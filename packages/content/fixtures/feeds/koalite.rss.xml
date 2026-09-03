@@ -1,0 +1,926 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>Koalite</title>
+	<atom:link href="http://blog.koalite.com/feed/" rel="self" type="application/rss+xml" />
+	<link>https://blog.koalite.com</link>
+	<description>El código importa, pero el contexto más</description>
+	<lastBuildDate>Sat, 20 Dec 2025 18:02:20 +0000</lastBuildDate>
+	<language>es</language>
+	<sy:updatePeriod>
+	hourly	</sy:updatePeriod>
+	<sy:updateFrequency>
+	1	</sy:updateFrequency>
+	<generator>https://wordpress.org/?v=6.4.2</generator>
+
+<image>
+	<url>https://blog.koalite.com/wp-content/uploads/favicon.png</url>
+	<title>Koalite</title>
+	<link>https://blog.koalite.com</link>
+	<width>32</width>
+	<height>32</height>
+</image> 
+	<item>
+		<title>Sobre velocidad y coste de desarrollo</title>
+		<link>https://blog.koalite.com/2025/12/sobre-velocidad-y-coste-de-desarrollo/</link>
+		
+		<dc:creator><![CDATA[Juan María Hernández]]></dc:creator>
+		<pubDate>Fri, 19 Dec 2025 09:19:56 +0000</pubDate>
+				<category><![CDATA[development]]></category>
+		<category><![CDATA[opinion]]></category>
+		<category><![CDATA[software development]]></category>
+		<guid isPermaLink="false">https://blog.koalite.com/?p=5743</guid>
+
+					<description><![CDATA[Al desarrollar software, y más cuando se trata de un producto maduro, es habitual que surga la sensación de que «antes sacábamos cambios rápido y ahora todo va más lento» y, por tanto, se proponga «contratar más gente para volver a ir rápido». Desde fuera puede parecer que el equipo simplemente se ha vuelto menos... <p><a href="https://blog.koalite.com/2025/12/sobre-velocidad-y-coste-de-desarrollo/" class="more-link">Seguir leyendo <span class="icon-chevron-right"></span></a></p>]]></description>
+										<content:encoded><![CDATA[<p>Al desarrollar software, y más cuando se trata de un producto maduro, es habitual que surga la sensación de que «antes sacábamos cambios rápido y ahora todo va más lento» y, por tanto, se proponga «contratar más gente para volver a ir rápido». </p>
+<p>Desde fuera puede parecer que el equipo simplemente se ha vuelto menos eficiente. Desde dentro, normalmente lo que está pasando es bastante más mecánico y predecible:</p>
+<ul>
+<li>A medida que el software crece, su coste mínimo de mantenimiento y evolución sube.</li>
+<li>A medida que crece el equipo, la capacidad productiva media por persona decrece.</li>
+</ul>
+<p>Esto, que puede parecer algo exclusivo del mundo del desarrollo, es algo que pasa en más ámbitos, como el nivel de vida de una persona o algo tan básico como organizar una habitación.</p>
+<h3 id="la-complejidad-tiene-un-coste">La complejidad tiene un coste</h3>
+<p>Cuando un software es pequeño, tiene pocas piezas, pocas reglas, pocas integraciones y pocos casos especiales. Cambiar algo es parecido a mover un mueble en una habitación vacía: lo haces rápido y rara vez rompes nada.</p>
+<p>Con el tiempo el producto crece: más funcionalidades, más pantallas, más configuraciones, más clientes con necesidades distintas, más integraciones externas, más datos históricos, más restricciones.</p>
+<p>El sistema se convierte en un conjunto de piezas que encajan entre sí. Y ese encaje tiene un precio. Ya no estamos moviendo un mueble en una habitación vacía; estamos intentando cambiar de sitio un armario ropero en una habitación llena de muebles.</p>
+<p>En la práctica, esto se nota en tres cosas:</p>
+<ul>
+<li><strong>Entender lo que hay cuesta más</strong>: antes podías leer una parte del código y ya. Ahora entender un cambio requiere saber cómo afecta a otras piezas.</li>
+<li><strong>Hacer un cambio correctamente cuesta más</strong> : hay más validaciones, más tests, más revisiones, más compatibilidad hacia atrás, más escenarios que no puedes romper.</li>
+<li><strong>Los errores se vuelven más probables y más caros</strong>: no porque la gente programe peor, sino porque hay más interacciones posibles. Además, cuando aparece un bug, cuesta más investigar su origen.</li>
+</ul>
+<p>Si lo llevamos al nivel de vida de una persona, pasa algo parecido.</p>
+<p>Si vives con tus padres, llevas una vida sencilla y no necesitas muchas cosas, tu coste fijo es bajo y puedes llegar a fin de mes sin problemas con poco dinero. A medida que tu vida se va complicado, y te compras una casa, tienes un hijo o te compras un coche, tu coste fijo va aumentando y cada vez necesitas más dinero para llegar fin de mes.</p>
+<p>Esto es lo que pasa en software: cuando es sencillo, un cambio puede costar un par de días, pero cuando va ganando en complejidad, ese mismo cambio puede requerir un par de semanas para poder tener en cuenta todas las interacciones con el resto del sistema.</p>
+<p>Es una consecuencia natural de tener más cosas funcionando y más cosas que no puedes romper.</p>
+<h3 id="escalar-el-equipo-ayuda-pero-con-rendimientos-decrecientes">Escalar el equipo ayuda, pero con rendimientos decrecientes</h3>
+<p><strong>Cuando el coste sube la reacción típica es: «contratemos más gente»</strong>. Es algo que ayuda y tiene un impacto positivo. Pero hasta cierto punto. </p>
+<p>Hay quien piensa que si 2 personas producen 10, aumentando a 4 producirán 20. O producirán 10, pero en la mitad de tiempo. Por desgracia, no es tan sencillo, y, en general, al aumentar el número de personas, la productividad media por persona irá disminuyendo.</p>
+<p>¿Por qué disminuye la productividad por persona al aumentar el número de personas?</p>
+<p>Hay dos motivos principales.</p>
+<p><strong>La falta de contexto</strong>. Una persona nueva puede ser muy buena, pero empieza con desventaja:</p>
+<ul>
+<li>No conoce el producto en detalle.</li>
+<li>No conoce los “porqués” históricos (decisiones pasadas, limitaciones, clientes clave).</li>
+<li>No conoce los riesgos escondidos (lo que no se debe tocar sin cuidado).</li>
+</ul>
+<p>Al principio, esa persona necesita tiempo de formación y, además, tiempo de otras personas para ayudarle: explicaciones, revisiones, acompañamiento, correcciones. Con el tiempo se convierte en productiva, pero no es inmediato.</p>
+<p><strong>El coste de coordinación</strong> interno del equipo.</p>
+<p>Cuando un equipo es pequeño pasa mucho tiempo junto, hay pocas tareas abiertas en paralelo, y todo el mundo está al tanto de todo. Al ir creciendo esto cambia: aparecen más reuniones, más tareas en paralelo que dependen unas de otras, más necesidad de alinear criterios (qué se hace, cómo, etc.).</p>
+<p>Aunque se pueda trabajar en más frentes en paralelo, <strong>cada iniciativa individual suele avanzar más lento</strong> porque necesita más coordinación y aumenta el coste de comunicación.</p>
+<p>Si volvemos a compararlo con el nivel de vida, es similar a lo que ocurre con los impuestos. Supongamos que cuando tenías una vida sencilla, con 12.000€ brutos al año conseguías 1.000€ netos al mes y te podías apañar. Podrías pensar que cuando la complejidad de tu vida aumenta te basta con aumenta linealmente tus ingresos, pero no es así: si duplicas tu ingresos y ganas 24.000€ brutos al año, mensualmente sólo recibes 1.600€. Los siguientes 12.000€ no han multiplicado por dos tu capacidad de asumir costes, sino sólo por 1.6. </p>
+<p>Algo parecido ocurre al incorporar personas a un equipo. Duplicar el tamaño del equipo no multiplica su capacidad de producción por 2, sino por un factor menor. </p>
+<h3 id="conclusiones">Conclusiones</h3>
+<p>Es necesario entender que cuando aumenta la complejidad del software los cambios cuestan más, no porque el equipo sea menos competetente, sino porque, sencillamente, los cambios son más difíciles y costosos de hacer.</p>
+<p>Contratar más gente ayuda, pero es necesario asumir un coste inicial de formación y un coste de coordinación creciente, por lo que no cabe esperar un crecimiento de la productividad lineal con respecto al número de personas.</p>
+<p>Para recuperar la velocidad hay que tener en cuenta otros factores, como reducir la complejidad simplificando el software, eliminando casos especiales, automatizando procesos y, sobre todo, teniendo unas prioridades claras para evitar que unas tareas acaben compitiendo con otras.</p>
+<p>Si entendemos que el software tiene un coste fijo creciente y que los equipos tienen rendimientos decrecientes al crecer, el foco de la conversación cambia. Ya no es «¿por qué somos más lentos?», sino «¿qué complejidad estamos acumulado? ¿la necesitamos? ¿cómo la vamos a gestionar?».</p>
+]]></content:encoded>
+					
+		
+		
+			</item>
+		<item>
+		<title>Sobre checked exceptions y manejo de excepciones</title>
+		<link>https://blog.koalite.com/2019/06/sobre-checked-exceptions-y-manejo-de-excepciones/</link>
+					<comments>https://blog.koalite.com/2019/06/sobre-checked-exceptions-y-manejo-de-excepciones/#comments</comments>
+		
+		<dc:creator><![CDATA[Juan María Hernández]]></dc:creator>
+		<pubDate>Mon, 17 Jun 2019 05:06:16 +0000</pubDate>
+				<category><![CDATA[development]]></category>
+		<category><![CDATA[exceptions]]></category>
+		<category><![CDATA[java]]></category>
+		<guid isPermaLink="false">https://blog.koalite.com/?p=5687</guid>
+
+					<description><![CDATA[Hace unos días me «retaba» Iván en Twitter a escribir un post sobre las checked exceptions de Java, y lo cierto es que me parece un tema entretenido para escribir algo más que un par de tweets, así que aquí va mi opinión. Checked exceptions en Java Desde la perspectiva de un sistema de tipos... <p><a href="https://blog.koalite.com/2019/06/sobre-checked-exceptions-y-manejo-de-excepciones/" class="more-link">Seguir leyendo <span class="icon-chevron-right"></span></a></p>]]></description>
+										<content:encoded><![CDATA[<p>Hace unos días <a href="https://twitter.com/Montyclt/status/1139495157173227520" target="_blank">me «retaba» Iván en Twitter a escribir un post sobre las checked exceptions de Java</a>, y lo cierto es que me parece un tema entretenido para escribir algo más que un par de tweets, así que aquí va mi opinión.</p>
+<h3>Checked exceptions en Java</h3>
+<p>Desde la perspectiva de un sistema de tipos estático esto de las checked exceptions parece una buena idea: hace más expresiva la declaración del método y permite hacer más validaciones en tiempo de compilación.</p>
+<p>Todo acorde con lo que uno esperaría de un sistema de tipos así. Si quieres flexibilidad vete a JavaScript y disfruta de su <del>anarquía</del> libertad, ¿no?</p>
+<p>Sin embargo, <em>para mi</em>, <a href="https://blog.koalite.com/2017/05/12-horas-con-java-15-anos-despues/" target="_blank">que no soy ningún experto en Java</a>, resultan incómodas. Quizá sea la sintaxis de Java, quizá sea el abuso de excepciones para situaciones que no son nada excepcionales, como que falle <a href="https://docs.oracle.com/javase/7/docs/api/java/lang/Integer.html#parseInt(java.lang.String)" target="_blank">una conversión de <code>string</code> a <code>int</code></a>.</p>
+<p>Si a eso le unes que existe un tipo mágico de excepciones que no se chequean (las que derivan de <code>RuntimeException</code>), pues te queda una mezcla un poco rara: por una parte me obligas a declarar y capturar excepciones con una sintaxis poco amigable, y por otra dejas una la puerta abierta a lanzar excepciones no chequeadas que hacen que nunca pueda estar seguro de si un método va a lanzar o no una excepción, por lo que esa presunta seguridad de tipos de queda en eso: presunta.</p>
+<h3>Excepciones como gestión de errores</h3>
+<p>En mi opinión, si una función puede no completar la operación que se supone que debe hacer es mejor codificarlo en el propio tipo devuelto por la función. Siguiendo con el ejemplo de convertir un <code>string</code> en un <code>int</code>, dado que es algo que puede fallar, me parece más razonable tener una función cuyo resultado indique si la conversión se pudo realizar o no y, en caso de que se realizase, el entero obtenido, en lugar de lanzar una excepción si el <code>string</code> no tiene un formato válido.</p>
+<p>Si asumimos que la función puede fallar, podemos codificar el fallo en el tipo de retorno y convertir lo que sería una <a href="https://en.wikipedia.org/wiki/Partial_function" target="_blank">función parcial</a> en una <a href="https://en.wikipedia.org/wiki/Partial_function#Total_function" target="_blank">función total</a>. En muchos lenguajes (como muchos funcionales) esto se representaría con un tipo <a href="http://hackage.haskell.org/package/base-4.12.0.0/docs/Data-Either.html" target="_blank">Either</a> o <a href="http://hackage.haskell.org/package/base-4.12.0.0/docs/Data-Maybe.html" target="_blank">Maybe</a> (si te da igual el motivo del fallo) y sería lo más normal del mundo.</p>
+<p>Cuando unes ese diseño con un lenguaje que permite utilizar pattern matching para el análisis de resultados, o incluso algo como el <a href="https://en.m.wikibooks.org/wiki/Haskell/do_notation" target="_blank">do notation de Haskell</a>, que suena muy exótico en pero en C# puedes simular con el <code>select/from</code> y seguro que en Java tienes alguna alternativa para hacer algo similar, la cosa se vuelve bastante cómoda y gestionar los errores de forma normal en lugar de como algo excepcional se convierte en rutinario.</p>
+<h3>Subiendo el nivel semántico de la excepción</h3>
+<p>Volviendo al <a href="https://twitter.com/Montyclt/status/1139495157173227520" target="_blank">hilo de Iván</a>, él plantea:</p>
+<blockquote><p>
+Los argumentos que he escuchado en su contra son principalmente dos, el primero es que exponen detalles de implementación en la interfaz (la firma del método).</p></blockquote>
+<blockquote><p>
+El segundo motivo en su contra es que si se modifica ese método y cambia su implementación de forma que pueda lanzar nuevas excepciones, es necesario actualizar todos sus usos añadiendo los correspondientes try.</p></blockquote>
+<p>Ciertamente son argumentos habituales en contra de las checked exceptions, y la respuesta de Iván a esos argumentos es más que razonable:</p>
+<blockquote><p>
+Tras darle vueltas y pensar en ello, para mi ninguno de los dos argumentos son válidos. Imagina una interfaz llamada <code>Mailer</code> que pueda tener diferentes implementaciones según como se quiera enviar un mensaje. Típico servicio registrado en un contenedor.</p></blockquote>
+<blockquote><p>
+El método sería <code>Future SendEmail(EmailAddress address, EmailContent content) throws EmailException</code></p></blockquote>
+<blockquote><p>
+Bajo mi punto de vista, la interfaz debe de exponer esta excepción, y si ocurre algún tipo de excepción en alguna de sus implementaciones, relanzarla como <code>EmailException</code>.</p></blockquote>
+<blockquote><p>
+De esta forma, me aseguro que la excepción siempre será <code>EmailException</code> y no otra. Imagina que estoy escribiendo una implementación que hace una llamada HTTP. Si <code>HttpClient</code> tiene <code>HttpBadCodeResponseException</code> como checked, me obligo a capturarla y relanzarla como <code>EmailException</code> de forma que no se me olvide hacer ningún catch y <code>SendEmail</code> lance un <code>IOException</code> o <code>HttpBadResponseException</code>, que SÍ que expondrían detalles de implementación.</p></blockquote>
+<blockquote><p>
+A la hora de utilizar el servicio, sólo tendría que capturar <code>EmailException</code> en vez de <code>Exception</code> por si en alguna implementación se me ha olvidado capturar la excepción que produce y me encuentro con un <code>FileNotFoundException</code> o algo similar.</p></blockquote>
+<p>Básicamente la idea es aumentar el nivel semántico del error. Si tienes un método/función que envía un email, el resultado puede ser que lo ha enviado con éxito o que ha fallado, y si es así, el motivo real (fallo en la respuesta HTTP, fallo en el formato de la dirección del destinatario, etc.) puede considerarse algo secundario que quedará encapsulado en un <code>EmailException</code>.</p>
+<p>Visto así tiene mucho sentido y es mucho más informativo encontrarte con un <code>EmailException</code> que con un <code>HttpBadResponseException</code>, pero lo cierto es que a efectos prácticos soluciona el problema a medias.</p>
+<p>Es cierto que evita el carácter «vírico» de las checked excepctions, y si una nueva implementación del servicio puede encontrarse con otro tipo de problema los consumidores del servicio <code>Mailer</code> no tienen que preocuparse por ella puesto que quedará encapsulada en una <code>EmailException</code>. Esto funciona muy bien si <em>desde el principio</em> ya hemos decicido que el método <code>SendEmail</code> puede lanzar una excepción.</p>
+<p>Pero, ¿qué ocurre cuando al diseñar nuestro interfaz decidimos no incluir ninguna excepción porque en las implementaciones iniciales no vemos ningún caso problemático? Básicamente, hemos vuelto al punto de partida. Cuando encontramos la primera implementación que puede lanzar excepciones, debemos encapsularlas en una excepción (con mayor valor semático, eso sí), y eso nos obliga a cambiar todas las implementaciones el interfaces <code>Mailer</code> y todos los consumidores del interfaces.</p>
+<p>Una opción sería hacer que, especulativamente, todos y cada uno de los métodos de nuestros interfaces lanzasen una excepción con valor semántico asociado al interfaz; pero, sinceramente, empezar a añadir posible excepciones por si acaso en el futuro alguna implementación del interfaz la lanza no me parece muy práctico.</p>
+<p>Y, ojo, esto no es algo que se solucione con la alternativa más «funcional» que comentaba antes de utilizar un tipo <code>Either</code> o similar para representar el resultado de la operación. Estás en las mismas, o bien introduces desde el principio el tipo <code>Either</code> como valor de retorno de todas tus funciones «por si acaso» en un futuro alguna puede fallar, o en el momento en que lo introduzcas te va a tocar modificar el código que ya existe.</p>
+<h3>Conclusión</h3>
+<p>Admito que aquí hay la cosa va por barrios.</p>
+<p>En cierto modo, me recuerda a la típica discusión de lenguajes dinámicos y estáticos. Yo me siento más cómodo con lenguajes estáticos y nunca me ha supueto un freno tener que lidiar con tipos, más bien al contrario, pero es cierto que la excepciones chequeadas, que podrían verse como un paso más hacia la comprobación estática de errores, me han supuesto fricción adicional a la hora de desarrollar.</p>
+<p>En realidad, ni siquiera estoy convencido de que las excepciones sean una buena idea como mecanismo de gestión de errores frente al uso de <a href="https://gobyexample.com/errors" target="_blank">valores de retorno al estilo go</a>, pero sin entrar a debatir eso, sí tengo claro que deberían representar cosas excepcionales y que, en general, se tienden a usar en situaciones que tienen poco de excepcional.</p>
+<p>Habitualmente intento <strong>no</strong> gestionar excepciones en el lugar en que se producen a menos que esté tratando con una librería que las lance por casi cualquier motivo y pueda hacer algo para recuperarme del error o al menos convertirlas a algo con mayor valor semántico (cosa que, sinceramente, ocurre menos veces de las que me gustaría).</p>
+<p>Desde mi punto de vista, una excepción debería representar algo excepcional y, por tanto, algo que de lo que la aplicación no tiene muchas formas de recuperarse. Por ello, tiendo a gestionar las excepciones en la «frontera» de las aplicaciones (controladores de un API Web, manejadores globales de excepciones), y muchas veces me limito a dejar que muera el proceso (ya sea la petición concreta a un API o incluso la aplicación entera) y <a href="https://blog.koalite.com/2014/09/no-subestimes-el-poder-de-un-log/" target="_blank">logear la información</a> para evitar en problemas futuros.</p>
+]]></content:encoded>
+					
+					<wfw:commentRss>https://blog.koalite.com/2019/06/sobre-checked-exceptions-y-manejo-de-excepciones/feed/</wfw:commentRss>
+			<slash:comments>5</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>No corrijas ese bug</title>
+		<link>https://blog.koalite.com/2019/05/no-corrijas-ese-bug/</link>
+					<comments>https://blog.koalite.com/2019/05/no-corrijas-ese-bug/#comments</comments>
+		
+		<dc:creator><![CDATA[Juan María Hernández]]></dc:creator>
+		<pubDate>Mon, 13 May 2019 05:06:38 +0000</pubDate>
+				<category><![CDATA[development]]></category>
+		<category><![CDATA[software development]]></category>
+		<guid isPermaLink="false">https://blog.koalite.com/?p=5679</guid>
+
+					<description><![CDATA[Hace casi 20 años Joel Spolsky escribía lo que se conoce como el test de Joel, 12 preguntas que (supuestamente) deberías aspirar a responder afirmativamente para mejorar tu proceso de desarrollo. Para tener 20 años han aguantado relativamente bien, y el hecho de que Stack Overflow lo use en las ofertas de trabajo (seguro que... <p><a href="https://blog.koalite.com/2019/05/no-corrijas-ese-bug/" class="more-link">Seguir leyendo <span class="icon-chevron-right"></span></a></p>]]></description>
+										<content:encoded><![CDATA[<p>Hace casi 20 años Joel Spolsky escribía <a href="https://www.joelonsoftware.com/2000/08/09/the-joel-test-12-steps-to-better-code/" target="_blank">lo que se conoce como el test de Joel</a>, 12 preguntas que (supuestamente) deberías aspirar a responder afirmativamente para mejorar tu proceso de desarrollo. Para tener 20 años han aguantado relativamente bien, y el hecho de que Stack Overflow lo use en las ofertas de trabajo (seguro que el hecho de que Joel sea fundador no tiene nada que ver) hace que sean conocidillas.</p>
+<p>La quinta de ellas dice algo así como:</p>
+<blockquote><p>
+	¿Arreglas los bugs antes de escribir código nuevo?</p></blockquote>
+<p>Suena a perogrullo. ¿Cómo no vas a arreglar los bugs cuando los encuentras? ¿Qué vas a hacer si no, dejarlos sin resolver? ¿Permitir que se acumulen hasta que destruyan tu precioso software? Además, todo el mundo sabe que resolver un bug suele ser más fácil (y por tanto más barato) cuanto menos tiempo pasa desde su introducción, así que el mejor momento para corregirlo es tan pronto como se detecta; idealmente durante el propio proceso de desarrollo.</p>
+<p>Si estuviera todo tan claro no estaría escribiendo este post. <a href="https://blog.koalite.com/2019/04/unpopular-opinions-software-development-edition/" target="_blank">Ya me conocéis</a>.</p>
+<p>No solo no siempre es necesario corregir los bugs según se encuentran, sino que a veces <strong>no merece la pena corregir ciertos bugs</strong>.</p>
+<h3>No todos los bugs iguales</h3>
+<p>Estás trabajando en una nueva funcionalidad. Por ser originales, el típico carrito de la compra de una tienda online. Mientras la implementas descubres que al sumar el precio de las productos se te ha olvidado tener en cuenta la cantidad, así que si alguien compra varias unidades de un mismo producto el cálculo del total falla. ¿Lo corriges ahora o esperas? Ahora, sin dudarlo.</p>
+<p>Llegas a la siguiente funcionalidad. Generar un PDF con la factura del carrito de antes. Mientras haces pruebas descubres que la librería que usas para generar el PDF falla cuando el nombre del cliente tiene caracteres coreanos. Y tú no has vendido a un coreano en tu vida, Hulio. ¿Lo corriges ahora o esperas? Pues si corregirlo implica cambiar la librería para generar PDFs y ajustar todo tu código, lo más razonable es pasar del tema, apuntar el bug en algún sitio para que soporte conozca esa limitación, y esperar a que el señor 동현 se queje.</p>
+<p>Resulta que algunos clientes se están quejando porque en su resumen de facturación el desglose de impuestos no siempre es correcto. ¿Lo corriges o esperas? Teniendo en cuenta las implicaciones legales, parece necesario corregirlo rápidamente.</p>
+<p>Te llega un correo de un cliente que no ha recibido su mercancía. Tras analizarlo, descubres que una terrible coincidencia hizo que una caída de un proveedor de servicios externos, unida a un fallo en el envío de un email, y la ausencia por vacaciones del responsable de almacén se encuentran detrás del problema. ¿Montas un sistema resistente a este tipo de coincidencias o lo dejas como está? Si contruir un sistema tolerante a fallos require cambiar la arquitectura de toda la aplicación y esto sólo te ha pasado una vez en 500.000 pedidos, es probable que puedas asumir el fallo y resolverlo manualmente cuando se produzca.</p>
+<p>Mientras revisas otra parte del código encuentras un caso extraño en el que se puede producir un error que impediría servir una determinada página generando un error 500 en el servidor. Compruebas los logs del servidor y ves que en los 2 años que lleva ese código en producción nunca se ha producido. ¿Merece la pena corregirlo? Depende. Técnicamente es un bug, pero si un bug no afecta a nadie, ¿realmente es un bug?</p>
+<h3>Triaje de bugs</h3>
+<p>En medicina de emergencias se utiliza la palabra <a href="https://es.wikipedia.org/wiki/Triaje" target="_blank">triaje</a> para referirse a la selección y clasificación de los pacientes en función de las prioridades de atención, privilegiando la posibilidad de supervivencia, de acuerdo con las necesidades terapéuticas y los recursos disponibles. Es decir, que cuando no puedes atender a todos los pacientes de forma inmediata y óptima, debes intentar salvar el máximo posible teniendo en cuenta la gravedad de sus lesiones y los recursos disponibles.</p>
+<p>Cuando desarrollamos software disponemos de un recurso limitado, el tiempo, y debemos decidir de qué manera hemos de emplearlo para maximizar su valor. Esto implica que a veces será mejor dedicar el tiempo a implementar nuevas funcionalidades, a veces a corregir bugs existentes, a veces a pagar deuda técnica, a veces a investigar nuevas tecnologías, y otras veces a mil cosas más.</p>
+<p>Decidir cómo repartir los recursos disponibles entre todas estas actividades es toda una ciencia (o arte, según se mire) y se escapa del objetivo de este post, pero podemos intentar ver algunas aspectos que nos permitan realizar un mejor triaje de bugs para decidir si los corregimos y cuándo los corregimos.</p>
+<h3>El coste de un bug</h3>
+<p>Cada bug que existe en un sistema tiene un coste asociado. Puede ser un coste derivado de los clientes que dejan de serlo por la existencia del bug, del tiempo dedicado por las personas de soporte para atenderlo cada vez que se produce, o del coste asociado a las acciones compensatorias que se realizan cuando ocurre, por ejempo, realizar un descuento a los clientes que, por culpa de un bug, han sufrido un retraso en su pedido, o hacer el seguimiento telefónico del envío de un pedido porque no se puede consultar en una página web.</p>
+<p>Para comprender (e idealmente mesurar) el coste real de un bug la clave es conocer su impacto de negocio. Para ti, para tus clientes y para tus usuarios (que pueden no ser los mismos que tus clientes, nunca lo olvides).</p>
+<p>Una primera dimensión que podemos considerar es <strong>la criticidad intrínseca</strong> del bug. No es lo mismo un bug que hace que un usuario pierda los datos que lleva introduciendo varias horas en un procesador de texto, que un bug que hace que se pierda el envío de un tweet si se pierde la conexión con el servidor de twitter. No es igual un bug que hace un usuario presente mal su declaración de impuestos y reciba una sanción administrativa por ello, que un bug que hace que las fotos de sus vacaciones aparezcan desordenadas cuando están sacadas en el mismo minuto. Esta criticidad siempre va ligada al valor de negocio de la funcionalidad afectada, por lo que sin comprender éste, es imposible valorarla.</p>
+<p>También podemos considerar <strong>el número de usuarios afectados</strong> y la importancia relativa de esos usuarios para nuestro negocio. Como veíamos antes, no es igual un bug que afecta a todos los usuarios, que un bug que sólo afecta a aquellos usuarios con nombres coreanos si no vendemos en corea, o a los que usan cierta conjunción de funcionalidades y operativas de nuestra aplicación que sólo se da en 1 de cada 10.000 casos.</p>
+<p>Además influye <strong>la frecuencia con que se reproduce</strong> el problema. Un bug de poca criticidad que se produce muchas veces al día y genera muchas llamadas de soporte puede suponer un coste mayor que un bug mucho más crítico que sólo se produce cuando hay eclipse de sol coincidiendo con el paso de Saturno por Sagitario.</p>
+<h3>El coste de su solución</h3>
+<p>En cuanto a lo que nos cuesta corregir el bug, hay factores más claros y otros que es más fácil pasar por alto a simple vista.</p>
+<p>Lo primero que nos viene a la mente al pensar en el coste de corregir un bug es <strong>el tiempo que nos va a llegar</strong>. Nada sorprendente. Cuanto más tiempo de desarrollo requiera, mayor será el coste de la resolución y menos tiempo podremos destinar a otras tareas.</p>
+<p>Otro factor a considerar es <strong>la posibilidad de introducir nuevos bugs</strong> con los cambios usados para corregir el primero. Casi puedo oir el nerviosismo de los auténticos <em>crafters</em>: ¡para eso están los tests! ¡<a href="https://blog.koalite.com/2016/09/cuando-utilizar-tdd/" target="_blank">Usa TDD para construir una red de seguridad contra regresiones</a>!.</p>
+<p>Sí, es verdad. Cuanto mejor sea tu proceso de pruebas y control de calidad (lo que suele implicar <a href="https://blog.koalite.com/2017/11/no-pierdas-el-tiempo-escribiendo-tests/" target="_blank">tener automatizado buena parte del mismo</a>), menos riesgo corres de introducir bugs al cambiar código para corregir otros. Desgraciadamente, no todas las aplicaciones cuentan con tests de la calidad que nos gustará, y no todas las áreas de la aplicación se pueden cubrir con tests fiables. Por ejemplo, el interfaz de usuario o la integración con dispositivos externos son partes en las que, por muchos tests que tengas, es difícil estar seguro de que un cambio no rompe nada sin hacer pruebas manuales, y según se van complicando las operativas existentes en una aplicación, saber qué pruebas manuales hay que hacer y realizarlas correctamente no es fácil.</p>
+<p>Existe otro factor que se tiende a despreciar: <strong>la complejidad que introduce la corrección</strong>. Aun asumiendo que puedas corregir el bug y que estés razonablemente seguro de que no rompes nada al hacerlo, ¿cuánto se va a complicar el mantenimiento posterior de la aplicación?</p>
+<p>Hay ocasiones en que para corregir un bug necesitas hacer cambios importantes en el diseño o en la arquitectura del sistema. Esos cambios pueden convertir un diseño simple en algo mucho más complejo capaz de cubrir los escenarios en los que se produce el bug, y al realizarlos estamos comprometiendo el desarrollo futuro introduciendo fragilidad en el sistema e incrementando el coste de la evolución.</p>
+<p>Hacer una valoración cuantitativa de todos estos factores no es trivial, y menos en un momento en que se tiene <a href="https://blog.koalite.com/2016/11/sobre-noestimates/" target="_blank">cierta aversión a las estimaciones</a> y parece que nadie quiere mojarse en nada. Aun así, es importante analizar cada caso y usar una política de decisión algo mejor que una cola FIFO o cuál es el cliente o comercial que más chilla.</p>
+<h3>Una cuestión económica</h3>
+<p>Al final, como en casi todas las actividades humanas, decidir si hay que corregir o no un bug es una cuestión puramente económica. Y por económica no quiero decir necesariamente <em>de euros</em>, sino de <strong>relación coste/beneficio</strong>.</p>
+<p>A muchos desarrolladores nos cuesta asumir cuando algo es suficientemente bueno. Tendemos a buscar la «perfección» de nuestro código y nuestras aplicaciones (a veces sólo de las partes que a las que hemos decidido darles más importancia porque nos parecen más divertidas). Nos pone nerviosos <a href="https://blog.koalite.com/2017/05/evitar-la-deuda-tecnica-es-un-error/" target="_blank">asumir deuda técnica</a>.</p>
+<p>Sin embargo, hay ocasiones en que lo mejor que podemos hacer con un bug es anotarlo para saber que existe y poder monitorizar su incidencia a lo largo del tiempo y olvidarnos de él por el momento. Igual que alcanzar un 100% de cobertura de código con los tests no suele ser rentable, mantener el sistema 100% libre de bugs tampoco suele serlo. Claro, que esto no vale hacerlo para todos los bugs y que nuestros clientes descubran <a href="https://blog.koalite.com/2016/06/lo-peor-de-desarrollar-software/" target="_blank">qué es lo peor de desarrollar software</a>.</p>
+]]></content:encoded>
+					
+					<wfw:commentRss>https://blog.koalite.com/2019/05/no-corrijas-ese-bug/feed/</wfw:commentRss>
+			<slash:comments>3</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>Unpopular opinions: software development edition</title>
+		<link>https://blog.koalite.com/2019/04/unpopular-opinions-software-development-edition/</link>
+		
+		<dc:creator><![CDATA[Juan María Hernández]]></dc:creator>
+		<pubDate>Mon, 22 Apr 2019 05:06:04 +0000</pubDate>
+				<category><![CDATA[development]]></category>
+		<category><![CDATA[opinion]]></category>
+		<category><![CDATA[software development]]></category>
+		<guid isPermaLink="false">https://blog.koalite.com/?p=5671</guid>
+
+					<description><![CDATA[A lo largo del tiempo he ido escribiendo bastantes posts en los que intentaba analizar desde un punto de vista (más o menos) racional varios aspectos relacionados con el desarrollo de software. En este post aprovecharé para repasar algunos de ellos. En realidad, nada es ni tan blanco ni tan negro y en los posts... <p><a href="https://blog.koalite.com/2019/04/unpopular-opinions-software-development-edition/" class="more-link">Seguir leyendo <span class="icon-chevron-right"></span></a></p>]]></description>
+										<content:encoded><![CDATA[<p>A lo largo del tiempo he ido escribiendo bastantes posts en los que intentaba analizar desde un punto de vista (más o menos) racional varios aspectos relacionados con el desarrollo de software. En este post aprovecharé para repasar algunos de ellos. En realidad, nada es ni tan blanco ni tan negro y en los posts enlazados podréis ver un poco mejor la gama de grises.</p>
+<p>Quizá no sean exactamente opiniones impopulares. Más bien podríamos decir que son opiniones controvertidas sobre temas que pueden ser examinados con cierto detalle y en los que podemos (y debemos) replantearnos nuestro punto de vista periódicamente.</p>
+<p>Veamos algunas.</p>
+<p><strong><a href="https://blog.koalite.com/2016/11/mitos-y-leyendas-sobre-metodos-estaticos/" target="_blank">Utilizar métodos estáticos está bien</a></strong></p>
+<p>En los diseños orientados a objetos se tiende a demonizar su uso, pero los métodos estáticos no son más que funciones, y como tales son muy útiles. Bien utilizados ofrecen <a href="https://blog.koalite.com/2019/02/clases-estaticas-como-alternativa-a-inyeccion-de-dependencias/" target="_blank">alternativas interesantes a la hora de diseñar</a> y pueden simplificar muchos escenarios de testing (en contra de lo que se suele pensar).</p>
+<p><strong><a href="https://blog.koalite.com/2017/09/primitive-obsession-obsession/" target="_blank">Utilizar tipos primitivos ayuda a escribir código más mantenible</a></strong></p>
+<p>Evitar modelar todo con <code>strings</code> o <code>decimals</code> es una cosa, pero introducir tipos específicos para cada concepto que te encuentras provoca que tengas que reimplementar muchas operaciones básicas que están disponibles para los tipos estándar.</p>
+<p><strong><a href="https://blog.koalite.com/2017/02/las-clases-como-code-smell/" target="_blank">Es preferible evitar utilizar clases</a></strong></p>
+<p>Si tu lenguaje lo permite, es mejor intentar diseñar utilizando estructuras más simples (valores, funciones o módulos) antes que empezar a pensar en clases. Los objetos acoplan estado y operaciones, pero además tienen un ciclo de vida que hay considerar. Si no vas a necesitar varias instancias de una clase, probablemente no necesites una clase.</p>
+<p><strong><a href="https://blog.koalite.com/2016/07/resistiendo-el-hedor-de-las-clases-grandes/" target="_blank">No pasa nada porque (algunas) clases sean grandes</a></strong></p>
+<p>Partir la funcionalidad de un sistema en una miríada de pequeñas clases muy focalizadas y (supuestamente) reutilizables está muy bien, pero puede hacer más difícil entender como funciona todo que tener un código más líneal (y procedural) empaquetado en menos clases. Además, si necesitas garantizar que se mantienen ciertos invariantes en partes críticas de una aplicación, a veces sólo te quedan las clases como mecanismo para encapsular información y evitar usos indebidos de la misma.</p>
+<p><strong><a href="https://blog.koalite.com/2016/09/cuando-utilizar-tdd/" target="_blank">En muchos casos utilizar TDD no tiene sentido</a></strong></p>
+<p>Pese a que suene a anatema en determinados ámbitos, hay muchas situaciones en las que utilizar TDD no ayuda a mejorar el diseño ni el proceso de desarrollo. Ni siquiera tener tests automatizados debería ser algo a perseguir <a href="https://blog.koalite.com/2017/11/no-pierdas-el-tiempo-escribiendo-tests/" target="_blank">sin pararse a pensar antes qué pretendes obtener con los tests</a>.</p>
+<p><strong><a href="https://blog.koalite.com/2016/02/las-ventajas-de-no-usar-inyeccion-de-dependencias/" target="_blank">La inyección de dependencias no debe ser la opción por defecto</a></strong></p>
+<p>Diseñar un sistema para permitir realizar inyección de dependencias en todos los puntos posibles añade una complejidad a la hora de utilizarlo que, sencillamente, no compensa si al final vas a tener una única implementación de cada dependencia. Refactoriza el código para usar inyección de dependencias cuando lo necesites, pero no lo hagas de forma especulativa.</p>
+<p><strong><a href="https://blog.koalite.com/2014/04/por-que-sigo-usando-un-orm/" target="_blank">Los ORMs son muy útiles (y no por evitarte escribir SQL)</a></strong></p>
+<p>Los ORMs tienen muchos detractores e implican varios sacrificios (curva de aprendizaje, abstracciones incompletas, &#8230;). Pese a todo ofrecen muchas ventajas a la hora de modelar, especialmente gracias a cosas como el <em>Identity Map</em>, la persistencia por alcance o el polimorfismo, que van mucho más allá de evitarte escribir SQL (<a href="https://blog.koalite.com/2017/10/tu-modelo-puede-ignorar-la-persistencia-tu-no/" target="_blank">algo de lo que nunca te puedes pretender aislar por completo</a>).</p>
+<p><strong><a href="https://blog.koalite.com/2014/10/de-abstracciones-y-repositorios/" target="_blank">Los repositorios son importantes (aunque utilices un ORM)</a></strong></p>
+<p>Cuando se utiliza un ORM existe cierta tendencia a despreciar el uso de repositorios por considerarlos una parte «ya cubierta» por el propio ORM. Utilizar repositorios es más que encapsular llamadas a una capa de persitencia. Utilizar repositorios permite establecer un lenguaje común sobre el tipo de operaciones que es pueden realizar sobre cada entidad y ayudar así a proteger los invariantes de tu dominio.</p>
+<p><strong><a href="https://blog.koalite.com/2016/04/ficheros-y-carpetas-en-un-mundo-de-apis-web/" target="_blank">Dejar ficheros en una carpeta es un mecanismo de integración válido</a></strong></p>
+<p>Es indudable que se trata de un sistema prehistórico y con muchos inconvenientes frente a utilizar alternativas más modernas como APIs Web o colas de mensajes. Sin embargo, la facilidad para implementarlo, usarlo y comprobar los datos que se mueven cuando hay errores son ventajas que no hay despreciar.</p>
+<p><strong><a href="https://blog.koalite.com/2014/07/por-favor-comenta-el-codigo/" target="_blank">Hay que comentar el código</a></strong></p>
+<p>El código limpio de los auténticos artesanos ágiles es completamente autoexplicativo y con un nivel de abstracción tal que permite leerlo como si fuese una novela. Sí, vale, me lo creo. Pero lo que no puede leerse es la mente de quien lo programó para saber por qué tomó unas deciciones y no otras. Puedes llevar esa documentación fuera del código (mensajes de commits, pull requests, etc.), pero documentar el porqué de las cosas junto al propio código hace que sea más sencillo consultarlo.</p>
+<p><strong><a href="https://blog.koalite.com/2017/05/evitar-la-deuda-tecnica-es-un-error/" target="_blank">Asumir deuda técnica es algo perfectamente razonable</a></strong></p>
+<p>«Como clean-coder quiero que mi código sea limpio y mantenible para que así&#8230;» Todo eso está muy bien, pero nunca hay que olvidar que el código hasta que no está en producción no sirve para nada. Saber gestionar la deuda técnica, ser consciente de cuándo hay que asumirla y de cuándo hay que empezar a pagarla es clave para el desarrollo de software.</p>
+<p><strong><a href="https://blog.koalite.com/2014/07/el-lado-oscuro-de-los-gestores-de-paquetes/" target="_blank">Subir las dependencias al repositorio de código es la mejor forma de crear compilaciones reproducibles</a></strong></p>
+<p>Incluir dentro del repositorio de código fuente las dependencias de terceros está considerado una mala práctica en muchos entornos, pero te permite independizarte por completo de servicios de terceros durante el proceso de compilación y garantizar que las compilaciones son realmente reproducibles.</p>
+<p><strong><a href="https://blog.koalite.com/2018/03/continuous-delivery-y-continuous-deployment-como-usuario/" target="_blank">Menos despliegue continuo y más despliegue de calidad</a></strong></p>
+<p>Queda muy bien presumir de que puedes hacer 400 despliegues en producción diarios y que tu tiempo para resolver una incidencia es menor de 4 minutos desde que la implementas hasta que llega a los usuarios, pero como usuario preferiría no haberme encontrado con la incidencia directamente. Hace falta dedicar más tiempo a diseñar y probar antes de empezar a utilizar a tus usuarios como testers gratuitos.</p>
+<h3>Conclusión</h3>
+<p>En el fondo, no hay tantas cosas en el desarrollo de software que sean realmente tan <em>opinables</em>.</p>
+<p>No es cuestión de «yo tengo derecho a opinar como quiera y toda opinión es respetable». Es cuestión de <em>analizar</em> los pros y los contras de todo sin empezar a dar por sentado cosas <a href="https://blog.koalite.com/2017/07/de-monos-melanesios-y-desarrollo-de-software/" target="_blank">sólo porque estén consideras buenas prácticas o las llevemos haciendo toda la vida</a>.</p>
+<p>Estos análisis no pueden realizarse de forma completamente abstracta y generalista y, ahí sí, entra en juego el contexto (personal, tecnológico, de equipo, de negocio, &#8230;) en el que nos encontramos a la hora de tomar decisiones.</p>
+]]></content:encoded>
+					
+		
+		
+			</item>
+		<item>
+		<title>Tipos Suma en TypeScript</title>
+		<link>https://blog.koalite.com/2019/04/tipos-suma-en-typescript/</link>
+		
+		<dc:creator><![CDATA[Juan María Hernández]]></dc:creator>
+		<pubDate>Mon, 01 Apr 2019 05:06:02 +0000</pubDate>
+				<category><![CDATA[development]]></category>
+		<category><![CDATA[type systems]]></category>
+		<category><![CDATA[typescript]]></category>
+		<guid isPermaLink="false">https://blog.koalite.com/?p=5665</guid>
+
+					<description><![CDATA[A veces da la sensación de que TypeScript se usa «sólo» como una forma de tener Javascript con intellisense y errores de compilación. La verdad es que, sólo por eso, ya puede merecer la pena, pero si nos quedamos ahí nos estamos perdiendo parte de las ventajas que nos puede aportar a la hora de... <p><a href="https://blog.koalite.com/2019/04/tipos-suma-en-typescript/" class="more-link">Seguir leyendo <span class="icon-chevron-right"></span></a></p>]]></description>
+										<content:encoded><![CDATA[<p>A veces da la sensación de que TypeScript se usa «sólo» como una forma de tener Javascript con intellisense y errores de compilación. La verdad es que, sólo por eso, ya puede merecer la pena, pero si nos quedamos ahí nos estamos perdiendo parte de las ventajas que nos puede aportar a la hora de diseñar soluciones.</p>
+<p>Quizá el sistema de tipos de TypeScript no sea el mejor del mundo y <a href="https://blog.koalite.com/2018/02/mantenimiento-de-invariantes-en-typescript/" target="_blank">presente sus problemas a la hora de mantener invariantes</a> o <a href="https://blog.koalite.com/2019/01/typescript-varianza-y-solidez/" target="_blank">no tenga toda la solidez que a uno le pudiera gustar</a>, pero eso no es óbice para que ofrezca alternativas de diseño interesantes, sobre todo comparado con las que solemos ver en lenguajes como C# o Java.</p>
+<p>En este post vamos a ver cómo podemos aprovechar varias características del sistema de tipos, concretamente los tipos literales y los tipos unión, para conseguir un diseño más seguro.</p>
+<h3>Tipos literales</h3>
+<p>Se le llama tipo literal en TypeScript a aquel tipo que contiene un único valor de tipo <code>string</code>, <code>number</code>, <code>boolean</code> o <code>enum</code>. Por ejemplo:</p>
+<pre class="brush:typescript">type Two = 2;
+type Duck = 'Duck';
+
+const x: Two = 2; // OK
+const y: Two = 3; // Error
+
+const a: Duck = 'Duck'; // OK
+const b: Duck = 'Fox'; // Error
+</pre>
+<p>A primera vista no parece algo muy útil porque todas las variables que definamos del tipo tendrán el mismo valor, pero cuando los combinamos con otros tipos la cosa mejora.</p>
+<p>Las reglas de inferencia de tipos para los tipos literales son un poco confusas (y han cambiado alguna vez a lo largo de la vida de TypeScript), por lo que hay que andarse con un poco de ojo:</p>
+<pre class="brush:typescript">let x = 2; // el tipo inferido para x es "Number"
+const x = 2; // el tipo inferido para x es 2
+</pre>
+<p>Por supuesto, un valor de un tipo literal es asignable a valores del tipo «general», pero no a la inversa:</p>
+<pre class="brush:typescript">const x: Two = 2;
+const y: Number = x; // OK
+const z: Two = y; // Error
+</pre>
+<h3>Tipos unión</h3>
+<p>En TypeScript podemos definir un tipo formado por la unión de otros tipos, es decir, a una variable del tipo unión podemos asignarle cualquier valor de cualquiera de los tipos que forman la unión:</p>
+<pre class="brush:typescript">type StringOrNumber = String | Number;
+
+let a: StringOrNumber = 2; // OK
+let b: StringOrNumber = 'Mar'; // OK
+let c: StringOrNumber = null; // Error
+</pre>
+<p>Como no, nuestros tipos literales pueden formar parte de uniones:</p>
+<pre class="brush:typescript">type DuckOrTwo = 'Duck' | 2;
+
+let a: DuckOrTwo = 2; // OK
+let b: DuckOrTwo = 'Duck'; // OK
+let c: DuckOrTwo = 142.12; // Error
+</pre>
+<p>Esto facilita interoperar con apis Javascript donde es frecuente que algún parámetro pueda tomar un conjunto de valores primitivos. Un caso típico sería el método <a href="https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener" target="_blank">addEventListener</a> para registrar manejadores de eventos, al cual se le pasa el nombre del evento para el que se quiere registrar el manejador.</p>
+<h3>Tipos suma</h3>
+<p>Juntando los tipos literales y los tipos unión podemos construir el equivalente a <a href="https://en.wikipedia.org/wiki/Tagged_union" target="_blank">tipos suma</a>. Estos tipos pueden almacenar información de distintos tipos, y existe una forma de detectar cuál de los posibles tipos almacenan.</p>
+<p>Dicho así suena un poco enrevesado, pero es fácil entenderlo con un poco de código. Imagina que necesitas representar un valor opcional. Para ello hace falta indicar de alguna forma la ausencia de valor, algo que muchas veces se hace utilizando <code>null</code> o <code>undefined</code>, pero esa alternativa no siempre es aconsejable. Podemos mejorarlo haciendo algo así:</p>
+<pre class="brush:typescript">type Optional&lt;T&gt; = { empty: true } | { empty: false, value: T };
+
+function f(x: Optional&lt;number&gt;) {
+  if (x.empty === true) {
+    // Tipo inferido { empty: true }
+    console.log(x.value); // error de compilación
+  }
+  else {
+    // Tipo inferido { empty: false, value: number }
+    console.log(x.value * 2);
+  }
+}
+</pre>
+<p>Es un poco feo tener que escribir el <code>x.empty === true</code>, pero sin eso el sistema de tipos de TypeScript no es capaz de acotar el tipo correcto en cada rama del <code>if</code>.</p>
+<p>Todo esto podemos aplicarlo a cosas algo más interesantes que <code>Optional</code>. Veamos otro ejemplo en el que tenemos usuarios con una dirección de correo asociado y queremos que no se les pueda enviar emails hasta que la dirección de correo haya sido verificada.</p>
+<p>Modelar esto en C# con una cierta seguridad de tipos es relativamente incómodo y nos obliga a utilizar varias clases y alguna relación de herencia por el camino. En TypeScript es bastante sencillo:</p>
+<pre class="brush:typescript">type VerifiedEmail = { verified: true, address: string };
+type UnverifiedEmail = { verified: false, address: string };
+type Email = VerifiedEmail | UnverifiedEmail;
+
+type User = { name: string, email: Email };
+
+function sendEmail({ address }: VerifiedEmail) {
+    // TODO: Enviar email
+}
+
+function verifyEmail({ address }: UnverifiedEmail) {
+    // TODO: Verificar el email
+}
+
+let u: User = getUserFromSomewhere();
+
+sendEmail(u.email); // Error. Email podría no estar verificado
+
+if (u.email.verified === true)
+    sendEmail(u.email);
+else
+    verifyEmail(u.email);
+</pre>
+<p>De esta forma es fácil crear tipos más restrictivos que nos permitan limitar las operaciones disponibles en cada caso y nos obliguen a tener en cuenta todos los escenarios posibles.</p>
+<p>En realidad, como decíamos antes, lo único que estamos haciendo es implementar tipos suma de una forma un tanto rebuscada, usando un valor dentro del tipo como discriminador en lugar de usar constructores como haríamos, por ejemplo, en Haskell donde nuestro tipo <code>Email</code> se definiría así:</p>
+<pre class="brush:haskell">data Email = VerifiedEmail address | UnverifiedEmail address
+</pre>
+<p>En lugar de utilizar un flag para distinguir entre los dos estados de <code>Email</code> se utilizan distintos constructores, <code>VerifiedEmail</code> y <code>UnverifiedEmail</code> para diferenciar un tipo de correo de otro.</p>
+<h3>Conclusión</h3>
+<p>TypeScript no es la panacea y tiene un montón de cosas discutibles (soy el primero que se suele quejar de ello), pero también ofrece posibilidades interesantes.</p>
+<p>Desgraciadamente, en el mundo del frontend es muy frecuente «no diseñar» y limitarse a aplicar los patrones indicados por el framework o librería de turno (react, vue, redux, angular&#8230;). Eso hace que TypeScript se vea sólo como una forma de tipar estáticamente las llamadas a estas herramientas y no se intente aprovechar realmente la capacidad de diseño que permite su sistema de tipos.</p>
+<p>Como vimos al hablar de <a href="https://blog.koalite.com/2017/02/las-clases-como-code-smell/" target="_blank"> las clases como code smell</a>, es importante utilizar cada lenguaje sacando partido a sus características en lugar de limitarse a traducir de un lenguaje a otro. Si tu uso de TypeScript se reduce a emplear las mismas técnicas que en Javascript (pero con intellisense) o los mismos diseños que en C# (pero ejecutándose en un browser), te estás perdiendo gran parte de sus ventajas.</p>
+]]></content:encoded>
+					
+		
+		
+			</item>
+		<item>
+		<title>Y tú, ¿qué haces los fines de semana?</title>
+		<link>https://blog.koalite.com/2019/03/y-tu-que-haces-los-fines-de-semana/</link>
+					<comments>https://blog.koalite.com/2019/03/y-tu-que-haces-los-fines-de-semana/#comments</comments>
+		
+		<dc:creator><![CDATA[Juan María Hernández]]></dc:creator>
+		<pubDate>Mon, 18 Mar 2019 17:42:31 +0000</pubDate>
+				<category><![CDATA[opinion]]></category>
+		<guid isPermaLink="false">https://blog.koalite.com/?p=5658</guid>
+
+					<description><![CDATA[Últimamente he llegado a varios hilos en twitter sobre la conveniencia o no de que los desarrolladores dediquemos nuestro tiempo libre a actividades relacionadas con el desarrollo de software. Vaya por delante que, como muy bien decía Modesto San Juan: Creo que lo de decirle a la gente lo que tiene que hacer o no... <p><a href="https://blog.koalite.com/2019/03/y-tu-que-haces-los-fines-de-semana/" class="more-link">Seguir leyendo <span class="icon-chevron-right"></span></a></p>]]></description>
+										<content:encoded><![CDATA[<p>Últimamente he llegado a varios hilos en twitter sobre la conveniencia o no de que los desarrolladores dediquemos nuestro tiempo libre a actividades relacionadas con el desarrollo de software.</p>
+<p>Vaya por delante que, como muy bien decía <a href="https://twitter.com/msanjuan/status/1107442790210985984" target="_blank">Modesto San Juan</a>:</p>
+<blockquote><p>
+Creo que lo de decirle a la gente lo que tiene que hacer o no hacer no tiene mucho sentido.</p></blockquote>
+<p>Pero también me parece interesante esta puntualización de <a href="https://twitter.com/Rafael_Casuso/status/1107543388323225600" target="_blank">Rafael Casuso</a>:</p>
+<blockquote><p>
+Creo que tampoco son conscientes de la presión que este bombardeo de actividad frenética IT causa en muchos compañeros. Si en algo podemos ayudar las voces conocidas a quitar esa presión creo que es positivo.</p></blockquote>
+<p>No sé si cuento como <em>voz conocida</em>, pero ya que tengo un blog y escribo cosas en él, me uno al debate.</p>
+<p>Llevo 18 años dedicado al desarrollo de software profesionalmente. Siempre me ha gustado y, durante casi todo ese tiempo, he dedicado más o menos parte de mi tiempo libre a aprender sobre cosas relacionadas con el desarrollo.</p>
+<p>Durante los últimos 7 años y medio además he estado escribiendo este blog, he sido razonablemente activo en redes sociales, e incluso he asistido a algunos eventos (tampoco muchos). Todo eso me da cierta experiencia en primera persona de lo que supone pertenecer a «la comunidad» del desarrollo.</p>
+<p>Sin embargo, como comentaba hace unos días con <a href="https://twitter.com/gulnor/status/1104059894498508801" target="_blank">Miguel Ángel Pastor</a>, desde hace dos años le dedico mucho menos tiempo. Ahora mismo prefiero dedicar más parte de mi tiempo libre a estar con mi familia y disfrutar de mi hija que a ir a un evento de fin de semana.</p>
+<p>Eso cuadra con lo que contaba Rafael en <a href="https://twitter.com/Rafael_Casuso/status/1107284863143407616" target="_blank"> este hilo</a> sobre dedicar el fin de semana a desconectar y estar con los tuyos.</p>
+<p>Podría venderlo como un (mal) ejemplo de conciliación familiar o de lo que implica ser padre. Nada más lejos de mi intención. Si hago esto, más allá de la responsabilidad que crea que tengo con mi familia, es <em>porque es lo que más me apetece hacer</em>. Al menos ahora. Es lo que más disfruto.</p>
+<p>Y eso es importante. Disfrutar.</p>
+<p>Cuando dedicaba muchas horas de mi tiempo libre a jugar con lenguajes de programación o con nuevos frameworks o a leer sobre desarrollo de software, lo hacía porque disfrutaba. Disfrutaba por el mero hecho de aprender sin necesidad de buscar una utilidad a lo que estaba aprendiendo y sin más objetivo que pasármelo bien.</p>
+<p>Por eso no veo ningún problema en que alguien quiera dedicar su tiempo libre a aprender (sobre software, sobre historia antigua o sobre repostería) si disfruta con ese aprendizaje.</p>
+<p>Comprendo que esto se puede volver en nuestra contra, como explica <a href="https://twitter.com/diana_aceves_" target="_blank">Diana Aceves</a>:</p>
+<blockquote><p>
+Pero, lo más importante, normalmente menciono que el principal problema es que las empresas den por normalizado el que tengas que tener side projects para mostrar en los procesos de selección, porque entonces ya no es tan «voluntario» lo de currar fuera de horas de trabajo.</p></blockquote>
+<p>Sin duda esto es un problema, pero no ya porque dediques el tiempo libre al desarrollo de software o al cultivo de tulipanes, sino porque no tiene mucho sentido hablar de tiempo <em>libre</em> cuando <em>necesariamente</em> tienes que dedicarlo a algo concreto. ¿Qué clase de libertad es esa?</p>
+<p>También es cierto que en esta profesión (¿y en todas?) es necesario mantenerse actualizado (aunque <a href="https://blog.koalite.com/2014/11/aprende-despacio/" target="_blank">no haga falta aprender cosas nuevas tan rápido como pueda parecer</a>), y de una forma u otra eso requiere tiempo. En un mundo ideal es tu empresa la que te permite destinar tiempo durante la jornada laboral para ello, pero todos sabemos que no siempre vivimos en un mundo ideal.</p>
+<p>Que puntualmente necesites sacrificar (y ojo, que esa es la palabra: sacrificar) parte de tu tiempo libre para obtener algo a cambio es perfectamente razonable. Para mi es equivalente al que compagina los estudios con un trabajo. ¿Lo tiene más complicado que el que puede estudiar mientras le mantienen sus padres? Por supuesto. Pero a veces no hay otra alternativa.</p>
+<p>Esto que ocurre desde un punto de vista laboral, también se manifiesta desde un punto de vista de «comunidad», postureo o como quieras llamarlo. Lo plantea Rafael en el tweet que citaba al principio.</p>
+<p>Es fácil sentirse abrumado al ver que las figuras más <del>reconocidas</del> reconocibles del mundillo del desarrollo no paran de hacer cosas. Dar charlas. Asistir a eventos. Publicar posts. Compartir enlaces en twitter. Contribuir en proyectos open source.</p>
+<p>Hacer todo esto está muy bien, pero vuelvo al punto anterior: está muy bien si lo disfrutas. Si hacer este tipo de cosas se convierte en algo <em>necesario</em> para sentirte alguien <em>guay</em> como tus ídolos y te acaba generando ansiedad, es el momento de replantearse tus prioridades.</p>
+<p>En resumen, ya lo decía Modesto en su tweet: no tiene mucho sentido decirle a nadie lo que debe hacer con su tiempo.</p>
+<p>En mi opinión, es fundamental ser capaz de diferenciar las cosas que haces porque necesitas y las cosas que haces para disfrutar y tener muy claro hasta dónde puedes llegar con cada una.</p>
+<p>Si disfrutas dedicando tiempo libre a cosas relacionadas con el desarrollo, estupendo. Si prefieres dedicar tu tiempo libre a otras actividades, perfecto. Si no te queda más remedio que sacrificar tu tiempo libre para conseguir algo&#8230;, bueno, a veces es inevitable, pero trata de estar seguro de que lo que quieres conseguir realmente merece la pena.</p>
+]]></content:encoded>
+					
+					<wfw:commentRss>https://blog.koalite.com/2019/03/y-tu-que-haces-los-fines-de-semana/feed/</wfw:commentRss>
+			<slash:comments>2</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>¿Qué significa new this() en Javascript?</title>
+		<link>https://blog.koalite.com/2019/03/que-significa-new-this-en-javascript/</link>
+					<comments>https://blog.koalite.com/2019/03/que-significa-new-this-en-javascript/#comments</comments>
+		
+		<dc:creator><![CDATA[Juan María Hernández]]></dc:creator>
+		<pubDate>Mon, 04 Mar 2019 05:06:48 +0000</pubDate>
+				<category><![CDATA[development]]></category>
+		<category><![CDATA[javascript]]></category>
+		<guid isPermaLink="false">https://blog.koalite.com/?p=5652</guid>
+
+					<description><![CDATA[Que Javascript es un lenguaje con un diseño sumamente confuso un tanto peculiar es algo que a estas alturas ya no se le escapa a nadie. Todos conocemos los típicos ejemplos de comportamientos impredecibles cuando se empiezan a mezclar las reglas de coerción de tipos con operadores como +, == o ===. Aun así, si... <p><a href="https://blog.koalite.com/2019/03/que-significa-new-this-en-javascript/" class="more-link">Seguir leyendo <span class="icon-chevron-right"></span></a></p>]]></description>
+										<content:encoded><![CDATA[<p>Que Javascript es un lenguaje con un diseño <del>sumamente confuso</del> un tanto peculiar es algo que a estas alturas ya no se le escapa a nadie. Todos conocemos los típicos ejemplos de comportamientos impredecibles cuando se empiezan a mezclar las reglas de coerción de tipos con operadores como +, == o ===.</p>
+<p>Aun así, si algo tengo que reconocerle a Javascript es que siempre puedes encontrar algo nuevo que te sorprenda. Lo último ha sido ver código parecido a éste:</p>
+<pre class="brush:javascript">const x = new this();
+</pre>
+<p>Si viendo ese código ya tienes clarísimo lo que hace, te puedes ahorrar el resto del post. Por el contrario, si a simple vista te resulta tan extraño como a mi, vamos a intentar descifrarlo poco a poco.</p>
+<h3>this en Javascript</h3>
+<p>Éste debe de ser el único blog que queda en internet sin hablar de esto, y tampoco quiero profundizar mucho ahora, pero para entender lo que significa <code>new this()</code> primero es necesario recordar cómo funciona <code>this</code> en Javascript.</p>
+<p>En lenguajes como C# o Java, <code>this</code> hace referencia a la instancia actual de la clase sobre la que se está ejecutando un método. El valor de <code>this</code> queda fijado por la clase en que está definido el método y siempre será una instancia de esa clase (o de una clase derivada de ella).</p>
+<p>En el caso de Javascript, <code>this</code> hace referencia al objeto sobre el que se ejecuta una función, pero al no haber un concepto de clase comparable al de C#/Java (y no, la sintaxis <code>class</code> no significa lo mismo), la cosa cambia bastante porque podemos hacer que una función esté enlazada a diferentes objetos:</p>
+<pre class="brush:javascript">function sayHello() {
+  console.log('Hi, ' + this.name);
+}
+
+const m = { name: 'Marcos', sayHello }
+m.sayHello() // Hi, Marcos
+
+const j = { name: 'Juan', sayHi: sayHello }
+j.sayHi(), // Hi, Juan
+</pre>
+<p>Podemos crear una función, asignarla a distintos objetos, y el valor de <code>this</code> al ejecutar la función dependerá del objeto que la contenga en cada momento. Esto no es del todo cierto y se puede controlar mejor con las funciones <code>bind</code>, <code>call</code>, <code>apply</code>, o usando funciones <code>arrow</code>, pero ahora eso nos importa relativamente poco.</p>
+<p>La idea con la que te tienes que quedar es que <code>this</code> no tiene nada que ver con clases, sino que referencia el objeto sobre el que se ejecuta una función, que puede coincidir o no con el objeto en el que se definió.</p>
+<h3>Funciones y objetos en Javascript</h3>
+<p>En Javascript podemos crear objetos mediante la sintaxis para objetos literales, como veíamos en el ejemplo anterior, o usando <a href="https://blog.koalite.com/2013/06/usando-c-para-entender-los-constructores-de-javascript/" target="_blank">funciones constructoras</a>. Y poco más. La sintaxis «nueva» para definir clases es, en realidad, azucar sintáctico sobre las funciones constructoras, pero se puede traducir a ellas. De hecho, cualquier función en Javascript se puede usar como función constructora si la invocamos con <code>new</code> (aunque a veces eso tenga poco sentido):</p>
+<pre class="brush:javascript">function sum(a, b) {
+  return a + b;
+}
+
+const x = new sum(1, 2);
+x instanceof sum // true
+</pre>
+<p>Además, las funciones en Javascript también son objetos, por lo que pueden tener sus propiedades adicionales y a las que les podemos enlazar otras funciones:</p>
+<pre class="brush:javascript">function sum(a, b) {
+  return (a + b) * sum.factor;
+}
+sum.factor = 2;
+sum.incFactor = function() { sum.factor ++; }
+
+sum.incFactor();
+sum(1, 2) === 9; // true (1 + 2) * 3
+</pre>
+<h3>Atando cabos</h3>
+<p>Pensando en lo que acabamos de ver (y que en el fondo ya sabíamos) sobre <code>this</code> y las funciones como objetos en Javascript, es fácil razonar lo que hace ese extraño <code>new this()</code> que veíamos al principio del post.</p>
+<p>Imagina este código:</p>
+<pre class="brush:javascript">function Person() {
+}
+
+Person.create = function() {
+  return new this();
+}
+
+const p = Person.create();
+p instanceof Person; // true
+</pre>
+<p>Si entendemos la función como un objeto y le asociamos una propiedad que es otra función, en esa otra función <code>this</code> se referirá a la propia función y, como hemos visto, cualquier función podemos usarla como una función constructora.</p>
+<p>Podemos hacer una traducción aproximada del código anterior a sintaxis de clases y tendríamos el mismo resultado:</p>
+<pre class="brush:javascript">class Person {
+  static create() {
+    return new this();
+  }
+}
+
+const p = Person.create();
+p instanceof Person; // true
+</pre>
+<p>Esto funciona incluso con relaciones de herencia, permitiendo tener métodos estáticos cuyo comportamiento cambia dependiendo del punto de la jerarquía desde el que se invoquen:</p>
+<pre class="brush:javascript">class Employee extends Person {
+}
+
+const e = Employee.create();
+e instanceof Employee; // true
+e instanceof Person; // true
+</pre>
+<p>Dependiendo de si invocamos el «método estático» desde el objeto que representa a la clase base o a la clase derivada, el valor de <code>this</code> cambiará y crearemos un tipo de objeto u otro.</p>
+<p>Y todo esto, ¿para qué sirve?</p>
+<p>Pues la verdad es que no tengo ni idea, más allá de que resulte curioso para pasar el rato. Quizá en algún escenario en el que tuvieras que simular factorías para una jerarquía de «clases» pueda tener algún uso, pero estoy casi seguro de que siempre vas a poder encontrar un diseño más sencillo de seguir.</p>
+<h3>Conclusión</h3>
+<p>Javascript es un lenguaje que tiene muchas pegas, pero la flexibilidad que ofrece hace que en ocasiones puedes encontrar planteamientos interesantes desde el punto de vista de metaprogramación. Al manejar muy pocos tipos de primitivas y tener una frontera muy difusa entre ellas (como el caso de las funciones que también son objetos) puedes hacer muchas <del>guarrerías</del> cosas que son complicadas en otros lenguajes de programación.</p>
+<p>A veces incluso pueden resultar útiles, como el caso de crear nuevas clases dinámicamente desde funciones, como vimos al hablar de los <a href="https://blog.koalite.com/2016/07/componentes-de-orden-superior-higher-order-components-en-reactjs/" target="_blank">componentes de orden superior en ReactJS</a>.</p>
+<p>Lo importante, con Javascript o con cualquier lenguaje, es intentar entender cómo funcionan las cosas que utilizamos y no quedarnos con <a href="https://blog.koalite.com/2011/08/%C2%BFhacen-los-frameworks-tontos-a-los-desarrolladores/" target="_blank">la sensación de ser los más listos sólo porque sabemos tirar un par de pantallas con el framework de turno</a>.</p>
+]]></content:encoded>
+					
+					<wfw:commentRss>https://blog.koalite.com/2019/03/que-significa-new-this-en-javascript/feed/</wfw:commentRss>
+			<slash:comments>3</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>Clases estáticas como alternativa a inyección de dependencias</title>
+		<link>https://blog.koalite.com/2019/02/clases-estaticas-como-alternativa-a-inyeccion-de-dependencias/</link>
+					<comments>https://blog.koalite.com/2019/02/clases-estaticas-como-alternativa-a-inyeccion-de-dependencias/#comments</comments>
+		
+		<dc:creator><![CDATA[Juan María Hernández]]></dc:creator>
+		<pubDate>Mon, 18 Feb 2019 05:06:42 +0000</pubDate>
+				<category><![CDATA[development]]></category>
+		<category><![CDATA[dependency injection]]></category>
+		<category><![CDATA[design patterns]]></category>
+		<category><![CDATA[ioc]]></category>
+		<guid isPermaLink="false">https://blog.koalite.com/?p=5647</guid>
+
+					<description><![CDATA[En las aplicaciones orientadas a objetos es frecuente que en algún momento necesites tener varias implementaciones de un mismo contrato. Esto no es ningún problema y puedes aprovechar el uso de interfaces o clases abstractas para definir el contrato y luego crear distintas implementaciones del mismo. Al tener varias implementaciones, ahora toca buscar una forma... <p><a href="https://blog.koalite.com/2019/02/clases-estaticas-como-alternativa-a-inyeccion-de-dependencias/" class="more-link">Seguir leyendo <span class="icon-chevron-right"></span></a></p>]]></description>
+										<content:encoded><![CDATA[<p>En las aplicaciones orientadas a objetos es frecuente que en algún momento necesites tener varias implementaciones de un mismo contrato. Esto no es ningún problema y puedes aprovechar el uso de interfaces o clases abstractas para definir el contrato y luego crear distintas implementaciones del mismo.</p>
+<p>Al tener varias implementaciones, ahora toca buscar una forma de decidir qué implementación hay que utilizar en cada caso. Para esto hay varias fórmulas. Desde el clásico <a href="https://blog.koalite.com/2016/12/los-patrones-de-diseno-hoy-patrones-creacionales/" target="_blank">patrón factoría</a> para delegar la creación de la implementación concreta a otra clase, hasta el uso de <a href="https://blog.koalite.com/2012/11/contenedores-ioc-%C2%BFbuenos-o-malos/" target="_blank">contenedores de inversión de control</a> e inyección de dependencias. Hoy en día parece que las buenas prácticas <em>te llevan</em> a usar estos últimos, pero quizá <a href="https://blog.koalite.com/2016/02/las-ventajas-de-no-usar-inyeccion-de-dependencias/" target="_blank">andar inyectando dependencias no siempre sea la mejor opción</a>.</p>
+<p>Siguiendo con las «buenas prácticas», otra de las cosas que <em>parece</em> que deberíamos hacer es <a href="https://blog.koalite.com/2016/11/mitos-y-leyendas-sobre-metodos-estaticos/" target="_blank">evitar a toda costa los métodos estáticos</a> porque son menos flexibles y limitan el polimorfismo. Sin embargo, hay escenarios en los que un uso razonable de clases estáticas pueden ayudarnos a conseguir esa parte de comportamiento dinámico que necesitamos sin necesidad de introducir grandes cambios en el diseño de la aplicación, algo que es especialmente útil cuando estamos tratando con código <em>legacy</em>.</p>
+<p>En este post vamos a partir de un ejemplo (basado en hechos reales) para ver cómo poco a poco podemos modificar una aplicación que parte de un diseño completamente rígido para dotarla de cierta flexibilidad sin asumir demasiados riesgos y sin añadir excesiva complejidad al diseño.</p>
+<h3>El problema</h3>
+<p>Partimos de una aplicación que realiza un proceso (que nos da más o menos igual), durante el cual se van ejecutando acciones modeladas en distintas clases. Esta aplicación es ejecutada manualmente por un usuario que va viendo en pantalla el estado de las operaciones y al que se le muestran de vez en cuando algunos mensajes.</p>
+<p>El código podría ser de este estilo:</p>
+<pre class="brush:csharp">public class UserConfigurator {
+  public void AddUser() {
+    ProgressView.ShowWhile("Adding users...", () =&gt; {
+      // ... 
+    });
+
+    MessageBox.ShowInfo("Users added");
+  }
+}
+
+public class FileDeployer {
+  public void DeployFiles() {
+    if (!CanDeployFiles()) {
+      MessageBox.ShowError("Could not deploy files");
+      var helpView = new HelpView();
+      helpView.LoadDocument("deploy-files.html");
+      helpView.Show();
+    }
+    // ...
+  }
+}
+</pre>
+<p>Como éstas, habría unas cuantas clases más cada una encargada de realizar parte del proceso, comunicar al usuario el estado. Supongamos ahora que necesitamos modificar esta aplicación para que se pueda ejecutar en modo silencioso, sin mostrar ningún tipo de mensaje al usuario, para ser ejecutada de forma desatendida.</p>
+<p>Siempre podríamos ir revisando el código con cariño e ir añadiendo <code>ifs</code> para sacar o no sacar ventanas, pero no parece una cosa muy agradable de hacer (ni de mantener).</p>
+<p>Existen muchas alternativas, pero en general partimos de una situación relativamente incómoda, porque tenemos bastante código dedicado a mostrar cosas en pantalla, repartido por bastantes sitios de la aplicación, y el diseño original no usa inyección de dependencias o cualquiera de las técnicas típicas para resolver esto.</p>
+<h3>Ocultando el polvo</h3>
+<p>Para intentar mejorar la situación, lo primero que podemos hacer es intentar encapsular todo el subsistema de interfaz de usuario detrás de una fachada. En lugar de tener acciones a través del método <code>ProcessView.ShowWhile</code>, <code>MessageBox.ShowInfo</code> y <code>MessageBox.ShowError</code>, podemos construir algo así:</p>
+<pre class="brush:csharp">public static class UI {
+  public static void ShowWhile(string message, Action action) {
+    ProgressView.ShowWhile(message, action);
+  }
+  public static void ShowError(string message) {
+    MessageBox.ShowError(messge);
+  }
+  public static void ShowInfo(string message) {
+    MessageBox.ShowInfo(messge);
+  }
+  public static void ShowHelpDocument(string file) {
+     var view = new HelpView();
+     view.LoadDocument(file);
+     view.Show(); 
+  }
+}
+</pre>
+<p>En la fachada encapsulamos <em>todas</em> las operaciones relativas a interfaz de usuario. Además, las vamos a encapsular como métodos estáticos. Esto nos permite evitar tener que gestionar el ciclo de vida de la fachada. Si fueran métodos de instancia y la fachada tuviera estado (algo que vamos a necesitar en un rato), tendríamos que andar garantizando que el estado de la fachada es el adecuado en todas las instancias y la cosa se complica. Es uno de esos casos en los que si puedes <a href="https://blog.koalite.com/2017/02/las-clases-como-code-smell/" target="_blank">evitar clases y limitarte a módulos</a> (que es lo que realmente es la clase estática), te ahorrarás complicaciones.</p>
+<p>Con la fachada montada así, actualizar el código del resto de la aplicación es trivial:</p>
+<pre class="brush:csharp">public class UserConfigurator {
+  public void AddUser() {
+    UI.ShowWhile("Adding users...", () =&gt; {
+      // ... 
+    });
+
+    UI.ShowInfo("Users added");
+  }
+}
+
+public class FileDeployer {
+  public void DeployFiles() {
+    if (!CanDeployFiles()) {
+      UI.ShowError("Could not deploy files");
+      UI.ShowHelpDocument("deploy-files.html");
+    }
+    // ...
+  }
+}
+</pre>
+<p>Por el camino, al haber pasado algo de lógica a la fachada (como el caso del <code>ShowHelpDocument</code>), simplificamos algo el código de los clientes y gracias a la fachada tenemos encapsulado todo el código relativo a la comunicación con el usuario sacando ventanas.</p>
+<h3>Introduciendo polimorfismo</h3>
+<p>Ahora sólo necesitamos tener dos implementaciones de fachada, una que muestre mensajes al usuario y otra que se limite a escribir esos mensajes en un log en lugar de andar sacando ventanas. Para ello, vamos a empaquetar toda la lógica actual de la fachada en una clase y haremos que la fachada delegue en ella todas las operaciones:</p>
+<pre class="brush:csharp">public static class UI {
+
+  private class WindowsUI {
+    public void ShowWhile(string message, Action action) {
+      ProgressView.ShowWhile(message, action);
+    }
+    public void ShowError(string message) {
+      MessageBox.ShowError(messge);
+    }
+    public void ShowInfo(string message) {
+      MessageBox.ShowInfo(messge);
+    }
+    public ShowHelpDocument(string file) {
+       var view = new HelpView();
+       view.LoadDocument(file);
+       view.Show(); 
+    }
+  }
+
+  private static readonly _ui = new WindowsUI();
+
+  public static void ShowWhile(string message, Action action) {
+    _ui.ShowWhile(message, action);
+  }
+  public static void ShowError(string message) {
+    _ui.ShowError(messge);
+  }
+  public static void ShowInfo(string message) {
+    _ui.ShowInfo(messge);
+  }
+  public static void ShowHelpDocument(string file) {
+     _ui.ShowHelpDocument(file);
+  }
+}
+</pre>
+<p>Nuevamente, una refactorización trivial. He dejado la clase <code>WindowsUI</code> como privada a la fachada porque realmente no tiene sentido fuera de ella, pero <a href="https://blog.koalite.com/2016/07/resistiendo-el-hedor-de-las-clases-grandes/" target="_blank">si ten ponen nervioso las clases grandes</a>, te lo puedes llevar fuera.</p>
+<p>Ahora ya está bastante claro, sólo nos falta extraer un interface con las operaciones de <code>WindowsUI</code> para poder crear nuestra implementación silenciosa:</p>
+<pre class="brush:csharp">public static class UI {
+
+  private interface IUI {
+    void ShowWhile(string message, Action action);
+    void ShowError(string message);
+    void ShowInfo(string message);
+    void ShowHelpDocument(string file);
+  }
+
+  private class WindowsUI: IUI {
+    // Implementación que hemos visto antes
+  }
+
+  private class SilentUI : IUI {
+    public void ShowWhile(string message, Action action) {
+      Log.Info(message);
+      action();
+    }
+    public void ShowError(string message) {
+      Log.Error(message);
+    }
+    public void ShowInfo(string message) {
+      Log.Info(message);
+    }
+    public void ShowHelpDocument(string file) {
+      // Nada que hacer aquí
+    }
+  }
+
+  private static readonly _ui = new WindowsUI();
+
+  public static void EnableSilentMode() {
+    _ui = new SilentUI();
+  }
+
+  public static void ShowWhile(string message, Action action) {
+    _ui.ShowWhile(message, action);
+  }
+  public static void ShowError(string message) {
+    _ui.ShowError(messge);
+  }
+  public static void ShowInfo(string message) {
+    _ui.ShowInfo(messge);
+  }
+  public static void ShowHelpDocument(string file) {
+    _ui.ShowHelpDocument(file);
+  }
+}
+</pre>
+<p>Sólo nos falta activar el modo silencioso al arrancar la aplicación en base a algún parámetro de línea de comandos:</p>
+<pre class="brush:csharp">static void Main(string[] args) {
+  if (args.Contains("--silent")) {
+    UI.EnableSilentMode();
+  }
+  // ...
+}
+</pre>
+<p>Con esto ya podemos configurar de forma transparente a toda la aplicación si queremos que nuestro interfaz de usuario muestre ventanas o sea completamente silencioso y se limite a escribir en un fichero.</p>
+<h3>Resumen</h3>
+<p>Tendemos a guiarnos demasiado por las «buenas prácticas» y eso nos lleva a utilizar siempre las mismas soluciones para determinados problemas, aunque podamos encontrar soluciones alternativas más simples.</p>
+<p>El ejemplo que hemos visto en este post es sólo eso, un ejemplo, y no pretendo en ningún caso decir que reniegues de tus contenedores de inyección de dependencias para usar sólo fachadas estáticas, entre otras cosas porque esta aproximación también tiene sus pegas (como la dificultad para seguir las dependencias de cada clase).</p>
+<p>Sin embargo, cuando te encuentras con una aplicación que no está usando un contenedor, es bueno conocer alternativas que te permiten modificar la aplicación e introducir cierto comportamiento polimórfico sin tener que reescribir media aplicación para usar inyección de dependencias.</p>
+]]></content:encoded>
+					
+					<wfw:commentRss>https://blog.koalite.com/2019/02/clases-estaticas-como-alternativa-a-inyeccion-de-dependencias/feed/</wfw:commentRss>
+			<slash:comments>2</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>Sistemas de control de versiones: algo más que comandos en un shell</title>
+		<link>https://blog.koalite.com/2019/02/sistemas-de-control-de-versiones-algo-mas-que-comandos-en-un-shell/</link>
+		
+		<dc:creator><![CDATA[Juan María Hernández]]></dc:creator>
+		<pubDate>Mon, 04 Feb 2019 05:06:03 +0000</pubDate>
+				<category><![CDATA[development]]></category>
+		<category><![CDATA[dvcs]]></category>
+		<category><![CDATA[git]]></category>
+		<category><![CDATA[vcs]]></category>
+		<guid isPermaLink="false">https://blog.koalite.com/?p=5643</guid>
+
+					<description><![CDATA[Como contaba en el post sobre las tecnologías que usé en 2018, uno de los cambios fundamentales a nivel profesional ha sido la introducción de git como sistema de control de versiones. Técnicamente soy usuario de git desde 2011 (o eso dice mi perfil de GitHub), pero lo cierto es que el uso que le... <p><a href="https://blog.koalite.com/2019/02/sistemas-de-control-de-versiones-algo-mas-que-comandos-en-un-shell/" class="more-link">Seguir leyendo <span class="icon-chevron-right"></span></a></p>]]></description>
+										<content:encoded><![CDATA[<p>Como contaba en el post sobre <a href="https://blog.koalite.com/2019/01/mis-tecnologias-de-2018/" target="_blank">las tecnologías que usé en 2018</a>, uno de los cambios fundamentales a nivel profesional ha sido la introducción de git como sistema de control de versiones. Técnicamente soy usuario de git desde 2011 (o eso dice mi perfil de GitHub), pero lo cierto es que el uso que le había dado hasta ahora no era demasiado completo. Sí, me servía para gestionar código, crear algunas ramas, incluso hacer algún Pull Request, pero sin tratar de entender realmente lo que había por debajo.</p>
+<p>Viniendo de usar Subversion durante muchos años (y de estar muy cómodos con él), antes de comenzar a utilizar git dedicamos bastante tiempo a conocerlo mejor y tratar de averiguar qué nos podría ofrecer, más allá de replicar las cosas que ya podíamos hacer con Subversion (pero más rápido), y a decidir qué necesitábamos de él.</p>
+<p>Eso me ha hecho replantearme algunas ideas que tenía sobre lo que esperaba de un sistema de control de versiones y el uso que le podía dar.</p>
+<p>Por supuesto, todo el mundo sabe un sistema de control de versiones sirve para, ejem, controlar versiones. Es decir, poder almacenar distintas versiones de un conjunto de ficheros y obtener información sobre ellas: qué cambios se introdujeron, cuándo, quién los introdujo, etc. Que esto es una de <a href="https://blog.koalite.com/2013/12/cinco-cosas-que-deberias-aprender-para-dedicarte-al-desarrollo-de-software/" target="_blank">las cosas básicas que cualquier desarrollador debería conocer</a> está fuera de toda duda.</p>
+<p>Pero además de eso, un sistema de control de versiones habilita otro tipo de escenarios, y dependiendo del sistema de control de versiones que usemos y de cómo lo usemos, tendremos más o menos facilidades para trabajar de distintas formas.</p>
+<p>A la hora de decidir cómo queremos trabajar con un sistema de control de versiones tenemos que pensar en lo que queremos conseguir. En qué tipo de información queremos tener, cómo vamos a consumirla y quién la va a consumir. En qué flujos de trabajo necesitamos soportar para permitir la colaboración entre distintos miembros de un mismo equipo. En cuál es el ciclo de vida de nuestra aplicación y cómo vamos a gestionarlo desde el punto de vista del código.</p>
+<h3>El flujo del tiempo</h3>
+<p>Lo primero que esperas de un control de versiones es poder consultar el historial de cambios que se han ido produciendo. La historia del proyecto. Cuando uno piensa en la historia, es fácil verla como un registro lineal de cosas que han pasado en el Mundo Real&amp;trade. Parece lógico.</p>
+<p>Viéndolo así, a través de la historia del repositorio podríamos saber todos los pasos que hemos ido dando hasta alcanzar el aspecto actual del código, incluyendo los posibles pasos intermedios erróneos que dimos mientras buscábamos la solución a un problema o el mejor diseño para ese componente que nos costó un par de pruebas hasta que lo cuadramos.</p>
+<p>Para una funcionalidad cualquiera podríamos tener una historia como ésta:</p>
+<pre>v7- Actualizado esquema de base de datos
+v6- Ajustado UI a cambios del modelo
+v5- Refactorizado modelo de dominio
+v4- Modificado UI (falta botón de guardar)
+v3- Incluidos más tests sobre dominio
+v2- Añadida parte de persistencia
+v1- Implementación inicial de modelo de dominio
+</pre>
+<p>Esto tiene sus ventajas porque mantienes el máximo nivel de detalle posible y puedes volver a cualquier instante de tiempo del desarrollo (siempre y cuando lo registraras en el sistema de control de código fuente, claro). A cambio, puede resultar difícil saber exactamente en qué estado se encontraba la aplicación en cada momento porque puedes encontrarte con versiones intermedias en las que algo estaba todavía a medio implementar, o con una implementación que no acabó siendo la definitiva.</p>
+<p>Podemos plantearnos si nos interesa reescribir la historia. ¿Realmente necesitamos todos esos pasos intermedios en nuestra historia? ¿Podemos eliminar el ruido, perder granularidad, y quedarnos sólo con versiones «con sentido» de la aplicación, por ejempo aquellas en las que se implementó una funcionalidad completa o se corrigió un bug?</p>
+<p>Depende. Depende mucho de para qué queremos la historia y quién la vaya a consumir.</p>
+<p>Si la historia va a ser consumida únicamente por los desarolladores del proyecto, mantener la máxima granularidad parece recomendable. Sí, puede que queden rastros de pasos en falso o de etapas intermedias del desarrollo, pero tener toda esa información nos puede servir para comprender mejor por qué el código ha acabado siendo lo que ha acabado siendo.</p>
+<p>En cambio, si queremos que la historia sirva como documentación para agentes externos, quizá ésta no sea la mejor aproximación. Si nuestra intención es que la historia la pueda comprender un equipo de QA que va realizando pruebas sobre la aplicación, introducir todo ese ruido no les va a ayudar y no van a tener muy claro qué tienen que probar y cuándo pueden empezar a probar una funcionalidad. Algo similar ocurre si pretendemos que la historia permita a otros equipos de desarrollo que dependan del nuestro ir adaptando su código a nuestros cambios.</p>
+<p>Para esos escenarios, parece más adecuado tener una historia más parecida a esta:</p>
+<pre>v3- Bug #444: Se permitía guardar cliente sin dirección
+v2- Posibilidad de asociar precios especiales a proveedores
+v1- Informe de Pagos por Cliente
+</pre>
+<p>Cada versión contiene un conjunto de cambios completo para implementar una funcionalidad y/o corregir un fallo. Por el camino hemos perdido detalle de la forma en que se fue implementando cada cosa, pero la historia nos queda «más bonita».</p>
+<p>Si quieres conseguir una historia de este estilo sin tener que renunciar a poder tener versiones intermedias mientras estás trabajando, muchos sistemas de control de versiones te permiten ir generando las versiones que quieras y, antes de ponerlas en común con el resto del equipo, convertir todas esas revisiones en una única revisión que incluya todos los cambios.</p>
+<p>Dependiendo del sistema de control de versiones que utilices y la forma en que trabajes con él hay <a href="https://twitter.com/gulnor/status/1078184807727808512" target="_blank">alternativas de tener algo a medio camino</a>.</p>
+<p>En cualquier caso, es interesante empezar a considerar la historia como un artefacto más generado durante el proceso de desarrollo y analizar de qué forma podemos sacarle el máximo partido dependiendo de nuestras necesidades.</p>
+<h3>Universos paralelos</h3>
+<p>Sin entrar en disquisiciones (meta)físicas, la mayoría de las veces consideramos el tiempo como lineal. Fluye en una sola dirección y los acontecimientos se suceden unos detrás de otros. Eso cuadra bastante con la idea de historia en un control de versiones, pero al hablar del estado de la aplicación es habitual que, en un instante de tiempo dado, no tengamos un único estado.</p>
+<p>Un caso claro es si tenemos dos desarrolladores trabajando en distintas áreas de la aplicación. Si los cambios que están introduciendo se van registrando en un sistema central, coexistirán, al menos, dos versiones distintas de la aplicación: una por cada desarrollador.</p>
+<p>También es posible que necesitemos mantener en paralelo varias versiones de la aplicación, por ejemplo porque a la versión N que está en producción podemos aplicarle correcciones de errores mientras desarrollamos la versión N+1 con nuevas funcionalidades. O porque tenemos el típico <a href="https://blog.koalite.com/2015/10/productos-y-proyectos-y-viceversa/" target="_blank">produyecto con versiones ligeramente distintas de código para cada cliente</a>.</p>
+<p>Generalmente esto se resuelve mediante el uso de ramas en el sistema de control de versiones, lo que nos permite mantener esos mundos paralelos evolucionando por separado, posiblemente cada uno a su ritmo, y decidir en qué momentos se junta o separan.</p>
+<p>Igual que ocurre con la historia, a la hora de establecer la estrategia de ramas que vamos a utilizar necesitamos pensar qué esperamos obtener de ella.</p>
+<p>Hace falta considerar la estabilidad que queremos que tenga cada rama. Podemos tener ramas extremadamente estables, donde se supone que el código está siempre listo para desplegar en producción. Otras con estabilidad algo menor, con el código listo para desplegar en un entorno de QA. Otras en las que permitimos código inacabado que podría no pasar los tests o incluso no compilar, pero que usamos para facilitar la colaboración entre varios desarrolladores.</p>
+<p>Entre todas estas ramas, necesitaremos establecer políticas que nos aseguren que se mantiene la estabilidad deseada, marcando la forma en que se traspasan cambios entre ellas y la forma en que se pasan esos cambios.</p>
+<p>Se pueden crear flujos de trabajo muy elaborados y burocratizados para gestionar todo este mundo de universos paralelos. Es fácil encontrar ejemplos en internet, por ejemplo el archiconocido <a href="https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow" target="_blank">Git Flow</a>, pero antes de aplicar ciegamente uno de ellos, merece la pena dedicar un tiempo a evaluar las necesidades reales de tu proyecto.</p>
+<p>Muchas veces estos flujos de trabajo son demasiado generalistas y cubren escenario que no necesitas, introduciendo una complejidad y fricción adicional durante el desarrollo.</p>
+<p>Quizá tu aplicación no necesite tener ramas dedicadas a estabilizar la aplicación antes de cada nueva versión porque estás usando un sistema de despliegue continuo. O te puedas ahorrar crear ramas para cada funcionalidad/bug porque todo el mundo <a href="https://trunkbaseddevelopment.com/" target="_blank">desarrolla directamente sobre la rama principal</a> para asegurar que la integración del código se realiza <em>realmente</em> cada poco tiempo.</p>
+<h3>Conclusión</h3>
+<p>Cuando empezamos a pensar en sistemas de control de versiones es fácil centrarnos en características puramente técnicas: qué operaciones soporta, cómo funciona cada una de ellas, qué clientes existen y cómo se manejan, qué rendimiento ofrece&#8230; Está muy bien saber todo lo que se puede hacer con un sistema de control de versiones, pero es aún más importante <em>saber lo que necesitas</em> hacer con él.</p>
+<p>A la hora de decidir cómo lo va a usar debes analizar para qué quieres la historia que se genera y quién la va a consumir, porque ello hará que sea más o menos práctico utilizar determinadas características de tu sistema de control de versiones. Pensar en la historia como un artefacto más del desarrollo (igual que el código fuente) y no sólo como un subproducto del mismo puede abrirte la puerta a escenarios interesantes.</p>
+<p>Si decides que vas a utilizar ramas para mantener flujos de trabajo en paralelo (algo que tampoco es obligatorio), piensa los escenarios que necesitas habilitar con ellas de cara a facilitar la colaboración entre miembros del equipo y el mantenimiento de versiones de producto. Te en cuenta la estabilidad que requiere cada rama, el tiempo que vivirá y la forma en que traspasarás cambios de unas ramas a otras. Evita guiarte ciegamente por la metodología de turno que, sí, es muy completa y está muy bien pensada, pero también puede resultar excesivamente compleja para tu caso de uso.</p>
+]]></content:encoded>
+					
+		
+		
+			</item>
+		<item>
+		<title>TypeScript: varianza y solidez</title>
+		<link>https://blog.koalite.com/2019/01/typescript-varianza-y-solidez/</link>
+					<comments>https://blog.koalite.com/2019/01/typescript-varianza-y-solidez/#comments</comments>
+		
+		<dc:creator><![CDATA[Juan María Hernández]]></dc:creator>
+		<pubDate>Mon, 21 Jan 2019 05:06:29 +0000</pubDate>
+				<category><![CDATA[development]]></category>
+		<category><![CDATA[type systems]]></category>
+		<category><![CDATA[typescript]]></category>
+		<guid isPermaLink="false">https://blog.koalite.com/?p=5622</guid>
+
+					<description><![CDATA[Hace un año escribía sobre las diferencias entre los sistemas de tipos nominales y los sistemas de tipos estructurales. También explicaba por qué el tipado estructural que utiliza Typescript puede suponer un problema a la hora de mantener invariantes en el modelo de datos de una aplicación. En este post quiero retomar el tema centrándome... <p><a href="https://blog.koalite.com/2019/01/typescript-varianza-y-solidez/" class="more-link">Seguir leyendo <span class="icon-chevron-right"></span></a></p>]]></description>
+										<content:encoded><![CDATA[<p>Hace un año escribía sobre las <a href="https://blog.koalite.com/2018/01/tipados-nominal-y-tipado-estructural/" target="_blank">diferencias entre los sistemas de tipos nominales y los sistemas de tipos estructurales</a>. También explicaba por qué <a href="https://blog.koalite.com/2018/02/mantenimiento-de-invariantes-en-typescript/" target="_blank">el tipado estructural que utiliza Typescript puede suponer un problema a la hora de mantener invariantes</a> en el modelo de datos de una aplicación.</p>
+<p>En este post quiero retomar el tema centrándome en las peculiaridades que presenta el sistema de tipos de Typescript a la hora de decidir si el tipo de dos funciones es estructuralmente compatible y las implicaciones que ello tiene. Por el camino pasaremos de puntillas por conceptos como la varianza de tipos y la solidez (<em>soundness</em>) de un sistema de tipos.</p>
+<h3>Tipado nominal y tipado estructural</h3>
+<p>No me voy a extender en este punto porque <a href="https://blog.koalite.com/2018/01/tipados-nominal-y-tipado-estructural/" target="_blank">ya lo traté con más detalle</a>, pero vamos a recordar las características básicas de cada sistema de tipos.</p>
+<p>En un sistema de tipos nominal sólo podemos hacer asignaciones entre referencias del mismo tipo o que implementen un tipo común (una clase base o interfaz, por ejemplo). El nombre define la identidad del tipo, y si tenemos dos tipos diferentes, aunque tengan exactamente la misma estructura interna, no son compatibles.</p>
+<p>En los sistemas de tipos estructural es la estructura del tipo la que define la compatibilidad. Eso permite que podamos realizar asignaciones entre cosas que, aunque a priori están definidas con tipos diferentes, tengan igual estructura (o al menos parecida).</p>
+<h3>Compatibilidad de funciones en TypeScript</h3>
+<p>Ya he mencionado antes que TypeScript utiliza tipado estructural para decidir la compatibilidad entre tipos pero, ¿cuándo se considera que <a href="https://www.typescriptlang.org/docs/handbook/type-compatibility.html#comparing-two-functions" target="_blank">dos funciones son compatibles</a>?</p>
+<p>Como era de esperar, esto va a depender tanto del tipo del valor de retorno de la función y los parámetros, como del número de los mismos.</p>
+<p>Empezando por el valor de retorno, podemos tener casos como esto:</p>
+<pre class="brush:typescript">type ReturnsVoid = (x: string) =&gt; void;
+type ReturnsBoolean = (x: string) =&gt; boolean;
+type ReturnsBooleanOrString = (x: string) =&gt; boolean | string;
+
+let f1: ReturnsVoid;
+let f2: ReturnsBoolean;
+let f3: ReturnsBooleanOrString;
+
+// OK: f1 no devuelve nada, nos da igual que f2 devuelva algo
+f1 = f2;
+
+// Error: f1 no devuelve nada pero f2 debe devolver boolean
+f2 = f1; 
+
+// OK: f2 devuelve boolean, que es válido para boolean|string
+f3 = f2;
+
+// Error: f3 puede devolver string, que no es válido para boolean
+f2 = f3;
+</pre>
+<p>Podemos asignar una función <code>f1</code> a otra <code>f2</code> si el tipo de retorno de <code>f1</code> es más específico (es un subtipo) que el tipo de retorno de <code>f2</code>. Si lo piensas un poco, tiene sentido, porque los consumidores de <code>f2</code> están preparados para trabajar con todos sus posibles valores de retorno, y los posibles valores de retorno de <code>f1</code> son un subconjunto de los de <code>f2</code>. Técnicamente, esto se conoce como covarianza, y podemos decir que las funciones con covariantes con respecto al tipo de retorno.</p>
+<p>¿Qué ocurre con los parámetros? Pues cabría esperar que más o menos lo contrario, pero no:</p>
+<pre class="brush:typescript">type AcceptsBoolean = (x: boolean) =&gt; void;
+type AcceptsBooleanOrString = (x: boolean | string) =&gt; void;
+
+let f1: AcceptsBoolean;
+let f2: AcceptsBooleanOrString;
+
+// OK: f2 trata boolean y string, y a través de f1 sólo llegará boolean
+f1 = f2;
+
+// OK: ¿Cómo? ¿Esto funciona?
+f2 = f1;
+// No, explota en tiempo de ejecución. Pero TypeScript te deja.
+f2("hola");
+</pre>
+<p>En <del>los lenguajes de programación sensatos</del> otros lenguajes de programación se permite la primera asignación porque el tipo del parámetro de <code>f1</code> es más restrictivo que el de <code>f2</code>, así que cuando se vaya a usar a través de la referencia <code>f1</code> todos los posibles valores que se pasen serán válidos para <code>f2</code>. El nombre técnico de eso es contravarianza y diríamos que las funciones son contravariantes con respecto al tipo de sus parámetros.</p>
+<p>Sin embargo, TypeScript permite también el segundo caso, que podría dar lugar a un error en tiempo de ejecución si usamos la referencia <code>f2</code> para invocar <code>f1</code> pasándole como parámetro un string. Eso se conoce como bivarianza y, aunque <a href="https://www.typescriptlang.org/docs/handbook/type-compatibility.html#function-parameter-bivariance" target="_blank"> tiene su razón de ser en TypeScript</a>, la verdad es que no me convence mucho. Por suerte en versiones recientes de TypeScript es posible desactivar este comportamiento con el parámetro <code>strictFunctionTypes</code>.</p>
+<p>Todo esto de <a href="https://en.wikipedia.org/wiki/Covariance_and_contravariance_(computer_science)" target="_blank">la covarianza y contravarianza tiene su definición formal</a> y va un poco más allá de lo que hemos visto aquí.</p>
+<p>Si pasamos a analizar la compatibilidad de funciones desde el punto de vista del número de argumentos, encontramos los siguientes casos:</p>
+<pre class="brush:typescript">type OneArg = (x: number) =&gt; void;
+type TwoArgs = (x: number, y: number) =&gt; void;
+type Optional = (x: number, y?: number) =&gt; void;
+type Rest = (x: number, ...y: number[]) =&gt; void;
+
+let f1: OneArg;
+let f2: TwoArgs;
+let f3: Optional;
+let f4: Rest;
+
+// OK: Al invocar a través de f2, f1 recibirá 
+//     un segundo parámetro que puede ignorar
+f2 = f1;
+
+// Error: Al invocar a través de f1, f2 sólo recibirá 
+//        un parámetro de los 2 que requiere
+f1 = f2;
+
+// OK: Parámetros opcionales y rest se tratan igual
+f3 = f4;
+f4 = f3;
+
+// OK: ¿Cómo? ¿Esto funciona?
+f3 = f2;
+// No, esto puede explorar en tiempo de ejecución
+// porque está invocando f2 con un sólo parámetro
+f3(2) 
+</pre>
+<p>Una función <em>f1</em> que recibe menos parámetros, puede ser asignada a otra función <em>f2</em> que recibe más. Esto tiene (cierto) sentido, porque cuando la invoquemos a través de la referencia <em>f2</em> se le pasarán parámetros adicionales que la función ignorará. El caso opuesto, por suerte, no está permitido, porque nos faltarían parámetros en la invocación.</p>
+<p>Desgraciadamente, en cuanto metemos parámetros opcionales la cosa vuelve a desmadrarse y se permiten asignaciones que pueden provocar problemas en tiempo de ejecución.</p>
+<h3>Las consecuencias de todo esto</h3>
+<p>Todo esto puede parecer muy rebuscado y que nunca pasa en la vida real, pero en cuanto empiezas a pasar funciones como parámetros de otras funciones (algo muy habitual en código javascript/typescript), es fácil que te salpique:</p>
+<pre class="brush:typescript">// Partimos de esta función...
+function printNumbers(
+  numbers: number[], 
+  printer: (n: number) =&gt; void) {
+    numbers.forEach(printer);
+}
+
+// ...que podríamos usar de esta forma
+printNumbers([1, 2, 3], n =&gt; console.log(n));
+
+// Típica función que, tal vez, viola el SRP
+function printAndKill(n: number, killKitten?: boolean): void {
+    console.log(n);
+    if (killKitten) {
+        // Matar gatito
+    }
+}
+
+// Ops. 2 animalillos menos.
+printNumbers([1, 2, 3], printAndKill)
+</pre>
+<p>Si analizamos las asignaciones de funciones que se están haciendo, veremos que la «flexibilidad» que proporciona TypeScript quizá sea excesiva:</p>
+<p>Primero se permite pasar como parámetro <code>printer</code> de la función <code>printNumbers</code> la función <code>printAndKill</code>. Eso es posible porque el segundo parámetro de <code>printAndKill</code> es opcional, así que se supone que es capaz de trabajar con sólo un <code>number</code>, que es lo que se le pasará a <code>printer</code>.</p>
+<p>Hasta aquí, vamos bien.</p>
+<p>Después la función <code>printer</code>, que recibe un <code>number</code>, nos permite asignarla al parámetro del método <code>forEach</code> de <code>Array&lt;number&gt;</code>, que tiene como tipo <code>(value: number, index: number, array: number[]) =&gt; void)</code>.</p>
+<p>Esto es así porque una función que recibe menos parámetros (<code>printer</code>) es asignable a una que recibe más (la callback de <code>forEach</code>). Total, los que le pasen extra los ignora y ya está, ¿no?</p>
+<p>El problema es que <code>printer</code> no sólo recibe un parámetro <code>number</code>, sino que internamente almacena una referencia a <code>printAndKill</code>, que recibe, opcionalmente un segundo parámetro. Ops. Si unimos esto al tipado débil de javascript, cuando se invoque <code>printAndKill</code> se hará la coerción de <code>index</code> a <code>boolean</code>, por lo que inadvertidamente mataremos gatitos en cuanto <code>index != 0</code>.</p>
+<h3>Solidez en sistemas de tipos</h3>
+<p>Esto que hemos visto no es algo exclusivo del sistema de tipos de TypeScript, y hay muchos lenguajes (entre ellos todos los más populares) que tienen problemas parecidos. Por ejemplo, en C# podemos encontrar un caso similar con la covarianza de arrays, que permite hacer cosas como ésta:</p>
+<pre class="brush:csharp">Dog[] dogs = new [] { new Dog() };
+
+// OK: los arrays con covariantes en C#
+Animal[] animals = dogs;
+
+// Error en tiempo de ejecución
+animals[0] = new Cat(); 
+</pre>
+<p>A esta propiedad de los sistemas de tipos se le llama solidez (<a href="https://en.wikipedia.org/wiki/Soundness" target="_blank">soundness</a>). Se dice que un sistema de tipos es sólido (<em>sound</em>) si no permite considerar válidos programas que luego darán errores en tipo de ejecución. Al resto, se les llama frágiles (<em>unsound</em>).</p>
+<p>Esto puede resultar un poco chocante. Se supone que una de las ventajas (¿la principal?) de los sistemas de tipado estático es que permite comprobar en tiempo de compilación la validez del programa (desde el punto de vista de compatibilidad de tipos). Si a veces da por buenos programas inválidos, ¿qué sentido tiene?</p>
+<p>La realidad es un poco más complicada y, al igual que los sistemas de tipado dinámico o gradual tienen su utilidad, tener sistemas frágiles también tiene sus ventajas. Por una parte puede simplificar la parte de validación de tipos, mejorando el rendimiento de los compiladores. Por otra, hay escenarios en los que gracias a la falta de solidez se simplifica mucho el código a escribir.</p>
+<p>Por ejemplo, si en el caso anterior de C# no existiera covarianza de arrays, no se podría hacer cosas como:</p>
+<pre class="brush:csharp">abstract class Animal {
+  abstract void Move()
+}
+class Dog : Animal {...}
+class Cat: Animal {...}
+
+void MoveAll(Animal[] animals) {
+  foreach (var animal in animals)
+    animal.Move();
+}
+
+MoveAll(new Dog[] { new Dog(), new Dog() });
+MoveAll(new Cat[] { new Cat(), new Cat() });
+</pre>
+<p>En ese caso se podría solucionar haciendo los arrays invariantes y haciendo que MoveAll recibiera un tipo covariante (por ejemplo IEnumerable), pero hay veces que compensa sacrificar la solidez para facilitar este tipo de patrones de uso.</p>
+<p>Para el caso de TypeScript, <a href="https://github.com/Microsoft/TypeScript/issues/9825" target="_blank">en esta discusión de GitHub podéis encontrar varios argumentos interesantes</a> sobre el tema.</p>
+]]></content:encoded>
+					
+					<wfw:commentRss>https://blog.koalite.com/2019/01/typescript-varianza-y-solidez/feed/</wfw:commentRss>
+			<slash:comments>2</slash:comments>
+		
+		
+			</item>
+	</channel>
+</rss>
