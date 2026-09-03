@@ -20,6 +20,8 @@ implements them (see `docs/ARCHITECTURE.md`).
 | `DATABASE_URL` | worker, web (local / non-Cloudflare) | Postgres connection string. On Cloudflare the `HYPERDRIVE` binding replaces it. |
 | `WORKER_ROLES` | worker | Comma list of roles; default is every role except `relay` |
 | `LOG_LEVEL` | worker | `debug` / `info` / `warn` / `error` |
+| `WORKER_USER_AGENT` | worker | Sent on every fetch; keep a contact URL in it |
+| `FETCH_TIMEOUT_MS`, `FETCH_CONCURRENCY`, `SCHEDULER_BATCH` | worker | Per-request timeout (20 s), parallel fetches per process (4), max feeds enqueued per tick (500) |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web | Browser auth client (phase 4) |
 | `NEXTJS_ENV` | web (`.dev.vars`) | Which `.env` files OpenNext loads locally |
 | `TEST_DATABASE_URL`, `PG_BIN_DIR` | tests | Use an existing database, or point at Postgres binaries |
@@ -60,8 +62,20 @@ fly deploy --config apps/worker/fly.toml --dockerfile apps/worker/Dockerfile
 - Tests: `bun run test`. DB tests start a throwaway cluster with the local `initdb`; install
   Postgres with `brew install postgresql@17` or set `TEST_DATABASE_URL`.
 
-## Runbooks (*later*)
+## Runbooks
 
+### Worker
+- Logs are JSON lines on stdout/stderr. `feed fetch failed` lines carry `kind` (`timeout`,
+  `network`, `http_429`, `parse`, …) and the feed id.
+- **Fetch one feed now**: `DATABASE_URL=… bun run worker:once fetch <feedUrl>` (creates the feed if
+  needed). `… discover <url>` prints candidates; `… extract <articleId>` runs Readability.
+- **Revive a dead feed**: `update feeds set status = 'active', error_count = 0, next_fetch_at =
+  now() where id = …`. The daily maintenance job does this automatically after seven days.
+- **Inspect the queue**: `select name, policy from pgboss.queue`; failed jobs land in
+  `<queue>.dead` and stay for 30 days.
+- The queue schema (`pgboss`) is created by the worker on first start; migrations do not manage it.
+
+### Later
 - Rotating the image-proxy signing key (phase 4)
 - Rotating the relay secret (phase 8)
-- Reviving a dead feed, adjusting the LLM budget, adding a reading language (phases 3, 5)
+- Adjusting the LLM budget, adding a reading language (phase 5)

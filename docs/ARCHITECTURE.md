@@ -84,12 +84,31 @@ read row`. "Mark all read" moves the watermark and compacts read rows below it.
 Fixtures: 21 captured real feeds in `packages/content/fixtures/`; snapshot tests pin block ids
 and hashes for three articles as the `NORM_VERSION` contract.
 
-## Fetching [phase 3]
+## Ingestion (`packages/ingest` + `apps/worker`)
 
-Scheduler enqueues `feed.fetch` for due feeds (singleton per feed). Adaptive interval from posting
-cadence with jitter and header floors; conditional GET plus body hash; exponential backoff on errors;
-301 rewrites; dead after 410 or 30 failures. Dedup ladder: guid → normalized link →
-sha(title|published_at). Summary-only feeds are extracted lazily at first open.
+`packages/ingest` is the library (HTTP client, discovery, feed fetch, extraction) and is
+runtime-agnostic so the web app can reuse discovery; `apps/worker` only wires it to pg-boss.
+
+- `createHttpClient`: conditional headers, manual redirects with permanent-redirect detection,
+  5 MB cap, charset-aware decoding, 2 s per-host spacing, private-network blocking, and a relay
+  hook for `fetch_region = cn`.
+- `discoverFeeds(http, url)`: the URL itself, then feeds declared by the page, then well-known
+  paths; every result is fetched and parsed before being returned.
+- `ensureFeed` / `ensureSite`: feed rows keyed by `feed_url`, sites keyed by normalized origin;
+  new feeds are due immediately, so the next scheduler tick fetches them.
+- `fetchFeed(db, http, feedId)`: conditional GET → body-hash short-circuit → parse → upsert
+  articles by dedup key (new rows, or `content_version + 1` when the content hash changed) → fill
+  site metadata → learn `content_mode` from three samples → reschedule. Interval = half the
+  average gap between posts over 7 days, clamped to 30 min…24 h, ×1.5 when unchanged, raised to the
+  publisher's `ttl`/`max-age` floor, ±10% jitter. Errors back off `interval × 2^n` capped at 7 days;
+  429/503 honor `Retry-After`; 410 or 30 consecutive errors mark the feed dead; only
+  timeouts/resets bump `timeout_streak` (the future cn-flip signal). Permanent redirects
+  rewrite `feed_url`.
+- `extractArticleContent` (`@tela/ingest/extract`): fetches the article page, runs Readability,
+  and replaces the stored content only when the result is clearly longer.
+
+Tests run against an in-process fixture HTTP server and the DB harness
+(`packages/ingest/test/`).
 
 ## Translation [phase 5]
 
@@ -99,11 +118,24 @@ Title and excerpt are translated eagerly at ingest; bodies lazily on first open.
 chunk of ~3k source tokens returns `{ translations: [{ id, text }] }`; each block is validated
 (placeholder multiset, length ratio, non-identity) and cached in `translations`.
 
-## Queue [phase 3]
+## Queue
 
-pg-boss v12 on the same Postgres (ADR 0004). Queues: `feed.discover`, `feed.fetch`,
-`article.extract`, `translate.title`, `translate.body`, `site.assets`, `site.claim.verify`,
-`maintenance.*`. One process; `WORKER_ROLES` filters which subscriptions start.
+pg-boss v12 on the same Postgres, schema `pgboss` (ADR 0004). `apps/worker/src/queues.ts`
+declares every queue with its policy, retries, expiry, and a `<name>.dead` dead-letter queue:
+
+| Queue | Producer | Role | Notes |
+|---|---|---|---|
+| `scheduler.tick` | cron `* * * * *` | scheduler | enqueues `feed.fetch` for due feeds (singleton per feed) |
+| `maintenance.daily` | cron `17 3 * * *` | scheduler | revives dead feeds once a week |
+| `feed.fetch` | scheduler | fetch | `short` policy, 3 retries with backoff, 120 s expiry |
+| `article.extract` | web (first open) [phase 4] | extract | lazy full-text extraction |
+| `translate.title`, `translate.body` | fetch / web [phase 5] | translate | declared, not consumed yet |
+| `site.assets` | fetch [phase 6] | assets | favicons and covers to R2 |
+| `site.claim.verify` | web [phase 6] | claim | claim verification |
+
+One process; `WORKER_ROLES` filters which `boss.work()` subscriptions start. Feed discovery runs
+in the request path (web) or the CLI rather than through a queue. `bun run worker:once
+<discover|fetch|extract> <arg>` runs any step directly against `DATABASE_URL`.
 
 ## Web app
 
@@ -118,10 +150,10 @@ pg-boss v12 on the same Postgres (ADR 0004). Queues: `feed.discover`, `feed.fetc
 
 ## Roadmap (milestone 1, branch `feat/mvp`)
 
-1. Scaffold + infra ← current
-2. Content package
-3. Ingestion worker
-4. Reader web
+1. Scaffold + infra ✓
+2. Content package ✓
+3. Ingestion worker ✓ (site assets to R2 moved to phase 6, where Discover first shows favicons)
+4. Reader web ← current
 5. Translation
 6. Discover + sites + claim
 7. Recommendations + profiles + dashboard
