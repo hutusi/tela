@@ -55,7 +55,10 @@ export const articles = pgTable(
 
 /** One block summary entry, mirrored from the data-tb attributes in html. */
 export type BlockSummary = {
+  /** data-tb value: first 10 hex of the hash, with -2/-3 suffixes for duplicates. */
   id: string
+  /** Full content hash of the tagged text; key into the translations table. */
+  hash: string
   tag: string
   chars: number
   skip?: boolean

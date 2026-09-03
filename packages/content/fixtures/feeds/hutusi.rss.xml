@@ -1,0 +1,455 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/modules/content/">
+  <channel>
+    <title><![CDATA[胡涂说]]></title>
+    <link>https://hutusi.com</link>
+    <description><![CDATA[胡涂说博客/好奇心周刊]]></description>
+    <language>zh</language>
+    <lastBuildDate>Sun, 30 Aug 2026 00:00:00 GMT</lastBuildDate>
+    <atom:link href="https://hutusi.com/feed.xml" rel="self" type="application/rss+xml" />
+    <image>
+      <url>https://hutusi.com/og-image.png</url>
+      <title>胡涂说</title>
+      <link>https://hutusi.com</link>
+    </image>
+    
+        <item>
+          <title><![CDATA[AI Naive: 用 AI 做“无用之用”的独立软件作品集]]></title>
+          <link>https://hutusi.com/flows/2026/08/30</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/08/30</guid>
+          <pubDate>Sun, 30 Aug 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[从去年下半年开始 AI Coding, 从 Claude Code 到 Codex, 从 Opus 4 到 Fable 5，我用 AI 给自己做了一系列的工具软件，主要是自己用自己玩，有少部分运行在公司的环境中。 - Amytis: 一个优雅的数字花园框架，可以做个人的静态博客，也可以做团队的知识库，目前我自己的[博客...]]></description>
+          <content:encoded><![CDATA[<p>从去年下半年开始 AI Coding, 从 Claude Code 到 Codex, 从 Opus 4 到 Fable 5，我用 AI 给自己做了一系列的工具软件，主要是自己用自己玩，有少部分运行在公司的环境中。</p>
+<ul>
+<li>Amytis: 一个优雅的数字花园框架，可以做个人的静态博客，也可以做团队的知识库，目前我自己的<a href="https://hutusi.com/">博客</a>框架也已换成 Amytis。<a href="https://github.com/hutusi/amytis">GitHub 源码</a>, <a href="https://amytis.vercel.app/">在线演示</a></li>
+<li>Ovid: 配合 Amytis 使用的桌面 Markdown 编辑器，跨平台。<a href="https://github.com/hutusi/ovid">GitHub 源码</a></li>
+<li>Janus: 自托管 CI/CD 工具，仅由简单、小巧、独立的 Go 二进制文件运行，没有任何依赖。<a href="https://github.com/hutusi/janus">GitHub 源码</a></li>
+<li>Monecraft: Web 版的 Minecraft，支持单机和联网。<a href="https://github.com/hutusi/monecraft">GitHub 源码</a>, <a href="https://mc.ainaive.com/">在线网站</a></li>
+<li>Mercury: 给忙碌的打工人做的英语学习应用。<a href="https://github.com/hutusi/mercury">GitHub 源码</a>, <a href="https://mercury.ainaive.com/">在线网站</a></li>
+<li>Roma: 经典电影策展中心，网站的名字叫“八部半”，项目和网站的名字都源于费里尼的电影。<a href="https://github.com/hutusi/roma">GitHub 源码</a>, <a href="https://babuban.com/zh">八部半网站</a></li>
+</ul>
+<p>我把这些项目都打包到一个货架上，做成工作室网站的样子来呈现。（当然，也是 AI 生成的）网站叫：AI Naive, 网址: <a href="https://ainaive.com">https://ainaive.com</a></p>
+<p>AI Naive, 不是 AI Native, 因为没有技术(technology)，我只是使用 AI 构建起了这些小工具，甚至连使用 AI 都是很"Naive"的那种纯粹的 Prompt，没有 AI Native 团队的 SDD, Harness Engineering, Loop Engineering, RSI ... （关于我的 AI 编程实践，可参见: <a href="https://hutusi.com/weeklies/25">好奇心周刊第25期: 如何让AI写好代码</a>）另外，用这个名字还有一个很重要的原因就是 ainaive.com 这个域名，没想到今年还能捡漏到了这个.com域名。</p>
+<p>当然，我计划中的远不止这 6 款工具，还有很多的工具在 AI Coding 中，等到打磨得差不多了我就会上架。也欢迎大家取用，提意见。</p>
+<p>AI Naive: <a href="https://ainaive.com">https://ainaive.com</a></p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[Jeff Dean 离开 Google，以及关于他的传说]]></title>
+          <link>https://hutusi.com/flows/2026/08/08</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/08/08</guid>
+          <pubDate>Sat, 08 Aug 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[几日前，Google DeepMind 人事震动，哈萨比斯卸任 CEO，而更重磅的新闻是： [[Jeff Dean]] 从 Google 离职了。 Jeff Dean 是 Google 的元老之一，他与 1999 年作为第 20 位员工加入 Google, 在效力了 27 年之后离职并创立 AI 初创公司 Discov...]]></description>
+          <content:encoded><![CDATA[<p>几日前，Google DeepMind 人事震动，哈萨比斯卸任 CEO，而更重磅的新闻是： [[Jeff Dean]] 从 Google 离职了。</p>
+<p>Jeff Dean 是 Google 的元老之一，他与 1999 年作为第 20 位员工加入 Google, 在效力了 27 年之后离职并创立 AI 初创公司 Discovery Loop. 他是 Google 的技术奠基人，在 2000年初的互联网时代，他就创造了 Google 分布式系统的技术底座：分布式计算模型 MapReduce, 分布式存储系统 BigTable, 以及分布式数据库 Spanner, 这些也成为了云计算基石。</p>
+<p>而后他转入人工智能领域，在 2011 年联合创办了 Google Brain, 主导创建了人工智能训练框架 TensorFlow. 2023 年，Google Brain 与 DeepMind 合并，Jeff Dean 归属哈萨比斯领导，并被任命为 Google 首席科学家。Jeff Dean 给此后 Google 发布的大模型产品命名为 Gemini（双生子），因为“就像是双胞胎合二为一”。</p>
+<p>Jeff Dean 一直为程序员界所推崇，特别是在十几年前，我记得那时流传着很多[[关于 Jeff Dean 的段子]]，称为<a href="https://www.quora.com/What-are-all-the-Jeff-Dean-facts">"Jeff Dean’s facts"</a>. 比如：</p>
+<ul>
+<li>当被问到 $P=NP$ 是否成立时，Jeff 仅用多项式时间在白板上解出了所有 NP 问题，证明了 $P=NP$（顺便说一句，对 Jeff 来说，“NP”的意思是 “No Problemo”）。</li>
+<li>在谷歌使用 <code>gcc -O4</code> 编译选项时，系统不会做优化，而是<strong>直接把你的代码发送到 Jeff Dean 的邮箱里让他重写</strong>。</li>
+<li>编译器从来不敢向 Jeff Dean 报告警，是 Jeff Dean 警告编译器。</li>
+<li>Jeff Dean 编写软件时，会先直接手写二进制代码，然后再写一套 C++ 源码作为给其他普通程序员看的“文档”。</li>
+</ul>
+<p>不过有些段子却是真的，如：</p>
+<ul>
+<li>Jeff 在一个顶级为 10 级的系统中升到了 11 级。（为了给 Jeff Dean 和他的长期黄金搭档 Sanjay Ghemawat 安排匹配的职位，谷歌专门设立了 <strong>Level 11 —— Senior Fellow</strong>）</li>
+<li>Jeff Dean 在斯坦福大学做技术讲座时，由于现场爆满、挤得水泄不通，计算机科学界泰斗、图灵奖得主高德纳（Donald Knuth）只能坐在地板上听完了全场。</li>
+<li>Jeff 休假的时候，Google 的生产服务器神秘地宕机了数天。（因为当时很多分布式基础构架的极极限性能瓶颈只有他能即时修复。）</li>
+</ul>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[Master of Puppets]]></title>
+          <link>https://hutusi.com/flows/2026/08/02</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/08/02</guid>
+          <pubDate>Sun, 02 Aug 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[读《资治通鉴·唐纪》，看到唐文宗李昂恭俭勤政，一心想振作有为，却在后期大权被宦官把持，最后无力回天、郁郁而终。临终前几个月，唐文宗问学士他可以与前代哪位君主相比，学士为了拍马屁，就说唐文宗是尧舜一类的君主。唐文宗苦笑说：我哪里比得上尧舜，我连周赧王、汉献帝都不如啊。“赧、献受制于强诸侯，今朕受制于家奴，以此言之，朕殆不...]]></description>
+          <content:encoded><![CDATA[<p>读《资治通鉴·唐纪》，看到唐文宗李昂恭俭勤政，一心想振作有为，却在后期大权被宦官把持，最后无力回天、郁郁而终。临终前几个月，唐文宗问学士他可以与前代哪位君主相比，学士为了拍马屁，就说唐文宗是尧舜一类的君主。唐文宗苦笑说：我哪里比得上尧舜，我连周赧王、汉献帝都不如啊。“赧、献受制于强诸侯，今朕受制于家奴，以此言之，朕殆不如！”</p>
+<p>唐文宗口中的“家奴”就是宦官仇士良，仇士良在“甘露之变”中杀了大量的朝廷大臣，把持了权柄，唐文宗则沦落为他控制下的傀儡。唐文宗如何走到这个境地，除了唐朝中后期皇权旁落外，跟他自己前期重用仇士良也有很大关系。后来唐武宗李炎即位，与李德裕联手，把仇士良的实权逐渐削弱。仇士良被逼无奈，只能告老还乡，临走前，他给小宦官们讲了一段话：“天子不可令闲，常宜以奢靡娱其耳目，使日新月盛，无暇更及他事，然后吾辈可以得志。慎勿使之读书，亲近儒生，彼见前代兴亡，心知忧惧，则吾辈疏斥矣。”</p>
+<p>大意就是“绝不能让皇帝闲着，要经常用奢靡的娱乐活动满足他的声色犬马之欲，而且每天要有新花样、日新月异，使之沉迷其中，让他没有功夫管别的事情。切记不要让他读书，不要接近儒生学者，一旦读书了解了前朝兴亡的历史教训，他心里就会产生忧患意识，那时我们就不好控制他了。”</p>
+<p>放在今天，仇士良也得是心理学大师啊，互联网巨头还不得把他请去做咨询。短视频、沉浸式小游戏、推荐算法、无休止的娱乐八卦，等等，本质上不就是“以奢靡娱其耳目，使日新月盛，无暇更及他事”吗？如果一个人的所有空闲时间都被低成本高刺激的廉价多巴胺填满，大脑就会失去深度思考的能力；当一个人被“奶头乐”娱乐喂得太多时，那他实际上就成了这些互联网巨头的“牵线木偶”。</p>
+<p>金属乐队 Metallica 最著名的一首曲目就叫 Master of Puppets （《木偶主人》，或者翻译为《傀儡之主》），它讲的不仅是毒品，还包括其他成瘾行为和一切能够掌控并毁灭一个人的力量。“Master of puppets, I'm pulling your strings. Twisting your mind and smashing your dreams.”（木偶的主人啊，在幕后控线。扭曲你的心灵，粉碎你的梦想。）</p>
+<p>要摆脱“仇士良”这类 Master of Puppets, 方法就在仇士良的话中，把他的话反过来理解：深度阅读，多交益友，避免“感官刺激过载”，避免“假性忙碌”，给大脑留白。</p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[《认知觉醒》]]></title>
+          <link>https://hutusi.com/flows/2026/07/11</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/07/11</guid>
+          <pubDate>Sat, 11 Jul 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[最近在重读《认知觉醒》这本书，触发的动机也是前段时间又分别给一些朋友安利了这本书。与《纳瓦尔宝典》一样，这也是一本被书名耽误的好书，书名看上去太鸡汤了，但内容真的很棒。可能一些挑剔的读者会觉得这本书像是大杂烩，不过作者系统地将认知方面的知识深入浅出的阐述出来，结合自己的亲身实践，很有代入感，读起来非常受用。在我消沉煎熬...]]></description>
+          <content:encoded><![CDATA[<p>最近在重读《认知觉醒》这本书，触发的动机也是前段时间又分别给一些朋友安利了这本书。与《纳瓦尔宝典》一样，这也是一本被书名耽误的好书，书名看上去太鸡汤了，但内容真的很棒。可能一些挑剔的读者会觉得这本书像是大杂烩，不过作者系统地将认知方面的知识深入浅出的阐述出来，结合自己的亲身实践，很有代入感，读起来非常受用。在我消沉煎熬的日子里，它陪我度过阴郁的时间，对我有很大的帮助。<br>
+这本书还有一个“青少年学习版”的版本，是作者面向中小学生群体改编的。我上半年的时候买了一本实体书送给大卫，大卫看了我买给他的数学书，但这本书就是没有动。前几天我问他看了这书没有，催了几次，他终于在书堆里找到，今天开始读起来，然后兴奋地告诉我说，虽然只读了十几页，但觉得这本书写得太好了。等读了几个章节后，又跟我讨论起书中的内容，学习的舒适区、拉伸区等话题。之前读到《认知觉醒》再版前言中作者说，他收到很多小学生的反馈说很有用，起初我还有点怀疑，现在看来这本书真的是老少皆宜。</p>
+<p><img src="/books/rzjx.jpeg" alt=""></p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[Fable 5 回归，但是用不起……]]></title>
+          <link>https://hutusi.com/flows/2026/07/02</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/07/02</guid>
+          <pubDate>Thu, 02 Jul 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[昨天，Anthropic 宣布美国政府解除 Fable 5 的出口管制，今天就恢复了 Fable 5 服务，不过在[ Anthropic 的官宣](https://www.anthropic.com/news/redeploying-fable-5)中，增加了使用期限：7 月 1 日至 7 月 7 日订阅账户可以使用，...]]></description>
+          <content:encoded><![CDATA[<p>昨天，Anthropic 宣布美国政府解除 Fable 5 的出口管制，今天就恢复了 Fable 5 服务，不过在<a href="https://www.anthropic.com/news/redeploying-fable-5"> Anthropic 的官宣</a>中，增加了使用期限：7 月 1 日至 7 月 7 日订阅账户可以使用，但过了 7 日，就不会在订阅计划中了，只能通过 API 购买流量使用。</p>
+<p>今天体验了下 Fable 5, 再次感受到了性能之快，也再次感受到烧 Token 的速度。晚上我的一个任务接近完成，在提交 PR 的那一刻 Claude Code 提示五小时的使用限额到了。我想着就差提个 PR，干脆临时打开 Extra credits, 继续提交 PR 的任务，结果提交完我看仪表盘傻眼了：花了 9.11 加币。</p>
+<p><img src="/flows/claude-extra-credits.png" alt="claude-extra-credits"></p>
+<p>7 号之后真的就用不起 Fable 了。</p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[Claude Fable 5: 短暂的寓言]]></title>
+          <link>https://hutusi.com/flows/2026/06/13</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/06/13</guid>
+          <pubDate>Sat, 13 Jun 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[今天早上，Anthropic 发布了一则[新闻告示](https://www.anthropic.com/news/fable-mythos-access)，表明收到美国政府出口管制要求，禁止所有非美国国籍用户访问 Fable 5 和 Mythos 5，随后，Claude Fable 5 全球服务关停，而该模型公开服务...]]></description>
+          <content:encoded><![CDATA[<p>今天早上，Anthropic 发布了一则<a href="https://www.anthropic.com/news/fable-mythos-access">新闻告示</a>，表明收到美国政府出口管制要求，禁止所有非美国国籍用户访问 Fable 5 和 Mythos 5，随后，Claude Fable 5 全球服务关停，而该模型公开服务刚满三天。</p>
+<blockquote>
+<p>The US government, citing national security authorities, has issued an export control directive to suspend all access to Fable 5 and Mythos 5 by any foreign national, whether inside or outside the United States, including foreign national Anthropic employees. The net effect of this order is that we must abruptly disable Fable 5 and Mythos 5 for <u><strong>all</strong></u> our customers to ensure compliance. </p>
+</blockquote>
+<p>6 月 10 日（美国时间 6 月 9 日），Anthropic 发布了新一代模型 Claude Fable 5, 该模型实际上是前几个月被披露的 Claude Mythos 模型。Mythos 由于其性能过于出色，因其在网络安全攻防任务上展现出了远超行业共识的破坏性能力，被 Anthropic 拒绝推向公众市场，转而为它构建安全护栏版本，也就是 Claude Fable. 从名称上可以看出：Mythos 为“神话”之意，代表巨大原始破坏力的宏大史诗；而 Fable 则为“寓言”，意为驯化的道德故事，也就是“神话” Mythos 的安全驯化版。</p>
+<p>在安全策略这块，Anthropic 部署了“主动分类过滤与模型降级”架构，对几个高度敏感的分类进行实时防御：生物化学，网络安全，以及模型蒸馏。当分类器触发后，系统不会中断服务，而是在后台悄悄降级到较弱的 Opus 模型继续服务。因此互联网上有很多人发无故被降级的段子，说明分类器并不是特别精准。另外，Fable 超高的价格也让人望而却步，在 API 定价上，输入每百万 Token 为 10 美元，输出每百万 Token 为 50 美元；比 Opus 4.8 整整高出一倍。（作为对比，DeepSeek V4 Pro 的价格分别为 0.435 美元和 0.87 美元。）Anthropic 仅承诺在 6 月 22 日前对 Pro, Max 及 Team 订阅用户免费开放。</p>
+<p>我因为是 Max 订阅用户，因此也得以体验 Fable 5, 感受确实好，速度很快，编写代码的效果也非常好，与 Opus 对比是换代的感觉。不过，还没等体验到 22 日，在今天早上就看到 Claude Code 上显示 Fable 模型不可用，也就是开头说的这件事。根据 Anthropic 的官方发文，是美国商务部长给 Anthropic CEO Dario Amodei 发送了紧急出口管制指令邮件，宣布基于美国国家安全授权，将 Fable 5 和 Mythos 5 列入最高级别出口管制名单：禁止提供给任何外籍人士，无论他身处美国国外还是国内，即使是 Anthropic 员工也不能例外。（想到了刚加入 Anthropic 的 Andrej Karpathy, 他是斯洛伐克和加拿大国籍。）</p>
+<p>据《华尔街日报》等媒体披露的内幕，这一禁令的直接导火索是亚马逊安全研究团队向美国政府提交的一份秘密报告，在报告中，他们通过一系列高度定制化、精心准备的提示词，成功绕过了 Fable 5 的安全过滤器，实现了对 Mythos 级别模型的“越狱”。</p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[当心流量别被 Agent 都吃了]]></title>
+          <link>https://hutusi.com/flows/2026/06/07</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/06/07</guid>
+          <pubDate>Sun, 07 Jun 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[大约从去年底开始，我总能收到阿里云和七牛云的通知，告知我流量不足，建议我买流量包。起初我没太注意，买了几十块钱的流量包，能用几个月。今年二、三月开始，发现每个月都要充值，到五月份一个月就花掉了一百多的流量费用。我开始意识到问题的严重性，一个静态博客网站不可能有这么大的流量开支。问阿里云客服，他们也说不出问题所在。我把日...]]></description>
+          <content:encoded><![CDATA[<p>大约从去年底开始，我总能收到阿里云和七牛云的通知，告知我流量不足，建议我买流量包。起初我没太注意，买了几十块钱的流量包，能用几个月。今年二、三月开始，发现每个月都要充值，到五月份一个月就花掉了一百多的流量费用。我开始意识到问题的严重性，一个静态博客网站不可能有这么大的流量开支。问阿里云客服，他们也说不出问题所在。我把日志给 Gemini 让它分析，它很快发现了问题所在：</p>
+<p>Umami 统计每天网站页面流量 PV 只有100 左右，但 Nginx 日志显示每天首页被访问了 2000 次以上，而 <code>feed.xml</code> 更是被请求了 10000 多次。仅 <code>feed.xml</code> 每天的流出流量就有 1.5 GB. 造成这个问题的原因只能是现在的 Agent 越来越多，抓取越来越频繁了。</p>
+<p>我听从 Gemini 的建议，将域名解析转移到 Cloudflare, 利用 Cloudflare 免费的全局缓存，将主站和图片 CDN 都在 Cloudflare 上配置缓存规则，立即生效，流量一下子就降下来了。不得不说，Cloudflare 和 Vercel 真的是个人开发者的福音。</p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[当 AI 构建自己]]></title>
+          <link>https://hutusi.com/flows/2026/06/06</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/06/06</guid>
+          <pubDate>Sat, 06 Jun 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[Anthropic 官方博客日前发表了一篇文章 [When AI builds itself](https://www.anthropic.com/institute/recursive-self-improvement)，回顾了历代 Claude 的开发时间线，并借由内部员工的现身说法，道出了一个事实：Anthrop...]]></description>
+          <content:encoded><![CDATA[<p>Anthropic 官方博客日前发表了一篇文章 <a href="https://www.anthropic.com/institute/recursive-self-improvement">When AI builds itself</a>，回顾了历代 Claude 的开发时间线，并借由内部员工的现身说法，道出了一个事实：Anthropic 正把越来越多的研发工作交给 AI 系统本身，而且步伐不断加快——快到很可能催生出能够完全自主设计下一代 AI 系统的 AI。这一前景被称为<strong>递归自我改进（recursive self-improvement）</strong>。</p>
+<p>2021 年至 2023 年，Anthropic 构建第一代 Claude，做法与其他科技公司并无二致：工程师在电脑上写代码、写文档。2023 年至 2025 年，工程师开始借助 AI 对话窗口辅助研发，例如生成代码片段，再粘贴到编辑器中。2025 年至 2026 年，随着编程智能体 Claude Code 能力增强，工程师开始用它来编写代码，乃至整份文件。而到了今天，智能体已能自行运行代码，并把数小时的工作委托给其他智能体。展望未来，智能体或许会强大到足以自行构建并训练模型——届时，新版 Claude 便可能由 Claude 自身持续改进。</p>
+<p><strong>一、从外部数据看，模型能力的提升正在加速。</strong> AI 能够可靠、独立完成任务的时长，如今大约每 4 个月翻一番（此前是每 7 个月）。举例来说，2024 年 3 月的 Claude Opus 3 可以完成人类耗时约 4 分钟的任务；一年后，Claude Sonnet 3.7 能胜任 1.5 小时的任务；再一年后，Claude Opus 4.6 已能完成长达 12 小时的任务。</p>
+<p><strong>二、从 Anthropic 内部数据看，AI 正被越来越多地用于工程与研究。</strong> 工程涵盖写代码、搭建基础设施、训练模型，研究则包括做实验、把握研究方向。如今，Anthropic 工程师每季度产出的代码量约为 2021 年至 2025 年间的 8 倍；截至 2026 年 5 月，合入 Anthropic 代码库的代码已有逾 80% 出自 Claude 之手。与此同时，代码质量也在提升：人类纠正或接管 Claude 的比例持续下降；在最具开放性的任务上，Claude 的成功率于 2026 年 5 月达到 76%，半年内提升了 50 个百分点。多数员工认为，Claude 写的代码在 2025 年底还略逊于人类，如今已大致持平，并预计一年内将超越人类。</p>
+<p><img src="/flows/claude-code-session-success-rate.webp" alt="Claude Code 会话成功率"></p>
+<p><strong>三、Anthropic 未来的工作会是什么样子？</strong> 人类的角色正在每一步被不断压缩。一旦人机代码质量持平，人类将不再亲自写代码，而只负责审查；可一旦审查速度跟不上 Claude 的生成速度，人类审查本身又会成为瓶颈。人类眼下的优势，暂时集中在研究品味（research taste）与判断力上——决定该研究哪些问题、该相信哪些结果、该选择哪条路径。</p>
+<p><strong>四、如果我们判断错了呢？</strong> 一种常见的反驳是：真正不可替代的，是握在人类手中的"研究品味与判断力"，而 Claude 也许永远训练不出优秀的研究品味。然而现有证据表明，AI 的判断力同样在稳步提升。</p>
+<p><strong>五、几种可能的未来</strong></p>
+<p>Anthropic 给出了三种前景：</p>
+<ol>
+<li><strong>趋势停滞，但现有能力广泛扩散。</strong> AI 能力的指数增长也许其实是一条 S 曲线——规模化的回报递减，曲线先变缓，再趋于平坦。不过 Anthropic 认为这是可能性最低的一种。</li>
+<li><strong>AI 实验室持续获得复利式的效率提升。</strong> AI 开发被大幅自动化，但人类仍负责定方向、判结果；百人规模的公司能干出上万乃至十万人的活。瓶颈会依照 [[阿姆达尔定律]] 转移到那些没能提速的环节（比如人类的代码审查）。Anthropic 认为这是可能性最高的一种。</li>
+<li><strong>AI 实现完全的递归自我改进，开始构建自己的继任者。</strong> 进化速度几乎只取决于算力，人类则主要转向监督与验证。届时对齐能否实现尚无定论：模型也许能自行找到对齐之道，也许会因对齐失败而失控。</li>
+</ol>
+<p><strong>六、我们该怎么办？</strong> 如果真能切实放慢这项技术的脚步，为研究对齐等问题争取更多时间，这或许是件好事。但前提是建立起可核查的机制：既能确认全球所有前沿实验室确实都停了下来，也能保证没有人借"协调"之名偷偷抢跑。</p>]]></content:encoded>
+          <category><![CDATA[AI]]></category>
+        </item>
+        <item>
+          <title><![CDATA[阿嬷 ā mó]]></title>
+          <link>https://hutusi.com/flows/2026/05/24</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/05/24</guid>
+          <pubDate>Sun, 24 May 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[阿嬷也是隋炀帝杨广的小名，更确切的说，是一个上面是“麻”下面是“女”的生僻字，读音 mó, Unicode 编码 U+21849. 杨广和他的哥哥杨勇出生在北周时期，由于北周皇帝是鲜卑族，那时达官贵族子嗣都会起个鲜卑语的小名。杨坚家族也被赐与鲜卑姓“普六茹”，因此杨坚在北周时一直被人呼作“普六茹坚”。杨坚和独孤伽罗给他...]]></description>
+          <content:encoded><![CDATA[<p>阿嬷也是隋炀帝杨广的小名，更确切的说，是一个上面是“麻”下面是“女”的生僻字，读音 mó, Unicode 编码 U+21849. 杨广和他的哥哥杨勇出生在北周时期，由于北周皇帝是鲜卑族，那时达官贵族子嗣都会起个鲜卑语的小名。杨坚家族也被赐与鲜卑姓“普六茹”，因此杨坚在北周时一直被人呼作“普六茹坚”。杨坚和独孤伽罗给他们的大儿子杨勇起了鲜卑小名“睍地伐”，意思大概是勇猛刚强之类；而给二儿子杨广起的小名是“阿mó”，意为可爱宝贝之类。《资治通鉴》便记载了这段独孤伽罗与权臣杨素的对话，独孤皇后抱怨“睍地伐”（杨勇）整日宴饮，亲近小人，而“阿mó”（杨广）则孝悌诚实，朴素节俭。杨素听在心里，推波助澜最终导致杨勇被废，杨广立为太子。彼时两人都三十多岁了，独孤伽罗一个“大强”一个“小宝”叫了三十多年，不能说没有潜移默化的心理影响。从某种意义上说，小名也间接影响了历史进程。</p>
+<p>btw，《给阿嬷的情书》这部电影真的不错，强烈推荐。</p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[Bun 要从 Zig 迁移到 Rust ？]]></title>
+          <link>https://hutusi.com/flows/2026/05/06</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/05/06</guid>
+          <pubDate>Wed, 06 May 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[今天看到新闻说：[Bun 要从 Zig 迁移到 Rust](https://news.ycombinator.com/item?id=48016880) ，大家讨论的比较热烈，一个可能的原因猜测是 [Zig 社区拒绝 AI 的政策](https://simonwillison.net/2026/Apr/30/zig-a...]]></description>
+          <content:encoded><![CDATA[<p>今天看到新闻说：<a href="https://news.ycombinator.com/item?id=48016880">Bun 要从 Zig 迁移到 Rust</a> ，大家讨论的比较热烈，一个可能的原因猜测是 <a href="https://simonwillison.net/2026/Apr/30/zig-anti-ai/">Zig 社区拒绝 AI 的政策</a>。作为新兴小众语言，Zig 知名的软件应用有两个，一个是 Hashimoto 开发的 Ghostty, 另一个就是 Bun 了。Bun 去年底以 10 亿美元的价格被 Anthropic 收购，作为其 AI 平台的工具链支撑，而现在其开发语言的社区要拒绝 AI 相关的 PR 和 issue, 可能这是 Bun 开发团队有迁移想法的原因之一吧。不过，目前还只是发布了一个迁移指南，是否真要迁移到 Rust 还是未知数。</p>
+<p>据说，Zig 的创始人比较偏执，上一次关于他们的新闻是 <a href="https://ziglang.org/news/migrating-from-github-to-codeberg/">Zig 从 GitHub 迁移到 Codeberg</a> ，其中一个原因也是与 Zig 的 <a href="https://ziglang.org/code-of-conduct/#strict-no-llm-no-ai-policy">no LLM / no AI 政策</a>有关。</p>]]></content:encoded>
+          <category><![CDATA[AI]]></category><category><![CDATA[Bun]]></category>
+        </item>
+        <item>
+          <title><![CDATA[Amytis —— 一个开源而优雅的博客/数字花园网站框架]]></title>
+          <link>https://hutusi.com/flows/2026/05/04</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/05/04</guid>
+          <pubDate>Mon, 04 May 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[前几个月间，完全使用 Claude Code + Gemini CLI + Codex 编程，提交了 800 多个 Commit ，打造了一个让自己较为满意的静态博客及数字花园框架 Amytis。 Amytis 是一个功能强大、设计优雅、交互友好的开源数字花园框架，用于构建知识空间、博客、展示页面或企业知识库等。它基于...]]></description>
+          <content:encoded><![CDATA[<p>前几个月间，完全使用 Claude Code + Gemini CLI + Codex 编程，提交了 800 多个 Commit ，打造了一个让自己较为满意的静态博客及数字花园框架 Amytis。</p>
+<p>Amytis 是一个功能强大、设计优雅、交互友好的开源数字花园框架，用于构建知识空间、博客、展示页面或企业知识库等。它基于 Next.js 16 、Tailwind CSS v4 和 Bun 构建，强调 Markdown 优先、文本优先，保障作者对内容的长期所有权，在不损失功能和性能的前提下追求极致简洁与优雅。</p>
+<p><a href="https://amytis.vercel.app/">在线演示</a></p>
+<p><img src="https://github.com/user-attachments/assets/a6514691-745f-458d-bf82-f76c5536df37" alt="Image"></p>
+<h2><strong>为什么要做 Amytis ?</strong></h2>
+<p>我写<a href="https://hutusi.com/archive">博客有二十年</a>了，从最早的博客平台，如 MSN Space (MS Live Space)、新浪博客，到自己搭建 Wordpress 、Drupal, 再到 GitHub Pages 推出后全面采用静态博客框架，折腾过 Jekyll 、Hugo 及其多个主题，但没有一个框架或主题能让自己真正满意。功能复杂的不够简洁或优雅，简洁优雅的又缺少功能定制。能不能有一款兼顾功能、性能、美观、UX 的博客或知识平台框架呢？这个想法最近几年一直萦绕在我的脑海，实在找不到那就做一个，等到准备付诸实践，才发现难度比想象中的要大得多。</p>
+<p>好在有 AI 编程，在 Claude Code/Gemini CLI/Codex 的帮助下，比以往要更容易实现自己的想法，在经过 700 多次 Commit 的打磨后，理想化的知识平台框架 —— Amytis 终于交付成稿，我在公司搭建的极客社区平台首次应用，并将胡涂说博客网站框架也进行了替换。同时，也将 Amytis 开源，欢迎更多的独立博主/知识管理者使用，更欢迎帮忙发现问题、提 PR 添砖加瓦。如果你也在使用 Amytis, 欢迎在<a href="https://github.com/hutusi/amytis/issues/49">此 issue 留言</a>。</p>
+<h3><strong>知识阶梯</strong></h3>
+<p>Amytis 围绕一条从碎片想法到精炼知识的路径来帮助个人或组织构建完整的数字花园体系：</p>
+<ul>
+<li>Flow （心流）：记录每日想法与头脑风暴的灵感碎片。</li>
+<li>Articles （文章）：将单个想法打磨成清晰的文章。</li>
+<li>Series （系列）：把相关文章串联为一条主题叙事。</li>
+<li>Books （书籍）：将成熟知识沉淀为章节化结构的书籍。</li>
+<li>每个阶段都建立在上一阶段之上，数字花园会自然生长。</li>
+</ul>
+<h3>设计理念</h3>
+<ul>
+<li>简洁优雅：排版、间距、配色开箱即用，且遵循审美一致性。</li>
+<li>内容及文本优先：通过文本文件化写作与发布流程完成创作，不依赖重型 CMS ，内容存储于 Markdown/MDX 文本，结合 Git 进行版本管理，使作者拥有长期所有权并便于平台迁移。</li>
+<li>Markdown 优先：默认支持 Markdown 及常用扩展语法，同时支持数学、图表、代码和双向链接。</li>
+<li>按需启用：site.config.ts 提供模块化开关，仅启用你需要的能力。</li>
+</ul>
+<h2>附录</h2>
+<p>延伸阅读：<a href="https://hutusi.com/weeklies/25">《如何让 AI 写好代码》</a>（中文）</p>
+<ul>
+<li>GitHub 地址：<a href="https://github.com/hutusi/amytis">https://github.com/hutusi/amytis</a></li>
+<li>在线预览地址： <a href="https://amytis.vercel.app/">https://amytis.vercel.app/</a></li>
+<li>应用个人博客案例：<a href="https://hutusi.com/">https://hutusi.com/</a></li>
+</ul>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[桃花源是不存在的]]></title>
+          <link>https://hutusi.com/flows/2026/04/29</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/04/29</guid>
+          <pubDate>Wed, 29 Apr 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[去东莞三丫坡出差的时候，那里的园区环境最让人倾心，加上那座美轮美奂的图书馆，仿佛是世外桃源。那里的工作人员是否为身在“桃花源”而感到快乐呢？ 设身处地想，如果换做是我，大概率不会。我会感到无聊，会感到枯燥，就像那句经常被引用的：“一眼望到头的生活。”桃花源是理想的概念，在实际生活中是不存在的。因为人总是想要寻找“意义”...]]></description>
+          <content:encoded><![CDATA[<p>去东莞三丫坡出差的时候，那里的园区环境最让人倾心，加上那座美轮美奂的图书馆，仿佛是世外桃源。那里的工作人员是否为身在“桃花源”而感到快乐呢？</p>
+<p>设身处地想，如果换做是我，大概率不会。我会感到无聊，会感到枯燥，就像那句经常被引用的：“一眼望到头的生活。”桃花源是理想的概念，在实际生活中是不存在的。因为人总是想要寻找“意义”，桃花源给不了人“意义”。</p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[苻坚]]></title>
+          <link>https://hutusi.com/flows/2026/04/26</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/04/26</guid>
+          <pubDate>Sun, 26 Apr 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[今年重启《资治通鉴》，已是第二遍研读。此前初读时，仅看到唐纪开头。回想起来，大抵是因为司马光笔下的魏晋南北朝太过精彩，以至于进入隋唐篇章后，反倒觉得气韵渐淡。这段横跨两百余年的乱世，论时长虽不及大唐一朝，却见证了数十个政权的兴灭交替。其间金戈铁马，豪杰并起，枭雄与暴君轮番登场。而在众多的君主中，我最为推崇的莫过于苻坚。...]]></description>
+          <content:encoded><![CDATA[<p>今年重启《资治通鉴》，已是第二遍研读。此前初读时，仅看到唐纪开头。回想起来，大抵是因为司马光笔下的魏晋南北朝太过精彩，以至于进入隋唐篇章后，反倒觉得气韵渐淡。这段横跨两百余年的乱世，论时长虽不及大唐一朝，却见证了数十个政权的兴灭交替。其间金戈铁马，豪杰并起，枭雄与暴君轮番登场。而在众多的君主中，我最为推崇的莫过于苻坚。他与王猛的君臣相知，堪称乱世中的最佳拍档。可惜天不假年，王猛去世后，苻坚一错再错，最终导致国破人亡，让人意难平，为之惋惜不已。</p>
+<p>不过这一次再次读到苻坚，感觉更多是他自己作的，或者说其性格使然。司马光针对苻坚有两段评论，可谓一针见血。</p>
+<p>第一段评苻坚对待叛乱将领无限宽容的做法：</p>
+<blockquote>
+<p>臣光曰：夫有功不赏，有罪不诛，虽尧、舜不能为治，况他人乎！秦王坚每得反者辄宥之，使其臣狃于为逆，行险徼幸，虽力屈被擒，犹不忧死，乱何自而息哉！书曰：“威克厥爱，允济；爱克厥威，允罔功。”诗云：“毋纵诡随，以谨罔极；式遏寇虐，无俾作慝。”今坚违之，能无亡乎！</p>
+</blockquote>
+<p>“威克厥爱，允济；爱克厥威，允罔功。”是《尚书》中周成王训诫百官的话，意思就是“如果威严胜过宠爱，事情就能办成；如果宠爱胜过威严，事情就不能成功。”王猛在世时，严刑峻法，对扰乱纲纪的豪强毫不手软，使得前秦秩序井然，国力大增。而苻坚过于“仁慈”，对造反者不问缘由，一概宽容，这种没有原则的“宠爱”最终导致淝水之战失败后，那些原本投降他的将领纷纷叛乱，最终土崩瓦解。</p>
+<p>“毋纵诡随，以谨罔极；式遏寇虐，无俾作慝。”出自《诗经》，意思是“不要放纵狡诈随和的小人，以此来警惕邪恶无度之徒；要遏制残暴掠夺的行为，不让恶人有作乱的机会。”</p>
+<p>第二段评论苻坚失败的原因：</p>
+<blockquote>
+<p>臣光曰：论者皆以为秦王坚之亡，由不杀慕容垂、姚苌故也。臣独以为不然。许劭谓魏武帝治世之能臣，乱世之奸雄。使坚治国无失其道，则垂、苌皆秦之能臣也，乌能为乱哉！坚之所以亡，由骤胜而骄故也。魏文侯问李克，吴之所以亡，对曰：“数战数胜。”文侯曰：“数战数胜，国之福也，何故亡？”对曰：“数战则民疲，数胜则主骄，以骄主御疲民，未有不亡者也。”秦王坚似之矣。</p>
+</blockquote>
+<p>苻坚最大的问题是骄傲，而骄傲源于他在王猛的辅佐下太顺了，数战数胜，导致民疲主骄，最终一败涂地。王猛在临终前曾上表奏章，其中就提醒过苻坚：“夫善作者不必善成，善始者不必善终，是以古先哲王，知功业之不易，战战兢兢，如临深谷。”</p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[独处]]></title>
+          <link>https://hutusi.com/flows/2026/04/12</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/04/12</guid>
+          <pubDate>Sun, 12 Apr 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[放春假时带大卫住酒店，白天我要上班，他在酒店跟我抱怨说一个人很无聊，我教他我小时候一个人待着时的方法，盯着墙壁或各种图案，把它们想象成一个个人物或角色，编造一些故事。小时候我很喜欢这种想象，也曾在[《当魔法消失时》](/articles/nostalgia)这篇文章中写过，所以当我看《白日梦想家》时特别有感触。]]></description>
+          <content:encoded><![CDATA[<p>放春假时带大卫住酒店，白天我要上班，他在酒店跟我抱怨说一个人很无聊，我教他我小时候一个人待着时的方法，盯着墙壁或各种图案，把它们想象成一个个人物或角色，编造一些故事。小时候我很喜欢这种想象，也曾在<a href="/articles/nostalgia">《当魔法消失时》</a>这篇文章中写过，所以当我看《白日梦想家》时特别有感触。</p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[重访旧日宿舍楼]]></title>
+          <link>https://hutusi.com/flows/2026/04/05</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/04/05</guid>
+          <pubDate>Sun, 05 Apr 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[周末在宝山住了一晚，发现以前工作的地方离酒店不远，下午便过去看了一下。十八年前工作在这里，住在马路对面的员工宿舍，我原来住的那片宿舍已经拆掉，而这一片看上去也要拆迁。在这样破旧狭小的宿舍内，住了约有三年，这三年里看过的电影和文学书籍比我后十八年看过的都要多得多。那时候早早下班吃完饭后便回宿舍看书看电影，周末如果不去逛书...]]></description>
+          <content:encoded><![CDATA[<p>周末在宝山住了一晚，发现以前工作的地方离酒店不远，下午便过去看了一下。十八年前工作在这里，住在马路对面的员工宿舍，我原来住的那片宿舍已经拆掉，而这一片看上去也要拆迁。在这样破旧狭小的宿舍内，住了约有三年，这三年里看过的电影和文学书籍比我后十八年看过的都要多得多。那时候早早下班吃完饭后便回宿舍看书看电影，周末如果不去逛书店淘碟也是看书看电影。看完了村上春树、雨果、君特·格拉斯、杜拉斯、米兰·昆德拉等，看完了豆瓣和 IMDB 250 中的 200 多部。还学会了 C 语言编程（不要问我为什么计算机系毕业时不会 C 语言编程）。</p>
+<p><img src="/flows/baosight-dormitory.jpg" alt="baosight-dormitory"></p>
+<p>子曰：逝者如斯夫！</p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[Vibe Coding 周末的日程和工作台]]></title>
+          <link>https://hutusi.com/flows/2026/03/08</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/03/08</guid>
+          <pubDate>Sun, 08 Mar 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[自从开始 Vibe Code 以来, 我的典型的周末一天日程 be like: 起床 → Vibe Coding → 跑步 → 洗澡 → Vibe Coding → 吃早餐 → Vibe Coding → 吃午饭（外卖） → Vibe Coding → 午休 → Vibe Coding → 游泳 → Vibe Codi...]]></description>
+          <content:encoded><![CDATA[<p>自从开始 Vibe Code 以来, 我的典型的周末一天日程 be like:</p>
+<p>起床 → Vibe Coding → 跑步 → 洗澡 → Vibe Coding → 吃早餐 → Vibe Coding → 吃午饭（外卖） → Vibe Coding → 午休 → Vibe Coding → 游泳 → Vibe Coding → 吃晚饭（外卖） → Vibe Coding → 睡觉</p>
+<p>昨天除了拿外卖就没出过门，因此得去跑步和游泳来消减一天久坐对身体带来的负面影响，早上跑步 3 公里，下午游泳 40 个来回约 800 米。</p>
+<p><img src="/flows/vibe-code-workstation.jpg" alt="vibe-code-workstation"></p>
+<p>但周末依然让我兴奋，因为这是一周内生产力最高的时候，图片是我的周末办公桌面（图片拍摄于上个月）：</p>
+<ol>
+<li>三台电脑一台外接显示器：一台工作电脑预备紧急会议和写材料；一台个人电脑+外接显示器作为 Vibe Coding 主力机；一台旧个人电脑装 OpenClaw（目前还只当它做玩具，后面再深入研究）。</li>
+<li>Keychron K9 Pro 蓝牙键盘是我最喜欢的输入设备，不管去哪里都会带上它。</li>
+<li>绿色圆形设备是 B&#x26;O A1 蓝牙随身音箱，结合 Apple Music 提供 Vibe Coding 的“氛围音乐”。当前主要是交响乐+摇滚。本周末的“氛围音乐”是 Kate Bush + Pink Floyd + 贝多芬。</li>
+</ol>
+<p>经过<a href="https://github.com/hutusi/amytis/commits/main/">近 700 个 Commit</a> 的打磨，第一个 Vibe Coding 作品 <a href="https://github.com/hutusi/amytis">Amytis</a> 终于达到发布标准了（其实已经实际应用了），最近几个月感受从未有过的生产力。</p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[2026-03-07]]></title>
+          <link>https://hutusi.com/flows/2026/03/07</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/03/07</guid>
+          <pubDate>Sat, 07 Mar 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[有人说不要说 [[vibe-coding]] 了，要说 [[Agentic-Coding]] 或者 [[Agentic-Engineering]]. 不过我觉得，叫什么名字不重要，关键是在玩还是应用在生产。[[vibe-coding]] 指的是一种工作状态，这种状态是一种心流状态，完全沉浸式的“编程”(其实是看着 AI...]]></description>
+          <content:encoded><![CDATA[<p>有人说不要说 [[vibe-coding]] 了，要说 [[Agentic-Coding]] 或者 [[Agentic-Engineering]]. 不过我觉得，叫什么名字不重要，关键是在玩还是应用在生产。[[vibe-coding]] 指的是一种工作状态，这种状态是一种心流状态，完全沉浸式的“编程”(其实是看着 AI 编程)，在这个过程中不仅能将产品项目真实落地，还能学到很多技术知识。比如今天让 AI 把浏览器上的告警都清掉了，了解了一些前端告警的原因。又让 AI 做移动性兼容测试，它给生成了一系列 Playwright 测试用例，让我了解到即使是简单的网站，做移动端适配着实不易。</p>]]></content:encoded>
+          
+        </item>
+        <item>
+          <title><![CDATA[好奇心周刊第25期: 如何让AI写好代码]]></title>
+          <link>https://hutusi.com/weeklies/25</link>
+          <guid isPermaLink="true">https://hutusi.com/weeklies/25</guid>
+          <pubDate>Thu, 26 Feb 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[苏格拉底式编程 + Claude/Gemini/Codex 的专家级协同，100% AI 编程的个人项目经验总结]]></description>
+          <content:encoded><![CDATA[<p>本文为好奇心周刊第25期，全部周刊参见：<a href="https://hutusi.com/weeklies/">周刊系列</a>。</p>
+<p>在<a href="https://hutusi.com/weeklies/24">上一期周刊</a>中，我谈了下对AI编程 / Vibe Coding 的一些看法。在这期里，我想就自己在AI编程上投入最多时间、最长跨度的一个项目为例，谈一谈如何让AI写好代码，实现一个完整的软件项目。这是一个从零开始、历经 400 多个 Commit 打磨、100% 由 AI 编程实现的项目——也是我二十年博客生涯中接触过的最优雅、交互体验最佳的博客框架，我对它颇为满意。</p>
+<p><img src="/weeklies/25-la-nascita-di-venere.jpg" alt="la-nascita-di-veneree"></p>
+<blockquote>
+<p>题图：《维纳斯的诞生》【意】波提切利</p>
+<p>《维纳斯的诞生》是意大利文艺复兴时期画家桑德罗·波提切利(Sandro Botticelli)最著名的作品之一，这件作品根据波利齐安诺的长诗《吉奥斯特纳》而作，描述女神维纳斯(Venus)从海中诞生的情景。维纳斯是希腊神话美神阿佛洛狄忒的罗马名，她从海上的泡沫中诞生。画面中，左侧是西风神塞费罗斯(Zephyrus)与花神克洛里斯(Chloris)，他们正用力向中心吹气，吹落漫天的玫瑰花。右侧是时序女神荷莱(Horae)，她拿着一件缀满花朵的红色斗篷，准备为赤裸的维纳斯遮盖身体。</p>
+</blockquote>
+<h2>引言：Amytis, 两个月 400 多个 Commit 的演进</h2>
+<p>首先介绍下项目背景。之前我在公司里联合一些同事做了一个线上周刊，每周发布一篇AI相关的文章。起初我用 Hugo 搭建了一个静态博客网站，极简的风格，样式则直接采用 Lilian Weng 的个人博客模板。后来对一些样式和功能又不太满意，想着使用 AI 对它增加些功能，但转念一想，现在的 AI 能力这么强大了，为什么不直接从零开始写一个呢，对于这些 SOTA 的 AI 来说，写一个静态网站简直是小菜一碟，仅仅是一条提示词的事情。</p>
+<p>不过随着我不断优化网站及增加功能，这个项目也从起初简单的静态博客逐渐成为了功能强大的知识平台，我从今年1月7日提交第一个 Commit，到现在近两个月（主要是周末和晚上时间），提交了400多个 Commit，已然让我感到比较满意，从最初的简单样式演进到了当前的功能丰富但简约优雅。</p>
+<p>功能从最初的博客文章(Posts)扩展到了专栏(Series)、书籍(Books)和随笔(Flow)，支持知识图谱、全文搜索、多语言、主题色、评论系统、数据统计、订阅等功能。网站内容文本格式，以 Markdown 为优先，支持 MDX、Mermaid、Latex 等语法，并支持双向链接等。网站设计风格简约而优雅，可以从浏览文章的阅读进度条、目录设置等管中窥豹。感兴趣的同学可以在 <a href="https://amytis.vercel.app/">amytis.vercel.app</a> 上体验完整的网站，代码开源在 <a href="https://github.com/hutusi/amytis">GitHub</a>.</p>
+<p>项目名称 Amytis 来源于古希腊时期巴比伦王尼布甲尼撒二世的王后的名字，尼布甲尼撒二世为她建造了世界七大奇迹之一的空中花园。而 Amytis 则是我借助 AI 创造的知识花园。在给这篇文章选择题图的时候，我又想到一幅以希腊神话为主题的艺术作品，即《维纳斯的诞生》。这幅作品的隐喻太契合了，仿佛是对着 AI 工具吹口气，Amytis 就从 Token 泡沫中诞生了，三位 AI 大神（Claude Code、Gemini CLI、Codex）为她装饰修整。下面就介绍下这充满神奇的过程。</p>
+<h2>我的“AI 专家委员会”： 四大 AI 编程工具的分工与 Git Worktree 工作流</h2>
+<p>在 AI 编程的过程中我使用到了 Gemini CLI (Gemini 3), Claude Code (Opus 4.5/4.6), Codex (GPT-5.3-Codex). 另外我还在 GitHub 上配置了 CodeRabbiAI 来做检视。我先简单解释下为什么会同时用到这四种 AI 编程工具（三个 AI Code Agent + 一个 Code Review Agent）。</p>
+<p>最初我在决定选用哪种工具作为该项目的编程主力的时候，分别用同样的提示词向它们下达了指令，对 Gemini CLI 创建的网站样式最为满意。其实 Claude Code 创建的网站样式也不差，不过因为当时我还在写另外一个项目，想着把 Claude Code 抠门的 Token 限额留给该项目，就选用了 Gemini CLI 作为编程主力。当时 Codex 的 GPT-5.3-Codex 模型还没出来，效果相对其他两个感觉上差了点，因此没有选。</p>
+<p>后来使用 Gemini CLI 提交了约200多个 Commit, 功能越来越复杂后，感觉 Gemini CLI 有些力不从心了。我希望它在首页设计个轮播图的效果，尽管 Google 在 Token 额度方面非常慷慨，Gemini CLI 一遍又一遍的规划设计生成尝试，最终也没能设计出一个让我感到满意的效果来。于是我让 Claude Code 出手，它理解了项目代码后立刻就设计出了让我满意的样式（修改代码参见 <a href="https://github.com/hutusi/amytis/commit/0d74bfa2203106bd03e7dd9f74a28dc3f562e851">Commit</a>）。当然，在它设计出来之前，我也不知道应该设计成什么样。后面一些特性增加或界面优化我开始尝试让 Gemini CLI 和 Claude Code 分别完成，但 Claude Code 实现效果明显要高于 Gemini CLI, 因此后面我便将 Claude Code 改为了编程主力，而 Gemini CLI 则被用来做生成文档、测试等任务。Claude Code 的网站设计能力明显强于其他 AI 编程工具。</p>
+<p>有一次遇到个bug，我尝试用 Claude Code 修复，结果它似乎进入了自证陷阱，消耗了一个时间窗的 Token 也没有修复。我想到微信公众号读者留言说 Codex + GPT-5.3 不错，于是我便尝试了下，结果出乎意料，Codex 很快就修复了，验证无误，Codex 修复该 bug 的代码参见 <a href="https://github.com/hutusi/amytis/commit/9731f7bc1a4624d2f0245ade5e0d00b17584ac98">Commit</a>.</p>
+<p>此后，我便在该 Web 项目中并行使用三种 AI 编程工具，主力编程使用 Claude Code, 文档和测试生成使用 Gemini CLI, 复杂问题解决使用 Codex. 过程中用到了 Git Worktree 的技巧，给每个工具各拉出不同的分支在不同的工作空间中，通过 GitHub PR 上库。在提交 PR 的时候，我发现它自动触发了早前配置的 CodeRabbit 检视，起初我没当回事，对 CodeRabbit 的印象还停留在 GPT-3 的时代，那时候它的用处不大。一次我看到 CodeRabbit 竟然在 Claude Code 写的代码里提了<a href="https://github.com/hutusi/amytis/pull/11">十几条检视意见</a>，于是我把 PR 链接发给 Claude Code 让它判断下这些检视意见是否正确，是否值得修复，结果 Claude Code 仔细分析后说大部分都是有价值的，我挑了几条看下确实如此。因此，这四种 AI 编程工具便在这个项目中和谐共存着。</p>
+<p>简单总结一下：</p>
+<ul>
+<li>Claude Code (Opus 4.5/4.6)：它是我的“首席架构师”、“首席设计师”和“主力开发工程师”。它对现代 Web 框架（Next.js/React）的审美和交互设计理解极其深刻，在从 Gemini CLI 切换到它时便再没有变过。</li>
+<li>Gemini CLI (Gemini 3)：它是“初创工程师”、“文档专家”与“首席测试”。得益于它极大的上下文窗口和极低的成本，我用它来生成文档、编写单元测试，以及扫描整个代码库进行重构建议。另外，在初始项目中它完全胜任。</li>
+<li>Codex (GPT-5.3)：它是“问题定位专家”。当 Claude Code 陷入逻辑死循环或“自证陷阱”时，Codex 往往能以不同的推理路径提供快速的 Bug 修复方案。</li>
+<li>CodeRabbit：它是“代码检视专家”。通过 PR 自动检视，它能更加全面的审查代码问题，发现被忽略的边界漏洞。</li>
+<li>通过 Git Worktree 为每个 Code Agent 分配了一个独立的工作空间（Worktree），就像在同一个办公室里给不同的员工安排了工位。它们在各自的分支上独自工作，编码、调试，最后通过 GitHub PR 汇总。这种上下文隔离的方式，避免 AI 乱改文件导致的合并冲突，让整个开发节奏井然有序。</li>
+</ul>
+<h2>对抗“熵增”：规则文件、重构与自动化测试</h2>
+<p>Vibe Coding 的感觉是很爽的，它及时反馈的速度甚至超过了人想到需求的速度。在这种快速的产出中，不但对人的精力和时间带来挑战，还隐藏着一个问题：AI 产出代码的速度远超人类，这意味着“技术债”的积累速度也是指数级的。</p>
+<p>为了防止代码库变成代码堆砌的庞大固埃，我在过程中主要采取了两个方法：规则文件和重构。</p>
+<p>在代码仓库的根目录可以看到同时存在 <code>GEMINI.md</code>, <code>CLAUDE.md</code> 和 <code>AGENTS.md</code> 三个规则文件。这是 AI 编程工具的操作手册，不但可以使它们快速进入工作状态，还可以保证它们能够遵从同样的规范与约束。美中不足的是三家 AI 编程工具的规则文件名各不相同，导致需要放三个文件，不过内容基本上是一致的。这些文件基本上都是 AI 编程工具自己生成和更新的，我看到网上有人说建议手工写 <code>GEMINI.md</code>, 不过我认为既然代码是可以按照用户意图生成，这些规则文件同样可以按照用户意图来生成，能偷懒尽可能偷懒。</p>
+<p>不能偷懒的时候则不能偷懒，比如要及时查看代码情况以提醒 AI 重构。当我发现一个代码文件过长（超过 1000 行），或者有大量重复或复杂逻辑的时候，就会要求 AI 将功能剥离拆分成模块或子组件。并且同时要求 AI 生成测试用例并更新文档。测试用例的好处自不必说，这与人类程序员编程的实践是一致的。重构的最大作用是提升可维护性，可代码都是 AI 去写了，还有重构的必要吗？是的。非常必要，因为上下文的限制，在新增功能或优化时， AI 也需要理解存量代码，简洁清晰的代码架构会让 AI 更容易理解并更少出问题。</p>
+<h2>苏格拉底式的编程：从指令到对话</h2>
+<p>苹果创始人乔布斯曾说过：“我愿意用我所有的科技成果换取和苏格拉底相处的一下午。”其实在苏格拉底所处的雅典时期，他就被誉为雅典最智慧的人。相传有人曾为此跑到德尔菲神庙问阿波罗神，得到的神谕肯定了这个问题。这话传到苏格拉底那里，他诚惶诚恐，他说：“阿波罗神这是什么意思呢，我本人实际上毫无智慧可言。”于是他挨家挨户找雅典的成功人士对话，去询问那些知名的智者、工匠、诗人、政治家，可一轮求教下来，苏格拉底惊讶地发现这些人果然没有智慧，他们不仅对自己的无知一无所知，还很傲慢地以为自己很有智慧。苏格拉底意识到自己的智慧所在：他知道自己的无知。正是因为知道自己的无知，因此才不断的向别人提问。</p>
+<p>苏格拉底将自己的这个哲学方法称为“灵魂助产术”，通过不断的启发和对话，帮助他人将脑海中模糊、潜藏的思想“接生”出来。我认为这种方法非常适用于 AI 编程。在<a href="https://hutusi.com/weeklies/24">《关于AI编程的一些体会和设想》</a>中我提到：“向 AI 学习，学习技术，学习编程，探索各种可能性。”当我们面对拥有海量通用知识的 AI 时，如果我们仅仅把它当作一个“代码录入员”，给出事无巨细、刻板教条的指令，其实是在用我们有限的认知，去囚禁 AI 那几乎无限的知识上限。正如那些雅典智者，容易陷入思维的狭窄胡同。相反，如果我们将自己置于苏格拉底的位置，承认自己的局限，保持好奇心，并专注于“提出高质量的问题”，你会发现 AI 能给出的反馈远超你的预期。</p>
+<p>我不擅长写详尽的 Spec 文档，除了开头我给 AI 限定技术栈 TypeScript + Next.js + TailwindCSS + Bun 之外，便几乎没有给它在方案选择上做太多的限制。即使我提出一个技术方案，也会不断追问 “What is your opinion?”“Do you have better idea?” 诸如此类。因为不限制不意味着撒手不管，任由 AI 发挥，那样效果可能也不佳。尤其是 Web 开发，现在能看到很多的网站都透着明显的 AI 风格：鲜明的色块、充斥着 emoji，诸如此类风格，这就是几句话提示词生成网站的结果。我的经验是，需要非常认真地与 AI 交流、探讨，并不断迭代，在这过程中不但自己补充了知识面的不足，也让 AI 能够理解真实的诉求，这些诉求可能原先连用户自己也不清楚，在交流过程中逐渐明晰起来。看到这里，不禁想到，这不就是产品经理收集用户需求的过程嘛。不同的是，面向用户的 AI 是通用知识全能者，且可以很快将原型构建出来，反馈链条极短。在这个 Web 项目中，提交了 400 多次 Commit, 很多 Commit 都有我跟 AI 的多次交互，不断迭代打磨才有了现在较为满意的产品。</p>
+<p>下面，还是以一个特性设计交互举例。</p>
+<p>我已经将网站的四大功能：随笔、文章、专栏和书籍的基本功能实现。我希望把这个网站打造成一个数字花园，而非简单的个人博客，因此需要能够将知识连接起来的功能。我自然想到了双向链接的功能，这在 Notion、Obsidian 等知识管理工具上都是基本的标配。于是，我跟 Claude Code 说：“让我们构思并规划一个核心功能：知识库。它应该支持像 Notion 或 Obsidian 那样的双向链接，并包含知识图谱。你的看法是什么？你还能想到哪些其他功能或改进？”</p>
+<p>如前文所述，我经常会在指令后面加上”What is your opinion” 或 “What do you think” 之类的话语，主要是防止 AI “严格”遵照我的指令去执行，而不思考更好的方法了。</p>
+<p><img src="/weeklies/25/demo-01.png" alt="demo-01"></p>
+<p>Claude Code 思考了一阵提出了它的评估方案，提出了需要考虑的建议，并给出了可实施步骤。并询问我想要按照哪个步骤来实施。</p>
+<p><img src="/weeklies/25/demo-02.png" alt="demo-02"></p>
+<p><img src="/weeklies/25/demo-03.png" alt="demo-03"></p>
+<p>我没有直接回答它的问题，而是看到它前面的回复中提到卢曼卡片盒笔记法(Zettelkasten)，让我眼睛一亮，这正是我所期望但没想到的，于是我说我想要真正的卢曼卡片盒，并提出也不希望这个网站过于复杂。Claude Code 则思考了一阵给我优化了方案。</p>
+<p><img src="/weeklies/25/demo-04.png" alt="demo-04"></p>
+<p>我在这个方案里看到它又提出了一种对象 Notes，于是问它跟我之前设计的 Flow 有什么区别？</p>
+<p>Claude Code 的回答则不仅是回答我问题表面上的区别，而是在探讨这两种对象该如何在系统中设计。</p>
+<p><img src="/weeklies/25/demo-05.png" alt="demo-05"></p>
+<p>不过我不希望网站又搞出一个概念，而是说要合并 Flow 和 Notes, 虽然我比较笃定这个想法，但我还是在末尾加了句 “What is your opinion”.</p>
+<p>Claude Code 则是先拍了我马屁，再提出它的观点：概念统一但技术实现分开，并给出它的理由，最后问我同不同意。</p>
+<p><img src="/weeklies/25/demo-06.png" alt="demo-06"></p>
+<p>这次我没有疑议了，不过我又问起它打算怎么设计 UI 和交互。 Claude Code 提出了它的设计方案。</p>
+<p><img src="/weeklies/25/demo-07.png" alt="demo-07"></p>
+<p>不过它似乎是没有理解我想要概念统一的真正意图，设计了三个独立的页面及分别的导航栏入口。</p>
+<p><img src="/weeklies/25/demo-08.png" alt="demo-08"></p>
+<p>我没有直接否定它，而是问它：“我们需要单独设立graph页和notes列表页吗？能否将它们合并为一个页面，左边显示列表，右边显示图谱？或者你能否设计得更优雅一些？此外，我们可以将notes页放入flow页面中，并使用顶部的标签页来进行筛选。你觉得怎么样？”</p>
+<p>Claude Code 思考后说标签页的思路是对的，然后重新设计。</p>
+<p><img src="/weeklies/25/demo-09.png" alt="demo-09"></p>
+<p>我也不忘记对它的表现进行夸奖，告诉它名字还是要保留使用 Flow. Claude Code 受了鼓励后则更加积极的响应，并扩展解释说 Flow 这个统领性的名称具有哲学层面的支撑：每日记录——意识流；笔记——思想流；图谱——关系流。我都没想到这一层。</p>
+<p><img src="/weeklies/25/demo-10.png" alt="demo-10"></p>
+<p>之后又聊了几轮我才让 Claude Code 开始计划模式(Plan Mode)，设计出详细的计划后，才是执行生成。当然，即使是这样，该特性生成后还是经过了不少轮的迭代交互才得以完善。该次特性计划前的对话我导出并保存在了 <a href="https://github.com/hutusi/amytis/issues/13">GitHub issue</a> 上，有兴趣可以浏览。</p>
+<h2>结语： 既然 AI 负责写代码，那我们负责什么？</h2>
+<p>写此章节的时候，正好在 X 上刷到一条推文问了同样的问题，博主的回答是：“程序员负责让 AI 写代码。”不过我打算认真的回答一下这个问题，其实这个问题的答案已经写在文章前面的内容里了，下面再简单总结一下。</p>
+<p>首先是品味。有关品味最著名的评判来自于乔布斯，他在 1995 年的一次访谈（<a href="https://www.youtube.com/watch?v=9m68auPIPRk"><em>Steve Jobs: The Lost Interview</em></a>）中说道：“归根结底，这关乎品味。这关乎让你自己置身于人类所创造的最优秀的事物中，然后尝试将这些事物融入到你正在做的事情里。”在 AI 时代，技术实现的门槛被拉低，AI 能写出正确的代码，但它目前还无法定义什么是“优雅”，什么是“美”。人类负责定义“美”与“意义”，负责从无限的可能中，挑选出最符合直觉与美感的那一个方案。品味，将成为未来程序员的核心竞争力。</p>
+<p>其次是边界。当前来看，AI 编程还是局部的专家，全局能力仍有缺陷。如果没有人类的干预，AI 极易通过不断的堆砌逻辑导致代码库的“熵增”，堆积技术债务。我们的职责变成了“首席架构师”。需要时刻保持警觉：模块是否需要解耦？技术债是否已经过载？规则文件是否依然有效？我们不再是搬砖的工匠，而得是高瞻远瞩的监工，确保项目在飞速扩张的同时，基座依然稳固。</p>
+<p>最后是问题。在 AI 时代，“答案”是廉价的，高质量的“问题”才是最有价值的。AI 能够高效执行指令，但它无法洞察用户未被满足的深层需求。我们负责将模糊的愿望转化为清晰的逻辑，负责在技术可能性与用户需求之间搭建桥梁。与其说我们在编程，不如说我们在进行一场“苏格拉底式的持续追问”，通过提问来激发 AI 的最大潜能。</p>
+<p>当然，随着 AI 的日益强大，也许在将来，AI 也会补齐这些能力（特别是第二点）。那时候，程序员或者说人类需要重新定义自身的价值和意义了。</p>
+<blockquote>
+<p>我们塑造了工具，此后工具又塑造了我们。</p>
+<p>—— 马歇尔·麦克卢汉</p>
+</blockquote>
+<h2>参考</h2>
+<ol>
+<li><a href="https://github.com/hutusi/amytis">Amytis 开源仓库地址</a></li>
+<li><a href="https://amytis.vercel.app/">Amytis 在线展示网址</a></li>
+<li><a href="https://www.youtube.com/watch?v=9m68auPIPRk"><em>Steve Jobs: The Lost Interview</em></a></li>
+</ol>]]></content:encoded>
+          <dc:creator><![CDATA[胡涂说]]></dc:creator>
+          <category><![CDATA[周刊]]></category><category><![CDATA[AI]]></category><category><![CDATA[Code Agent]]></category>
+        </item>
+        <item>
+          <title><![CDATA[好奇心周刊第24期: 关于AI编程的一些体会和设想]]></title>
+          <link>https://hutusi.com/weeklies/24</link>
+          <guid isPermaLink="true">https://hutusi.com/weeklies/24</guid>
+          <pubDate>Sun, 25 Jan 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[如何看待及用好 AI 编程和 Code Agent，以及作为程序员应该做什么]]></description>
+          <content:encoded><![CDATA[<p>本文为好奇心周刊第24期，全部周刊参见：<a href="https://hutusi.com/weeklies/">周刊系列</a>。</p>
+<p>现在应该很少人怀疑 AI 的生产力了，去年 Claude Code + Opus-4.5 组合的强大编程能力刷新了很多人的认知，我也是在年底体验后<a href="https://hutusi.com/articles/2025-review">惊叹不已</a>。我用 Claude Code 做了几个应用，后来又尝试 Gemini CLI, 并用 Gemini CLI 也做了静态网站的程序，用在了工作的洞察周刊中。过程中一行代码没有写，甚至连 <code>Git Commit</code> 信息也是由 Gemini CLI 填写的，我把<a href="https://github.com/hutusi/amytis">代码开源在了 GitHub 上</a>，如果有想要建博客或知识库、文档网站的同学推荐取用，我在 Vercel 上也部署了 <a href="https://amytis.vercel.app/">Live Demo</a> 可以体验效果。</p>
+<p>最近两个多月，除了 Claude Code 和 Gemini CLI, 我还体验了 Codex 和 Lovable 这种 Web 类 AI 编程工具，不过对比下来，我更喜欢 Claude Code 和 Gemini CLI，这两个使用也最为高频，几乎每天都会用到其中之一。本来打算写一期关于 Claude Code 和 Gemini CLI 的特性洞察的周刊，但我发现这种介绍文章在网上太多了，而且这些 AI 编程工具更新迭代极快，Claude Code 甚至每天都发布新版本。对于 AI 工具，看一百篇介绍文章不如实际动手试一次。所以再写洞察或介绍之类的文章意义不是很大，而是改成总结下我最近两月的使用感受，以及个人的一些看法和对未来的预测。</p>
+<p><img src="/weeklies/24-impression-sunrise.jpg" alt="impression-sunrise"></p>
+<blockquote>
+<p>题图：《印象·日出》【法】克劳德·莫奈 Claude Monet, 1872</p>
+</blockquote>
+<ol>
+<li>
+<p>以 Claude Code 为代表的 Code Agent 与此前 GitHub Copilot, Cursor(现在也支持 Agent 模式了)等 AI 编程工具完全不同，这种区别属于代际跨越，可以理解为是智能驾驶中 L4 甚至是 L5 和 L3 的差异。</p>
+<p>在 GitHub Copilot 和 早期版本 Cursor 这种 “传统”AI编程中，实际上应该叫 “AI 辅助编程”，正如 Copilot 名称所寓意的那样，AI 是辅助程序员编程。而 Claude Code 这种 Code Agent，则是 “AI 编程”，AI 成为了编程的主角。用户告诉它一个任务，在很多情况下它可以自主完成，小到一个功能优化，一个问题修复，大到一个重大特性、模块重构，甚至是一个网站或应用，它都可以自主完成。</p>
+<p>我从去年11月开始订阅 Claude AI Pro, 接着便尝试使用 Claude Code, 开始由于我并不知道切换模型，便使用默认的 Haiku 4.5 生成了一个 Nextra 文档网站，我除了告诉它一些要求外，并没有做任何干预，然后它就把网站生成并调试运行成功了，虽然网页还有些小 bug, 但已经让我非常吃惊了。当时我同样尝试了 Codex (gpt-5.1-codex-max) 和 Gemini CLI (gemini-2.5), 都没能顺畅的运行。我便认定了 Claude Code, 后来发现还可以切换到更强大的模型 Sonnet-4.5, 而等到12月 Opus-4.5 也对 Pro 用户开放后，效果更显著了。而 Gemini CLI 是等到 Gemini-3 模型开放可用后感到明显的提升，也成了我近期主力使用的 AI 编程工具。</p>
+</li>
+<li>
+<p>Code Agent 的竞争力是大模型能力，而大模型 API Token 就是生产力。</p>
+<p>如果说 Haiku-4.5 和 Sonnet-4.5 已经让我可以解决大部分 Web 类编程的问题了，而 Opus-4.5 则是让我“沉迷”上了 Vibe Coding. 甚至到了每天睡觉前的事情是给 Claude Code 发送指令，早上起床的第一件事情也是把酝酿的指令发送给 Claude Code. Claude Code + Opus-4.5 对模型 API Token 消耗极大，基本上每次交互三四次就消耗掉了时间窗的限额，根据 Anthropic 的规则，需要在下一个五小时才能继续使用。就算我这种“相对低频”的使用，对于可怜的 Pro 账户来说，基本上没几天就会耗尽一周限额。</p>
+<p>前不久，Claude Code 的创始人 <a href="https://x.com/bcherny/status/2007179832300581177?lang=en">Boris Cherny 在 X 上分享他使用 Claude Code 的经验</a>：他会并行开五个窗口，并行指挥 Claude Code 编程和处理任务，这样的效率提升是巨大，但“代价”也是巨大的。所以很多程序员都订阅了 Claude AI Max 5x(100美元每月) 甚至是 Max 20x(200美元每月) ，而很多企业也考虑其生产力提升给员工订阅 Claude AI。最近一则消息是微软鼓励内部员工使用 Claude Code. 越来越多的程序员依赖 Claude Code 编程，以至于每次 Claude 出故障，网络上都会成为热点，程序员们都停工停产了。</p>
+<p>可以预见的是，越来越多的企业会将为员工提供类似 Claude Code 和更大规格的 AI Token 来作为员工福利，就像二十年前比拼员工食堂，十年前比拼办公设备、人体工学座椅等。2026年企业招聘员工的吸引条件可能会变成“模型不限，Token管饱”之类的福利措施。</p>
+</li>
+<li>
+<p>把 Code Agent 当成一个能力极强的程序员，而非只是一个工具箱。</p>
+<p>尽管在 AI 是不是工具这个话题很有争议性，但我认为如果单纯把 Code Agent 当成传统工具来看待，那就大大限制了它们的能力发挥。我在新起项目或任务的时候，总会问 Code Agent 如何规划设计，或者是如 Boris 那样使用 Plan 模式。 Plan 模式其实是 Claude Code 自己在规划，我只需要对它的问题给予反馈即可。Gemini CLI 虽然没有 Plan 模式，但它有 <code>/constructor</code> 扩展，我在实际应用中则会让 Gemini CLI 生成 TODO list, 来规划任务。最初在探索 Claude Code 的时候，我让它设计一款类似 Claude Code 的 Code Agent CLI 工具，它则非常详细地列出了待办清单，我只需要按照待办清单的内容依次下达命令给 Claude Code. 最后，花了大约两周时间，一个功能基本可用的 Code Agent 命令行工具就做出来了。</p>
+<p>网上有很多文章介绍 Claude Code 等 Code Agent 的使用技巧、定制配置，我认为与其花时间研究那些技巧，不如多花时间直接与之交互，在实战中探索其能力边界。Boris Cherny 在介绍他的经验时，也提到他几乎是开箱即用，没有做什么配置："My setup might be surprisingly vanilla! Claude Code works great out of the box, so I personally don't customize it much. "当然，Boris 也许是在宣传他们 Claude Code 强大的原生能力。</p>
+<p>我有类似的经验体会。Anthropic 推出的 Agent Skill 和 MCP，我则很少用。在个人项目和通用编程场景中，我暂时还没遇到必须使用 Skills 的情况。我觉得，Skill 可能更适用于特殊业务场景，软件编程场景并非必需。而最近 Skill 在互联网上有愈来愈火的趋势，我觉得也与 Claude Code 这类工具开始向编码外的场景渗透有关。本质上解决好代码问题就能解决其他数字类问题，这就是为什么 AI 先在编码场景卷起来的原因。</p>
+<p>之前，Anthropic 员工做技术分享时说"Don’t build Agents, but build Skills". 诚然，这是针对n8n, Langraph 那些所谓的 Agent 平台说的。有一个形象的比喻，大模型就是一个超级聪明的博士，但博士到了新企业也不懂企业流程的做事方法，因此 Skill 就像是企业的工作手册，教博士一步一步操作。但软件编程方法大多是通用的，Skills 并非必需。当然，某些企业为了管理的需要，增加了一些对软件编程的管理流程和规则，这些可能是软件团队要使用的 Skills 的原因之一吧。但我认为，这些基于传统软件开发而形成的管理流程和规则，将会在 AI 编程的时代被取代。</p>
+</li>
+<li>
+<p>指令并不是越全面越详细越好，给 AI 更多的自主，有时会带来惊喜。</p>
+<p>这个观点可能也是违反主流认知的。</p>
+<p>自从 Vibe Coding 流行以来，另外一个软件工程概念也开始流行：SDD (Spec-Driven Development，规范驱动开发) 。简单的说就是，SDD 要求在 AI 生成代码之前，先编写一套详细、结构化的规范（Specification/Spec）。在复杂工程中，SDD 有助于构建严谨的编程框架，引导 AI 生成更符合预期的代码。</p>
+<p>但我认为，并非所有的场景下 SDD 越详细越好。我给 Claude Code 或 Gemini CLI 下发指令，然后验收成果。以我的经验，有时候简单指令比具体指令生成的效果更好。我的指令一般都是简单的英语语句，这是因为我希望 Vibe Coding 的同时也能学英语。考虑到我蹩脚的英语很可能传递错误的意思，因此我在下达指令前，会在 Gemini 网页上让它优化下语句，而 Gemini 除了纠正语法和优化语句外，还识别到我是在 Vibe Coding, 因此也会提供一份更详细的分解成具体执行步骤的指令给我。但我一般不会取用该指令，只是用能够清楚表达需求的英语语句给到 Code Agent. 这种刻意避免用较为细节的规则去约束 AI 的实际效果往往出乎我的意料。当然，这也得分场景。如果是问题定位和解决，那我会把详细报错信息和场景描述尽可能描述详细。</p>
+<p>下面，举一个实际的例子。我用 Gemini CLI 做了一个静态博客网站，用在周刊上。我不太满意归档页的设计，年份字体太淡了，看着不太清楚，年份字体也太大了，整体不协调。我没有直接指出字体色重的问题，而仅仅是告诉 Gemini CLI：我不满意归档页面的风格，请重新设计并实现，力求优雅。</p>
+<p><img src="/weeklies/24/previous-archive-page.jpg" alt="previous-archive-page"></p>
+<p>Gemini CLI 开始思考并计划。令我惊喜的是，它立刻识别到了年份字体的问题，还考虑优化月份和列表，并且实现了页面滚动时在当前列表所在年份范围内年份固定显示。优化后的效果令我非常满意，完全超出了我的期望。而如果我明确告诉它修改年份字体，那它可能只会根据我的要求做符合我期望的修改。</p>
+<p><img src="/weeklies/24/gemini-thinking.jpg" alt="gemini-thinking"></p>
+<p>优化后的页面效果如下：</p>
+<p><img src="/weeklies/24/refactor-archive-page.jpg" alt="refactor-archive-page"></p>
+<p>当然，我举的例子是 AI 编程最擅长的 Web 应用开发，不能代表所有软件开发场景。但我认为随着大模型的能力越来越强大，很多的软件开发场景下自主的 AI 表现会越来越好。那时候，我们要想到的是，AI 的能力远超过我们自己，我们需要的是尽可能激发它，而不是约束它。</p>
+</li>
+<li>
+<p>传统软件工程将会消亡。</p>
+<p>2024年初，我写了一篇回顾软件工程历史的文章<a href="https://hutusi.com/articles/the-history-of-software-engineering">《银弹飞过先锋大厦》</a>，这篇文章写得太长，以至于我没有把观点表述得简洁明了，我的观点隐藏在了结尾的这句话中：“大模型的AI时代正在来临，我大胆预测大模型是软件开发的银弹”。那个时候，我用 ChatGPT 来生成代码来举例，而现在 Claude Code 的生成代码能力不知道翻了多少倍。这种进化速度更加强化了我的观点：“大模型是软件开发的银弹”。</p>
+<p>“软件开发的银弹”这个概念是弗雷德·布鲁克斯提出的，由于我那篇文章有详细阐述，这里不再赘述，感兴趣的读者可以参看该文。他认为“没有银弹”，因为可见的未来“不会有任何技术或管理上的突破能使软件工程的生产力得到数十倍的提升”。但大模型的发明改变了这一切，Code Agent 使得软件编程效率成倍数上升。Anthropic 刚发布 Cowork, 可以理解为是非编码领域的 Claude Code, 类似 Manus 的通用 Agent 工具。在 X 上，有人问 Boris 有多少代码是 Claude Code 写的，Boris 回答：全都是。而 Claude Code 自身 80%-90% 的代码也由 Claude Code 写成。</p>
+<p><img src="/weeklies/24/boris-comment-about-cowork.webp" alt="boris-comment-about-cowork"></p>
+<blockquote>
+<p>Boris 在 X 上回复说 cowork 全部由 Claude Code 编写</p>
+</blockquote>
+<p>“银弹”意味着传统软件工程的历史使命将会终结，软件工程的诞生是因为“软件危机”，而软件危机的本质是因为软件项目膨胀后，个人或小团队无法处理其复杂性而导致的一系列质量问题。因而从上世纪六十年代到目前的软件工程一直致力于通过管理和工程手段来消减复杂性，比如角色分工、瀑布流程、敏捷迭代、CICD、微服务。而大模型将会接手程序员处理软件复杂性的工作，软件工程也可能不再适用。新的软件工程会是什么样的，还不好说，但这将是“全新”的软件工程，而非传统软件工程的演进。这里我暂不展开，后面会考虑单独写一篇文章。</p>
+</li>
+<li>
+<p>向 AI 学习，学习技术，学习编程，探索各种可能性。</p>
+<p>传统软件工程中的角色分工不但将消失，高级程序员、初级程序员这种级别的区分也可能消失，或者换句话说：程序员能力的评价标准将从纯粹的代码编写能力转向系统性思维、需求洞察和 AI 协作能力。软件从业人员可能不再像以前那样区分产品经理、架构师、开发、测试等角色，而是融合性的角色。程序员可能不是通过自己编码来提升技能，而是要向 AI 学习编程、学习技术。</p>
+<p>这让我想到了当年柯洁在与 AlphaGo 对弈后连输三局后中途退场大哭，他发现对方无法战胜。赛后，他平静了心情，在微博上写道：“重新学围棋”。柯洁感叹 AlphaGo 对围棋的理解超出了人类的想象，颠覆了人类几千年来形成的思维定式，AlphaGo 的出现是围棋届的幸事，棋手们可以重新认识和定义围棋。</p>
+<p>虽然目前的大模型和 Code Agent 在软件编程方面还有达到 AlphaGo 在围棋方面绝对领先的优势，但这种趋势是很明显的。而柯洁的感悟给给了我启发，通过与 AI 的交互来探索对系统、对编程的理解，学习新技术，探索未知领域。我在使用 Claude Code 的时候也没有用 <code>--dangerously-skip-permissions</code> 的自主模式，倒不是因为我不相信它，而是因为我想要在过程中能够与 Claude Code 实时互动，并观察它的思考和执行过程。在这方面，我觉得 Gemini CLI 做得比 Claude Code 好，Gemini CLI 会详细展示其思考过程，这些思考过程也能反向触发我自己的思考。</p>
+</li>
+</ol>
+<p>以上是我这两个月 Vibe Coding 的思考和猜测，由于经验有限，仅代表个人观点，抛砖引玉，与大家一起切磋。</p>
+<blockquote>
+<p>时间向一个方向移动，记忆向另一个方向。</p>
+<p>—— 威廉·吉布森</p>
+</blockquote>
+<h2>参考</h2>
+<ol>
+<li><a href="https://x.com/bcherny/status/2007179832300581177?lang=en">Boris Cherny 在 X 上分享使用 Claude Code 的经验</a></li>
+<li><a href="https://www.anthropic.com/engineering/claude-code-best-practices"><em>Claude Code: Best practices for agentic coding</em></a></li>
+</ol>]]></content:encoded>
+          <dc:creator><![CDATA[胡涂说]]></dc:creator>
+          <category><![CDATA[周刊]]></category><category><![CDATA[AI]]></category><category><![CDATA[Code Agent]]></category>
+        </item>
+        <item>
+          <title><![CDATA[2026-01-18]]></title>
+          <link>https://hutusi.com/flows/2026/01/18</link>
+          <guid isPermaLink="true">https://hutusi.com/flows/2026/01/18</guid>
+          <pubDate>Sun, 18 Jan 2026 00:00:00 GMT</pubDate>
+          <description><![CDATA[使用 Claude Code 和 Gemini CLI 需要在网络代理中使用 TUN Mode, 之前用 ClashX Pro 总会出莫名其妙的问题，改用 [Clash Verge rev](https://github.com/clash-verge-rev/clash-verge-rev?tab=readme-ov...]]></description>
+          <content:encoded><![CDATA[<p>使用 Claude Code  和 Gemini CLI 需要在网络代理中使用 TUN Mode, 之前用 ClashX Pro 总会出莫名其妙的问题，改用 <a href="https://github.com/clash-verge-rev/clash-verge-rev?tab=readme-ov-file">Clash Verge rev</a> 后好用多了。这也是 Gemini 告诉我的，之前用 Google 总搜不出合适的方案，还是得靠 AI 啊。</p>]]></content:encoded>
+          
+        </item>
+  </channel>
+</rss>

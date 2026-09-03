@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>44BITS</title>
+    <link>https://www.44bits.io/</link>
+    <atom:link href="https://www.44bits.io/feed.xml" rel="self" type="application/rss+xml" />
+    <description>클라우드, 컨테이너, 리눅스, 인프라, 프로그래밍 등 개발 관련 기술을 다루는 기술 블로그</description>
+    <language>ko</language>
+    <lastBuildDate>Sat, 08 Aug 2026 00:00:00 +0900</lastBuildDate>
+    <item>
+      <title>AI와 함께 44BITS 팟캐스트를 편집하고 발행한 기록</title>
+      <link>https://www.44bits.io/posts/ai-assisted-podcast-production-ep-2618/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/ai-assisted-podcast-production-ep-2618/</guid>
+      <pubDate>Sat, 08 Aug 2026 00:00:00 +0900</pubDate>
+      <dc:creator>seapy</dc:creator>
+      <description>seapy가 완성본을 듣고 종료점을 정했으며 raccoony는 썸네일을 골랐습니다. Hermes가 원본 다운로드부터 전사·인코딩·발행까지 진행한 Ep 2618 제작 과정을 시간순으로 기록했습니다.</description>
+    </item>
+    <item>
+      <title>Train High, Infer Low - 머신러닝 학습과 서빙의 FP32, FP16, BF16, INT8 정밀도 선택</title>
+      <link>https://www.44bits.io/posts/train-high-infer-low/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/train-high-infer-low/</guid>
+      <pubDate>Tue, 06 Jan 2026 00:00:00 +0900</pubDate>
+      <dc:creator>seapy</dc:creator>
+      <description>수치 정밀도 선택은 추론 속도, 메모리, 정확도의 균형을 좌우합니다. 학습은 높은 정밀도로 안정성을 확보하고, 서빙은 낮은 정밀도로 효율을 끌어내는 전략과 BF16 중심의 권장 조합을 제시합니다. 현실 환경에서의 품질 저하와 범위 한계를 고려한 의사결정 기준을 제공합니다.</description>
+    </item>
+    <item>
+      <title>도커(Docker) 입문편 컨테이너 기초부터 서버 배포까지</title>
+      <link>https://www.44bits.io/posts/easy-deploy-with-docker/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/easy-deploy-with-docker/</guid>
+      <pubDate>Tue, 09 Sep 2025 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>도커(Docker)는 2013년 등장한 컨테이너 기반 가상화 도구입니다. 도커를 사용하면 컨테이너를 쉽게 관리할 수 있으며, 이미지를 만들어 외부 서버에 배포하는 것도 가능합니다. 이 글에서는 도커를 시작하는 하는 사람들을 대상으로 도커의 기본 기능에 대해서 소개하고, 도커 허브와 Fly.io을 사용해 직접 만든 이미지로 서버 애플리케이션을 배포하는...</description>
+    </item>
+    <item>
+      <title>[뉴스] 앤트로픽, 클로드 모델 품질 저하 버그 수정 완료</title>
+      <link>https://www.44bits.io/posts/anthropic-fixes-claude-model-quality-degradation-bugs/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/anthropic-fixes-claude-model-quality-degradation-bugs/</guid>
+      <pubDate>Tue, 09 Sep 2025 00:00:00 +0900</pubDate>
+      <dc:creator>44bits</dc:creator>
+      <description>앤트로픽이 2025년 8-9월 클로드 모델에서 발생한 품질 저하 버그 2건을 수정 완료했다고 발표했습니다. 소네트 4.0과 하이쿠 3.5 모델이 영향을 받았으며, 오푸스 4.1은 계속 모니터링 중입니다.</description>
+    </item>
+    <item>
+      <title>[뉴스] 구글 Gemini API 빌링 버그: 8월 하순부터 과다 청구 이슈 발생중</title>
+      <link>https://www.44bits.io/posts/google-gemini-api-billing-bug/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/google-gemini-api-billing-bug/</guid>
+      <pubDate>Thu, 04 Sep 2025 00:00:00 +0900</pubDate>
+      <dc:creator>44bits</dc:creator>
+      <description>구글 Gemini API에서 8월 하순부터 과다 청구 이슈가 발생중입니다. 일부 사용자들은 실제로 사용하지 않은 이미지 생성 요청이 리퀘스트로 잡히고 비용이 청구되는 문제를 겪고 있습니다. 9월 현재도 지속중이니 각별한 주의가 필요합니다.</description>
+    </item>
+    <item>
+      <title>미니 PC로 서버 운영하기</title>
+      <link>https://www.44bits.io/posts/mini-pc-server-hosting/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/mini-pc-server-hosting/</guid>
+      <pubDate>Sun, 31 Aug 2025 00:00:00 +0900</pubDate>
+      <dc:creator>seapy</dc:creator>
+      <description>클라우드와 온프레미스의 높은 월 비용을 줄이기 위해 미니 PC 기반 홈서버로 전환합니다. 저전력·저소음이면서도 충분한 성능을 제공해 여러 서비스를 안정적으로 운영하며, 구매 비용이 단기간에 상쇄되어 총소유비용을 낮춥니다.</description>
+    </item>
+    <item>
+      <title>Kamal2에서 점검(maintenance) 모드 활용법</title>
+      <link>https://www.44bits.io/posts/kamal2-maintenance-mode-usage/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/kamal2-maintenance-mode-usage/</guid>
+      <pubDate>Wed, 27 Aug 2025 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>Kamal2의 점검 모드는 프록시 레이어가 요청을 가로채 서비스 대신 503 응답을 제공해 다운타임 작업을 안전하게 진행하게 합니다. 안내 문구와 커스텀 페이지를 적용해 사용자 경험을 관리할 수 있습니다.</description>
+    </item>
+    <item>
+      <title>Anthropic, 기업용 Claude Team/Enterprise에서 Claude Code 지원</title>
+      <link>https://www.44bits.io/posts/anthropic-claude-team-enterprise-code-support/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/anthropic-claude-team-enterprise-code-support/</guid>
+      <pubDate>Mon, 25 Aug 2025 00:00:00 +0900</pubDate>
+      <dc:creator>44bits</dc:creator>
+      <description>Anthropic이 기업용 Team/Enterprise에서 Claude Code를 공식 지원합니다. 프리미엄 시트로 배포하고 조직 정책, 사용량 분석, 지출 상한을 제공해 거버넌스와 예산 통제를 강화하며, 표준 API 요금의 추가 사용으로 확장성을 보장합니다.</description>
+    </item>
+    <item>
+      <title>Django 4.1 릴리스와 주요 변경 사항</title>
+      <link>https://www.44bits.io/posts/django-4-1-release-note-summary/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/django-4-1-release-note-summary/</guid>
+      <pubDate>Mon, 08 Aug 2022 00:00:00 +0900</pubDate>
+      <dc:creator>raccoonyy</dc:creator>
+      <description>2022년 8월 3일에 Django 4.1이 출시되었습니다. 이 글에서는 Django 4.1에 추가된 기능과 바뀐 점을 알아보려 합니다. 릴리스 노트만으로 이해하기가 어려운 기능엔 설명을 조금 보태었습니다.</description>
+    </item>
+    <item>
+      <title>도커 컨테이너 5분 만에 무료로 배포하기(feat. fly.io)</title>
+      <link>https://www.44bits.io/posts/docker-container-deploy-in-5-minitues-with-fly-io/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/docker-container-deploy-in-5-minitues-with-fly-io/</guid>
+      <pubDate>Mon, 01 Aug 2022 00:00:00 +0900</pubDate>
+      <dc:creator>raccoonyy</dc:creator>
+      <description>fly.io가 제공하는 환경에 도커 컨테이너를 배포해봅니다. 첫 배포까지 5분 정도면 충분하고, 이후 업데이트에는 10초가 채 걸리지 않을 거예요. 게다가 무료 티어 성능도 꽤 좋아요!</description>
+    </item>
+    <item>
+      <title>Django Rest Framework 레시피</title>
+      <link>https://www.44bits.io/posts/django-rest-framework-recipes-korean/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/django-rest-framework-recipes-korean/</guid>
+      <pubDate>Mon, 20 Jun 2022 00:00:00 +0900</pubDate>
+      <dc:creator>raccoonyy</dc:creator>
+      <description>Django Rest Framework를 사용할 때 유용한 레시피를 소개합니다.</description>
+    </item>
+    <item>
+      <title>Django 4.0 릴리스와 주요 변경 사항</title>
+      <link>https://www.44bits.io/posts/django-4-0-release-note-summary/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/django-4-0-release-note-summary/</guid>
+      <pubDate>Fri, 31 Dec 2021 00:00:00 +0900</pubDate>
+      <dc:creator>raccoonyy</dc:creator>
+      <description>2021년 12월 7일에 Django 4.0가 출시되었습니다. 이 글에서는 Django 4.0에 추가된 기능과 바뀐 점을 알아보려 합니다. 릴리스 노트만으로 이해하기가 어려운 기능엔 설명을 조금 보태었습니다.</description>
+    </item>
+    <item>
+      <title>Django 3.2 릴리스와 주요 변경 사항</title>
+      <link>https://www.44bits.io/posts/django-3-2-release-note-summary/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/django-3-2-release-note-summary/</guid>
+      <pubDate>Fri, 28 May 2021 00:00:00 +0900</pubDate>
+      <dc:creator>raccoonyy</dc:creator>
+      <description>2021년 4월 6일에 Django 3.2가 출시되었습니다. 이 글에서는 Django 3.2에 추가된 기능과 바뀐 점을 알아보려 합니다. 릴리스 노트만으로 이해하기가 어려운 기능엔 설명을 조금 보태었습니다.</description>
+    </item>
+    <item>
+      <title>구글 워크스페이스, 새로운 기능 더 빨리 사용하기(rapid release)</title>
+      <link>https://www.44bits.io/posts/google-workspace-rapid-release/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/google-workspace-rapid-release/</guid>
+      <pubDate>Fri, 28 May 2021 00:00:00 +0900</pubDate>
+      <dc:creator>seapy</dc:creator>
+      <description>구글 워크스페이스(Google Workspace, 구 G Suite)에는 지속적으로 새로운 기능을 추가되고 있습니다. 이 기능들을 조금 더 빨리 사용하기 위해 Rapid Release를 활성화하는 방법을 소개합니다.</description>
+    </item>
+    <item>
+      <title>[뉴스] IDaaS 서비스 옥타(Okta), Okta Starter Developer Edition 공개</title>
+      <link>https://www.44bits.io/posts/news--okta-announced-new-okta-starter-developer-edition/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/news--okta-announced-new-okta-starter-developer-edition/</guid>
+      <pubDate>Mon, 19 Apr 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>IDaaS 서비스 옥타(Okta)에서는 Oktane 21 Virtual 컨퍼런스에서 MAU 15,000명까지 무료로로 인증 기능을 임베딩해서 사용할 수 있는 Okta Starter Developer Edition을 공개했습니다. Okta Developer 서비스를 사용하면 인증 기능을 앱에 임베딩할 수 있으며, Okta 서비스의 적응형 MFA, API...</description>
+    </item>
+    <item>
+      <title>[키워드] 롬 리서치(Roam Research)란? 그래프 기반 노트 애플리케이션</title>
+      <link>https://www.44bits.io/posts/roam-research/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/roam-research/</guid>
+      <pubDate>Mon, 19 Apr 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>롬 리서치(Roam Research)는 동명의 회사에서 개발하고 서비스하고 있는 그래프 기반의 노트 애플리케이션입니다. 롬 리서치는 2019년 10월 베타 버전을 런칭하고 2020년 6월 유료 플랜을 공개했습니다. 노트를 연결하고 편집하는 기능이 다른 노트 애플리케이션에 비해서 특출나게 편리해서, 일부 유저들 사이에서 큰 인기를 끌고 있습니다.</description>
+    </item>
+    <item>
+      <title>[뉴스] 테라폼(Terraform) 0.15 릴리스</title>
+      <link>https://www.44bits.io/posts/news--terraform-0-15-ga-release/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/news--terraform-0-15-ga-release/</guid>
+      <pubDate>Sat, 17 Apr 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>지난 4월 14일 하시코프(Hashicorp)에서는 Infrastructure as Code를 구현하는 오픈소스 도구 테라폼(Terraform)의 0.15 버전을 정식 릴리스하였습니다. 테라폼 0.15는 1.0를 준비하는 버전으로 안정성 및 호환성을 중심에 두고 개선이 이루어졌습니다.</description>
+    </item>
+    <item>
+      <title>[뉴스] 비바리퍼블리카, 개발자 컨퍼런스 Slash 21 사전 예약중</title>
+      <link>https://www.44bits.io/posts/news-viva-republica-announce-developer-conference-slash-21/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/news-viva-republica-announce-developer-conference-slash-21/</guid>
+      <pubDate>Sat, 17 Apr 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>토스 서비스의 개발사 비바리퍼블리카에서는 개발자 컨퍼런스 Slash 21 컨퍼런스 사이트를 오픈하고, 사전 예약 신청을 받고 있습니다. 이번 컨퍼런스는 4월 28일부터 30일까지 3일 동안 열리며, SRE, 모니터링, 테스트, 프론트엔드, 자바스크립트(JavaScript), 데이터베이스, 슬랙봇 등을 주제로 3일간 총 19개 세션이 예정되어있습니다.</description>
+    </item>
+    <item>
+      <title>[키워드] 로케일(Locale)이란? 국가 및 언어 설정</title>
+      <link>https://www.44bits.io/posts/locale/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/locale/</guid>
+      <pubDate>Sun, 07 Mar 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>로케일(Locale)은 사용자 인터페이스에서 사용되는 언어, 지역 설정, 출력 형식 등을 정의하는 문자열입니다. 유닉스, 리눅스, 맥OS 등 POSIX (호환) 시스템에서는 언어, 국가, 인코딩 방법의 조합으로된 문자열을 사용합니다.</description>
+    </item>
+    <item>
+      <title>[키워드] ruby-install이란? 루비 설치 유틸리티</title>
+      <link>https://www.44bits.io/posts/ruby-install/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/ruby-install/</guid>
+      <pubDate>Thu, 04 Mar 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>ruby-install은 맥OS(macOS)와 리눅스(Linux)에서 프로그래밍 언어 Ruby의 다양한 배포판을 손쉽게 설치할 수 있도록 도와주는 도구입니다. Ruby, JRuby, Rubinius, TruffleRuby, mruby 등의 배포판을 지원하고 있으며, 원하는 버전을 원하는 위치에 설치할 수 있습니다. direnv, rbenv, RVM와...</description>
+    </item>
+    <item>
+      <title>[뉴스] AWS, 오사카 리전(ap-northeast-3) 정식 공개</title>
+      <link>https://www.44bits.io/posts/news--aws-osaka-region-public-open/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/news--aws-osaka-region-public-open/</guid>
+      <pubDate>Tue, 02 Mar 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>AWS에서는 2021년 3월 2일 오사카 리전(ap-northeast-3)을 정식 오픈하였습니다. 오사카 리전은 2018년부터 제한적으로 일부 고객에게만 서비스되던 로컬 리전으로 AZ를 3개로 확장하면서 일반 리전으로 공개하였습니다. 도쿄, 홍콩, 뭄바이, 서울, 싱가폴, 시드니, 베이징, 닝샤에 이어 아시아 9번째 리전이며, 리전 코드는 ap-nor...</description>
+    </item>
+    <item>
+      <title>[키워드] 노션(Notion)이란? 올인원 업무용 협업 도구</title>
+      <link>https://www.44bits.io/posts/notion/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/notion/</guid>
+      <pubDate>Tue, 02 Mar 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>노션(Notion)은 노션(Notion Labs)에서 개발하고 서비스하는 노트, 업무, 할 일 관리, 데이터베이스 등의 기능을 지원하는 온라인 올인원 협업 도구입니다. 노션 랩은 2016년 이반 자오와 시몬 라스트 등이 함께 설립하였으며, 2020년 4월 현재 2조 이상의 기업 가치를 평가 받으며 약 550억원의 투자를 유치하였습니다. 투자 시점에 사...</description>
+    </item>
+    <item>
+      <title>[키워드] 하시코프(HashiCorp)란? 모던 인프라스트럭처 툴 개발</title>
+      <link>https://www.44bits.io/posts/hashicorp/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/hashicorp/</guid>
+      <pubDate>Sun, 21 Feb 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>하시코프(HashiCorp)는 2012년 미셸 하시모토(Mitchell Hashimoto)와 아몬 데드거(Armon Dadgar)가 창업한 기업으로, 오픈소스로 인프라스트럭처와 관련돈 도구를 개발하고 이를 서비스로 제공하고 있습니다. 하시코프의 대표적인 제품으로는 테라폼(Terraform), 패커(Packer), 베이그런트(Vagrant), 볼트(Va...</description>
+    </item>
+    <item>
+      <title>AWS 도쿄 리전 장애 발생, 특정 AZ 일부 구역의 온도 상승이 원인</title>
+      <link>https://www.44bits.io/posts/news--2021-02-20-aws-ap-northeast-1-outage/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/news--2021-02-20-aws-ap-northeast-1-outage/</guid>
+      <pubDate>Sat, 20 Feb 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>2021년 2월 19일 오후 11시부터 20일 새벽까지 AWS 도쿄 리전에서 대규모 장애가 발생했습니다. AWS Status에 따르면 한국 시간 기준 20일 0시 9분부터 apne1-az1의 일부 EC2 인스턴스와 EBS 볼륨이 정상 동작하지 않은 것으로 보입니다. 5시 30분 경에는 대부분의 장애가 복구된 것으로 보이며, 12시 현재는 정상 상태로...</description>
+    </item>
+    <item>
+      <title>Apple M1 지원 도커 데스크탑 업데이트 - 이제 쿠버네티스 실행 가능</title>
+      <link>https://www.44bits.io/posts/news--docker-desktop-preview-for-apple-m1-can-run-kubernetes/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/news--docker-desktop-preview-for-apple-m1-can-run-kubernetes/</guid>
+      <pubDate>Sat, 20 Feb 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>도커 데스크탑(Docker Desktop)은 윈도우나 맥에서 도커를 사용할 수 있게 도와주는 올인원 도구입니다. 2020년 말 애플에서 Arm 기반 M1 칩을 발표하면서 현재 도커 사에서는 M1 칩을 지원하는 도커 데스크탑을 개발중에 있습니다. 2월 17일 릴리스된 프리뷰 버전에서는 이제 쿠버네티스를 실행할 수 있게되었습니다.</description>
+    </item>
+    <item>
+      <title>[키워드] iTerm2란? 맥OS의 터미널 대체 애플리케이션</title>
+      <link>https://www.44bits.io/posts/iterm2/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/iterm2/</guid>
+      <pubDate>Fri, 19 Feb 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>iTerm2는 맥OS에서 공식 터미널 애플리케이션 대신 사용할 수 있는 가상 터미널 애플리케이션입니다. 화면 분할, 핫키 윈도우, 검색 및 하이라이트, 카피 모드, 붙여넣기 히스토리, 인스턴스 리플레이 등의 기능을 제공하고 있으며, 터미널보다 기능이 많아서 맥OS 사용자들의 사랑을 받고 있습니다. 최신 버전은 2020년 11월에 릴리스된 3.4 버전입니다.</description>
+    </item>
+    <item>
+      <title>GPG(GNU PG)를 이용해 git 커밋에 서명하는 방법</title>
+      <link>https://www.44bits.io/posts/add-signing-key-to-git-commit-by-gpg/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/add-signing-key-to-git-commit-by-gpg/</guid>
+      <pubDate>Mon, 15 Feb 2021 00:00:00 +0900</pubDate>
+      <dc:creator>jeyraof</dc:creator>
+      <description>깃허브(GitHub)에서 커밋을 읽다보면 Verified 된 커밋을 발견하곤 합니다. Verified된 커밋을 만들려면 GPG 키로 커밋에 서명을 해야합니다. 이 글에서는 gpg를 사용해 GPG 키를 생성하고 깃 커밋에 서명하는 방법을 소개합니다.</description>
+    </item>
+    <item>
+      <title>[키워드] 리눅스 네임스페이스(Linux Namespace)란?</title>
+      <link>https://www.44bits.io/posts/linux-namespace/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/linux-namespace/</guid>
+      <pubDate>Sat, 13 Feb 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>리눅스 네임스페이스는 프로세스를 실행할 때 시스템의 리소스를 분리해서 실행할 수 있도록 도와주는 기능입니다. 한 시스템의 프로세스들은 기본적으로 시스템의 리소스들을 공유해서 실행됩니다. 리눅스 네임스페이스를 사용하면 PID, 네트워크, UTS, 마운트, Cgroup 등의 시스템 리소스를 격리해서 프로세스를 실행할 수 있습니다.</description>
+    </item>
+    <item>
+      <title>[뉴스] 온라인 협업 도구 노션(Notion) 장애와 DNS 문제 대응</title>
+      <link>https://www.44bits.io/posts/news--notion-outage-dns-issue/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/news--notion-outage-dns-issue/</guid>
+      <pubDate>Sat, 13 Feb 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>노션(Notion)은 노션 랩(Notion Labs)에서 서비스하는 협업 도구입니다. 노션은 한국 시간 2021년 2월 12일 오후 10시부터 2시간의 이상의 DNS 장애를 겪었습니다. 이로 인해 전면적으로 서비스가 중단되었습니다. 이 글에서는 노션의 장애와 DNS 장애 대응에 대해서 소개합니다.</description>
+    </item>
+    <item>
+      <title>[키워드] 클럽하우스(Clubhouse)란? 오디오 기반 소셜네트워크 앱</title>
+      <link>https://www.44bits.io/posts/clubhouse/</link>
+      <guid isPermaLink="true">https://www.44bits.io/posts/clubhouse/</guid>
+      <pubDate>Fri, 12 Feb 2021 00:00:00 +0900</pubDate>
+      <dc:creator>nacyot</dc:creator>
+      <description>클럽하우스(Clubhouse)는  알파 익스플로레이션(Alpha Exploration Co.)에서 개발한 음성 기반 소셜 네트워크 애플리케이션입니다. 현재는 아이폰만 지원되며, 초대 기반으로 운영이 되고 있습니다. 2021년 1월 이후 폭발적인 인기를 얻으며 한국, 일본 등 애플 앱스토어에서 무료 앱 1위를 기록중입니다.</description>
+    </item>
+  </channel>
+</rss>
