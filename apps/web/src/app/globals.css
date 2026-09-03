@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/* Tela design tokens, from the Claude Design file Tela.dc.html. See docs/DESIGN.md. */
+@theme {
+  --color-paper: #f6f2ea;
+  --color-ink: #1f1c18;
+  --color-body: #2a261f;
+  --color-ink-2: #5c554b;
+  --color-muted: #8a8275;
+  --color-line: #e3dccf;
+  --color-hover: #ece6da;
+  --color-thumb: #d9d2c5;
+  --color-accent: oklch(0.5 0.1 150);
+  --color-accent-strong: oklch(0.4 0.1 150);
+
+  --font-serif: var(--font-garamond), "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+  --font-sans: var(--font-figtree), "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+
+  --animate-fade: fade 0.25s ease;
+  @keyframes fade {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--color-accent-strong);
+  text-decoration: underline;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-thumb);
+  border-radius: 4px;
+}

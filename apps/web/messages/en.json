@@ -1,0 +1,17 @@
+{
+  "app": {
+    "name": "Tela",
+    "tagline": "Independent blogs, in any language."
+  },
+  "nav": {
+    "reading": "Reading",
+    "discover": "Discover",
+    "readIn": "Read in"
+  },
+  "home": {
+    "title": "Tela is being built.",
+    "intro": "A reader and gathering place for independent blogs. Every feed here has a specific human behind it.",
+    "dbConnected": "Database connected: {sites, plural, =0 {no sites yet} one {# site} other {# sites}}.",
+    "dbMissing": "Database not configured. Set DATABASE_URL or the HYPERDRIVE binding."
+  }
+}
