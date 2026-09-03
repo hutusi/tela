@@ -1,0 +1,16 @@
+{
+  "name": "@tela/llm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Translation provider adapter, prompts, and output validation",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tela/shared": "workspace:*"
+  }
+}
