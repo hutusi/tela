@@ -1,0 +1,17 @@
+{
+  "app": {
+    "name": "Tela",
+    "tagline": "独立博客，任何语言。"
+  },
+  "nav": {
+    "reading": "阅读",
+    "discover": "发现",
+    "readIn": "阅读语言"
+  },
+  "home": {
+    "title": "Tela 正在建设中。",
+    "intro": "一个面向独立博客的阅读器与聚集地。这里的每个订阅源背后都有一个具体的人。",
+    "dbConnected": "数据库已连接：{sites, plural, =0 {还没有站点} other {# 个站点}}。",
+    "dbMissing": "尚未配置数据库。请设置 DATABASE_URL 或 HYPERDRIVE 绑定。"
+  }
+}
