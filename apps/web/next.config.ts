@@ -6,7 +6,7 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source; Next compiles them.
-  transpilePackages: ['@tela/db', '@tela/shared', '@tela/content'],
+  transpilePackages: ['@tela/db', '@tela/shared', '@tela/content', '@tela/ingest'],
   // Body images go through the signed /img proxy, never next/image optimization.
   images: { unoptimized: true },
 }

@@ -8,13 +8,17 @@
     "dev": "bun run --watch src/index.ts",
     "build": "bun build src/index.ts --target=node --outdir dist --sourcemap=external --external sharp --external pg-native",
     "start": "node dist/index.js",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "once": "bun run src/cli.ts"
   },
   "dependencies": {
     "@tela/db": "workspace:*",
     "@tela/shared": "workspace:*",
     "pg-boss": "^12.30.0",
     "postgres": "^3.4.9",
-    "zod": "^4.5.4"
+    "zod": "^4.5.4",
+    "@tela/ingest": "workspace:*",
+    "@tela/content": "workspace:*",
+    "drizzle-orm": "^0.45.2"
   }
 }

@@ -6,6 +6,12 @@ const envSchema = z.object({
   WORKER_ROLES: z.string().optional(),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   HEARTBEAT_SEC: z.coerce.number().int().positive().default(60),
+  WORKER_USER_AGENT: z.string().default('Tela/0.1 (+https://tela.app/bot; feed reader)'),
+  FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+  /** How many feeds one fetch worker processes concurrently. */
+  FETCH_CONCURRENCY: z.coerce.number().int().positive().default(4),
+  /** Scheduler: maximum feeds enqueued per tick. */
+  SCHEDULER_BATCH: z.coerce.number().int().positive().default(500),
 })
 
 export type WorkerConfig = ReturnType<typeof loadConfig>
