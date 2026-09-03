@@ -41,8 +41,11 @@
       "name": "@tela/worker",
       "version": "0.0.0",
       "dependencies": {
+        "@tela/content": "workspace:*",
         "@tela/db": "workspace:*",
+        "@tela/ingest": "workspace:*",
         "@tela/shared": "workspace:*",
+        "drizzle-orm": "^0.45.2",
         "pg-boss": "^12.30.0",
         "postgres": "^3.4.9",
         "zod": "^4.5.4",
@@ -82,6 +85,16 @@
       },
       "devDependencies": {
         "drizzle-kit": "^0.31.10",
+      },
+    },
+    "packages/ingest": {
+      "name": "@tela/ingest",
+      "version": "0.0.0",
+      "dependencies": {
+        "@tela/content": "workspace:*",
+        "@tela/db": "workspace:*",
+        "@tela/shared": "workspace:*",
+        "drizzle-orm": "^0.45.2",
       },
     },
     "packages/llm": {
@@ -625,6 +638,8 @@
     "@tela/content": ["@tela/content@workspace:packages/content"],
 
     "@tela/db": ["@tela/db@workspace:packages/db"],
+
+    "@tela/ingest": ["@tela/ingest@workspace:packages/ingest"],
 
     "@tela/llm": ["@tela/llm@workspace:packages/llm"],
 
