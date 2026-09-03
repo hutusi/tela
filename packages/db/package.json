@@ -6,7 +6,8 @@
   "description": "Drizzle schema, migrations, and query helpers for Tela's Postgres",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts"
+    "./schema": "./src/schema/index.ts",
+    "./testing": "./src/testing/index.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",

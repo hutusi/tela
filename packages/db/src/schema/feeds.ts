@@ -33,7 +33,11 @@ export const feeds = pgTable(
     fetchIntervalSec: integer('fetch_interval_sec').notNull().default(3600),
     fetchRegion: fetchRegionEnum('fetch_region').notNull().default('global'),
     errorCount: integer('error_count').notNull().default(0),
+    /** Consecutive timeouts/resets; only these count toward flipping fetch_region to cn. */
+    timeoutStreak: integer('timeout_streak').notNull().default(0),
     lastError: text('last_error'),
+    /** Newest published_at seen in the feed, for scheduling and "new items" detection. */
+    lastItemAt: timestamp('last_item_at', { withTimezone: true }),
     status: feedStatusEnum('status').notNull().default('active'),
     contentMode: contentModeEnum('content_mode').notNull().default('unknown'),
     hubUrl: text('hub_url'),
