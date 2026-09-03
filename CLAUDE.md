@@ -41,8 +41,12 @@ Next.js 16 rules that differ from older training data; read it before touching `
 
 - **Add a table**: edit `packages/db/src/schema/*.ts` (add `pgPolicy` rows and `.enableRLS()` if no
   policy), `bun run db:generate`, review the SQL, add a test in `packages/db/test/`.
-- **Add a worker role or job**: `apps/worker/src/roles.ts` for the role list; jobs under
-  `apps/worker/src/jobs/` subscribe in `apps/worker/src/index.ts` (phase 3 wires pg-boss).
+- **Add a worker job**: put the logic in `packages/ingest` (pure library, tested with the fixture
+  HTTP server + DB harness), declare the queue and its payload type in `apps/worker/src/queues.ts`,
+  add a thin handler under `apps/worker/src/jobs/`, and subscribe it under the right role in
+  `apps/worker/src/index.ts`. Roles live in `apps/worker/src/roles.ts`.
+- **Run ingestion by hand**: `DATABASE_URL=… bun run worker:once fetch <feedUrl>`; `bun run
+  db:local --port 54322` gives you a migrated Postgres without Docker.
 - **Add a UI string**: `apps/web/messages/en.json` and `zh-Hans.json`, same key in both.
 - **Add a reading language**: `READING_LANGUAGES` in `packages/shared`, a message catalog if it is
   also a UI locale, and `LANGUAGE_NAMES`.
