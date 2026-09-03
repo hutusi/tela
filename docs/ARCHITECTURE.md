@@ -60,20 +60,29 @@ service connection. Application code is the authority; RLS is the backstop (ADR 
 Unread count per feed = `articles.id > watermark_id AND fetched_at > now() - 30 days AND NOT EXISTS
 read row`. "Mark all read" moves the watermark and compacts read rows below it.
 
-## Content pipeline [phase 2]
+## Content pipeline
 
-`packages/content`, pure TypeScript with no I/O:
+`packages/content`, pure TypeScript with no I/O (normative spec: `packages/content/README.md`):
 
-1. Discovery: try the URL as a feed, then `link[rel=alternate]`, then common paths.
-2. Parsing with `feedsmith` (RSS, Atom, RDF, JSON Feed, OPML).
-3. Sanitize with `sanitize-html` (allowlist; no svg/iframe/script). Leaf-normalize so every
-   text-bearing block is a leaf (`p, h1-h6, li, figcaption, th, td, dt, dd, summary, caption`).
-4. Tagged text: inline markup becomes `<gN>…</gN>` and `<xN/>` placeholders; attributes are kept
-   in a side table. The block id is the first 10 hex of
-   `sha256(NFC(collapse_ws(trim(tagged_text))) + NORM_VERSION)`, written as `data-tb`.
-5. Skip `pre`, `code`, `math`, and blocks with no translatable text.
-6. Language detection (script heuristics, then `tinyld`), excerpt, reading time.
-7. Image URLs stay original in storage and are rewritten to the signed `/img` proxy at render.
+1. Discovery (`findFeedLinks`, `candidateFeedUrls`): `link[rel=alternate]`, feed-looking anchors,
+   then well-known paths.
+2. Parsing (`parseFeedText`) with `feedsmith`: RSS, Atom, RDF, JSON Feed → `ParsedFeed` with
+   `summaryHtml` and `contentHtml` per item.
+3. Sanitize (`sanitizeArticleHtml`) with an allowlist; links and images absolutized; lazy-load
+   attributes folded into `src`; tracking pixels dropped.
+4. Normalize + annotate (`annotateBlocks`): wrappers unwrapped, inline runs wrapped, every
+   text-bearing element a leaf with a `data-tb` id = first 10 hex of
+   `sha256(normalized tagged text + NORM_VERSION)`.
+5. Tagged text (`toTaggedText` / `fromTaggedText` / `checkPlaceholders`): inline markup becomes
+   `<gN>…</gN>` and `<xN/>` placeholders; rehydration re-escapes model output.
+6. Skip `pre` and blocks with no letters or under two characters (`data-tb-skip`).
+7. `detectLanguage` (script ratios, then tinyld), `makeExcerpt`, `readingMinutes`, `contentHash`.
+8. Images stay original in storage; `rewriteImages` + `signImageUrl` produce `/img` proxy URLs at
+   render time. `extractArticle` (`@tela/content/extract`, Readability on linkedom) recovers full
+   text for summary-only feeds.
+
+Fixtures: 21 captured real feeds in `packages/content/fixtures/`; snapshot tests pin block ids
+and hashes for three articles as the `NORM_VERSION` contract.
 
 ## Fetching [phase 3]
 
