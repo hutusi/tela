@@ -1,0 +1,26 @@
+{
+  "name": "@tela/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Drizzle schema, migrations, and query helpers for Tela's Postgres",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "generate:custom": "drizzle-kit generate --custom",
+    "migrate": "bun run scripts/migrate.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "local-db": "bun run scripts/local-db.ts"
+  },
+  "dependencies": {
+    "@tela/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10"
+  }
+}
