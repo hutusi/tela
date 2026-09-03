@@ -1,0 +1,20 @@
+{
+  "name": "@tela/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Tela background worker: one codebase, roles selected by WORKER_ROLES",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --target=node --outdir dist --sourcemap=external --external sharp --external pg-native",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tela/db": "workspace:*",
+    "@tela/shared": "workspace:*",
+    "pg-boss": "^12.30.0",
+    "postgres": "^3.4.9",
+    "zod": "^4.5.4"
+  }
+}

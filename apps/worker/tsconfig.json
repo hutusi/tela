@@ -1,0 +1,5 @@
+{
+  "extends": "../../packages/config/tsconfig.node.json",
+  "compilerOptions": { "types": ["node", "bun"] },
+  "include": ["src", "test"]
+}

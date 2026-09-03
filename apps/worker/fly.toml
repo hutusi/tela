@@ -1,0 +1,18 @@
+# Deploy from the repository root:
+#   fly deploy --config apps/worker/fly.toml --dockerfile apps/worker/Dockerfile
+app = "tela-worker"
+primary_region = "nrt"
+
+[build]
+  dockerfile = "apps/worker/Dockerfile"
+
+[env]
+  WORKER_ROLES = "scheduler,fetch,extract,translate,assets,claim"
+  LOG_LEVEL = "info"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[[restart]]
+  policy = "always"
