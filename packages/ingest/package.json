@@ -1,0 +1,20 @@
+{
+  "name": "@tela/ingest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ingestion library: HTTP client, feed discovery, feed fetching, article extraction (no queue, no runtime-specific APIs)",
+  "exports": {
+    ".": "./src/index.ts",
+    "./extract": "./src/extract-article.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tela/content": "workspace:*",
+    "@tela/db": "workspace:*",
+    "@tela/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  }
+}
