@@ -1,0 +1,16 @@
+{
+  "name": "@tela/content",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure content pipeline: discovery, parsing, sanitization, blocks, hashing, language detection",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tela/shared": "workspace:*"
+  }
+}
