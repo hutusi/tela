@@ -96,7 +96,19 @@ export async function ensureQueues(boss: PgBoss) {
       await boss.createQueue(deadLetter, { policy: 'standard', retentionSeconds: 30 * 24 * 3600 })
     }
     const options: QueueSpec = deadLetter ? { ...spec, deadLetter } : spec
-    if (await boss.getQueue(name)) await boss.updateQueue(name, options)
-    else await boss.createQueue(name, options)
+    const existing = await boss.getQueue(name)
+    if (!existing) {
+      await boss.createQueue(name, options)
+      continue
+    }
+    // pg-boss refuses updateQueue() when `policy` is present, even unchanged: the policy is fixed
+    // at creation. Send only the settings that can change; a policy drift is a manual migration.
+    const { policy, ...mutable } = options
+    if (policy && existing.policy !== policy) {
+      throw new Error(
+        `queue ${name} has policy ${existing.policy} but the code wants ${policy}; recreate it`,
+      )
+    }
+    await boss.updateQueue(name, mutable)
   }
 }
