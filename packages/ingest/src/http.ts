@@ -103,22 +103,44 @@ export function classify(err: unknown): HttpError {
   return new HttpError('network', `request failed (${code || name || e.message || 'unknown'})`)
 }
 
-export async function readCapped(response: Response, maxBytes: number): Promise<Uint8Array> {
-  const reader = response.body?.getReader()
-  if (!reader) return new Uint8Array()
+/**
+ * Pass bytes through until `maxBytes`, then fail the stream with a `too_large` HttpError and
+ * cancel the upstream body. Counts what actually arrives, so a missing or dishonest
+ * Content-Length changes nothing; usable for proxying as well as for buffering.
+ */
+export function cappedStream(
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+): ReadableStream<Uint8Array> {
+  let total = 0
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        total += chunk.byteLength
+        if (total > maxBytes) {
+          controller.error(new HttpError('too_large', `response exceeds ${maxBytes} bytes`))
+          return
+        }
+        controller.enqueue(chunk)
+      },
+    }),
+  )
+}
+
+/** Buffer a body through `cappedStream`. Accepts a Request as well as a Response. */
+export async function readCapped(
+  message: { body: ReadableStream<Uint8Array> | null },
+  maxBytes: number,
+): Promise<Uint8Array> {
+  if (!message.body) return new Uint8Array()
+  const reader = cappedStream(message.body, maxBytes).getReader()
   const chunks: Uint8Array[] = []
   let total = 0
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
-    if (value) {
-      total += value.byteLength
-      if (total > maxBytes) {
-        await reader.cancel().catch(() => {})
-        throw new HttpError('too_large', `response exceeds ${maxBytes} bytes`)
-      }
-      chunks.push(value)
-    }
+    total += value.byteLength
+    chunks.push(value)
   }
   const out = new Uint8Array(total)
   let offset = 0

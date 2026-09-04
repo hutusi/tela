@@ -1,6 +1,7 @@
 import { getWebsub, markWebsubVerified } from '@tela/db/queries'
 import { createJobSender } from '@tela/db/queue'
 import { verifyHubSignature, WEBSUB_LEASE_SECONDS } from '@tela/ingest'
+import { HttpError, readCapped } from '@tela/ingest/http'
 import { getDb } from '@/lib/platform/db'
 
 export const dynamic = 'force-dynamic'
@@ -47,8 +48,17 @@ export async function POST(req: Request, ctx: Ctx): Promise<Response> {
   const db = await getDb()
   const row = await getWebsub(db, feedId)
   if (!row || row.status !== 'active') return new Response('not found', { status: 404 })
-  const body = new Uint8Array(await req.arrayBuffer())
-  if (body.byteLength > MAX_NOTIFICATION_BYTES) return new Response('too large', { status: 413 })
+  // The signature covers the body, so it has to be read; the cap stops the read at the limit
+  // instead of buffering everything first.
+  let body: Uint8Array
+  try {
+    body = await readCapped(req, MAX_NOTIFICATION_BYTES)
+  } catch (err) {
+    if (err instanceof HttpError && err.kind === 'too_large') {
+      return new Response('too large', { status: 413 })
+    }
+    throw err
+  }
   if (!(await verifyHubSignature(row.secret, body, req.headers.get('x-hub-signature')))) {
     return new Response('bad signature', { status: 403 })
   }

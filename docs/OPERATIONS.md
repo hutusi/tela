@@ -184,7 +184,7 @@ First run: `cd apps/web && bunx playwright install chromium`.
   restart; finally remove `RELAY_SECRET_PREVIOUS` from the relay. Signatures expire after five
   minutes, so keep both boxes' clocks in sync (NTP).
 - **It is not an open proxy**: only signed `POST /fetch` requests are served, private ranges are
-  refused, redirects are not followed, and the body is capped at 5 MB.
+  refused, redirects are not followed, and the upstream body is capped at 5 MB, and a request larger than 64 KiB is refused before it is read (the signature covers the body, so that cap is the only pre-authentication limit).
 
 ### Web
 - **Rate limits**: rules live in `RATE_LIMITS` (`packages/db/src/queries/rate-limit.ts`); change a

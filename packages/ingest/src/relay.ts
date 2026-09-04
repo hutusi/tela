@@ -124,11 +124,13 @@ export function createRelayHandler(
 
     const ts = request.headers.get(RELAY_TIMESTAMP_HEADER) ?? ''
     const signature = request.headers.get(RELAY_SIGNATURE_HEADER) ?? ''
-    const body = await request.text()
+    // The timestamp is checked before the body is read: it is the one thing that can be
+    // rejected without buffering, and it turns away replayed or unsigned traffic cheaply.
     const skew = Math.abs(now() - Number(ts))
     if (!ts || !Number.isFinite(skew) || skew > maxSkewMs) {
       return json({ error: 'stale or missing timestamp' }, 401)
     }
+    const body = await request.text()
     let authentic = false
     for (const secret of secrets) {
       if (timingSafeEqual(await signRelayRequest(secret, ts, body), signature)) authentic = true

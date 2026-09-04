@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { createHttpClient } from '../src/http'
+import { cappedStream, createHttpClient, readCapped } from '../src/http'
 import { isBlockedHost } from '../src/net'
 import { FixtureServer } from './fixture-server'
 
@@ -62,9 +62,31 @@ describe('createHttpClient', () => {
     await expect(client().get(server.url('/slow'))).rejects.toMatchObject({ kind: 'timeout' })
   })
 
-  test('rejects oversized bodies', async () => {
+  test('rejects oversized bodies, whatever Content-Length claims', async () => {
     server.text('/big', 'x'.repeat(20_000))
     await expect(client().get(server.url('/big'))).rejects.toMatchObject({ kind: 'too_large' })
+    // No Content-Length at all (chunked): the cap counts bytes as they arrive.
+    server.set('/chunked', (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' })
+      for (let i = 0; i < 20; i++) res.write('x'.repeat(1000))
+      res.end()
+    })
+    await expect(client().get(server.url('/chunked'))).rejects.toMatchObject({ kind: 'too_large' })
+  })
+
+  test('cappedStream passes bytes through until the cap and then fails the stream', async () => {
+    const chunks = [new Uint8Array(6000), new Uint8Array(6000)]
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const c of chunks) controller.enqueue(c)
+        controller.close()
+      },
+    })
+    const reader = cappedStream(source, 10_000).getReader()
+    expect((await reader.read()).value?.byteLength).toBe(6000)
+    await expect(reader.read()).rejects.toMatchObject({ kind: 'too_large' })
+    const fine = await readCapped(new Response(new Uint8Array(3000)), 10_000)
+    expect(fine.byteLength).toBe(3000)
   })
 
   test('decodes declared charsets', async () => {
