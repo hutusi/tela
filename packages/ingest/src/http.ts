@@ -16,6 +16,8 @@ export type HttpResponse = {
   status: number
   headers: Headers
   body: string
+  /** Undecoded response body, for images and other binary payloads. */
+  raw: Uint8Array
   bytes: number
   finalUrl: string
   /** Set when every redirect hop was permanent (301/308): the caller may adopt it. */
@@ -201,6 +203,7 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
               status: response.status,
               headers: response.headers,
               body: '',
+              raw: new Uint8Array(),
               bytes: 0,
               finalUrl: current,
               permanentRedirectTo: null,
@@ -227,6 +230,7 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
           status: response.status,
           headers: response.headers,
           body,
+          raw: bytes,
           bytes: bytes.byteLength,
           finalUrl: current,
           permanentRedirectTo: hops > 0 && allPermanent && current !== url ? current : null,
