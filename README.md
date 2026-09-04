@@ -29,9 +29,11 @@ bun install
 bun run lint        # biome
 bun run typecheck   # tsc in every workspace
 bun run test        # bun test; DB tests start a throwaway local Postgres
+bun run e2e         # Playwright against a built app, worker, and fixture feeds
 
-# web
-cp apps/web/.env.example apps/web/.env   # set DATABASE_URL + Supabase keys
+# web (no Supabase project needed locally: dev-auth mode + a local Postgres)
+bun run db:local --port 54322            # migrated Postgres with the development user
+cp apps/web/.env.example apps/web/.env   # DATABASE_URL matches the port above; TELA_DEV_AUTH=1
 bun run dev                              # http://localhost:3000
 
 # worker

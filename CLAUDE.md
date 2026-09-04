@@ -29,6 +29,12 @@ Next.js 16 rules that differ from older training data; read it before touching `
 - **Reading languages are the launch set in `packages/shared/src/languages.ts`**; never translate into
   "every language a subscriber speaks".
 - **Use absolute paths in shell commands.** The shell's working directory persists between commands.
+- **The web app never imports pg-boss.** Enqueue through `createJobSender` (`@tela/db/queue`),
+  whose SQL mirrors pg-boss's insert plan; `packages/db/test/queue.test.ts` guards the coupling.
+- **Never name a package script `prepare`, `postinstall`, or another npm lifecycle hook**; Bun
+  runs them on install.
+- **Raw SQL returns bigint columns as strings.** Convert ids with `Number()` in query helpers (see
+  `listSubscriptions`), or use the typed query builder.
 
 ## Style
 
