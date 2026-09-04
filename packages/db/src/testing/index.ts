@@ -19,6 +19,11 @@ export async function startTestDb(): Promise<TestDb> {
   if (external) {
     const db = createDb(external, { max: 3 })
     await prepareDatabase(db)
+    // Test files run one after another against this one database. Give each file what a
+    // throwaway cluster gives it: empty tables and no queue schema (files that boot pg-boss
+    // create it themselves).
+    await resetDatabase(db)
+    await db.execute(sql`drop schema if exists pgboss cascade`)
     return { db, url: external, stop: () => db.close() }
   }
   const cluster = await startLocalCluster()
