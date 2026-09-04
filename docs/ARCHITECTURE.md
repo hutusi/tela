@@ -225,4 +225,9 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 5. Translation ✓
 6. Discover + sites + claim ✓ (site assets job included)
 7. Recommendations + profiles + dashboard ✓
-8. Hardening ← current (relay, China checks, search, observability)
+8. Hardening ✓ (China fetch relay with automatic region routing, rate limits, search, health
+   checks, WebSub, mobile fallback)
+
+Milestone 1 merges to `main` once the deploy-side checks in `docs/OPERATIONS.md` pass: a
+Cloudflare preview through Hyperdrive, one real Bailian translation run, and the China smoke test
+from the relay box (custom auth domain and image proxy reachability).
