@@ -76,6 +76,10 @@ bun run deploy            # opennextjs-cloudflare build && deploy
 - The first request after a deploy can wait up to the driver's 30 s connect timeout while
   Hyperdrive opens its origin connection; `/api/health` reports `databaseMs` and the error text.
 - Then add the custom domain under Workers & Pages → tela-web → Settings → Domains.
+- The production build runs `next build --webpack` (`apps/web/package.json`): Turbopack in Next
+  16.3 panics while chunking any middleware file in this app (`ModuleGraph::from_graphs_inner was
+  canceled`), and the session-refresh middleware is not optional. `next dev` still uses Turbopack.
+  Retry the default bundler after the next Next.js upgrade.
 
 R2 for favicons and covers: `bunx wrangler r2 bucket create tela-assets --location apac`, then
 either connect a custom domain (`assets.<domain>`) under the bucket's settings or, before a

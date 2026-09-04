@@ -180,7 +180,9 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 - Design tokens from `Tela.dc.html` live in `apps/web/src/app/globals.css` (`@theme`). Fonts
   (EB Garamond, Figtree) are self-hosted by `next/font`. See `docs/DESIGN.md`.
 - Auth: `lib/auth.ts` (Supabase SSR cookies, `getClaims()`, dev-auth mode; ADR 0012). Pages call
-  `requireUser()`; there is no middleware.
+  `requireUser()`. `src/middleware.ts` runs before every non-static request and refreshes an expiring
+  session, forwarding the rotated cookies to both the render and the browser: Server Components
+  cannot write cookies, and with refresh-token rotation a dropped refresh logs the reader out.
 - Reader queries live in `packages/db/src/queries/reader.ts` (`listSubscriptions`, `countTotals`,
   `listArticles` with keyset paging, `getArticle`, `markRead`, `markAllRead`, `toggleLike`,
   `subscribe`) and are tested in `packages/db/test/reader.test.ts`.

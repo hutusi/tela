@@ -4,17 +4,14 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { cache } from 'react'
 import { isDevAuthEnabled } from './platform/env'
+import { supabaseConfig } from './supabase-config'
+
+export { supabaseConfig } from './supabase-config'
 
 export type SessionUser = { id: string; email: string | null }
 
 /** Fixed id of the local development user (created by `bun run db:local`). */
 export const DEV_USER_ID = '00000000-0000-4000-8000-000000000001'
-
-export function supabaseConfig(): { url: string; anonKey: string } | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  return url && anonKey ? { url, anonKey } : null
-}
 
 /** Supabase client bound to the request's cookies. Null when Supabase is not configured. */
 export async function supabaseServer(): Promise<SupabaseClient | null> {
@@ -28,7 +25,12 @@ export async function supabaseServer(): Promise<SupabaseClient | null> {
         try {
           for (const { name, value, options } of list) store.set(name, value, options)
         } catch {
-          // Server Components cannot set cookies; the callback route and actions can.
+          // Server Components cannot set cookies. The request proxy (src/middleware.ts) refreshes
+          // sessions before rendering, so landing here means a route slipped past its matcher
+          // and this refresh is being dropped: with token rotation on, that logs the reader out.
+          console.warn('[tela] session cookies refreshed outside the proxy were dropped', {
+            cookies: list.map((c) => c.name),
+          })
         }
       },
     },
