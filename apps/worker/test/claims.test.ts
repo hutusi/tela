@@ -10,6 +10,7 @@ import { FixtureServer } from './fixture-server'
 let t: TestDb
 let server: FixtureServer
 const userA = '11111111-1111-4111-8111-111111111111'
+const userB = '22222222-2222-4222-8222-222222222222'
 const http = createHttpClient({
   userAgent: 'TelaTest/1.0',
   politenessMs: 0,
@@ -115,5 +116,29 @@ describe('verifyClaim', () => {
     const down = await verifyClaim({ db: t.db, http, publicUrl: 'https://tela.test' }, claim.id)
     expect(down).toMatchObject({ status: 'failed' })
     expect(down.status === 'failed' ? down.error : '').toMatch(/503/)
+  })
+
+  test('a second member whose rel=me link is also on the page cannot take over a claimed site', async () => {
+    const { site, claim } = await siteWithClaim()
+    await t.db.execute(sql`insert into auth.users (id, email) values (${userB}, 'b@x.test')`)
+    const other = await getOrCreateClaim(t.db, site.id, userB)
+    const handles = await t.db.execute<{ handle: string }>(sql`select handle from profiles`)
+    const links = handles
+      .map((h) => `<a rel="me" href="https://tela.test/@${h.handle}">${h.handle}</a>`)
+      .join('')
+    server.set('/', (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' })
+      res.end(`<html><body>${links}</body></html>`)
+    })
+    const deps = { db: t.db, http, publicUrl: 'https://tela.test' }
+    expect(await verifyClaim(deps, claim.id)).toEqual({ status: 'verified', method: 'rel_me' })
+    expect(await verifyClaim(deps, other.id)).toEqual({
+      status: 'failed',
+      error: 'site already claimed by another member',
+    })
+    const [updated] = await t.db.select().from(sites).where(eq(sites.id, site.id))
+    expect(updated?.claimedBy).toBe(userA)
+    const [row] = await t.db.select().from(siteClaims).where(eq(siteClaims.id, other.id))
+    expect(row?.status).toBe('failed')
   })
 })

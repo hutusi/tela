@@ -214,20 +214,23 @@ function randomToken(): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-/** The user's claim on a site, created pending if none exists. Verified claims are returned as is. */
+/**
+ * The user's claim on a site, created pending if none exists. Verified claims are returned as
+ * is. The unique (site, user) index makes concurrent calls converge on one row.
+ */
 export async function getOrCreateClaim(db: Db, siteId: number, userId: string): Promise<ClaimRow> {
+  const [inserted] = await db
+    .insert(siteClaims)
+    .values({ siteId, userId, method: 'meta', token: randomToken(), status: 'pending' })
+    .onConflictDoNothing({ target: [siteClaims.siteId, siteClaims.userId] })
+    .returning()
+  if (inserted) return inserted
   const [existing] = await db
     .select()
     .from(siteClaims)
     .where(and(eq(siteClaims.siteId, siteId), eq(siteClaims.userId, userId)))
-    .orderBy(desc(siteClaims.id))
-    .limit(1)
-  if (existing) return existing
-  const [row] = await db
-    .insert(siteClaims)
-    .values({ siteId, userId, method: 'meta', token: randomToken(), status: 'pending' })
-    .returning()
-  return row as ClaimRow
+  if (!existing) throw new Error(`claim for site ${siteId} vanished`)
+  return existing
 }
 
 export async function getClaim(db: Db, claimId: number): Promise<ClaimRow | null> {
@@ -243,27 +246,47 @@ export async function resetClaim(db: Db, claimId: number): Promise<void> {
     .where(eq(siteClaims.id, claimId))
 }
 
-/** Record the verifier's result; on success the site becomes claimed and listed. */
+export type ClaimResultOutcome = 'verified' | 'failed' | 'conflict' | 'missing'
+
+/**
+ * Record the verifier's result; on success the site becomes claimed and listed. The site row is
+ * locked and its owner checked in the same transaction, so a later verifier (a co-author whose
+ * rel="me" link is also on the page, or a domain's next owner) cannot take a site away from the
+ * member who already proved control of it: that claim fails as `conflict` instead.
+ */
 export async function markClaimResult(
   db: Db,
   claimId: number,
   result: { ok: true; method: 'meta' | 'rel_me' } | { ok: false; error: string },
-): Promise<void> {
-  await db.transaction(async (tx) => {
+): Promise<ClaimResultOutcome> {
+  return db.transaction(async (tx) => {
     const [claim] = await tx
       .select()
       .from(siteClaims)
       .where(eq(siteClaims.id, claimId))
       .for('update')
-    if (!claim) return
-    if (!result.ok) {
+    if (!claim) return 'missing'
+    const now = new Date()
+    const fail = async (error: string) => {
       await tx
         .update(siteClaims)
-        .set({ status: 'failed', error: result.error.slice(0, 500), lastCheckedAt: new Date() })
+        .set({ status: 'failed', error: error.slice(0, 500), lastCheckedAt: now })
         .where(eq(siteClaims.id, claimId))
-      return
     }
-    const now = new Date()
+    if (!result.ok) {
+      await fail(result.error)
+      return 'failed'
+    }
+    const [site] = await tx
+      .select({ claimedBy: sites.claimedBy })
+      .from(sites)
+      .where(eq(sites.id, claim.siteId))
+      .for('update')
+    if (!site) return 'missing'
+    if (site.claimedBy !== null && site.claimedBy !== claim.userId) {
+      await fail('site already claimed by another member')
+      return 'conflict'
+    }
     await tx
       .update(siteClaims)
       .set({
@@ -282,6 +305,7 @@ export async function markClaimResult(
         listing: sql`case when ${sites.listing} = 'private' then 'listed'::site_listing else ${sites.listing} end`,
       })
       .where(eq(sites.id, claim.siteId))
+    return 'verified'
   })
 }
 

@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { authenticatedRole, authUid } from 'drizzle-orm/supabase'
@@ -15,7 +16,10 @@ import { claimMethodEnum, claimStatusEnum } from './enums'
 import { profiles } from './profiles'
 import { sites } from './sites'
 
-/** A user's attempt to prove they own a site. Verified by the claim worker role. */
+/**
+ * A user's attempt to prove they own a site, one per user and site. Verified by the claim
+ * worker role, which also refuses to move a site away from a member who already proved control.
+ */
 export const siteClaims = pgTable(
   'site_claims',
   {
@@ -35,7 +39,7 @@ export const siteClaims = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index('site_claims_site_id_idx').on(t.siteId),
+    uniqueIndex('site_claims_site_user_key').on(t.siteId, t.userId),
     index('site_claims_user_id_idx').on(t.userId),
     pgPolicy('site_claims_select_own', {
       for: 'select',

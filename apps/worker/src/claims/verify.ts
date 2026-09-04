@@ -84,6 +84,10 @@ export async function verifyClaim(deps: VerifyDeps, claimId: number): Promise<Ve
     await markClaimResult(deps.db, claimId, { ok: false, error })
     return { status: 'failed', error }
   }
-  await markClaimResult(deps.db, claimId, { ok: true, method: proof.method })
+  const outcome = await markClaimResult(deps.db, claimId, { ok: true, method: proof.method })
+  if (outcome === 'conflict') {
+    return { status: 'failed', error: 'site already claimed by another member' }
+  }
+  if (outcome !== 'verified') return { status: 'skipped', reason: `claim ${outcome}` }
   return { status: 'verified', method: proof.method }
 }

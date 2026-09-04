@@ -64,6 +64,13 @@
       "when": 1788512340977,
       "tag": "0008_websub_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788556608187,
+      "tag": "0009_site_claims_unique_per_user",
+      "breakpoints": true
     }
   ]
 }
