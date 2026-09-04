@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { createHttpClient, HttpError, isBlockedHost } from '../src/http'
+import { createHttpClient } from '../src/http'
+import { isBlockedHost } from '../src/net'
 import { FixtureServer } from './fixture-server'
 
 let server: FixtureServer
@@ -76,12 +77,20 @@ describe('createHttpClient', () => {
     expect(res.body).toBe('<t>中文</t>')
   })
 
-  test('blocks private hosts unless allowed', async () => {
+  test('blocks private hosts unless allowed, on every redirect hop', async () => {
     expect(isBlockedHost('localhost')).toBe(true)
     expect(isBlockedHost('10.1.2.3')).toBe(true)
+    expect(isBlockedHost('[fdaa::1]')).toBe(true)
     expect(isBlockedHost('blog.example')).toBe(false)
     const strict = createHttpClient({ userAgent: 'x', politenessMs: 0 })
-    await expect(strict.get(server.url('/new'))).rejects.toBeInstanceOf(HttpError)
+    await expect(strict.get(server.url('/new'))).rejects.toMatchObject({ kind: 'blocked' })
+    // A public-looking first hop that redirects into a private address is refused too.
+    server.redirect('/hop', 'http://[::ffff:127.0.0.1]:9/secret')
+    await expect(
+      createHttpClient({ userAgent: 'x', politenessMs: 0, allowPrivateHosts: false }).get(
+        server.url('/hop'),
+      ),
+    ).rejects.toMatchObject({ kind: 'blocked' })
   })
 
   test('spaces requests to the same host', async () => {

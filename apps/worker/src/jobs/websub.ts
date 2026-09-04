@@ -2,7 +2,7 @@ import { feeds } from '@tela/db'
 import { getWebsub, websubDueForRenewal } from '@tela/db/queries'
 import { eq } from 'drizzle-orm'
 import type { Job } from 'pg-boss'
-import type { WorkerContext } from '../context'
+import { allowPrivateHosts, type WorkerContext } from '../context'
 import { log } from '../logger'
 import { QUEUES, type WebsubSubscribeJob } from '../queues'
 import { subscribeFeedToHub, websubNeedsRequest } from '../websub/subscribe'
@@ -11,8 +11,9 @@ function deps(ctx: WorkerContext) {
   return {
     db: ctx.db,
     publicUrl: ctx.config.PUBLIC_URL,
+    fetch: ctx.fetch,
     timeoutMs: ctx.config.FETCH_TIMEOUT_MS,
-    allowPrivateHosts: process.env.WORKER_ALLOW_PRIVATE_HOSTS === '1',
+    allowPrivateHosts: allowPrivateHosts(),
   }
 }
 

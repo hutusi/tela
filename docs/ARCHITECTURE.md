@@ -218,7 +218,10 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
   `similarity()`. Trigrams handle CJK substrings without a tokenizer; PGroonga is the upgrade
   path when full-text ranking is needed.
 - **Outbound fetches** from the web app (discovery, claim start) use the same HTTP client as the
-  worker: private ranges refused, 10 s timeout, 5 MB cap.
+  worker: private ranges refused, 10 s timeout, 5 MB cap. The worker additionally pins every
+  connection to the addresses it resolved and refuses names that resolve to a private address
+  (`apps/worker/src/net/safe-fetch.ts`); on Cloudflare the `global_fetch_strictly_public` flag
+  plays that role, and the image proxy checks the host name as well.
 
 ## Roadmap (milestone 1, branch `feat/mvp`)
 

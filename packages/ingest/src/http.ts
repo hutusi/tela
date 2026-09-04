@@ -1,4 +1,5 @@
 import type { FetchRegion } from '@tela/shared'
+import { isBlockedHost } from './net'
 
 export type HttpErrorKind = 'timeout' | 'network' | 'too_large' | 'redirect_loop' | 'blocked'
 
@@ -60,15 +61,6 @@ const RELAY_HEADROOM_MS = 10_000
 const DEFAULT_ACCEPT =
   'application/rss+xml, application/atom+xml, application/feed+json, application/xml;q=0.9, text/xml;q=0.9, text/html;q=0.8, */*;q=0.5'
 
-const PRIVATE_HOST =
-  /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|169\.254\.\d+\.\d+|0\.0\.0\.0|\[::1\]|\[fc[0-9a-f]{2}:.*\]|\[fe80:.*\])$/i
-
-export function isBlockedHost(hostname: string): boolean {
-  return (
-    PRIVATE_HOST.test(hostname) || hostname.endsWith('.local') || hostname.endsWith('.internal')
-  )
-}
-
 function charsetOf(contentType: string | null, body: Uint8Array): string {
   const fromHeader = contentType?.match(/charset=["']?([\w-]+)/i)?.[1]
   if (fromHeader) return fromHeader.toLowerCase()
@@ -92,11 +84,15 @@ export function classify(err: unknown): HttpError {
   const e = err as {
     name?: string
     code?: string
-    cause?: { code?: string; name?: string }
+    cause?: { code?: string; name?: string; message?: string }
     message?: string
   }
   const code = e.cause?.code ?? e.code ?? ''
   const name = e.name ?? e.cause?.name ?? ''
+  // The worker's DNS-pinned fetch refuses names that resolve to private addresses.
+  if (code === 'EBLOCKED') {
+    return new HttpError('blocked', e.cause?.message ?? e.message ?? 'address not allowed')
+  }
   if (
     name === 'TimeoutError' ||
     name === 'AbortError' ||

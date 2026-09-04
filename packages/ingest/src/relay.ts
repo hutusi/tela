@@ -6,14 +6,8 @@
  * Both halves are written against Web APIs only, so the handler can be served by Node's `http`
  * module in the worker and driven directly in tests without a socket.
  */
-import {
-  classify,
-  HttpError,
-  type HttpErrorKind,
-  isBlockedHost,
-  type Relay,
-  readCapped,
-} from './http'
+import { classify, HttpError, type HttpErrorKind, type Relay, readCapped } from './http'
+import { isBlockedHost } from './net'
 
 export const RELAY_SIGNATURE_HEADER = 'x-tela-signature'
 export const RELAY_TIMESTAMP_HEADER = 'x-tela-timestamp'

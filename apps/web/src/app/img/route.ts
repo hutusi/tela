@@ -1,4 +1,5 @@
 import { verifyImageParams } from '@tela/content/images'
+import { isBlockedHost } from '@tela/ingest/net'
 import { imageProxySecret } from '@/lib/platform/env'
 
 const MAX_BYTES = 10 * 1024 * 1024
@@ -17,6 +18,9 @@ export async function GET(request: Request): Promise<Response> {
   if (!secret) return new Response('image proxy disabled', { status: 404 })
   const target = await verifyImageParams(u, s, secret)
   if (!target) return new Response('bad signature', { status: 403 })
+  // Signed URLs come from feed HTML, which a publisher controls; never fetch into a private
+  // network for them. (Cloudflare's strictly-public fetch is the other layer on Workers.)
+  if (isBlockedHost(new URL(target).hostname)) return new Response('forbidden', { status: 403 })
 
   const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default
   const cacheKey = new Request(url.toString(), { method: 'GET' })

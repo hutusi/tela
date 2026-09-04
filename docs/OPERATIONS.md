@@ -38,7 +38,7 @@ implements them (see `docs/ARCHITECTURE.md`).
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web | Supabase Auth (cookies via `@supabase/ssr`) |
 | `IMAGE_PROXY_SECRET` | web | HMAC key for `/img` URLs; set as a Worker secret (`wrangler secret put`) |
 | `TELA_DEV_AUTH` | web (local only) | `1` signs every request in as the development user; refused on Cloudflare |
-| `TELA_ALLOW_PRIVATE_HOSTS`, `WORKER_ALLOW_PRIVATE_HOSTS` | tests only | let discovery/fetch reach localhost fixture servers |
+| `TELA_ALLOW_PRIVATE_HOSTS`, `WORKER_ALLOW_PRIVATE_HOSTS` | tests only | let discovery/fetch reach localhost fixture servers. In production the worker resolves every outbound host itself and refuses names that resolve to a private address (DNS-pinned via undici); the pinning is Node-only, so `bun run dev:worker` keeps just the name and literal checks. `apps/worker/scripts/safe-fetch-check.ts` verifies the Node path |
 | `NEXTJS_ENV` | web (`.dev.vars`) | Which `.env` files OpenNext loads locally |
 | `TEST_DATABASE_URL`, `PG_BIN_DIR` | tests | Use an existing database, or point at Postgres binaries |
 

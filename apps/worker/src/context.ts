@@ -4,6 +4,7 @@ import { configFromEnv, createTranslator, type Translator } from '@tela/llm'
 import type { PgBoss } from 'pg-boss'
 import { type AssetStore, createStoreFromEnv } from './assets/store'
 import type { WorkerConfig } from './config'
+import { createSafeFetch } from './net/safe-fetch'
 
 /** Everything a job handler needs. Built once per process. */
 export type WorkerContext = {
@@ -11,12 +12,23 @@ export type WorkerContext = {
   db: Db
   boss: PgBoss
   http: HttpClient
+  /** Outbound fetch pinned to vetted addresses; every user-controlled URL goes through it. */
+  fetch: typeof fetch
   translator: Translator
   /** Favicon/cover store; null disables the assets job's uploads. */
   assets: AssetStore | null
 }
 
-export function createHttp(config: WorkerConfig): HttpClient {
+export function allowPrivateHosts(): boolean {
+  return process.env.WORKER_ALLOW_PRIVATE_HOSTS === '1'
+}
+
+/** One DNS-pinned fetch for the process; the relay client and the S3 store keep the global one. */
+export function createOutboundFetch(): typeof fetch {
+  return createSafeFetch({ allowPrivateHosts: allowPrivateHosts() })
+}
+
+export function createHttp(config: WorkerConfig, fetchImpl: typeof fetch): HttpClient {
   const relay =
     config.RELAY_URL && config.RELAY_SECRET
       ? createRelayClient({ relayUrl: config.RELAY_URL, secret: config.RELAY_SECRET })
@@ -26,7 +38,8 @@ export function createHttp(config: WorkerConfig): HttpClient {
     timeoutMs: config.FETCH_TIMEOUT_MS,
     maxBytes: 5 * 1024 * 1024,
     politenessMs: 2000,
-    allowPrivateHosts: process.env.WORKER_ALLOW_PRIVATE_HOSTS === '1',
+    allowPrivateHosts: allowPrivateHosts(),
+    fetch: fetchImpl,
     ...(relay ? { relay } : {}),
   })
 }
