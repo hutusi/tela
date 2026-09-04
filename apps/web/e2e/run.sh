@@ -63,7 +63,7 @@ echo "▸ seed"
 
 echo "▸ worker"
 (cd "$ROOT/apps/worker" && bun run build > "$LOGS/worker-build.log" 2>&1)
-(cd "$ROOT/apps/worker" && WORKER_ROLES=scheduler,fetch,extract,translate,claim,assets WORKER_ALLOW_PRIVATE_HOSTS=1 LLM_PROVIDER=mock ASSETS_DIR="$LOGS/assets" PUBLIC_URL="$E2E_BASE_URL" LOG_LEVEL=info exec node dist/index.js > "$LOGS/worker.log" 2>&1) &
+(cd "$ROOT/apps/worker" && WORKER_ROLES=scheduler,fetch,extract,translate,claim,assets WORKER_ALLOW_PRIVATE_HOSTS=1 WEBSUB_ENABLED=1 LLM_PROVIDER=mock ASSETS_DIR="$LOGS/assets" PUBLIC_URL="$E2E_BASE_URL" LOG_LEVEL=info exec node dist/index.js > "$LOGS/worker.log" 2>&1) &
 pids+=($!)
 
 echo "▸ web build"

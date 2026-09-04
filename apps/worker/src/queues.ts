@@ -8,6 +8,7 @@ export const QUEUES = {
   translateBody: 'translate.body',
   siteAssets: 'site.assets',
   siteClaimVerify: 'site.claim.verify',
+  websubSubscribe: 'websub.subscribe',
   schedulerTick: 'scheduler.tick',
   maintenanceDaily: 'maintenance.daily',
   healthCheck: 'health.check',
@@ -21,6 +22,7 @@ export type SiteAssetsJob = { siteId: number }
 export type TranslateTitleJob = { articleId: number; targetLang: string }
 export type TranslateBodyJob = { articleId: number; targetLang: string }
 export type SiteClaimVerifyJob = { claimId: number }
+export type WebsubSubscribeJob = { feedId: number }
 
 type QueueSpec = Omit<Queue, 'name'>
 
@@ -67,6 +69,13 @@ const SPECS: Record<QueueName, QueueSpec> = {
     policy: 'short',
     retryLimit: 3,
     retryDelay: 60,
+    retryBackoff: true,
+    expireInSeconds: 60,
+  },
+  [QUEUES.websubSubscribe]: {
+    policy: 'short',
+    retryLimit: 2,
+    retryDelay: 300,
     retryBackoff: true,
     expireInSeconds: 60,
   },

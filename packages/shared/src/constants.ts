@@ -18,6 +18,10 @@ export type FeedStatus = (typeof FEED_STATUSES)[number]
 export const FETCH_REGIONS = ['global', 'cn'] as const
 export type FetchRegion = (typeof FETCH_REGIONS)[number]
 
+/** WebSub subscription state for a feed that advertises a hub. */
+export const WEBSUB_STATUSES = ['pending', 'active', 'failed'] as const
+export type WebsubStatus = (typeof WEBSUB_STATUSES)[number]
+
 export const CONTENT_MODES = ['unknown', 'full', 'summary'] as const
 export type ContentMode = (typeof CONTENT_MODES)[number]
 

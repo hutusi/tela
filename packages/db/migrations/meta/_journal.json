@@ -57,6 +57,13 @@
       "when": 1788511558761,
       "tag": "0007_search_trgm",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788512340977,
+      "tag": "0008_websub_subscriptions",
+      "breakpoints": true
     }
   ]
 }
