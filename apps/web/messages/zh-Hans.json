@@ -226,5 +226,15 @@
       "invalid_handle": "用户名需为 3–30 个小写字母、数字或下划线，且不能使用保留词。",
       "handle_taken": "该用户名已被占用。"
     }
+  },
+  "search": {
+    "title": "搜索",
+    "resultsFor": "“{query}”的结果",
+    "hint": "按名称或地址搜索博客，按标题（原文或译文）搜索你订阅的文章。",
+    "none": "没有与“{query}”匹配的内容。",
+    "sites": "博客",
+    "articles": "你订阅的文章",
+    "noArticles": "你订阅的文章中没有匹配项。",
+    "signInForArticles": "登录后可搜索你订阅的文章。"
   }
 }

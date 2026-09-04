@@ -226,5 +226,15 @@
       "invalid_handle": "Handles are 3–30 lowercase letters, digits, or underscores, and some words are reserved.",
       "handle_taken": "That handle is already taken."
     }
+  },
+  "search": {
+    "title": "Search",
+    "resultsFor": "Results for “{query}”",
+    "hint": "Blogs by name or address, and posts in your subscriptions by title (original or translated).",
+    "none": "Nothing matches “{query}”.",
+    "sites": "Blogs",
+    "articles": "Posts in your subscriptions",
+    "noArticles": "No posts in your subscriptions match.",
+    "signInForArticles": "Sign in to search the posts you subscribe to."
   }
 }

@@ -275,3 +275,34 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     expect(body).toContain('xmlUrl="http://127.0.0.1:4790/jvns.xml"')
   })
 })
+
+test.describe('search', () => {
+  test('finds blogs by name and posts in subscriptions by title', async ({ page }) => {
+    await page.goto('/reading')
+    const firstTitle =
+      (await page.getByTestId('article-row').first().locator('h2').textContent())?.trim() ?? ''
+    const original = firstTitle.replace(/^[a-zA-Z-]+:/, '')
+    const word = original.split(/\s+/).find((w) => w.length >= 4) ?? original.slice(0, 4)
+
+    const input = page.getByTestId('search-input')
+    await input.fill('Julia')
+    await input.press('Enter')
+    await expect(page).toHaveURL(/\/search\?q=Julia$/)
+    // Every fixture feed belongs to the one fixture site, so "Julia" matches through a feed title.
+    await expect(page.getByTestId('site-card').first()).toBeVisible()
+    await expect(page.getByTestId('search-input')).toHaveValue('Julia')
+    await page.getByTestId('search-input').fill('胡涂')
+    await page.getByTestId('search-input').press('Enter')
+    await expect(page.getByTestId('site-card').filter({ hasText: '胡涂说' })).toBeVisible()
+
+    await page.getByTestId('search-input').fill(word)
+    await page.getByTestId('search-input').press('Enter')
+    const hit = page.getByTestId('article-hit').first()
+    await expect(hit).toContainText(word)
+    await hit.click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+&article=\d+/)
+
+    await page.goto('/search?q=zzzz-nothing-here')
+    await expect(page.getByTestId('search-empty')).toBeVisible()
+  })
+})

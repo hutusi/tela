@@ -9,7 +9,7 @@ import { ReadInMenu } from './read-in-menu'
 
 type NavKey = 'reading' | 'discover' | 'dashboard' | 'settings'
 
-export async function AppHeader({ active }: { active?: NavKey }) {
+export async function AppHeader({ active, query }: { active?: NavKey; query?: string }) {
   const [t, user, locale] = await Promise.all([
     getTranslations('nav'),
     getSessionUser(),
@@ -43,10 +43,24 @@ export async function AppHeader({ active }: { active?: NavKey }) {
         {user ? pill('settings', '/settings') : null}
       </nav>
       <div className="flex-1" />
-      <div className="hidden min-w-60 items-center gap-2 rounded-full border border-line bg-white px-3.5 py-1.5 text-[13px] text-muted md:flex">
-        <span>⌕</span>
-        <span>{t('search')}</span>
-      </div>
+      <form
+        action="/search"
+        method="get"
+        role="search"
+        className="hidden min-w-60 items-center gap-2 rounded-full border border-line bg-white px-3.5 py-1.5 text-[13px] text-muted focus-within:border-muted md:flex"
+      >
+        <span aria-hidden="true">⌕</span>
+        <input
+          type="search"
+          name="q"
+          defaultValue={query ?? ''}
+          placeholder={t('search')}
+          aria-label={t('search')}
+          maxLength={100}
+          data-testid="search-input"
+          className="w-full bg-transparent text-ink outline-none placeholder:text-muted"
+        />
+      </form>
       {user ? <ReadInMenu readingLang={await getReadingLang()} /> : null}
       <LocaleSwitcher locale={locale} />
       {user ? (
