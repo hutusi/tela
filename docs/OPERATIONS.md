@@ -26,6 +26,9 @@ implements them (see `docs/ARCHITECTURE.md`).
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` | worker | Anthropic key; base URL optional |
 | `LLM_JSON_MODE` | worker | `text` (parse JSON from the reply; default for Bailian) or `schema` (structured output; default for Anthropic) |
 | `LLM_DAILY_BUDGET_TOKENS` | worker | Daily cap for background translation; `0` = unlimited; on-demand requests always run |
+| `PUBLIC_URL` | worker | Public origin of the web app, for verifying rel="me" claim links |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | worker | Favicon/cover uploads to R2; `ASSETS_DIR` writes to a directory instead (dev); neither disables uploads |
+| `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_ASSETS_URL` | web | Public origin (claim snippets) and the assets bucket's public base URL |
 | `WORKER_USER_AGENT` | worker | Sent on every fetch; keep a contact URL in it |
 | `FETCH_TIMEOUT_MS`, `FETCH_CONCURRENCY`, `SCHEDULER_BATCH` | worker | Per-request timeout (20 s), parallel fetches per process (4), max feeds enqueued per tick (500) |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web | Supabase Auth (cookies via `@supabase/ssr`) |
@@ -54,6 +57,16 @@ bunx wrangler hyperdrive create tela-db --connection-string="<supabase direct co
 bun run deploy            # opennextjs-cloudflare build && deploy
 ```
 Then add the custom domain under Workers & Pages → tela-web → Settings → Domains.
+
+R2 for favicons and covers: create a bucket (`tela-assets`), connect a custom domain
+(`assets.<domain>`) under the bucket's settings, create an R2 API token with object read/write,
+and set the `R2_*` variables on the worker and `NEXT_PUBLIC_ASSETS_URL=https://assets.<domain>` on
+the web app.
+
+### Curation
+- Feature a site: `update sites set listing = 'featured' where id = …`; hide one: `'rejected'`.
+- Release a claim so another member can claim the site: `update sites set claimed_by = null,
+  claimed_at = null where id = …; delete from site_claims where site_id = …`.
 
 ### Fly.io (worker)
 ```sh
