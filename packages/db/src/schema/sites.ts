@@ -35,6 +35,8 @@ export const sites = pgTable(
     topics: text('topics').array().notNull().default(sql`'{}'::text[]`),
     readerCount: integer('reader_count').notNull().default(0),
     translationOptOut: boolean('translation_opt_out').notNull().default(false),
+    /** When the assets job last looked for a favicon and cover (success or not). */
+    assetsCheckedAt: timestamp('assets_checked_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()

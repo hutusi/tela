@@ -1,0 +1,1 @@
+ALTER TABLE "sites" ADD COLUMN "assets_checked_at" timestamp with time zone;

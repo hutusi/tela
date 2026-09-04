@@ -29,6 +29,13 @@
       "when": 1788503081149,
       "tag": "0003_translation_pending",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788503903050,
+      "tag": "0004_site_assets_checked",
+      "breakpoints": true
     }
   ]
 }

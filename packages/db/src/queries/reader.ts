@@ -342,6 +342,17 @@ export async function toggleLike(
   })
 }
 
+/** Recount distinct readers across every feed of the site a feed belongs to. */
+export async function recomputeReaderCount(db: Db, feedId: number): Promise<void> {
+  await db.execute(sql`
+    update sites s set reader_count = (
+      select count(distinct sub.user_id) from subscriptions sub
+      join feeds f on f.id = sub.feed_id where f.site_id = s.id
+    )
+    where s.id = (select site_id from feeds where id = ${feedId})
+  `)
+}
+
 /** Subscribe; existing articles count as unread from here on. Idempotent. */
 export async function subscribe(
   db: Db,
@@ -353,6 +364,7 @@ export async function subscribe(
     .values({ userId, feedId })
     .onConflictDoNothing()
     .returning({ feedId: subscriptions.feedId })
+  if (rows.length > 0) await recomputeReaderCount(db, feedId)
   return { created: rows.length > 0 }
 }
 
@@ -360,4 +372,5 @@ export async function unsubscribe(db: Db, userId: string, feedId: number): Promi
   await db
     .delete(subscriptions)
     .where(and(eq(subscriptions.userId, userId), eq(subscriptions.feedId, feedId)))
+  await recomputeReaderCount(db, feedId)
 }
