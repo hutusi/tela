@@ -10,9 +10,16 @@ export async function generateMetadata() {
   return { title: t('title') }
 }
 
-export default async function AddPage() {
+const KNOWN_ERRORS = new Set(['rate_limited'])
+
+export default async function AddPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
   await requireUser('/add')
   const t = await getTranslations('add')
+  const { error } = await searchParams
   return (
     <>
       <AppHeader active="reading" />
@@ -23,6 +30,11 @@ export default async function AddPage() {
           </h1>
           <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{t('intro')}</p>
         </div>
+        {error && KNOWN_ERRORS.has(error) ? (
+          <p className="text-sm text-[oklch(0.5_0.15_25)]" data-testid="add-error">
+            {t(`errors.${error}`)}
+          </p>
+        ) : null}
         <AddFeedForm />
         <div className="border-t border-line pt-8">
           <h2 className="font-serif text-[22px] font-medium">{t('opml')}</h2>

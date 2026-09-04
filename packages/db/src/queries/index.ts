@@ -1,4 +1,5 @@
 export * from './discover'
+export * from './rate-limit'
 export * from './reader'
 export * from './social'
 export * from './translation'
