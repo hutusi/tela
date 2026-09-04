@@ -10,6 +10,7 @@ export const QUEUES = {
   siteClaimVerify: 'site.claim.verify',
   schedulerTick: 'scheduler.tick',
   maintenanceDaily: 'maintenance.daily',
+  healthCheck: 'health.check',
 } as const
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES]
@@ -71,12 +72,16 @@ const SPECS: Record<QueueName, QueueSpec> = {
   },
   [QUEUES.schedulerTick]: { policy: 'singleton', retryLimit: 0, expireInSeconds: 55 },
   [QUEUES.maintenanceDaily]: { policy: 'singleton', retryLimit: 1, expireInSeconds: 600 },
+  [QUEUES.healthCheck]: { policy: 'singleton', retryLimit: 0, expireInSeconds: 240 },
 }
 
 /** Create or update every queue (idempotent), plus a dead-letter queue per work queue. */
 export async function ensureQueues(boss: PgBoss) {
   for (const [name, spec] of Object.entries(SPECS) as Array<[QueueName, QueueSpec]>) {
-    const isTick = name === QUEUES.schedulerTick || name === QUEUES.maintenanceDaily
+    const isTick =
+      name === QUEUES.schedulerTick ||
+      name === QUEUES.maintenanceDaily ||
+      name === QUEUES.healthCheck
     const deadLetter = isTick ? undefined : `${name}${DEAD_LETTER_SUFFIX}`
     if (deadLetter && !(await boss.getQueue(deadLetter))) {
       await boss.createQueue(deadLetter, { policy: 'standard', retentionSeconds: 30 * 24 * 3600 })
