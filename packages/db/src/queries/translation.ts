@@ -3,17 +3,29 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { Db, Tx } from '../client'
 import { articleTranslations, profiles, translations } from '../schema'
 
+/** The cache key's source-language component: articles with no detected language share 'und'. */
+export function cacheSourceLang(sourceLang: string | null | undefined): string {
+  return sourceLang ?? 'und'
+}
+
 /** Cached translations for a set of block hashes: hash → translated tagged text. */
 export async function getCachedTranslations(
   db: Db,
   hashes: string[],
   targetLang: string,
+  sourceLang: string | null,
 ): Promise<Map<string, string>> {
   if (hashes.length === 0) return new Map()
   const rows = await db
     .select({ hash: translations.sourceHash, text: translations.taggedText })
     .from(translations)
-    .where(and(eq(translations.targetLang, targetLang), inArray(translations.sourceHash, hashes)))
+    .where(
+      and(
+        eq(translations.targetLang, targetLang),
+        eq(translations.sourceLang, cacheSourceLang(sourceLang)),
+        inArray(translations.sourceHash, hashes),
+      ),
+    )
   return new Map(rows.map((r) => [r.hash, r.text]))
 }
 
@@ -36,8 +48,8 @@ export async function storeTranslations(db: Db, entries: CacheEntry[]): Promise<
       entries.map((e) => ({
         sourceHash: e.sourceHash,
         targetLang: e.targetLang,
+        sourceLang: cacheSourceLang(e.sourceLang),
         taggedText: e.taggedText,
-        sourceLangHint: e.sourceLang,
         model: e.model,
         normVersion: e.normVersion,
         chars: e.chars,

@@ -23,7 +23,9 @@ Studio) serving GLM, with Claude available later. Bailian exposes an OpenAI-comp
   with the previous chunk's last two translations as context. Every block is validated
   (placeholder multiset, length ratio, non-identity); failures are retried once in strict mode,
   then recorded in `failed_block_ids` and rendered as source (`partial`).
-- **Cache**: `translations(source_hash, target_lang)` keyed by the tagged-text hash; the
+- **Cache**: `translations(source_hash, target_lang, source_lang)` keyed by the tagged-text hash
+  and the article's source language (`und` when undetected: the same short text can mean
+  different things in different languages); the
   materialized `article_translations.html` is rebuilt from the cache and goes stale when
   `content_hash` changes.
 - **Adapter**: `packages/llm` exposes a `Translator` interface. Providers: Bailian through

@@ -91,6 +91,7 @@ export async function translateArticleBody(
     deps.db,
     [...new Set(blocks.map((b) => b.hash))],
     targetLang,
+    article.sourceLang,
   )
   const translatedById = new Map<string, string>()
   const missing: Array<{ id: string; text: string }> = []

@@ -100,23 +100,25 @@ export const articleContents = pgTable(
 )
 
 /**
- * Content-addressed translation cache. Keyed by the block's tagged-text hash and the
- * target language, so identical paragraphs across articles and versions cost once.
+ * Content-addressed translation cache. Keyed by the block's tagged-text hash, the target
+ * language, and the source language ('und' when unknown), so identical paragraphs across
+ * articles and versions cost once, while a homograph such as "Gift" in English and in German
+ * cannot serve the other language's translation.
  */
 export const translations = pgTable(
   'translations',
   {
     sourceHash: text('source_hash').notNull(),
     targetLang: text('target_lang').notNull(),
+    sourceLang: text('source_lang').notNull().default('und'),
     taggedText: text('tagged_text').notNull(),
-    sourceLangHint: text('source_lang_hint'),
     model: text('model').notNull(),
     normVersion: integer('norm_version').notNull(),
     chars: integer('chars'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.sourceHash, t.targetLang] }),
+    primaryKey({ columns: [t.sourceHash, t.targetLang, t.sourceLang] }),
     pgPolicy('translations_select_public', {
       for: 'select',
       to: [anonRole, authenticatedRole],

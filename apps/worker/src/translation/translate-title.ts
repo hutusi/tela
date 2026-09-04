@@ -52,7 +52,12 @@ export async function translateArticleTitle(
   const hashes = new Map<string, string>()
   for (const b of blocks) hashes.set(b.id, await blockHash(b.text))
 
-  const cached = await getCachedTranslations(deps.db, [...hashes.values()], targetLang)
+  const cached = await getCachedTranslations(
+    deps.db,
+    [...hashes.values()],
+    targetLang,
+    article.sourceLang,
+  )
   const result = new Map<string, string>()
   const missing: typeof blocks = []
   for (const b of blocks) {

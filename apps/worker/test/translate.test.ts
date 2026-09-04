@@ -10,7 +10,7 @@ import {
   translations,
 } from '@tela/db'
 import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
-import { createMockTranslator } from '@tela/llm'
+import { createMockTranslator, type TranslationRequest } from '@tela/llm'
 import { eq, sql } from 'drizzle-orm'
 import { type Job, PgBoss } from 'pg-boss'
 import type { WorkerContext } from '../src/context'
@@ -244,6 +244,37 @@ describe('translateArticleTitle', () => {
         'zh-Hans',
       ),
     ).toMatchObject({ status: 'skipped' })
+  })
+})
+
+describe('translation cache key', () => {
+  test('the same text in two source languages gets two cache entries', async () => {
+    const en = await seedArticle({ sourceLang: 'en' })
+    const [feed] = await t.db.select({ id: feeds.id }).from(feeds).limit(1)
+    const [de] = await t.db
+      .insert(articles)
+      .values({ feedId: feed!.id, dedupKey: 'k-de', title: en.article.title, sourceLang: 'de' })
+      .returning({ id: articles.id })
+    const calls: TranslationRequest[] = []
+    const translator = createMockTranslator({ calls })
+    expect(await translateArticleTitle({ db: t.db, translator }, en.article.id, 'zh-Hans')).toEqual(
+      {
+        status: 'done',
+      },
+    )
+    expect(await translateArticleTitle({ db: t.db, translator }, de!.id, 'zh-Hans')).toEqual({
+      status: 'done',
+    })
+    // Not a cache hit: the German title went to the model with its own source language.
+    expect(calls.map((c) => c.sourceLang)).toEqual(['en', 'de'])
+    // The English article also has an excerpt; the German one only a title. Same title hash,
+    // one row per source language.
+    const rows = await t.db.select().from(translations)
+    const deRows = rows.filter((r) => r.sourceLang === 'de')
+    expect(deRows).toHaveLength(1)
+    expect(rows.filter((r) => r.sourceLang === 'en').map((r) => r.sourceHash)).toContain(
+      deRows[0]?.sourceHash ?? '',
+    )
   })
 })
 
