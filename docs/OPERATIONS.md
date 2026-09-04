@@ -75,7 +75,15 @@ bun run deploy            # opennextjs-cloudflare build && deploy
   not ask for TLS there (`sslModeFor` in `@tela/db` handles `*.hyperdrive.local`).
 - The first request after a deploy can wait up to the driver's 30 s connect timeout while
   Hyperdrive opens its origin connection; `/api/health` reports `databaseMs` and the error text.
-- Then add the custom domain under Workers & Pages → tela-web → Settings → Domains.
+- Then add the custom domain under Workers & Pages → tela-web → Settings → Domains, and in the
+  same change:
+  - `supabase/config.toml`: set `[auth] site_url` to the new origin and add `https://<domain>/**`
+    to `additional_redirect_urls`, then `supabase config push`. OAuth builds its callback from the
+    request host, so a domain missing from that list makes GitHub/Google sign-in fail with a
+    redirect error; magic-link emails use `site_url`, so they would keep pointing at the old
+    origin (blocked in mainland China) until this is done.
+  - `NEXT_PUBLIC_SITE_URL` (web) and `PUBLIC_URL` (worker) to the new origin: claim snippets and
+    `rel="me"` verification compare against them.
 - The production build runs `next build --webpack` (`apps/web/package.json`): Turbopack in Next
   16.3 panics while chunking any middleware file in this app (`ModuleGraph::from_graphs_inner was
   canceled`), and the session-refresh middleware is not optional. `next dev` still uses Turbopack.
@@ -184,7 +192,7 @@ First run: `cd apps/web && bunx playwright install chromium`.
   restart; finally remove `RELAY_SECRET_PREVIOUS` from the relay. Signatures expire after five
   minutes, so keep both boxes' clocks in sync (NTP).
 - **It is not an open proxy**: only signed `POST /fetch` requests are served, private ranges are
-  refused, redirects are not followed, and the upstream body is capped at 5 MB, and a request larger than 64 KiB is refused before it is read (the signature covers the body, so that cap is the only pre-authentication limit).
+  refused, redirects are not followed, the upstream body is capped at 5 MB, and a request larger than 64 KiB is refused before it is read (the signature covers the body, so that cap is the only pre-authentication limit).
 
 ### Web
 - **Rate limits**: rules live in `RATE_LIMITS` (`packages/db/src/queries/rate-limit.ts`); change a
@@ -212,4 +220,6 @@ First run: `cd apps/web && bunx playwright install chromium`.
 ### Later
 - Rotating the image-proxy signing key: set a new `IMAGE_PROXY_SECRET`; old proxy URLs stop
   verifying and pages regenerate them on the next render.
+- Before switching readers to the custom domain: the Supabase redirect allow-list and `site_url`
+  step above, then sign in once with each provider from the new origin.
 - China checks from a HK/CN box (custom auth domain, image proxy for `mmbiz.qpic.cn`-style hosts)
