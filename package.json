@@ -22,7 +22,9 @@
     "db:generate": "bun run --filter @tela/db generate",
     "db:migrate": "bun run --filter @tela/db migrate",
     "db:local": "bun run --filter @tela/db local-db",
-    "worker:once": "bun run --filter @tela/worker once"
+    "worker:once": "bun run --filter @tela/worker once",
+    "e2e": "apps/web/e2e/run.sh",
+    "db:prepare": "bun run --filter @tela/db prepare-db"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",

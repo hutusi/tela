@@ -17,5 +17,6 @@ export function createHttp(config: WorkerConfig): HttpClient {
     timeoutMs: config.FETCH_TIMEOUT_MS,
     maxBytes: 5 * 1024 * 1024,
     politenessMs: 2000,
+    allowPrivateHosts: process.env.WORKER_ALLOW_PRIVATE_HOSTS === '1',
   })
 }
