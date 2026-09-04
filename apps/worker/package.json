@@ -12,13 +12,15 @@
     "once": "bun run src/cli.ts"
   },
   "dependencies": {
+    "@tela/content": "workspace:*",
     "@tela/db": "workspace:*",
+    "@tela/ingest": "workspace:*",
+    "@tela/llm": "workspace:*",
     "@tela/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "entities": "^7.0.0",
     "pg-boss": "^12.30.0",
     "postgres": "^3.4.9",
-    "zod": "^4.5.4",
-    "@tela/ingest": "workspace:*",
-    "@tela/content": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "zod": "^4.5.4"
   }
 }

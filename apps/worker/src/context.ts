@@ -1,5 +1,6 @@
 import type { Db } from '@tela/db'
 import { createHttpClient, type HttpClient } from '@tela/ingest'
+import { configFromEnv, createTranslator, type Translator } from '@tela/llm'
 import type { PgBoss } from 'pg-boss'
 import type { WorkerConfig } from './config'
 
@@ -9,6 +10,7 @@ export type WorkerContext = {
   db: Db
   boss: PgBoss
   http: HttpClient
+  translator: Translator
 }
 
 export function createHttp(config: WorkerConfig): HttpClient {
@@ -19,4 +21,9 @@ export function createHttp(config: WorkerConfig): HttpClient {
     politenessMs: 2000,
     allowPrivateHosts: process.env.WORKER_ALLOW_PRIVATE_HOSTS === '1',
   })
+}
+
+/** Translator from LLM_PROVIDER / keys; the mock when no key is configured. */
+export function createTranslatorFromEnv(): Translator {
+  return createTranslator(configFromEnv(process.env))
 }

@@ -1,0 +1,226 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { processArticleHtml } from '@tela/content'
+import {
+  articleContents,
+  articles,
+  articleTranslations,
+  feeds,
+  llmUsage,
+  sites,
+  translations,
+} from '@tela/db'
+import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
+import { createMockTranslator } from '@tela/llm'
+import { eq } from 'drizzle-orm'
+import { translateArticleBody } from '../src/translation/translate-body'
+import { translateArticleTitle } from '../src/translation/translate-title'
+
+let t: TestDb
+
+beforeAll(async () => {
+  t = await startTestDb()
+}, 120_000)
+
+afterAll(async () => {
+  await t?.stop()
+})
+
+beforeEach(async () => {
+  await resetDatabase(t.db)
+})
+
+const HTML = `
+  <p>On Calle de Toledo there is a <a href="https://x.example/b">bakery</a> that has been open since 1928.</p>
+  <p>The bread has not changed. Around it the city has been dug up, rerouted and renamed.</p>
+  <pre><code>let keep = "me"</code></pre>
+  <p>The bread has not changed. Around it the city has been dug up, rerouted and renamed.</p>
+`
+
+async function seedArticle(
+  options: { sourceLang?: string | null; optOut?: boolean; html?: string } = {},
+) {
+  const [site] = await t.db
+    .insert(sites)
+    .values({
+      homeUrl: 'https://blog.example',
+      title: 'Blog',
+      translationOptOut: options.optOut ?? false,
+    })
+    .returning()
+  const [feed] = await t.db
+    .insert(feeds)
+    .values({ siteId: site!.id, feedUrl: 'https://blog.example/feed' })
+    .returning()
+  const processed = await processArticleHtml({
+    html: options.html ?? HTML,
+    baseUrl: 'https://blog.example/p/1',
+  })
+  const [article] = await t.db
+    .insert(articles)
+    .values({
+      feedId: feed!.id,
+      dedupKey: 'k1',
+      title: 'The bakery that outlived three metro lines',
+      excerpt: processed.excerpt,
+      sourceLang: options.sourceLang === undefined ? 'en' : options.sourceLang,
+      contentHash: processed.contentHash,
+    })
+    .returning()
+  await t.db
+    .insert(articleContents)
+    .values({ articleId: article!.id, html: processed.html, blocks: processed.blocks })
+  return { article: article!, processed }
+}
+
+describe('translateArticleBody', () => {
+  test('translates through the cache, materializes html, and records usage', async () => {
+    const { article, processed } = await seedArticle()
+    const translator = createMockTranslator()
+    const first = await translateArticleBody({ db: t.db, translator }, article.id, 'zh-Hans', {
+      onDemand: true,
+    })
+    expect(first).toMatchObject({ status: 'done', failed: 0, cached: 0 })
+    // 3 translatable blocks, two of them identical → 2 cache entries; pre is skipped.
+    expect(first.translated).toBe(3)
+    expect(await t.db.select().from(translations)).toHaveLength(2)
+
+    const [row] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(row?.status).toBe('done')
+    expect(row?.contentHash).toBe(processed.contentHash)
+    expect(row?.model).toBe('mock')
+    expect(row?.html).toContain('zh-Hans:On Calle de Toledo')
+    expect(row?.html).toContain('<a href="https://x.example/b">zh-Hans:bakery</a>')
+    expect(row?.html).toContain('let keep = "me"') // pre untouched
+    expect(row?.html?.match(/zh-Hans:The bread/g)).toHaveLength(2)
+    expect(await t.db.select().from(llmUsage)).toHaveLength(1)
+
+    // Second run: everything is cached, no provider call, no new usage.
+    const second = await translateArticleBody({ db: t.db, translator }, article.id, 'zh-Hans', {
+      onDemand: true,
+    })
+    expect(second).toMatchObject({ status: 'done', translated: 0, cached: 3, failed: 0 })
+    expect(await t.db.select().from(llmUsage)).toHaveLength(1)
+  })
+
+  test('keeps partial results and lists failed blocks', async () => {
+    const { article, processed } = await seedArticle()
+    const firstId = processed.blocks.find((b) => !b.skip)?.id as string
+    const translator = createMockTranslator({ failIds: new Set([firstId]) })
+    const out = await translateArticleBody({ db: t.db, translator }, article.id, 'zh-Hans', {
+      onDemand: true,
+    })
+    expect(out.status).toBe('partial')
+    expect(out.failed).toBe(1)
+    const [row] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(row?.status).toBe('partial')
+    expect(row?.failedBlockIds).toEqual([firstId])
+    // The failed block keeps its source text in the materialized html.
+    expect(row?.html).toContain(
+      'On Calle de Toledo there is a <a href="https://x.example/b">bakery</a>',
+    )
+  })
+
+  test('marks failed and rethrows when the provider is down', async () => {
+    const { article } = await seedArticle()
+    await expect(
+      translateArticleBody(
+        { db: t.db, translator: createMockTranslator({ fail: true }) },
+        article.id,
+        'zh-Hans',
+        { onDemand: true },
+      ),
+    ).rejects.toThrow(/mock provider failure/)
+    const [row] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(row?.status).toBe('failed')
+  })
+
+  test('skips same-language articles and opted-out sites', async () => {
+    const same = await seedArticle({ sourceLang: 'zh-Hans' })
+    expect(
+      await translateArticleBody(
+        { db: t.db, translator: createMockTranslator() },
+        same.article.id,
+        'zh-Hans',
+      ),
+    ).toMatchObject({
+      status: 'skipped',
+      reason: 'same language',
+    })
+    await resetDatabase(t.db)
+    const opted = await seedArticle({ optOut: true })
+    expect(
+      await translateArticleBody(
+        { db: t.db, translator: createMockTranslator() },
+        opted.article.id,
+        'zh-Hans',
+      ),
+    ).toMatchObject({
+      status: 'failed',
+      reason: 'site opted out of translation',
+    })
+  })
+
+  test('background work stops at the daily budget; on-demand continues', async () => {
+    const { article } = await seedArticle()
+    await t.db
+      .insert(llmUsage)
+      .values({ job: 'x', model: 'mock', inputTokens: 900, outputTokens: 200 })
+    const deps = { db: t.db, translator: createMockTranslator(), dailyBudgetTokens: 1000 }
+    expect(await translateArticleBody(deps, article.id, 'zh-Hans')).toMatchObject({
+      status: 'skipped',
+      reason: 'daily budget exhausted',
+    })
+    expect(
+      await translateArticleBody(deps, article.id, 'zh-Hans', { onDemand: true }),
+    ).toMatchObject({ status: 'done' })
+  })
+})
+
+describe('translateArticleTitle', () => {
+  test('stores a translated title and excerpt without touching the body state', async () => {
+    const { article } = await seedArticle()
+    const translator = createMockTranslator()
+    expect(await translateArticleTitle({ db: t.db, translator }, article.id, 'zh-Hans')).toEqual({
+      status: 'done',
+    })
+    const [row] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(row?.status).toBe('pending')
+    expect(row?.title).toBe('zh-Hans:The bakery that outlived three metro lines')
+    expect(row?.excerpt?.startsWith('zh-Hans:')).toBe(true)
+    expect(row?.html).toBeNull()
+    // Cached: a second call does not add usage.
+    await translateArticleTitle({ db: t.db, translator }, article.id, 'zh-Hans')
+    expect(await t.db.select().from(llmUsage)).toHaveLength(1)
+    // Body translation afterwards keeps the title.
+    await translateArticleBody({ db: t.db, translator }, article.id, 'zh-Hans', { onDemand: true })
+    const [after] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(after?.status).toBe('done')
+    expect(after?.title).toBe('zh-Hans:The bakery that outlived three metro lines')
+  })
+
+  test('skips when the language already matches', async () => {
+    const { article } = await seedArticle({ sourceLang: 'zh-Hans' })
+    expect(
+      await translateArticleTitle(
+        { db: t.db, translator: createMockTranslator() },
+        article.id,
+        'zh-Hans',
+      ),
+    ).toMatchObject({ status: 'skipped' })
+  })
+})
