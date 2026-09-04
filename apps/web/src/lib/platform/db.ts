@@ -29,7 +29,8 @@ export const getDb = cache(async (): Promise<Db> => {
   }
   const fromBinding = await hyperdriveUrl()
   if (fromBinding) {
-    return createDb(fromBinding, { max: 1 })
+    // Hyperdrive's endpoint is plain TCP; it holds the TLS session to the origin.
+    return createDb(fromBinding, { max: 1, ssl: false })
   }
   throw new Error('DATABASE_URL is not set and no HYPERDRIVE binding is available')
 })

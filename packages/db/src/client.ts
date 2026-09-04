@@ -7,14 +7,34 @@ export type DbOptions = {
   max?: number
   /** Disable prepared statements when going through a transaction-mode pooler. */
   prepare?: boolean
+  /** Override TLS; by default it is chosen from the host (see sslModeFor). */
+  ssl?: false | 'require'
+}
+
+/**
+ * Supabase and other hosted Postgres require TLS. Local clusters do not offer it, and neither
+ * does a Hyperdrive endpoint (`*.hyperdrive.local`): Hyperdrive terminates TLS to the origin
+ * itself, and a client that insists on TLS hangs on the handshake until its connect timeout.
+ */
+export function sslModeFor(url: string): false | 'require' {
+  let host = ''
+  try {
+    host = new URL(url).hostname
+  } catch {
+    return 'require'
+  }
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]') {
+    return false
+  }
+  if (host.endsWith('.hyperdrive.local')) return false
+  return 'require'
 }
 
 export function createDb(url: string, options: DbOptions = {}) {
   const client = postgres(url, {
     max: options.max ?? 10,
     prepare: options.prepare ?? true,
-    // Supabase direct connections require TLS; local Postgres does not offer it.
-    ssl: /localhost|127\.0\.0\.1/.test(url) ? false : 'require',
+    ssl: options.ssl ?? sslModeFor(url),
     onnotice: () => {},
   })
   const db = drizzle(client, { schema, casing: 'snake_case' })
