@@ -12,6 +12,8 @@ const envSchema = z.object({
   FETCH_CONCURRENCY: z.coerce.number().int().positive().default(4),
   /** Scheduler: maximum feeds enqueued per tick. */
   SCHEDULER_BATCH: z.coerce.number().int().positive().default(500),
+  /** Daily LLM token budget for background translation; 0 = unlimited. On-demand work ignores it. */
+  LLM_DAILY_BUDGET_TOKENS: z.coerce.number().int().nonnegative().default(0),
 })
 
 export type WorkerConfig = ReturnType<typeof loadConfig>

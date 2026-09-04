@@ -61,7 +61,13 @@ describe('fetchFeed', () => {
     expect(created).toBe(true)
 
     const result = await fetchFeed(t.db, http, feedId, opts)
-    expect(result).toEqual({ status: 'fetched', newArticles: 3, updatedArticles: 0, items: 3 })
+    expect(result).toMatchObject({
+      status: 'fetched',
+      newArticles: 3,
+      updatedArticles: 0,
+      items: 3,
+    })
+    expect(result.status === 'fetched' ? result.newArticleIds : []).toHaveLength(3)
 
     const rows = await t.db.select().from(articles).where(eq(articles.feedId, feedId))
     expect(rows).toHaveLength(3)

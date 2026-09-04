@@ -1,11 +1,19 @@
 import { createDb } from '@tela/db'
 import { type Job, PgBoss } from 'pg-boss'
 import { loadConfig } from './config'
-import { createHttp, type WorkerContext } from './context'
+import { createHttp, createTranslatorFromEnv, type WorkerContext } from './context'
 import { handleArticleExtract } from './jobs/extract-article'
 import { handleFeedFetch } from './jobs/fetch-feed'
+import { handleTranslateBody, handleTranslateTitle } from './jobs/translate'
 import { log, setLogLevel } from './logger'
-import { type ArticleExtractJob, ensureQueues, type FeedFetchJob, QUEUES } from './queues'
+import {
+  type ArticleExtractJob,
+  ensureQueues,
+  type FeedFetchJob,
+  QUEUES,
+  type TranslateBodyJob,
+  type TranslateTitleJob,
+} from './queues'
 import { maintenanceDaily, schedulerTick } from './scheduler'
 
 async function main() {
@@ -32,7 +40,9 @@ async function main() {
     await ensureQueues(boss)
     log.info('queues ready')
 
-    const ctx: WorkerContext = { config, db, boss, http: createHttp(config) }
+    const translator = createTranslatorFromEnv()
+    const ctx: WorkerContext = { config, db, boss, http: createHttp(config), translator }
+    log.info('translator ready', { model: translator.model })
 
     if (has('scheduler')) {
       await boss.schedule(QUEUES.schedulerTick, '* * * * *', {}, {})
@@ -60,7 +70,19 @@ async function main() {
         (jobs) => handleArticleExtract(ctx, jobs as Job<ArticleExtractJob>[]),
       )
     }
-    for (const pending of ['translate', 'assets', 'claim'] as const) {
+    if (has('translate')) {
+      await boss.work(
+        QUEUES.translateBody,
+        { batchSize: 1, localConcurrency: 2, pollingIntervalSeconds: 2, priority: true },
+        (jobs) => handleTranslateBody(ctx, jobs as Job<TranslateBodyJob>[]),
+      )
+      await boss.work(
+        QUEUES.translateTitle,
+        { batchSize: 1, localConcurrency: 2, pollingIntervalSeconds: 3 },
+        (jobs) => handleTranslateTitle(ctx, jobs as Job<TranslateTitleJob>[]),
+      )
+    }
+    for (const pending of ['assets', 'claim'] as const) {
       if (has(pending)) log.warn(`role ${pending} is not implemented yet; no subscription started`)
     }
 

@@ -42,7 +42,7 @@ const SPECS: Record<QueueName, QueueSpec> = {
     expireInSeconds: 120,
   },
   [QUEUES.translateTitle]: {
-    policy: 'standard',
+    policy: 'short',
     retryLimit: 3,
     retryDelay: 30,
     retryBackoff: true,

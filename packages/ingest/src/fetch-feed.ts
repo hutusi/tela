@@ -21,7 +21,14 @@ import {
 } from './schedule'
 
 export type FetchFeedResult =
-  | { status: 'fetched'; newArticles: number; updatedArticles: number; items: number }
+  | {
+      status: 'fetched'
+      newArticles: number
+      updatedArticles: number
+      items: number
+      newArticleIds: number[]
+      updatedArticleIds: number[]
+    }
   | { status: 'unchanged' }
   | { status: 'error'; error: string; kind: string }
   | { status: 'dead'; error: string }
@@ -119,7 +126,7 @@ function titleFor(item: ParsedItem, excerpt: string): string {
   return 'Untitled'
 }
 
-type UpsertOutcome = 'inserted' | 'updated' | 'unchanged'
+type UpsertOutcome = { kind: 'inserted' | 'updated' | 'unchanged'; id: number | null }
 
 async function upsertArticle(
   db: Db,
@@ -154,6 +161,7 @@ async function upsertArticle(
     .where(and(eq(articles.feedId, feed.id), eq(articles.dedupKey, key)))
 
   if (!existing) {
+    let insertedId: number | null = null
     await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(articles)
@@ -172,18 +180,20 @@ async function upsertArticle(
           readingMinutes: processed.readingMinutes,
         })
         .returning({ id: articles.id })
+      insertedId = (row as { id: number }).id
       await tx.insert(articleContents).values({
-        articleId: (row as { id: number }).id,
+        articleId: insertedId,
         html: processed.html,
         blocks: processed.blocks,
         extractedFrom: 'feed',
       })
     })
-    return 'inserted'
+    return { kind: 'inserted', id: insertedId }
   }
 
-  if (existing.contentHash === processed.contentHash || processed.text.length === 0)
-    return 'unchanged'
+  if (existing.contentHash === processed.contentHash || processed.text.length === 0) {
+    return { kind: 'unchanged', id: existing.id }
+  }
 
   await db.transaction(async (tx) => {
     await tx
@@ -219,7 +229,7 @@ async function upsertArticle(
         },
       })
   })
-  return 'updated'
+  return { kind: 'updated', id: existing.id }
 }
 
 /**
@@ -295,13 +305,15 @@ export async function fetchFeed(
   }
 
   const samples: ContentSample[] = []
-  let newArticles = 0
-  let updatedArticles = 0
+  const newArticleIds: number[] = []
+  const updatedArticleIds: number[] = []
   for (const item of parsed.items) {
     const outcome = await upsertArticle(db, feed, parsed, item, now, samples)
-    if (outcome === 'inserted') newArticles += 1
-    else if (outcome === 'updated') updatedArticles += 1
+    if (outcome.kind === 'inserted' && outcome.id !== null) newArticleIds.push(outcome.id)
+    else if (outcome.kind === 'updated' && outcome.id !== null) updatedArticleIds.push(outcome.id)
   }
+  const newArticles = newArticleIds.length
+  const updatedArticles = updatedArticleIds.length
 
   // Fill in site metadata the feed knows and the site row lacks.
   await db
@@ -364,5 +376,12 @@ export async function fetchFeed(
     throw err
   })
 
-  return { status: 'fetched', newArticles, updatedArticles, items: parsed.items.length }
+  return {
+    status: 'fetched',
+    newArticles,
+    updatedArticles,
+    items: parsed.items.length,
+    newArticleIds,
+    updatedArticleIds,
+  }
 }
