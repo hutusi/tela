@@ -60,10 +60,11 @@ test.describe('reader', () => {
 
   test('the UI switches to Chinese', async ({ page }) => {
     await page.goto('/reading')
-    await page.getByRole('button', { name: '中文' }).click()
+    const switcher = page.getByTestId('locale-switcher')
+    await switcher.getByRole('button', { name: '中文' }).click()
     await expect(page.getByRole('link', { name: '阅读' })).toBeVisible()
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
-    await page.getByRole('button', { name: 'EN' }).click()
+    await switcher.getByRole('button', { name: 'EN' }).click()
     await expect(page.getByRole('link', { name: 'Reading' })).toBeVisible()
   })
 
@@ -95,5 +96,49 @@ test.describe('reader', () => {
     expect(bad.status()).toBe(403)
     const html = await request.get(signedImageUrl(`${FIXTURES}/blog`))
     expect(html.status()).toBe(415)
+  })
+})
+
+test.describe('translation', () => {
+  test('foreign articles show translated titles and open with a side-by-side translation', async ({
+    page,
+  }) => {
+    // The Japanese feed added earlier was fetched by the worker, which queued title translations.
+    await page.goto('/reading')
+    const row = page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first()
+    await expect(row).toBeVisible()
+    // Title translations are queued after the fetch; the mock answers within seconds.
+    await expect(row.locator('h2')).toContainText('en:', { timeout: 30_000 })
+
+    await row.click()
+    const bar = page.getByTestId('translation-bar')
+    await expect(bar).toBeVisible()
+    await expect(bar).toContainText('Written in Japanese')
+    // Requested on open; the mock provider answers within seconds.
+    await expect(bar).toHaveAttribute('data-state', /done|partial/, { timeout: 30_000 })
+    await expect(page.getByTestId('body-translated')).toContainText('en:')
+    await expect(page.getByTestId('body-original')).toBeVisible()
+    await expect(page.getByTestId('article-title')).toContainText('en:')
+
+    await page.getByTestId('mode-trans').click()
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans')
+    await expect(page.getByTestId('body-original')).toHaveCount(0)
+    await page.getByTestId('mode-orig').click()
+    await expect(page.getByTestId('body-translated')).toHaveCount(0)
+    await expect(page.getByTestId('article-title')).not.toContainText('en:')
+  })
+
+  test('switching the reading language changes what gets translated', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('read-in').getByRole('button', { name: 'ZH' }).click()
+    await expect(page.getByTestId('read-in').getByRole('button', { name: 'ZH' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    // An English feed is now foreign.
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page.getByTestId('article-row').first()).toContainText('EN → ZH')
+    await page.getByTestId('read-in').getByRole('button', { name: 'EN' }).click()
+    await expect(page.getByTestId('article-row').first()).not.toContainText('EN → ZH')
   })
 })

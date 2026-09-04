@@ -55,7 +55,7 @@ echo "▸ seed"
 
 echo "▸ worker"
 (cd "$ROOT/apps/worker" && bun run build > "$LOGS/worker-build.log" 2>&1)
-(cd "$ROOT/apps/worker" && WORKER_ROLES=scheduler,fetch,extract WORKER_ALLOW_PRIVATE_HOSTS=1 LOG_LEVEL=info node dist/index.js > "$LOGS/worker.log" 2>&1) &
+(cd "$ROOT/apps/worker" && WORKER_ROLES=scheduler,fetch,extract,translate WORKER_ALLOW_PRIVATE_HOSTS=1 LLM_PROVIDER=mock LOG_LEVEL=info node dist/index.js > "$LOGS/worker.log" 2>&1) &
 pids+=($!)
 
 echo "▸ web build"
