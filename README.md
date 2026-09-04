@@ -59,10 +59,20 @@ DATABASE_URL=... bun run db:migrate       # apply packages/db/migrations
 - **Recommendations**: recommend a post with a note; the note appears on your public profile
   (`/@handle`) and in the author's dashboard next to likes and reader counts.
 - **Settings**: handle, display name, bio, public subscriptions, reading language, OPML export.
+- **Search**: blogs by name, address, or description and posts in your subscriptions by original
+  or translated title (trigram indexes, works for CJK).
+- **Freshness**: adaptive polling with conditional requests, plus WebSub push where a feed
+  advertises a hub.
+- **Reachability**: feeds that keep timing out are fetched through a signed relay in Hong Kong or
+  mainland China and re-probed directly every week.
+- **Operations**: hourly abuse limits on discovery, imports, and claims; a five-minute health
+  check that logs queue depth, dead letters, and overdue feeds; a stacked mobile layout.
 - **UI languages**: English and Simplified Chinese, switchable without a page reload.
 
 ## Status
 
-Milestone 1 is under construction on the `feat/mvp` branch. Phases 1–7 of the roadmap are done;
-phase 8 (hardening: China fetch relay, rate limits, search, observability) remains. See
+Milestone 1 is complete on the `feat/mvp` branch: all eight roadmap phases are implemented and
+tested (unit, database, worker integration, and Playwright end-to-end). What remains before it
+merges to `main` is the deploy-side verification in `docs/OPERATIONS.md`: a Cloudflare preview,
+a real Bailian translation run, and a China smoke test from the relay box. See
 `docs/ARCHITECTURE.md` for the design and the route map.
