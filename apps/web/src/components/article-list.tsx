@@ -11,6 +11,7 @@ type Props = {
   items: ArticleListItem[]
   params: ReadingParams
   title?: string | undefined
+  readingLang: string
   locale: string
   wide: boolean
   pendingFetch?: boolean
@@ -26,6 +27,7 @@ export async function ArticleList({
   items,
   params,
   title,
+  readingLang,
   locale,
   wide,
   pendingFetch = false,
@@ -34,7 +36,7 @@ export async function ArticleList({
   const t = await getTranslations('list')
   const ts = await getTranslations('sidebar')
   const heading = title ?? ts(params.filter)
-  const target = languageBadge(locale)
+  const target = languageBadge(readingLang)
   return (
     <section
       className={`min-w-0 border-r border-line lg:sticky lg:top-14 lg:h-[calc(100vh-56px)] lg:overflow-y-auto ${className}`}
@@ -74,7 +76,9 @@ export async function ArticleList({
       <div className="flex flex-col px-3 pb-10">
         {items.map((a) => {
           const active = a.id === params.articleId
-          const showBadge = foreign(a.sourceLang, locale)
+          const showBadge = foreign(a.sourceLang, readingLang)
+          const shownTitle = showBadge && a.translatedTitle ? a.translatedTitle : a.title
+          const shownExcerpt = showBadge && a.translatedExcerpt ? a.translatedExcerpt : a.excerpt
           return (
             <Link
               key={a.id}
@@ -118,11 +122,11 @@ export async function ArticleList({
                 className={`m-0 font-serif font-medium leading-[1.2] tracking-tight ${wide ? 'text-[19px]' : 'text-[15.5px]'}`}
                 style={{ textWrap: 'pretty' }}
               >
-                {a.title}
+                {shownTitle}
               </h2>
-              {wide && a.excerpt ? (
+              {wide && shownExcerpt ? (
                 <p className="m-0 line-clamp-2 font-serif text-base leading-[1.4] text-ink-2">
-                  {a.excerpt}
+                  {shownExcerpt}
                 </p>
               ) : null}
               {wide ? (

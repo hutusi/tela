@@ -89,5 +89,18 @@
       "fetch_failed": "Could not reach that address.",
       "opml_invalid": "That file is not an OPML document."
     }
+  },
+  "translation": {
+    "writtenIn": "Written in <b>{source}</b>. Translated to {target} by Tela.",
+    "translating": "Translating…",
+    "failed": "Translation failed.",
+    "partial": "{n, plural, one {# paragraph} other {# paragraphs}} could not be translated.",
+    "modes": {
+      "side": "Side by side",
+      "trans": "Translation",
+      "orig": "Original"
+    },
+    "columnTranslated": "{target} · translation",
+    "columnOriginal": "original"
   }
 }

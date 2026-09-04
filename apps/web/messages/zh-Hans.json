@@ -89,5 +89,18 @@
       "fetch_failed": "无法访问该地址。",
       "opml_invalid": "该文件不是 OPML 文档。"
     }
+  },
+  "translation": {
+    "writtenIn": "原文为<b>{source}</b>，由 Tela 翻译成{target}。",
+    "translating": "翻译中…",
+    "failed": "翻译失败。",
+    "partial": "有 {n} 段未能翻译。",
+    "modes": {
+      "side": "对照",
+      "trans": "译文",
+      "orig": "原文"
+    },
+    "columnTranslated": "{target} · 译文",
+    "columnOriginal": "原文"
   }
 }
