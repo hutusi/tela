@@ -8,6 +8,7 @@ export function LocaleSwitcher({ locale }: { locale: string }) {
   return (
     <form
       action={setLocale}
+      data-testid="locale-switcher"
       className="flex rounded-full border border-line bg-white p-0.5 text-[12px] font-medium"
     >
       {UI_LOCALES.map((code) => (

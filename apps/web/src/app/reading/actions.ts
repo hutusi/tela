@@ -1,6 +1,10 @@
 'use server'
 
-import { markAllRead, markRead, toggleLike } from '@tela/db/queries'
+import { articles } from '@tela/db'
+import { markAllRead, markRead, requestBodyTranslation, toggleLike } from '@tela/db/queries'
+import { createJobSender } from '@tela/db/queue'
+import { isReadingLanguage } from '@tela/shared'
+import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth'
 import { getDb } from '@/lib/platform/db'
@@ -34,4 +38,36 @@ export async function toggleLikeAction(
   const result = await toggleLike(await getDb(), user.id, target)
   revalidatePath('/reading')
   return result
+}
+
+/** Ask for a body translation; enqueues translate.body at reader priority when new. */
+export async function requestTranslationAction(
+  articleId: number,
+  targetLang: string,
+): Promise<'requested' | 'in_progress' | 'ready' | 'invalid'> {
+  await requireUser()
+  const target = id(articleId)
+  if (!target || !isReadingLanguage(targetLang)) return 'invalid'
+  const db = await getDb()
+  const [article] = await db
+    .select({ contentHash: articles.contentHash })
+    .from(articles)
+    .where(eq(articles.id, target))
+  if (!article) return 'invalid'
+  const outcome = await requestBodyTranslation(db, target, targetLang, article.contentHash)
+  if (outcome === 'requested') {
+    try {
+      await createJobSender(db).send(
+        'translate.body',
+        { articleId: target, targetLang },
+        { singletonKey: `${target}:${targetLang}`, priority: 10 },
+      )
+    } catch (err) {
+      console.warn('[tela] could not enqueue translate.body', {
+        articleId: target,
+        err: String(err),
+      })
+    }
+  }
+  return outcome
 }

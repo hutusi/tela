@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { signOut } from '@/app/login/actions'
 import { getSessionUser } from '@/lib/auth'
+import { getReadingLang } from '@/lib/reading'
 import { LocaleSwitcher } from './locale-switcher'
+import { ReadInMenu } from './read-in-menu'
 
 export async function AppHeader({ active }: { active?: 'reading' | 'discover' }) {
   const [t, user, locale] = await Promise.all([
@@ -35,6 +37,7 @@ export async function AppHeader({ active }: { active?: 'reading' | 'discover' })
         <span>⌕</span>
         <span>{t('search')}</span>
       </div>
+      {user ? <ReadInMenu readingLang={await getReadingLang()} /> : null}
       <LocaleSwitcher locale={locale} />
       {user ? (
         <form action={signOut} className="flex items-center gap-2">
