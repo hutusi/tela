@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/auth'
+import { safeNext } from '@/lib/redirect'
 
 /** OAuth and magic-link return: exchange the code for a session, then continue. */
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
-  const nextParam = url.searchParams.get('next') ?? '/reading'
-  const next = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/reading'
+  const next = safeNext(url.searchParams.get('next'), '/reading')
   if (code) {
     const client = await supabaseServer()
     if (client) {
