@@ -52,6 +52,8 @@ Tables live in `packages/db/src/schema/`. bigint identity ids on high-volume tab
 | `recommendations` | Public recommendation with an optional note (≤ 500 chars). |
 | `site_claims` | Claim attempts: method (meta / rel_me / dns), token, status. |
 | `llm_usage` | One row per LLM call for budget and cost visibility. Service-only. |
+| `rate_limits` | Fixed-window counters per action and member (`consumeRateLimit`). Service-only. |
+| `websub_subscriptions` | One per feed with a hub: topic, shared secret, status (pending/active/failed), lease. Service-only. |
 
 Row-level security is enabled on every table. Content tables are readable by `anon` and
 `authenticated`; user tables are owner-only via `(select auth.uid())`; writes happen through the
@@ -97,6 +99,12 @@ runtime-agnostic so the web app can reuse discovery; `apps/worker` only wires it
   HMAC-SHA256 over a timestamp and the JSON body and rebuilds a `Response`. See ADR 0008.
 - `region.ts`: a feed flips to the relay on its third consecutive timeout when the control URL
   still answers, and is re-probed from the global region after seven days (`maintenance.daily`).
+- `websub.ts`: WebSub subscriber side. Feeds that advertise a hub (`rel="hub"`, JSON Feed
+  `hubs`) get a subscription request with a per-feed secret; the web callback
+  (`/api/websub/[feedId]`) answers the hub's intent check and, for signed content pings, enqueues
+  a normal `feed.fetch` rather than trusting the pushed body. Leases (10 days) renew from the
+  daily maintenance job two days before they end. Polling continues regardless, so a hub outage
+  only costs freshness.
 - `discoverFeeds(http, url)`: the URL itself, then feeds declared by the page, then well-known
   paths; every result is fetched and parsed before being returned.
 - `ensureFeed` / `ensureSite`: feed rows keyed by `feed_url`, sites keyed by normalized origin;
@@ -145,10 +153,13 @@ declares every queue with its policy, retries, expiry, and a `<name>.dead` dead-
 | Queue | Producer | Role | Notes |
 |---|---|---|---|
 | `scheduler.tick` | cron `* * * * *` | scheduler | enqueues `feed.fetch` for due feeds (singleton per feed) |
-| `maintenance.daily` | cron `17 3 * * *` | scheduler | revives dead feeds once a week |
-| `feed.fetch` | scheduler | fetch | `short` policy, 3 retries with backoff, 120 s expiry |
-| `article.extract` | web (first open) [phase 4] | extract | lazy full-text extraction |
-| `translate.title`, `translate.body` | fetch / web [phase 5] | translate | declared, not consumed yet |
+| `maintenance.daily` | cron `17 3 * * *` | scheduler | revives dead feeds once a week, re-probes relay-routed feeds, prunes rate-limit windows |
+| `health.check` | cron `*/5 * * * *` (and at startup) | scheduler | logs queue depth, dead letters, failures in the last hour, and overdue feeds; `warn` level when something needs a look |
+| `feed.fetch` | scheduler, web (add feed) | fetch | `short` policy, 3 retries with backoff, 120 s expiry |
+| `article.extract` | web (first open) | extract | lazy full-text extraction for summary-only feeds |
+| `translate.title` | fetch (newest first) | translate | batches of 5, 4 in flight; every reading language the article is not in |
+| `translate.body` | web (open), fetch (prefetch) | translate | priority 10 on demand, 1 in the background; singleton per article and language |
+| `websub.subscribe` | fetch (feed advertises a hub), maintenance (renewals) | fetch | asks the hub to push to `/api/websub/<feedId>`; only when `WEBSUB_ENABLED=1` |
 | `site.assets` | fetch [phase 6] | assets | favicons and covers to R2 |
 | `site.claim.verify` | web [phase 6] | claim | claim verification |
 
@@ -189,6 +200,21 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 | `/@[handle]` | ✓ | public profile: sites written, recommendations with notes, subscriptions when public (root `[handle]` segment, only `@…` matches) |
 | `/dashboard` | ✓ | author view: claimed sites, readers, per-post likes and recommendations, notes, translation opt-out |
 | `/settings`, `/settings/opml` | ✓ | handle, display name, bio, public subscriptions, reading language, OPML export |
+| `/search?q=` | ✓ | header search: listed sites (plus the member's private ones) by name, host, or description, and posts in the member's subscriptions by original or translated title |
+
+### Safeguards
+
+- **Abuse limits** (`rate_limits`, `consumeRateLimit` in `@tela/db/queries`): fixed hourly
+  windows per member for feed discovery (30), subscribing (120), OPML import (5), claim start (10)
+  and claim verification (30). Counters live in Postgres because the web app runs as stateless
+  isolates; the worker's daily maintenance job prunes closed windows. Actions answer with a
+  `rate_limited` message rather than an error page.
+- **Search** uses `pg_trgm` GIN indexes on `sites.title`, `sites.home_url` and `articles.title`
+  (migration 0007) so `ILIKE '%term%'` stays an index scan and site matches rank by
+  `similarity()`. Trigrams handle CJK substrings without a tokenizer; PGroonga is the upgrade
+  path when full-text ranking is needed.
+- **Outbound fetches** from the web app (discovery, claim start) use the same HTTP client as the
+  worker: private ranges refused, 10 s timeout, 5 MB cap.
 
 ## Roadmap (milestone 1, branch `feat/mvp`)
 

@@ -27,12 +27,17 @@ Motion: `animate-fade` (250 ms fade + 4px rise) on view changes and popovers.
 
 ## Layout rules
 
-- Header 56px, sticky: logo (serif 26px/600), Reading/Discover pills, search field (md+),
-  locale switcher, avatar (accent circle with initial) and sign-out.
+- Header 56px, sticky: logo (serif 26px/600), Reading/Discover/Dashboard/Settings pills (the
+  pill row scrolls horizontally on narrow screens), search field (md+, submits to `/search`),
+  Read-in menu, locale switcher, avatar (accent circle with initial, links to the profile) and
+  sign-out.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
-  list are sticky and scroll independently. Below `lg` the sidebar is hidden and the list gives way
-  to the reader when an article is open (mobile pass in phase 8).
+  list are sticky and scroll independently. Below `lg` the sidebar is hidden, a `MobileNav`
+  disclosure above the list carries the filters, subscriptions and "Add a feed", and the list gives
+  way to the reader when an article is open (stacked fallback: list → article as a page; the
+  side-by-side body stacks below `xl`). Mobile is a fallback, not a design; `mobile.e2e.ts` keeps
+  it working.
 - List rows: feed swatch (10px), feed name, relative time, `XX → EN` badge for foreign posts,
   accent unread dot, serif title (19px wide / 15.5px slim), two-line excerpt, `min · ♡ · ↗` row.
   Read rows render at 62% opacity; the open row has a white background.

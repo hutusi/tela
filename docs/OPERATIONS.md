@@ -31,6 +31,7 @@ implements them (see `docs/ARCHITECTURE.md`).
 | `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_ASSETS_URL` | web | Public origin (claim snippets) and the assets bucket's public base URL |
 | `RELAY_URL`, `RELAY_SECRET` | worker (fetch/claim/assets roles) | Origin of the relay role and the shared signing secret; unset `RELAY_URL` = no relay, feeds never change region |
 | `RELAY_SECRET`, `RELAY_SECRET_PREVIOUS`, `RELAY_PORT` | worker (`relay` role) | Accepted signing secrets (previous one during rotation) and the listen port (8787) |
+| `WEBSUB_ENABLED` | worker | `1` subscribes at feeds' WebSub hubs (needs `PUBLIC_URL` reachable from the internet); default `0` |
 | `RELAY_CONTROL_URL` | worker | Fetched before flipping a feed to the relay; if it fails too, the worker's own network is the problem (default: Cloudflare's trace endpoint) |
 | `WORKER_USER_AGENT` | worker | Sent on every fetch; keep a contact URL in it |
 | `FETCH_TIMEOUT_MS`, `FETCH_CONCURRENCY`, `SCHEDULER_BATCH` | worker | Per-request timeout (20 s), parallel fetches per process (4), max feeds enqueued per tick (500) |
@@ -110,6 +111,28 @@ First run: `cd apps/web && bunx playwright install chromium`.
 - **Inspect the queue**: `select name, policy from pgboss.queue`; failed jobs land in
   `<queue>.dead` and stay for 30 days.
 - The queue schema (`pgboss`) is created by the worker on first start; migrations do not manage it.
+- **Health check**: every five minutes (and at startup) the scheduler role logs one `health check`
+  line with per-queue counts (`queued`, `active`, `retrying`, `done1h`, `failed1h`, `oldestSec`),
+  feed counts (`active`, `paused`, `dead`, `overdue`, `relayed`) and a `problems` list. It is
+  `warn` level when a dead-letter queue holds jobs, a queue failed jobs in the last hour, the
+  oldest waiting job is older than ten minutes, or active feeds are more than fifteen minutes
+  overdue. Alert on `level=warn msg="health check"`; the web's `/api/health` covers the app.
+- **Alert playbook**: `*.dead` growing → `select data, output from pgboss.job where name = '<queue>.dead'
+  order by created_on desc limit 20`, fix the cause, then re-send with `boss.send` or delete the
+  rows; `overdue` feeds → the fetch role is down or too slow (raise `FETCH_CONCURRENCY` or add a
+  fetch instance); `oldestSec` high on `translate.body` → the provider is slow or the daily budget
+  is exhausted (`LLM_DAILY_BUDGET_TOKENS`).
+
+### WebSub
+- Turn on with `WEBSUB_ENABLED=1` on the fetch/scheduler workers once `PUBLIC_URL` is the real
+  origin; hubs verify by calling `<PUBLIC_URL>/api/websub/<feedId>`.
+- **State**: `select feed_id, status, lease_until, last_error from websub_subscriptions order by
+  lease_until`. `failed` rows retry weekly, `pending` ones that were never verified retry daily,
+  `active` leases renew two days before they end.
+- **Force a resubscribe**: `delete from websub_subscriptions where feed_id = …`; the next fetch of
+  that feed requests a new subscription.
+- Pings only enqueue a fetch, so a misbehaving hub cannot inject content; a bad signature is a 403
+  in the web logs.
 
 ### Relay (China fetch)
 - **Deploy**: run the worker image with `WORKER_ROLES=relay RELAY_SECRET=<32+ random chars>` on a
@@ -127,6 +150,15 @@ First run: `cd apps/web && bunx playwright install chromium`.
   minutes, so keep both boxes' clocks in sync (NTP).
 - **It is not an open proxy**: only signed `POST /fetch` requests are served, private ranges are
   refused, redirects are not followed, and the body is capped at 5 MB.
+
+### Web
+- **Rate limits**: rules live in `RATE_LIMITS` (`packages/db/src/queries/rate-limit.ts`); change a
+  number and redeploy. To lift a member's block early: `delete from rate_limits where key like
+  'discover:<user id>%'` (keys are `<action>:<user id>`). Closed windows are pruned daily by the
+  worker's maintenance job; the table is service-role only.
+- **Search** needs the `pg_trgm` extension (migration 0007 creates it and the GIN indexes). On
+  Supabase the extension is preinstalled; on a fresh Postgres install the contrib package. If
+  search gets slow, `reindex index concurrently articles_title_trgm_idx` after large backfills.
 
 ### Translation
 - **Cost check**: `select date_trunc('day', created_at) d, model, sum(input_tokens) i, sum(output_tokens) o, count(*) from llm_usage group by 1, 2 order by 1 desc`.
