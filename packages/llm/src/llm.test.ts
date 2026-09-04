@@ -1,0 +1,149 @@
+import { describe, expect, test } from 'bun:test'
+import { chunkBlocks, estimateTokens } from './chunk'
+import { createMockTranslator } from './mock'
+import { configFromEnv } from './providers'
+import { translateBlocks } from './translate'
+import { parseJsonReply } from './translator'
+import { validateTranslation } from './validate'
+
+describe('chunking', () => {
+  test('estimates CJK as one token per character and Latin as four characters per token', () => {
+    expect(estimateTokens('中文四个字')).toBe(5)
+    expect(estimateTokens('twelve chars')).toBe(3)
+  })
+
+  test('groups consecutive blocks and never splits an oversized block', () => {
+    const blocks = [
+      { id: 'a', text: 'x'.repeat(400) }, // 100 tokens
+      { id: 'b', text: 'x'.repeat(400) },
+      { id: 'c', text: 'x'.repeat(2000) }, // 500 tokens, alone
+      { id: 'd', text: 'short' },
+    ]
+    expect(chunkBlocks(blocks, 250).map((c) => c.map((b) => b.id))).toEqual([
+      ['a', 'b'],
+      ['c'],
+      ['d'],
+    ])
+  })
+})
+
+describe('validateTranslation', () => {
+  const src = 'Click <g1>here</g1> to read the <x1/> documentation, please.'
+  test('accepts a faithful translation', () => {
+    expect(validateTranslation(src, '点击<g1>这里</g1>阅读 <x1/> 文档。').ok).toBe(true)
+  })
+  test('rejects lost placeholders, empties, wild lengths, and echoes', () => {
+    expect(validateTranslation(src, '点击这里阅读文档。')).toMatchObject({ ok: false })
+    expect(validateTranslation(src, '<g1></g1><x1/>')).toMatchObject({
+      ok: false,
+      reason: 'empty translation',
+    })
+    expect(validateTranslation(src, `<g1>x</g1><x1/>${'很'.repeat(500)}`)).toMatchObject({
+      ok: false,
+    })
+    expect(validateTranslation(src, src)).toMatchObject({
+      ok: false,
+      reason: 'identical to source',
+    })
+  })
+  test('short blocks may stay identical (names, labels)', () => {
+    expect(validateTranslation('GitHub', 'GitHub').ok).toBe(true)
+  })
+})
+
+describe('parseJsonReply', () => {
+  test('handles fences and surrounding prose', () => {
+    expect(parseJsonReply('```json\n{"a":1}\n```')).toEqual({ a: 1 })
+    expect(parseJsonReply('Here you go: {"a":[1,2]} hope it helps')).toEqual({ a: [1, 2] })
+    expect(() => parseJsonReply('no json here')).toThrow()
+  })
+})
+
+describe('translateBlocks with the mock translator', () => {
+  const blocks = [
+    { id: 'b1', text: 'On Calle de Toledo there is a <g1>bakery</g1> open since 1928.' },
+    { id: 'b2', text: 'The bread has not changed at all in a century.' },
+    { id: 'b3', text: 'See <x1/> for the recipe and the history.' },
+  ]
+
+  test('translates every block and records usage', async () => {
+    const calls: Parameters<ReturnType<typeof createMockTranslator>['translate']>[0][] = []
+    const out = await translateBlocks(createMockTranslator({ calls }), {
+      blocks,
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+      context: { title: 'The bakery' },
+    })
+    expect(out.failed).toEqual([])
+    expect(out.translated.get('b1')).toBe(
+      'zh-Hans:On Calle de Toledo there is a <g1>zh-Hans:bakery</g1>zh-Hans: open since 1928.',
+    )
+    expect(out.translated.get('b3')).toBe(
+      'zh-Hans:See <x1/>zh-Hans: for the recipe and the history.',
+    )
+    expect(out.usage).toHaveLength(1)
+    expect(calls[0]?.context?.title).toBe('The bakery')
+    expect(calls[0]?.strict).toBe(false)
+  })
+
+  test('retries invalid blocks once in strict mode and reports the rest', async () => {
+    const calls: Parameters<ReturnType<typeof createMockTranslator>['translate']>[0][] = []
+    const out = await translateBlocks(
+      createMockTranslator({ calls, failIds: new Set(['b1']), dropIds: new Set(['b2']) }),
+      {
+        blocks,
+        sourceLang: 'en',
+        targetLang: 'zh-Hans',
+      },
+    )
+    expect(out.translated.has('b3')).toBe(true)
+    expect(out.failed.map((f) => f.id).sort()).toEqual(['b1', 'b2'])
+    expect(calls).toHaveLength(2)
+    expect(calls[1]?.strict).toBe(true)
+    expect(calls[1]?.blocks.map((b) => b.id).sort()).toEqual(['b1', 'b2'])
+  })
+
+  test('carries previous translations into the next chunk as context', async () => {
+    const calls: Parameters<ReturnType<typeof createMockTranslator>['translate']>[0][] = []
+    const out = await translateBlocks(createMockTranslator({ calls }), {
+      blocks,
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+      maxTokensPerChunk: 20,
+    })
+    expect(out.failed).toEqual([])
+    expect(calls.length).toBeGreaterThan(1)
+    expect(calls[1]?.context?.previous?.length).toBeGreaterThan(0)
+  })
+
+  test('throws when the provider fails for every chunk', async () => {
+    await expect(
+      translateBlocks(createMockTranslator({ fail: true }), {
+        blocks,
+        sourceLang: 'en',
+        targetLang: 'zh-Hans',
+      }),
+    ).rejects.toThrow(/mock provider failure/)
+  })
+})
+
+describe('configFromEnv', () => {
+  test('falls back to the mock without keys and honors overrides', () => {
+    expect(configFromEnv({})).toEqual({ provider: 'mock', model: 'mock' })
+    expect(configFromEnv({ LLM_PROVIDER: 'bailian', BAILIAN_API_KEY: 'k' })).toMatchObject({
+      provider: 'bailian',
+      model: 'glm-5.2',
+      baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    })
+    expect(
+      configFromEnv({
+        LLM_PROVIDER: 'anthropic',
+        ANTHROPIC_API_KEY: 'k',
+        LLM_MODEL: 'claude-sonnet-5',
+      }),
+    ).toMatchObject({
+      provider: 'anthropic',
+      model: 'claude-sonnet-5',
+    })
+  })
+})
