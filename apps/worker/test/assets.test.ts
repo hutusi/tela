@@ -95,7 +95,7 @@ describe('processSiteAssets', () => {
     expect((await stat(join(dir, row?.coverKey as string))).size).toBeGreaterThan(0)
   })
 
-  test('stamps the site even when nothing is found or no store is configured', async () => {
+  test('stamps the site when nothing is found, but not while no store is configured', async () => {
     const [site] = await t.db.insert(sites).values({ homeUrl: server.origin }).returning()
     server.text('/', '<html></html>', { headers: { 'content-type': 'text/html' } })
     const none = await processSiteAssets({ db: t.db, http, store: createFsStore(dir) }, site!.id)
@@ -109,6 +109,6 @@ describe('processSiteAssets', () => {
       status: 'skipped',
     })
     ;[row] = await t.db.select().from(sites).where(eq(sites.id, site!.id))
-    expect(row?.assetsCheckedAt).not.toBeNull()
+    expect(row?.assetsCheckedAt).toBeNull()
   })
 })

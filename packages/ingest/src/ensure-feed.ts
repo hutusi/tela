@@ -1,4 +1,4 @@
-import { normalizeOrigin, type ParsedFeed } from '@tela/content'
+import { normalizeLangTag, normalizeOrigin, type ParsedFeed } from '@tela/content'
 import { type Db, feeds, sites } from '@tela/db'
 import { eq, sql } from 'drizzle-orm'
 
@@ -20,7 +20,7 @@ export async function ensureSite(db: Db, input: EnsureSiteInput): Promise<{ site
       homeUrl: origin,
       title: input.title ?? null,
       description: input.description ?? null,
-      primaryLang: input.language ?? null,
+      primaryLang: normalizeLangTag(input.language),
     })
     .onConflictDoUpdate({
       target: sites.homeUrl,

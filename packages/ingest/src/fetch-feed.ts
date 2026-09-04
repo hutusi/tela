@@ -1,6 +1,7 @@
 import {
   dedupKey,
   FeedParseError,
+  normalizeLangTag,
   type ParsedFeed,
   type ParsedItem,
   parseFeedText,
@@ -342,13 +343,21 @@ export async function fetchFeed(
   const newArticles = newArticleIds.length
   const updatedArticles = updatedArticleIds.length
 
-  // Fill in site metadata the feed knows and the site row lacks.
+  // Fill in site metadata the feed knows and the site row lacks. The language comes from what
+  // the site's articles are written in; feeds declare "zh", "en-us", or nothing at all, so the
+  // declared tag is only a normalized fallback while no article has been detected yet.
+  const [dominant] = await db.execute<{ lang: string | null }>(sql`
+    select mode() within group (order by a.source_lang) as lang
+    from articles a join feeds f on f.id = a.feed_id
+    where f.site_id = ${feed.siteId} and a.source_lang is not null
+  `)
+  const primaryLang = dominant?.lang ?? normalizeLangTag(parsed.language)
   await db
     .update(sites)
     .set({
       title: sql`coalesce(${sites.title}, ${parsed.title})`,
       description: sql`coalesce(${sites.description}, ${parsed.description})`,
-      primaryLang: sql`coalesce(${sites.primaryLang}, ${parsed.language})`,
+      primaryLang: sql`coalesce(${primaryLang}::text, ${sites.primaryLang})`,
     })
     .where(eq(sites.id, feed.siteId))
 

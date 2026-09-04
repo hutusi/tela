@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { parseFeedText } from '@tela/content'
 import { articleContents, articles, feeds, sites } from '@tela/db'
 import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
 import { eq } from 'drizzle-orm'
@@ -224,5 +225,47 @@ describe('fetchFeed', () => {
     const keys = (await t.db.select({ k: articles.dedupKey }).from(articles)).map((r) => r.k).sort()
     expect(keys[0]).toMatch(/^h:/)
     expect(keys[1]).toBe(`u:${server.url('/p/1').replace('http://', 'https://')}`)
+  })
+})
+
+describe('site language', () => {
+  test('follows the detected article language and normalizes declared tags', async () => {
+    // Declares en-US; the articles are English either way.
+    server.text(
+      '/a.xml',
+      threeItems().replace('<language>en</language>', '<language>en-US</language>'),
+    )
+    const a = await ensureFeed(t.db, { feedUrl: server.url('/a.xml') })
+    await fetchFeed(t.db, http, a.feedId, opts)
+    let [site] = await t.db.select().from(sites).where(eq(sites.id, a.siteId))
+    expect(site?.primaryLang).toBe('en')
+
+    // Declares zh, but the posts are English: what readers see wins. Its own home link gives
+    // it its own site, so the first feed's articles do not count here.
+    const bXml = threeItems()
+      .replace(server.url('/'), 'https://b.example/')
+      .replace('<language>en</language>', '<language>zh</language>')
+    server.text('/b.xml', bXml)
+    const b = await ensureFeed(t.db, {
+      feedUrl: server.url('/b.xml'),
+      parsed: await parseFeedText(bXml, server.url('/b.xml')),
+    })
+    await fetchFeed(t.db, http, b.feedId, opts)
+    ;[site] = await t.db.select().from(sites).where(eq(sites.id, b.siteId))
+    expect(site?.primaryLang).toBe('en')
+
+    // No articles yet: the declared tag, normalized.
+    const cXml = rss({ link: 'https://c.example/', items: [] }).replace(
+      '<language>en</language>',
+      '<language>zh-CN</language>',
+    )
+    server.text('/c.xml', cXml)
+    const c = await ensureFeed(t.db, {
+      feedUrl: server.url('/c.xml'),
+      parsed: await parseFeedText(cXml, server.url('/c.xml')),
+    })
+    await fetchFeed(t.db, http, c.feedId, opts)
+    ;[site] = await t.db.select().from(sites).where(eq(sites.id, c.siteId))
+    expect(site?.primaryLang).toBe('zh-Hans')
   })
 })

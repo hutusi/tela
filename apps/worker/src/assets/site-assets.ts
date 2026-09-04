@@ -119,7 +119,7 @@ export async function processSiteAssets(deps: AssetDeps, siteId: number): Promis
     deps.db.update(sites).set({ assetsCheckedAt: new Date() }).where(eq(sites.id, siteId))
   if (!site) return { status: 'skipped', favicon: false, cover: false, reason: 'site not found' }
   if (!deps.store) {
-    await stamp()
+    // Not stamped: once a store is configured the next fetch queues the site again.
     return { status: 'skipped', favicon: false, cover: false, reason: 'no asset store configured' }
   }
 
