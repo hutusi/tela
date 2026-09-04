@@ -20,6 +20,12 @@ implements them (see `docs/ARCHITECTURE.md`).
 | `DATABASE_URL` | worker, web (local / non-Cloudflare) | Postgres connection string. On Cloudflare the `HYPERDRIVE` binding replaces it. |
 | `WORKER_ROLES` | worker | Comma list of roles; default is every role except `relay` |
 | `LOG_LEVEL` | worker | `debug` / `info` / `warn` / `error` |
+| `LLM_PROVIDER` | worker | `bailian` (default), `anthropic`, or `mock`; without the matching key the mock is used |
+| `LLM_MODEL` | worker | Model id: `glm-5.2` (Bailian default), `claude-opus-5` (Anthropic default) |
+| `BAILIAN_API_KEY`, `BAILIAN_BASE_URL` | worker | Aliyun Bailian key; base URL defaults to `https://dashscope.aliyuncs.com/compatible-mode/v1` (use the workspace/region host from the console when required) |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` | worker | Anthropic key; base URL optional |
+| `LLM_JSON_MODE` | worker | `text` (parse JSON from the reply; default for Bailian) or `schema` (structured output; default for Anthropic) |
+| `LLM_DAILY_BUDGET_TOKENS` | worker | Daily cap for background translation; `0` = unlimited; on-demand requests always run |
 | `WORKER_USER_AGENT` | worker | Sent on every fetch; keep a contact URL in it |
 | `FETCH_TIMEOUT_MS`, `FETCH_CONCURRENCY`, `SCHEDULER_BATCH` | worker | Per-request timeout (20 s), parallel fetches per process (4), max feeds enqueued per tick (500) |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web | Supabase Auth (cookies via `@supabase/ssr`) |
@@ -89,7 +95,20 @@ First run: `cd apps/web && bunx playwright install chromium`.
   `<queue>.dead` and stay for 30 days.
 - The queue schema (`pgboss`) is created by the worker on first start; migrations do not manage it.
 
+### Translation
+- **Cost check**: `select date_trunc('day', created_at) d, model, sum(input_tokens) i, sum(output_tokens) o, count(*) from llm_usage group by 1, 2 order by 1 desc`.
+- **Budget**: set `LLM_DAILY_BUDGET_TOKENS` on the worker; background title work stops for the
+  day once exceeded, reader-initiated body requests do not.
+- **Switch provider**: change `LLM_PROVIDER`/`LLM_MODEL` and the key; restart the worker. Cached
+  translations keep their `model` label, so old and new output can be compared.
+- **Force a retranslation** of an article: `delete from article_translations where article_id = …`
+  (the block cache stays; use `delete from translations where model = '…'` to drop a model's output).
+- **Add a reading language**: append it to `READING_LANGUAGES` in `packages/shared`, add the
+  name to `LANGUAGE_NAMES`, and (if it is also a UI locale) a message catalog.
+- **Spot-check quality**: `LLM_PROVIDER=bailian BAILIAN_API_KEY=… bun run --filter @tela/llm spot-check`
+  translates a few fixture paragraphs and prints them side by side.
+
 ### Later
-- Rotating the image-proxy signing key (phase 4)
+- Rotating the image-proxy signing key: set a new `IMAGE_PROXY_SECRET`; old proxy URLs stop
+  verifying and pages regenerate them on the next render.
 - Rotating the relay secret (phase 8)
-- Adjusting the LLM budget, adding a reading language (phase 5)
