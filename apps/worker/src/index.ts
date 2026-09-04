@@ -7,6 +7,7 @@ import {
   createTranslatorFromEnv,
   type WorkerContext,
 } from './context'
+import { logHealth } from './health'
 import { handleSiteAssets, handleSiteClaimVerify } from './jobs/claims-and-assets'
 import { handleArticleExtract } from './jobs/extract-article'
 import { handleFeedFetch } from './jobs/fetch-feed'
@@ -63,8 +64,13 @@ async function main() {
       await boss.work(QUEUES.maintenanceDaily, { pollingIntervalSeconds: 30 }, async () =>
         maintenanceDaily(ctx),
       )
+      await boss.schedule(QUEUES.healthCheck, '*/5 * * * *', {}, {})
+      await boss.work(QUEUES.healthCheck, { pollingIntervalSeconds: 30 }, async () => {
+        await logHealth(db)
+      })
       // Run one tick at startup so a fresh deployment does not wait for the next minute.
       await schedulerTick(ctx)
+      await logHealth(db)
     }
     if (has('fetch')) {
       await boss.work(
