@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import {
   countTotals,
   getArticle,
@@ -196,6 +196,27 @@ describe('reader queries', () => {
     expect((await countTotals(t.db, userB)).liked).toBe(1)
     expect((await listArticles(t.db, userA)).find((a) => a.id === id)?.isRead).toBe(true)
     expect((await listArticles(t.db, userA, { filter: 'liked' })).length).toBe(0)
+  })
+
+  test('concurrent toggles keep like_count equal to the number of likes', async () => {
+    const id = s.byTitle.Fresh as number
+    // Three toggles by one reader end liked; two by another end unliked. Whatever the
+    // interleaving, the counter must match the rows.
+    await Promise.all([
+      toggleLike(t.db, userA, id),
+      toggleLike(t.db, userA, id),
+      toggleLike(t.db, userA, id),
+    ])
+    await Promise.all([toggleLike(t.db, userB, id), toggleLike(t.db, userB, id)])
+    const [likes] = await t.db.execute<{ count: string }>(
+      sql`select count(*)::text as count from user_article_states where article_id = ${id} and liked_at is not null`,
+    )
+    const [article] = await t.db
+      .select({ likeCount: articles.likeCount })
+      .from(articles)
+      .where(eq(articles.id, id))
+    expect(Number(likes?.count)).toBe(1)
+    expect(article?.likeCount).toBe(1)
   })
 
   test('unsubscribe removes the feed from lists but keeps article access', async () => {

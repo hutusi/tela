@@ -311,28 +311,31 @@ export async function markAllRead(db: Db, userId: string, feedId?: number | null
   })
 }
 
-/** Toggle a like; keeps articles.like_count in step. Returns the new state. */
+/**
+ * Toggle a like; keeps articles.like_count in step. Returns the new state.
+ *
+ * One upsert flips `liked_at` and reports the outcome, so two concurrent toggles serialise on
+ * the row lock and the counter moves by exactly the transition that happened, instead of both
+ * reading the same stale state and double-counting.
+ */
 export async function toggleLike(
   db: Db,
   userId: string,
   articleId: number,
 ): Promise<{ liked: boolean; likeCount: number }> {
   return db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({ likedAt: userArticleStates.likedAt })
-      .from(userArticleStates)
-      .where(and(eq(userArticleStates.userId, userId), eq(userArticleStates.articleId, articleId)))
-    const liked = !(existing?.likedAt != null)
-    await tx
+    const [state] = await tx
       .insert(userArticleStates)
-      .values({ userId, articleId, likedAt: liked ? new Date() : null, readAt: new Date() })
+      .values({ userId, articleId, likedAt: new Date(), readAt: new Date() })
       .onConflictDoUpdate({
         target: [userArticleStates.userId, userArticleStates.articleId],
         set: {
-          likedAt: liked ? new Date() : null,
+          likedAt: sql`case when ${userArticleStates.likedAt} is null then now() else null end`,
           readAt: sql`coalesce(${userArticleStates.readAt}, now())`,
         },
       })
+      .returning({ likedAt: userArticleStates.likedAt })
+    const liked = state?.likedAt != null
     const [row] = await tx
       .update(articles)
       .set({ likeCount: sql`greatest(0, ${articles.likeCount} + ${liked ? 1 : -1})` })
