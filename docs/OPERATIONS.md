@@ -55,17 +55,30 @@ implements them (see `docs/ARCHITECTURE.md`).
 ### Cloudflare
 ```sh
 cd apps/web
-bunx wrangler login
-bunx wrangler hyperdrive create tela-db --connection-string="<supabase direct connection string>"
-# paste the returned id into wrangler.jsonc → hyperdrive[0].id
+bunx wrangler login       # from a real terminal; the browser flow needs a TTY
+bunx wrangler hyperdrive create tela-db --connection-string="<supabase connection string>"
+# paste the returned id into wrangler.jsonc → hyperdrive[0].id (ids are not secrets)
+bunx wrangler secret put IMAGE_PROXY_SECRET
 bun run deploy            # opennextjs-cloudflare build && deploy
 ```
-Then add the custom domain under Workers & Pages → tela-web → Settings → Domains.
+- `NEXT_PUBLIC_*` values are inlined at build time: put them in `apps/web/.env.production`
+  (gitignored) so `bun run deploy` and CI builds see them: `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_ASSETS_URL`.
+- Hyperdrive needs an IPv4 origin. Until the Supabase IPv4 add-on is on, point it at the
+  *session* pooler (`postgres.<ref>@aws-0-<region>.pooler.supabase.com:5432`, prepared statements
+  work in session mode); afterwards recreate it with the direct connection, which is what
+  Cloudflare recommends for Supabase. Hyperdrive's own endpoint is plain TCP: the client must
+  not ask for TLS there (`sslModeFor` in `@tela/db` handles `*.hyperdrive.local`).
+- The first request after a deploy can wait up to the driver's 30 s connect timeout while
+  Hyperdrive opens its origin connection; `/api/health` reports `databaseMs` and the error text.
+- Then add the custom domain under Workers & Pages → tela-web → Settings → Domains.
 
-R2 for favicons and covers: create a bucket (`tela-assets`), connect a custom domain
-(`assets.<domain>`) under the bucket's settings, create an R2 API token with object read/write,
-and set the `R2_*` variables on the worker and `NEXT_PUBLIC_ASSETS_URL=https://assets.<domain>` on
-the web app.
+R2 for favicons and covers: `bunx wrangler r2 bucket create tela-assets --location apac`, then
+either connect a custom domain (`assets.<domain>`) under the bucket's settings or, before a
+domain exists, `bunx wrangler r2 bucket dev-url enable tela-assets` (rate-limited, fine for
+previews). Create an R2 API token with object read/write in the dashboard (R2 → Manage API
+tokens; wrangler cannot), set the `R2_*` variables on the worker, and
+`NEXT_PUBLIC_ASSETS_URL` on the web app.
 
 ### Curation
 - Feature a site: `update sites set listing = 'featured' where id = …`; hide one: `'rejected'`.
