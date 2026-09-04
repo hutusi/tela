@@ -25,6 +25,8 @@ type Props = {
   /** Present when the article is not in the reading language. */
   translation: ReaderTranslation | null
   recommendation: { note: string | null } | null
+  /** Full text is being fetched for a summary-only article: say so and poll. */
+  extracting: boolean
 }
 
 function Body({ html, lang, testId }: { html: string; lang?: string | undefined; testId: string }) {
@@ -46,6 +48,7 @@ export async function Reader({
   locale,
   translation,
   recommendation,
+  extracting,
 }: Props) {
   const t = await getTranslations('reader')
   const tt = await getTranslations('translation')
@@ -67,10 +70,15 @@ export async function Reader({
       data-mode={mode}
     >
       <MarkRead articleId={article.id} isRead={article.isRead} />
+      {extracting ? (
+        <p className="mx-auto mb-4 max-w-[1240px] text-[13px] text-muted" data-testid="extracting">
+          {t('fetchingFullText')}
+        </p>
+      ) : null}
       {needsRequest ? (
         <RequestTranslation articleId={article.id} targetLang={translation.targetLang} />
       ) : null}
-      {pending ? <AutoRefresh intervalMs={2000} maxMs={180_000} /> : null}
+      {pending || extracting ? <AutoRefresh intervalMs={2000} maxMs={180_000} /> : null}
 
       <div className="mx-auto mb-7 flex max-w-[1240px] flex-wrap items-center justify-between gap-2">
         <Link

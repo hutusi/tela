@@ -78,6 +78,13 @@
       "when": 1788556837195,
       "tag": "0010_read_only_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788559302571,
+      "tag": "0011_article_extract_checked",
+      "breakpoints": true
     }
   ]
 }

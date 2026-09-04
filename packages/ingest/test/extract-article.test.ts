@@ -75,6 +75,7 @@ describe('extractArticleContent', () => {
       .where(eq(articleContents.articleId, article.id))
     expect(contents?.extractedFrom).toBe('readability')
     expect(contents?.html).toContain('Paragraph 6.')
+    expect(updated?.extractCheckedAt).not.toBeNull()
   })
 
   test('keeps the feed content when the page has nothing better', async () => {
@@ -86,6 +87,8 @@ describe('extractArticleContent', () => {
     expect(await extractArticleContent(t.db, http, article.id)).toMatchObject({ status: 'failed' })
     const [same] = await t.db.select().from(articles).where(eq(articles.id, article.id))
     expect(same?.contentVersion).toBe(1)
+    // Stamped anyway, so the reader does not queue this article again on every open.
+    expect(same?.extractCheckedAt).not.toBeNull()
   })
 
   test('reports fetch failures', async () => {

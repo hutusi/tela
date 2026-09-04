@@ -11,7 +11,8 @@ export type ExtractResult =
 
 /**
  * Fetch an article's page and replace summary-only content with the extracted body.
- * Keeps the existing content when extraction is not clearly better.
+ * Keeps the existing content when extraction is not clearly better. Every attempt stamps
+ * `articles.extract_checked_at`, so the reader queues extraction for an article once.
  */
 export async function extractArticleContent(
   db: Db,
@@ -30,6 +31,25 @@ export async function extractArticleContent(
     .leftJoin(articleContents, eq(articleContents.articleId, articles.id))
     .where(eq(articles.id, articleId))
   if (!row) return { status: 'skipped', reason: 'article not found' }
+  const { article } = row
+  try {
+    return await attempt(db, http, row)
+  } finally {
+    await db
+      .update(articles)
+      .set({ extractCheckedAt: new Date() })
+      .where(eq(articles.id, article.id))
+  }
+}
+
+type ArticleRow = {
+  article: typeof articles.$inferSelect
+  feed: { feedUrl: string; fetchRegion: 'global' | 'cn'; language: string | null }
+  contentsLength: string | null
+  blocks: (typeof articleContents.$inferSelect)['blocks'] | null
+}
+
+async function attempt(db: Db, http: HttpClient, row: ArticleRow): Promise<ExtractResult> {
   const { article } = row
   if (!article.url) return { status: 'skipped', reason: 'article has no url' }
 

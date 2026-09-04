@@ -88,6 +88,26 @@ test.describe('reader', () => {
     await expect(page.getByTestId('opml-result')).toContainText(/Imported \d+ feed/)
   })
 
+  test('a summary-only feed gets its full text fetched on first open', async ({ page }) => {
+    await page.goto('/add')
+    await page.getByTestId('feed-url').fill(`${FIXTURES}/summary.xml`)
+    await page.getByTestId('find-feeds').click()
+    const candidates = page.getByTestId('feed-candidates')
+    await expect(candidates).toContainText('Summary Fixture')
+    await candidates.getByTestId('subscribe').first().click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+/)
+    // The worker fetches the feed and learns from its three items that it is summary-only.
+    const row = page.getByTestId('article-row').first()
+    await expect(row).toBeVisible({ timeout: 45_000 })
+    await row.click()
+    await expect(page).toHaveURL(/article=\d+/)
+    // Opening queues article.extract; the reader polls until the page body replaces the teaser.
+    await expect(page.locator('.article-body')).toContainText('Full paragraph 8', {
+      timeout: 45_000,
+    })
+    await expect(page.getByTestId('extracting')).toHaveCount(0)
+  })
+
   test('the image proxy serves signed URLs and rejects tampering', async ({ request }) => {
     const good = await request.get(signedImageUrl(`${FIXTURES}/pixel.png`))
     expect(good.status()).toBe(200)

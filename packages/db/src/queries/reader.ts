@@ -198,6 +198,11 @@ export type ArticleDetail = ArticleListItem & {
   blocks: (typeof articleContents.$inferSelect)['blocks']
   contentVersion: number
   contentHash: string | null
+  /** The feed's learned content mode; `summary` feeds get lazy full-text extraction. */
+  contentMode: (typeof feeds.$inferSelect)['contentMode']
+  extractedFrom: (typeof articleContents.$inferSelect)['extractedFrom']
+  /** Null until extraction has been attempted once (see article.extract). */
+  extractCheckedAt: Date | null
   site: {
     id: number
     title: string | null
@@ -267,6 +272,9 @@ export async function getArticle(
     blocks: row.contents?.blocks ?? [],
     contentVersion: a.contentVersion,
     contentHash: a.contentHash,
+    contentMode: row.feed.contentMode,
+    extractedFrom: row.contents?.extractedFrom ?? 'feed',
+    extractCheckedAt: a.extractCheckedAt,
     site: {
       id: row.site.id,
       title: row.site.title,

@@ -8,9 +8,11 @@ const SECRET = 'dev-image-proxy-secret'
 beforeEach(() => {
   process.env.TELA_DEV_AUTH = '1'
   delete process.env.IMAGE_PROXY_SECRET
+  delete process.env.TELA_ALLOW_PRIVATE_HOSTS
 })
 afterEach(() => {
   delete process.env.TELA_DEV_AUTH
+  delete process.env.TELA_ALLOW_PRIVATE_HOSTS
 })
 
 async function get(target: string): Promise<Response> {
@@ -29,6 +31,12 @@ describe('GET /img', () => {
     ]) {
       expect({ target, status: (await get(target)).status }).toEqual({ target, status: 403 })
     }
+  })
+
+  test('lets the tests-only flag reach a fixture server on a private host', async () => {
+    process.env.TELA_ALLOW_PRIVATE_HOSTS = '1'
+    // Nothing listens on this port, so the fetch fails, but the host check no longer refuses it.
+    expect((await get('http://127.0.0.1:9/x.png')).status).toBe(502)
   })
 
   test('refuses a bad signature', async () => {

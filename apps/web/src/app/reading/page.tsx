@@ -17,6 +17,7 @@ import { Sidebar } from '@/components/sidebar'
 import { renderArticleHtml } from '@/lib/article-html'
 import { requireUser } from '@/lib/auth'
 import { getDb } from '@/lib/platform/db'
+import { enqueueArticleExtract } from '@/lib/queue'
 import { getReadingLang } from '@/lib/reading'
 import { parseReadingParams } from './href'
 
@@ -46,6 +47,14 @@ export default async function ReadingPage({ searchParams }: Props) {
     params.articleId ? getArticle(db, user.id, params.articleId) : Promise.resolve(null),
     getLocale(),
   ])
+  // A summary-only feed's article gets its full text fetched on first open, once: the worker
+  // stamps the article whatever happens, and the reader polls until then.
+  const extracting =
+    article !== null &&
+    article.contentMode === 'summary' &&
+    article.extractedFrom === 'feed' &&
+    article.extractCheckedAt === null
+  if (article && extracting) await enqueueArticleExtract(db, article.id)
   const html = article ? await renderArticleHtml(article.html) : ''
   const recommendation = article ? await getRecommendation(db, user.id, article.id) : null
 
@@ -102,6 +111,7 @@ export default async function ReadingPage({ searchParams }: Props) {
             locale={locale}
             translation={translation}
             recommendation={recommendation}
+            extracting={extracting}
           />
         ) : (
           <EmptyState unread={totals.all} hasSubscriptions={subscriptions.length > 0} />

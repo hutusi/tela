@@ -155,6 +155,11 @@ describe('reader queries', () => {
     expect(fresh?.isRead).toBe(true)
     expect((await countTotals(t.db, userA)).all).toBe(2)
     const detail = await getArticle(t.db, userA, s.byTitle.Fresh as number)
+    expect(detail).toMatchObject({
+      contentMode: 'unknown',
+      extractedFrom: 'feed',
+      extractCheckedAt: null,
+    })
     expect(detail?.isRead).toBe(true)
     expect(detail?.html).toContain('Fresh')
     expect(detail?.isSubscribed).toBe(true)
