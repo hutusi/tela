@@ -54,7 +54,7 @@ export async function asUser<T>(
 export async function resetDatabase(db: Db) {
   await db.execute(
     sql.raw(`truncate table
-      recommendations, user_article_states, subscriptions, site_claims, llm_usage,
+      recommendations, user_article_states, subscriptions, site_claims, llm_usage, rate_limits,
       article_translations, translations, article_contents, articles, feeds, sites, profiles, auth.users
       restart identity cascade`),
   )

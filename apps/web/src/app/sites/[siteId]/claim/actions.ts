@@ -1,6 +1,6 @@
 'use server'
 
-import { getClaim, resetClaim } from '@tela/db/queries'
+import { consumeRateLimit, getClaim, resetClaim } from '@tela/db/queries'
 import { createJobSender } from '@tela/db/queue'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth'
@@ -14,6 +14,8 @@ export async function verifyClaimAction(form: FormData): Promise<void> {
   const db = await getDb()
   const claim = await getClaim(db, claimId)
   if (!claim || claim.userId !== user.id || claim.status === 'verified') return
+  // Each verification fetches the site's home page; a bot retrying in a loop stays here.
+  if (!(await consumeRateLimit(db, 'claimVerify', user.id)).allowed) return
   if (claim.status === 'failed') await resetClaim(db, claimId)
   try {
     await createJobSender(db).send(

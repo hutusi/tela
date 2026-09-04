@@ -1,5 +1,6 @@
 'use server'
 
+import { consumeRateLimit } from '@tela/db/queries'
 import { createHttpClient, discoverFeeds, ensureFeed, HttpError } from '@tela/ingest'
 import { redirect } from 'next/navigation'
 import { requireUser } from '@/lib/auth'
@@ -29,9 +30,13 @@ export async function startClaimAction(
   _prev: ClaimStartState,
   form: FormData,
 ): Promise<ClaimStartState> {
-  await requireUser('/claim')
+  const user = await requireUser('/claim')
   const query = String(form.get('url') ?? '').trim()
   if (!looksLikeUrl(query)) return { error: 'invalid_url', query }
+  const db = await getDb()
+  if (!(await consumeRateLimit(db, 'claimStart', user.id)).allowed) {
+    return { error: 'rate_limited', query }
+  }
   let found: Awaited<ReturnType<typeof discoverFeeds>>
   try {
     found = await discoverFeeds(http, query, { maxCandidates: 3 })
@@ -41,6 +46,6 @@ export async function startClaimAction(
   }
   const first = found[0]
   if (!first) return { error: 'no_feed', query }
-  const { siteId } = await ensureFeed(await getDb(), { feedUrl: first.url })
+  const { siteId } = await ensureFeed(db, { feedUrl: first.url })
   redirect(`/sites/${siteId}/claim`)
 }

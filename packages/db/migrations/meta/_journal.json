@@ -43,6 +43,13 @@
       "when": 1788506414463,
       "tag": "0005_feed_region_flipped",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788511433215,
+      "tag": "0006_rate_limits",
+      "breakpoints": true
     }
   ]
 }

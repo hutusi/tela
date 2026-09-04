@@ -1,6 +1,6 @@
 'use server'
 
-import { subscribe } from '@tela/db/queries'
+import { consumeRateLimit, subscribe } from '@tela/db/queries'
 import {
   createHttpClient,
   type DiscoveredFeed,
@@ -41,9 +41,11 @@ function looksLikeUrl(input: string): boolean {
 }
 
 export async function discoverAction(_prev: DiscoverState, form: FormData): Promise<DiscoverState> {
-  await requireUser('/add')
+  const user = await requireUser('/add')
   const query = String(form.get('url') ?? '').trim()
   if (!looksLikeUrl(query)) return { candidates: null, error: 'invalid_url', query }
+  const limit = await consumeRateLimit(await getDb(), 'discover', user.id)
+  if (!limit.allowed) return { candidates: null, error: 'rate_limited', query }
   try {
     const candidates = await discoverFeeds(http, query)
     return { candidates, error: null, query }
@@ -58,6 +60,8 @@ export async function subscribeAction(form: FormData): Promise<void> {
   const feedUrl = String(form.get('feedUrl') ?? '')
   if (!/^https?:\/\//.test(feedUrl)) redirect('/add')
   const db = await getDb()
+  if (!(await consumeRateLimit(db, 'subscribe', user.id)).allowed)
+    redirect('/add?error=rate_limited')
   const { feedId } = await ensureFeed(db, { feedUrl })
   await subscribe(db, user.id, feedId)
   await enqueueFeedFetch(db, feedId)
@@ -86,6 +90,9 @@ export async function importOpmlAction(_prev: ImportState, form: FormData): Prom
   }
   urls = [...new Set(urls)].slice(0, 500)
   const db = await getDb()
+  if (!(await consumeRateLimit(db, 'opmlImport', user.id)).allowed) {
+    return { imported: null, error: 'rate_limited' }
+  }
   let imported = 0
   for (const feedUrl of urls) {
     const { feedId } = await ensureFeed(db, { feedUrl })
