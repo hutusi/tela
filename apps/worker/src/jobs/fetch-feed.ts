@@ -1,7 +1,8 @@
-import { articles } from '@tela/db'
+import { articles, feeds } from '@tela/db'
+import { siteNeedsAssets } from '@tela/db/queries'
 import { fetchFeed } from '@tela/ingest'
 import { READING_LANGUAGES } from '@tela/shared'
-import { inArray } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import type { Job } from 'pg-boss'
 import type { WorkerContext } from '../context'
 import { log } from '../logger'
@@ -29,6 +30,20 @@ async function enqueueTitleTranslations(ctx: WorkerContext, articleIds: number[]
   return sent
 }
 
+/** First successful fetch of a site: look for its favicon and cover once. */
+async function enqueueSiteAssets(ctx: WorkerContext, feedId: number) {
+  const [feed] = await ctx.db
+    .select({ siteId: feeds.siteId })
+    .from(feeds)
+    .where(eq(feeds.id, feedId))
+  if (!feed || !(await siteNeedsAssets(ctx.db, feed.siteId))) return
+  await ctx.boss.send(
+    QUEUES.siteAssets,
+    { siteId: feed.siteId },
+    { singletonKey: String(feed.siteId) },
+  )
+}
+
 export async function handleFeedFetch(ctx: WorkerContext, jobs: Job<FeedFetchJob>[]) {
   for (const job of jobs) {
     const started = Date.now()
@@ -39,6 +54,7 @@ export async function handleFeedFetch(ctx: WorkerContext, jobs: Job<FeedFetchJob
         ...result.newArticleIds,
         ...result.updatedArticleIds,
       ])
+      await enqueueSiteAssets(ctx, job.data.feedId)
     }
     const {
       newArticleIds: _n,

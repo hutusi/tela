@@ -1,7 +1,13 @@
 import { createDb } from '@tela/db'
 import { type Job, PgBoss } from 'pg-boss'
 import { loadConfig } from './config'
-import { createHttp, createTranslatorFromEnv, type WorkerContext } from './context'
+import {
+  createAssetsFromEnv,
+  createHttp,
+  createTranslatorFromEnv,
+  type WorkerContext,
+} from './context'
+import { handleSiteAssets, handleSiteClaimVerify } from './jobs/claims-and-assets'
 import { handleArticleExtract } from './jobs/extract-article'
 import { handleFeedFetch } from './jobs/fetch-feed'
 import { handleTranslateBody, handleTranslateTitle } from './jobs/translate'
@@ -11,6 +17,8 @@ import {
   ensureQueues,
   type FeedFetchJob,
   QUEUES,
+  type SiteAssetsJob,
+  type SiteClaimVerifyJob,
   type TranslateBodyJob,
   type TranslateTitleJob,
 } from './queues'
@@ -41,8 +49,9 @@ async function main() {
     log.info('queues ready')
 
     const translator = createTranslatorFromEnv()
-    const ctx: WorkerContext = { config, db, boss, http: createHttp(config), translator }
-    log.info('translator ready', { model: translator.model })
+    const assets = createAssetsFromEnv()
+    const ctx: WorkerContext = { config, db, boss, http: createHttp(config), translator, assets }
+    log.info('translator ready', { model: translator.model, assets: assets?.kind ?? 'none' })
 
     if (has('scheduler')) {
       await boss.schedule(QUEUES.schedulerTick, '* * * * *', {}, {})
@@ -82,8 +91,19 @@ async function main() {
         (jobs) => handleTranslateTitle(ctx, jobs as Job<TranslateTitleJob>[]),
       )
     }
-    for (const pending of ['assets', 'claim'] as const) {
-      if (has(pending)) log.warn(`role ${pending} is not implemented yet; no subscription started`)
+    if (has('claim')) {
+      await boss.work(
+        QUEUES.siteClaimVerify,
+        { batchSize: 1, localConcurrency: 2, pollingIntervalSeconds: 2 },
+        (jobs) => handleSiteClaimVerify(ctx, jobs as Job<SiteClaimVerifyJob>[]),
+      )
+    }
+    if (has('assets')) {
+      await boss.work(
+        QUEUES.siteAssets,
+        { batchSize: 1, localConcurrency: 2, pollingIntervalSeconds: 5 },
+        (jobs) => handleSiteAssets(ctx, jobs as Job<SiteAssetsJob>[]),
+      )
     }
 
     stops.push(async () => {
