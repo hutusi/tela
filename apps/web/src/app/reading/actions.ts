@@ -1,7 +1,14 @@
 'use server'
 
 import { articles } from '@tela/db'
-import { markAllRead, markRead, requestBodyTranslation, toggleLike } from '@tela/db/queries'
+import {
+  markAllRead,
+  markRead,
+  recommend,
+  requestBodyTranslation,
+  toggleLike,
+  unrecommend,
+} from '@tela/db/queries'
 import { createJobSender } from '@tela/db/queue'
 import { isReadingLanguage } from '@tela/shared'
 import { eq } from 'drizzle-orm'
@@ -70,4 +77,27 @@ export async function requestTranslationAction(
     }
   }
   return outcome
+}
+
+export async function recommendAction(
+  articleId: number,
+  note: string | null,
+): Promise<{ recommended: boolean; recommendCount: number }> {
+  const user = await requireUser()
+  const target = id(articleId)
+  if (!target) return { recommended: false, recommendCount: 0 }
+  const result = await recommend(await getDb(), user.id, target, note)
+  revalidatePath('/reading')
+  return { recommended: true, recommendCount: result.recommendCount }
+}
+
+export async function unrecommendAction(
+  articleId: number,
+): Promise<{ recommended: boolean; recommendCount: number }> {
+  const user = await requireUser()
+  const target = id(articleId)
+  if (!target) return { recommended: false, recommendCount: 0 }
+  const result = await unrecommend(await getDb(), user.id, target)
+  revalidatePath('/reading')
+  return { recommended: false, recommendCount: result.recommendCount }
 }

@@ -10,7 +10,9 @@
     "search": "Search blogs, articles, people",
     "signIn": "Sign in",
     "signOut": "Sign out",
-    "addFeed": "+ Add a feed"
+    "addFeed": "+ Add a feed",
+    "dashboard": "Dashboard",
+    "settings": "Settings"
   },
   "home": {
     "title": "Independent blogs, in any language.",
@@ -68,7 +70,15 @@
     "visibleToAuthor": "Your ♡ and recommendations are visible to the author.",
     "pickArticle": "Pick an article on the left. Posts in other languages open with a translation beside the original.",
     "unreadCount": "{n} unread",
-    "noContent": "This post has no readable content in its feed."
+    "noContent": "This post has no readable content in its feed.",
+    "recommendedLabel": "Recommended",
+    "recommendTitle": "Recommend to your readers",
+    "recommendPlaceholder": "Why should they read this? (optional)",
+    "recommendHint": "Shown on your profile and to the author.",
+    "cancel": "Cancel",
+    "recommended": "Recommended.",
+    "recommendedWithNote": "Recommended with your note.",
+    "unrecommended": "Recommendation removed."
   },
   "add": {
     "title": "Add a feed",
@@ -170,6 +180,49 @@
       "invalid_url": "That does not look like a URL.",
       "fetch_failed": "Could not reach that address.",
       "no_feed": "No feed found at that address. Tela lists sites that publish a feed."
+    }
+  },
+  "profile": {
+    "memberSince": "joined {when}",
+    "writes": "Writes",
+    "recommendations": "Recommendations",
+    "noRecommendations": "Nothing recommended yet.",
+    "reads": "Reads"
+  },
+  "dashboard": {
+    "title": "Your sites",
+    "intro": "Who reads you, which posts they liked, and what they said when recommending them.",
+    "noSites": "You have not claimed a site yet.",
+    "post": "Post",
+    "notes": "What readers said",
+    "noNotes": "No recommendation notes yet.",
+    "optOutTranslation": "Opt out of translation",
+    "allowTranslation": "Allow translation",
+    "listing": {
+      "private": "private",
+      "listed": "listed in Discover",
+      "featured": "featured",
+      "rejected": "hidden"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "profileLink": "Your public profile:",
+    "handle": "Handle",
+    "handleHint": "3–30 lowercase letters, digits, or underscores. Used in your profile URL.",
+    "displayName": "Display name",
+    "bio": "Bio",
+    "publicSubscriptions": "Show my subscriptions on my profile",
+    "save": "Save",
+    "saved": "Saved.",
+    "reading": "Reading",
+    "readingLang": "Posts are translated into {lang}.",
+    "data": "Your data",
+    "opmlHint": "Take your subscriptions anywhere: export them as OPML.",
+    "opmlExport": "Export OPML",
+    "errors": {
+      "invalid_handle": "Handles are 3–30 lowercase letters, digits, or underscores, and some words are reserved.",
+      "handle_taken": "That handle is already taken."
     }
   }
 }

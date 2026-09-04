@@ -10,7 +10,9 @@
     "search": "搜索博客、文章、人",
     "signIn": "登录",
     "signOut": "退出登录",
-    "addFeed": "+ 添加订阅"
+    "addFeed": "+ 添加订阅",
+    "dashboard": "仪表盘",
+    "settings": "设置"
   },
   "home": {
     "title": "独立博客，任何语言。",
@@ -68,7 +70,15 @@
     "visibleToAuthor": "你的 ♡ 和推荐对作者可见。",
     "pickArticle": "在左侧选择一篇文章。其他语言的文章会与译文并排显示。",
     "unreadCount": "{n} 篇未读",
-    "noContent": "这篇文章的订阅源中没有可读内容。"
+    "noContent": "这篇文章的订阅源中没有可读内容。",
+    "recommendedLabel": "已推荐",
+    "recommendTitle": "推荐给你的读者",
+    "recommendPlaceholder": "为什么值得一读？（可选）",
+    "recommendHint": "会显示在你的个人页，作者也能看到。",
+    "cancel": "取消",
+    "recommended": "已推荐。",
+    "recommendedWithNote": "已附上你的推荐语。",
+    "unrecommended": "已取消推荐。"
   },
   "add": {
     "title": "添加订阅",
@@ -170,6 +180,49 @@
       "invalid_url": "这不像是一个 URL。",
       "fetch_failed": "无法访问该地址。",
       "no_feed": "该地址下没有找到订阅源。Tela 只收录发布订阅源的网站。"
+    }
+  },
+  "profile": {
+    "memberSince": "{when}加入",
+    "writes": "写作",
+    "recommendations": "推荐",
+    "noRecommendations": "还没有推荐过文章。",
+    "reads": "在读"
+  },
+  "dashboard": {
+    "title": "你的站点",
+    "intro": "谁在读你，他们喜欢哪些文章，推荐时说了什么。",
+    "noSites": "你还没有认领站点。",
+    "post": "文章",
+    "notes": "读者说",
+    "noNotes": "还没有推荐语。",
+    "optOutTranslation": "关闭翻译",
+    "allowTranslation": "允许翻译",
+    "listing": {
+      "private": "未公开",
+      "listed": "已在「发现」列出",
+      "featured": "精选",
+      "rejected": "已隐藏"
+    }
+  },
+  "settings": {
+    "title": "设置",
+    "profileLink": "你的公开个人页：",
+    "handle": "用户名",
+    "handleHint": "3–30 个小写字母、数字或下划线，用于你的个人页地址。",
+    "displayName": "显示名称",
+    "bio": "简介",
+    "publicSubscriptions": "在个人页展示我的订阅",
+    "save": "保存",
+    "saved": "已保存。",
+    "reading": "阅读",
+    "readingLang": "文章会被翻译成{lang}。",
+    "data": "你的数据",
+    "opmlHint": "把订阅带去任何地方：导出为 OPML。",
+    "opmlExport": "导出 OPML",
+    "errors": {
+      "invalid_handle": "用户名需为 3–30 个小写字母、数字或下划线，且不能使用保留词。",
+      "handle_taken": "该用户名已被占用。"
     }
   }
 }
