@@ -178,7 +178,9 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 | `/reading?filter=&feed=&article=` | ✓ | three-column reader; URL carries the selection |
 | `/add` | ✓ | discover feeds from any URL, subscribe, OPML import |
 | `/img` | ✓ | signed image proxy (ADR 0007) |
-| `/discover`, `/s/[siteId]`, `/sites/[id]/claim` | phase 6 | |
+| `/discover?topic=&lang=` | ✓ | listed and featured sites with topic chips, language menu, subscribe toggles, claim banner |
+| `/s/[siteId]` | ✓ | public site page: avatar, description, readers, claimed badge, topics (owner-editable), latest posts |
+| `/claim`, `/sites/[id]/claim` | ✓ | find the feed, then verify by meta tag or rel=me (ADR 0011) |
 | `/@[handle]`, `/dashboard`, `/settings` | phase 7 | |
 
 ## Roadmap (milestone 1, branch `feat/mvp`)
@@ -188,6 +190,6 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 3. Ingestion worker ✓ (site assets to R2 moved to phase 6, where Discover first shows favicons)
 4. Reader web ✓
 5. Translation ✓
-6. Discover + sites + claim ← current
-7. Recommendations + profiles + dashboard
+6. Discover + sites + claim ✓ (site assets job included)
+7. Recommendations + profiles + dashboard ← current
 8. Hardening (relay, China checks, search, observability)

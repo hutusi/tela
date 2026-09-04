@@ -44,9 +44,15 @@ Motion: `animate-fade` (250 ms fade + 4px rise) on view changes and popovers.
 
 ## Components (`apps/web/src/components`)
 
-`AppHeader`, `LocaleSwitcher`, `Sidebar`, `ArticleList`, `Reader`, `LikeButton`, `MarkRead`,
-`EmptyState`, `Swatch`. Phase 5 adds `ReadInMenu` and `TranslationBar`; phase 6 `DiscoverHero`,
-`TopicChips`, `LanguageMenu`, `SiteCard`, `ClaimBanner`; phase 7 `RecommendPopover` and `Toast`.
+`AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `ArticleList`, `Reader`,
+`TranslationBar`, `LikeButton`, `MarkRead`, `RequestTranslation`, `AutoRefresh`, `EmptyState`,
+`Swatch`, `SiteAvatar`, `SiteCard`. Discover's hero, topic chips, language menu (a native
+`<details>` dropdown), and claim banner live in `app/discover/page.tsx`. Phase 7 adds
+`RecommendPopover` and `Toast`.
+
+Discover card (from the design): 40 px avatar (favicon or initial), name with a green ✓ when
+claimed, host, language chip, serif tagline, "Latest: …", "N readers · cadence", and a
+Subscribe/Subscribed pill. Cadence is derived from posts in the last 30 days.
 
 ## Strings
 
