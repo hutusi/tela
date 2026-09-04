@@ -8,9 +8,15 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "spot-check": "bun run scripts/spot-check.ts"
   },
   "dependencies": {
-    "@tela/shared": "workspace:*"
+    "@tela/shared": "workspace:*",
+    "@tela/content": "workspace:*",
+    "ai": "^7.0.92",
+    "@ai-sdk/openai-compatible": "^3.0.43",
+    "@ai-sdk/anthropic": "^4.0.49",
+    "zod": "^4.5.4"
   }
 }
