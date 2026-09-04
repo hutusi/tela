@@ -1,0 +1,18 @@
+# Build context for apps/worker/Dockerfile is the repository root; keep it to source files.
+.git
+**/node_modules
+**/dist
+**/.next
+**/.open-next
+**/.turbo
+.e2e-logs
+**/test-results
+**/playwright-report
+.env
+.env.*
+**/.env
+**/.env.*
+**/.dev.vars
+**/.dev.vars.*
+supabase/.temp
+supabase/.branches
