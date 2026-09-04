@@ -133,6 +133,10 @@ First run: `cd apps/web && bunx playwright install chromium`.
 - **Inspect the queue**: `select name, policy from pgboss.queue`; failed jobs land in
   `<queue>.dead` and stay for 30 days.
 - The queue schema (`pgboss`) is created by the worker on first start; migrations do not manage it.
+  On every start `ensureQueues` creates missing queues and updates the mutable settings of
+  existing ones. A queue's *policy* is fixed at creation: if the code changes one, the worker
+  refuses to start with "queue … has policy …; recreate it". Drain the queue, `select
+  pgboss.delete_queue('<name>')`, and restart.
 - **Health check**: every five minutes (and at startup) the scheduler role logs one `health check`
   line with per-queue counts (`queued`, `active`, `retrying`, `done1h`, `failed1h`, `oldestSec`),
   feed counts (`active`, `paused`, `dead`, `overdue`, `relayed`) and a `problems` list. It is
