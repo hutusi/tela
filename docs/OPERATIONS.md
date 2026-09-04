@@ -29,6 +29,9 @@ implements them (see `docs/ARCHITECTURE.md`).
 | `PUBLIC_URL` | worker | Public origin of the web app, for verifying rel="me" claim links |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | worker | Favicon/cover uploads to R2; `ASSETS_DIR` writes to a directory instead (dev); neither disables uploads |
 | `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_ASSETS_URL` | web | Public origin (claim snippets) and the assets bucket's public base URL |
+| `RELAY_URL`, `RELAY_SECRET` | worker (fetch/claim/assets roles) | Origin of the relay role and the shared signing secret; unset `RELAY_URL` = no relay, feeds never change region |
+| `RELAY_SECRET`, `RELAY_SECRET_PREVIOUS`, `RELAY_PORT` | worker (`relay` role) | Accepted signing secrets (previous one during rotation) and the listen port (8787) |
+| `RELAY_CONTROL_URL` | worker | Fetched before flipping a feed to the relay; if it fails too, the worker's own network is the problem (default: Cloudflare's trace endpoint) |
 | `WORKER_USER_AGENT` | worker | Sent on every fetch; keep a contact URL in it |
 | `FETCH_TIMEOUT_MS`, `FETCH_CONCURRENCY`, `SCHEDULER_BATCH` | worker | Per-request timeout (20 s), parallel fetches per process (4), max feeds enqueued per tick (500) |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web | Supabase Auth (cookies via `@supabase/ssr`) |
@@ -108,6 +111,23 @@ First run: `cd apps/web && bunx playwright install chromium`.
   `<queue>.dead` and stay for 30 days.
 - The queue schema (`pgboss`) is created by the worker on first start; migrations do not manage it.
 
+### Relay (China fetch)
+- **Deploy**: run the worker image with `WORKER_ROLES=relay RELAY_SECRET=<32+ random chars>` on a
+  Hong Kong (or mainland) box; no `DATABASE_URL`. Put it behind TLS (Caddy, or the provider's
+  load balancer) and check `GET /healthz`. Then set `RELAY_URL=https://relay.<domain>` and the
+  same `RELAY_SECRET` on the global worker and restart it.
+- **Which feeds use it**: `select id, feed_url, region_flipped_at, timeout_streak from feeds where
+  fetch_region = 'cn'`. Worker logs show `feed routed through the relay` when a feed flips.
+- **Force a feed onto or off the relay**: `update feeds set fetch_region = 'cn', region_flipped_at
+  = now() where id = …` (or `'global'`). The daily maintenance job re-probes `cn` feeds from the
+  global region after seven days; a feed that times out three more times flips back by itself.
+- **Rotate the secret**: on the relay set `RELAY_SECRET_PREVIOUS` to the current value and
+  `RELAY_SECRET` to the new one, restart; then set the new `RELAY_SECRET` on the global worker,
+  restart; finally remove `RELAY_SECRET_PREVIOUS` from the relay. Signatures expire after five
+  minutes, so keep both boxes' clocks in sync (NTP).
+- **It is not an open proxy**: only signed `POST /fetch` requests are served, private ranges are
+  refused, redirects are not followed, and the body is capped at 5 MB.
+
 ### Translation
 - **Cost check**: `select date_trunc('day', created_at) d, model, sum(input_tokens) i, sum(output_tokens) o, count(*) from llm_usage group by 1, 2 order by 1 desc`.
 - **Budget**: set `LLM_DAILY_BUDGET_TOKENS` on the worker; background title work stops for the
@@ -124,4 +144,4 @@ First run: `cd apps/web && bunx playwright install chromium`.
 ### Later
 - Rotating the image-proxy signing key: set a new `IMAGE_PROXY_SECRET`; old proxy URLs stop
   verifying and pages regenerate them on the next render.
-- Rotating the relay secret (phase 8)
+- China checks from a HK/CN box (custom auth domain, image proxy for `mmbiz.qpic.cn`-style hosts)
