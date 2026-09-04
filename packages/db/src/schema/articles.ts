@@ -122,7 +122,7 @@ export const articleTranslations = pgTable(
       .references(() => articles.id, { onDelete: 'cascade' }),
     targetLang: text('target_lang').notNull(),
     contentHash: text('content_hash'),
-    status: translationStatusEnum('status').notNull().default('requested'),
+    status: translationStatusEnum('status').notNull().default('pending'),
     title: text('title'),
     excerpt: text('excerpt'),
     html: text('html'),

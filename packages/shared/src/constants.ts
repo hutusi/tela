@@ -24,7 +24,15 @@ export type ContentMode = (typeof CONTENT_MODES)[number]
 export const EXTRACTED_FROM = ['feed', 'readability'] as const
 export type ExtractedFrom = (typeof EXTRACTED_FROM)[number]
 
-export const TRANSLATION_STATUSES = ['requested', 'running', 'done', 'partial', 'failed'] as const
+/** pending: only title/excerpt exist; requested/running: body in flight; done/partial/failed: body outcome. */
+export const TRANSLATION_STATUSES = [
+  'pending',
+  'requested',
+  'running',
+  'done',
+  'partial',
+  'failed',
+] as const
 export type TranslationStatus = (typeof TRANSLATION_STATUSES)[number]
 
 export const CLAIM_METHODS = ['meta', 'rel_me', 'dns'] as const
