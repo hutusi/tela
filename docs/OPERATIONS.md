@@ -20,7 +20,7 @@ implements them (see `docs/ARCHITECTURE.md`).
 | `DATABASE_URL` | worker, web (local / non-Cloudflare) | Postgres connection string. On Cloudflare the `HYPERDRIVE` binding replaces it. |
 | `WORKER_ROLES` | worker | Comma list of roles; default is every role except `relay` |
 | `LOG_LEVEL` | worker | `debug` / `info` / `warn` / `error` |
-| `LLM_PROVIDER` | worker | `bailian` (default), `anthropic`, or `mock`; without the matching key the mock is used |
+| `LLM_PROVIDER` | worker | `bailian` (default), `anthropic`, or `mock`; any other value is an error. Without the matching key the mock is used, but the `translate` role refuses to start on that fallback: its placeholder output would be cached for everyone. Set `LLM_PROVIDER=mock` to run the mock on purpose (e2e, local) |
 | `LLM_MODEL` | worker | Model id: `glm-5.2` (Bailian default), `claude-opus-5` (Anthropic default) |
 | `BAILIAN_API_KEY`, `BAILIAN_BASE_URL` | worker | Aliyun Bailian key; base URL defaults to `https://dashscope.aliyuncs.com/compatible-mode/v1` (use the workspace/region host from the console when required) |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` | worker | Anthropic key; base URL optional |
@@ -101,8 +101,9 @@ fly deploy --config fly.worker.toml --remote-only --ha=false   # from the reposi
 - `fly.worker.toml` sits at the repository root because Fly's build context is the config's
   directory and the image builds from the whole monorepo (`.dockerignore` keeps it small).
 - Override roles per deploy with `-e WORKER_ROLES=scheduler,fetch,extract,claim,assets`, for
-  example to hold back `translate` until the LLM key exists (the mock provider would otherwise
-  write placeholder translations into the shared cache).
+  example to run without `translate` until the LLM key exists. With the key missing the worker
+  refuses to start the `translate` role at all (rather than caching the mock's placeholder
+  translations), so a forgotten secret shows up as a crash loop, not as garbled titles.
 - Logs: `fly logs --app tela-worker`; the JSON lines are the same as locally.
 
 ## End-to-end tests

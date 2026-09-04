@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { chunkBlocks, estimateTokens } from './chunk'
 import { createMockTranslator } from './mock'
-import { configFromEnv } from './providers'
+import { configFromEnv, isAccidentalMock } from './providers'
 import { translateBlocks } from './translate'
 import { parseJsonReply } from './translator'
 import { validateTranslation } from './validate'
@@ -130,6 +130,22 @@ describe('translateBlocks with the mock translator', () => {
 describe('configFromEnv', () => {
   test('falls back to the mock without keys and honors overrides', () => {
     expect(configFromEnv({})).toEqual({ provider: 'mock', model: 'mock' })
+    expect(isAccidentalMock(configFromEnv({}), {})).toBe(true)
+    expect(
+      isAccidentalMock(configFromEnv({ LLM_PROVIDER: 'mock' }), { LLM_PROVIDER: 'mock' }),
+    ).toBe(false)
+    // The mock never borrows a real model's name, so its cache rows stay recognizable.
+    expect(configFromEnv({ LLM_PROVIDER: 'mock', LLM_MODEL: 'glm-5.2' })).toEqual({
+      provider: 'mock',
+      model: 'mock',
+    })
+    expect(configFromEnv({ LLM_PROVIDER: 'bailian', LLM_MODEL: 'glm-5.2' })).toEqual({
+      provider: 'mock',
+      model: 'mock',
+    })
+    expect(() => configFromEnv({ LLM_PROVIDER: 'bailain', BAILIAN_API_KEY: 'k' })).toThrow(
+      /Unknown LLM_PROVIDER "bailain"/,
+    )
     expect(configFromEnv({ LLM_PROVIDER: 'bailian', BAILIAN_API_KEY: 'k' })).toMatchObject({
       provider: 'bailian',
       model: 'glm-5.2',

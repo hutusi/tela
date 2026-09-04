@@ -1,3 +1,4 @@
+import { configFromEnv, isAccidentalMock } from '@tela/llm'
 import { z } from 'zod'
 import { parseRoles } from './roles'
 
@@ -49,6 +50,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   }
   if (parsed.data.RELAY_URL && !parsed.data.RELAY_SECRET) {
     throw new Error('RELAY_SECRET is required when RELAY_URL is set')
+  }
+  if (roles.includes('translate')) {
+    // The mock's placeholder output would be cached first-write-wins for every reader, so a
+    // deploy that merely forgot the key must fail here instead of poisoning the cache.
+    const llm = configFromEnv(env)
+    if (isAccidentalMock(llm, env)) {
+      throw new Error(
+        'the translate role needs BAILIAN_API_KEY or ANTHROPIC_API_KEY; set LLM_PROVIDER=mock to run the deterministic mock on purpose',
+      )
+    }
   }
   return { ...parsed.data, roles, needsDb }
 }
