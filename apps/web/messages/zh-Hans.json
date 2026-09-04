@@ -48,7 +48,8 @@
     "today": "今天",
     "liked": "喜欢",
     "subscriptions": "订阅",
-    "noSubscriptions": "还没有订阅。"
+    "noSubscriptions": "还没有订阅。",
+    "browse": "订阅"
   },
   "list": {
     "markAllRead": "全部标为已读",

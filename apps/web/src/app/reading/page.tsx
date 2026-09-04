@@ -11,6 +11,7 @@ import { AppHeader } from '@/components/app-header'
 import { ArticleList } from '@/components/article-list'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { EmptyState } from '@/components/empty-state'
+import { MobileNav } from '@/components/mobile-nav'
 import { Reader, type ReaderTranslation } from '@/components/reader'
 import { Sidebar } from '@/components/sidebar'
 import { renderArticleHtml } from '@/lib/article-html'
@@ -81,6 +82,7 @@ export default async function ReadingPage({ searchParams }: Props) {
         data-testid="reading-layout"
       >
         {pendingFetch ? <AutoRefresh /> : null}
+        {open ? null : <MobileNav subscriptions={subscriptions} totals={totals} params={params} />}
         <Sidebar subscriptions={subscriptions} totals={totals} params={params} />
         <ArticleList
           items={items}

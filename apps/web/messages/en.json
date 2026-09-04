@@ -48,7 +48,8 @@
     "today": "Today",
     "liked": "Liked",
     "subscriptions": "Subscriptions",
-    "noSubscriptions": "No subscriptions yet."
+    "noSubscriptions": "No subscriptions yet.",
+    "browse": "Feeds"
   },
   "list": {
     "markAllRead": "Mark all read",

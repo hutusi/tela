@@ -62,7 +62,7 @@ export async function Reader({
 
   return (
     <main
-      className="min-w-0 overflow-hidden px-8 pb-20 pt-6 animate-fade"
+      className="min-w-0 overflow-hidden px-5 pb-20 pt-6 animate-fade md:px-8"
       data-testid="reader"
       data-mode={mode}
     >

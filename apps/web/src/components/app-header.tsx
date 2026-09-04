@@ -29,14 +29,14 @@ export async function AppHeader({ active, query }: { active?: NavKey; query?: st
     .charAt(0)
     .toUpperCase()
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center gap-7 border-b border-line bg-paper px-7">
+    <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-line bg-paper px-4 md:gap-7 md:px-7">
       <Link
         href="/"
         className="font-serif text-[26px] font-semibold tracking-tight text-ink hover:no-underline"
       >
         Tela
       </Link>
-      <nav className="flex gap-1 text-sm">
+      <nav className="flex min-w-0 gap-1 overflow-x-auto whitespace-nowrap text-sm [scrollbar-width:none]">
         {pill('reading', '/reading')}
         {pill('discover', '/discover')}
         {user ? pill('dashboard', '/dashboard') : null}
