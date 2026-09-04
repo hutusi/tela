@@ -142,3 +142,67 @@ test.describe('translation', () => {
     await expect(page.getByTestId('article-row').first()).not.toContainText('EN → ZH')
   })
 })
+
+test.describe('discover and claim', () => {
+  test('claiming a site by meta tag lists it in Discover with the badge', async ({
+    page,
+    request,
+  }) => {
+    await page.goto('/claim')
+    await page.getByTestId('claim-url').fill(`${FIXTURES}/`)
+    await page.getByTestId('claim-continue').click()
+    await expect(page).toHaveURL(/\/sites\/\d+\/claim$/)
+    const siteId = page.url().match(/\/sites\/(\d+)\/claim/)?.[1] as string
+    const snippet = (await page.getByTestId('meta-snippet').textContent()) ?? ''
+    const token = snippet.match(/content="([0-9a-f]+)"/)?.[1]
+    expect(token).toBeTruthy()
+
+    // Verify before the tag exists: a clear failure.
+    await page.getByTestId('claim-verify').click()
+    await expect(page.getByTestId('claim-page')).toHaveAttribute('data-status', 'failed', {
+      timeout: 30_000,
+    })
+    await expect(page.getByTestId('claim-error')).toContainText('tela-site-verification')
+
+    // Publish the token on the fixture home page and verify again.
+    const set = await request.post(`${FIXTURES}/__claim-token?token=${token}`)
+    expect(set.status()).toBe(204)
+    await page.getByTestId('claim-verify').click()
+    await expect(page.getByTestId('claim-verified')).toBeVisible({ timeout: 30_000 })
+
+    // All fixture feeds share one origin, so the site carries the first feed's title.
+    await page.goto('/discover')
+    const card = page.locator(`[data-testid="site-card"][data-site-id="${siteId}"]`)
+    await expect(card).toBeVisible()
+    await expect(card.getByTestId('claimed-badge')).toBeVisible()
+    await expect(card).toContainText(/reader/)
+    await expect(page.getByTestId('topic-chips')).toContainText('Tech')
+  })
+
+  test('the site page lets the owner set topics, and Discover filters by them', async ({
+    page,
+  }) => {
+    await page.goto('/discover')
+    await page.getByTestId('site-card').first().locator('a[href^="/s/"]').first().click()
+    await expect(page).toHaveURL(/\/s\/\d+$/)
+    await expect(page.getByTestId('site-articles')).toBeVisible()
+    const form = page.getByTestId('topics-form')
+    await form.getByLabel('Tech').check()
+    await form.getByRole('button', { name: 'Save' }).click()
+    await expect(page.locator('a[href="/discover?topic=tech"]')).toBeVisible()
+
+    await page.goto('/discover?topic=tech')
+    await expect(page.getByTestId('site-card')).toHaveCount(1)
+    await page.goto('/discover?topic=food')
+    await expect(page.getByTestId('site-card')).toHaveCount(0)
+
+    // Subscribe/unsubscribe from the card keeps reader counts in step.
+    await page.goto('/discover')
+    const button = page.getByTestId('site-card').first().getByTestId('site-subscribe')
+    const wasSubscribed = (await button.getAttribute('aria-pressed')) === 'true'
+    await button.click()
+    await expect(
+      page.getByTestId('site-card').first().getByTestId('site-subscribe'),
+    ).toHaveAttribute('aria-pressed', wasSubscribed ? 'false' : 'true')
+  })
+})

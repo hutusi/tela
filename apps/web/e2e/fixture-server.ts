@@ -15,7 +15,18 @@ const PNG = Buffer.from(
   'base64',
 )
 
+/** Set by the e2e test through POST /__claim-token?token=…; rendered on the home page. */
+let claimToken = ''
+
 const routes: Record<string, () => { body: Buffer | string; type: string }> = {
+  '/': () => ({
+    body: `<html><head><title>Fixture blog</title>
+      <link rel="alternate" type="application/rss+xml" title="Fixture RSS" href="/jnito.xml">
+      <link rel="icon" href="/pixel.png">
+      ${claimToken ? `<meta name="tela-site-verification" content="${claimToken}">` : ''}
+      </head><body><h1>Fixture blog home</h1></body></html>`,
+    type: 'text/html; charset=utf-8',
+  }),
   '/hutusi.xml': () => ({
     body: readFileSync(join(feeds, 'hutusi.rss.xml')),
     type: 'application/xml; charset=utf-8',
@@ -38,7 +49,14 @@ const routes: Record<string, () => { body: Buffer | string; type: string }> = {
 }
 
 createServer((req, res) => {
-  const path = new URL(req.url ?? '/', 'http://x').pathname
+  const url = new URL(req.url ?? '/', 'http://x')
+  const path = url.pathname
+  if (req.method === 'POST' && path === '/__claim-token') {
+    claimToken = url.searchParams.get('token') ?? ''
+    res.writeHead(204)
+    res.end()
+    return
+  }
   const route = routes[path]
   if (!route) {
     res.writeHead(404)
