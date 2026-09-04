@@ -17,7 +17,10 @@ Supavisor transaction pooler (which also disables prepared statements).
   for Auth (and Realtime later). Migrations via `drizzle-kit generate`, never `push` (which has
   skipped policies in a known bug); custom SQL in `--custom` migrations.
 - RLS enabled on every table and declared in the schema with `pgPolicy`. App code on the service
-  connection is the authority; RLS is the backstop for the anon key path.
+  connection is the authority; RLS is the backstop for the anon key path. Policies only grant
+  reads (members see everything, anonymous callers only listed sites): there is no client-side
+  write path, so nothing reachable with the anon key can skip the invariants application code
+  enforces (denormalized counters, rate limits, reserved handles, `is_admin`).
 - `profiles` rows are created by a `security definer` trigger on `auth.users`.
 - Custom SMTP (Resend) from day one: the built-in mailer allows 2 emails/hour.
 

@@ -71,6 +71,13 @@
       "when": 1788556608187,
       "tag": "0009_site_claims_unique_per_user",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788556837195,
+      "tag": "0010_read_only_policies",
+      "breakpoints": true
     }
   ]
 }

@@ -34,10 +34,9 @@ export const subscriptions = pgTable(
     primaryKey({ columns: [t.userId, t.feedId] }),
     index('subscriptions_feed_id_idx').on(t.feedId),
     pgPolicy('subscriptions_own', {
-      for: 'all',
+      for: 'select',
       to: authenticatedRole,
       using: sql`${authUid} = ${t.userId}`,
-      withCheck: sql`${authUid} = ${t.userId}`,
     }),
   ],
 )
@@ -59,10 +58,9 @@ export const userArticleStates = pgTable(
     primaryKey({ columns: [t.userId, t.articleId] }),
     index('user_article_states_liked_idx').on(t.userId, t.likedAt.desc()),
     pgPolicy('user_article_states_own', {
-      for: 'all',
+      for: 'select',
       to: authenticatedRole,
       using: sql`${authUid} = ${t.userId}`,
-      withCheck: sql`${authUid} = ${t.userId}`,
     }),
   ],
 )
@@ -93,22 +91,6 @@ export const recommendations = pgTable(
       for: 'select',
       to: [anonRole, authenticatedRole],
       using: sql`true`,
-    }),
-    pgPolicy('recommendations_insert_own', {
-      for: 'insert',
-      to: authenticatedRole,
-      withCheck: sql`${authUid} = ${t.userId}`,
-    }),
-    pgPolicy('recommendations_update_own', {
-      for: 'update',
-      to: authenticatedRole,
-      using: sql`${authUid} = ${t.userId}`,
-      withCheck: sql`${authUid} = ${t.userId}`,
-    }),
-    pgPolicy('recommendations_delete_own', {
-      for: 'delete',
-      to: authenticatedRole,
-      using: sql`${authUid} = ${t.userId}`,
     }),
   ],
 )

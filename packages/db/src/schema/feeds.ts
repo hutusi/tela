@@ -55,7 +55,12 @@ export const feeds = pgTable(
     index('feeds_schedule_idx').on(t.status, t.nextFetchAt),
     pgPolicy('feeds_select_public', {
       for: 'select',
-      to: [anonRole, authenticatedRole],
+      to: anonRole,
+      using: sql`exists (select 1 from sites s where s.id = ${t.siteId} and s.listing in ('listed', 'featured'))`,
+    }),
+    pgPolicy('feeds_select_member', {
+      for: 'select',
+      to: authenticatedRole,
       using: sql`true`,
     }),
   ],

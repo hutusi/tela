@@ -49,7 +49,12 @@ export const sites = pgTable(
     index('sites_claimed_by_idx').on(t.claimedBy),
     pgPolicy('sites_select_public', {
       for: 'select',
-      to: [anonRole, authenticatedRole],
+      to: anonRole,
+      using: sql`${t.listing} in ('listed', 'featured')`,
+    }),
+    pgPolicy('sites_select_member', {
+      for: 'select',
+      to: authenticatedRole,
       using: sql`true`,
     }),
   ],

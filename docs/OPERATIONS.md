@@ -51,6 +51,10 @@ implements them (see `docs/ARCHITECTURE.md`).
    qq.com and 163.com addresses.
 3. Auth → Providers: Email (OTP), GitHub, Google (phase 4).
 4. Apply migrations: `DATABASE_URL=<direct connection> bun run db:migrate`.
+5. Data API → Exposed schemas: remove `public` until a browser feature (Realtime) needs it. The
+   app never uses the Data API (all queries go through Postgres directly) and every RLS policy is
+   read-only, so this only closes a door nobody walks through. Mirror it in `supabase/config.toml`
+   (`[api] schemas`) so a later `supabase config push` does not reopen it.
 
 ### Cloudflare
 ```sh

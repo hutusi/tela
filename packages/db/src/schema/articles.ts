@@ -47,7 +47,12 @@ export const articles = pgTable(
     index('articles_feed_published_idx').on(t.feedId, t.publishedAt.desc()),
     pgPolicy('articles_select_public', {
       for: 'select',
-      to: [anonRole, authenticatedRole],
+      to: anonRole,
+      using: sql`exists (select 1 from feeds f join sites s on s.id = f.site_id where f.id = ${t.feedId} and s.listing in ('listed', 'featured'))`,
+    }),
+    pgPolicy('articles_select_member', {
+      for: 'select',
+      to: authenticatedRole,
       using: sql`true`,
     }),
   ],
@@ -78,10 +83,15 @@ export const articleContents = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  () => [
+  (t) => [
     pgPolicy('article_contents_select_public', {
       for: 'select',
-      to: [anonRole, authenticatedRole],
+      to: anonRole,
+      using: sql`exists (select 1 from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id where a.id = ${t.articleId} and s.listing in ('listed', 'featured'))`,
+    }),
+    pgPolicy('article_contents_select_member', {
+      for: 'select',
+      to: authenticatedRole,
       using: sql`true`,
     }),
   ],
@@ -138,7 +148,12 @@ export const articleTranslations = pgTable(
     index('article_translations_status_idx').on(t.status),
     pgPolicy('article_translations_select_public', {
       for: 'select',
-      to: [anonRole, authenticatedRole],
+      to: anonRole,
+      using: sql`exists (select 1 from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id where a.id = ${t.articleId} and s.listing in ('listed', 'featured'))`,
+    }),
+    pgPolicy('article_translations_select_member', {
+      for: 'select',
+      to: authenticatedRole,
       using: sql`true`,
     }),
   ],

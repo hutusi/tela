@@ -55,9 +55,11 @@ Tables live in `packages/db/src/schema/`. bigint identity ids on high-volume tab
 | `rate_limits` | Fixed-window counters per action and member (`consumeRateLimit`). Service-only. |
 | `websub_subscriptions` | One per feed with a hub: topic, shared secret, status (pending/active/failed), lease. Service-only. |
 
-Row-level security is enabled on every table. Content tables are readable by `anon` and
-`authenticated`; user tables are owner-only via `(select auth.uid())`; writes happen through the
-service connection. Application code is the authority; RLS is the backstop (ADR 0003).
+Row-level security is enabled on every table and every policy is a `select`: members read all
+content tables, anonymous callers only the rows of `listed`/`featured` sites, and user tables are
+owner-readable via `(select auth.uid())`. No policy grants a write, so the Supabase Data API can
+never bypass the counters, rate limits, and handle rules that live in application code; all
+writes go through the service connection, which is the authority (ADR 0003).
 
 Unread count per feed = `articles.id > watermark_id AND fetched_at > now() - 30 days AND NOT EXISTS
 read row`. "Mark all read" moves the watermark and compacts read rows below it.
