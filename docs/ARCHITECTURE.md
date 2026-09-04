@@ -13,7 +13,7 @@ Browser ──HTTPS──▶ Cloudflare Worker (Next.js via OpenNext)
                      └─ Supabase Auth (browser: @supabase/ssr)                          [phase 4]
 Worker image (Node 22, Fly.io nrt), WORKER_ROLES selects subscriptions:
    scheduler | fetch | extract | translate | assets | claim ──▶ Postgres (pg-boss + data) [phase 3+]
-   fetch ──(fetch_region=cn)──▶ relay role on a HK/CN box (HMAC-signed fetch endpoint)  [phase 8]
+   fetch ──(fetch_region=cn)──▶ relay role on a HK/CN box (HMAC-signed fetch endpoint)  [phase 8 ✓]
    translate ──▶ Aliyun Bailian (GLM) or other providers through one adapter           [phase 5]
    assets ──▶ R2 (S3 API), served from assets.<domain>                                  [phase 3]
 ```
@@ -92,6 +92,11 @@ runtime-agnostic so the web app can reuse discovery; `apps/worker` only wires it
 - `createHttpClient`: conditional headers, manual redirects with permanent-redirect detection,
   5 MB cap, charset-aware decoding, 2 s per-host spacing, private-network blocking, and a relay
   hook for `fetch_region = cn`.
+- `createRelayHandler` / `createRelayClient` (`relay.ts`): the China fetch relay. The handler is
+  Web-API only (served by Node `http` in the `relay` role); the client signs each hop with
+  HMAC-SHA256 over a timestamp and the JSON body and rebuilds a `Response`. See ADR 0008.
+- `region.ts`: a feed flips to the relay on its third consecutive timeout when the control URL
+  still answers, and is re-probed from the global region after seven days (`maintenance.daily`).
 - `discoverFeeds(http, url)`: the URL itself, then feeds declared by the page, then well-known
   paths; every result is fetched and parsed before being returned.
 - `ensureFeed` / `ensureSite`: feed rows keyed by `feed_url`, sites keyed by normalized origin;
