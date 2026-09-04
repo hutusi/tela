@@ -32,6 +32,8 @@ export const feeds = pgTable(
     nextFetchAt: timestamp('next_fetch_at', { withTimezone: true }).notNull().defaultNow(),
     fetchIntervalSec: integer('fetch_interval_sec').notNull().default(3600),
     fetchRegion: fetchRegionEnum('fetch_region').notNull().default('global'),
+    /** When fetch_region last changed; cn feeds are re-probed from global after a week. */
+    regionFlippedAt: timestamp('region_flipped_at', { withTimezone: true }),
     errorCount: integer('error_count').notNull().default(0),
     /** Consecutive timeouts/resets; only these count toward flipping fetch_region to cn. */
     timeoutStreak: integer('timeout_streak').notNull().default(0),

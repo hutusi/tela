@@ -55,6 +55,8 @@ export type HttpClientOptions = {
   allowPrivateHosts?: boolean
 }
 
+const RELAY_HEADROOM_MS = 10_000
+
 const DEFAULT_ACCEPT =
   'application/rss+xml, application/atom+xml, application/feed+json, application/xml;q=0.9, text/xml;q=0.9, text/html;q=0.8, */*;q=0.5'
 
@@ -86,7 +88,7 @@ function decodeBody(bytes: Uint8Array, contentType: string | null): string {
   }
 }
 
-function classify(err: unknown): HttpError {
+export function classify(err: unknown): HttpError {
   const e = err as {
     name?: string
     code?: string
@@ -105,7 +107,7 @@ function classify(err: unknown): HttpError {
   return new HttpError('network', `request failed (${code || name || e.message || 'unknown'})`)
 }
 
-async function readCapped(response: Response, maxBytes: number): Promise<Uint8Array> {
+export async function readCapped(response: Response, maxBytes: number): Promise<Uint8Array> {
   const reader = response.body?.getReader()
   if (!reader) return new Uint8Array()
   const chunks: Uint8Array[] = []
@@ -179,20 +181,20 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
         }
         await politeWait(parsed.host)
 
+        const relay = opts.region === 'cn' ? options.relay : undefined
         const init: RequestInit = {
           method: 'GET',
           headers,
           redirect: 'manual',
-          signal: AbortSignal.timeout(timeoutMs),
+          // The relay applies the same timeout upstream; give its round trip some headroom.
+          signal: AbortSignal.timeout(relay ? timeoutMs + RELAY_HEADROOM_MS : timeoutMs),
         }
         let response: Response
         try {
-          response =
-            opts.region === 'cn' && options.relay
-              ? await options.relay(current, init)
-              : await doFetch(current, init)
+          response = relay ? await relay(current, init) : await doFetch(current, init)
         } catch (err) {
-          throw classify(err)
+          // The relay client already speaks our error taxonomy; only raw fetch errors need mapping.
+          throw err instanceof HttpError ? err : classify(err)
         }
 
         if ([301, 302, 303, 307, 308].includes(response.status)) {
