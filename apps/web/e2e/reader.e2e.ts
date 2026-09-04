@@ -206,3 +206,63 @@ test.describe('discover and claim', () => {
     ).toHaveAttribute('aria-pressed', wasSubscribed ? 'false' : 'true')
   })
 })
+
+test.describe('recommendations, profile, dashboard, settings', () => {
+  test('recommend with a note, see it on the profile and in the author dashboard', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    await page.getByTestId('article-row').first().click()
+    // The reader shows the translated title (the mock prefixes "en:"); the public profile shows
+    // the original, so compare on the untranslated part.
+    const title = ((await page.getByTestId('article-title').textContent())?.trim() ?? '').replace(
+      /^[a-zA-Z-]+:/,
+      '',
+    )
+    await page.getByTestId('recommend-button').click()
+    await page.getByTestId('recommend-note').fill('Worth your time, especially the ending.')
+    await page.getByTestId('recommend-submit').click()
+    await expect(page.getByTestId('toast')).toContainText('Recommended with your note')
+    await expect(page.getByTestId('recommend-button')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('recommend-button')).toContainText('1')
+
+    await page.getByTestId('nav-profile').click()
+    await expect(page).toHaveURL(/\/@[a-z0-9_]+$/)
+    const recs = page.getByTestId('profile-recommendations')
+    await expect(recs).toContainText(title.slice(0, 20))
+    await expect(recs).toContainText('Worth your time')
+
+    // The development user claimed the fixture site earlier, so the note reaches the dashboard.
+    await page.getByTestId('nav-dashboard').click()
+    await expect(page.getByTestId('dashboard-site')).toHaveCount(1)
+    await expect(page.getByTestId('dashboard-notes')).toContainText('Worth your time')
+    await expect(page.getByTestId('dashboard-post').first()).toBeVisible()
+    await page.getByTestId('translation-optout').click()
+    await expect(page.getByTestId('translation-optout')).toContainText('Allow translation')
+    await page.getByTestId('translation-optout').click()
+    await expect(page.getByTestId('translation-optout')).toContainText('Opt out of translation')
+  })
+
+  test('settings validate the handle and the profile link follows it', async ({ page }) => {
+    await page.goto('/settings')
+    await page.getByTestId('settings-handle').fill('settings')
+    await page.getByTestId('settings-save').click()
+    await expect(page.getByTestId('settings-error')).toContainText('reserved')
+    await page.getByTestId('settings-handle').fill('devreader')
+    await page.getByTestId('settings-display-name').fill('Dev Reader')
+    await page.getByTestId('settings-save').click()
+    await expect(page.getByTestId('settings-saved')).toBeVisible()
+    await expect(page.getByTestId('profile-link')).toHaveAttribute('href', '/@devreader')
+    await page.getByTestId('profile-link').click()
+    await expect(page.getByTestId('profile-page')).toContainText('Dev Reader')
+  })
+
+  test('OPML export lists the subscriptions', async ({ request }) => {
+    const res = await request.get('/settings/opml')
+    expect(res.status()).toBe(200)
+    expect(res.headers()['content-type']).toContain('opml')
+    const body = await res.text()
+    expect(body).toContain('<opml version="2.0">')
+    expect(body).toContain('xmlUrl="http://127.0.0.1:4790/jvns.xml"')
+  })
+})
