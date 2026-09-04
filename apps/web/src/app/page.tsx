@@ -1,42 +1,32 @@
-import { sites } from '@tela/db'
-import { count } from 'drizzle-orm'
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { getDb, isDatabaseConfigured } from '@/lib/platform/db'
+import { AppHeader } from '@/components/app-header'
+import { getSessionUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-async function siteCount(): Promise<number | null> {
-  try {
-    const db = await getDb()
-    const [row] = await db.select({ n: count() }).from(sites)
-    return row?.n ?? 0
-  } catch (err) {
-    console.error('[home] site count failed', err)
-    return null
-  }
-}
-
 export default async function HomePage() {
-  const t = await getTranslations()
-  const n = await siteCount()
+  const user = await getSessionUser()
+  if (user) redirect('/reading')
+  const t = await getTranslations('home')
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-8 py-16 animate-fade">
-      <header className="flex items-center gap-7 border-line border-b pb-4">
-        <span className="font-serif text-[26px] font-semibold tracking-tight">{t('app.name')}</span>
-        <nav className="flex gap-1 text-sm font-medium">
-          <span className="rounded-full bg-hover px-3 py-1.5">{t('nav.reading')}</span>
-          <span className="rounded-full px-3 py-1.5 text-ink-2">{t('nav.discover')}</span>
-        </nav>
-      </header>
-      <h1 className="font-serif text-[40px] font-medium leading-[1.1] tracking-tight">
-        {t('home.title')}
-      </h1>
-      <p className="max-w-xl text-base leading-relaxed text-ink-2">{t('home.intro')}</p>
-      <p className="text-sm text-muted">
-        {n === null && !isDatabaseConfigured() ? t('home.dbMissing') : null}
-        {n === null && isDatabaseConfigured() ? t('home.dbMissing') : null}
-        {n !== null ? t('home.dbConnected', { sites: n }) : null}
-      </p>
-    </main>
+    <>
+      <AppHeader />
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-12 py-16 animate-fade">
+        <h1 className="max-w-2xl font-serif text-[40px] font-medium leading-[1.1] tracking-tight">
+          {t('title')}
+        </h1>
+        <p className="max-w-xl text-base leading-relaxed text-ink-2">{t('intro')}</p>
+        <div>
+          <Link
+            href="/login"
+            className="inline-block rounded-full bg-ink px-5 py-2.5 font-medium text-paper hover:no-underline hover:brightness-125"
+          >
+            {t('cta')}
+          </Link>
+        </div>
+      </main>
+    </>
   )
 }
