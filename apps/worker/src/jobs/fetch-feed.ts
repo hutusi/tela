@@ -2,7 +2,7 @@ import { articles, feeds } from '@tela/db'
 import { siteNeedsAssets } from '@tela/db/queries'
 import { fetchFeed, type RegionPolicy } from '@tela/ingest'
 import { READING_LANGUAGES } from '@tela/shared'
-import { eq, inArray } from 'drizzle-orm'
+import { desc, eq, inArray, sql } from 'drizzle-orm'
 import type { Job } from 'pg-boss'
 import type { WorkerContext } from '../context'
 import { log } from '../logger'
@@ -11,10 +11,13 @@ import { type FeedFetchJob, QUEUES } from '../queues'
 /** Queue eager title/excerpt translation into every reading language the article is not in. */
 async function enqueueTitleTranslations(ctx: WorkerContext, articleIds: number[]) {
   if (articleIds.length === 0) return 0
+  // Newest first, in the order the list shows them: pg-boss serves equal priorities in creation
+  // order, so the titles readers see at the top are translated first.
   const rows = await ctx.db
     .select({ id: articles.id, sourceLang: articles.sourceLang })
     .from(articles)
     .where(inArray(articles.id, articleIds))
+    .orderBy(desc(sql`coalesce(${articles.publishedAt}, ${articles.fetchedAt})`), desc(articles.id))
   let sent = 0
   for (const row of rows) {
     for (const target of READING_LANGUAGES) {
