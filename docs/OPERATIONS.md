@@ -87,10 +87,19 @@ tokens; wrangler cannot), set the `R2_*` variables on the worker, and
 
 ### Fly.io (worker)
 ```sh
-fly apps create tela-worker
-fly secrets set --app tela-worker DATABASE_URL="<supabase direct connection string>"
-fly deploy --config apps/worker/fly.toml --dockerfile apps/worker/Dockerfile
+fly auth login            # from a real terminal
+fly apps create tela-worker --org <org>
+fly secrets set --app tela-worker --stage DATABASE_URL="<supabase connection string>" \
+  PUBLIC_URL="https://<web origin>" BAILIAN_API_KEY="…" R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… \
+  R2_SECRET_ACCESS_KEY=… R2_BUCKET=tela-assets
+fly deploy --config fly.worker.toml --remote-only --ha=false   # from the repository root
 ```
+- `fly.worker.toml` sits at the repository root because Fly's build context is the config's
+  directory and the image builds from the whole monorepo (`.dockerignore` keeps it small).
+- Override roles per deploy with `-e WORKER_ROLES=scheduler,fetch,extract,claim,assets`, for
+  example to hold back `translate` until the LLM key exists (the mock provider would otherwise
+  write placeholder translations into the shared cache).
+- Logs: `fly logs --app tela-worker`; the JSON lines are the same as locally.
 
 ## End-to-end tests
 

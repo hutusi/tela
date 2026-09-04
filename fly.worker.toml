@@ -1,5 +1,6 @@
-# Deploy from the repository root:
-#   fly deploy --config apps/worker/fly.toml --dockerfile apps/worker/Dockerfile
+# Lives at the repository root because Fly uses the config's directory as the build context,
+# and the worker image is built from the whole monorepo. Deploy from the root:
+#   fly deploy --config fly.worker.toml
 app = "tela-worker"
 primary_region = "nrt"
 
