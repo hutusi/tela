@@ -45,7 +45,24 @@ bun run db:generate                       # drizzle-kit generate from packages/d
 DATABASE_URL=... bun run db:migrate       # apply packages/db/migrations
 ```
 
+## Features
+
+- **Reader**: subscribe by URL or OPML, unread counts, smart filters (all / today / liked), mark read
+  and mark all read, likes, a three-column layout that mirrors the design.
+- **Translation**: eager title translation, lazy body translation on open, side-by-side /
+  translation / original modes aligned block by block, a "Read in" language switch, and a
+  content-addressed cache so nothing is translated twice. Providers are pluggable (Aliyun Bailian
+  GLM first, Anthropic second, a mock for tests).
+- **Discover**: listed blogs with topic and language filters, site pages, subscribe from a card.
+- **Claim your feed**: prove ownership with a meta tag or `rel="me"` link; claimed sites are listed
+  and can opt out of translation.
+- **Recommendations**: recommend a post with a note; the note appears on your public profile
+  (`/@handle`) and in the author's dashboard next to likes and reader counts.
+- **Settings**: handle, display name, bio, public subscriptions, reading language, OPML export.
+- **UI languages**: English and Simplified Chinese, switchable without a page reload.
+
 ## Status
 
-Milestone 1 is under construction on the `feat/mvp` branch. See `docs/ARCHITECTURE.md` for the
-target design and which parts exist yet.
+Milestone 1 is under construction on the `feat/mvp` branch. Phases 1–7 of the roadmap are done;
+phase 8 (hardening: China fetch relay, rate limits, search, observability) remains. See
+`docs/ARCHITECTURE.md` for the design and the route map.

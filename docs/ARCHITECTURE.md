@@ -181,7 +181,9 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 | `/discover?topic=&lang=` | ✓ | listed and featured sites with topic chips, language menu, subscribe toggles, claim banner |
 | `/s/[siteId]` | ✓ | public site page: avatar, description, readers, claimed badge, topics (owner-editable), latest posts |
 | `/claim`, `/sites/[id]/claim` | ✓ | find the feed, then verify by meta tag or rel=me (ADR 0011) |
-| `/@[handle]`, `/dashboard`, `/settings` | phase 7 | |
+| `/@[handle]` | ✓ | public profile: sites written, recommendations with notes, subscriptions when public (root `[handle]` segment, only `@…` matches) |
+| `/dashboard` | ✓ | author view: claimed sites, readers, per-post likes and recommendations, notes, translation opt-out |
+| `/settings`, `/settings/opml` | ✓ | handle, display name, bio, public subscriptions, reading language, OPML export |
 
 ## Roadmap (milestone 1, branch `feat/mvp`)
 
@@ -191,5 +193,5 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 4. Reader web ✓
 5. Translation ✓
 6. Discover + sites + claim ✓ (site assets job included)
-7. Recommendations + profiles + dashboard ← current
-8. Hardening (relay, China checks, search, observability)
+7. Recommendations + profiles + dashboard ✓
+8. Hardening ← current (relay, China checks, search, observability)

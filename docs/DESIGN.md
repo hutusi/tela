@@ -46,9 +46,18 @@ Motion: `animate-fade` (250 ms fade + 4px rise) on view changes and popovers.
 
 `AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `ArticleList`, `Reader`,
 `TranslationBar`, `LikeButton`, `MarkRead`, `RequestTranslation`, `AutoRefresh`, `EmptyState`,
-`Swatch`, `SiteAvatar`, `SiteCard`. Discover's hero, topic chips, language menu (a native
-`<details>` dropdown), and claim banner live in `app/discover/page.tsx`. Phase 7 adds
-`RecommendPopover` and `Toast`.
+`Swatch`, `SiteAvatar`, `SiteCard`, `RecommendPopover`. Discover's hero, topic chips, language
+menu (a native `<details>` dropdown), and claim banner live in `app/discover/page.tsx`.
+
+Recommend (from the design): the reader's action row holds Like and Recommend pills; Recommend
+opens a 320 px popover with a three-line serif textarea, a hint ("shown on your profile and to the
+author"), Cancel and a filled Recommend button. Success shows a bottom-centre toast for ~2.5 s
+(the toast lives inside `RecommendPopover`; there is no global toast bus yet). A recommended post
+renders the pill filled (`bg-ink`), and clicking it again removes the recommendation.
+
+Profile (`/@handle`), dashboard and settings reuse the header and a single 720–960 px column with
+`font-serif` headings; there is no dedicated design for them, so they follow the Discover page's
+spacing and the site card's chips.
 
 Discover card (from the design): 40 px avatar (favicon or initial), name with a green ✓ when
 claimed, host, language chip, serif tagline, "Latest: …", "N readers · cadence", and a
