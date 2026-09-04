@@ -2,13 +2,22 @@ import {
   dedupKey,
   FeedParseError,
   normalizeLangTag,
+  normalizeOrigin,
   type ParsedFeed,
   type ParsedItem,
   parseFeedText,
   processArticleHtml,
   sha256Hex,
 } from '@tela/content'
-import { articleContents, articles, type Db, feeds, sites, type Tx } from '@tela/db'
+import {
+  articleContents,
+  articles,
+  type Db,
+  feeds,
+  recomputeReaderCount,
+  sites,
+  type Tx,
+} from '@tela/db'
 import { and, eq, sql } from 'drizzle-orm'
 import { type ContentSample, learnContentMode } from './content-mode'
 import { type HttpClient, HttpError } from './http'
@@ -30,6 +39,8 @@ export type FetchFeedResult =
       items: number
       newArticleIds: number[]
       updatedArticleIds: number[]
+      /** What happened to the site's home URL once the feed declared one. */
+      siteHome: HomeUrlOutcome
     }
   | { status: 'unchanged' }
   | { status: 'error'; error: string; kind: string }
@@ -54,6 +65,53 @@ export type FetchFeedOptions = {
 }
 
 type FeedRow = typeof feeds.$inferSelect
+
+export type HomeUrlOutcome = 'kept' | 'renamed' | 'joined' | 'blocked'
+
+/**
+ * Sites are keyed by origin, and a feed added by URL starts on a site keyed by the feed's own
+ * origin. A feed served from elsewhere (FeedBurner, a CDN, a hosted newsletter) would leave the
+ * blog attached to that host, which is where claim verification looks for the proof and what
+ * readers see as the site. Once the feed declares its home, move the feed there: rename the site
+ * when that origin is free, join an existing site nobody has claimed, and leave a claimed site
+ * alone, since a feed must not be able to attach itself to another member's site.
+ */
+async function adoptDeclaredHome(
+  db: Db,
+  feed: FeedRow,
+  declaredHome: string | null,
+): Promise<{ siteId: number; outcome: HomeUrlOutcome }> {
+  const declared = declaredHome ? normalizeOrigin(declaredHome) : null
+  const [site] = await db
+    .select({ id: sites.id, homeUrl: sites.homeUrl, claimedBy: sites.claimedBy })
+    .from(sites)
+    .where(eq(sites.id, feed.siteId))
+  const keyedByFeedHost = site !== undefined && site.homeUrl === normalizeOrigin(feed.feedUrl)
+  if (!site || !declared || declared === site.homeUrl || !keyedByFeedHost) {
+    return { siteId: feed.siteId, outcome: 'kept' }
+  }
+  const [target] = await db
+    .select({ id: sites.id, claimedBy: sites.claimedBy })
+    .from(sites)
+    .where(eq(sites.homeUrl, declared))
+  if (!target) {
+    await db.update(sites).set({ homeUrl: declared }).where(eq(sites.id, site.id))
+    return { siteId: site.id, outcome: 'renamed' }
+  }
+  if (target.claimedBy !== null || site.claimedBy !== null) {
+    return { siteId: site.id, outcome: 'blocked' }
+  }
+  await db.transaction(async (tx) => {
+    await tx.update(feeds).set({ siteId: target.id }).where(eq(feeds.id, feed.id))
+    const [left] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(feeds)
+      .where(eq(feeds.siteId, site.id))
+    if ((left?.n ?? 0) === 0) await tx.delete(sites).where(eq(sites.id, site.id))
+  })
+  await recomputeReaderCount(db, feed.id)
+  return { siteId: target.id, outcome: 'joined' }
+}
 
 function addSeconds(date: Date, sec: number): Date {
   return new Date(date.getTime() + sec * 1000)
@@ -358,13 +416,15 @@ export async function fetchFeed(
   const newArticles = newArticleIds.length
   const updatedArticles = updatedArticleIds.length
 
+  const { siteId, outcome: siteHome } = await adoptDeclaredHome(db, feed, parsed.homeUrl)
+
   // Fill in site metadata the feed knows and the site row lacks. The language comes from what
   // the site's articles are written in; feeds declare "zh", "en-us", or nothing at all, so the
   // declared tag is only a normalized fallback while no article has been detected yet.
   const [dominant] = await db.execute<{ lang: string | null }>(sql`
     select mode() within group (order by a.source_lang) as lang
     from articles a join feeds f on f.id = a.feed_id
-    where f.site_id = ${feed.siteId} and a.source_lang is not null
+    where f.site_id = ${siteId} and a.source_lang is not null
   `)
   const primaryLang = dominant?.lang ?? normalizeLangTag(parsed.language)
   await db
@@ -374,7 +434,7 @@ export async function fetchFeed(
       description: sql`coalesce(${sites.description}, ${parsed.description})`,
       primaryLang: sql`coalesce(${primaryLang}::text, ${sites.primaryLang})`,
     })
-    .where(eq(sites.id, feed.siteId))
+    .where(eq(sites.id, siteId))
 
   const publishedDates = parsed.items.map((i) => i.publishedAt).filter((d): d is Date => d !== null)
   const lastItemAt =
@@ -434,5 +494,6 @@ export async function fetchFeed(
     items: parsed.items.length,
     newArticleIds,
     updatedArticleIds,
+    siteHome,
   }
 }

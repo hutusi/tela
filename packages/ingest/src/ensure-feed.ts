@@ -37,6 +37,8 @@ export async function ensureSite(db: Db, input: EnsureSiteInput): Promise<{ site
 export type EnsureFeedInput = {
   feedUrl: string
   parsed?: ParsedFeed | null
+  /** The blog's home as discovery saw it, when the parsed feed is not at hand. */
+  homeUrl?: string | null
   /** Force the region (e.g. a known mainland-China host). */
   fetchRegion?: 'global' | 'cn'
 }
@@ -53,7 +55,7 @@ export async function ensureFeed(db: Db, input: EnsureFeedInput): Promise<Ensure
 
   const parsed = input.parsed ?? null
   const { siteId } = await ensureSite(db, {
-    homeUrl: parsed?.homeUrl ?? null,
+    homeUrl: input.homeUrl ?? parsed?.homeUrl ?? null,
     feedUrl: input.feedUrl,
     title: parsed?.title ?? null,
     description: parsed?.description ?? null,

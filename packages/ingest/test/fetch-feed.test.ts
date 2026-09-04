@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { parseFeedText } from '@tela/content'
 import { articleContents, articles, feeds, sites } from '@tela/db'
 import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { ensureFeed } from '../src/ensure-feed'
 import { fetchFeed } from '../src/fetch-feed'
 import { createHttpClient } from '../src/http'
@@ -170,6 +170,76 @@ describe('fetchFeed', () => {
       status: 'fetched',
       newArticles: 2,
     })
+  })
+
+  function declaringHome(home: string, path = '/feed.xml') {
+    return rss({
+      link: home,
+      items: [
+        {
+          guid: `${path}-1`,
+          link: `${home}posts/1`,
+          title: 'Hosted elsewhere',
+          description: 'Summary',
+          content: longHtml(4),
+          date: 'Thu, 04 Sep 2026 08:00:00 GMT',
+        },
+      ],
+    })
+  }
+
+  test('a feed hosted elsewhere moves its site to the home it declares', async () => {
+    server.text('/feed.xml', declaringHome('https://blog.example/'))
+    const { feedId, siteId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
+    const [before] = await t.db.select().from(sites).where(eq(sites.id, siteId))
+    expect(before?.homeUrl).toBe(server.origin)
+    expect(await fetchFeed(t.db, http, feedId, opts)).toMatchObject({
+      status: 'fetched',
+      siteHome: 'renamed',
+    })
+    const [after] = await t.db.select().from(sites).where(eq(sites.id, siteId))
+    expect(after?.homeUrl).toBe('https://blog.example')
+    // Already right: the next fetch keeps it.
+    server.text('/feed.xml', declaringHome('https://blog.example/', '/feed2.xml'))
+    expect(await fetchFeed(t.db, http, feedId, opts)).toMatchObject({ siteHome: 'kept' })
+    // A site created from discovery's declared home starts out right and is kept as well.
+    server.text('/other.xml', declaringHome('https://other.example/'))
+    const other = await ensureFeed(t.db, {
+      feedUrl: server.url('/other.xml'),
+      homeUrl: 'https://other.example/',
+    })
+    expect(await fetchFeed(t.db, http, other.feedId, opts)).toMatchObject({ siteHome: 'kept' })
+  })
+
+  test('joins an existing unclaimed site for that home, and leaves a claimed one alone', async () => {
+    const userA = '11111111-1111-4111-8111-111111111111'
+    await t.db.execute(sql`insert into auth.users (id, email) values (${userA}, 'a@x.test')`)
+    // An unclaimed site already exists for the declared home (with its own feed).
+    const [home] = await t.db
+      .insert(sites)
+      .values({ homeUrl: 'https://blog.example', title: 'Blog' })
+      .returning({ id: sites.id })
+    await t.db.insert(feeds).values({ siteId: home!.id, feedUrl: 'https://blog.example/rss' })
+    server.text('/feed.xml', declaringHome('https://blog.example/'))
+    const hosted = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
+    expect(await fetchFeed(t.db, http, hosted.feedId, opts)).toMatchObject({ siteHome: 'joined' })
+    const [moved] = await t.db.select().from(feeds).where(eq(feeds.id, hosted.feedId))
+    expect(moved?.siteId).toBe(home!.id)
+    expect(await t.db.select().from(sites).where(eq(sites.id, hosted.siteId))).toEqual([])
+
+    // A site claimed by a member does not get feeds from other hosts attached to it.
+    const [claimed] = await t.db
+      .insert(sites)
+      .values({ homeUrl: 'https://claimed.example', claimedBy: userA, listing: 'listed' })
+      .returning({ id: sites.id })
+    server.text('/imposter.xml', declaringHome('https://claimed.example/', '/imposter.xml'))
+    const imposter = await ensureFeed(t.db, { feedUrl: server.url('/imposter.xml') })
+    expect(await fetchFeed(t.db, http, imposter.feedId, opts)).toMatchObject({
+      siteHome: 'blocked',
+    })
+    const [still] = await t.db.select().from(feeds).where(eq(feeds.id, imposter.feedId))
+    expect(still?.siteId).toBe(imposter.siteId)
+    expect(still?.siteId).not.toBe(claimed!.id)
   })
 
   test('is idempotent: unchanged bodies and 304s add nothing and back off', async () => {

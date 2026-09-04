@@ -46,6 +46,7 @@ export async function startClaimAction(
   }
   const first = found[0]
   if (!first) return { error: 'no_feed', query }
-  const { siteId } = await ensureFeed(db, { feedUrl: first.url })
+  // The declared home is what the site is keyed by and where verification looks for the proof.
+  const { siteId } = await ensureFeed(db, { feedUrl: first.url, homeUrl: first.homeUrl })
   redirect(`/sites/${siteId}/claim`)
 }

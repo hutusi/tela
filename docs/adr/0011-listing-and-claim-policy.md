@@ -31,5 +31,8 @@ DNS access.
 - The directory stays human-backed by construction: nothing is listed without a person who
   proved control of the domain.
 - A site claimed by one member cannot be claimed by another until the first claim is removed
-  (support action).
+  (support action); a later verifier's claim fails instead of taking the site over.
+- A site is keyed by the home the feed declares, not by the feed's host: a blog whose feed lives
+  on FeedBurner or a CDN is still verified (and shown) at its own origin. The first fetch moves
+  the feed there, joining an existing unclaimed site or leaving a claimed one alone.
 - Verification runs from the worker, so mainland-China sites go through the relay once it exists.
