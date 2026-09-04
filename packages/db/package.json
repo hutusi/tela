@@ -7,14 +7,17 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts",
-    "./testing": "./src/testing/index.ts"
+    "./testing": "./src/testing/index.ts",
+    "./queries": "./src/queries/index.ts",
+    "./queue": "./src/queue.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
     "generate:custom": "drizzle-kit generate --custom",
     "migrate": "bun run scripts/migrate.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "local-db": "bun run scripts/local-db.ts"
+    "local-db": "bun run scripts/local-db.ts",
+    "prepare-db": "bun run scripts/prepare-db.ts"
   },
   "dependencies": {
     "@tela/shared": "workspace:*",
@@ -22,6 +25,7 @@
     "postgres": "^3.4.9"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "^0.31.10",
+    "pg-boss": "^12.30.0"
   }
 }
