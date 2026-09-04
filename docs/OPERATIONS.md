@@ -22,7 +22,10 @@ implements them (see `docs/ARCHITECTURE.md`).
 | `LOG_LEVEL` | worker | `debug` / `info` / `warn` / `error` |
 | `WORKER_USER_AGENT` | worker | Sent on every fetch; keep a contact URL in it |
 | `FETCH_TIMEOUT_MS`, `FETCH_CONCURRENCY`, `SCHEDULER_BATCH` | worker | Per-request timeout (20 s), parallel fetches per process (4), max feeds enqueued per tick (500) |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web | Browser auth client (phase 4) |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web | Supabase Auth (cookies via `@supabase/ssr`) |
+| `IMAGE_PROXY_SECRET` | web | HMAC key for `/img` URLs; set as a Worker secret (`wrangler secret put`) |
+| `TELA_DEV_AUTH` | web (local only) | `1` signs every request in as the development user; refused on Cloudflare |
+| `TELA_ALLOW_PRIVATE_HOSTS`, `WORKER_ALLOW_PRIVATE_HOSTS` | tests only | let discovery/fetch reach localhost fixture servers |
 | `NEXTJS_ENV` | web (`.dev.vars`) | Which `.env` files OpenNext loads locally |
 | `TEST_DATABASE_URL`, `PG_BIN_DIR` | tests | Use an existing database, or point at Postgres binaries |
 
@@ -53,6 +56,14 @@ fly secrets set --app tela-worker DATABASE_URL="<supabase direct connection stri
 fly deploy --config apps/worker/fly.toml --dockerfile apps/worker/Dockerfile
 ```
 
+## End-to-end tests
+
+`bun run e2e` (`apps/web/e2e/run.sh`) starts a throwaway Postgres (or uses `E2E_DATABASE_URL`),
+a fixture feed server, seeds two feeds for the development user, builds and starts the worker and
+the web app in dev-auth mode, and runs Playwright. Logs land in `.e2e-logs/`; failing tests leave
+traces in `apps/web/test-results/`. CI runs the same script against a Postgres service container.
+First run: `cd apps/web && bunx playwright install chromium`.
+
 ## Local development
 
 - Web: `cp apps/web/.env.example apps/web/.env`, set `DATABASE_URL`, `bun run dev`.
@@ -61,6 +72,9 @@ fly deploy --config apps/worker/fly.toml --dockerfile apps/worker/Dockerfile
 - Worker: `cp apps/worker/.env.example apps/worker/.env`, `bun run dev:worker`.
 - Tests: `bun run test`. DB tests start a throwaway cluster with the local `initdb`; install
   Postgres with `brew install postgresql@17` or set `TEST_DATABASE_URL`.
+- No Docker: `bun run db:local --port 54322` starts a migrated Postgres with the development user
+  and prints `DATABASE_URL`; with `TELA_DEV_AUTH=1` in `apps/web/.env` the app signs you in as that
+  user. `bun run db:prepare` applies the same setup to an existing database.
 
 ## Runbooks
 

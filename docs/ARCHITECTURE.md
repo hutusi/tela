@@ -144,17 +144,36 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 - i18n: next-intl without routing; locale from cookie → `Accept-Language` (ADR 0010).
   `reading_lang` is separate from the UI locale.
 - Design tokens from `Tela.dc.html` live in `apps/web/src/app/globals.css` (`@theme`). Fonts
-  (EB Garamond, Figtree) are self-hosted by `next/font`.
-- Routes [phase 4+]: `/reading`, `/discover`, `/add`, `/s/[siteId]`, `/@[handle]`,
-  `/sites/[id]/claim`, `/dashboard`, `/settings`, `/login`, `/img`.
+  (EB Garamond, Figtree) are self-hosted by `next/font`. See `docs/DESIGN.md`.
+- Auth: `lib/auth.ts` (Supabase SSR cookies, `getClaims()`, dev-auth mode; ADR 0012). Pages call
+  `requireUser()`; there is no middleware.
+- Reader queries live in `packages/db/src/queries/reader.ts` (`listSubscriptions`, `countTotals`,
+  `listArticles` with keyset paging, `getArticle`, `markRead`, `markAllRead`, `toggleLike`,
+  `subscribe`) and are tested in `packages/db/test/reader.test.ts`.
+- Enqueueing from the web: `createJobSender(db)` (`@tela/db/queue`) inserts into `pgboss.job`
+  with plain SQL that mirrors pg-boss's own insert plan (queue defaults from `pgboss.queue`,
+  `ON CONFLICT DO NOTHING` for singleton dedup). The web app never imports pg-boss, whose `pg`
+  dependency does not bundle for Workers; `packages/db/test/queue.test.ts` fetches those rows with
+  a real pg-boss instance so a schema change in pg-boss fails there first. "Add a feed" sends
+  `feed.fetch`, and the reading view auto-refreshes until the first fetch lands.
+
+| Route | Status | Purpose |
+|---|---|---|
+| `/` | ✓ | landing for anonymous users; signed-in users go to `/reading` |
+| `/login`, `/auth/callback` | ✓ | email code, GitHub, Google; dev-auth button locally |
+| `/reading?filter=&feed=&article=` | ✓ | three-column reader; URL carries the selection |
+| `/add` | ✓ | discover feeds from any URL, subscribe, OPML import |
+| `/img` | ✓ | signed image proxy (ADR 0007) |
+| `/discover`, `/s/[siteId]`, `/sites/[id]/claim` | phase 6 | |
+| `/@[handle]`, `/dashboard`, `/settings` | phase 7 | |
 
 ## Roadmap (milestone 1, branch `feat/mvp`)
 
 1. Scaffold + infra ✓
 2. Content package ✓
 3. Ingestion worker ✓ (site assets to R2 moved to phase 6, where Discover first shows favicons)
-4. Reader web ← current
-5. Translation
+4. Reader web ✓
+5. Translation ← current
 6. Discover + sites + claim
 7. Recommendations + profiles + dashboard
 8. Hardening (relay, China checks, search, observability)
