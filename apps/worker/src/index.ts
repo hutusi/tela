@@ -22,6 +22,7 @@ import {
   type TranslateBodyJob,
   type TranslateTitleJob,
 } from './queues'
+import { startRelayServer } from './relay/server'
 import { maintenanceDaily, schedulerTick } from './scheduler'
 
 async function main() {
@@ -113,7 +114,14 @@ async function main() {
   }
 
   if (has('relay')) {
-    log.warn('relay role is not implemented yet (phase 8)')
+    const relay = await startRelayServer({
+      secrets: [config.RELAY_SECRET ?? '', config.RELAY_SECRET_PREVIOUS ?? ''],
+      port: config.RELAY_PORT,
+      timeoutMs: config.FETCH_TIMEOUT_MS,
+      allowPrivateHosts: process.env.WORKER_ALLOW_PRIVATE_HOSTS === '1',
+    })
+    log.info('relay listening', { port: relay.port })
+    stops.push(relay.stop)
   }
 
   const heartbeat = setInterval(
