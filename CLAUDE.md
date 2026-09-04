@@ -56,3 +56,7 @@ Next.js 16 rules that differ from older training data; read it before touching `
 - **Add a UI string**: `apps/web/messages/en.json` and `zh-Hans.json`, same key in both.
 - **Add a reading language**: `READING_LANGUAGES` in `packages/shared`, a message catalog if it is
   also a UI locale, and `LANGUAGE_NAMES`.
+- **Add a translation provider**: implement `Translator` (`packages/llm/src/types.ts`) or add a
+  case to `createTranslator` in `packages/llm/src/providers.ts` using an AI SDK model, extend
+  `configFromEnv`, and document the env vars in `docs/OPERATIONS.md`. Keep output validation in
+  `translateBlocks`; never trust model output as HTML.

@@ -110,13 +110,27 @@ runtime-agnostic so the web app can reuse discovery; `apps/worker` only wires it
 Tests run against an in-process fixture HTTP server and the DB harness
 (`packages/ingest/test/`).
 
-## Translation [phase 5]
+## Translation (`packages/llm` + `apps/worker/src/translation`)
 
-Provider-agnostic adapter (Vercel AI SDK); first provider is Aliyun Bailian's OpenAI-compatible
-endpoint serving GLM. Targets are the reading languages in `packages/shared` (`zh-Hans`, `en`).
-Title and excerpt are translated eagerly at ingest; bodies lazily on first open. One call per
-chunk of ~3k source tokens returns `{ translations: [{ id, text }] }`; each block is validated
-(placeholder multiset, length ratio, non-identity) and cached in `translations`.
+ADR 0006. `packages/llm` is the provider adapter: a `Translator` interface with Bailian
+(OpenAI-compatible, GLM), Anthropic, and a deterministic mock behind `createTranslator` /
+`configFromEnv`; `translateBlocks` chunks to ~3k source tokens, validates every block
+(placeholder multiset, length ratio, non-identity), retries failures once in strict mode, and
+carries the previous chunk's tail as context.
+
+- **Eager titles**: after each fetch the worker sends `translate.title` for new and changed
+  articles into every reading language ≠ source; `translateArticleTitle` stores the result on
+  `article_translations.title/excerpt` with `status = 'pending'` (body untouched).
+- **Lazy bodies**: opening a foreign article calls `requestTranslationAction`, which upserts
+  `status = 'requested'` (or notices a fresh `done`/`partial` row) and sends `translate.body` at
+  priority 10; the reader polls every 2 s. `translateArticleBody` reads `taggedTextsOf(html)`,
+  looks up the `translations` cache by block hash, translates only the misses, stores them, and
+  materializes the rehydrated HTML. Same-language, opted-out, and budget-exhausted cases are
+  recorded as `done`/`failed`/skipped explicitly.
+- **Reader**: `TranslationBar` (written in X, translated by Tela, status) with Side by side /
+  Translation / Original modes (`?mode=`); the list shows translated titles and excerpts and an
+  `XX → YY` badge. "Read in" in the header sets `profiles.reading_lang`.
+- **Cost**: `llm_usage` per call; `LLM_DAILY_BUDGET_TOKENS` gates background work only.
 
 ## Queue
 
@@ -173,7 +187,7 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 2. Content package ✓
 3. Ingestion worker ✓ (site assets to R2 moved to phase 6, where Discover first shows favicons)
 4. Reader web ✓
-5. Translation ← current
-6. Discover + sites + claim
+5. Translation ✓
+6. Discover + sites + claim ← current
 7. Recommendations + profiles + dashboard
 8. Hardening (relay, China checks, search, observability)
