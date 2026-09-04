@@ -65,3 +65,111 @@ a:hover {
   background: var(--color-thumb);
   border-radius: 4px;
 }
+
+/* Article bodies: sanitized HTML from @tela/content, one leaf block per data-tb id. */
+.article-body {
+  font-family: var(--font-serif);
+  font-size: 19.5px;
+  line-height: 1.55;
+  color: var(--color-body);
+  overflow-wrap: anywhere;
+}
+.article-body :is(p, ul, ol, blockquote, pre, table, figure, dl, details, hr) {
+  margin: 0 0 20px;
+}
+.article-body :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin: 32px 0 12px;
+  color: var(--color-ink);
+}
+.article-body h1 {
+  font-size: 1.5em;
+}
+.article-body h2 {
+  font-size: 1.35em;
+}
+.article-body h3 {
+  font-size: 1.15em;
+}
+.article-body :is(h4, h5, h6) {
+  font-size: 1em;
+}
+.article-body :is(ul, ol) {
+  padding-left: 1.4em;
+}
+.article-body li {
+  margin: 0 0 6px;
+}
+.article-body blockquote {
+  border-left: 3px solid var(--color-line);
+  padding-left: 16px;
+  color: var(--color-ink-2);
+}
+.article-body :is(pre, code, kbd, samp) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8em;
+}
+.article-body pre {
+  background: #fff;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+.article-body :not(pre) > code {
+  background: var(--color-hover);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.article-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+.article-body figure {
+  margin-left: 0;
+  margin-right: 0;
+}
+.article-body figcaption {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-top: 6px;
+}
+.article-body table {
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.article-body :is(th, td) {
+  border: 1px solid var(--color-line);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.article-body th {
+  background: var(--color-hover);
+  font-weight: 600;
+}
+.article-body hr {
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}
+.article-body a {
+  text-decoration: underline;
+  text-decoration-color: var(--color-line);
+  text-underline-offset: 3px;
+}
+.article-body :lang(zh),
+.article-body:lang(zh),
+.article-body:lang(ja),
+.article-body:lang(ko) {
+  font-size: 18px;
+  line-height: 1.8;
+}

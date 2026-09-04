@@ -23,7 +23,7 @@ const figtree = Figtree({
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('app')
-  return { title: t('name'), description: t('tagline') }
+  return { title: { default: t('name'), template: `%s · ${t('name')}` }, description: t('tagline') }
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

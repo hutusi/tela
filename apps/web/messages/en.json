@@ -6,12 +6,88 @@
   "nav": {
     "reading": "Reading",
     "discover": "Discover",
-    "readIn": "Read in"
+    "readIn": "Read in",
+    "search": "Search blogs, articles, people",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "addFeed": "+ Add a feed"
   },
   "home": {
-    "title": "Tela is being built.",
-    "intro": "A reader and gathering place for independent blogs. Every feed here has a specific human behind it.",
+    "title": "Independent blogs, in any language.",
+    "intro": "Blogs and personal websites with a feed, claimed by their authors. Subscribe in one click; Tela translates as you read.",
+    "cta": "Start reading",
     "dbConnected": "Database connected: {sites, plural, =0 {no sites yet} one {# site} other {# sites}}.",
     "dbMissing": "Database not configured. Set DATABASE_URL or the HYPERDRIVE binding."
+  },
+  "login": {
+    "title": "Sign in to Tela",
+    "intro": "A code by email, or your GitHub or Google account. No passwords.",
+    "emailPlaceholder": "you@example.com",
+    "sendCode": "Send me a code",
+    "codeSent": "We sent a code to {email}.",
+    "codePlaceholder": "6-digit code",
+    "verify": "Continue",
+    "or": "or",
+    "with": {
+      "github": "Continue with GitHub",
+      "google": "Continue with Google"
+    },
+    "devUser": "Continue as the development user",
+    "errors": {
+      "invalid_email": "That does not look like an email address.",
+      "not_configured": "Sign-in is not configured on this server.",
+      "send_failed": "We could not send the code. Try again in a minute.",
+      "bad_code": "That code is wrong or has expired.",
+      "oauth_failed": "Sign-in with that provider failed."
+    }
+  },
+  "sidebar": {
+    "all": "All articles",
+    "today": "Today",
+    "liked": "Liked",
+    "subscriptions": "Subscriptions",
+    "noSubscriptions": "No subscriptions yet."
+  },
+  "list": {
+    "markAllRead": "Mark all read",
+    "empty": "Nothing here yet.",
+    "emptyHint": "Add a feed to start reading.",
+    "minutes": "{n} min",
+    "translatedBadge": "{from} → {to}",
+    "loadMore": "Older articles",
+    "fetching": "Fetching this feed for the first time…"
+  },
+  "reader": {
+    "close": "✕ Close",
+    "like": "Like",
+    "liked": "Liked",
+    "recommend": "Recommend",
+    "minRead": "{n} min read",
+    "readOriginal": "Open the original",
+    "readersOnTela": "{n, plural, =0 {no readers on Tela yet} one {# reader on Tela} other {# readers on Tela}}",
+    "visibleToAuthor": "Your ♡ and recommendations are visible to the author.",
+    "pickArticle": "Pick an article on the left. Posts in other languages open with a translation beside the original.",
+    "unreadCount": "{n} unread",
+    "noContent": "This post has no readable content in its feed."
+  },
+  "add": {
+    "title": "Add a feed",
+    "intro": "Paste a blog address or a feed URL. Tela finds the feed and starts fetching.",
+    "placeholder": "https://example.blog",
+    "find": "Find feeds",
+    "searching": "Looking for feeds…",
+    "none": "No feed found at that address.",
+    "subscribe": "Subscribe",
+    "subscribed": "Subscribed",
+    "items": "{n, plural, one {# post} other {# posts}}",
+    "opml": "Or import an OPML file",
+    "opmlHint": "Exported from another reader. Up to 500 feeds.",
+    "import": "Import",
+    "imported": "Imported {n, plural, one {# feed} other {# feeds}}.",
+    "errors": {
+      "invalid_url": "That does not look like a URL.",
+      "fetch_failed": "Could not reach that address.",
+      "opml_invalid": "That file is not an OPML document."
+    }
   }
 }

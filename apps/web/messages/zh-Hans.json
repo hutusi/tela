@@ -6,12 +6,88 @@
   "nav": {
     "reading": "阅读",
     "discover": "发现",
-    "readIn": "阅读语言"
+    "readIn": "阅读语言",
+    "search": "搜索博客、文章、人",
+    "signIn": "登录",
+    "signOut": "退出登录",
+    "addFeed": "+ 添加订阅"
   },
   "home": {
-    "title": "Tela 正在建设中。",
-    "intro": "一个面向独立博客的阅读器与聚集地。这里的每个订阅源背后都有一个具体的人。",
+    "title": "独立博客，任何语言。",
+    "intro": "有订阅源、由作者本人认领的博客与个人网站。一键订阅，Tela 边读边翻译。",
+    "cta": "开始阅读",
     "dbConnected": "数据库已连接：{sites, plural, =0 {还没有站点} other {# 个站点}}。",
     "dbMissing": "尚未配置数据库。请设置 DATABASE_URL 或 HYPERDRIVE 绑定。"
+  },
+  "login": {
+    "title": "登录 Tela",
+    "intro": "邮箱验证码，或使用 GitHub / Google 账号。无需密码。",
+    "emailPlaceholder": "you@example.com",
+    "sendCode": "发送验证码",
+    "codeSent": "验证码已发送到 {email}。",
+    "codePlaceholder": "6 位验证码",
+    "verify": "继续",
+    "or": "或",
+    "with": {
+      "github": "使用 GitHub 登录",
+      "google": "使用 Google 登录"
+    },
+    "devUser": "以开发用户身份继续",
+    "errors": {
+      "invalid_email": "这不像是一个邮箱地址。",
+      "not_configured": "此服务器尚未配置登录。",
+      "send_failed": "验证码发送失败，请稍后再试。",
+      "bad_code": "验证码错误或已过期。",
+      "oauth_failed": "使用该账号登录失败。"
+    }
+  },
+  "sidebar": {
+    "all": "全部文章",
+    "today": "今天",
+    "liked": "喜欢",
+    "subscriptions": "订阅",
+    "noSubscriptions": "还没有订阅。"
+  },
+  "list": {
+    "markAllRead": "全部标为已读",
+    "empty": "这里还没有内容。",
+    "emptyHint": "添加一个订阅源开始阅读。",
+    "minutes": "{n} 分钟",
+    "translatedBadge": "{from} → {to}",
+    "loadMore": "更早的文章",
+    "fetching": "正在首次抓取这个订阅源…"
+  },
+  "reader": {
+    "close": "✕ 关闭",
+    "like": "喜欢",
+    "liked": "已喜欢",
+    "recommend": "推荐",
+    "minRead": "阅读约 {n} 分钟",
+    "readOriginal": "打开原文",
+    "readersOnTela": "{n, plural, =0 {在 Tela 上还没有读者} other {# 位 Tela 读者}}",
+    "visibleToAuthor": "你的 ♡ 和推荐对作者可见。",
+    "pickArticle": "在左侧选择一篇文章。其他语言的文章会与译文并排显示。",
+    "unreadCount": "{n} 篇未读",
+    "noContent": "这篇文章的订阅源中没有可读内容。"
+  },
+  "add": {
+    "title": "添加订阅",
+    "intro": "粘贴博客地址或订阅源 URL。Tela 会找到订阅源并开始抓取。",
+    "placeholder": "https://example.blog",
+    "find": "查找订阅源",
+    "searching": "正在查找订阅源…",
+    "none": "该地址下没有找到订阅源。",
+    "subscribe": "订阅",
+    "subscribed": "已订阅",
+    "items": "{n} 篇文章",
+    "opml": "或导入 OPML 文件",
+    "opmlHint": "从其他阅读器导出。最多 500 个订阅源。",
+    "import": "导入",
+    "imported": "已导入 {n} 个订阅源。",
+    "errors": {
+      "invalid_url": "这不像是一个 URL。",
+      "fetch_failed": "无法访问该地址。",
+      "opml_invalid": "该文件不是 OPML 文档。"
+    }
   }
 }

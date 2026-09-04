@@ -1,6 +1,7 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { createDb, type Db } from '@tela/db'
 import { cache } from 'react'
+import { onCloudflare } from './env'
 
 /**
  * The only place that knows about Cloudflare bindings. On Workers each request gets its
@@ -9,6 +10,7 @@ import { cache } from 'react'
 let shared: Db | undefined
 
 async function hyperdriveUrl(): Promise<string | undefined> {
+  if (!(await onCloudflare())) return undefined
   try {
     const { env } = await getCloudflareContext({ async: true })
     return (env as CloudflareEnv).HYPERDRIVE?.connectionString
