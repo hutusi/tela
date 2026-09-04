@@ -11,6 +11,7 @@ import { articleContents, articles, type Db, feeds, sites } from '@tela/db'
 import { and, eq, sql } from 'drizzle-orm'
 import { type ContentSample, learnContentMode } from './content-mode'
 import { type HttpClient, HttpError } from './http'
+import { type RegionPolicy, timeoutsWarrantRelay } from './region'
 import {
   backoffSec,
   cacheControlMaxAge,
@@ -37,6 +38,8 @@ export type FetchFeedResult =
 export type FetchFeedOptions = {
   now?: () => Date
   random?: () => number
+  /** Relay routing policy; absent means a feed never changes region. */
+  region?: RegionPolicy
 }
 
 type FeedRow = typeof feeds.$inferSelect
@@ -255,8 +258,32 @@ export async function fetchFeed(
       region: feed.fetchRegion,
     })
   } catch (err) {
-    if (err instanceof HttpError) return recordError(db, feed, err.kind, err.message, now, {})
-    throw err
+    if (!(err instanceof HttpError)) throw err
+    const policy = opts.region
+    if (
+      err.kind === 'timeout' &&
+      policy &&
+      timeoutsWarrantRelay(feed, policy) &&
+      (await policy.controlOk())
+    ) {
+      // The origin keeps timing out while our own connectivity is fine: route it through the
+      // relay from now on and retry at the next scheduler tick.
+      const streak = feed.timeoutStreak + 1
+      await db
+        .update(feeds)
+        .set({
+          fetchRegion: 'cn',
+          regionFlippedAt: now,
+          timeoutStreak: 0,
+          errorCount: feed.errorCount + 1,
+          lastError: `timeout: routed through the relay after ${streak} timeouts`,
+          lastFetchedAt: now,
+          nextFetchAt: now,
+        })
+        .where(eq(feeds.id, feed.id))
+      return { status: 'error', error: 'routed through the relay', kind: 'region_flip' }
+    }
+    return recordError(db, feed, err.kind, err.message, now, {})
   }
 
   if (res.status === 304) {
