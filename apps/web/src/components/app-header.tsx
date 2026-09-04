@@ -46,7 +46,6 @@ export async function AppHeader({ active, query }: { active?: NavKey; query?: st
       <form
         action="/search"
         method="get"
-        role="search"
         className="hidden min-w-60 items-center gap-2 rounded-full border border-line bg-white px-3.5 py-1.5 text-[13px] text-muted focus-within:border-muted md:flex"
       >
         <span aria-hidden="true">⌕</span>
