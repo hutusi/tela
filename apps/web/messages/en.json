@@ -102,5 +102,74 @@
     },
     "columnTranslated": "{target} · translation",
     "columnOriginal": "original"
+  },
+  "discover": {
+    "title": "Independent blogs, in any language.",
+    "intro": "Blogs and personal websites with a feed, claimed by their authors. Subscribe in one click; Tela translates as you read.",
+    "allTopics": "All",
+    "language": "Language",
+    "allLanguages": "All languages",
+    "topics": {
+      "essays": "Essays",
+      "tech": "Tech",
+      "cities": "Cities",
+      "food": "Food",
+      "design": "Design",
+      "outdoors": "Outdoors",
+      "life": "Life",
+      "photography": "Photography",
+      "science": "Science"
+    },
+    "latest": "Latest:",
+    "readers": "{n, plural, =0 {no readers yet} one {# reader} other {# readers}}",
+    "cadence": {
+      "daily": "daily",
+      "weekly": "weekly",
+      "biweekly": "twice a month",
+      "monthly": "monthly",
+      "quiet": "quiet lately"
+    },
+    "subscribe": "Subscribe",
+    "subscribed": "Subscribed",
+    "claimed": "Claimed by its author",
+    "empty": "No blogs listed here yet. Claim yours to be the first.",
+    "claim": {
+      "title": "Have a blog?",
+      "intro": "Claim your feed to see who reads you, which posts they liked, and what they said when recommending them.",
+      "cta": "Claim your feed"
+    }
+  },
+  "site": {
+    "claimedBy": "claimed by @{handle}",
+    "claimLink": "Is this your site? Claim it",
+    "yourTopics": "Your topics",
+    "saveTopics": "Save",
+    "latestPosts": "Latest posts",
+    "noPosts": "No posts fetched yet."
+  },
+  "claim": {
+    "title": "Claim your feed",
+    "intro": "Tell us your blog's address. We will find its feed, then ask you to prove you control the site.",
+    "continue": "Continue",
+    "searching": "Looking for your feed…",
+    "verifyTitle": "Prove you own this site",
+    "verifyIntro": "Add one of the two snippets to the home page of {site}:",
+    "optionMeta": "Option A: a meta tag",
+    "optionMetaHint": "Put this in the <head> of your home page. You can remove it after verification.",
+    "optionRelMe": "Option B: a rel=\"me\" link",
+    "optionRelMeHint": "Link to your Tela profile from your home page (a link in the footer works).",
+    "verify": "Verify",
+    "verifyAgain": "Verify again",
+    "checking": "Checking your site…",
+    "failed": "Not verified yet.",
+    "verified": "Verified. This site is yours on Tela.",
+    "verifiedHint": "It is now listed in Discover. Pick its topics on the site page, and see readers and likes in your dashboard.",
+    "viewSite": "View site page",
+    "claimedByOther": "This site has already been claimed by another Tela member.",
+    "errors": {
+      "invalid_url": "That does not look like a URL.",
+      "fetch_failed": "Could not reach that address.",
+      "no_feed": "No feed found at that address. Tela lists sites that publish a feed."
+    }
   }
 }

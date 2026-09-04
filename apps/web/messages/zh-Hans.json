@@ -102,5 +102,74 @@
     },
     "columnTranslated": "{target} · 译文",
     "columnOriginal": "原文"
+  },
+  "discover": {
+    "title": "独立博客，任何语言。",
+    "intro": "有订阅源、由作者本人认领的博客与个人网站。一键订阅，Tela 边读边翻译。",
+    "allTopics": "全部",
+    "language": "语言",
+    "allLanguages": "所有语言",
+    "topics": {
+      "essays": "随笔",
+      "tech": "技术",
+      "cities": "城市",
+      "food": "美食",
+      "design": "设计",
+      "outdoors": "户外",
+      "life": "生活",
+      "photography": "摄影",
+      "science": "科学"
+    },
+    "latest": "最新：",
+    "readers": "{n, plural, =0 {还没有读者} other {# 位读者}}",
+    "cadence": {
+      "daily": "每日更新",
+      "weekly": "每周更新",
+      "biweekly": "每月两更",
+      "monthly": "每月更新",
+      "quiet": "最近安静"
+    },
+    "subscribe": "订阅",
+    "subscribed": "已订阅",
+    "claimed": "作者已认领",
+    "empty": "这里还没有收录博客。认领你的博客，成为第一个。",
+    "claim": {
+      "title": "你有博客吗？",
+      "intro": "认领你的订阅源，看看谁在读你的文章、他们喜欢哪些、推荐时说了什么。",
+      "cta": "认领你的订阅源"
+    }
+  },
+  "site": {
+    "claimedBy": "由 @{handle} 认领",
+    "claimLink": "这是你的网站？认领它",
+    "yourTopics": "你的主题",
+    "saveTopics": "保存",
+    "latestPosts": "最新文章",
+    "noPosts": "还没有抓取到文章。"
+  },
+  "claim": {
+    "title": "认领你的订阅源",
+    "intro": "告诉我们你博客的地址。我们会找到它的订阅源，然后请你证明你拥有这个网站。",
+    "continue": "继续",
+    "searching": "正在查找订阅源…",
+    "verifyTitle": "证明你拥有这个网站",
+    "verifyIntro": "在 {site} 的首页加入以下两段代码之一：",
+    "optionMeta": "方式一：meta 标签",
+    "optionMetaHint": "放在首页的 <head> 中。验证完成后可以删除。",
+    "optionRelMe": "方式二：rel=\"me\" 链接",
+    "optionRelMeHint": "从你的首页链接到你的 Tela 个人页（放在页脚即可）。",
+    "verify": "验证",
+    "verifyAgain": "再次验证",
+    "checking": "正在检查你的网站…",
+    "failed": "尚未验证。",
+    "verified": "已验证。这个网站在 Tela 上属于你了。",
+    "verifiedHint": "它现在会出现在「发现」中。在站点页选择主题，在仪表盘查看读者与喜欢。",
+    "viewSite": "查看站点页",
+    "claimedByOther": "这个网站已被另一位 Tela 成员认领。",
+    "errors": {
+      "invalid_url": "这不像是一个 URL。",
+      "fetch_failed": "无法访问该地址。",
+      "no_feed": "该地址下没有找到订阅源。Tela 只收录发布订阅源的网站。"
+    }
   }
 }
