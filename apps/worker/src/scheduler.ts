@@ -1,7 +1,7 @@
-import { feeds } from '@tela/db'
+import { articleTranslations, feeds } from '@tela/db'
 import { pruneRateLimits } from '@tela/db/queries'
 import { DEAD_AFTER_ERRORS, reprobeRelayRegions } from '@tela/ingest'
-import { and, asc, eq, lte, sql } from 'drizzle-orm'
+import { and, asc, eq, lt, lte, sql } from 'drizzle-orm'
 import type { WorkerContext } from './context'
 import { queueWebsubRenewals } from './jobs/websub'
 import { log } from './logger'
@@ -24,7 +24,52 @@ export async function schedulerTick(ctx: WorkerContext) {
     )
     if (jobId) enqueued += 1
   }
-  if (due.length > 0) log.info('scheduler tick', { due: due.length, enqueued })
+  const resentTranslations = await resweepStuckTranslations(ctx)
+  if (due.length > 0 || resentTranslations > 0) {
+    log.info('scheduler tick', { due: due.length, enqueued, resentTranslations })
+  }
+}
+
+/** How long a body translation may sit `requested` before the scheduler re-sends its job. */
+export const STUCK_REQUEST_MINUTES = 5
+
+/**
+ * ADR 0004's fallback for lost jobs. The web app inserts translate.body in the same
+ * transaction as the `requested` status, so a stuck row means the job itself was lost (expired,
+ * dead-lettered, or from before that change). The handler flips a row to `running` as soon as it
+ * starts, so `requested` past the grace period is a reliable signal; the singleton key makes a
+ * re-send a no-op while a job for that article and language is still queued.
+ */
+export async function resweepStuckTranslations(
+  ctx: Pick<WorkerContext, 'db' | 'boss'>,
+): Promise<number> {
+  const rows = await ctx.db
+    .select({
+      articleId: articleTranslations.articleId,
+      targetLang: articleTranslations.targetLang,
+    })
+    .from(articleTranslations)
+    .where(
+      and(
+        eq(articleTranslations.status, 'requested'),
+        lt(
+          articleTranslations.updatedAt,
+          sql`now() - make_interval(mins => ${STUCK_REQUEST_MINUTES})`,
+        ),
+      ),
+    )
+    .orderBy(asc(articleTranslations.updatedAt))
+    .limit(200)
+  let sent = 0
+  for (const row of rows) {
+    const id = await ctx.boss.send(
+      QUEUES.translateBody,
+      { articleId: row.articleId, targetLang: row.targetLang, onDemand: true },
+      { singletonKey: `${row.articleId}:${row.targetLang}`, priority: 10 },
+    )
+    if (id) sent += 1
+  }
+  return sent
 }
 
 /** Daily: give dead feeds another chance once a week, and re-probe relay-routed feeds directly. */

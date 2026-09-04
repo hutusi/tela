@@ -161,8 +161,8 @@ declares every queue with its policy, retries, expiry, and a `<name>.dead` dead-
 | `health.check` | cron `*/5 * * * *` (and at startup) | scheduler | logs queue depth, dead letters, failures in the last hour, and overdue feeds; `warn` level when something needs a look |
 | `feed.fetch` | scheduler, web (add feed) | fetch | `short` policy, 3 retries with backoff, 120 s expiry |
 | `article.extract` | web (first open) | extract | lazy full-text extraction for summary-only feeds |
-| `translate.title` | fetch (newest first, at most 100 articles per fetch) | translate | batches of 5, 4 in flight; every reading language the article is not in; deferred to the next day when the budget is spent |
-| `translate.body` | web (open) | translate | priority 10 with `onDemand: true`; singleton per article and language |
+| `translate.title` | fetch (in the article's own transaction; at most 100 articles per fetch) | translate | batches of 5, 4 in flight; every reading language the article is not in; deferred to the next day when the budget is spent |
+| `translate.body` | web (open, same transaction as the `requested` row), scheduler (re-sends rows stuck `requested` for 5 min) | translate | priority 10 with `onDemand: true`; singleton per article and language |
 | `websub.subscribe` | fetch (feed advertises a hub), maintenance (renewals) | fetch | asks the hub to push to `/api/websub/<feedId>`; only when `WEBSUB_ENABLED=1` |
 | `site.assets` | fetch [phase 6] | assets | favicons and covers to R2 |
 | `site.claim.verify` | web [phase 6] | claim | claim verification |

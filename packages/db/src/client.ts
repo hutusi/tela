@@ -1,4 +1,5 @@
-import { drizzle } from 'drizzle-orm/postgres-js'
+import type { PgDatabase } from 'drizzle-orm/pg-core'
+import { drizzle, type PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from './schema'
 
@@ -45,3 +46,9 @@ export function createDb(url: string, options: DbOptions = {}) {
 }
 
 export type Db = ReturnType<typeof createDb>
+
+/** A Db or the `tx` inside db.transaction(): what query helpers and the job sender need. */
+export type DbExecutor = PgDatabase<PostgresJsQueryResultHKT, typeof schema>
+
+/** The handle passed to the callback of db.transaction(). */
+export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]

@@ -1,6 +1,6 @@
 import type { TranslationStatus } from '@tela/shared'
 import { and, eq, inArray, sql } from 'drizzle-orm'
-import type { Db } from '../client'
+import type { Db, Tx } from '../client'
 import { articleTranslations, profiles, translations } from '../schema'
 
 /** Cached translations for a set of block hashes: hash → translated tagged text. */
@@ -70,13 +70,16 @@ export type RequestOutcome = 'requested' | 'in_progress' | 'ready'
 /**
  * Ask for a body translation. Returns 'ready' when a fresh translation exists,
  * 'in_progress' when one is already queued or running, and 'requested' when this call
- * created the request (the caller then enqueues translate.body).
+ * created the request. Pass `enqueue` to insert the translate.body job inside the same
+ * transaction: it runs after the status write and before commit, so a failure to enqueue
+ * rolls the `requested` status back instead of stranding a row no worker will ever pick up.
  */
 export async function requestBodyTranslation(
   db: Db,
   articleId: number,
   targetLang: string,
   contentHash: string | null,
+  enqueue?: (tx: Tx) => Promise<void>,
 ): Promise<RequestOutcome> {
   return db.transaction(async (tx) => {
     const [row] = await tx
@@ -99,6 +102,7 @@ export async function requestBodyTranslation(
         target: [articleTranslations.articleId, articleTranslations.targetLang],
         set: { status: 'requested', contentHash, failedBlockIds: [], updatedAt: new Date() },
       })
+    if (enqueue) await enqueue(tx)
     return 'requested'
   })
 }

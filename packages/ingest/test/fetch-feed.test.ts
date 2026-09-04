@@ -99,6 +99,79 @@ describe('fetchFeed', () => {
     expect(site?.primaryLang).toBe('en')
   })
 
+  test("onArticleStored runs inside each stored article's transaction, and only for changes", async () => {
+    server.text('/feed.xml', threeItems())
+    const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
+    const seen: Array<{ id: number; kind: string }> = []
+    const result = await fetchFeed(t.db, http, feedId, {
+      ...opts,
+      onArticleStored: async (tx, article) => {
+        // Visible on the transaction handle, not yet to anyone else.
+        const inTx = await tx
+          .select({ id: articles.id })
+          .from(articles)
+          .where(eq(articles.id, article.id))
+        const outside = await t.db
+          .select({ id: articles.id })
+          .from(articles)
+          .where(eq(articles.id, article.id))
+        expect(inTx.map((r) => r.id)).toEqual([article.id])
+        expect(outside).toEqual([])
+        seen.push({ id: article.id, kind: article.kind })
+      },
+    })
+    expect(result.status).toBe('fetched')
+    expect(seen.map((s) => s.kind)).toEqual(['inserted', 'inserted', 'inserted'])
+
+    // A fourth item: the three unchanged ones do not call the hook again.
+    server.text(
+      '/feed.xml',
+      rss({
+        link: server.url('/'),
+        ttl: 90,
+        items: [1, 2, 3, 4].map((n) => ({
+          guid: `post-${n}`,
+          link: server.url(`/posts/${n}`),
+          title: `Post ${n}`,
+          description: `Summary ${n}`,
+          content: longHtml(4),
+          date: `Thu, 0${n} Sep 2026 08:00:00 GMT`,
+        })),
+      }),
+    )
+    seen.length = 0
+    await fetchFeed(t.db, http, feedId, {
+      ...opts,
+      onArticleStored: async (_tx, article) => {
+        seen.push({ id: article.id, kind: article.kind })
+      },
+    })
+    expect(seen.map((s) => s.kind)).toEqual(['inserted'])
+  })
+
+  test('a throwing onArticleStored rolls that article back and leaves the fetch to be retried', async () => {
+    server.text('/feed.xml', threeItems())
+    const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
+    let calls = 0
+    await expect(
+      fetchFeed(t.db, http, feedId, {
+        ...opts,
+        onArticleStored: async () => {
+          calls += 1
+          if (calls === 2) throw new Error('queue down')
+        },
+      }),
+    ).rejects.toThrow('queue down')
+    // The first article committed with its hook; the second rolled back; the third never ran.
+    expect(await t.db.select().from(articles).where(eq(articles.feedId, feedId))).toHaveLength(1)
+    expect((await feedRow(feedId)).lastBodyHash).toBeNull()
+    // The retry stores the rest, because the fetch was never recorded as done.
+    expect(await fetchFeed(t.db, http, feedId, opts)).toMatchObject({
+      status: 'fetched',
+      newArticles: 2,
+    })
+  })
+
   test('is idempotent: unchanged bodies and 304s add nothing and back off', async () => {
     server.cached('/feed.xml', threeItems(), '"v1"')
     const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })

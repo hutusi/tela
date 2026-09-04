@@ -1,25 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { getConstructionPlans, PgBoss, type Db as PgBossDb } from 'pg-boss'
-import type { Db } from '../src/client'
+import { getConstructionPlans, PgBoss } from 'pg-boss'
 import { createJobSender } from '../src/queue'
 import { startTestDb, type TestDb } from '../src/testing'
+import { pgBossDatabase } from './pg-boss'
 
 let t: TestDb
-
-/** pg-boss adapter over the postgres.js client, on reserved connections (pg-boss issues BEGIN). */
-function pgBossDatabase(db: Db): PgBossDb {
-  return {
-    async executeSql(text, values) {
-      const conn = await db.raw.reserve()
-      try {
-        const rows = await conn.unsafe(text, (values ?? []) as never[])
-        return { rows: [...rows] }
-      } finally {
-        conn.release()
-      }
-    },
-  }
-}
 
 beforeAll(async () => {
   t = await startTestDb()
@@ -65,5 +50,24 @@ describe('createJobSender', () => {
   test('sending to a missing queue fails loudly', async () => {
     const sender = createJobSender(t.db)
     await expect(sender.send('nope', {})).rejects.toThrow(/does not exist/)
+  })
+
+  test('sends inside a transaction: a rollback takes the job with it', async () => {
+    const boss = new PgBoss({ db: pgBossDatabase(t.db), schema: 'pgboss' })
+    await boss.createQueue('translate.body', { policy: 'short', expireInSeconds: 300 })
+
+    await expect(
+      t.db.transaction(async (tx) => {
+        await createJobSender(tx).send('translate.body', { articleId: 1 }, { singletonKey: '1' })
+        throw new Error('status write failed')
+      }),
+    ).rejects.toThrow('status write failed')
+    expect(await boss.fetch('translate.body', { batchSize: 10 })).toEqual([])
+
+    await t.db.transaction(async (tx) => {
+      await createJobSender(tx).send('translate.body', { articleId: 2 }, { singletonKey: '2' })
+    })
+    const jobs = await boss.fetch<{ articleId: number }>('translate.body', { batchSize: 10 })
+    expect(jobs.map((j) => j.data)).toEqual([{ articleId: 2 }])
   })
 })

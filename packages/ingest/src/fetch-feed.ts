@@ -8,7 +8,7 @@ import {
   processArticleHtml,
   sha256Hex,
 } from '@tela/content'
-import { articleContents, articles, type Db, feeds, sites } from '@tela/db'
+import { articleContents, articles, type Db, feeds, sites, type Tx } from '@tela/db'
 import { and, eq, sql } from 'drizzle-orm'
 import { type ContentSample, learnContentMode } from './content-mode'
 import { type HttpClient, HttpError } from './http'
@@ -36,11 +36,21 @@ export type FetchFeedResult =
   | { status: 'dead'; error: string }
   | { status: 'skipped'; reason: string }
 
+/** What `onArticleStored` learns about the article whose transaction is about to commit. */
+export type StoredArticle = { id: number; sourceLang: string | null; kind: 'inserted' | 'updated' }
+
 export type FetchFeedOptions = {
   now?: () => Date
   random?: () => number
   /** Relay routing policy; absent means a feed never changes region. */
   region?: RegionPolicy
+  /**
+   * Called inside the transaction that inserts or updates an article, before it commits, with
+   * that transaction's handle: work queued through it (title translations) lands together with
+   * the article or not at all. A throw rolls that article back and fails the fetch, which
+   * pg-boss retries; articles stored before it are kept and count as unchanged then.
+   */
+  onArticleStored?: (tx: Tx, article: StoredArticle) => Promise<void>
 }
 
 type FeedRow = typeof feeds.$inferSelect
@@ -139,6 +149,7 @@ async function upsertArticle(
   item: ParsedItem,
   now: Date,
   samples: ContentSample[],
+  onStored?: FetchFeedOptions['onArticleStored'],
 ): Promise<UpsertOutcome> {
   const key = await dedupKey(item)
   const html = item.contentHtml ?? item.summaryHtml ?? ''
@@ -154,6 +165,7 @@ async function upsertArticle(
     tail: processed.text.slice(-40),
   })
   const title = titleFor(item, processed.excerpt)
+  const sourceLang = processed.lang === 'und' ? null : processed.lang
 
   const [existing] = await db
     .select({
@@ -177,20 +189,22 @@ async function upsertArticle(
           author: item.author,
           publishedAt: item.publishedAt,
           fetchedAt: now,
-          sourceLang: processed.lang === 'und' ? null : processed.lang,
+          sourceLang,
           excerpt: processed.excerpt || null,
           contentHash: processed.contentHash,
           wordCount: processed.wordCount,
           readingMinutes: processed.readingMinutes,
         })
         .returning({ id: articles.id })
-      insertedId = (row as { id: number }).id
+      const id = (row as { id: number }).id
+      insertedId = id
       await tx.insert(articleContents).values({
-        articleId: insertedId,
+        articleId: id,
         html: processed.html,
         blocks: processed.blocks,
         extractedFrom: 'feed',
       })
+      if (onStored) await onStored(tx, { id, sourceLang, kind: 'inserted' })
     })
     return { kind: 'inserted', id: insertedId }
   }
@@ -207,7 +221,7 @@ async function upsertArticle(
         title,
         author: item.author,
         publishedAt: item.publishedAt,
-        sourceLang: processed.lang === 'und' ? null : processed.lang,
+        sourceLang,
         excerpt: processed.excerpt || null,
         contentHash: processed.contentHash,
         contentVersion: existing.contentVersion + 1,
@@ -232,6 +246,7 @@ async function upsertArticle(
           updatedAt: now,
         },
       })
+    if (onStored) await onStored(tx, { id: existing.id, sourceLang, kind: 'updated' })
   })
   return { kind: 'updated', id: existing.id }
 }
@@ -336,7 +351,7 @@ export async function fetchFeed(
   const newArticleIds: number[] = []
   const updatedArticleIds: number[] = []
   for (const item of parsed.items) {
-    const outcome = await upsertArticle(db, feed, parsed, item, now, samples)
+    const outcome = await upsertArticle(db, feed, parsed, item, now, samples, opts.onArticleStored)
     if (outcome.kind === 'inserted' && outcome.id !== null) newArticleIds.push(outcome.id)
     else if (outcome.kind === 'updated' && outcome.id !== null) updatedArticleIds.push(outcome.id)
   }

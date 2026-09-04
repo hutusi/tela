@@ -52,7 +52,7 @@ export async function toggleLikeAction(
 export async function requestTranslationAction(
   articleId: number,
   targetLang: string,
-): Promise<'requested' | 'in_progress' | 'ready' | 'invalid' | 'rate_limited'> {
+): Promise<'requested' | 'in_progress' | 'ready' | 'invalid' | 'rate_limited' | 'unavailable'> {
   const user = await requireUser()
   const target = id(articleId)
   if (!target || !isReadingLanguage(targetLang)) return 'invalid'
@@ -65,22 +65,21 @@ export async function requestTranslationAction(
     .from(articles)
     .where(eq(articles.id, target))
   if (!article) return 'invalid'
-  const outcome = await requestBodyTranslation(db, target, targetLang, article.contentHash)
-  if (outcome === 'requested') {
-    try {
-      await createJobSender(db).send(
-        'translate.body',
-        { articleId: target, targetLang, onDemand: true },
-        { singletonKey: `${target}:${targetLang}`, priority: 10 },
-      )
-    } catch (err) {
-      console.warn('[tela] could not enqueue translate.body', {
-        articleId: target,
-        err: String(err),
-      })
-    }
-  }
-  return outcome
+  // The job is inserted in the same transaction as the `requested` status (ADR 0004): if the
+  // queue is unavailable the status rolls back too, and the reader can simply ask again.
+  return requestBodyTranslation(db, target, targetLang, article.contentHash, async (tx) => {
+    await createJobSender(tx).send(
+      'translate.body',
+      { articleId: target, targetLang, onDemand: true },
+      { singletonKey: `${target}:${targetLang}`, priority: 10 },
+    )
+  }).catch((err: unknown) => {
+    console.warn('[tela] could not request translate.body', {
+      articleId: target,
+      err: String(err),
+    })
+    return 'unavailable' as const
+  })
 }
 
 export async function recommendAction(
