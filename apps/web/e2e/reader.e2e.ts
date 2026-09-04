@@ -107,8 +107,17 @@ test.describe('translation', () => {
     await page.goto('/reading')
     const row = page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first()
     await expect(row).toBeVisible()
-    // Title translations are queued after the fetch; the mock answers within seconds.
-    await expect(row.locator('h2')).toContainText('en:', { timeout: 30_000 })
+    // Title translations are queued after the fetch and the list does not live-update, so
+    // reload until the worker (mock provider) has stored the translated title.
+    await expect
+      .poll(
+        async () => {
+          await page.reload()
+          return (await row.locator('h2').textContent()) ?? ''
+        },
+        { timeout: 30_000, intervals: [1000] },
+      )
+      .toContain('en:')
 
     await row.click()
     const bar = page.getByTestId('translation-bar')

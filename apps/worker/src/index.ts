@@ -86,9 +86,11 @@ async function main() {
         { batchSize: 1, localConcurrency: 2, pollingIntervalSeconds: 2, priority: true },
         (jobs) => handleTranslateBody(ctx, jobs as Job<TranslateBodyJob>[]),
       )
+      // Title jobs are small and arrive in bursts (every article × every reading language), so
+      // take several per poll; each poll only fetches once per interval.
       await boss.work(
         QUEUES.translateTitle,
-        { batchSize: 1, localConcurrency: 2, pollingIntervalSeconds: 3 },
+        { batchSize: 5, localConcurrency: 4, pollingIntervalSeconds: 2 },
         (jobs) => handleTranslateTitle(ctx, jobs as Job<TranslateTitleJob>[]),
       )
     }

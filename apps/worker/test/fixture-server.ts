@@ -115,6 +115,8 @@ export class FixtureServer {
   }
 
   async stop() {
+    // Keep-alive connections from undici's pool would otherwise hold close() open.
+    this.server.closeAllConnections()
     await new Promise<void>((resolve) => this.server.close(() => resolve()))
   }
 }
