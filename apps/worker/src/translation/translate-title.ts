@@ -1,6 +1,6 @@
 import { blockHash } from '@tela/content'
 import { plainText } from '@tela/content/tagged'
-import { articles, type Db, feeds, sites } from '@tela/db'
+import { articles, feeds, sites } from '@tela/db'
 import { getCachedTranslations, setTranslatedTitle, storeTranslations } from '@tela/db/queries'
 import { translateBlocks } from '@tela/llm'
 import { NORM_VERSION } from '@tela/shared'
