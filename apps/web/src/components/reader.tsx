@@ -7,6 +7,7 @@ import { relativeTime } from '@/lib/format'
 import { AutoRefresh } from './auto-refresh'
 import { LikeButton } from './like-button'
 import { MarkRead } from './mark-read'
+import { RecommendPopover } from './recommend-popover'
 import { RequestTranslation } from './request-translation'
 import { Swatch } from './swatch'
 import { TranslationBar, type TranslationView } from './translation-bar'
@@ -23,21 +24,29 @@ type Props = {
   locale: string
   /** Present when the article is not in the reading language. */
   translation: ReaderTranslation | null
+  recommendation: { note: string | null } | null
 }
 
 function Body({ html, lang, testId }: { html: string; lang?: string | undefined; testId: string }) {
   return (
-    // biome-ignore lint/security/noDangerouslySetInnerHtml: allowlist-sanitized by @tela/content; images go through the signed proxy
     <div
       className="article-body"
       lang={lang}
       data-testid={testId}
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: allowlist-sanitized by @tela/content; images go through the signed proxy
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )
 }
 
-export async function Reader({ article, html, params, locale, translation }: Props) {
+export async function Reader({
+  article,
+  html,
+  params,
+  locale,
+  translation,
+  recommendation,
+}: Props) {
   const t = await getTranslations('reader')
   const tt = await getTranslations('translation')
   const sourceLang = article.sourceLang ?? undefined
@@ -76,6 +85,12 @@ export async function Reader({ article, html, params, locale, translation }: Pro
             articleId={article.id}
             liked={article.isLiked}
             likeCount={article.likeCount}
+          />
+          <RecommendPopover
+            articleId={article.id}
+            recommended={recommendation !== null}
+            note={recommendation?.note ?? null}
+            recommendCount={article.recommendCount}
           />
         </div>
       </div>

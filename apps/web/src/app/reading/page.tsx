@@ -2,6 +2,7 @@ import {
   countTotals,
   getArticle,
   getArticleTranslation,
+  getRecommendation,
   listArticles,
   listSubscriptions,
 } from '@tela/db/queries'
@@ -45,6 +46,7 @@ export default async function ReadingPage({ searchParams }: Props) {
     getLocale(),
   ])
   const html = article ? await renderArticleHtml(article.html) : ''
+  const recommendation = article ? await getRecommendation(db, user.id, article.id) : null
 
   // Foreign article: look up the body translation state for the reading language.
   let translation: ReaderTranslation | null = null
@@ -97,6 +99,7 @@ export default async function ReadingPage({ searchParams }: Props) {
             params={params}
             locale={locale}
             translation={translation}
+            recommendation={recommendation}
           />
         ) : (
           <EmptyState unread={totals.all} hasSubscriptions={subscriptions.length > 0} />
