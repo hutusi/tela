@@ -25,3 +25,12 @@ export function initialOf(title: string): string {
   const first = [...title.trim()][0] ?? '?'
   return first.toUpperCase()
 }
+
+/** Hostname for display: no scheme, no www. */
+export function displayHost(input: string): string {
+  try {
+    return new URL(input).hostname.replace(/^www\./, '')
+  } catch {
+    return input
+  }
+}
