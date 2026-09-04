@@ -3,6 +3,7 @@ import { pruneRateLimits } from '@tela/db/queries'
 import { DEAD_AFTER_ERRORS, reprobeRelayRegions } from '@tela/ingest'
 import { and, asc, eq, lte, sql } from 'drizzle-orm'
 import type { WorkerContext } from './context'
+import { queueWebsubRenewals } from './jobs/websub'
 import { log } from './logger'
 import { QUEUES } from './queues'
 
@@ -30,6 +31,7 @@ export async function schedulerTick(ctx: WorkerContext) {
 export async function maintenanceDaily(ctx: WorkerContext) {
   const reprobed = await reprobeRelayRegions(ctx.db)
   const prunedLimits = await pruneRateLimits(ctx.db)
+  const websubRenewals = await queueWebsubRenewals(ctx)
   const revived = await ctx.db
     .update(feeds)
     .set({
@@ -43,5 +45,6 @@ export async function maintenanceDaily(ctx: WorkerContext) {
     revivedDeadFeeds: revived.length,
     reprobedRegions: reprobed.length,
     prunedRateLimits: prunedLimits,
+    websubRenewals,
   })
 }

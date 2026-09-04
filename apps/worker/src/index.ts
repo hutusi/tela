@@ -12,6 +12,7 @@ import { handleSiteAssets, handleSiteClaimVerify } from './jobs/claims-and-asset
 import { handleArticleExtract } from './jobs/extract-article'
 import { handleFeedFetch } from './jobs/fetch-feed'
 import { handleTranslateBody, handleTranslateTitle } from './jobs/translate'
+import { handleWebsubSubscribe } from './jobs/websub'
 import { log, setLogLevel } from './logger'
 import {
   type ArticleExtractJob,
@@ -22,6 +23,7 @@ import {
   type SiteClaimVerifyJob,
   type TranslateBodyJob,
   type TranslateTitleJob,
+  type WebsubSubscribeJob,
 } from './queues'
 import { startRelayServer } from './relay/server'
 import { maintenanceDaily, schedulerTick } from './scheduler'
@@ -77,6 +79,11 @@ async function main() {
         QUEUES.feedFetch,
         { batchSize: 1, localConcurrency: config.FETCH_CONCURRENCY, pollingIntervalSeconds: 2 },
         (jobs) => handleFeedFetch(ctx, jobs as Job<FeedFetchJob>[]),
+      )
+      await boss.work(
+        QUEUES.websubSubscribe,
+        { batchSize: 1, localConcurrency: 2, pollingIntervalSeconds: 5 },
+        (jobs) => handleWebsubSubscribe(ctx, jobs as Job<WebsubSubscribeJob>[]),
       )
     }
     if (has('extract')) {

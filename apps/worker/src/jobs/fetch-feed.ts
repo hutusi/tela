@@ -7,6 +7,7 @@ import type { Job } from 'pg-boss'
 import type { WorkerContext } from '../context'
 import { log } from '../logger'
 import { type FeedFetchJob, QUEUES } from '../queues'
+import { maybeQueueWebsub } from './websub'
 
 /** Queue eager title/excerpt translation into every reading language the article is not in. */
 async function enqueueTitleTranslations(ctx: WorkerContext, articleIds: number[]) {
@@ -74,12 +75,16 @@ export async function handleFeedFetch(ctx: WorkerContext, jobs: Job<FeedFetchJob
       policy ? { region: policy } : {},
     )
     let titleJobs = 0
+    let websub = false
     if (result.status === 'fetched') {
       titleJobs = await enqueueTitleTranslations(ctx, [
         ...result.newArticleIds,
         ...result.updatedArticleIds,
       ])
       await enqueueSiteAssets(ctx, job.data.feedId)
+    }
+    if (result.status === 'fetched' || result.status === 'unchanged') {
+      websub = await maybeQueueWebsub(ctx, job.data.feedId)
     }
     const {
       newArticleIds: _n,
@@ -93,6 +98,7 @@ export async function handleFeedFetch(ctx: WorkerContext, jobs: Job<FeedFetchJob
       jobId: job.id,
       ms: Date.now() - started,
       titleJobs,
+      websub,
       ...summary,
     }
     if (result.status === 'error' && result.kind === 'region_flip') {

@@ -8,6 +8,7 @@ import {
   FETCH_REGIONS,
   SITE_LISTINGS,
   TRANSLATION_STATUSES,
+  WEBSUB_STATUSES,
 } from '@tela/shared'
 import { pgEnum } from 'drizzle-orm/pg-core'
 
@@ -15,6 +16,7 @@ export const siteListingEnum = pgEnum('site_listing', SITE_LISTINGS)
 export const feedFormatEnum = pgEnum('feed_format', FEED_FORMATS)
 export const feedStatusEnum = pgEnum('feed_status', FEED_STATUSES)
 export const fetchRegionEnum = pgEnum('fetch_region', FETCH_REGIONS)
+export const websubStatusEnum = pgEnum('websub_status', WEBSUB_STATUSES)
 export const contentModeEnum = pgEnum('content_mode', CONTENT_MODES)
 export const extractedFromEnum = pgEnum('extracted_from', EXTRACTED_FROM)
 export const translationStatusEnum = pgEnum('translation_status', TRANSLATION_STATUSES)

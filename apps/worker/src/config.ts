@@ -23,6 +23,11 @@ const envSchema = z.object({
   /** Still accepted by the relay while a new RELAY_SECRET rolls out. */
   RELAY_SECRET_PREVIOUS: z.string().min(16).optional(),
   RELAY_PORT: z.coerce.number().int().positive().default(8787),
+  /** Subscribe to feeds' WebSub hubs; needs PUBLIC_URL reachable by hubs, so off by default. */
+  WEBSUB_ENABLED: z
+    .enum(['0', '1'])
+    .default('0')
+    .transform((v) => v === '1'),
   /** Fetched before blaming an origin for timeouts: if this fails too, the worker is the problem. */
   RELAY_CONTROL_URL: z.string().url().default('https://www.cloudflare.com/cdn-cgi/trace'),
 })
