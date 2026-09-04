@@ -4,6 +4,7 @@ import type { Db } from '../client'
 import {
   articleContents,
   articles,
+  articleTranslations,
   feeds,
   sites,
   subscriptions,
@@ -110,12 +111,17 @@ export type ArticleListItem = {
   recommendCount: number
   isRead: boolean
   isLiked: boolean
+  /** Eagerly translated title/excerpt for `translateTo`, when available. */
+  translatedTitle: string | null
+  translatedExcerpt: string | null
 }
 
 export type ListArticlesOptions = {
   filter?: ArticleFilter
   feedId?: number | null
   limit?: number
+  /** Reading language: joins article_translations for titles and excerpts. */
+  translateTo?: string | null
   /** Keyset cursor: the sort timestamp and id of the last row seen. */
   before?: { at: Date; id: number } | null
 }
@@ -158,8 +164,17 @@ export async function listArticles(
       readAt: userArticleStates.readAt,
       likedAt: userArticleStates.likedAt,
       watermarkId: subscriptions.watermarkId,
+      translatedTitle: articleTranslations.title,
+      translatedExcerpt: articleTranslations.excerpt,
     })
     .from(articles)
+    .leftJoin(
+      articleTranslations,
+      and(
+        eq(articleTranslations.articleId, articles.id),
+        eq(articleTranslations.targetLang, options.translateTo ?? ''),
+      ),
+    )
     .innerJoin(subscriptions, eq(subscriptions.feedId, articles.feedId))
     .innerJoin(feeds, eq(feeds.id, articles.feedId))
     .innerJoin(sites, eq(sites.id, feeds.siteId))
@@ -246,6 +261,8 @@ export async function getArticle(
     recommendCount: a.recommendCount,
     isRead: row.readAt !== null || (row.watermarkId !== null && a.id <= row.watermarkId),
     isLiked: row.likedAt !== null,
+    translatedTitle: null,
+    translatedExcerpt: null,
     html: row.contents?.html ?? '',
     blocks: row.contents?.blocks ?? [],
     contentVersion: a.contentVersion,

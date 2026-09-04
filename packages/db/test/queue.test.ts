@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { type Db as PgBossDb, getConstructionPlans, PgBoss } from 'pg-boss'
+import { getConstructionPlans, PgBoss, type Db as PgBossDb } from 'pg-boss'
 import type { Db } from '../src/client'
 import { createJobSender } from '../src/queue'
 import { startTestDb, type TestDb } from '../src/testing'
