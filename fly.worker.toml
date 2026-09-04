@@ -10,6 +10,8 @@ primary_region = "nrt"
 [env]
   WORKER_ROLES = "scheduler,fetch,extract,translate,assets,claim"
   LOG_LEVEL = "info"
+  # Daily ceiling for background (title) translation; reader requests are rate-limited instead.
+  LLM_DAILY_BUDGET_TOKENS = "2000000"
 
 [[vm]]
   size = "shared-cpu-1x"

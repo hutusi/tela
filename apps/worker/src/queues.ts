@@ -20,7 +20,8 @@ export type FeedFetchJob = { feedId: number }
 export type ArticleExtractJob = { articleId: number }
 export type SiteAssetsJob = { siteId: number }
 export type TranslateTitleJob = { articleId: number; targetLang: string }
-export type TranslateBodyJob = { articleId: number; targetLang: string }
+/** `onDemand` marks a reader-initiated request, which the daily budget does not gate. */
+export type TranslateBodyJob = { articleId: number; targetLang: string; onDemand?: boolean }
 export type SiteClaimVerifyJob = { claimId: number }
 export type WebsubSubscribeJob = { feedId: number }
 

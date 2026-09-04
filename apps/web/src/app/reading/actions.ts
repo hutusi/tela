@@ -2,6 +2,7 @@
 
 import { articles } from '@tela/db'
 import {
+  consumeRateLimit,
   markAllRead,
   markRead,
   recommend,
@@ -51,11 +52,14 @@ export async function toggleLikeAction(
 export async function requestTranslationAction(
   articleId: number,
   targetLang: string,
-): Promise<'requested' | 'in_progress' | 'ready' | 'invalid'> {
-  await requireUser()
+): Promise<'requested' | 'in_progress' | 'ready' | 'invalid' | 'rate_limited'> {
+  const user = await requireUser()
   const target = id(articleId)
   if (!target || !isReadingLanguage(targetLang)) return 'invalid'
   const db = await getDb()
+  // On-demand requests skip the daily budget, so this is the only ceiling on what one account
+  // can make the model do.
+  if (!(await consumeRateLimit(db, 'translate', user.id)).allowed) return 'rate_limited'
   const [article] = await db
     .select({ contentHash: articles.contentHash })
     .from(articles)
@@ -66,7 +70,7 @@ export async function requestTranslationAction(
     try {
       await createJobSender(db).send(
         'translate.body',
-        { articleId: target, targetLang },
+        { articleId: target, targetLang, onDemand: true },
         { singletonKey: `${target}:${targetLang}`, priority: 10 },
       )
     } catch (err) {

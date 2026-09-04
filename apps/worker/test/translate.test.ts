@@ -11,17 +11,30 @@ import {
 } from '@tela/db'
 import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
 import { createMockTranslator } from '@tela/llm'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
+import { type Job, PgBoss } from 'pg-boss'
+import type { WorkerContext } from '../src/context'
+import {
+  handleTranslateBody,
+  handleTranslateTitle,
+  secondsUntilNextUtcDay,
+} from '../src/jobs/translate'
+import { ensureQueues, QUEUES, type TranslateBodyJob, type TranslateTitleJob } from '../src/queues'
 import { translateArticleBody } from '../src/translation/translate-body'
 import { translateArticleTitle } from '../src/translation/translate-title'
 
 let t: TestDb
+let boss: PgBoss
 
 beforeAll(async () => {
   t = await startTestDb()
+  boss = new PgBoss({ connectionString: t.url, schema: 'pgboss', max: 2 })
+  await boss.start()
+  await ensureQueues(boss)
 }, 120_000)
 
 afterAll(async () => {
+  await boss?.stop({ graceful: false })
   await t?.stop()
 })
 
@@ -70,6 +83,15 @@ async function seedArticle(
     .insert(articleContents)
     .values({ articleId: article!.id, html: processed.html, blocks: processed.blocks })
   return { article: article!, processed }
+}
+
+async function seedArticleWithKey(dedupKey: string, title: string): Promise<number> {
+  const [feed] = await t.db.select({ id: feeds.id }).from(feeds).limit(1)
+  const [article] = await t.db
+    .insert(articles)
+    .values({ feedId: feed!.id, dedupKey, title, sourceLang: 'en' })
+    .returning({ id: articles.id })
+  return article!.id
 }
 
 describe('translateArticleBody', () => {
@@ -222,5 +244,74 @@ describe('translateArticleTitle', () => {
         'zh-Hans',
       ),
     ).toMatchObject({ status: 'skipped' })
+  })
+})
+
+describe('daily budget and the on-demand flag', () => {
+  async function overBudget() {
+    await t.db
+      .insert(llmUsage)
+      .values({ job: 'x', model: 'mock', inputTokens: 900, outputTokens: 200 })
+  }
+  function ctx(): WorkerContext {
+    return {
+      db: t.db,
+      boss,
+      translator: createMockTranslator(),
+      config: { LLM_DAILY_BUDGET_TOKENS: 1000 },
+    } as unknown as WorkerContext
+  }
+  // What pg-boss hands a handler: id, name, data. No priority unless metadata was requested.
+  const bodyJob = (data: TranslateBodyJob) =>
+    ({ id: crypto.randomUUID(), name: QUEUES.translateBody, data }) as Job<TranslateBodyJob>
+  const titleJob = (data: TranslateTitleJob) =>
+    ({ id: crypto.randomUUID(), name: QUEUES.translateTitle, data }) as Job<TranslateTitleJob>
+
+  test('title work defers on a cache miss once the budget is spent; cache hits still finish', async () => {
+    const { article } = await seedArticle()
+    const deps = { db: t.db, translator: createMockTranslator(), dailyBudgetTokens: 1000 }
+    expect(await translateArticleTitle(deps, article.id, 'zh-Hans')).toEqual({ status: 'done' })
+    await overBudget()
+    expect(await translateArticleTitle(deps, article.id, 'zh-Hans')).toEqual({ status: 'done' })
+    expect(await translateArticleTitle(deps, article.id, 'en')).toEqual({
+      status: 'skipped',
+      reason: 'not needed',
+    })
+    const other = await seedArticleWithKey('k2', 'Another title entirely')
+    expect(await translateArticleTitle(deps, other, 'zh-Hans')).toEqual({
+      status: 'deferred',
+      reason: 'daily budget exhausted',
+    })
+  })
+
+  test('the title handler re-queues a deferred job for the next UTC day', async () => {
+    const { article } = await seedArticle()
+    await overBudget()
+    await handleTranslateTitle(ctx(), [titleJob({ articleId: article.id, targetLang: 'zh-Hans' })])
+    const rows = await t.db.execute<{
+      start_after: string
+      singleton_key: string
+      data: TranslateTitleJob
+    }>(
+      sql`select start_after, singleton_key, data from pgboss.job
+          where name = ${QUEUES.translateTitle} and singleton_key = ${`${article.id}:zh-Hans`}`,
+    )
+    expect(rows).toHaveLength(1)
+    expect(new Date(rows[0]?.start_after as string).getTime()).toBeGreaterThan(Date.now() + 1000)
+    expect(rows[0]?.data).toEqual({ articleId: article.id, targetLang: 'zh-Hans' })
+    expect(secondsUntilNextUtcDay(new Date('2026-09-05T23:59:30Z'))).toBe(30)
+    expect(secondsUntilNextUtcDay(new Date('2026-09-05T00:00:00Z'))).toBe(86_400)
+  })
+
+  test('the body handler takes on-demand from the payload, not from job metadata', async () => {
+    const { article } = await seedArticle()
+    await overBudget()
+    await handleTranslateBody(ctx(), [bodyJob({ articleId: article.id, targetLang: 'zh-Hans' })])
+    expect(await t.db.select().from(articleTranslations)).toHaveLength(0)
+    await handleTranslateBody(ctx(), [
+      bodyJob({ articleId: article.id, targetLang: 'zh-Hans', onDemand: true }),
+    ])
+    const [row] = await t.db.select().from(articleTranslations)
+    expect(row?.status).toBe('done')
   })
 })

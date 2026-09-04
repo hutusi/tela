@@ -113,7 +113,8 @@
       "orig": "Original"
     },
     "columnTranslated": "{target} · translation",
-    "columnOriginal": "original"
+    "columnOriginal": "original",
+    "rateLimited": "Too many translation requests for now. Please try again in a little while."
   },
   "discover": {
     "title": "Independent blogs, in any language.",

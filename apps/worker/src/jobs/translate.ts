@@ -1,7 +1,7 @@
 import type { Job } from 'pg-boss'
 import type { WorkerContext } from '../context'
 import { log } from '../logger'
-import type { TranslateBodyJob, TranslateTitleJob } from '../queues'
+import { QUEUES, type TranslateBodyJob, type TranslateTitleJob } from '../queues'
 import { translateArticleBody } from '../translation/translate-body'
 import { translateArticleTitle } from '../translation/translate-title'
 
@@ -17,9 +17,9 @@ export async function handleTranslateBody(ctx: WorkerContext, jobs: Job<Translat
   for (const job of jobs) {
     const started = Date.now()
     const { articleId, targetLang } = job.data
-    // Priority 10 marks reader-initiated requests; background prefetch runs at 1.
-    const priority = (job as { priority?: number }).priority
-    const onDemand = priority === undefined || priority >= 10
+    // The flag travels in the payload: pg-boss only exposes a job's priority with
+    // includeMetadata, so reading it here would make every job look on-demand.
+    const onDemand = job.data.onDemand === true
     const result = await translateArticleBody(deps(ctx), articleId, targetLang, { onDemand })
     const fields = { articleId, targetLang, jobId: job.id, ms: Date.now() - started, ...result }
     if (result.status === 'failed') log.warn('body translation failed', fields)
@@ -27,12 +27,27 @@ export async function handleTranslateBody(ctx: WorkerContext, jobs: Job<Translat
   }
 }
 
+/** Seconds until the next UTC day starts, when tokensUsedToday resets. */
+export function secondsUntilNextUtcDay(now: Date = new Date()): number {
+  const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
+  return Math.max(1, Math.ceil((next - now.getTime()) / 1000))
+}
+
 export async function handleTranslateTitle(ctx: WorkerContext, jobs: Job<TranslateTitleJob>[]) {
   for (const job of jobs) {
     const { articleId, targetLang } = job.data
     const result = await translateArticleTitle(deps(ctx), articleId, targetLang)
     const fields = { articleId, targetLang, jobId: job.id, ...result }
-    if (result.status === 'failed') log.warn('title translation failed', fields)
+    if (result.status === 'deferred') {
+      // Budget exhausted: try again tomorrow. The `short` policy only dedups created jobs, so
+      // this re-send is accepted while the current job is still active.
+      await ctx.boss.send(QUEUES.translateTitle, job.data, {
+        singletonKey: `${articleId}:${targetLang}`,
+        priority: 5,
+        startAfter: secondsUntilNextUtcDay(),
+      })
+      log.info('title translation deferred', fields)
+    } else if (result.status === 'failed') log.warn('title translation failed', fields)
     else log.debug('title translation done', fields)
   }
 }

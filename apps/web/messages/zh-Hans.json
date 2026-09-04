@@ -113,7 +113,8 @@
       "orig": "原文"
     },
     "columnTranslated": "{target} · 译文",
-    "columnOriginal": "原文"
+    "columnOriginal": "原文",
+    "rateLimited": "翻译请求过于频繁，请稍后再试。"
   },
   "discover": {
     "title": "独立博客，任何语言。",

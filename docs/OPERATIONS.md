@@ -25,7 +25,7 @@ implements them (see `docs/ARCHITECTURE.md`).
 | `BAILIAN_API_KEY`, `BAILIAN_BASE_URL` | worker | Aliyun Bailian key; base URL defaults to `https://dashscope.aliyuncs.com/compatible-mode/v1` (use the workspace/region host from the console when required) |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` | worker | Anthropic key; base URL optional |
 | `LLM_JSON_MODE` | worker | `text` (parse JSON from the reply; default for Bailian) or `schema` (structured output; default for Anthropic) |
-| `LLM_DAILY_BUDGET_TOKENS` | worker | Daily cap for background translation; `0` = unlimited; on-demand requests always run |
+| `LLM_DAILY_BUDGET_TOKENS` | worker | Daily cap for background (title) translation; `0` = unlimited; `fly.worker.toml` sets 2,000,000. Reader requests always run and are rate-limited per member instead |
 | `PUBLIC_URL` | worker | Public origin of the web app, for verifying rel="me" claim links |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | worker | Favicon/cover uploads to R2; `ASSETS_DIR` writes to a directory instead (dev); neither disables uploads |
 | `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_ASSETS_URL` | web | Public origin (claim snippets) and the assets bucket's public base URL |
@@ -193,8 +193,9 @@ First run: `cd apps/web && bunx playwright install chromium`.
 
 ### Translation
 - **Cost check**: `select date_trunc('day', created_at) d, model, sum(input_tokens) i, sum(output_tokens) o, count(*) from llm_usage group by 1, 2 order by 1 desc`.
-- **Budget**: set `LLM_DAILY_BUDGET_TOKENS` on the worker; background title work stops for the
-  day once exceeded, reader-initiated body requests do not.
+- **Budget**: set `LLM_DAILY_BUDGET_TOKENS` on the worker; once exceeded, title jobs that miss
+  the cache are re-queued for the next UTC day, reader-initiated body requests still run (each
+  member gets 120 per hour).
 - **Switch provider**: change `LLM_PROVIDER`/`LLM_MODEL` and the key; restart the worker. Cached
   translations keep their `model` label, so old and new output can be compared.
 - **Force a retranslation** of an article: `delete from article_translations where article_id = …`

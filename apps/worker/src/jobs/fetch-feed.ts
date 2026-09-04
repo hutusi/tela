@@ -9,6 +9,13 @@ import { log } from '../logger'
 import { type FeedFetchJob, QUEUES } from '../queues'
 import { maybeQueueWebsub } from './websub'
 
+/**
+ * Ceiling on title jobs one fetch may create per language. A first fetch of a long archive, or
+ * a hostile feed with thousands of items, otherwise turns into that many model calls; the
+ * newest posts are the ones lists show, so they are the ones worth translating eagerly.
+ */
+export const TITLE_JOBS_PER_FETCH = 100
+
 /** Queue eager title/excerpt translation into every reading language the article is not in. */
 async function enqueueTitleTranslations(ctx: WorkerContext, articleIds: number[]) {
   if (articleIds.length === 0) return 0
@@ -19,6 +26,7 @@ async function enqueueTitleTranslations(ctx: WorkerContext, articleIds: number[]
     .from(articles)
     .where(inArray(articles.id, articleIds))
     .orderBy(desc(sql`coalesce(${articles.publishedAt}, ${articles.fetchedAt})`), desc(articles.id))
+    .limit(TITLE_JOBS_PER_FETCH)
   let sent = 0
   for (const row of rows) {
     for (const target of READING_LANGUAGES) {
