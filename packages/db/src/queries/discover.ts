@@ -2,6 +2,7 @@ import { isTopic } from '@tela/shared'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import type { Db } from '../client'
 import { articles, feeds, profiles, siteClaims, sites, subscriptions } from '../schema'
+import { likePattern, normalizeQuery } from './search'
 
 const NO_USER = '00000000-0000-0000-0000-000000000000'
 
@@ -30,6 +31,10 @@ export type DiscoverFilter = {
   lang?: string | null
   userId?: string | null
   limit?: number
+  /** Free-text match on name, host, and description (trigram ILIKE), ranked by name similarity. */
+  query?: string | null
+  /** Search only: also return private sites the user subscribes to, not just listed ones. */
+  includeSubscribed?: boolean
 }
 
 /** Listed and featured sites for the Discover page, with what the card shows. */
@@ -40,6 +45,13 @@ export async function listDiscoverSites(
   const uid = filter.userId ?? NO_USER
   const topic = filter.topic && isTopic(filter.topic) ? filter.topic : null
   const lang = filter.lang?.trim() || null
+  const query = normalizeQuery(filter.query ?? undefined)
+  const pattern = likePattern(query)
+  const visible = filter.includeSubscribed
+    ? sql`(s.listing in ('listed', 'featured') or exists (
+        select 1 from subscriptions sub join feeds f on f.id = sub.feed_id
+        where f.site_id = s.id and sub.user_id = ${uid}))`
+    : sql`s.listing in ('listed', 'featured')`
   const rows = await db.execute<{
     id: number
     title: string | null
@@ -76,10 +88,19 @@ export async function listDiscoverSites(
       select count(*) as n from articles a join feeds f on f.id = a.feed_id
       where f.site_id = s.id and coalesce(a.published_at, a.fetched_at) > now() - interval '30 days'
     ) p30 on true
-    where s.listing in ('listed', 'featured')
+    where ${visible}
       ${topic ? sql`and ${topic} = any(s.topics)` : sql``}
       ${lang ? sql`and s.primary_lang = ${lang}` : sql``}
-    order by (s.listing = 'featured') desc, s.reader_count desc, s.id
+      ${
+        query
+          ? sql`and (s.title ilike ${pattern} or s.home_url ilike ${pattern}
+                     or coalesce(s.description, '') ilike ${pattern}
+                     or exists (select 1 from feeds ft where ft.site_id = s.id
+                                and coalesce(ft.title, '') ilike ${pattern}))`
+          : sql``
+      }
+    order by ${query ? sql`similarity(coalesce(s.title, ''), ${query}) desc,` : sql``}
+             (s.listing = 'featured') desc, s.reader_count desc, s.id
     limit ${Math.min(filter.limit ?? 60, 200)}
   `)
   return rows.map((r) => ({
