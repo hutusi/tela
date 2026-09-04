@@ -1,5 +1,5 @@
 import type { Db } from '@tela/db'
-import { createHttpClient, type HttpClient } from '@tela/ingest'
+import { createHttpClient, createRelayClient, type HttpClient } from '@tela/ingest'
 import { configFromEnv, createTranslator, type Translator } from '@tela/llm'
 import type { PgBoss } from 'pg-boss'
 import { type AssetStore, createStoreFromEnv } from './assets/store'
@@ -17,12 +17,17 @@ export type WorkerContext = {
 }
 
 export function createHttp(config: WorkerConfig): HttpClient {
+  const relay =
+    config.RELAY_URL && config.RELAY_SECRET
+      ? createRelayClient({ relayUrl: config.RELAY_URL, secret: config.RELAY_SECRET })
+      : null
   return createHttpClient({
     userAgent: config.WORKER_USER_AGENT,
     timeoutMs: config.FETCH_TIMEOUT_MS,
     maxBytes: 5 * 1024 * 1024,
     politenessMs: 2000,
     allowPrivateHosts: process.env.WORKER_ALLOW_PRIVATE_HOSTS === '1',
+    ...(relay ? { relay } : {}),
   })
 }
 

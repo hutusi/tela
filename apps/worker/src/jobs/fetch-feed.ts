@@ -1,6 +1,6 @@
 import { articles, feeds } from '@tela/db'
 import { siteNeedsAssets } from '@tela/db/queries'
-import { fetchFeed } from '@tela/ingest'
+import { fetchFeed, type RegionPolicy } from '@tela/ingest'
 import { READING_LANGUAGES } from '@tela/shared'
 import { eq, inArray } from 'drizzle-orm'
 import type { Job } from 'pg-boss'
@@ -44,10 +44,32 @@ async function enqueueSiteAssets(ctx: WorkerContext, feedId: number) {
   )
 }
 
+/** Region flips are allowed only when a relay exists and our own connectivity checks out. */
+function regionPolicy(ctx: WorkerContext): RegionPolicy | undefined {
+  if (!ctx.config.RELAY_URL) return undefined
+  return {
+    relayAvailable: true,
+    controlOk: async () => {
+      try {
+        const res = await ctx.http.get(ctx.config.RELAY_CONTROL_URL, { accept: '*/*' })
+        return res.status >= 200 && res.status < 500
+      } catch {
+        return false
+      }
+    },
+  }
+}
+
 export async function handleFeedFetch(ctx: WorkerContext, jobs: Job<FeedFetchJob>[]) {
+  const policy = regionPolicy(ctx)
   for (const job of jobs) {
     const started = Date.now()
-    const result = await fetchFeed(ctx.db, ctx.http, job.data.feedId)
+    const result = await fetchFeed(
+      ctx.db,
+      ctx.http,
+      job.data.feedId,
+      policy ? { region: policy } : {},
+    )
     let titleJobs = 0
     if (result.status === 'fetched') {
       titleJobs = await enqueueTitleTranslations(ctx, [
@@ -70,7 +92,12 @@ export async function handleFeedFetch(ctx: WorkerContext, jobs: Job<FeedFetchJob
       titleJobs,
       ...summary,
     }
-    if (result.status === 'error' || result.status === 'dead') log.warn('feed fetch failed', fields)
-    else log.info('feed fetched', fields)
+    if (result.status === 'error' && result.kind === 'region_flip') {
+      log.info('feed routed through the relay', fields)
+    } else if (result.status === 'error' || result.status === 'dead') {
+      log.warn('feed fetch failed', fields)
+    } else {
+      log.info('feed fetched', fields)
+    }
   }
 }

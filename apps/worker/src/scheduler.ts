@@ -1,5 +1,5 @@
 import { feeds } from '@tela/db'
-import { DEAD_AFTER_ERRORS } from '@tela/ingest'
+import { DEAD_AFTER_ERRORS, reprobeRelayRegions } from '@tela/ingest'
 import { and, asc, eq, lte, sql } from 'drizzle-orm'
 import type { WorkerContext } from './context'
 import { log } from './logger'
@@ -25,8 +25,9 @@ export async function schedulerTick(ctx: WorkerContext) {
   if (due.length > 0) log.info('scheduler tick', { due: due.length, enqueued })
 }
 
-/** Daily: give dead feeds another chance once a week. */
+/** Daily: give dead feeds another chance once a week, and re-probe relay-routed feeds directly. */
 export async function maintenanceDaily(ctx: WorkerContext) {
+  const reprobed = await reprobeRelayRegions(ctx.db)
   const revived = await ctx.db
     .update(feeds)
     .set({
@@ -36,5 +37,8 @@ export async function maintenanceDaily(ctx: WorkerContext) {
     })
     .where(and(eq(feeds.status, 'dead'), lte(feeds.lastFetchedAt, sql`now() - interval '7 days'`)))
     .returning({ id: feeds.id })
-  log.info('maintenance daily', { revivedDeadFeeds: revived.length })
+  log.info('maintenance daily', {
+    revivedDeadFeeds: revived.length,
+    reprobedRegions: reprobed.length,
+  })
 }
