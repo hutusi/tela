@@ -8,9 +8,9 @@ import {
   ensureFeed,
   HttpError,
 } from '@tela/ingest'
-import { parseOpml } from 'feedsmith'
 import { redirect } from 'next/navigation'
 import { requireUser } from '@/lib/auth'
+import { feedUrlsFromOpml, MAX_OPML_BYTES } from '@/lib/opml'
 import { getDb } from '@/lib/platform/db'
 import { enqueueFeedFetch } from '@/lib/queue'
 
@@ -68,30 +68,22 @@ export async function subscribeAction(form: FormData): Promise<void> {
   redirect(`/reading?feed=${feedId}`)
 }
 
-type Outline = { xmlUrl?: string; outlines?: Outline[] }
-
-function collectFeedUrls(outlines: Outline[] | undefined, out: string[]) {
-  for (const o of outlines ?? []) {
-    if (o.xmlUrl && /^https?:\/\//.test(o.xmlUrl)) out.push(o.xmlUrl)
-    collectFeedUrls(o.outlines, out)
-  }
-}
-
 export async function importOpmlAction(_prev: ImportState, form: FormData): Promise<ImportState> {
   const user = await requireUser('/add')
   const file = form.get('opml')
   if (!(file instanceof File)) return { imported: null, error: 'opml_invalid' }
-  let urls: string[] = []
-  try {
-    const doc = parseOpml(await file.text()) as { body?: { outlines?: Outline[] } }
-    collectFeedUrls(doc.body?.outlines, urls)
-  } catch {
-    return { imported: null, error: 'opml_invalid' }
-  }
-  urls = [...new Set(urls)].slice(0, 500)
+  // Size and allowance are checked before a byte is read or parsed, so a stream of oversized or
+  // malformed files costs the member their imports for the hour, not the server its CPU.
+  if (file.size > MAX_OPML_BYTES) return { imported: null, error: 'opml_too_large' }
   const db = await getDb()
   if (!(await consumeRateLimit(db, 'opmlImport', user.id)).allowed) {
     return { imported: null, error: 'rate_limited' }
+  }
+  let urls: string[]
+  try {
+    urls = feedUrlsFromOpml(await file.text())
+  } catch {
+    return { imported: null, error: 'opml_invalid' }
   }
   let imported = 0
   for (const feedUrl of urls) {

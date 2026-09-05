@@ -100,7 +100,8 @@
       "invalid_url": "That does not look like a URL.",
       "fetch_failed": "Could not reach that address.",
       "opml_invalid": "That file is not an OPML document.",
-      "rate_limited": "Too many requests. Please wait a little and try again."
+      "rate_limited": "Too many requests. Please wait a little and try again.",
+      "opml_too_large": "That OPML file is larger than 1 MB."
     }
   },
   "translation": {

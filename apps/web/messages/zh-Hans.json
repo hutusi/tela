@@ -100,7 +100,8 @@
       "invalid_url": "这不像是一个 URL。",
       "fetch_failed": "无法访问该地址。",
       "opml_invalid": "该文件不是 OPML 文档。",
-      "rate_limited": "操作太频繁，请稍后再试。"
+      "rate_limited": "操作太频繁，请稍后再试。",
+      "opml_too_large": "OPML 文件超过 1 MB。"
     }
   },
   "translation": {
