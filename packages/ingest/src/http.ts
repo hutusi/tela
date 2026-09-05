@@ -168,18 +168,26 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
   const sleep = options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
   const lastRequestAt = new Map<string, number>()
 
-  async function politeWait(host: string) {
+  /** Space requests to a host; refused, without sleeping, when the wait would outlast `budgetMs`. */
+  async function politeWait(host: string, budgetMs: number): Promise<boolean> {
     const last = lastRequestAt.get(host)
     if (last !== undefined) {
       const wait = last + politenessMs - now()
+      if (wait > budgetMs) return false
       if (wait > 0) await sleep(wait)
     }
     lastRequestAt.set(host, now())
+    return true
   }
 
   return {
     async get(url, opts = {}) {
       const started = now()
+      // One deadline for the whole request, redirects and politeness waits included, so a chain
+      // of slow hops cannot multiply the timeout.
+      const deadline = started + (opts.timeoutMs ?? timeoutMs)
+      const remaining = () => deadline - now()
+      const expired = () => new HttpError('timeout', `deadline passed after ${hops} redirects`)
       const headers: Record<string, string> = {
         'user-agent': options.userAgent,
         accept: opts.accept ?? DEFAULT_ACCEPT,
@@ -199,7 +207,8 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
         if (!options.allowPrivateHosts && isBlockedHost(parsed.hostname)) {
           throw new HttpError('blocked', `host ${parsed.hostname} is not allowed`)
         }
-        await politeWait(parsed.host)
+        if (!(await politeWait(parsed.host, remaining()))) throw expired()
+        if (remaining() <= 0) throw expired()
 
         const relay = opts.region === 'cn' ? options.relay : undefined
         const init: RequestInit = {
@@ -207,9 +216,7 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
           headers,
           redirect: 'manual',
           // The relay applies the same timeout upstream; give its round trip some headroom.
-          signal: AbortSignal.timeout(
-            (opts.timeoutMs ?? timeoutMs) + (relay ? RELAY_HEADROOM_MS : 0),
-          ),
+          signal: AbortSignal.timeout(remaining() + (relay ? RELAY_HEADROOM_MS : 0)),
         }
         let response: Response
         try {

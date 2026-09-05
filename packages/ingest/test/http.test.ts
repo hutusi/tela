@@ -69,6 +69,27 @@ describe('createHttpClient', () => {
     ).rejects.toMatchObject({ kind: 'timeout' })
   })
 
+  test('the timeout is one deadline across redirects, not one per hop', async () => {
+    const hop = (from: string, to: string) =>
+      server.set(from, (_req, res) => {
+        setTimeout(() => {
+          res.writeHead(302, { location: server.url(to) })
+          res.end()
+        }, 60)
+      })
+    hop('/h1', '/h2')
+    hop('/h2', '/h3')
+    hop('/h3', '/h4')
+    hop('/h4', '/h5')
+    server.delay('/h5', 60)
+    const started = Date.now()
+    // Five 60 ms steps: each fits a 200 ms budget on its own, together they do not.
+    await expect(
+      client({ timeoutMs: 5000 }).get(server.url('/h1'), { timeoutMs: 200 }),
+    ).rejects.toMatchObject({ kind: 'timeout' })
+    expect(Date.now() - started).toBeLessThan(1000)
+  })
+
   test('rejects oversized bodies, whatever Content-Length claims', async () => {
     server.text('/big', 'x'.repeat(20_000))
     await expect(client().get(server.url('/big'))).rejects.toMatchObject({ kind: 'too_large' })
@@ -128,6 +149,8 @@ describe('createHttpClient', () => {
     let clock = 0
     const http = client({
       politenessMs: 2000,
+      // The wait counts against the request's deadline, so it must fit inside it.
+      timeoutMs: 10_000,
       now: () => clock,
       sleep: async (ms) => {
         waits.push(ms)
@@ -137,6 +160,27 @@ describe('createHttpClient', () => {
     await http.get(server.url('/p'))
     await http.get(server.url('/p'))
     expect(waits).toEqual([2000])
+  })
+
+  test('a politeness wait that would outlast the deadline is refused without sleeping', async () => {
+    server.text('/q', 'ok')
+    const waits: number[] = []
+    let clock = 0
+    const http = client({
+      politenessMs: 2000,
+      timeoutMs: 10_000,
+      now: () => clock,
+      sleep: async (ms) => {
+        waits.push(ms)
+        clock += ms
+      },
+    })
+    await http.get(server.url('/q'))
+    await expect(http.get(server.url('/q'), { timeoutMs: 500 })).rejects.toMatchObject({
+      kind: 'timeout',
+    })
+    expect(waits).toEqual([])
+    expect(server.requestsFor('/q')).toHaveLength(1)
   })
 
   test('uses the relay for the cn region', async () => {
