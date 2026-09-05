@@ -5,7 +5,10 @@
 project_id = "tela"
 
 [api]
-enabled = true
+# The Data API stays off: nothing in the app uses it (all queries go through Postgres, supabase-js
+# is auth only), and `public` is always among the exposed schemas while it is on. This value is
+# pushed, so the Dashboard toggle would be overwritten by the next `supabase config push`.
+enabled = false
 # Port to use for the API URL.
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API

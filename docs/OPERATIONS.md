@@ -60,12 +60,14 @@ implements them (see `docs/ARCHITECTURE.md`).
    and 163.com addresses.
 3. Auth → Providers: Email (OTP), GitHub, Google (phase 4).
 4. Apply migrations: `DATABASE_URL=<session pooler connection> bun run db:migrate`.
-5. Turn the Data API off in the Dashboard: Data API integration overview → **Enable Data API**
-   off. Nothing in `supabase/config.toml` can express this (`api.enabled` is local-only and
-   `public` is always among the exposed schemas while the API is on), and the GraphQL endpoint
-   reflects `public` as well. The app never uses the Data API (all queries go through Postgres
-   directly, supabase-js is auth only), and the read-only RLS policies remain the backstop for as
-   long as it is on. Turn it back on only if a browser feature (Realtime) ever needs it.
+5. The Data API is off: `[api] enabled = false` in `supabase/config.toml`, applied by
+   `supabase config push`. The Dashboard toggle (Data API integration overview → **Enable Data
+   API**) does the same thing, but the next `config push` re-applies whatever the file says (seen
+   on 2026-09-05), so the file is the source of truth. `public` is always among the exposed
+   schemas while the API is on, and the GraphQL endpoint reflects it as well. The app never uses
+   the Data API (all queries go through Postgres directly, supabase-js is auth only), and the
+   read-only RLS policies remain the backstop for as long as it is on. Turn it back on only if a
+   browser feature (Realtime) ever needs it.
 
 ### Cloudflare
 ```sh
@@ -234,5 +236,5 @@ First run: `cd apps/web && bunx playwright install chromium`.
   verifying and pages regenerate them on the next render.
 - Before switching readers to the custom domain: the Supabase redirect allow-list and `site_url`
   step above, then sign in once with each provider from the new origin.
-- Before launch: the Data API is off in the Dashboard (Provisioning step 5).
+- Before launch: the Data API is off (`[api] enabled = false`, Provisioning step 5).
 - China checks from a HK/CN box (custom auth domain, image proxy for `mmbiz.qpic.cn`-style hosts)
