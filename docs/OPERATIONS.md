@@ -52,10 +52,12 @@ implements them (see `docs/ARCHITECTURE.md`).
    qq.com and 163.com addresses.
 3. Auth → Providers: Email (OTP), GitHub, Google (phase 4).
 4. Apply migrations: `DATABASE_URL=<direct connection> bun run db:migrate`.
-5. Data API → Exposed schemas: remove `public` until a browser feature (Realtime) needs it. The
-   app never uses the Data API (all queries go through Postgres directly) and every RLS policy is
-   read-only, so this only closes a door nobody walks through. Mirror it in `supabase/config.toml`
-   (`[api] schemas`) so a later `supabase config push` does not reopen it.
+5. Turn the Data API off in the Dashboard: Data API integration overview → **Enable Data API**
+   off. Nothing in `supabase/config.toml` can express this (`api.enabled` is local-only and
+   `public` is always among the exposed schemas while the API is on), and the GraphQL endpoint
+   reflects `public` as well. The app never uses the Data API (all queries go through Postgres
+   directly, supabase-js is auth only), and the read-only RLS policies remain the backstop for as
+   long as it is on. Turn it back on only if a browser feature (Realtime) ever needs it.
 
 ### Cloudflare
 ```sh
@@ -223,4 +225,5 @@ First run: `cd apps/web && bunx playwright install chromium`.
   verifying and pages regenerate them on the next render.
 - Before switching readers to the custom domain: the Supabase redirect allow-list and `site_url`
   step above, then sign in once with each provider from the new origin.
+- Before launch: the Data API is off in the Dashboard (Provisioning step 5).
 - China checks from a HK/CN box (custom auth domain, image proxy for `mmbiz.qpic.cn`-style hosts)
