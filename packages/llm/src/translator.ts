@@ -38,6 +38,50 @@ export function parseJsonReply(text: string): unknown {
   }
 }
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Recover entries from a reply that is not valid JSON. Some models copy quotation marks into
+ * the "text" value unescaped, which breaks the whole object; the shape is fixed and the ids are
+ * known, so each entry is found by its id and its text taken up to the closing `"}`, with the
+ * stray quotes escaped before JSON decodes the remaining escapes. Entries that cannot be found
+ * are simply absent, which the caller reports as missing.
+ */
+export function recoverTranslations(
+  text: string,
+  ids: string[],
+): Array<{ id: string; text: string }> {
+  const out: Array<{ id: string; text: string }> = []
+  for (const id of ids) {
+    const m = new RegExp(
+      `"id"\\s*:\\s*"${escapeRegExp(id)}"\\s*,\\s*"text"\\s*:\\s*"([\\s\\S]*?)"\\s*\\}`,
+    ).exec(text)
+    if (!m) continue
+    // Escape the quotes the model left raw; ones it did escape stay as they are.
+    const escaped = (m[1] as string).replace(/(?<!\\)"/g, '\\"')
+    try {
+      out.push({ id, text: JSON.parse(`"${escaped}"`) as string })
+    } catch {
+      // not decodable even after repair: leave it missing
+    }
+  }
+  return out
+}
+
+/** The translations in a text reply: parsed as JSON, or recovered entry by entry when that fails. */
+export function parseTranslations(
+  text: string,
+  ids: string[],
+): Array<{ id: string; text: string }> {
+  try {
+    return responseSchema.parse(parseJsonReply(text)).translations
+  } catch (err) {
+    const recovered = recoverTranslations(text, ids)
+    if (recovered.length === 0) throw err
+    return recovered
+  }
+}
+
 /** A Translator over any Vercel AI SDK language model. */
 export function createSdkTranslator(
   model: LanguageModel,
@@ -70,7 +114,10 @@ export function createSdkTranslator(
         usage = result.usage
       } else {
         const result = await generateText(common)
-        translations = responseSchema.parse(parseJsonReply(result.text)).translations
+        translations = parseTranslations(
+          result.text,
+          request.blocks.map((b) => b.id),
+        )
         usage = result.usage
       }
       return {

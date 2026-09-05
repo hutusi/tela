@@ -5,7 +5,7 @@ import { createMockTranslator } from './mock'
 import { buildUserPayload } from './prompt'
 import { configFromEnv, isAccidentalMock } from './providers'
 import { type TranslateBlocksInput, translateBlocks } from './translate'
-import { createSdkTranslator, parseJsonReply } from './translator'
+import { createSdkTranslator, parseJsonReply, parseTranslations } from './translator'
 import type { TranslationRequest } from './types'
 import { validateTranslation } from './validate'
 
@@ -59,6 +59,30 @@ describe('parseJsonReply', () => {
     expect(parseJsonReply('```json\n{"a":1}\n```')).toEqual({ a: 1 })
     expect(parseJsonReply('Here you go: {"a":[1,2]} hope it helps')).toEqual({ a: [1, 2] })
     expect(() => parseJsonReply('no json here')).toThrow()
+  })
+})
+
+describe('parseTranslations', () => {
+  test('parses a valid reply as before', () => {
+    const reply = '{"translations":[{"id":"a","text":"你好"},{"id":"b","text":"再见"}]}'
+    expect(parseTranslations(reply, ['a', 'b'])).toEqual([
+      { id: 'a', text: '你好' },
+      { id: 'b', text: '再见' },
+    ])
+  })
+
+  test('recovers entries whose text carries unescaped quotes, keeping real escapes', () => {
+    // What GLM returned for a Japanese title with 「」 quotes: straight quotes copied raw.
+    const reply =
+      '```json\n{"translations":[{"id":"t","text":"《书评》"上手的传达方式"教科书\\n第二行"},{"id":"u","text":"plain"}]}\n```'
+    expect(parseTranslations(reply, ['t', 'u'])).toEqual([
+      { id: 't', text: '《书评》"上手的传达方式"教科书\n第二行' },
+      { id: 'u', text: 'plain' },
+    ])
+  })
+
+  test('still throws when nothing can be recovered', () => {
+    expect(() => parseTranslations('Sorry, I cannot help with that.', ['a'])).toThrow()
   })
 })
 

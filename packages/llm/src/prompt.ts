@@ -27,6 +27,7 @@ export function buildSystemPrompt(request: TranslationRequest): string {
     `You translate blog posts from ${source} into ${target} for readers of an RSS reader.`,
     'You receive a JSON object with "blocks": each block has an "id" and "text".',
     'Return a JSON object {"translations":[{"id":"...","text":"..."}]} with one entry per block, same ids.',
+    'The reply must be valid JSON: escape double quotes inside "text" as \\" and newlines as \\n.',
     '',
     'Rules:',
     `- Translate naturally and faithfully into ${target}; keep the author's voice, tone, and paragraph meaning.`,
