@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { request as httpRequest } from 'node:http'
+import { connect } from 'node:net'
 import { createHttpClient, createRelayClient } from '@tela/ingest'
 import { loadConfig } from '../src/config'
 import { startRelayServer } from '../src/relay/server'
@@ -16,7 +16,9 @@ beforeAll(async () => {
     port: 0,
     host: '127.0.0.1',
     allowPrivateHosts: true,
-    timeoutMs: 500,
+    // Nothing here exercises the timeout; keep it loose so a busy machine cannot turn a 401
+    // into a spurious timeout.
+    timeoutMs: 5000,
   })
 })
 afterAll(async () => {
@@ -30,7 +32,7 @@ function client(secret = SECRET) {
     userAgent: 'TelaTest/1.0',
     politenessMs: 0,
     allowPrivateHosts: true,
-    timeoutMs: 1000,
+    timeoutMs: 5000,
     relay: createRelayClient({ relayUrl: `http://127.0.0.1:${relay.port}`, secret }),
   })
 }
@@ -57,35 +59,58 @@ describe('relay server', () => {
       status: 401,
       body: '{"error":"stale or missing timestamp"}',
     })
-    // Node's http client, not the shared fetch pool: the server drops these connections, and a
-    // pooled socket that died under a later test would only make the failure look flaky.
-    const post = (headers: Record<string, string>, chunk: string, times: number) =>
+    // Raw sockets, so no client-side connection pool (Bun shares reuse between fetch and
+    // node:http) can hand a socket the server dropped mid-body to the next test.
+    const raw = (headers: Record<string, string>, frames: string[]) =>
       new Promise<number | 'reset'>((resolve) => {
-        const req = httpRequest(base, { method: 'POST', headers }, (res) => {
-          res.resume()
-          resolve(res.statusCode ?? 0)
+        let settled = false
+        const sock = connect({ host: '127.0.0.1', port: relay.port })
+        const settle = (value: number | 'reset') => {
+          if (settled) return
+          settled = true
+          resolve(value)
+          sock.destroy()
+        }
+        let received = ''
+        sock.on('data', (chunk) => {
+          received += chunk.toString('latin1')
+          const status = /^HTTP\/1\.[01] (\d{3})/.exec(received)
+          if (status) settle(Number(status[1]))
         })
-        req.on('error', () => resolve('reset'))
-        let sent = 0
-        const pump = () => {
-          while (sent < times) {
-            sent += 1
-            if (!req.write(chunk)) {
-              req.once('drain', pump)
-              return
+        sock.on('error', () => settle('reset'))
+        sock.on('close', () => settle('reset'))
+        sock.on('connect', () => {
+          const head = [
+            'POST /fetch HTTP/1.1',
+            `host: 127.0.0.1:${relay.port}`,
+            'connection: close',
+            ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`),
+            '',
+            '',
+          ].join('\r\n')
+          sock.write(head)
+          let i = 0
+          const pump = () => {
+            while (i < frames.length) {
+              const frame = frames[i++] as string
+              if (!sock.write(frame)) {
+                sock.once('drain', pump)
+                return
+              }
             }
           }
-          req.end()
-        }
-        pump()
+          pump()
+        })
       })
     // Declared up front: refused from the header alone.
     const big = 'x'.repeat(256 * 1024)
-    expect(await post({ 'content-length': String(big.length) }, big, 1)).toBe(413)
+    expect(await raw({ 'content-length': String(big.length) }, [big])).toBe(413)
     // No Content-Length (chunked): the cap applies to what actually arrives. The server may
     // drop the connection right after answering, so a reset counts as refused too.
-    const chunked = await post({ 'transfer-encoding': 'chunked' }, 'y'.repeat(32 * 1024), 8)
-    expect([413, 'reset']).toContain(chunked)
+    const chunk = 'y'.repeat(32 * 1024)
+    const frames = Array.from({ length: 8 }, () => `${chunk.length.toString(16)}\r\n${chunk}\r\n`)
+    frames.push('0\r\n\r\n')
+    expect([413, 'reset']).toContain(await raw({ 'transfer-encoding': 'chunked' }, frames))
     expect(origin.requests).toHaveLength(0)
   })
 
