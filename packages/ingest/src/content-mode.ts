@@ -1,4 +1,4 @@
-import type { ContentMode } from '@tela/shared'
+import type { ContentMode, ExtractedFrom } from '@tela/shared'
 
 export type ContentSample = {
   /** Plain-text length of the processed body. */
@@ -14,6 +14,27 @@ const READ_MORE =
 
 export const SUMMARY_MAX_CHARS = 600
 export const MIN_SAMPLES = 3
+
+/** What the reader knows about an article when deciding whether to fetch its page. */
+export type ExtractionCandidate = {
+  contentMode: ContentMode
+  extractedFrom: ExtractedFrom
+  extractCheckedAt: Date | null
+  blocks: Array<{ chars: number; skip?: boolean }>
+}
+
+/**
+ * Whether opening this article should queue full-text extraction: once, while the content
+ * still comes from the feed, when the feed is known to ship summaries, or when the feed was too
+ * small to classify (fewer than MIN_SAMPLES items) and this body is summary-sized.
+ */
+export function wantsExtraction(article: ExtractionCandidate): boolean {
+  if (article.extractedFrom !== 'feed' || article.extractCheckedAt !== null) return false
+  if (article.contentMode === 'summary') return true
+  if (article.contentMode !== 'unknown') return false
+  const chars = article.blocks.reduce((n, b) => n + (b.skip ? 0 : b.chars), 0)
+  return chars < SUMMARY_MAX_CHARS
+}
 
 /**
  * Decide whether a feed ships full articles or only summaries. Needs at least three

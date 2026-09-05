@@ -6,6 +6,7 @@ import {
   listArticles,
   listSubscriptions,
 } from '@tela/db/queries'
+import { wantsExtraction } from '@tela/ingest'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { AppHeader } from '@/components/app-header'
 import { ArticleList } from '@/components/article-list'
@@ -47,13 +48,9 @@ export default async function ReadingPage({ searchParams }: Props) {
     params.articleId ? getArticle(db, user.id, params.articleId) : Promise.resolve(null),
     getLocale(),
   ])
-  // A summary-only feed's article gets its full text fetched on first open, once: the worker
-  // stamps the article whatever happens, and the reader polls until then.
-  const extracting =
-    article !== null &&
-    article.contentMode === 'summary' &&
-    article.extractedFrom === 'feed' &&
-    article.extractCheckedAt === null
+  // A summary-only article gets its full text fetched on first open, once: the worker stamps
+  // the article on a final outcome, and the reader polls until then.
+  const extracting = article !== null && wantsExtraction(article)
   if (article && extracting) await enqueueArticleExtract(db, article.id)
   const html = article ? await renderArticleHtml(article.html) : ''
   const recommendation = article ? await getRecommendation(db, user.id, article.id) : null
