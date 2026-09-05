@@ -5,6 +5,12 @@
  */
 export const NORM_VERSION = 1
 
+/**
+ * Source tokens one member may have translated on demand per UTC day, about ten articles at
+ * the per-article ceiling. Background (title) work is budgeted separately by the worker.
+ */
+export const USER_DAILY_TRANSLATION_TOKENS = 400_000
+
 /** Site listing states. */
 export const SITE_LISTINGS = ['private', 'listed', 'featured', 'rejected'] as const
 export type SiteListing = (typeof SITE_LISTINGS)[number]

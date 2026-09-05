@@ -165,6 +165,15 @@ export async function setReadingLang(db: Db, userId: string, readingLang: string
   await db.update(profiles).set({ readingLang }).where(eq(profiles.id, userId))
 }
 
+/** Today's LLM token usage caused by one member's requests, for their daily allowance. */
+export async function tokensUsedTodayBy(db: Db, userId: string): Promise<number> {
+  const [row] = await db.execute<{ total: number }>(
+    sql`select coalesce(sum(input_tokens + output_tokens), 0)::int as total
+        from llm_usage where user_id = ${userId} and created_at >= date_trunc('day', now())`,
+  )
+  return row?.total ?? 0
+}
+
 /** Today's LLM token usage, for the daily budget check. */
 export async function tokensUsedToday(db: Db): Promise<number> {
   const [row] = await db.execute<{ total: number }>(

@@ -20,8 +20,16 @@ export type FeedFetchJob = { feedId: number }
 export type ArticleExtractJob = { articleId: number }
 export type SiteAssetsJob = { siteId: number }
 export type TranslateTitleJob = { articleId: number; targetLang: string }
-/** `onDemand` marks a reader-initiated request, which the daily budget does not gate. */
-export type TranslateBodyJob = { articleId: number; targetLang: string; onDemand?: boolean }
+/**
+ * `onDemand` marks a reader-initiated request, which the daily budget does not gate;
+ * `requestedBy` is the member it is metered against.
+ */
+export type TranslateBodyJob = {
+  articleId: number
+  targetLang: string
+  onDemand?: boolean
+  requestedBy?: string
+}
 export type SiteClaimVerifyJob = { claimId: number }
 export type WebsubSubscribeJob = { feedId: number }
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { chunkBlocks, estimateTokens } from './chunk'
 import { createMockTranslator } from './mock'
+import { buildUserPayload } from './prompt'
 import { configFromEnv, isAccidentalMock } from './providers'
 import { translateBlocks } from './translate'
 import { parseJsonReply } from './translator'
@@ -197,5 +198,28 @@ describe('configFromEnv', () => {
       provider: 'anthropic',
       model: 'claude-sonnet-5',
     })
+  })
+})
+
+describe('buildUserPayload', () => {
+  test('clips context strings so a feed cannot grow every prompt', () => {
+    const payload = JSON.parse(
+      buildUserPayload({
+        sourceLang: 'en',
+        targetLang: 'zh-Hans',
+        blocks: [{ id: 'b1', text: 'Hello' }],
+        context: {
+          title: 'T'.repeat(5000),
+          siteTitle: 'S'.repeat(5000),
+          previous: [{ source: 'p'.repeat(5000), target: 'q'.repeat(5000) }],
+        },
+      }),
+    ) as {
+      context: { title: string; site: string; previous: Array<{ source: string; target: string }> }
+    }
+    expect(payload.context.title).toHaveLength(201)
+    expect(payload.context.site).toHaveLength(201)
+    expect(payload.context.previous[0]?.source).toHaveLength(401)
+    expect(payload.context.previous[0]?.target).toHaveLength(401)
   })
 })

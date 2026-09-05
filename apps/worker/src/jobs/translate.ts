@@ -21,7 +21,10 @@ export async function handleTranslateBody(ctx: WorkerContext, jobs: Job<Translat
     // The flag travels in the payload: pg-boss only exposes a job's priority with
     // includeMetadata, so reading it here would make every job look on-demand.
     const onDemand = job.data.onDemand === true
-    const result = await translateArticleBody(deps(ctx), articleId, targetLang, { onDemand })
+    const result = await translateArticleBody(deps(ctx), articleId, targetLang, {
+      onDemand,
+      ...(job.data.requestedBy ? { requestedBy: job.data.requestedBy } : {}),
+    })
     const fields = { articleId, targetLang, jobId: job.id, ms: Date.now() - started, ...result }
     if (result.status === 'failed') log.warn('body translation failed', fields)
     else log.info('body translation done', fields)

@@ -8,6 +8,8 @@ export async function recordUsage(
   articleId: number,
   targetLang: string,
   usage: TranslationUsage[],
+  /** Member whose request caused the calls; null for background work. */
+  userId: string | null = null,
 ): Promise<void> {
   if (usage.length === 0) return
   await db.insert(llmUsage).values(
@@ -15,6 +17,7 @@ export async function recordUsage(
       job,
       articleId,
       targetLang,
+      userId,
       model: u.model,
       inputTokens: u.inputTokens,
       outputTokens: u.outputTokens,

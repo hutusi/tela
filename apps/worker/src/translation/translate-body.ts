@@ -37,7 +37,7 @@ export async function translateArticleBody(
   deps: TranslationDeps,
   articleId: number,
   targetLang: string,
-  options: { onDemand?: boolean } = {},
+  options: { onDemand?: boolean; requestedBy?: string } = {},
 ): Promise<BodyOutcome> {
   const [row] = await deps.db
     .select({
@@ -139,7 +139,14 @@ export async function translateArticleBody(
             }))
             .filter((e) => (seen.has(e.sourceHash) ? false : (seen.add(e.sourceHash), true)))
           await storeTranslations(deps.db, entries)
-          await recordUsage(deps.db, 'translate.body', articleId, targetLang, [usage])
+          await recordUsage(
+            deps.db,
+            'translate.body',
+            articleId,
+            targetLang,
+            [usage],
+            options.requestedBy ?? null,
+          )
         },
       })
     } catch (err) {

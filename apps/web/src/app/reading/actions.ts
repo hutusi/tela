@@ -8,10 +8,11 @@ import {
   recommend,
   requestBodyTranslation,
   toggleLike,
+  tokensUsedTodayBy,
   unrecommend,
 } from '@tela/db/queries'
 import { createJobSender } from '@tela/db/queue'
-import { isReadingLanguage } from '@tela/shared'
+import { isReadingLanguage, USER_DAILY_TRANSLATION_TOKENS } from '@tela/shared'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth'
@@ -52,7 +53,15 @@ export async function toggleLikeAction(
 export async function requestTranslationAction(
   articleId: number,
   targetLang: string,
-): Promise<'requested' | 'in_progress' | 'ready' | 'invalid' | 'rate_limited' | 'unavailable'> {
+): Promise<
+  | 'requested'
+  | 'in_progress'
+  | 'ready'
+  | 'invalid'
+  | 'rate_limited'
+  | 'budget_exhausted'
+  | 'unavailable'
+> {
   const user = await requireUser()
   const target = id(articleId)
   if (!target || !isReadingLanguage(targetLang)) return 'invalid'
@@ -60,6 +69,11 @@ export async function requestTranslationAction(
   // On-demand requests skip the daily budget, so this is the only ceiling on what one account
   // can make the model do.
   if (!(await consumeRateLimit(db, 'translate', user.id)).allowed) return 'rate_limited'
+  // Requests are also metered by what they cost: each body job records its usage against the
+  // member who asked for it, and a day's allowance ends further requests until tomorrow.
+  if ((await tokensUsedTodayBy(db, user.id)) >= USER_DAILY_TRANSLATION_TOKENS) {
+    return 'budget_exhausted'
+  }
   const [article] = await db
     .select({ contentHash: articles.contentHash })
     .from(articles)
@@ -70,7 +84,7 @@ export async function requestTranslationAction(
   return requestBodyTranslation(db, target, targetLang, article.contentHash, async (tx) => {
     await createJobSender(tx).send(
       'translate.body',
-      { articleId: target, targetLang, onDemand: true },
+      { articleId: target, targetLang, onDemand: true, requestedBy: user.id },
       { singletonKey: `${target}:${targetLang}`, priority: 10 },
     )
   }).catch((err: unknown) => {

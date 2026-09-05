@@ -368,15 +368,20 @@ describe('daily budget and the on-demand flag', () => {
     expect(secondsUntilNextUtcDay(new Date('2026-09-05T00:00:00Z'))).toBe(86_400)
   })
 
-  test('the body handler takes on-demand from the payload, not from job metadata', async () => {
+  test('the body handler takes on-demand from the payload and meters usage against the member', async () => {
+    const userA = '11111111-1111-4111-8111-111111111111'
+    await t.db.execute(sql`insert into auth.users (id, email) values (${userA}, 'a@x.test')`)
     const { article } = await seedArticle()
     await overBudget()
     await handleTranslateBody(ctx(), [bodyJob({ articleId: article.id, targetLang: 'zh-Hans' })])
     expect(await t.db.select().from(articleTranslations)).toHaveLength(0)
     await handleTranslateBody(ctx(), [
-      bodyJob({ articleId: article.id, targetLang: 'zh-Hans', onDemand: true }),
+      bodyJob({ articleId: article.id, targetLang: 'zh-Hans', onDemand: true, requestedBy: userA }),
     ])
     const [row] = await t.db.select().from(articleTranslations)
     expect(row?.status).toBe('done')
+    const usage = await t.db.select().from(llmUsage).where(eq(llmUsage.job, 'translate.body'))
+    expect(usage.length).toBeGreaterThan(0)
+    expect(usage.every((u) => u.userId === userA)).toBe(true)
   })
 })

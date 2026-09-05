@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { dedupKey } from './dedup'
-import { looksLikeFeed, parseFeedText } from './feed'
+import { looksLikeFeed, MAX_FEED_TITLE_CHARS, parseFeedText } from './feed'
 import { FIXTURE_FEEDS, FIXTURES_DIR } from './fixtures.test-helper'
 
 describe('parseFeedText on captured feeds', () => {
@@ -93,5 +93,16 @@ describe('parseFeedText specifics', () => {
     })
     const feed = parseFeedText(json, 'https://t.example/feed.json')
     expect(feed.items[0]?.contentHtml).toBe('<p>one<br>two</p><p>three &lt;b&gt;</p>')
+  })
+})
+
+describe('feed metadata bounds', () => {
+  test('clips absurd feed titles and descriptions at parse time', () => {
+    const xml = `<?xml version="1.0"?><rss version="2.0"><channel><title>${'x'.repeat(10_000)}</title>
+      <link>https://blog.example/</link><description>${'d'.repeat(10_000)}</description>
+      <item><title>Post</title><link>https://blog.example/p</link></item></channel></rss>`
+    const feed = parseFeedText(xml, 'https://blog.example/feed')
+    expect(feed.title).toHaveLength(MAX_FEED_TITLE_CHARS + 1)
+    expect(feed.description?.length).toBe(2001)
   })
 })

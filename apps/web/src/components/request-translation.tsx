@@ -15,22 +15,23 @@ export function RequestTranslation({
 }) {
   const router = useRouter()
   const t = useTranslations('translation')
-  const [rateLimited, setRateLimited] = useState(false)
+  const [notice, setNotice] = useState<'rateLimited' | 'budgetExhausted' | null>(null)
   useEffect(() => {
     let cancelled = false
     requestTranslationAction(articleId, targetLang).then((outcome) => {
       if (cancelled) return
-      if (outcome === 'rate_limited') setRateLimited(true)
+      if (outcome === 'rate_limited') setNotice('rateLimited')
+      else if (outcome === 'budget_exhausted') setNotice('budgetExhausted')
       else router.refresh()
     })
     return () => {
       cancelled = true
     }
   }, [articleId, targetLang, router])
-  if (!rateLimited) return null
+  if (notice === null) return null
   return (
-    <p className="text-[13px] text-muted" data-testid="translation-rate-limited">
-      {t('rateLimited')}
+    <p className="text-[13px] text-muted" data-testid={`translation-${notice}`}>
+      {t(notice)}
     </p>
   )
 }

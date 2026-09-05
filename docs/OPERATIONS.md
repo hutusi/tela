@@ -210,7 +210,8 @@ First run: `cd apps/web && bunx playwright install chromium`.
 - **Cost check**: `select date_trunc('day', created_at) d, model, sum(input_tokens) i, sum(output_tokens) o, count(*) from llm_usage group by 1, 2 order by 1 desc`.
 - **Budget**: set `LLM_DAILY_BUDGET_TOKENS` on the worker; once exceeded, title jobs that miss
   the cache are re-queued for the next UTC day, reader-initiated body requests still run (each
-  member gets 120 per hour).
+  member gets 30 per hour and `USER_DAILY_TRANSLATION_TOKENS` a day, metered per member in
+  `llm_usage.user_id`).
 - **Switch provider**: change `LLM_PROVIDER`/`LLM_MODEL` and the key; restart the worker. Cached
   translations keep their `model` label, so old and new output can be compared.
 - **Force a retranslation** of an article: `delete from article_translations where article_id = …`

@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { sql } from 'drizzle-orm'
 import { getConstructionPlans, PgBoss } from 'pg-boss'
-import { requestBodyTranslation, setTranslationStatus } from '../src/queries'
+import { requestBodyTranslation, setTranslationStatus, tokensUsedTodayBy } from '../src/queries'
 import { createJobSender } from '../src/queue'
-import { articles, articleTranslations, feeds, sites } from '../src/schema'
+import { articles, articleTranslations, feeds, llmUsage, sites } from '../src/schema'
 import { resetDatabase, startTestDb, type TestDb } from '../src/testing'
 import { pgBossDatabase } from './pg-boss'
 
@@ -87,5 +88,26 @@ describe('requestBodyTranslation', () => {
     // A changed body makes the translation stale: requested again.
     expect(await requestBodyTranslation(t.db, id, 'zh-Hans', 'h2', counting)).toBe('requested')
     expect(calls).toBe(2)
+  })
+})
+
+describe('tokensUsedTodayBy', () => {
+  test("sums only the member's own calls from today", async () => {
+    const userA = '11111111-1111-4111-8111-111111111111'
+    const userB = '22222222-2222-4222-8222-222222222222'
+    await t.db.execute(
+      sql`insert into auth.users (id, email) values (${userA}, 'a@x.test'), (${userB}, 'b@x.test')`,
+    )
+    await t.db.insert(llmUsage).values([
+      { job: 'translate.body', model: 'mock', inputTokens: 100, outputTokens: 50, userId: userA },
+      { job: 'translate.body', model: 'mock', inputTokens: 7, outputTokens: 3, userId: userA },
+      { job: 'translate.body', model: 'mock', inputTokens: 1000, outputTokens: 0, userId: userB },
+      { job: 'translate.title', model: 'mock', inputTokens: 500, outputTokens: 0, userId: null },
+    ])
+    await t.db.execute(
+      sql`update llm_usage set created_at = now() - interval '1 day' where input_tokens = 7`,
+    )
+    expect(await tokensUsedTodayBy(t.db, userA)).toBe(150)
+    expect(await tokensUsedTodayBy(t.db, userB)).toBe(1000)
   })
 })

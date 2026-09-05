@@ -37,8 +37,10 @@ Studio) serving GLM, with Claude available later. Bailian exposes an OpenAI-comp
 - **Cost control**: one `llm_usage` row per call, written as each chunk lands so a retried job
   resumes from the cache; `LLM_DAILY_BUDGET_TOKENS` pauses background work (title jobs and any
   job without `onDemand`) while reader requests continue; reader requests are rate-limited per
-  member and every body is capped at `LLM_MAX_ARTICLE_TOKENS` source tokens (the rest renders as
-  source, `partial`); sites can opt out of translation.
+  member (30 an hour), metered against the member who asked (`llm_usage.user_id`, capped at
+  `USER_DAILY_TRANSLATION_TOKENS` a day), and every body is capped at `LLM_MAX_ARTICLE_TOKENS`
+  source tokens (the rest renders as source, `partial`); the prompt's context strings are
+  clipped; sites can opt out of translation.
 
 ## Consequences
 
