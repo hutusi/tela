@@ -57,7 +57,8 @@ const SPECS: Record<QueueName, QueueSpec> = {
     retryLimit: 3,
     retryDelay: 30,
     retryBackoff: true,
-    expireInSeconds: 300,
+    // A capped article is at most ~14 chunks; chunks already stored survive an expiry anyway.
+    expireInSeconds: 600,
   },
   [QUEUES.siteAssets]: {
     policy: 'short',

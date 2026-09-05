@@ -6,7 +6,7 @@ import {
   storeTranslations,
   tokensUsedToday,
 } from '@tela/db/queries'
-import { type Translator, translateBlocks } from '@tela/llm'
+import { estimateTokens, type Translator, translateBlocks } from '@tela/llm'
 import { NORM_VERSION } from '@tela/shared'
 import { eq } from 'drizzle-orm'
 import { recordUsage } from './usage'
@@ -16,6 +16,8 @@ export type TranslationDeps = {
   translator: Translator
   /** Daily token budget for background work; 0 = unlimited. */
   dailyBudgetTokens?: number
+  /** Ceiling on source tokens per article body; blocks past it are left as source. */
+  maxArticleTokens?: number
 }
 
 export type BodyOutcome = {
@@ -93,15 +95,25 @@ export async function translateArticleBody(
     targetLang,
     article.sourceLang,
   )
+  // The ceiling is measured over the whole body, not over what is still missing, so a rerun
+  // cannot translate "the next prefix" until the cap means nothing. Cached blocks past the
+  // ceiling are free and are used; uncached ones stay as source.
   const translatedById = new Map<string, string>()
   const missing: Array<{ id: string; text: string }> = []
+  const capped: Array<{ id: string; reason: string }> = []
+  let budget = deps.maxArticleTokens ?? Number.POSITIVE_INFINITY
+  let cachedCount = 0
   for (const b of blocks) {
+    budget -= estimateTokens(b.text)
     const hit = cached.get(b.hash)
-    if (hit !== undefined) translatedById.set(b.id, hit)
+    if (hit !== undefined) {
+      translatedById.set(b.id, hit)
+      cachedCount += 1
+    } else if (budget < 0) capped.push({ id: b.id, reason: 'article too long' })
     else missing.push({ id: b.id, text: b.text })
   }
 
-  let failed: Array<{ id: string; reason: string }> = []
+  let failed: Array<{ id: string; reason: string }> = capped
   if (missing.length > 0) {
     let outcome: Awaited<ReturnType<typeof translateBlocks>>
     try {
@@ -110,6 +122,25 @@ export async function translateArticleBody(
         sourceLang: article.sourceLang,
         targetLang,
         context: { title: article.title, siteTitle: row.siteTitle ?? row.feedTitle },
+        // Persist every chunk as it lands: a retried or expired job resumes from the cache
+        // instead of paying again, and today's usage reflects work in flight.
+        onChunk: async ({ translated, usage }) => {
+          // Duplicate blocks in one chunk share a hash; keep one entry per hash.
+          const seen = new Set<string>()
+          const entries = [...translated.entries()]
+            .map(([id, text]) => ({
+              sourceHash: hashById.get(id) as string,
+              targetLang,
+              taggedText: text,
+              sourceLang: article.sourceLang,
+              model: deps.translator.model,
+              normVersion: NORM_VERSION,
+              chars: text.length,
+            }))
+            .filter((e) => (seen.has(e.sourceHash) ? false : (seen.add(e.sourceHash), true)))
+          await storeTranslations(deps.db, entries)
+          await recordUsage(deps.db, 'translate.body', articleId, targetLang, [usage])
+        },
       })
     } catch (err) {
       await setTranslationStatus(deps.db, articleId, targetLang, 'failed', {
@@ -117,24 +148,8 @@ export async function translateArticleBody(
       })
       throw err
     }
-    failed = outcome.failed
-    const entries = [...outcome.translated.entries()].map(([id, text]) => ({
-      sourceHash: hashById.get(id) as string,
-      targetLang,
-      taggedText: text,
-      sourceLang: article.sourceLang,
-      model: deps.translator.model,
-      normVersion: NORM_VERSION,
-      chars: text.length,
-    }))
-    // Duplicate blocks in one article share a hash; keep one entry per hash.
-    const seen = new Set<string>()
-    await storeTranslations(
-      deps.db,
-      entries.filter((e) => (seen.has(e.sourceHash) ? false : (seen.add(e.sourceHash), true))),
-    )
+    failed = [...capped, ...outcome.failed]
     for (const [id, text] of outcome.translated) translatedById.set(id, text)
-    await recordUsage(deps.db, 'translate.body', articleId, targetLang, outcome.usage)
   }
 
   const html = rehydrateBlocks(contents.html, Object.fromEntries(translatedById))
@@ -147,8 +162,8 @@ export async function translateArticleBody(
   })
   return {
     status,
-    translated: translatedById.size - (blocks.length - missing.length),
-    cached: blocks.length - missing.length,
+    translated: translatedById.size - cachedCount,
+    cached: cachedCount,
     failed: failed.length,
   }
 }

@@ -145,9 +145,11 @@ carries the previous chunk's tail as context.
 - **Reader**: `TranslationBar` (written in X, translated by Tela, status) with Side by side /
   Translation / Original modes (`?mode=`); the list shows translated titles and excerpts and an
   `XX → YY` badge. "Read in" in the header sets `profiles.reading_lang`.
-- **Cost**: `llm_usage` per call; `LLM_DAILY_BUDGET_TOKENS` gates background work (title jobs
-  defer to the next day on a cache miss once it is spent); reader requests carry `onDemand: true`
-  in the job payload and are rate-limited per member (`translate`, 120 per hour) instead.
+- **Cost**: `llm_usage` per call, written as each chunk lands (a retried or expired job resumes
+  from the cache); `LLM_DAILY_BUDGET_TOKENS` gates background work (title jobs defer to the next
+  day on a cache miss once it is spent); reader requests carry `onDemand: true` in the job payload,
+  are rate-limited per member (`translate`, 120 per hour), and every body is capped at
+  `LLM_MAX_ARTICLE_TOKENS` source tokens (default 40,000), the rest rendering as source.
 
 ## Queue
 

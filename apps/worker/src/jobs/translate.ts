@@ -10,6 +10,7 @@ function deps(ctx: WorkerContext) {
     db: ctx.db,
     translator: ctx.translator,
     dailyBudgetTokens: ctx.config.LLM_DAILY_BUDGET_TOKENS,
+    maxArticleTokens: ctx.config.LLM_MAX_ARTICLE_TOKENS,
   }
 }
 

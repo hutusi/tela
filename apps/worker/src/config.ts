@@ -15,6 +15,8 @@ const envSchema = z.object({
   SCHEDULER_BATCH: z.coerce.number().int().positive().default(500),
   /** Daily LLM token budget for background translation; 0 = unlimited. On-demand work ignores it. */
   LLM_DAILY_BUDGET_TOKENS: z.coerce.number().int().nonnegative().default(0),
+  /** Ceiling on source tokens translated per article body; the rest stays as source (`partial`). */
+  LLM_MAX_ARTICLE_TOKENS: z.coerce.number().int().positive().default(40_000),
   /** Public origin of the web app, used to verify rel="me" claim links. */
   PUBLIC_URL: z.string().url().default('https://tela.app'),
   /** Global workers: origin of the relay role (e.g. https://relay-hk.example.com); unset = no relay. */

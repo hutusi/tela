@@ -191,6 +191,40 @@ describe('translateArticleBody', () => {
     })
   })
 
+  test('a body past the per-article ceiling ends partial, with progress stored per chunk', async () => {
+    const html = Array.from(
+      { length: 12 },
+      (_, i) =>
+        `<p>Paragraph ${i + 1}: the bakery on Calle de Toledo has been selling the same loaf since 1928, and the neighbourhood has been rebuilt around it more than once.</p>`,
+    ).join('')
+    const { article } = await seedArticle({ html })
+    const calls: TranslationRequest[] = []
+    const deps = { db: t.db, translator: createMockTranslator({ calls }), maxArticleTokens: 120 }
+    const out = await translateArticleBody(deps, article.id, 'zh-Hans', { onDemand: true })
+    expect(out.status).toBe('partial')
+    expect(out.translated).toBeGreaterThan(0)
+    expect(out.failed).toBeGreaterThan(0)
+    expect(out.translated + out.failed).toBe(12)
+    // Only the accepted prefix went to the model, in one chunk; its usage row is already there.
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.blocks).toHaveLength(out.translated)
+    expect(await t.db.select().from(llmUsage)).toHaveLength(1)
+    expect(await t.db.select().from(translations)).toHaveLength(out.translated)
+    const [row] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(row?.failedBlockIds).toHaveLength(out.failed)
+    expect(row?.html).toContain('zh-Hans:Paragraph 1')
+    expect(row?.html).toContain('Paragraph 12: the bakery')
+    expect(row?.html).not.toContain('zh-Hans:Paragraph 12')
+
+    // A rerun translates nothing new: the stored prefix is served from the cache.
+    const again = await translateArticleBody(deps, article.id, 'zh-Hans', { onDemand: true })
+    expect(again).toMatchObject({ status: 'partial', translated: 0, cached: out.translated })
+    expect(calls).toHaveLength(1)
+  })
+
   test('background work stops at the daily budget; on-demand continues', async () => {
     const { article } = await seedArticle()
     await t.db

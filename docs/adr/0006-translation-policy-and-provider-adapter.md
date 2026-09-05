@@ -34,8 +34,11 @@ Studio) serving GLM, with Claude available later. Bailian exposes an OpenAI-comp
   `@ai-sdk/anthropic` (structured output), and a deterministic mock used by tests and any
   environment without keys. `LLM_PROVIDER`, `LLM_MODEL`, and the keys select the backend; the
   model label is stored on every cache row and usage row.
-- **Cost control**: one `llm_usage` row per call; `LLM_DAILY_BUDGET_TOKENS` pauses background
-  (priority < 10) work while on-demand requests continue; sites can opt out of translation.
+- **Cost control**: one `llm_usage` row per call, written as each chunk lands so a retried job
+  resumes from the cache; `LLM_DAILY_BUDGET_TOKENS` pauses background work (title jobs and any
+  job without `onDemand`) while reader requests continue; reader requests are rate-limited per
+  member and every body is capped at `LLM_MAX_ARTICLE_TOKENS` source tokens (the rest renders as
+  source, `partial`); sites can opt out of translation.
 
 ## Consequences
 

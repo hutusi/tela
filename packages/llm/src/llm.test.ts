@@ -116,6 +116,42 @@ describe('translateBlocks with the mock translator', () => {
     expect(calls[1]?.context?.previous?.length).toBeGreaterThan(0)
   })
 
+  test('stops at the source-token ceiling and never sends the rest', async () => {
+    const calls: Parameters<ReturnType<typeof createMockTranslator>['translate']>[0][] = []
+    const out = await translateBlocks(createMockTranslator({ calls }), {
+      blocks,
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+      maxSourceTokens: 20,
+    })
+    expect([...out.translated.keys()]).toEqual(['b1'])
+    expect(out.failed).toEqual([
+      { id: 'b2', reason: 'article too long' },
+      { id: 'b3', reason: 'article too long' },
+    ])
+    // One call, and no strict retry for the blocks that were never sent.
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.blocks.map((b) => b.id)).toEqual(['b1'])
+  })
+
+  test('reports every successful call through onChunk as it lands', async () => {
+    const calls: Parameters<ReturnType<typeof createMockTranslator>['translate']>[0][] = []
+    const chunks: Array<{ ids: string[]; inputTokens: number }> = []
+    const out = await translateBlocks(createMockTranslator({ calls }), {
+      blocks,
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+      maxTokensPerChunk: 20,
+      onChunk: async ({ translated, usage }) => {
+        chunks.push({ ids: [...translated.keys()], inputTokens: usage.inputTokens })
+      },
+    })
+    expect(out.failed).toEqual([])
+    expect(chunks).toHaveLength(calls.length)
+    expect(chunks.flatMap((c) => c.ids).sort()).toEqual(['b1', 'b2', 'b3'])
+    expect(chunks.every((c) => c.inputTokens > 0)).toBe(true)
+  })
+
   test('throws when the provider fails for every chunk', async () => {
     await expect(
       translateBlocks(createMockTranslator({ fail: true }), {
