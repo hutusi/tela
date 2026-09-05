@@ -1,7 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { eq, sql } from 'drizzle-orm'
 import { getConstructionPlans, PgBoss } from 'pg-boss'
-import { requestBodyTranslation, setTranslationStatus, tokensUsedTodayBy } from '../src/queries'
+import {
+  requestBodyTranslation,
+  setTranslationStatus,
+  tokensUsedTodayBy,
+  transitionAttempt,
+} from '../src/queries'
 import { createJobSender } from '../src/queue'
 import {
   articles,
@@ -245,5 +250,64 @@ describe('tokensUsedTodayBy', () => {
     )
     expect(await tokensUsedTodayBy(t.db, userA)).toBe(150)
     expect(await tokensUsedTodayBy(t.db, userB)).toBe(1000)
+  })
+})
+
+describe('attempts', () => {
+  test('each request is a new attempt, and only the current attempt can settle the row', async () => {
+    const id = await seedArticle()
+    const attempts: string[] = []
+    const remember = async (_tx: unknown, attempt: string) => {
+      attempts.push(attempt)
+    }
+    expect(await requestBodyTranslation(t.db, id, 'zh-Hans', 'h1', remember)).toBe('requested')
+    // The article changed: a new request, a new attempt.
+    expect(await requestBodyTranslation(t.db, id, 'zh-Hans', 'h2', remember)).toBe('requested')
+    expect(attempts).toHaveLength(2)
+    expect(attempts[0]).not.toBe(attempts[1])
+    const [current] = await t.db.select().from(articleTranslations)
+    expect(current?.attempt).toBe(attempts[1] as string)
+
+    // The first attempt's job finishing late must not overwrite the newer request.
+    expect(
+      await transitionAttempt(t.db, id, 'zh-Hans', attempts[0] as string, 'done', {
+        html: '<p>old</p>',
+        contentHash: 'h1',
+      }),
+    ).toBe(false)
+    let [row] = await t.db.select().from(articleTranslations)
+    expect(row).toMatchObject({ status: 'requested', contentHash: 'h2', html: null })
+    expect(
+      await transitionAttempt(t.db, id, 'zh-Hans', attempts[1] as string, 'done', {
+        html: '<p>new</p>',
+        contentHash: 'h2',
+      }),
+    ).toBe(true)
+    ;[row] = await t.db.select().from(articleTranslations)
+    expect(row).toMatchObject({ status: 'done', contentHash: 'h2', html: '<p>new</p>' })
+  })
+
+  test('a running attempt is never replaced, even for changed content', async () => {
+    const id = await seedArticle()
+    const attempts: string[] = []
+    const remember = async (_tx: unknown, attempt: string) => {
+      attempts.push(attempt)
+    }
+    expect(await requestBodyTranslation(t.db, id, 'zh-Hans', 'h1', remember)).toBe('requested')
+    expect(await transitionAttempt(t.db, id, 'zh-Hans', attempts[0] as string, 'running')).toBe(
+      true,
+    )
+    // The body changed while the worker is spending: the reader waits for that attempt.
+    expect(await requestBodyTranslation(t.db, id, 'zh-Hans', 'h2', remember)).toBe('in_progress')
+    expect(attempts).toHaveLength(1)
+    expect(
+      await transitionAttempt(t.db, id, 'zh-Hans', attempts[0] as string, 'done', {
+        html: '<p>old</p>',
+        contentHash: 'h1',
+      }),
+    ).toBe(true)
+    // Concluded: the stale row gives way to a new attempt with its own reservation.
+    expect(await requestBodyTranslation(t.db, id, 'zh-Hans', 'h2', remember)).toBe('requested')
+    expect(attempts).toHaveLength(2)
   })
 })

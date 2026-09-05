@@ -42,7 +42,13 @@ Studio) serving GLM, with Claude available later. Bailian exposes an OpenAI-comp
   recorded usage (`llm_usage.user_id`) when the attempt concludes; every body is capped at
   `LLM_MAX_ARTICLE_TOKENS`
   source tokens (the rest renders as source, `partial`); the prompt's context strings are
-  clipped; sites can opt out of translation.
+  clipped; sites can opt out of translation. Every request is an attempt
+  (`article_translations.attempt`) carried by its job: a job whose attempt was superseded by a
+  newer request steps aside, asks for the current one to run, and never overwrites its row. A
+  running attempt is never replaced; it heartbeats after every chunk, each provider call has a
+  two-minute deadline, an execution stops starting calls before its queue lease ends and
+  continues the attempt in a fresh job, and the scheduler retires the attempt id, on the row itself, when it re-sends a dead attempt
+  (at most twice) or gives the row up.
 
 ## Consequences
 

@@ -1,5 +1,5 @@
 {
-  "id": "9e261cc4-ad76-455a-a706-7cc9e62aa3a3",
+  "id": "04608572-0733-4987-ac89-4e954180a65f",
   "prevId": "deecf8a8-cdfe-4bf5-a9d3-d430681328a5",
   "version": "7",
   "dialect": "postgresql",
@@ -138,6 +138,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::text[]"
+        },
+        "attempt": {
+          "name": "attempt",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "model": {
           "name": "model",
@@ -481,12 +488,12 @@
           "notNull": true,
           "default": 0
         },
-        "attempt": {
-          "name": "attempt",
-          "type": "uuid",
+        "resends": {
+          "name": "resends",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": 0
         },
         "updated_at": {
           "name": "updated_at",

@@ -166,7 +166,7 @@ declares every queue with its policy, retries, expiry, and a `<name>.dead` dead-
 | `feed.fetch` | scheduler, web (add feed) | fetch | `short` policy, 3 retries with backoff, 120 s expiry |
 | `article.extract` | web (opening a summary-only article, or a summary-sized one from a feed too small to classify; at most one job per article per 10 minutes via `extract_requested_at`; `extract_checked_at` records a final outcome, transient failures retry) | extract | lazy full-text extraction; the reader polls and shows a hint until it lands |
 | `translate.title` | fetch (in the article's own transaction; at most 100 articles per fetch) | translate | batches of 5, 4 in flight; every reading language the article is not in; deferred to the next day when the budget is spent |
-| `translate.body` | web (open, same transaction as the `requested` row), scheduler (re-sends rows stuck `requested` for 5 min) | translate | priority 10 with `onDemand: true`; singleton per article and language |
+| `translate.body` | web (open, same transaction as the `requested` row), scheduler (re-sends rows stuck `requested` for 5 min or `running` without a heartbeat for 15 min, at most twice, then gives up) | translate | priority 10 with `onDemand: true`; singleton per article and language |
 | `websub.subscribe` | fetch (feed advertises a hub), maintenance (renewals) | fetch | asks the hub to push to `/api/websub/<feedId>`; only when `WEBSUB_ENABLED=1` |
 | `site.assets` | fetch [phase 6] | assets | favicons and covers to R2 |
 | `site.claim.verify` | web [phase 6] | claim | claim verification |

@@ -284,6 +284,170 @@ describe('translateArticleBody', () => {
     expect(await t.db.select().from(translationRequests)).toHaveLength(1)
   })
 
+  test('with an attempt that is not the current request, nothing is written at all', async () => {
+    const { article } = await seedArticle()
+    const calls: TranslationRequest[] = []
+    const deps = { db: t.db, translator: createMockTranslator({ calls }) }
+    // No request row at all (the reader withdrew, or the row was retired): the running write
+    // is refused before any provider call.
+    const out = await translateArticleBody(deps, article.id, 'zh-Hans', {
+      onDemand: true,
+      attempt: crypto.randomUUID(),
+    })
+    expect(out).toEqual({
+      status: 'skipped',
+      reason: 'superseded',
+      translated: 0,
+      cached: 0,
+      failed: 0,
+    })
+    expect(calls).toHaveLength(0)
+    expect(await t.db.select().from(articleTranslations)).toHaveLength(0)
+  })
+
+  test('an attempt given up mid-run stops at its next chunk and leaves the row alone', async () => {
+    const { article } = await seedArticle()
+    const attempts: string[] = []
+    await requestBodyTranslation(
+      t.db,
+      article.id,
+      'zh-Hans',
+      article.contentHash,
+      async (_tx, attempt) => {
+        attempts.push(attempt)
+      },
+    )
+    const inner = createMockTranslator()
+    const translator = {
+      model: inner.model,
+      translate: async (req: TranslationRequest) => {
+        // The scheduler gave up on this attempt while the provider was answering.
+        await t.db.execute(sql`update article_translations set attempt = gen_random_uuid()`)
+        return inner.translate(req)
+      },
+    }
+    const out = await translateArticleBody({ db: t.db, translator }, article.id, 'zh-Hans', {
+      onDemand: true,
+      attempt: attempts[0] as string,
+    })
+    expect(out).toMatchObject({ status: 'skipped', reason: 'attempt lost' })
+    // The chunk it paid for is kept for the next attempt; the row itself is left alone.
+    expect((await t.db.select().from(translations)).length).toBeGreaterThan(0)
+    const [row] = await t.db.select().from(articleTranslations)
+    expect(row).toMatchObject({ status: 'running', html: null })
+  })
+
+  test('an execution past its budget continues the same attempt in a fresh job', async () => {
+    const { article } = await seedArticle()
+    const attempts: string[] = []
+    await requestBodyTranslation(
+      t.db,
+      article.id,
+      'zh-Hans',
+      article.contentHash,
+      async (_tx, attempt) => {
+        attempts.push(attempt)
+      },
+    )
+    const calls: TranslationRequest[] = []
+    const deps = { db: t.db, translator: createMockTranslator({ calls }) }
+    const attempt = attempts[0] as string
+    const out = await translateArticleBody(deps, article.id, 'zh-Hans', {
+      onDemand: true,
+      attempt,
+      deadline: Date.now() - 1,
+    })
+    expect(out).toMatchObject({
+      status: 'skipped',
+      reason: 'continued',
+      resend: { attempt, requestedBy: null },
+    })
+    expect(calls).toHaveLength(0)
+    expect((await t.db.select().from(articleTranslations))[0]?.status).toBe('running')
+    // The continuation carries the same attempt and finishes the work.
+    const done = await translateArticleBody(deps, article.id, 'zh-Hans', {
+      onDemand: true,
+      attempt,
+      deadline: Date.now() + 60_000,
+    })
+    expect(done.status).toBe('done')
+  })
+
+  test('an early outcome for a superseded attempt is refused and names the current one', async () => {
+    const { article } = await seedArticle()
+    const attempts: string[] = []
+    const remember = async (_tx: unknown, attempt: string) => {
+      attempts.push(attempt)
+    }
+    await requestBodyTranslation(t.db, article.id, 'zh-Hans', 'old-hash', remember)
+    await requestBodyTranslation(t.db, article.id, 'zh-Hans', article.contentHash, remember)
+    // The article turns out to be in the reading language: an early 'done' write, on behalf
+    // of the first attempt, which is no longer the row's.
+    await t.db.update(articles).set({ sourceLang: 'zh-Hans' }).where(eq(articles.id, article.id))
+    const out = await translateArticleBody(
+      { db: t.db, translator: createMockTranslator() },
+      article.id,
+      'zh-Hans',
+      { onDemand: true, attempt: attempts[0] as string },
+    )
+    expect(out).toMatchObject({ reason: 'superseded', resend: { attempt: attempts[1] } })
+    const [row] = await t.db.select().from(articleTranslations)
+    expect(row).toMatchObject({ status: 'requested', contentHash: article.contentHash })
+  })
+
+  test('a job for a superseded attempt steps aside and asks for the current one to run', async () => {
+    const userA = '11111111-1111-4111-8111-111111111111'
+    const userB = '22222222-2222-4222-8222-222222222222'
+    await t.db.execute(
+      sql`insert into auth.users (id, email) values (${userA}, 'a@x.test'), (${userB}, 'b@x.test')`,
+    )
+    const { article } = await seedArticle()
+    const attempts: string[] = []
+    const remember = async (_tx: unknown, attempt: string) => {
+      attempts.push(attempt)
+    }
+    const reserve = (requestedBy: string) => ({
+      requestedBy,
+      reserveTokens: 1000,
+      allowanceTokens: 400_000,
+    })
+    // A asks, then the article changes and B asks: B's request is the current attempt.
+    await requestBodyTranslation(t.db, article.id, 'zh-Hans', 'old-hash', remember, reserve(userA))
+    await requestBodyTranslation(
+      t.db,
+      article.id,
+      'zh-Hans',
+      article.contentHash,
+      remember,
+      reserve(userB),
+    )
+    const calls: TranslationRequest[] = []
+    const deps = { db: t.db, translator: createMockTranslator({ calls }) }
+    // A's job runs first (the queue kept B's out): it translates nothing and names B's attempt.
+    const stale = await translateArticleBody(deps, article.id, 'zh-Hans', {
+      onDemand: true,
+      requestedBy: userA,
+      attempt: attempts[0] as string,
+    })
+    expect(stale).toMatchObject({
+      status: 'skipped',
+      reason: 'superseded',
+      resend: { attempt: attempts[1], requestedBy: userB },
+    })
+    expect(calls).toHaveLength(0)
+    const [row] = await t.db.select().from(articleTranslations)
+    expect(row).toMatchObject({ status: 'requested', contentHash: article.contentHash })
+    // B's job completes normally and the usage is B's.
+    const fresh = await translateArticleBody(deps, article.id, 'zh-Hans', {
+      onDemand: true,
+      requestedBy: userB,
+      attempt: attempts[1] as string,
+    })
+    expect(fresh.status).toBe('done')
+    const usage = await t.db.select().from(llmUsage)
+    expect(usage.every((u) => u.userId === userB)).toBe(true)
+  })
+
   test('background work stops at the daily budget; on-demand continues', async () => {
     const { article } = await seedArticle()
     await t.db
@@ -427,15 +591,77 @@ describe('daily budget and the on-demand flag', () => {
     expect(secondsUntilNextUtcDay(new Date('2026-09-05T00:00:00Z'))).toBe(86_400)
   })
 
+  test('the handler re-sends a job for the current attempt when its own was superseded', async () => {
+    const userA = '11111111-1111-4111-8111-111111111111'
+    await t.db.execute(sql`insert into auth.users (id, email) values (${userA}, 'a@x.test')`)
+    const { article } = await seedArticle()
+    const attempts: string[] = []
+    const remember = async (_tx: unknown, attempt: string) => {
+      attempts.push(attempt)
+    }
+    await requestBodyTranslation(t.db, article.id, 'zh-Hans', 'old-hash', remember)
+    await requestBodyTranslation(t.db, article.id, 'zh-Hans', article.contentHash, remember, {
+      requestedBy: userA,
+      reserveTokens: 1000,
+      allowanceTokens: 400_000,
+    })
+    await t.db.execute(sql`delete from pgboss.job where name = ${QUEUES.translateBody}`)
+    await handleTranslateBody(ctx(), [
+      bodyJob({
+        articleId: article.id,
+        targetLang: 'zh-Hans',
+        onDemand: true,
+        attempt: attempts[0] as string,
+      }),
+    ])
+    const queued = await t.db.execute<{ data: TranslateBodyJob }>(
+      sql`select data from pgboss.job where name = ${QUEUES.translateBody}`,
+    )
+    expect([...queued].map((q) => q.data)).toEqual([
+      {
+        articleId: article.id,
+        targetLang: 'zh-Hans',
+        onDemand: true,
+        attempt: attempts[1] as string,
+        requestedBy: userA,
+      },
+    ])
+  })
+
   test('the body handler takes on-demand from the payload and meters usage against the member', async () => {
     const userA = '11111111-1111-4111-8111-111111111111'
     await t.db.execute(sql`insert into auth.users (id, email) values (${userA}, 'a@x.test')`)
     const { article } = await seedArticle()
     await overBudget()
-    await handleTranslateBody(ctx(), [bodyJob({ articleId: article.id, targetLang: 'zh-Hans' })])
-    expect(await t.db.select().from(articleTranslations)).toHaveLength(0)
+    // A job from before attempts existed runs nothing: its row was retired by the migration.
     await handleTranslateBody(ctx(), [
-      bodyJob({ articleId: article.id, targetLang: 'zh-Hans', onDemand: true, requestedBy: userA }),
+      bodyJob({ articleId: article.id, targetLang: 'zh-Hans', onDemand: true } as TranslateBodyJob),
+    ])
+    expect(await t.db.select().from(articleTranslations)).toHaveLength(0)
+    let attempt = ''
+    await requestBodyTranslation(
+      t.db,
+      article.id,
+      'zh-Hans',
+      article.contentHash,
+      async (_tx, a) => {
+        attempt = a
+      },
+      { requestedBy: userA, reserveTokens: 1000, allowanceTokens: 400_000 },
+    )
+    // Background work stops at the daily budget; the row waits.
+    await handleTranslateBody(ctx(), [
+      bodyJob({ articleId: article.id, targetLang: 'zh-Hans', attempt }),
+    ])
+    expect((await t.db.select().from(articleTranslations))[0]?.status).toBe('requested')
+    await handleTranslateBody(ctx(), [
+      bodyJob({
+        articleId: article.id,
+        targetLang: 'zh-Hans',
+        onDemand: true,
+        requestedBy: userA,
+        attempt,
+      }),
     ])
     const [row] = await t.db.select().from(articleTranslations)
     expect(row?.status).toBe('done')

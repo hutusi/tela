@@ -145,6 +145,12 @@ export const articleTranslations = pgTable(
     excerpt: text('excerpt'),
     html: text('html'),
     failedBlockIds: text('failed_block_ids').array().notNull().default(sql`'{}'::text[]`),
+    /**
+     * Identity of the current attempt, carried by its job. Every worker write compares against
+     * it on this very row, so a job that was superseded, re-sent, or given up is refused without
+     * a race against the scheduler. Random by default, so rows written outside a request have one.
+     */
+    attempt: uuid('attempt').notNull().defaultRandom(),
     model: text('model'),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -183,12 +189,8 @@ export const translationRequests = pgTable(
     requestedBy: uuid('requested_by').references(() => profiles.id, { onDelete: 'set null' }),
     /** Source tokens the attempt is expected to send, capped at the per-article ceiling. */
     reservedTokens: integer('reserved_tokens').notNull().default(0),
-    /**
-     * Identity of the current attempt, carried by its job. The queue dedups by article and
-     * language, so a job may find that a newer request replaced the one it was sent for; it must
-     * then step aside rather than charge the wrong member or overwrite the newer row.
-     */
-    attempt: uuid('attempt').notNull().defaultRandom(),
+    /** Times the scheduler replaced a dead running attempt; past a small bound the row is given up. */
+    resends: integer('resends').notNull().default(0),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
       .defaultNow()

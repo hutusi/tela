@@ -96,10 +96,10 @@ export async function requestTranslationAction(
     target,
     targetLang,
     article.contentHash,
-    async (tx) => {
+    async (tx, attempt) => {
       await createJobSender(tx).send(
         'translate.body',
-        { articleId: target, targetLang, onDemand: true, requestedBy: user.id },
+        { articleId: target, targetLang, onDemand: true, requestedBy: user.id, attempt },
         { singletonKey: `${target}:${targetLang}`, priority: 10 },
       )
     },

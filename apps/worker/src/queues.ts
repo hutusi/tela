@@ -1,4 +1,15 @@
+import { DEFAULT_CALL_TIMEOUT_MS } from '@tela/llm'
 import type { PgBoss, Queue } from 'pg-boss'
+
+/** How long pg-boss lets one translate.body execution run before handing the job to a retry. */
+export const TRANSLATE_BODY_LEASE_SECONDS = 600
+/**
+ * How long one execution may keep starting provider calls: the lease, less one call at its
+ * deadline, less slack for the final writes. An execution past its budget hands the same
+ * attempt to a fresh job instead of overlapping its own retry after the lease expires.
+ */
+export const TRANSLATE_BODY_BUDGET_MS =
+  TRANSLATE_BODY_LEASE_SECONDS * 1000 - DEFAULT_CALL_TIMEOUT_MS - 60_000
 
 /** Queue names. The web app enqueues on some of these through pg-boss's Drizzle adapter. */
 export const QUEUES = {
@@ -29,6 +40,8 @@ export type TranslateBodyJob = {
   targetLang: string
   onDemand?: boolean
   requestedBy?: string
+  /** The request this job was sent for; see translation_requests.attempt. */
+  attempt: string
 }
 export type SiteClaimVerifyJob = { claimId: number }
 export type WebsubSubscribeJob = { feedId: number }
@@ -65,8 +78,9 @@ const SPECS: Record<QueueName, QueueSpec> = {
     retryLimit: 3,
     retryDelay: 30,
     retryBackoff: true,
-    // A capped article is at most ~14 chunks; chunks already stored survive an expiry anyway.
-    expireInSeconds: 600,
+    // A capped article can take longer than this: an execution stops at TRANSLATE_BODY_BUDGET_MS
+    // and continues in a fresh job from the chunks already stored.
+    expireInSeconds: TRANSLATE_BODY_LEASE_SECONDS,
   },
   [QUEUES.siteAssets]: {
     policy: 'short',

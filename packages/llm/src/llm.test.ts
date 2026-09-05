@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test'
+import { MockLanguageModelV4 } from 'ai/test'
 import { chunkBlocks, estimateTokens } from './chunk'
 import { createMockTranslator } from './mock'
 import { buildUserPayload } from './prompt'
 import { configFromEnv, isAccidentalMock } from './providers'
-import { translateBlocks } from './translate'
-import { parseJsonReply } from './translator'
+import { type TranslateBlocksInput, translateBlocks } from './translate'
+import { createSdkTranslator, parseJsonReply } from './translator'
+import type { TranslationRequest } from './types'
 import { validateTranslation } from './validate'
 
 describe('chunking', () => {
@@ -164,6 +166,39 @@ describe('translateBlocks with the mock translator', () => {
   })
 })
 
+describe('translateBlocks deadline', () => {
+  test('stops starting provider calls once the deadline has passed, and says so', async () => {
+    const calls: TranslationRequest[] = []
+    const inner = createMockTranslator({ calls })
+    const input: TranslateBlocksInput = {
+      blocks: [
+        { id: 'a', text: 'x'.repeat(400) },
+        { id: 'b', text: 'y'.repeat(400) },
+      ],
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+      maxTokensPerChunk: 100,
+      deadline: Date.now() + 60_000,
+    }
+    const translator = {
+      model: inner.model,
+      translate: async (req: TranslationRequest) => {
+        // Time runs out while the first chunk is in flight.
+        input.deadline = Date.now() - 1
+        return inner.translate(req)
+      },
+    }
+    const out = await translateBlocks(translator, input)
+    expect(calls.map((c) => c.blocks.map((b) => b.id))).toEqual([['a']])
+    expect(out.stopped).toBe(true)
+    expect([...out.translated.keys()]).toEqual(['a'])
+    expect(out.failed).toEqual([])
+    // Without a deadline the run is never stopped.
+    const { deadline: _deadline, ...noDeadline } = input
+    expect((await translateBlocks(inner, noDeadline)).stopped).toBe(false)
+  })
+})
+
 describe('configFromEnv', () => {
   test('falls back to the mock without keys and honors overrides', () => {
     expect(configFromEnv({})).toEqual({ provider: 'mock', model: 'mock' })
@@ -221,5 +256,26 @@ describe('buildUserPayload', () => {
     expect(payload.context.site).toHaveLength(201)
     expect(payload.context.previous[0]?.source).toHaveLength(401)
     expect(payload.context.previous[0]?.target).toHaveLength(401)
+  })
+})
+
+describe('createSdkTranslator', () => {
+  test('a provider call that never answers is abandoned at the deadline', async () => {
+    const model = new MockLanguageModelV4({
+      doGenerate: (options) =>
+        new Promise((_, reject) => {
+          options.abortSignal?.addEventListener('abort', () => reject(options.abortSignal?.reason))
+        }),
+    })
+    const translator = createSdkTranslator(model, { modelName: 'never', timeoutMs: 50 })
+    await expect(
+      translator.translate({
+        sourceLang: 'en',
+        targetLang: 'zh-Hans',
+        blocks: [{ id: 'a', text: 'hi' }],
+        context: { previous: [] },
+        strict: false,
+      }),
+    ).rejects.toThrow()
   })
 })

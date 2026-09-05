@@ -22,6 +22,12 @@ export type TranslateBlocksInput = {
   maxSourceTokens?: number
   /** Called after every successful provider call, so progress can be persisted before the next. */
   onChunk?: (chunk: ChunkResult) => Promise<void>
+  /**
+   * Epoch milliseconds after which no further provider call is started. Blocks left unattempted
+   * are neither translated nor failed; the outcome says the run `stopped` so the caller can
+   * continue it later from what was persisted.
+   */
+  deadline?: number
 }
 
 export type TranslateBlocksOutcome = {
@@ -29,6 +35,8 @@ export type TranslateBlocksOutcome = {
   translated: Map<string, string>
   failed: Array<{ id: string; reason: string }>
   usage: TranslationUsage[]
+  /** The deadline passed with blocks still unattempted. */
+  stopped: boolean
 }
 
 /**
@@ -109,14 +117,26 @@ export async function translateBlocks(
     if (input.onChunk) await input.onChunk({ translated: chunkTranslated, usage: response.usage })
   }
 
+  const past = () => input.deadline !== undefined && Date.now() >= input.deadline
+  let stopped = false
   for (const chunk of chunkBlocks(accepted, input.maxTokensPerChunk ?? DEFAULT_CHUNK_TOKENS)) {
+    if (past()) {
+      stopped = true
+      break
+    }
     await run(chunk, false)
   }
-  const retry = [...failed.keys()]
-    .filter((id) => !capped.has(id) && !failed.get(id)?.startsWith('provider error'))
-    .map((id) => ({ id, text: bySource.get(id) as string }))
-  for (const chunk of chunkBlocks(retry, input.maxTokensPerChunk ?? DEFAULT_CHUNK_TOKENS)) {
-    await run(chunk, true)
+  if (!stopped) {
+    const retry = [...failed.keys()]
+      .filter((id) => !capped.has(id) && !failed.get(id)?.startsWith('provider error'))
+      .map((id) => ({ id, text: bySource.get(id) as string }))
+    for (const chunk of chunkBlocks(retry, input.maxTokensPerChunk ?? DEFAULT_CHUNK_TOKENS)) {
+      if (past()) {
+        stopped = true
+        break
+      }
+      await run(chunk, true)
+    }
   }
 
   if (successes === 0 && lastError && accepted.length > 0) throw lastError
@@ -124,5 +144,6 @@ export async function translateBlocks(
     translated,
     failed: [...failed.entries()].map(([id, reason]) => ({ id, reason })),
     usage,
+    stopped,
   }
 }

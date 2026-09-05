@@ -140,3 +140,39 @@ describe('0014 provenance columns', () => {
     ])
   })
 })
+
+describe('0015 translation requests', () => {
+  test('retires translations in flight from before attempts existed', async () => {
+    const fresh = await freshDatabase('tela_migrations_attempts')
+    await migrate(fresh, { migrationsFolder: await folderUpTo(14) })
+    const [site] = await fresh.execute<{ id: number }>(
+      sql`insert into sites (home_url) values ('https://legacy.example') returning id`,
+    )
+    const [feed] = await fresh.execute<{ id: number }>(
+      sql`insert into feeds (site_id, feed_url) values (${site?.id}, 'https://legacy.example/feed') returning id`,
+    )
+    const ids = await fresh.execute<{ id: string }>(
+      sql`insert into articles (feed_id, dedup_key, title)
+          values (${feed?.id}, 'a', 'A'), (${feed?.id}, 'b', 'B'), (${feed?.id}, 'c', 'C') returning id`,
+    )
+    const [a, b, c] = [...ids].map((r) => r.id)
+    // No request rows exist yet: these jobs carry no attempt and could bypass every guard.
+    await fresh.execute(sql`
+      insert into article_translations (article_id, target_lang, status, html) values
+        (${a}, 'zh-Hans', 'requested', null),
+        (${b}, 'zh-Hans', 'running', '<p>x</p>'),
+        (${c}, 'zh-Hans', 'done', '<p>y</p>')
+    `)
+
+    await migrate(fresh, { migrationsFolder: MIGRATIONS_DIR })
+
+    const rows = await fresh.execute<{ status: string; html: string | null }>(
+      sql`select status, html from article_translations order by article_id`,
+    )
+    expect([...rows].map((r) => [r.status, r.html])).toEqual([
+      ['failed', null],
+      ['failed', null],
+      ['done', '<p>y</p>'],
+    ])
+  })
+})
