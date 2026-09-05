@@ -56,7 +56,10 @@ implements them (see `docs/ARCHITECTURE.md`).
 2. Email through Resend (built-in SMTP is capped at 2 emails/hour): verify the sending domain in
    Resend (its DKIM, SPF and MX records go into the Cloudflare zone), create a sending-only API
    key, put it in `.env.supabase` as `SUPABASE_AUTH_SMTP_PASS`, and `supabase config push` applies
-   the `[auth.email.smtp]` block and the raised `email_sent` rate limit. Verify delivery to qq.com
+   the `[auth.email.smtp]` block and the raised `email_sent` rate limit. The same push applies the
+   email templates in `supabase/templates`: they carry the one-time code the login form asks for
+   and a link to `/auth/callback` with a token hash (works from any browser); Supabase's stock
+   templates carry neither, only a link that lands on the site root. Verify delivery to qq.com
    and 163.com addresses.
 3. Auth → Providers: Email (OTP), GitHub, Google (phase 4).
 4. Apply migrations: `DATABASE_URL=<session pooler connection> bun run db:migrate`.

@@ -26,7 +26,7 @@
     "intro": "A code by email, or your GitHub or Google account. No passwords.",
     "emailPlaceholder": "you@example.com",
     "sendCode": "Send me a code",
-    "codeSent": "We sent a code to {email}.",
+    "codeSent": "We sent a code to {email}. Enter it here, or open the link in the same email.",
     "codePlaceholder": "6-digit code",
     "verify": "Continue",
     "or": "or",
@@ -40,7 +40,8 @@
       "not_configured": "Sign-in is not configured on this server.",
       "send_failed": "We could not send the code. Try again in a minute.",
       "bad_code": "That code is wrong or has expired.",
-      "oauth_failed": "Sign-in with that provider failed."
+      "oauth_failed": "Sign-in with that provider failed.",
+      "link_failed": "That sign-in link is invalid or has expired. Ask for a new code."
     }
   },
   "sidebar": {

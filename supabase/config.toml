@@ -254,6 +254,18 @@ pass = "env(SUPABASE_AUTH_SMTP_PASS)"
 admin_email = "noreply@ainaive.com"
 sender_name = "Tela"
 
+# Both sign-in mails carry the one-time code the login form asks for, and a link to the app's own
+# callback with a token hash, which works from any browser. Supabase's stock templates carry only
+# {{ .ConfirmationURL }}: no code, and a link that lands on the site root with nothing to make a
+# session from. Templates are applied by `supabase config push`.
+[auth.email.template.confirmation]
+subject = "Your Tela sign-in code · Tela 登录验证码"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.magic_link]
+subject = "Your Tela sign-in code · Tela 登录验证码"
+content_path = "./supabase/templates/magic_link.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"
