@@ -5,6 +5,7 @@ import {
   getRecommendation,
   listArticles,
   listSubscriptions,
+  markExtractRequested,
 } from '@tela/db/queries'
 import { wantsExtraction } from '@tela/ingest'
 import { getLocale, getTranslations } from 'next-intl/server'
@@ -48,10 +49,13 @@ export default async function ReadingPage({ searchParams }: Props) {
     params.articleId ? getArticle(db, user.id, params.articleId) : Promise.resolve(null),
     getLocale(),
   ])
-  // A summary-only article gets its full text fetched on first open, once: the worker stamps
-  // the article on a final outcome, and the reader polls until then.
+  // A summary-only article gets its full text fetched when opened. The job follows the row
+  // update that claims a cooldown window, not the render, so a tab polling every two seconds
+  // causes one job per window; the worker stamps the article on a final outcome.
   const extracting = article !== null && wantsExtraction(article)
-  if (article && extracting) await enqueueArticleExtract(db, article.id)
+  if (article && extracting && (await markExtractRequested(db, article.id))) {
+    await enqueueArticleExtract(db, article.id)
+  }
   const html = article ? await renderArticleHtml(article.html) : ''
   const recommendation = article ? await getRecommendation(db, user.id, article.id) : null
 

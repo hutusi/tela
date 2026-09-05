@@ -1,5 +1,5 @@
 import { UNREAD_HORIZON_DAYS } from '@tela/shared'
-import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, isNotNull, isNull, lt, or, sql } from 'drizzle-orm'
 import type { Db, DbExecutor } from '../client'
 import {
   articleContents,
@@ -203,6 +203,8 @@ export type ArticleDetail = ArticleListItem & {
   extractedFrom: (typeof articleContents.$inferSelect)['extractedFrom']
   /** Null until extraction has been attempted once (see article.extract). */
   extractCheckedAt: Date | null
+  /** When the reader last queued extraction; one request per cooldown window. */
+  extractRequestedAt: Date | null
   site: {
     id: number
     title: string | null
@@ -275,6 +277,7 @@ export async function getArticle(
     contentMode: row.feed.contentMode,
     extractedFrom: row.contents?.extractedFrom ?? 'feed',
     extractCheckedAt: a.extractCheckedAt,
+    extractRequestedAt: a.extractRequestedAt,
     site: {
       id: row.site.id,
       title: row.site.title,
@@ -285,6 +288,37 @@ export async function getArticle(
     },
     isSubscribed: row.watermarkId !== null,
   }
+}
+
+/** Minutes before the reader may queue extraction for the same article again. */
+export const EXTRACT_COOLDOWN_MINUTES = 10
+
+/**
+ * Claim the right to queue extraction for an article: once per cooldown window, and never once
+ * an attempt has concluded (`extract_checked_at`). The caller enqueues only when this returns
+ * true, so a tab that re-renders every two seconds still causes one job per window; pg-boss's
+ * own retries of that job stay inside it.
+ */
+export async function markExtractRequested(
+  db: Db,
+  articleId: number,
+  cooldownMinutes = EXTRACT_COOLDOWN_MINUTES,
+): Promise<boolean> {
+  const rows = await db
+    .update(articles)
+    .set({ extractRequestedAt: new Date() })
+    .where(
+      and(
+        eq(articles.id, articleId),
+        isNull(articles.extractCheckedAt),
+        or(
+          isNull(articles.extractRequestedAt),
+          lt(articles.extractRequestedAt, sql`now() - make_interval(mins => ${cooldownMinutes})`),
+        ),
+      ),
+    )
+    .returning({ id: articles.id })
+  return rows.length > 0
 }
 
 /** Record that the user opened an article. Idempotent. */

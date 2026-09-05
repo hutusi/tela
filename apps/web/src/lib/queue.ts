@@ -11,9 +11,9 @@ export async function enqueueFeedFetch(db: Db, feedId: number): Promise<void> {
 }
 
 /**
- * First open of an article from a summary-only feed: fetch its page for the full text. The
- * worker stamps the article whatever the outcome, so this happens once per article; a failed
- * enqueue simply means the next open tries again.
+ * Opening an article from a summary-only feed: fetch its page for the full text. Callers gate
+ * this on markExtractRequested (one window per article), and the worker stamps a final outcome;
+ * a failed enqueue simply means a later window tries again.
  */
 export async function enqueueArticleExtract(db: Db, articleId: number): Promise<void> {
   await enqueue(db, 'article.extract', { articleId }, String(articleId))

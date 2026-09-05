@@ -6,6 +6,7 @@ import {
   listArticles,
   listSubscriptions,
   markAllRead,
+  markExtractRequested,
   markRead,
   subscribe,
   toggleLike,
@@ -201,6 +202,21 @@ describe('reader queries', () => {
     expect((await countTotals(t.db, userB)).liked).toBe(1)
     expect((await listArticles(t.db, userA)).find((a) => a.id === id)?.isRead).toBe(true)
     expect((await listArticles(t.db, userA, { filter: 'liked' })).length).toBe(0)
+  })
+
+  test('markExtractRequested wins one window per article and never after a final outcome', async () => {
+    const id = s.byTitle.Fresh as number
+    expect(await markExtractRequested(t.db, id)).toBe(true)
+    expect(await markExtractRequested(t.db, id)).toBe(false)
+    await t.db.execute(
+      sql`update articles set extract_requested_at = now() - interval '11 minutes' where id = ${id}`,
+    )
+    expect(await markExtractRequested(t.db, id)).toBe(true)
+    await t.db.execute(
+      sql`update articles set extract_requested_at = now() - interval '11 minutes', extract_checked_at = now() where id = ${id}`,
+    )
+    expect(await markExtractRequested(t.db, id)).toBe(false)
+    expect(await markExtractRequested(t.db, 999_999)).toBe(false)
   })
 
   test('concurrent toggles keep like_count equal to the number of likes', async () => {
