@@ -111,8 +111,8 @@ runtime-agnostic so the web app can reuse discovery; `apps/worker` only wires it
   paths; every result is fetched and parsed before being returned.
 - `ensureFeed` / `ensureSite`: feed rows keyed by `feed_url`, sites keyed by normalized origin;
   new feeds are due immediately, so the next scheduler tick fetches them.
-- `fetchFeed(db, http, feedId)`: conditional GET → body-hash short-circuit → parse → upsert
-  articles by dedup key (new rows, or `content_version + 1` when the content hash changed) → fill
+- `fetchFeed(db, http, feedId)`: conditional GET → body-hash short-circuit → parse → keep the newest
+  200 items → upsert articles by dedup key (new rows, or `content_version + 1` when the content hash changed) → fill
   site metadata → learn `content_mode` from three samples → reschedule. Interval = half the
   average gap between posts over 7 days, clamped to 30 min…24 h, ×1.5 when unchanged, raised to the
   publisher's `ttl`/`max-age` floor, ±10% jitter. Errors back off `interval × 2^n` capped at 7 days;

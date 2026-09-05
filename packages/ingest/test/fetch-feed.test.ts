@@ -281,6 +281,41 @@ describe('fetchFeed', () => {
     expect(row?.siteId).toBe(mine.siteId)
   })
 
+  test('keeps only the newest items of an oversized feed', async () => {
+    const items = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        guid: `p${i}`,
+        link: server.url(`/p/${i}`),
+        title: `Post ${i}`,
+        description: `Summary ${i}`,
+        content: longHtml(1),
+        date: new Date(Date.UTC(2026, 0, 1) + i * 3_600_000).toUTCString(),
+      }))
+    server.text('/feed.xml', rss({ link: server.url('/'), items: items(250) }))
+    const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
+    expect(await fetchFeed(t.db, http, feedId, opts)).toMatchObject({
+      status: 'fetched',
+      newArticles: 200,
+      items: 250,
+      itemsSkipped: 50,
+    })
+    const titles = (await t.db.select().from(articles).where(eq(articles.feedId, feedId))).map(
+      (a) => a.title,
+    )
+    expect(titles).toHaveLength(200)
+    expect(titles).toContain('Post 249')
+    expect(titles).toContain('Post 50')
+    expect(titles).not.toContain('Post 49')
+
+    // One newer item appears: only it is stored; the old tail stays out.
+    server.text('/feed.xml', rss({ link: server.url('/'), items: items(251) }))
+    expect(await fetchFeed(t.db, http, feedId, opts)).toMatchObject({
+      status: 'fetched',
+      newArticles: 1,
+      itemsSkipped: 51,
+    })
+  })
+
   test('is idempotent: unchanged bodies and 304s add nothing and back off', async () => {
     server.cached('/feed.xml', threeItems(), '"v1"')
     const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })

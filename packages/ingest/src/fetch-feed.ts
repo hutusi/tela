@@ -41,6 +41,8 @@ export type FetchFeedResult =
       updatedArticleIds: number[]
       /** What happened to the site's home URL once the feed declared one. */
       siteHome: HomeUrlOutcome
+      /** Items beyond MAX_ITEMS_PER_FETCH, left alone this time. */
+      itemsSkipped: number
     }
   | { status: 'unchanged' }
   | { status: 'error'; error: string; kind: string }
@@ -65,6 +67,26 @@ export type FetchFeedOptions = {
 }
 
 type FeedRow = typeof feeds.$inferSelect
+
+/**
+ * Ceiling on items one fetch processes. A first fetch of a long archive, or a hostile feed of
+ * thousands of tiny items, would otherwise become that many selects and transactions inside a
+ * single job. Lists show the newest posts, so those are the ones kept.
+ */
+export const MAX_ITEMS_PER_FETCH = 200
+
+/** The newest `limit` items: dated ones first, newest first; undated ones keep document order after them. */
+export function selectItems(items: ParsedItem[], limit = MAX_ITEMS_PER_FETCH): ParsedItem[] {
+  if (items.length <= limit) return items
+  const indexed = items.map((item, i) => ({ item, i, at: item.publishedAt?.getTime() }))
+  indexed.sort((a, b) => {
+    if (a.at !== undefined && b.at !== undefined && a.at !== b.at) return b.at - a.at
+    if (a.at !== undefined && b.at === undefined) return -1
+    if (a.at === undefined && b.at !== undefined) return 1
+    return a.i - b.i
+  })
+  return indexed.slice(0, limit).map((x) => x.item)
+}
 
 export type HomeUrlOutcome = 'kept' | 'renamed' | 'joined' | 'split' | 'blocked'
 
@@ -435,7 +457,8 @@ export async function fetchFeed(
   const samples: ContentSample[] = []
   const newArticleIds: number[] = []
   const updatedArticleIds: number[] = []
-  for (const item of parsed.items) {
+  const items = selectItems(parsed.items)
+  for (const item of items) {
     const outcome = await upsertArticle(db, feed, parsed, item, now, samples, opts.onArticleStored)
     if (outcome.kind === 'inserted' && outcome.id !== null) newArticleIds.push(outcome.id)
     else if (outcome.kind === 'updated' && outcome.id !== null) updatedArticleIds.push(outcome.id)
@@ -519,6 +542,7 @@ export async function fetchFeed(
     newArticles,
     updatedArticles,
     items: parsed.items.length,
+    itemsSkipped: parsed.items.length - items.length,
     newArticleIds,
     updatedArticleIds,
     siteHome,
