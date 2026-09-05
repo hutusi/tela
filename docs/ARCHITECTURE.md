@@ -8,7 +8,7 @@ Sections are tagged with the phase that implements them (see "Roadmap"); anythin
 
 ```
 Browser ──HTTPS──▶ Cloudflare Worker (Next.js via OpenNext)
-                     ├─ Hyperdrive ──▶ Supabase Postgres (Tokyo, direct connection) ◀── worker(s)
+                     ├─ Hyperdrive ──▶ Supabase Postgres (Tokyo, session pooler) ◀── worker(s)
                      ├─ /img signed image proxy (Cache API) ──▶ origin images          [phase 4]
                      └─ Supabase Auth (browser: @supabase/ssr)                          [phase 4]
 Worker image (Node 22, Fly.io nrt), WORKER_ROLES selects subscriptions:

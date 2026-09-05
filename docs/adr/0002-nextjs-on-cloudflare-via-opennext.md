@@ -16,7 +16,7 @@ ISR only with R2 + tag cache, and `proxy.ts` support that landed in 1.20.3 (2026
 - No middleware / `proxy.ts`; next-intl runs without routing (ADR 0010).
 - All Cloudflare-specific code lives in `apps/web/src/lib/platform/`. The rest of the app must run
   unchanged on Vercel or a Node container.
-- Postgres via Hyperdrive to Supabase's direct connection (ADR 0003), one client per request.
+- Postgres via Hyperdrive to Supabase's session pooler (ADR 0003), one client per request.
 
 ## Consequences
 

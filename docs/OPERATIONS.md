@@ -8,7 +8,7 @@ implements them (see `docs/ARCHITECTURE.md`).
 | Component | Where | Notes |
 |---|---|---|
 | Web | Cloudflare Workers via OpenNext (`apps/web`) | Custom domain only; never share `workers.dev` URLs (blocked in mainland China) |
-| Database + Auth | Supabase, region Tokyo (`ap-northeast-1`) | IPv4 add-on for the direct connection; custom SMTP (Resend); custom auth domain *later* |
+| Database + Auth | Supabase, region Tokyo (`ap-northeast-1`) | session pooler as the connection path (the IPv4 add-on is optional, see Provisioning); custom SMTP (Resend); custom auth domain *later* |
 | Worker | Fly.io app `tela-worker`, region `nrt` (`apps/worker`) | Docker image, Node 22; roles via `WORKER_ROLES` |
 | Relay | HK or CN box running the same image with `WORKER_ROLES=relay` | *later*, phase 8 |
 | Assets | Cloudflare R2 bucket behind `assets.<domain>` | favicons and covers; *later*, phase 3 |
@@ -46,12 +46,17 @@ implements them (see `docs/ARCHITECTURE.md`).
 ## Provisioning
 
 ### Supabase
-1. Create a project in Tokyo. Enable the IPv4 add-on (Project Settings → Add-ons) so Hyperdrive can
-   use the *direct* connection string (not the pooler).
+1. Create a project in Tokyo. Use the *session* pooler connection string
+   (`postgres.<ref>@aws-0-<region>.pooler.supabase.com:5432`) for Hyperdrive, the worker, and
+   migrations: it has IPv4 and session mode keeps prepared statements. The direct host is
+   IPv6-only, and the paid IPv4 add-on (Project Settings → Add-ons) is optional: turn it on only if
+   the pooler's session-mode pool runs out (`/api/health` or the worker's health check report
+   pooler connection errors) and raising the pool size under Database → Connection pooling is not
+   enough. Decided 2026-09-05 to keep it off.
 2. Auth → SMTP: configure Resend (built-in SMTP is capped at 2 emails/hour). Verify delivery to
    qq.com and 163.com addresses.
 3. Auth → Providers: Email (OTP), GitHub, Google (phase 4).
-4. Apply migrations: `DATABASE_URL=<direct connection> bun run db:migrate`.
+4. Apply migrations: `DATABASE_URL=<session pooler connection> bun run db:migrate`.
 5. Turn the Data API off in the Dashboard: Data API integration overview → **Enable Data API**
    off. Nothing in `supabase/config.toml` can express this (`api.enabled` is local-only and
    `public` is always among the exposed schemas while the API is on), and the GraphQL endpoint
@@ -71,11 +76,11 @@ bun run deploy            # opennextjs-cloudflare build && deploy
 - `NEXT_PUBLIC_*` values are inlined at build time: put them in `apps/web/.env.production`
   (gitignored) so `bun run deploy` and CI builds see them: `NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_ASSETS_URL`.
-- Hyperdrive needs an IPv4 origin. Until the Supabase IPv4 add-on is on, point it at the
-  *session* pooler (`postgres.<ref>@aws-0-<region>.pooler.supabase.com:5432`, prepared statements
-  work in session mode); afterwards recreate it with the direct connection, which is what
-  Cloudflare recommends for Supabase. Hyperdrive's own endpoint is plain TCP: the client must
-  not ask for TLS there (`sslModeFor` in `@tela/db` handles `*.hyperdrive.local`).
+- Hyperdrive needs an IPv4 origin: point it at the *session* pooler (Supabase step 1). Cloudflare
+  recommends Supabase's direct connection, which needs the paid IPv4 add-on; if that add-on is
+  ever turned on, recreate Hyperdrive with the direct connection string. Hyperdrive's own
+  endpoint is plain TCP: the client must not ask for TLS there (`sslModeFor` in `@tela/db`
+  handles `*.hyperdrive.local`).
 - The first request after a deploy can wait up to the driver's 30 s connect timeout while
   Hyperdrive opens its origin connection; `/api/health` reports `databaseMs` and the error text.
 - Then add the custom domain under Workers & Pages → tela-web → Settings → Domains, and in the
