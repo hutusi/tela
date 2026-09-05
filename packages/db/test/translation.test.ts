@@ -85,9 +85,12 @@ describe('requestBodyTranslation', () => {
     expect(await requestBodyTranslation(t.db, id, 'zh-Hans', 'h1', counting)).toBe('in_progress')
     await setTranslationStatus(t.db, id, 'zh-Hans', 'done', { html: '<p>x</p>', contentHash: 'h1' })
     expect(await requestBodyTranslation(t.db, id, 'zh-Hans', 'h1', counting)).toBe('ready')
-    // A changed body makes the translation stale: requested again.
+    // A changed body makes the translation stale: requested again, and the old html goes, so
+    // nothing renders it as a translation of the new content.
     expect(await requestBodyTranslation(t.db, id, 'zh-Hans', 'h2', counting)).toBe('requested')
     expect(calls).toBe(2)
+    const [stale] = await t.db.select().from(articleTranslations)
+    expect(stale).toMatchObject({ status: 'requested', contentHash: 'h2', html: null })
   })
 })
 

@@ -117,7 +117,8 @@
     "columnTranslated": "{target} · translation",
     "columnOriginal": "original",
     "rateLimited": "Too many translation requests for now. Please try again in a little while.",
-    "budgetExhausted": "You have used today's translation allowance. It resets tomorrow."
+    "budgetExhausted": "You have used today's translation allowance. It resets tomorrow.",
+    "retry": "Try translating again"
   },
   "discover": {
     "title": "Independent blogs, in any language.",

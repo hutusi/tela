@@ -57,6 +57,7 @@ export async function translateArticleBody(
   const { article, contents } = row
   if (!contents || !contents.html) {
     await setTranslationStatus(deps.db, articleId, targetLang, 'failed', {
+      html: null,
       contentHash: article.contentHash,
     })
     return { ...none, status: 'failed', reason: 'no content' }
@@ -70,6 +71,7 @@ export async function translateArticleBody(
   }
   if (row.optOut) {
     await setTranslationStatus(deps.db, articleId, targetLang, 'failed', {
+      html: null,
       contentHash: article.contentHash,
     })
     return { ...none, status: 'failed', reason: 'site opted out of translation' }
@@ -151,6 +153,7 @@ export async function translateArticleBody(
       })
     } catch (err) {
       await setTranslationStatus(deps.db, articleId, targetLang, 'failed', {
+        html: null,
         contentHash: article.contentHash,
       })
       throw err

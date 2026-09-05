@@ -9,6 +9,7 @@ import {
   sites,
   translations,
 } from '@tela/db'
+import { setTranslationStatus } from '@tela/db/queries'
 import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
 import { createMockTranslator, type TranslationRequest } from '@tela/llm'
 import { eq, sql } from 'drizzle-orm'
@@ -148,8 +149,13 @@ describe('translateArticleBody', () => {
     )
   })
 
-  test('marks failed and rethrows when the provider is down', async () => {
+  test('marks failed, clears any earlier html, and rethrows when the provider is down', async () => {
     const { article } = await seedArticle()
+    // A translation of an earlier content version must not survive as if it were current.
+    await setTranslationStatus(t.db, article.id, 'zh-Hans', 'done', {
+      html: '<p>old</p>',
+      contentHash: 'previous-version',
+    })
     await expect(
       translateArticleBody(
         { db: t.db, translator: createMockTranslator({ fail: true }) },
@@ -163,6 +169,7 @@ describe('translateArticleBody', () => {
       .from(articleTranslations)
       .where(eq(articleTranslations.articleId, article.id))
     expect(row?.status).toBe('failed')
+    expect(row?.html).toBeNull()
   })
 
   test('skips same-language articles and opted-out sites', async () => {

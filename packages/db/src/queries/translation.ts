@@ -112,7 +112,14 @@ export async function requestBodyTranslation(
       .values({ articleId, targetLang, contentHash, status: 'requested' })
       .onConflictDoUpdate({
         target: [articleTranslations.articleId, articleTranslations.targetLang],
-        set: { status: 'requested', contentHash, failedBlockIds: [], updatedAt: new Date() },
+        // The old html belongs to the previous content version; it must not show as current.
+        set: {
+          status: 'requested',
+          contentHash,
+          html: null,
+          failedBlockIds: [],
+          updatedAt: new Date(),
+        },
       })
     if (enqueue) await enqueue(tx)
     return 'requested'

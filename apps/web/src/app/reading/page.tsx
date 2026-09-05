@@ -69,7 +69,10 @@ export default async function ReadingPage({ searchParams }: Props) {
       targetLang: readingLang,
       state,
       failedBlocks: fresh ? (row?.failedBlockIds.length ?? 0) : 0,
-      html: fresh && row?.html ? await renderArticleHtml(row.html) : null,
+      html:
+        fresh && row?.html && (row.status === 'done' || row.status === 'partial')
+          ? await renderArticleHtml(row.html)
+          : null,
       title: row?.title ?? null,
     }
   }

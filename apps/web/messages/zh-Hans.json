@@ -117,7 +117,8 @@
     "columnTranslated": "{target} · 译文",
     "columnOriginal": "原文",
     "rateLimited": "翻译请求过于频繁，请稍后再试。",
-    "budgetExhausted": "今日的翻译额度已用完，明天会重置。"
+    "budgetExhausted": "今日的翻译额度已用完，明天会重置。",
+    "retry": "重新翻译"
   },
   "discover": {
     "title": "独立博客，任何语言。",

@@ -53,7 +53,10 @@ export async function Reader({
   const t = await getTranslations('reader')
   const tt = await getTranslations('translation')
   const sourceLang = article.sourceLang ?? undefined
-  const ready = translation !== null && translation.html !== null
+  const ready =
+    translation !== null &&
+    translation.html !== null &&
+    (translation.state === 'done' || translation.state === 'partial')
   const mode = translation === null ? 'orig' : ready ? params.mode : 'orig'
   const showTrans = ready && mode !== 'orig'
   const showOrig = mode !== 'trans'
@@ -129,6 +132,13 @@ export async function Reader({
 
         {translation && sourceLang ? (
           <TranslationBar sourceLang={sourceLang} view={translation} params={params} />
+        ) : null}
+        {translation?.state === 'failed' ? (
+          <RequestTranslation
+            articleId={article.id}
+            targetLang={translation.targetLang}
+            mode="button"
+          />
         ) : null}
 
         <div
