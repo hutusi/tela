@@ -1,7 +1,7 @@
 import type { TranslationStatus } from '@tela/shared'
 import { and, eq, inArray, sql } from 'drizzle-orm'
-import type { Db, Tx } from '../client'
-import { articleTranslations, profiles, translations } from '../schema'
+import type { Db, DbExecutor, Tx } from '../client'
+import { articleTranslations, profiles, translationRequests, translations } from '../schema'
 
 /** The cache key's source-language component: articles with no detected language share 'und'. */
 export function cacheSourceLang(sourceLang: string | null | undefined): string {
@@ -77,7 +77,50 @@ export async function getArticleTranslation(
   return row ?? null
 }
 
-export type RequestOutcome = 'requested' | 'in_progress' | 'ready'
+export type RequestOutcome = 'requested' | 'in_progress' | 'ready' | 'budget_exhausted'
+
+export type RequestReservation = {
+  /** Member asking; reservations and recorded usage are metered against them. */
+  requestedBy: string
+  /** Source tokens this attempt is expected to send, capped at the per-article ceiling. */
+  reserveTokens: number
+  /** The member's allowance per UTC day. */
+  allowanceTokens: number
+}
+
+/**
+ * Source tokens reserved by a member's attempts still in flight, whenever they were made: a
+ * backlog that outlives midnight must not let the member reserve a fresh allowance on top of it.
+ */
+export async function tokensReservedBy(db: DbExecutor, userId: string): Promise<number> {
+  const [row] = await db.execute<{ total: number }>(
+    sql`select coalesce(sum(r.reserved_tokens), 0)::int as total
+        from translation_requests r
+        join article_translations t on t.article_id = r.article_id and t.target_lang = r.target_lang
+        where r.requested_by = ${userId} and t.status in ('requested', 'running')`,
+  )
+  return row?.total ?? 0
+}
+
+export type TranslationRequestRow = typeof translationRequests.$inferSelect
+
+/** The reservation behind a body translation, if a member asked for it. */
+export async function getTranslationRequest(
+  db: DbExecutor,
+  articleId: number,
+  targetLang: string,
+): Promise<TranslationRequestRow | null> {
+  const [row] = await db
+    .select()
+    .from(translationRequests)
+    .where(
+      and(
+        eq(translationRequests.articleId, articleId),
+        eq(translationRequests.targetLang, targetLang),
+      ),
+    )
+  return row ?? null
+}
 
 /**
  * Ask for a body translation. Returns 'ready' when a fresh translation exists,
@@ -85,6 +128,11 @@ export type RequestOutcome = 'requested' | 'in_progress' | 'ready'
  * created the request. Pass `enqueue` to insert the translate.body job inside the same
  * transaction: it runs after the status write and before commit, so a failure to enqueue
  * rolls the `requested` status back instead of stranding a row no worker will ever pick up.
+ *
+ * With a `reservation`, the request is refused as 'budget_exhausted' unless the member's
+ * recorded usage today plus their attempts still in flight leave room for this estimate; the
+ * estimate is then reserved on the row until the attempt concludes. Requests by one member are
+ * serialised with an advisory lock, so a burst cannot all pass on the same headroom.
  */
 export async function requestBodyTranslation(
   db: Db,
@@ -92,6 +140,7 @@ export async function requestBodyTranslation(
   targetLang: string,
   contentHash: string | null,
   enqueue?: (tx: Tx) => Promise<void>,
+  reservation?: RequestReservation,
 ): Promise<RequestOutcome> {
   return db.transaction(async (tx) => {
     const [row] = await tx
@@ -107,6 +156,14 @@ export async function requestBodyTranslation(
     const fresh = row !== undefined && row.contentHash === contentHash
     if (fresh && (row.status === 'done' || row.status === 'partial')) return 'ready'
     if (fresh && (row.status === 'requested' || row.status === 'running')) return 'in_progress'
+    if (reservation) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${reservation.requestedBy}))`)
+      const used = await tokensUsedTodayBy(tx, reservation.requestedBy)
+      const reserved = await tokensReservedBy(tx, reservation.requestedBy)
+      if (used + reserved + reservation.reserveTokens > reservation.allowanceTokens) {
+        return 'budget_exhausted'
+      }
+    }
     await tx
       .insert(articleTranslations)
       .values({ articleId, targetLang, contentHash, status: 'requested' })
@@ -120,6 +177,17 @@ export async function requestBodyTranslation(
           failedBlockIds: [],
           updatedAt: new Date(),
         },
+      })
+    // The requester and the estimate live in a service-only table: article_translations is
+    // readable through the Data API, and who asked for a translation is nobody's business.
+    const requestedBy = reservation?.requestedBy ?? null
+    const reservedTokens = reservation?.reserveTokens ?? 0
+    await tx
+      .insert(translationRequests)
+      .values({ articleId, targetLang, requestedBy, reservedTokens })
+      .onConflictDoUpdate({
+        target: [translationRequests.articleId, translationRequests.targetLang],
+        set: { requestedBy, reservedTokens, updatedAt: new Date() },
       })
     if (enqueue) await enqueue(tx)
     return 'requested'
@@ -173,7 +241,7 @@ export async function setReadingLang(db: Db, userId: string, readingLang: string
 }
 
 /** Today's LLM token usage caused by one member's requests, for their daily allowance. */
-export async function tokensUsedTodayBy(db: Db, userId: string): Promise<number> {
+export async function tokensUsedTodayBy(db: DbExecutor, userId: string): Promise<number> {
   const [row] = await db.execute<{ total: number }>(
     sql`select coalesce(sum(input_tokens + output_tokens), 0)::int as total
         from llm_usage where user_id = ${userId} and created_at >= date_trunc('day', now())`,

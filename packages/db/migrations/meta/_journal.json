@@ -106,6 +106,13 @@
       "when": 1788571049254,
       "tag": "0014_provenance_extraction_metering",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788586260930,
+      "tag": "0015_translation_requests",
+      "breakpoints": true
     }
   ]
 }

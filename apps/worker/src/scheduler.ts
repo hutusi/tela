@@ -1,4 +1,4 @@
-import { articleTranslations, feeds } from '@tela/db'
+import { articleTranslations, feeds, translationRequests } from '@tela/db'
 import { pruneRateLimits } from '@tela/db/queries'
 import { DEAD_AFTER_ERRORS, reprobeRelayRegions } from '@tela/ingest'
 import { and, asc, eq, lt, lte, sql } from 'drizzle-orm'
@@ -47,8 +47,16 @@ export async function resweepStuckTranslations(
     .select({
       articleId: articleTranslations.articleId,
       targetLang: articleTranslations.targetLang,
+      requestedBy: translationRequests.requestedBy,
     })
     .from(articleTranslations)
+    .leftJoin(
+      translationRequests,
+      and(
+        eq(translationRequests.articleId, articleTranslations.articleId),
+        eq(translationRequests.targetLang, articleTranslations.targetLang),
+      ),
+    )
     .where(
       and(
         eq(articleTranslations.status, 'requested'),
@@ -64,7 +72,13 @@ export async function resweepStuckTranslations(
   for (const row of rows) {
     const id = await ctx.boss.send(
       QUEUES.translateBody,
-      { articleId: row.articleId, targetLang: row.targetLang, onDemand: true },
+      // The member is restored so recovered work still counts against their allowance.
+      {
+        articleId: row.articleId,
+        targetLang: row.targetLang,
+        onDemand: true,
+        ...(row.requestedBy ? { requestedBy: row.requestedBy } : {}),
+      },
       { singletonKey: `${row.articleId}:${row.targetLang}`, priority: 10 },
     )
     if (id) sent += 1

@@ -7,9 +7,10 @@ import {
   feeds,
   llmUsage,
   sites,
+  translationRequests,
   translations,
 } from '@tela/db'
-import { setTranslationStatus } from '@tela/db/queries'
+import { requestBodyTranslation, setTranslationStatus } from '@tela/db/queries'
 import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
 import { createMockTranslator, type TranslationRequest } from '@tela/llm'
 import { eq, sql } from 'drizzle-orm'
@@ -230,6 +231,57 @@ describe('translateArticleBody', () => {
     const again = await translateArticleBody(deps, article.id, 'zh-Hans', { onDemand: true })
     expect(again).toMatchObject({ status: 'partial', translated: 0, cached: out.translated })
     expect(calls).toHaveLength(1)
+  })
+
+  test('an attempt is bound to the content and the reservation it was requested with', async () => {
+    const userA = '11111111-1111-4111-8111-111111111111'
+    await t.db.execute(sql`insert into auth.users (id, email) values (${userA}, 'a@x.test')`)
+    const { article } = await seedArticle()
+    // Smaller than the seed body, so the second block already falls past the reservation.
+    const reservation = { requestedBy: userA, reserveTokens: 30, allowanceTokens: 400_000 }
+    expect(
+      await requestBodyTranslation(
+        t.db,
+        article.id,
+        'zh-Hans',
+        'stale-hash',
+        undefined,
+        reservation,
+      ),
+    ).toBe('requested')
+    // The body changed after the request: fail against the requested hash, translate nothing.
+    const calls: TranslationRequest[] = []
+    const deps = { db: t.db, translator: createMockTranslator({ calls }) }
+    expect(
+      await translateArticleBody(deps, article.id, 'zh-Hans', { onDemand: true }),
+    ).toMatchObject({ status: 'skipped', reason: 'content changed since the request' })
+    expect(calls).toHaveLength(0)
+    let [row] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(row).toMatchObject({ status: 'failed', contentHash: 'stale-hash', html: null })
+
+    // Requested for the current content with a tiny reservation: the attempt stops there.
+    expect(
+      await requestBodyTranslation(
+        t.db,
+        article.id,
+        'zh-Hans',
+        article.contentHash,
+        undefined,
+        reservation,
+      ),
+    ).toBe('requested')
+    const out = await translateArticleBody(deps, article.id, 'zh-Hans', { onDemand: true })
+    expect(out.status).toBe('partial')
+    expect(out.failed).toBeGreaterThan(0)
+    ;[row] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(row?.status).toBe('partial')
+    expect(await t.db.select().from(translationRequests)).toHaveLength(1)
   })
 
   test('background work stops at the daily budget; on-demand continues', async () => {

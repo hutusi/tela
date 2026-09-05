@@ -1,6 +1,7 @@
 'use server'
 
-import { articles } from '@tela/db'
+import { estimateTokens, taggedTextsOf } from '@tela/content'
+import { articleContents, articles } from '@tela/db'
 import {
   consumeRateLimit,
   markAllRead,
@@ -8,11 +9,14 @@ import {
   recommend,
   requestBodyTranslation,
   toggleLike,
-  tokensUsedTodayBy,
   unrecommend,
 } from '@tela/db/queries'
 import { createJobSender } from '@tela/db/queue'
-import { isReadingLanguage, USER_DAILY_TRANSLATION_TOKENS } from '@tela/shared'
+import {
+  isReadingLanguage,
+  MAX_ARTICLE_TRANSLATION_TOKENS,
+  USER_DAILY_TRANSLATION_TOKENS,
+} from '@tela/shared'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth'
@@ -69,25 +73,38 @@ export async function requestTranslationAction(
   // On-demand requests skip the daily budget, so this is the only ceiling on what one account
   // can make the model do.
   if (!(await consumeRateLimit(db, 'translate', user.id)).allowed) return 'rate_limited'
-  // Requests are also metered by what they cost: each body job records its usage against the
-  // member who asked for it, and a day's allowance ends further requests until tomorrow.
-  if ((await tokensUsedTodayBy(db, user.id)) >= USER_DAILY_TRANSLATION_TOKENS) {
-    return 'budget_exhausted'
-  }
   const [article] = await db
-    .select({ contentHash: articles.contentHash })
+    .select({ contentHash: articles.contentHash, html: articleContents.html })
     .from(articles)
+    .leftJoin(articleContents, eq(articleContents.articleId, articles.id))
     .where(eq(articles.id, target))
   if (!article) return 'invalid'
+  // What this attempt would send, estimated the way the worker chunks it and capped like the
+  // worker caps it; reserved against the member's daily allowance until the attempt concludes,
+  // so a burst of requests cannot all be admitted on usage that has not been recorded yet.
+  const reserveTokens = Math.min(
+    MAX_ARTICLE_TRANSLATION_TOKENS,
+    Object.values(taggedTextsOf(article.html ?? '')).reduce(
+      (n, text) => n + estimateTokens(text),
+      0,
+    ),
+  )
   // The job is inserted in the same transaction as the `requested` status (ADR 0004): if the
   // queue is unavailable the status rolls back too, and the reader can simply ask again.
-  return requestBodyTranslation(db, target, targetLang, article.contentHash, async (tx) => {
-    await createJobSender(tx).send(
-      'translate.body',
-      { articleId: target, targetLang, onDemand: true, requestedBy: user.id },
-      { singletonKey: `${target}:${targetLang}`, priority: 10 },
-    )
-  }).catch((err: unknown) => {
+  return requestBodyTranslation(
+    db,
+    target,
+    targetLang,
+    article.contentHash,
+    async (tx) => {
+      await createJobSender(tx).send(
+        'translate.body',
+        { articleId: target, targetLang, onDemand: true, requestedBy: user.id },
+        { singletonKey: `${target}:${targetLang}`, priority: 10 },
+      )
+    },
+    { requestedBy: user.id, reserveTokens, allowanceTokens: USER_DAILY_TRANSLATION_TOKENS },
+  ).catch((err: unknown) => {
     console.warn('[tela] could not request translate.body', {
       articleId: target,
       err: String(err),

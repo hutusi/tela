@@ -10,10 +10,12 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from 'drizzle-orm/pg-core'
 import { anonRole, authenticatedRole } from 'drizzle-orm/supabase'
 import { extractedFromEnum, translationStatusEnum } from './enums'
 import { feeds } from './feeds'
+import { profiles } from './profiles'
 
 /**
  * Article metadata. bigint ids give ingest order, which the unread watermark relies on.
@@ -164,3 +166,36 @@ export const articleTranslations = pgTable(
     }),
   ],
 )
+
+/**
+ * Who asked for a body translation and what it was expected to cost. Service-only (RLS enabled,
+ * no policies): the requester must not be readable through the Data API, where article
+ * translations themselves are. A reservation counts against the member's daily allowance while
+ * the matching article_translations row is `requested` or `running`.
+ */
+export const translationRequests = pgTable(
+  'translation_requests',
+  {
+    articleId: bigint('article_id', { mode: 'number' })
+      .notNull()
+      .references(() => articles.id, { onDelete: 'cascade' }),
+    targetLang: text('target_lang').notNull(),
+    requestedBy: uuid('requested_by').references(() => profiles.id, { onDelete: 'set null' }),
+    /** Source tokens the attempt is expected to send, capped at the per-article ceiling. */
+    reservedTokens: integer('reserved_tokens').notNull().default(0),
+    /**
+     * Identity of the current attempt, carried by its job. The queue dedups by article and
+     * language, so a job may find that a newer request replaced the one it was sent for; it must
+     * then step aside rather than charge the wrong member or overwrite the newer row.
+     */
+    attempt: uuid('attempt').notNull().defaultRandom(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    primaryKey({ columns: [t.articleId, t.targetLang] }),
+    index('translation_requests_requested_by_idx').on(t.requestedBy),
+  ],
+).enableRLS()

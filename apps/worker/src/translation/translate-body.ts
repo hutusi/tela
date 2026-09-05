@@ -1,7 +1,9 @@
 import { rehydrateBlocks, taggedTextsOf } from '@tela/content'
 import { articleContents, articles, type Db, feeds, sites } from '@tela/db'
 import {
+  getArticleTranslation,
   getCachedTranslations,
+  getTranslationRequest,
   setTranslationStatus,
   storeTranslations,
   tokensUsedToday,
@@ -80,6 +82,24 @@ export async function translateArticleBody(
     const used = await tokensUsedToday(deps.db)
     if (used >= deps.dailyBudgetTokens) return { ...none, reason: 'daily budget exhausted' }
   }
+  // The attempt is bound to what was requested. If the body changed since (extraction, a
+  // refresh), the reservation was made for other content: fail against the requested hash so
+  // the reader sees a stale row and asks again with a fresh reservation. A reservation also
+  // caps the attempt, so the member never pays for more than they reserved.
+  const requested = await getArticleTranslation(deps.db, articleId, targetLang)
+  const inFlight = requested?.status === 'requested' || requested?.status === 'running'
+  if (inFlight && requested.contentHash !== article.contentHash) {
+    await setTranslationStatus(deps.db, articleId, targetLang, 'failed', {
+      html: null,
+      contentHash: requested.contentHash,
+    })
+    return { ...none, reason: 'content changed since the request' }
+  }
+  const request = await getTranslationRequest(deps.db, articleId, targetLang)
+  const maxArticleTokens = Math.min(
+    deps.maxArticleTokens ?? Number.POSITIVE_INFINITY,
+    request && request.reservedTokens > 0 ? request.reservedTokens : Number.POSITIVE_INFINITY,
+  )
 
   await setTranslationStatus(deps.db, articleId, targetLang, 'running', {
     contentHash: article.contentHash,
@@ -103,7 +123,7 @@ export async function translateArticleBody(
   const translatedById = new Map<string, string>()
   const missing: Array<{ id: string; text: string }> = []
   const capped: Array<{ id: string; reason: string }> = []
-  let budget = deps.maxArticleTokens ?? Number.POSITIVE_INFINITY
+  let budget = maxArticleTokens
   let cachedCount = 0
   for (const b of blocks) {
     budget -= estimateTokens(b.text)
