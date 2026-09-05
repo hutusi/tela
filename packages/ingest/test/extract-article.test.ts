@@ -91,12 +91,30 @@ describe('extractArticleContent', () => {
     expect(same?.extractCheckedAt).not.toBeNull()
   })
 
-  test('reports fetch failures', async () => {
+  test('transient fetch failures are retryable and leave the article unstamped', async () => {
     const article = await summaryOnlyArticle()
     server.text('/posts/1', 'nope', { status: 500 })
-    expect(await extractArticleContent(t.db, http, article.id)).toMatchObject({
+    expect(await extractArticleContent(t.db, http, article.id)).toEqual({
       status: 'failed',
       error: 'http 500',
+      retryable: true,
     })
+    server.delay('/posts/1', 800)
+    expect(await extractArticleContent(t.db, http, article.id)).toMatchObject({
+      status: 'failed',
+      retryable: true,
+    })
+    const [row] = await t.db.select().from(articles).where(eq(articles.id, article.id))
+    expect(row?.extractCheckedAt).toBeNull()
+
+    // A page that is gone is final: stamped, so the reader stops asking.
+    server.text('/posts/1', 'gone', { status: 404 })
+    expect(await extractArticleContent(t.db, http, article.id)).toEqual({
+      status: 'failed',
+      error: 'http 404',
+      retryable: false,
+    })
+    const [stamped] = await t.db.select().from(articles).where(eq(articles.id, article.id))
+    expect(stamped?.extractCheckedAt).not.toBeNull()
   })
 })
