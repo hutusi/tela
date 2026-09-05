@@ -1,6 +1,12 @@
-import { chunkBlocks, DEFAULT_CHUNK_TOKENS } from './chunk'
+import { chunkBlocks, DEFAULT_CHUNK_TOKENS, estimateTokens } from './chunk'
 import type { TranslationBlock, TranslationContext, TranslationUsage, Translator } from './types'
 import { validateTranslation } from './validate'
+
+/** What one successful provider call produced, handed to `onChunk` as it lands. */
+export type ChunkResult = {
+  translated: Map<string, string>
+  usage: TranslationUsage
+}
 
 export type TranslateBlocksInput = {
   blocks: TranslationBlock[]
@@ -8,6 +14,20 @@ export type TranslateBlocksInput = {
   targetLang: string
   context?: Pick<TranslationContext, 'title' | 'siteTitle'>
   maxTokensPerChunk?: number
+  /**
+   * Ceiling on estimated source tokens for the whole call. Blocks are taken in order until the
+   * ceiling would be crossed; the rest are reported as failed (`article too long`) and never
+   * sent, so one article costs a bounded number of calls.
+   */
+  maxSourceTokens?: number
+  /** Called after every successful provider call, so progress can be persisted before the next. */
+  onChunk?: (chunk: ChunkResult) => Promise<void>
+  /**
+   * Epoch milliseconds after which no further provider call is started. Blocks left unattempted
+   * are neither translated nor failed; the outcome says the run `stopped` so the caller can
+   * continue it later from what was persisted.
+   */
+  deadline?: number
 }
 
 export type TranslateBlocksOutcome = {
@@ -15,6 +35,8 @@ export type TranslateBlocksOutcome = {
   translated: Map<string, string>
   failed: Array<{ id: string; reason: string }>
   usage: TranslationUsage[]
+  /** The deadline passed with blocks still unattempted. */
+  stopped: boolean
 }
 
 /**
@@ -31,6 +53,25 @@ export async function translateBlocks(
   const failed = new Map<string, string>()
   const usage: TranslationUsage[] = []
   const bySource = new Map(input.blocks.map((b) => [b.id, b.text]))
+  const capped = new Set<string>()
+  let accepted = input.blocks
+  if (input.maxSourceTokens !== undefined) {
+    accepted = []
+    let total = 0
+    let over = false
+    for (const b of input.blocks) {
+      if (!over) {
+        total += estimateTokens(b.text)
+        if (total > input.maxSourceTokens) over = true
+      }
+      if (over) {
+        capped.add(b.id)
+        failed.set(b.id, 'article too long')
+      } else {
+        accepted.push(b)
+      }
+    }
+  }
   let previous: Array<{ source: string; target: string }> = []
   let successes = 0
   let lastError: unknown = null
@@ -55,6 +96,7 @@ export async function translateBlocks(
     successes += 1
     usage.push(response.usage)
     const returned = new Map(response.translations.map((t) => [t.id, t.text]))
+    const chunkTranslated = new Map<string, string>()
     for (const b of blocks) {
       const text = returned.get(b.id)
       if (text === undefined) {
@@ -64,6 +106,7 @@ export async function translateBlocks(
       const check = validateTranslation(b.text, text)
       if (check.ok) {
         translated.set(b.id, text)
+        chunkTranslated.set(b.id, text)
         failed.delete(b.id)
       } else {
         failed.set(b.id, check.reason)
@@ -71,22 +114,36 @@ export async function translateBlocks(
     }
     const tail = blocks.filter((b) => translated.has(b.id)).slice(-2)
     previous = tail.map((b) => ({ source: b.text, target: translated.get(b.id) as string }))
+    if (input.onChunk) await input.onChunk({ translated: chunkTranslated, usage: response.usage })
   }
 
-  for (const chunk of chunkBlocks(input.blocks, input.maxTokensPerChunk ?? DEFAULT_CHUNK_TOKENS)) {
+  const past = () => input.deadline !== undefined && Date.now() >= input.deadline
+  let stopped = false
+  for (const chunk of chunkBlocks(accepted, input.maxTokensPerChunk ?? DEFAULT_CHUNK_TOKENS)) {
+    if (past()) {
+      stopped = true
+      break
+    }
     await run(chunk, false)
   }
-  const retry = [...failed.keys()]
-    .filter((id) => !failed.get(id)?.startsWith('provider error'))
-    .map((id) => ({ id, text: bySource.get(id) as string }))
-  for (const chunk of chunkBlocks(retry, input.maxTokensPerChunk ?? DEFAULT_CHUNK_TOKENS)) {
-    await run(chunk, true)
+  if (!stopped) {
+    const retry = [...failed.keys()]
+      .filter((id) => !capped.has(id) && !failed.get(id)?.startsWith('provider error'))
+      .map((id) => ({ id, text: bySource.get(id) as string }))
+    for (const chunk of chunkBlocks(retry, input.maxTokensPerChunk ?? DEFAULT_CHUNK_TOKENS)) {
+      if (past()) {
+        stopped = true
+        break
+      }
+      await run(chunk, true)
+    }
   }
 
-  if (successes === 0 && lastError && input.blocks.length > 0) throw lastError
+  if (successes === 0 && lastError && accepted.length > 0) throw lastError
   return {
     translated,
     failed: [...failed.entries()].map(([id, reason]) => ({ id, reason })),
     usage,
+    stopped,
   }
 }

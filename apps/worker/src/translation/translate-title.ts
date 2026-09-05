@@ -1,7 +1,12 @@
 import { blockHash } from '@tela/content'
 import { plainText } from '@tela/content/tagged'
 import { articles, feeds, sites } from '@tela/db'
-import { getCachedTranslations, setTranslatedTitle, storeTranslations } from '@tela/db/queries'
+import {
+  getCachedTranslations,
+  setTranslatedTitle,
+  storeTranslations,
+  tokensUsedToday,
+} from '@tela/db/queries'
 import { translateBlocks } from '@tela/llm'
 import { NORM_VERSION } from '@tela/shared'
 import { eq } from 'drizzle-orm'
@@ -9,11 +14,16 @@ import { escapeUTF8 } from 'entities'
 import type { TranslationDeps } from './translate-body'
 import { recordUsage } from './usage'
 
-export type TitleOutcome = { status: 'done' | 'skipped' | 'failed'; reason?: string }
+export type TitleOutcome = {
+  status: 'done' | 'skipped' | 'failed' | 'deferred'
+  reason?: string
+}
 
 /**
  * Eagerly translate an article's title and excerpt (cheap, and what the list shows). Uses
- * the same content-addressed cache as bodies, keyed by the escaped plain text.
+ * the same content-addressed cache as bodies, keyed by the escaped plain text. Title work is
+ * background work, so once the daily budget is spent a cache miss is `deferred` (the handler
+ * re-queues it for the next day); cache hits still complete.
  */
 export async function translateArticleTitle(
   deps: TranslationDeps,
@@ -42,7 +52,12 @@ export async function translateArticleTitle(
   const hashes = new Map<string, string>()
   for (const b of blocks) hashes.set(b.id, await blockHash(b.text))
 
-  const cached = await getCachedTranslations(deps.db, [...hashes.values()], targetLang)
+  const cached = await getCachedTranslations(
+    deps.db,
+    [...hashes.values()],
+    targetLang,
+    article.sourceLang,
+  )
   const result = new Map<string, string>()
   const missing: typeof blocks = []
   for (const b of blocks) {
@@ -51,6 +66,11 @@ export async function translateArticleTitle(
     else missing.push(b)
   }
   if (missing.length > 0) {
+    if (deps.dailyBudgetTokens) {
+      const used = await tokensUsedToday(deps.db)
+      if (used >= deps.dailyBudgetTokens)
+        return { status: 'deferred', reason: 'daily budget exhausted' }
+    }
     const outcome = await translateBlocks(deps.translator, {
       blocks: missing,
       sourceLang: article.sourceLang,

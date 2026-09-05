@@ -5,6 +5,16 @@
  */
 export const NORM_VERSION = 1
 
+/** Source tokens translated per article body; the rest renders as source (`partial`). */
+export const MAX_ARTICLE_TRANSLATION_TOKENS = 40_000
+
+/**
+ * Source tokens one member may have translated on demand per UTC day, about ten articles at
+ * the per-article ceiling. Reserved when a request is made, reconciled against recorded usage
+ * when the attempt concludes. Background (title) work is budgeted separately by the worker.
+ */
+export const USER_DAILY_TRANSLATION_TOKENS = 400_000
+
 /** Site listing states. */
 export const SITE_LISTINGS = ['private', 'listed', 'featured', 'rejected'] as const
 export type SiteListing = (typeof SITE_LISTINGS)[number]

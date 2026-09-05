@@ -7,11 +7,14 @@ import { type HttpClient, HttpError } from './http'
 export type ExtractResult =
   | { status: 'extracted'; chars: number }
   | { status: 'skipped'; reason: string }
-  | { status: 'failed'; error: string }
+  /** `retryable`: the page may answer later (timeout, network, 5xx), so nothing is recorded. */
+  | { status: 'failed'; error: string; retryable: boolean }
 
 /**
  * Fetch an article's page and replace summary-only content with the extracted body.
- * Keeps the existing content when extraction is not clearly better.
+ * Keeps the existing content when extraction is not clearly better. A final outcome stamps
+ * `articles.extract_checked_at`, so the reader queues extraction for an article once; a
+ * transient failure leaves it unstamped so the job can retry and a later open can ask again.
  */
 export async function extractArticleContent(
   db: Db,
@@ -31,6 +34,25 @@ export async function extractArticleContent(
     .where(eq(articles.id, articleId))
   if (!row) return { status: 'skipped', reason: 'article not found' }
   const { article } = row
+  const result = await attempt(db, http, row)
+  if (!(result.status === 'failed' && result.retryable)) {
+    await db
+      .update(articles)
+      .set({ extractCheckedAt: new Date() })
+      .where(eq(articles.id, article.id))
+  }
+  return result
+}
+
+type ArticleRow = {
+  article: typeof articles.$inferSelect
+  feed: { feedUrl: string; fetchRegion: 'global' | 'cn'; language: string | null }
+  contentsLength: string | null
+  blocks: (typeof articleContents.$inferSelect)['blocks'] | null
+}
+
+async function attempt(db: Db, http: HttpClient, row: ArticleRow): Promise<ExtractResult> {
+  const { article } = row
   if (!article.url) return { status: 'skipped', reason: 'article has no url' }
 
   let page: Awaited<ReturnType<HttpClient['get']>>
@@ -40,13 +62,25 @@ export async function extractArticleContent(
       accept: 'text/html, application/xhtml+xml, */*;q=0.5',
     })
   } catch (err) {
-    if (err instanceof HttpError) return { status: 'failed', error: `${err.kind}: ${err.message}` }
+    if (err instanceof HttpError) {
+      return {
+        status: 'failed',
+        error: `${err.kind}: ${err.message}`,
+        retryable: err.kind === 'timeout' || err.kind === 'network',
+      }
+    }
     throw err
   }
-  if (page.status !== 200 || !page.body) return { status: 'failed', error: `http ${page.status}` }
+  if (page.status !== 200 || !page.body) {
+    return {
+      status: 'failed',
+      error: `http ${page.status}`,
+      retryable: page.status >= 500 || page.status === 429 || page.status === 408,
+    }
+  }
 
   const extracted = extractArticle(page.body, page.finalUrl)
-  if (!extracted) return { status: 'failed', error: 'no article content found' }
+  if (!extracted) return { status: 'failed', error: 'no article content found', retryable: false }
 
   const processed = await processArticleHtml({
     html: extracted.contentHtml,

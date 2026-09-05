@@ -157,4 +157,26 @@ describe('discover', () => {
     expect(await setSiteTopics(t.db, siteId, userA, ['tech', 'bogus', 'tech'])).toBe(true)
     expect((await getSitePage(t.db, siteId, null))?.site.topics).toEqual(['tech'])
   })
+
+  test('a verified claim is not overwritten by a later verifier; one claim per user and site', async () => {
+    const siteId = s.byTitle.Private!.id
+    const a = await getOrCreateClaim(t.db, siteId, userA)
+    expect(await markClaimResult(t.db, a.id, { ok: true, method: 'meta' })).toBe('verified')
+
+    const [b1, b2] = await Promise.all([
+      getOrCreateClaim(t.db, siteId, userB),
+      getOrCreateClaim(t.db, siteId, userB),
+    ])
+    expect(b2.id).toBe(b1.id)
+    expect(await markClaimResult(t.db, b1.id, { ok: true, method: 'rel_me' })).toBe('conflict')
+    const [site] = await t.db.select().from(sites).where(sql`id = ${siteId}`)
+    expect(site?.claimedBy).toBe(userA)
+    const [bRow] = await t.db.select().from(siteClaims).where(sql`id = ${b1.id}`)
+    expect(bRow?.status).toBe('failed')
+    expect(bRow?.error).toMatch(/already claimed/)
+
+    // The owner verifying again keeps the site.
+    expect(await markClaimResult(t.db, a.id, { ok: true, method: 'meta' })).toBe('verified')
+    expect(await markClaimResult(t.db, 999999, { ok: false, error: 'x' })).toBe('missing')
+  })
 })

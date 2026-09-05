@@ -6,10 +6,11 @@ import { redirect } from 'next/navigation'
 import { requireUser } from '@/lib/auth'
 import { getDb } from '@/lib/platform/db'
 import { enqueueFeedFetch } from '@/lib/queue'
+import { safeNext } from '@/lib/redirect'
 
 /** Subscribe or unsubscribe from a site's feed; `next` is where to return. */
 export async function toggleSubscriptionAction(form: FormData): Promise<void> {
-  const next = String(form.get('next') ?? '/discover')
+  const next = safeNext(form.get('next'), '/discover')
   const user = await requireUser(next)
   const feedId = Number(form.get('feedId'))
   const subscribed = form.get('subscribed') === '1'
@@ -23,5 +24,5 @@ export async function toggleSubscriptionAction(form: FormData): Promise<void> {
   }
   revalidatePath('/discover')
   revalidatePath('/s/[siteId]', 'page')
-  redirect(next.startsWith('/') && !next.startsWith('//') ? next : '/discover')
+  redirect(next)
 }

@@ -64,6 +64,55 @@
       "when": 1788512340977,
       "tag": "0008_websub_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788556608187,
+      "tag": "0009_site_claims_unique_per_user",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788556837195,
+      "tag": "0010_read_only_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788559302571,
+      "tag": "0011_article_extract_checked",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788559509843,
+      "tag": "0012_translations_source_lang",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788559535405,
+      "tag": "0013_translations_drop_source_lang_hint",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788571049254,
+      "tag": "0014_provenance_extraction_metering",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788590720511,
+      "tag": "0015_translation_requests",
+      "breakpoints": true
     }
   ]
 }

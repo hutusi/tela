@@ -75,6 +75,7 @@ describe('extractArticleContent', () => {
       .where(eq(articleContents.articleId, article.id))
     expect(contents?.extractedFrom).toBe('readability')
     expect(contents?.html).toContain('Paragraph 6.')
+    expect(updated?.extractCheckedAt).not.toBeNull()
   })
 
   test('keeps the feed content when the page has nothing better', async () => {
@@ -86,14 +87,34 @@ describe('extractArticleContent', () => {
     expect(await extractArticleContent(t.db, http, article.id)).toMatchObject({ status: 'failed' })
     const [same] = await t.db.select().from(articles).where(eq(articles.id, article.id))
     expect(same?.contentVersion).toBe(1)
+    // Stamped anyway, so the reader does not queue this article again on every open.
+    expect(same?.extractCheckedAt).not.toBeNull()
   })
 
-  test('reports fetch failures', async () => {
+  test('transient fetch failures are retryable and leave the article unstamped', async () => {
     const article = await summaryOnlyArticle()
     server.text('/posts/1', 'nope', { status: 500 })
-    expect(await extractArticleContent(t.db, http, article.id)).toMatchObject({
+    expect(await extractArticleContent(t.db, http, article.id)).toEqual({
       status: 'failed',
       error: 'http 500',
+      retryable: true,
     })
+    server.delay('/posts/1', 800)
+    expect(await extractArticleContent(t.db, http, article.id)).toMatchObject({
+      status: 'failed',
+      retryable: true,
+    })
+    const [row] = await t.db.select().from(articles).where(eq(articles.id, article.id))
+    expect(row?.extractCheckedAt).toBeNull()
+
+    // A page that is gone is final: stamped, so the reader stops asking.
+    server.text('/posts/1', 'gone', { status: 404 })
+    expect(await extractArticleContent(t.db, http, article.id)).toEqual({
+      status: 'failed',
+      error: 'http 404',
+      retryable: false,
+    })
+    const [stamped] = await t.db.select().from(articles).where(eq(articles.id, article.id))
+    expect(stamped?.extractCheckedAt).not.toBeNull()
   })
 })

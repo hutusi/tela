@@ -4,16 +4,12 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/auth'
 import { isDevAuthEnabled } from '@/lib/platform/env'
+import { safeNext } from '@/lib/redirect'
 
 export type LoginState = {
   step: 'email' | 'code'
   email?: string
   error?: string | null
-}
-
-function safeNext(value: FormDataEntryValue | null): string {
-  const next = typeof value === 'string' ? value : ''
-  return next.startsWith('/') && !next.startsWith('//') ? next : '/reading'
 }
 
 async function siteOrigin(): Promise<string> {
@@ -46,7 +42,7 @@ export async function verifyCode(_prev: LoginState, form: FormData): Promise<Log
   if (!client) return { step: 'email', error: 'not_configured' }
   const { error } = await client.auth.verifyOtp({ email, token, type: 'email' })
   if (error) return { step: 'code', email, error: 'bad_code' }
-  redirect(safeNext(form.get('next')))
+  redirect(safeNext(form.get('next'), '/reading'))
 }
 
 /** OAuth: ask Supabase for the provider URL and send the browser there. */
@@ -55,7 +51,7 @@ export async function signInWithProvider(form: FormData): Promise<void> {
   if (provider !== 'github' && provider !== 'google') return
   const client = await supabaseServer()
   if (!client) redirect('/login?error=not_configured')
-  const next = safeNext(form.get('next'))
+  const next = safeNext(form.get('next'), '/reading')
   const { data, error } = await client.auth.signInWithOAuth({
     provider,
     options: { redirectTo: `${await siteOrigin()}/auth/callback?next=${encodeURIComponent(next)}` },
@@ -67,7 +63,7 @@ export async function signInWithProvider(form: FormData): Promise<void> {
 /** Dev-auth mode: nothing to do, the session is implicit. */
 export async function continueAsDevUser(form: FormData): Promise<void> {
   if (!(await isDevAuthEnabled())) redirect('/login')
-  redirect(safeNext(form.get('next')))
+  redirect(safeNext(form.get('next'), '/reading'))
 }
 
 export async function signOut(): Promise<void> {

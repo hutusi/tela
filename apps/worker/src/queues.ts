@@ -1,4 +1,15 @@
+import { DEFAULT_CALL_TIMEOUT_MS } from '@tela/llm'
 import type { PgBoss, Queue } from 'pg-boss'
+
+/** How long pg-boss lets one translate.body execution run before handing the job to a retry. */
+export const TRANSLATE_BODY_LEASE_SECONDS = 600
+/**
+ * How long one execution may keep starting provider calls: the lease, less one call at its
+ * deadline, less slack for the final writes. An execution past its budget hands the same
+ * attempt to a fresh job instead of overlapping its own retry after the lease expires.
+ */
+export const TRANSLATE_BODY_BUDGET_MS =
+  TRANSLATE_BODY_LEASE_SECONDS * 1000 - DEFAULT_CALL_TIMEOUT_MS - 60_000
 
 /** Queue names. The web app enqueues on some of these through pg-boss's Drizzle adapter. */
 export const QUEUES = {
@@ -20,7 +31,18 @@ export type FeedFetchJob = { feedId: number }
 export type ArticleExtractJob = { articleId: number }
 export type SiteAssetsJob = { siteId: number }
 export type TranslateTitleJob = { articleId: number; targetLang: string }
-export type TranslateBodyJob = { articleId: number; targetLang: string }
+/**
+ * `onDemand` marks a reader-initiated request, which the daily budget does not gate;
+ * `requestedBy` is the member it is metered against.
+ */
+export type TranslateBodyJob = {
+  articleId: number
+  targetLang: string
+  onDemand?: boolean
+  requestedBy?: string
+  /** The request this job was sent for; see translation_requests.attempt. */
+  attempt: string
+}
 export type SiteClaimVerifyJob = { claimId: number }
 export type WebsubSubscribeJob = { feedId: number }
 
@@ -56,7 +78,9 @@ const SPECS: Record<QueueName, QueueSpec> = {
     retryLimit: 3,
     retryDelay: 30,
     retryBackoff: true,
-    expireInSeconds: 300,
+    // A capped article can take longer than this: an execution stops at TRANSLATE_BODY_BUDGET_MS
+    // and continues in a fresh job from the chunks already stored.
+    expireInSeconds: TRANSLATE_BODY_LEASE_SECONDS,
   },
   [QUEUES.siteAssets]: {
     policy: 'short',
@@ -70,7 +94,9 @@ const SPECS: Record<QueueName, QueueSpec> = {
     retryLimit: 3,
     retryDelay: 60,
     retryBackoff: true,
-    expireInSeconds: 60,
+    // The home page (FETCH_TIMEOUT_MS) plus the declared feed lookups (DECLARED_FEEDS_BUDGET_MS),
+    // with slack.
+    expireInSeconds: 180,
   },
   [QUEUES.websubSubscribe]: {
     policy: 'short',

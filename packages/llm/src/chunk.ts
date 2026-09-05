@@ -1,12 +1,7 @@
+import { estimateTokens } from '@tela/content'
 import type { TranslationBlock } from './types'
 
-const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu
-
-/** Rough token estimate: one per CJK character, one per four other characters. */
-export function estimateTokens(text: string): number {
-  const cjk = (text.match(CJK) ?? []).length
-  return cjk + Math.ceil((text.length - cjk) / 4)
-}
+export { estimateTokens } from '@tela/content'
 
 export const DEFAULT_CHUNK_TOKENS = 3000
 

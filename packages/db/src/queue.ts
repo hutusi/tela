@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import type { Db } from './client'
+import type { DbExecutor } from './client'
 
 export type JobSendOptions = {
   singletonKey?: string
@@ -19,8 +19,12 @@ export type JobSendOptions = {
  * pg-boss upgrade that changes the schema fails there first.
  *
  * Queues are created by the worker's ensureQueues(); sending to a missing queue throws.
+ *
+ * Accepts a transaction handle as well as a Db, so a job can be inserted in the same
+ * transaction as the row it belongs to (ADR 0004): if the status write rolls back, so does
+ * the job, and a job never exists for a status that was never written.
  */
-export function createJobSender(db: Db, schema = 'pgboss') {
+export function createJobSender(db: DbExecutor, schema = 'pgboss') {
   const table = (name: string) => sql.raw(`"${schema}"."${name}"`)
   return {
     async send(

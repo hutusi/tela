@@ -3,7 +3,8 @@
  * the web app's callback; the hub verifies the request with a GET and later POSTs signed pings.
  * Web APIs only, so the signature check runs on Cloudflare too.
  */
-import { classify, isBlockedHost } from './http'
+import { classify } from './http'
+import { isBlockedHost } from './net'
 
 export const WEBSUB_LEASE_SECONDS = 10 * 24 * 3600
 

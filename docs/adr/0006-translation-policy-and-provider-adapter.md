@@ -23,7 +23,9 @@ Studio) serving GLM, with Claude available later. Bailian exposes an OpenAI-comp
   with the previous chunk's last two translations as context. Every block is validated
   (placeholder multiset, length ratio, non-identity); failures are retried once in strict mode,
   then recorded in `failed_block_ids` and rendered as source (`partial`).
-- **Cache**: `translations(source_hash, target_lang)` keyed by the tagged-text hash; the
+- **Cache**: `translations(source_hash, target_lang, source_lang)` keyed by the tagged-text hash
+  and the article's source language (`und` when undetected: the same short text can mean
+  different things in different languages); the
   materialized `article_translations.html` is rebuilt from the cache and goes stale when
   `content_hash` changes.
 - **Adapter**: `packages/llm` exposes a `Translator` interface. Providers: Bailian through
@@ -32,8 +34,21 @@ Studio) serving GLM, with Claude available later. Bailian exposes an OpenAI-comp
   `@ai-sdk/anthropic` (structured output), and a deterministic mock used by tests and any
   environment without keys. `LLM_PROVIDER`, `LLM_MODEL`, and the keys select the backend; the
   model label is stored on every cache row and usage row.
-- **Cost control**: one `llm_usage` row per call; `LLM_DAILY_BUDGET_TOKENS` pauses background
-  (priority < 10) work while on-demand requests continue; sites can opt out of translation.
+- **Cost control**: one `llm_usage` row per call, written as each chunk lands so a retried job
+  resumes from the cache; `LLM_DAILY_BUDGET_TOKENS` pauses background work (title jobs and any
+  job without `onDemand`) while reader requests continue; reader requests are rate-limited per
+  member (30 an hour) and reserved against the member's daily allowance
+  (`USER_DAILY_TRANSLATION_TOKENS`) when requested, the estimate being released and replaced by
+  recorded usage (`llm_usage.user_id`) when the attempt concludes; every body is capped at
+  `LLM_MAX_ARTICLE_TOKENS`
+  source tokens (the rest renders as source, `partial`); the prompt's context strings are
+  clipped; sites can opt out of translation. Every request is an attempt
+  (`article_translations.attempt`) carried by its job: a job whose attempt was superseded by a
+  newer request steps aside, asks for the current one to run, and never overwrites its row. A
+  running attempt is never replaced; it heartbeats after every chunk, each provider call has a
+  two-minute deadline, an execution stops starting calls before its queue lease ends and
+  continues the attempt in a fresh job, and the scheduler retires the attempt id, on the row itself, when it re-sends a dead attempt
+  (at most twice) or gives the row up.
 
 ## Consequences
 

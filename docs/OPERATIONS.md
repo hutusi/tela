@@ -20,12 +20,13 @@ implements them (see `docs/ARCHITECTURE.md`).
 | `DATABASE_URL` | worker, web (local / non-Cloudflare) | Postgres connection string. On Cloudflare the `HYPERDRIVE` binding replaces it. |
 | `WORKER_ROLES` | worker | Comma list of roles; default is every role except `relay` |
 | `LOG_LEVEL` | worker | `debug` / `info` / `warn` / `error` |
-| `LLM_PROVIDER` | worker | `bailian` (default), `anthropic`, or `mock`; without the matching key the mock is used |
+| `LLM_PROVIDER` | worker | `bailian` (default), `anthropic`, or `mock`; any other value is an error. Without the matching key the mock is used, but the `translate` role refuses to start on that fallback: its placeholder output would be cached for everyone. Set `LLM_PROVIDER=mock` to run the mock on purpose (e2e, local) |
 | `LLM_MODEL` | worker | Model id: `glm-5.2` (Bailian default), `claude-opus-5` (Anthropic default) |
 | `BAILIAN_API_KEY`, `BAILIAN_BASE_URL` | worker | Aliyun Bailian key; base URL defaults to `https://dashscope.aliyuncs.com/compatible-mode/v1` (use the workspace/region host from the console when required) |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` | worker | Anthropic key; base URL optional |
 | `LLM_JSON_MODE` | worker | `text` (parse JSON from the reply; default for Bailian) or `schema` (structured output; default for Anthropic) |
-| `LLM_DAILY_BUDGET_TOKENS` | worker | Daily cap for background translation; `0` = unlimited; on-demand requests always run |
+| `LLM_DAILY_BUDGET_TOKENS` | worker | Daily cap for background (title) translation; `0` = unlimited; `fly.worker.toml` sets 2,000,000. Reader requests always run and are rate-limited per member instead |
+| `LLM_MAX_ARTICLE_TOKENS` | worker | Source tokens translated per article body (default 40,000, about 14 model calls); the rest stays as source and the translation is `partial` |
 | `PUBLIC_URL` | worker | Public origin of the web app, for verifying rel="me" claim links |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | worker | Favicon/cover uploads to R2; `ASSETS_DIR` writes to a directory instead (dev); neither disables uploads |
 | `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_ASSETS_URL` | web | Public origin (claim snippets) and the assets bucket's public base URL |
@@ -38,7 +39,7 @@ implements them (see `docs/ARCHITECTURE.md`).
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web | Supabase Auth (cookies via `@supabase/ssr`) |
 | `IMAGE_PROXY_SECRET` | web | HMAC key for `/img` URLs; set as a Worker secret (`wrangler secret put`) |
 | `TELA_DEV_AUTH` | web (local only) | `1` signs every request in as the development user; refused on Cloudflare |
-| `TELA_ALLOW_PRIVATE_HOSTS`, `WORKER_ALLOW_PRIVATE_HOSTS` | tests only | let discovery/fetch reach localhost fixture servers |
+| `TELA_ALLOW_PRIVATE_HOSTS`, `WORKER_ALLOW_PRIVATE_HOSTS` | tests only | let discovery/fetch reach localhost fixture servers. In production the worker resolves every outbound host itself and refuses names that resolve to a private address (DNS-pinned via undici); the pinning is Node-only, so `bun run dev:worker` keeps just the name and literal checks. `apps/worker/scripts/safe-fetch-check.ts` verifies the Node path |
 | `NEXTJS_ENV` | web (`.dev.vars`) | Which `.env` files OpenNext loads locally |
 | `TEST_DATABASE_URL`, `PG_BIN_DIR` | tests | Use an existing database, or point at Postgres binaries |
 
@@ -51,6 +52,12 @@ implements them (see `docs/ARCHITECTURE.md`).
    qq.com and 163.com addresses.
 3. Auth → Providers: Email (OTP), GitHub, Google (phase 4).
 4. Apply migrations: `DATABASE_URL=<direct connection> bun run db:migrate`.
+5. Turn the Data API off in the Dashboard: Data API integration overview → **Enable Data API**
+   off. Nothing in `supabase/config.toml` can express this (`api.enabled` is local-only and
+   `public` is always among the exposed schemas while the API is on), and the GraphQL endpoint
+   reflects `public` as well. The app never uses the Data API (all queries go through Postgres
+   directly, supabase-js is auth only), and the read-only RLS policies remain the backstop for as
+   long as it is on. Turn it back on only if a browser feature (Realtime) ever needs it.
 
 ### Cloudflare
 ```sh
@@ -71,7 +78,19 @@ bun run deploy            # opennextjs-cloudflare build && deploy
   not ask for TLS there (`sslModeFor` in `@tela/db` handles `*.hyperdrive.local`).
 - The first request after a deploy can wait up to the driver's 30 s connect timeout while
   Hyperdrive opens its origin connection; `/api/health` reports `databaseMs` and the error text.
-- Then add the custom domain under Workers & Pages → tela-web → Settings → Domains.
+- Then add the custom domain under Workers & Pages → tela-web → Settings → Domains, and in the
+  same change:
+  - `supabase/config.toml`: set `[auth] site_url` to the new origin and add `https://<domain>/**`
+    to `additional_redirect_urls`, then `supabase config push`. OAuth builds its callback from the
+    request host, so a domain missing from that list makes GitHub/Google sign-in fail with a
+    redirect error; magic-link emails use `site_url`, so they would keep pointing at the old
+    origin (blocked in mainland China) until this is done.
+  - `NEXT_PUBLIC_SITE_URL` (web) and `PUBLIC_URL` (worker) to the new origin: claim snippets and
+    `rel="me"` verification compare against them.
+- The production build runs `next build --webpack` (`apps/web/package.json`): Turbopack in Next
+  16.3 panics while chunking any middleware file in this app (`ModuleGraph::from_graphs_inner was
+  canceled`), and the session-refresh middleware is not optional. `next dev` still uses Turbopack.
+  Retry the default bundler after the next Next.js upgrade.
 
 R2 for favicons and covers: `bunx wrangler r2 bucket create tela-assets --location apac`, then
 either connect a custom domain (`assets.<domain>`) under the bucket's settings or, before a
@@ -97,8 +116,9 @@ fly deploy --config fly.worker.toml --remote-only --ha=false   # from the reposi
 - `fly.worker.toml` sits at the repository root because Fly's build context is the config's
   directory and the image builds from the whole monorepo (`.dockerignore` keeps it small).
 - Override roles per deploy with `-e WORKER_ROLES=scheduler,fetch,extract,claim,assets`, for
-  example to hold back `translate` until the LLM key exists (the mock provider would otherwise
-  write placeholder translations into the shared cache).
+  example to run without `translate` until the LLM key exists. With the key missing the worker
+  refuses to start the `translate` role at all (rather than caching the mock's placeholder
+  translations), so a forgotten secret shows up as a crash loop, not as garbled titles.
 - Logs: `fly logs --app tela-worker`; the JSON lines are the same as locally.
 
 ## End-to-end tests
@@ -175,7 +195,7 @@ First run: `cd apps/web && bunx playwright install chromium`.
   restart; finally remove `RELAY_SECRET_PREVIOUS` from the relay. Signatures expire after five
   minutes, so keep both boxes' clocks in sync (NTP).
 - **It is not an open proxy**: only signed `POST /fetch` requests are served, private ranges are
-  refused, redirects are not followed, and the body is capped at 5 MB.
+  refused, redirects are not followed, the upstream body is capped at 5 MB, and a request larger than 64 KiB is refused before it is read (the signature covers the body, so that cap is the only pre-authentication limit).
 
 ### Web
 - **Rate limits**: rules live in `RATE_LIMITS` (`packages/db/src/queries/rate-limit.ts`); change a
@@ -188,8 +208,10 @@ First run: `cd apps/web && bunx playwright install chromium`.
 
 ### Translation
 - **Cost check**: `select date_trunc('day', created_at) d, model, sum(input_tokens) i, sum(output_tokens) o, count(*) from llm_usage group by 1, 2 order by 1 desc`.
-- **Budget**: set `LLM_DAILY_BUDGET_TOKENS` on the worker; background title work stops for the
-  day once exceeded, reader-initiated body requests do not.
+- **Budget**: set `LLM_DAILY_BUDGET_TOKENS` on the worker; once exceeded, title jobs that miss
+  the cache are re-queued for the next UTC day, reader-initiated body requests still run (each
+  member gets 30 per hour and `USER_DAILY_TRANSLATION_TOKENS` a day, metered per member in
+  `llm_usage.user_id`).
 - **Switch provider**: change `LLM_PROVIDER`/`LLM_MODEL` and the key; restart the worker. Cached
   translations keep their `model` label, so old and new output can be compared.
 - **Force a retranslation** of an article: `delete from article_translations where article_id = …`
@@ -202,4 +224,7 @@ First run: `cd apps/web && bunx playwright install chromium`.
 ### Later
 - Rotating the image-proxy signing key: set a new `IMAGE_PROXY_SECRET`; old proxy URLs stop
   verifying and pages regenerate them on the next render.
+- Before switching readers to the custom domain: the Supabase redirect allow-list and `site_url`
+  step above, then sign in once with each provider from the new origin.
+- Before launch: the Data API is off in the Dashboard (Provisioning step 5).
 - China checks from a HK/CN box (custom auth domain, image proxy for `mmbiz.qpic.cn`-style hosts)

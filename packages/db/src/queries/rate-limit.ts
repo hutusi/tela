@@ -13,6 +13,8 @@ export const RATE_LIMITS = {
   opmlImport: { limit: 5, windowSec: 3600 },
   claimStart: { limit: 10, windowSec: 3600 },
   claimVerify: { limit: 30, windowSec: 3600 },
+  /** Each body translation request can cost up to ~14 model calls; a reader opens far fewer. */
+  translate: { limit: 30, windowSec: 3600 },
 } as const satisfies Record<string, RateLimitRule>
 
 export type RateLimitAction = keyof typeof RATE_LIMITS

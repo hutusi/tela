@@ -16,8 +16,11 @@ backoff, cron, and dead-letter queues and had an open install bug on PG 17.6.1.0
   priorities for on-demand vs background work, retries with backoff, expiry, and dead-letter queues.
 - One worker process; `WORKER_ROLES` filters which `boss.work()` subscriptions start.
 - The web app enqueues through a small SQL helper in `packages/db` (pg-boss documents the insert
-  contract for non-Node runtimes), in the same transaction as the status write. Fallback: workers
-  poll `requested` rows with `FOR UPDATE SKIP LOCKED`.
+  contract for non-Node runtimes), in the same transaction as the status write. Fallback: the
+  scheduler tick re-sends `translate.body` for rows still `requested` after five minutes; the
+  singleton key makes a duplicate a no-op. The worker uses the same helper to insert title jobs
+  inside the transaction that stores an article, so a fetch cannot commit articles and lose
+  their follow-up work.
 
 ## Consequences
 

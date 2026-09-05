@@ -7,9 +7,14 @@ const responseSchema = z.object({
   translations: z.array(z.object({ id: z.string(), text: z.string() })),
 })
 
+/** One provider call, the SDK's own retries included, is abandoned after this long. */
+export const DEFAULT_CALL_TIMEOUT_MS = 120_000
+
 export type SdkTranslatorOptions = {
   /** Label recorded in llm_usage and translations.model. */
   modelName: string
+  /** Deadline for one provider call; a hung connection must not hold an attempt forever. */
+  timeoutMs?: number
   /** 'schema' uses the provider's structured output; 'text' asks for JSON and parses it. */
   jsonMode?: 'schema' | 'text'
   providerOptions?: Record<string, Record<string, string | number | boolean | null>>
@@ -51,6 +56,7 @@ export function createSdkTranslator(
         prompt,
         temperature: options.temperature ?? 0.2,
         maxOutputTokens: options.maxOutputTokens ?? 16_000,
+        abortSignal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_CALL_TIMEOUT_MS),
         ...(options.providerOptions ? { providerOptions: options.providerOptions } : {}),
       }
       let translations: Array<{ id: string; text: string }>

@@ -1,5 +1,6 @@
 'use server'
 
+import { normalizeOrigin } from '@tela/content'
 import { consumeRateLimit } from '@tela/db/queries'
 import { createHttpClient, discoverFeeds, ensureFeed, HttpError } from '@tela/ingest'
 import { redirect } from 'next/navigation'
@@ -46,6 +47,11 @@ export async function startClaimAction(
   }
   const first = found[0]
   if (!first) return { error: 'no_feed', query }
-  const { siteId } = await ensureFeed(db, { feedUrl: first.url })
+  // The site to claim is the page the member entered: that is where the proof goes. When the
+  // feed lives on that same origin (or the member entered the feed URL itself), the feed's
+  // declared home is used instead, which ensureFeed refuses for sites other members claimed.
+  const entered = normalizeOrigin(/^https?:\/\//i.test(query) ? query : `https://${query}`)
+  const homeUrl = entered && entered !== normalizeOrigin(first.url) ? entered : first.homeUrl
+  const { siteId } = await ensureFeed(db, { feedUrl: first.url, homeUrl, actorId: user.id })
   redirect(`/sites/${siteId}/claim`)
 }

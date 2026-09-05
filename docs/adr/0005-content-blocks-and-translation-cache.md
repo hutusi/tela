@@ -18,7 +18,7 @@ makes paragraphs that differ only by a link target collide.
   (`<g1>…</g1>` paired, `<x1/>` opaque) with attributes and opaque content kept in a side table
   derived from the source block. The model sees only text and placeholders.
 - Block id = first 10 hex of `sha256(normalized tagged text + NORM_VERSION)`, written as
-  `data-tb`. `translations(source_hash, target_lang)` caches translated tagged text per block,
+  `data-tb`. `translations(source_hash, target_lang, source_lang)` caches translated tagged text per block,
   across articles and versions.
 - Rehydration decodes and re-escapes text segments, so model output can never inject markup;
   translations are accepted only if their placeholder multiset matches the source.

@@ -20,6 +20,18 @@ const PNG = Buffer.from(
 let claimToken = ''
 
 /**
+ * Captured feeds declare their real home; served from here, that would make the worker move
+ * their site to the real origin and point claim verification at it. Declare this server as
+ * the home instead, so every fixture feed belongs to one site on this origin.
+ */
+const origin = `http://127.0.0.1:${port}/`
+function servedFromHere(xml: string, realHome: string): string {
+  return xml
+    .replace(`<link>${realHome}</link>`, `<link>${origin}</link>`)
+    .replace(`<link href="${realHome}"/>`, `<link href="${origin}"/>`)
+}
+
+/**
  * A minimal WebSub hub: records subscription requests, verifies the callback's intent the way a
  * real hub would, and (on request from the test) sends a signed content ping.
  */
@@ -81,23 +93,26 @@ const routes: Record<string, () => { body: Buffer | string; type: string }> = {
     type: 'text/html; charset=utf-8',
   }),
   '/hutusi.xml': () => ({
-    body: readFileSync(join(feeds, 'hutusi.rss.xml')),
+    body: servedFromHere(readFileSync(join(feeds, 'hutusi.rss.xml'), 'utf8'), 'https://hutusi.com'),
     type: 'application/xml; charset=utf-8',
   }),
   '/jvns.xml': () => ({
-    body: readFileSync(join(feeds, 'jvns.atom.xml')),
+    body: servedFromHere(readFileSync(join(feeds, 'jvns.atom.xml'), 'utf8'), 'https://jvns.ca'),
     type: 'application/xml; charset=utf-8',
   }),
   '/jnito.xml': () => ({
-    body: readFileSync(join(feeds, 'jnito.rss.xml')),
+    body: servedFromHere(
+      readFileSync(join(feeds, 'jnito.rss.xml'), 'utf8'),
+      'https://blog.jnito.com/',
+    ),
     type: 'application/xml; charset=utf-8',
   }),
   // The Atom fixture with a hub link, so the worker subscribes at this server's /hub.
   '/hubbed.xml': () => ({
-    body: readFileSync(join(feeds, 'jvns.atom.xml'), 'utf8').replace(
-      /<feed([^>]*)>/,
-      `<feed$1><link rel="hub" href="http://127.0.0.1:${port}/hub"/>`,
-    ),
+    body: servedFromHere(
+      readFileSync(join(feeds, 'jvns.atom.xml'), 'utf8'),
+      'https://jvns.ca',
+    ).replace(/<feed([^>]*)>/, `<feed$1><link rel="hub" href="http://127.0.0.1:${port}/hub"/>`),
     type: 'application/atom+xml; charset=utf-8',
   }),
   '/blog': () => ({
@@ -107,6 +122,42 @@ const routes: Record<string, () => { body: Buffer | string; type: string }> = {
     type: 'text/html; charset=utf-8',
   }),
   '/pixel.png': () => ({ body: PNG, type: 'image/png' }),
+  // A summary-only feed (descriptions, no content) whose posts are full pages on this server.
+  '/summary.xml': () => ({
+    body: `<?xml version="1.0"?><rss version="2.0"><channel><title>Summary Fixture</title>
+      <link>http://127.0.0.1:${port}/summary</link><language>en</language>
+      ${[1, 2, 3]
+        .map(
+          (
+            n,
+          ) => `<item><guid>summary-${n}</guid><link>http://127.0.0.1:${port}/summary/posts/${n}</link>
+        <title>Summary post ${n}</title><description>Only a teaser for post ${n}.</description>
+        <pubDate>Thu, 0${n} Sep 2026 08:00:00 GMT</pubDate></item>`,
+        )
+        .join('')}
+      </channel></rss>`,
+    type: 'application/rss+xml; charset=utf-8',
+  }),
+  '/summary': () => ({
+    body: `<html><head><title>Summary fixture</title>
+      <link rel="alternate" type="application/rss+xml" href="/summary.xml"></head>
+      <body><h1>Summary fixture</h1></body></html>`,
+    type: 'text/html; charset=utf-8',
+  }),
+  ...Object.fromEntries(
+    [1, 2, 3].map((n) => [
+      `/summary/posts/${n}`,
+      () => ({
+        body: `<html><head><title>Summary post ${n}</title></head><body><nav><a href="/">Home</a></nav>
+          <article><h1>Summary post ${n}</h1>${Array.from(
+            { length: 8 },
+            (_, i) =>
+              `<p>Full paragraph ${i + 1} of post ${n}. The quick brown fox jumps over the lazy dog while the reader finally gets the whole story instead of a teaser, sentence after sentence.</p>`,
+          ).join('')}</article></body></html>`,
+        type: 'text/html; charset=utf-8',
+      }),
+    ]),
+  ),
 }
 
 createServer(async (req, res) => {

@@ -10,7 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import { anonRole, authenticatedRole, authUid, authUsers } from 'drizzle-orm/supabase'
+import { anonRole, authenticatedRole, authUsers } from 'drizzle-orm/supabase'
 
 /**
  * One row per auth user, created by the on_auth_user_created trigger (custom migration).
@@ -45,12 +45,6 @@ export const profiles = pgTable(
       for: 'select',
       to: [anonRole, authenticatedRole],
       using: sql`true`,
-    }),
-    pgPolicy('profiles_update_own', {
-      for: 'update',
-      to: authenticatedRole,
-      using: sql`${authUid} = ${t.id}`,
-      withCheck: sql`${authUid} = ${t.id}`,
     }),
   ],
 )

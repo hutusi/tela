@@ -1,5 +1,8 @@
 import { verifyImageParams } from '@tela/content/images'
+import { cappedStream } from '@tela/ingest/http'
+import { isBlockedHost } from '@tela/ingest/net'
 import { imageProxySecret } from '@/lib/platform/env'
+import { waitUntil } from '@/lib/platform/wait-until'
 
 const MAX_BYTES = 10 * 1024 * 1024
 const TIMEOUT_MS = 10_000
@@ -17,6 +20,13 @@ export async function GET(request: Request): Promise<Response> {
   if (!secret) return new Response('image proxy disabled', { status: 404 })
   const target = await verifyImageParams(u, s, secret)
   if (!target) return new Response('bad signature', { status: 403 })
+  // Signed URLs come from feed HTML, which a publisher controls; never fetch into a private
+  // network for them. (Cloudflare's strictly-public fetch is the other layer on Workers.)
+  // TELA_ALLOW_PRIVATE_HOSTS is the tests-only escape hatch discovery uses for fixture servers.
+  const allowPrivateHosts = process.env.TELA_ALLOW_PRIVATE_HOSTS === '1'
+  if (!allowPrivateHosts && isBlockedHost(new URL(target).hostname)) {
+    return new Response('forbidden', { status: 403 })
+  }
 
   const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default
   const cacheKey = new Request(url.toString(), { method: 'GET' })
@@ -45,10 +55,15 @@ export async function GET(request: Request): Promise<Response> {
   if (!type.startsWith('image/') || type === 'image/svg+xml') {
     return new Response('not an image', { status: 415 })
   }
+  // A declared size over the cap is refused outright; everything else is counted as it
+  // streams, since Content-Length is optional (chunked) and chosen by the origin.
   const length = Number(upstream.headers.get('content-length') ?? 0)
-  if (length > MAX_BYTES) return new Response('too large', { status: 413 })
+  if (length > MAX_BYTES) {
+    await upstream.body.cancel().catch(() => {})
+    return new Response('too large', { status: 413 })
+  }
 
-  const response = new Response(upstream.body, {
+  const response = new Response(cappedStream(upstream.body, MAX_BYTES), {
     status: 200,
     headers: {
       'content-type': type,
@@ -59,11 +74,10 @@ export async function GET(request: Request): Promise<Response> {
     },
   })
   if (cache) {
-    try {
-      await cache.put(cacheKey, response.clone())
-    } catch {
-      // Cache API unavailable (local Node); serve uncached.
-    }
+    // Filled in the background: awaiting the put would hold the whole body in memory until the
+    // origin finished, before the first byte reached the reader. A capped or failed stream
+    // simply leaves the cache empty.
+    await waitUntil(cache.put(cacheKey, response.clone()))
   }
   return response
 }

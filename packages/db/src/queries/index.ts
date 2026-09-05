@@ -1,4 +1,5 @@
 export * from './discover'
+export * from './provenance'
 export * from './rate-limit'
 export * from './reader'
 export * from './search'

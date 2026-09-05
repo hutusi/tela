@@ -4,7 +4,12 @@ import { createMockTranslator } from './mock'
 import { createSdkTranslator } from './translator'
 import type { Translator } from './types'
 
-export type ProviderName = 'bailian' | 'anthropic' | 'mock'
+export const PROVIDER_NAMES = ['bailian', 'anthropic', 'mock'] as const
+export type ProviderName = (typeof PROVIDER_NAMES)[number]
+
+function isProviderName(value: string): value is ProviderName {
+  return (PROVIDER_NAMES as readonly string[]).includes(value)
+}
 
 export type ProviderConfig = {
   provider: ProviderName
@@ -74,11 +79,20 @@ export function createTranslator(config: ProviderConfig): Translator {
 /**
  * Provider config from the environment. LLM_PROVIDER selects the backend (default bailian);
  * unset keys fall back to the mock so local runs and tests never call a paid API by accident.
+ * The mock always reports `model: 'mock'`, so its rows in `translations` and `llm_usage` can be
+ * told apart from a real provider's; a misspelled LLM_PROVIDER is an error rather than a
+ * silent fallback.
  */
 export function configFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): ProviderConfig {
-  const provider = (env.LLM_PROVIDER ?? 'bailian') as ProviderName
+  const requested = env.LLM_PROVIDER ?? 'bailian'
+  if (!isProviderName(requested)) {
+    throw new Error(
+      `Unknown LLM_PROVIDER "${requested}" (expected one of ${PROVIDER_NAMES.join(', ')})`,
+    )
+  }
+  const provider: ProviderName = requested
   const jsonMode =
     env.LLM_JSON_MODE === 'schema' ? 'schema' : env.LLM_JSON_MODE === 'text' ? 'text' : undefined
   if (provider === 'anthropic') {
@@ -101,5 +115,13 @@ export function configFromEnv(
       ...(jsonMode ? { jsonMode } : {}),
     }
   }
-  return { provider: 'mock', model: env.LLM_MODEL ?? 'mock' }
+  return { provider: 'mock', model: 'mock' }
+}
+
+/** True when the mock was chosen as a fallback rather than asked for with LLM_PROVIDER=mock. */
+export function isAccidentalMock(
+  config: ProviderConfig,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return config.provider === 'mock' && env.LLM_PROVIDER !== 'mock'
 }

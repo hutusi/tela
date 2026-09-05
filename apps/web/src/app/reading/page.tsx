@@ -5,7 +5,9 @@ import {
   getRecommendation,
   listArticles,
   listSubscriptions,
+  markExtractRequested,
 } from '@tela/db/queries'
+import { wantsExtraction } from '@tela/ingest'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { AppHeader } from '@/components/app-header'
 import { ArticleList } from '@/components/article-list'
@@ -17,6 +19,7 @@ import { Sidebar } from '@/components/sidebar'
 import { renderArticleHtml } from '@/lib/article-html'
 import { requireUser } from '@/lib/auth'
 import { getDb } from '@/lib/platform/db'
+import { enqueueArticleExtract } from '@/lib/queue'
 import { getReadingLang } from '@/lib/reading'
 import { parseReadingParams } from './href'
 
@@ -46,6 +49,13 @@ export default async function ReadingPage({ searchParams }: Props) {
     params.articleId ? getArticle(db, user.id, params.articleId) : Promise.resolve(null),
     getLocale(),
   ])
+  // A summary-only article gets its full text fetched when opened. The job follows the row
+  // update that claims a cooldown window, not the render, so a tab polling every two seconds
+  // causes one job per window; the worker stamps the article on a final outcome.
+  const extracting = article !== null && wantsExtraction(article)
+  if (article && extracting && (await markExtractRequested(db, article.id))) {
+    await enqueueArticleExtract(db, article.id)
+  }
   const html = article ? await renderArticleHtml(article.html) : ''
   const recommendation = article ? await getRecommendation(db, user.id, article.id) : null
 
@@ -59,7 +69,10 @@ export default async function ReadingPage({ searchParams }: Props) {
       targetLang: readingLang,
       state,
       failedBlocks: fresh ? (row?.failedBlockIds.length ?? 0) : 0,
-      html: fresh && row?.html ? await renderArticleHtml(row.html) : null,
+      html:
+        fresh && row?.html && (row.status === 'done' || row.status === 'partial')
+          ? await renderArticleHtml(row.html)
+          : null,
       title: row?.title ?? null,
     }
   }
@@ -102,6 +115,7 @@ export default async function ReadingPage({ searchParams }: Props) {
             locale={locale}
             translation={translation}
             recommendation={recommendation}
+            extracting={extracting}
           />
         ) : (
           <EmptyState unread={totals.all} hasSubscriptions={subscriptions.length > 0} />

@@ -112,59 +112,67 @@ async function normalizeCover(
   }
 }
 
-/** Find, normalize, and store a site's favicon and cover; always stamps assets_checked_at. */
+/**
+ * Find, normalize, and store a site's favicon and cover. Stamps `assets_checked_at` whenever a
+ * store is configured, including when a fetch or a store write throws: `siteNeedsAssets` queues
+ * unstamped sites on every feed fetch, so a site whose assets keep failing would otherwise be
+ * retried forever. pg-boss still retries the throwing job itself.
+ */
 export async function processSiteAssets(deps: AssetDeps, siteId: number): Promise<AssetsOutcome> {
   const [site] = await deps.db.select().from(sites).where(eq(sites.id, siteId))
-  const stamp = () =>
-    deps.db.update(sites).set({ assetsCheckedAt: new Date() }).where(eq(sites.id, siteId))
   if (!site) return { status: 'skipped', favicon: false, cover: false, reason: 'site not found' }
-  if (!deps.store) {
+  const store = deps.store
+  if (!store) {
     // Not stamped: once a store is configured the next fetch queues the site again.
     return { status: 'skipped', favicon: false, cover: false, reason: 'no asset store configured' }
   }
 
-  let html = ''
-  let baseUrl = site.homeUrl
-  try {
-    const page = await deps.http.get(site.homeUrl, { accept: 'text/html, */*;q=0.5' })
-    if (page.status === 200) {
-      html = page.body
-      baseUrl = page.finalUrl
-    }
-  } catch (err) {
-    if (!(err instanceof HttpError)) throw err
-  }
-
   let faviconKey: string | null = null
-  for (const url of findIconUrls(html, baseUrl)) {
-    const got = await fetchBytes(deps.http, url, MAX_ICON_BYTES)
-    if (!got || !got.type.startsWith('image/')) continue
-    const icon = await normalizeIcon(got.bytes, got.type)
-    faviconKey = `sites/${siteId}/favicon-${site.updatedAt.getTime()}.${icon.ext}`
-    await deps.store.put(faviconKey, icon.bytes, icon.type)
-    break
-  }
-
   let coverKey: string | null = null
-  const coverUrl = html ? findCoverUrl(html, baseUrl) : null
-  if (coverUrl) {
-    const got = await fetchBytes(deps.http, coverUrl, MAX_COVER_BYTES)
-    if (got?.type.startsWith('image/')) {
-      const cover = await normalizeCover(got.bytes)
-      if (cover) {
-        coverKey = `sites/${siteId}/cover-${site.updatedAt.getTime()}.${cover.ext}`
-        await deps.store.put(coverKey, cover.bytes, cover.type)
+  try {
+    let html = ''
+    let baseUrl = site.homeUrl
+    try {
+      const page = await deps.http.get(site.homeUrl, { accept: 'text/html, */*;q=0.5' })
+      if (page.status === 200) {
+        html = page.body
+        baseUrl = page.finalUrl
+      }
+    } catch (err) {
+      if (!(err instanceof HttpError)) throw err
+    }
+
+    for (const url of findIconUrls(html, baseUrl)) {
+      const got = await fetchBytes(deps.http, url, MAX_ICON_BYTES)
+      if (!got || !got.type.startsWith('image/')) continue
+      const icon = await normalizeIcon(got.bytes, got.type)
+      const key = `sites/${siteId}/favicon-${site.updatedAt.getTime()}.${icon.ext}`
+      await store.put(key, icon.bytes, icon.type)
+      faviconKey = key
+      break
+    }
+
+    const coverUrl = html ? findCoverUrl(html, baseUrl) : null
+    if (coverUrl) {
+      const got = await fetchBytes(deps.http, coverUrl, MAX_COVER_BYTES)
+      if (got?.type.startsWith('image/')) {
+        const cover = await normalizeCover(got.bytes)
+        if (cover) {
+          const key = `sites/${siteId}/cover-${site.updatedAt.getTime()}.${cover.ext}`
+          await store.put(key, cover.bytes, cover.type)
+          coverKey = key
+        }
       }
     }
+  } finally {
+    await deps.db
+      .update(sites)
+      .set({
+        assetsCheckedAt: new Date(),
+        ...(faviconKey ? { faviconKey } : {}),
+        ...(coverKey ? { coverKey } : {}),
+      })
+      .where(eq(sites.id, siteId))
   }
-
-  await deps.db
-    .update(sites)
-    .set({
-      assetsCheckedAt: new Date(),
-      ...(faviconKey ? { faviconKey } : {}),
-      ...(coverKey ? { coverKey } : {}),
-    })
-    .where(eq(sites.id, siteId))
   return { status: 'done', favicon: faviconKey !== null, cover: coverKey !== null }
 }

@@ -6,14 +6,8 @@
  * Both halves are written against Web APIs only, so the handler can be served by Node's `http`
  * module in the worker and driven directly in tests without a socket.
  */
-import {
-  classify,
-  HttpError,
-  type HttpErrorKind,
-  isBlockedHost,
-  type Relay,
-  readCapped,
-} from './http'
+import { classify, HttpError, type HttpErrorKind, type Relay, readCapped } from './http'
+import { isBlockedHost } from './net'
 
 export const RELAY_SIGNATURE_HEADER = 'x-tela-signature'
 export const RELAY_TIMESTAMP_HEADER = 'x-tela-timestamp'
@@ -130,11 +124,13 @@ export function createRelayHandler(
 
     const ts = request.headers.get(RELAY_TIMESTAMP_HEADER) ?? ''
     const signature = request.headers.get(RELAY_SIGNATURE_HEADER) ?? ''
-    const body = await request.text()
+    // The timestamp is checked before the body is read: it is the one thing that can be
+    // rejected without buffering, and it turns away replayed or unsigned traffic cheaply.
     const skew = Math.abs(now() - Number(ts))
     if (!ts || !Number.isFinite(skew) || skew > maxSkewMs) {
       return json({ error: 'stale or missing timestamp' }, 401)
     }
+    const body = await request.text()
     let authentic = false
     for (const secret of secrets) {
       if (timingSafeEqual(await signRelayRequest(secret, ts, body), signature)) authentic = true

@@ -30,12 +30,13 @@ export default async function SiteClaimPage({ params }: Props) {
     getTranslations('claim'),
   ])
   if (!page || !profile) notFound()
-  const claim = await getOrCreateClaim(db, siteId, user.id)
+  const claimedByOther = page.site.claimedBy !== null && page.site.claimedBy !== user.id
+  // No token is minted for a site somebody else already proved control of.
+  const claim = claimedByOther ? null : await getOrCreateClaim(db, siteId, user.id)
   const publicUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://tela.app').replace(/\/+$/, '')
   const profileUrl = `${publicUrl}/@${profile.handle}`
-  const metaSnippet = `<meta name="tela-site-verification" content="${claim.token}">`
+  const metaSnippet = `<meta name="tela-site-verification" content="${claim?.token ?? ''}">`
   const relMeSnippet = `<link rel="me" href="${profileUrl}">`
-  const claimedByOther = page.site.claimedBy !== null && page.site.claimedBy !== user.id
 
   return (
     <>
@@ -43,9 +44,9 @@ export default async function SiteClaimPage({ params }: Props) {
       <main
         className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-7 px-8 py-12 animate-fade"
         data-testid="claim-page"
-        data-status={claim.status}
+        data-status={claim?.status ?? 'claimed'}
       >
-        {claim.status === 'pending' ? <AutoRefresh intervalMs={2500} maxMs={120_000} /> : null}
+        {claim?.status === 'pending' ? <AutoRefresh intervalMs={2500} maxMs={120_000} /> : null}
         <div>
           <h1 className="font-serif text-[34px] font-medium leading-tight tracking-tight">
             {t('verifyTitle')}
@@ -58,7 +59,11 @@ export default async function SiteClaimPage({ params }: Props) {
           </p>
         </div>
 
-        {claim.status === 'verified' ? (
+        {claim === null ? (
+          <p className="rounded-xl border border-line bg-white p-5 text-ink-2">
+            {t('claimedByOther')}
+          </p>
+        ) : claim.status === 'verified' ? (
           <div
             className="rounded-xl border border-accent/40 bg-white p-5"
             data-testid="claim-verified"
@@ -72,10 +77,6 @@ export default async function SiteClaimPage({ params }: Props) {
               {t('viewSite')}
             </Link>
           </div>
-        ) : claimedByOther ? (
-          <p className="rounded-xl border border-line bg-white p-5 text-ink-2">
-            {t('claimedByOther')}
-          </p>
         ) : (
           <>
             <section className="flex flex-col gap-3">

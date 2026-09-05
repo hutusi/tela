@@ -2,8 +2,10 @@ import { createDb } from '@tela/db'
 import { type Job, PgBoss } from 'pg-boss'
 import { loadConfig } from './config'
 import {
+  allowPrivateHosts,
   createAssetsFromEnv,
   createHttp,
+  createOutboundFetch,
   createTranslatorFromEnv,
   type WorkerContext,
 } from './context'
@@ -35,6 +37,9 @@ async function main() {
 
   const stops: Array<() => Promise<void>> = []
   const has = (role: (typeof config.roles)[number]) => config.roles.includes(role)
+  // Every fetch of a URL somebody else chose (feeds, pages, hubs, relayed requests) goes
+  // through the DNS-pinned client so a name cannot resolve into our own network.
+  const outbound = createOutboundFetch()
 
   if (config.needsDb && config.DATABASE_URL) {
     const db = createDb(config.DATABASE_URL, { max: 5 })
@@ -54,7 +59,15 @@ async function main() {
 
     const translator = createTranslatorFromEnv()
     const assets = createAssetsFromEnv()
-    const ctx: WorkerContext = { config, db, boss, http: createHttp(config), translator, assets }
+    const ctx: WorkerContext = {
+      config,
+      db,
+      boss,
+      http: createHttp(config, outbound),
+      fetch: outbound,
+      translator,
+      assets,
+    }
     log.info('translator ready', { model: translator.model, assets: assets?.kind ?? 'none' })
 
     if (has('scheduler')) {
@@ -133,7 +146,8 @@ async function main() {
       secrets: [config.RELAY_SECRET ?? '', config.RELAY_SECRET_PREVIOUS ?? ''],
       port: config.RELAY_PORT,
       timeoutMs: config.FETCH_TIMEOUT_MS,
-      allowPrivateHosts: process.env.WORKER_ALLOW_PRIVATE_HOSTS === '1',
+      allowPrivateHosts: allowPrivateHosts(),
+      fetch: outbound,
     })
     log.info('relay listening', { port: relay.port })
     stops.push(relay.stop)

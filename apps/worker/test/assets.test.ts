@@ -111,4 +111,27 @@ describe('processSiteAssets', () => {
     ;[row] = await t.db.select().from(sites).where(eq(sites.id, site!.id))
     expect(row?.assetsCheckedAt).toBeNull()
   })
+
+  test('stamps the site even when storing an asset throws, so it is not queued on every fetch', async () => {
+    const [site] = await t.db.insert(sites).values({ homeUrl: server.origin }).returning()
+    server.text('/', '<html><head><link rel="icon" href="/icon.png"></head></html>', {
+      headers: { 'content-type': 'text/html' },
+    })
+    server.set('/icon.png', (_req, res) => {
+      res.writeHead(200, { 'content-type': 'image/png', 'content-length': PNG.length })
+      res.end(PNG)
+    })
+    const broken = {
+      kind: 'broken',
+      put: async () => {
+        throw new Error('bucket unavailable')
+      },
+    }
+    await expect(processSiteAssets({ db: t.db, http, store: broken }, site!.id)).rejects.toThrow(
+      'bucket unavailable',
+    )
+    const [row] = await t.db.select().from(sites).where(eq(sites.id, site!.id))
+    expect(row?.assetsCheckedAt).not.toBeNull()
+    expect(row?.faviconKey).toBeNull()
+  })
 })

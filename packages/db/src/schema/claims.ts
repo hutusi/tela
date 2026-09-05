@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { authenticatedRole, authUid } from 'drizzle-orm/supabase'
@@ -15,7 +16,10 @@ import { claimMethodEnum, claimStatusEnum } from './enums'
 import { profiles } from './profiles'
 import { sites } from './sites'
 
-/** A user's attempt to prove they own a site. Verified by the claim worker role. */
+/**
+ * A user's attempt to prove they own a site, one per user and site. Verified by the claim
+ * worker role, which also refuses to move a site away from a member who already proved control.
+ */
 export const siteClaims = pgTable(
   'site_claims',
   {
@@ -35,7 +39,7 @@ export const siteClaims = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index('site_claims_site_id_idx').on(t.siteId),
+    uniqueIndex('site_claims_site_user_key').on(t.siteId, t.userId),
     index('site_claims_user_id_idx').on(t.userId),
     pgPolicy('site_claims_select_own', {
       for: 'select',
@@ -55,11 +59,16 @@ export const llmUsage = pgTable(
       onDelete: 'set null',
     }),
     targetLang: text('target_lang'),
+    /** Member whose request caused the call (reader-initiated work); null for background jobs. */
+    userId: uuid('user_id').references(() => profiles.id, { onDelete: 'set null' }),
     model: text('model').notNull(),
     inputTokens: integer('input_tokens'),
     outputTokens: integer('output_tokens'),
     latencyMs: integer('latency_ms'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('llm_usage_created_at_idx').on(t.createdAt)],
+  (t) => [
+    index('llm_usage_created_at_idx').on(t.createdAt),
+    index('llm_usage_user_id_created_at_idx').on(t.userId, t.createdAt),
+  ],
 ).enableRLS()

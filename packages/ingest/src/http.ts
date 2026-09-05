@@ -1,4 +1,5 @@
 import type { FetchRegion } from '@tela/shared'
+import { isBlockedHost } from './net'
 
 export type HttpErrorKind = 'timeout' | 'network' | 'too_large' | 'redirect_loop' | 'blocked'
 
@@ -30,6 +31,8 @@ export type HttpGetOptions = {
   lastModified?: string | null
   region?: FetchRegion
   accept?: string
+  /** Override the client's timeout for this request (a quick side lookup inside a bounded job). */
+  timeoutMs?: number
 }
 
 export type HttpClient = {
@@ -60,15 +63,6 @@ const RELAY_HEADROOM_MS = 10_000
 const DEFAULT_ACCEPT =
   'application/rss+xml, application/atom+xml, application/feed+json, application/xml;q=0.9, text/xml;q=0.9, text/html;q=0.8, */*;q=0.5'
 
-const PRIVATE_HOST =
-  /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|169\.254\.\d+\.\d+|0\.0\.0\.0|\[::1\]|\[fc[0-9a-f]{2}:.*\]|\[fe80:.*\])$/i
-
-export function isBlockedHost(hostname: string): boolean {
-  return (
-    PRIVATE_HOST.test(hostname) || hostname.endsWith('.local') || hostname.endsWith('.internal')
-  )
-}
-
 function charsetOf(contentType: string | null, body: Uint8Array): string {
   const fromHeader = contentType?.match(/charset=["']?([\w-]+)/i)?.[1]
   if (fromHeader) return fromHeader.toLowerCase()
@@ -92,11 +86,15 @@ export function classify(err: unknown): HttpError {
   const e = err as {
     name?: string
     code?: string
-    cause?: { code?: string; name?: string }
+    cause?: { code?: string; name?: string; message?: string }
     message?: string
   }
   const code = e.cause?.code ?? e.code ?? ''
   const name = e.name ?? e.cause?.name ?? ''
+  // The worker's DNS-pinned fetch refuses names that resolve to private addresses.
+  if (code === 'EBLOCKED') {
+    return new HttpError('blocked', e.cause?.message ?? e.message ?? 'address not allowed')
+  }
   if (
     name === 'TimeoutError' ||
     name === 'AbortError' ||
@@ -107,22 +105,44 @@ export function classify(err: unknown): HttpError {
   return new HttpError('network', `request failed (${code || name || e.message || 'unknown'})`)
 }
 
-export async function readCapped(response: Response, maxBytes: number): Promise<Uint8Array> {
-  const reader = response.body?.getReader()
-  if (!reader) return new Uint8Array()
+/**
+ * Pass bytes through until `maxBytes`, then fail the stream with a `too_large` HttpError and
+ * cancel the upstream body. Counts what actually arrives, so a missing or dishonest
+ * Content-Length changes nothing; usable for proxying as well as for buffering.
+ */
+export function cappedStream(
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+): ReadableStream<Uint8Array> {
+  let total = 0
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        total += chunk.byteLength
+        if (total > maxBytes) {
+          controller.error(new HttpError('too_large', `response exceeds ${maxBytes} bytes`))
+          return
+        }
+        controller.enqueue(chunk)
+      },
+    }),
+  )
+}
+
+/** Buffer a body through `cappedStream`. Accepts a Request as well as a Response. */
+export async function readCapped(
+  message: { body: ReadableStream<Uint8Array> | null },
+  maxBytes: number,
+): Promise<Uint8Array> {
+  if (!message.body) return new Uint8Array()
+  const reader = cappedStream(message.body, maxBytes).getReader()
   const chunks: Uint8Array[] = []
   let total = 0
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
-    if (value) {
-      total += value.byteLength
-      if (total > maxBytes) {
-        await reader.cancel().catch(() => {})
-        throw new HttpError('too_large', `response exceeds ${maxBytes} bytes`)
-      }
-      chunks.push(value)
-    }
+    total += value.byteLength
+    chunks.push(value)
   }
   const out = new Uint8Array(total)
   let offset = 0
@@ -148,18 +168,26 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
   const sleep = options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
   const lastRequestAt = new Map<string, number>()
 
-  async function politeWait(host: string) {
+  /** Space requests to a host; refused, without sleeping, when the wait would outlast `budgetMs`. */
+  async function politeWait(host: string, budgetMs: number): Promise<boolean> {
     const last = lastRequestAt.get(host)
     if (last !== undefined) {
       const wait = last + politenessMs - now()
+      if (wait > budgetMs) return false
       if (wait > 0) await sleep(wait)
     }
     lastRequestAt.set(host, now())
+    return true
   }
 
   return {
     async get(url, opts = {}) {
       const started = now()
+      // One deadline for the whole request, redirects and politeness waits included, so a chain
+      // of slow hops cannot multiply the timeout.
+      const deadline = started + (opts.timeoutMs ?? timeoutMs)
+      const remaining = () => deadline - now()
+      const expired = () => new HttpError('timeout', `deadline passed after ${hops} redirects`)
       const headers: Record<string, string> = {
         'user-agent': options.userAgent,
         accept: opts.accept ?? DEFAULT_ACCEPT,
@@ -179,7 +207,8 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
         if (!options.allowPrivateHosts && isBlockedHost(parsed.hostname)) {
           throw new HttpError('blocked', `host ${parsed.hostname} is not allowed`)
         }
-        await politeWait(parsed.host)
+        if (!(await politeWait(parsed.host, remaining()))) throw expired()
+        if (remaining() <= 0) throw expired()
 
         const relay = opts.region === 'cn' ? options.relay : undefined
         const init: RequestInit = {
@@ -187,7 +216,7 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
           headers,
           redirect: 'manual',
           // The relay applies the same timeout upstream; give its round trip some headroom.
-          signal: AbortSignal.timeout(relay ? timeoutMs + RELAY_HEADROOM_MS : timeoutMs),
+          signal: AbortSignal.timeout(remaining() + (relay ? RELAY_HEADROOM_MS : 0)),
         }
         let response: Response
         try {

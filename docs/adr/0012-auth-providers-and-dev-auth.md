@@ -13,7 +13,10 @@ and end-to-end tests need to sign in without a Supabase project or Docker.
 - Providers: email one-time code (custom SMTP via Resend, deliverability to qq.com/163.com must
   be tested), GitHub, Google. No passwords. WeChat is out of scope.
 - Sessions live in Supabase cookies managed by `@supabase/ssr`; server code verifies the JWT
-  locally with `auth.getClaims()` instead of a network round trip per request.
+  locally with `auth.getClaims()` instead of a network round trip per request. The refresh of an
+  expiring session happens in the request proxy (`apps/web/src/middleware.ts`), never only inside a
+  Server Component: a component cannot write cookies, and with refresh-token rotation enabled a
+  refresh whose cookies are dropped leaves the browser holding a revoked token.
 - `profiles` rows are created by the database trigger on `auth.users`, so every session has a
   profile.
 - **Dev-auth mode**: with `TELA_DEV_AUTH=1` every request is the fixed development user

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { createDb, type Db } from '../client'
+import { createDb, type Db, type Tx } from '../client'
 import { prepareDatabase, startLocalCluster } from './local-postgres'
 
 export { prepareDatabase, startLocalCluster } from './local-postgres'
@@ -38,8 +38,6 @@ export async function startTestDb(): Promise<TestDb> {
     },
   }
 }
-
-type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 
 /** Run `fn` as the given Supabase role and user, inside one transaction (RLS applies). */
 export async function asUser<T>(

@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'bun:test'
+import { MockLanguageModelV4 } from 'ai/test'
 import { chunkBlocks, estimateTokens } from './chunk'
 import { createMockTranslator } from './mock'
-import { configFromEnv } from './providers'
-import { translateBlocks } from './translate'
-import { parseJsonReply } from './translator'
+import { buildUserPayload } from './prompt'
+import { configFromEnv, isAccidentalMock } from './providers'
+import { type TranslateBlocksInput, translateBlocks } from './translate'
+import { createSdkTranslator, parseJsonReply } from './translator'
+import type { TranslationRequest } from './types'
 import { validateTranslation } from './validate'
 
 describe('chunking', () => {
@@ -116,6 +119,42 @@ describe('translateBlocks with the mock translator', () => {
     expect(calls[1]?.context?.previous?.length).toBeGreaterThan(0)
   })
 
+  test('stops at the source-token ceiling and never sends the rest', async () => {
+    const calls: Parameters<ReturnType<typeof createMockTranslator>['translate']>[0][] = []
+    const out = await translateBlocks(createMockTranslator({ calls }), {
+      blocks,
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+      maxSourceTokens: 20,
+    })
+    expect([...out.translated.keys()]).toEqual(['b1'])
+    expect(out.failed).toEqual([
+      { id: 'b2', reason: 'article too long' },
+      { id: 'b3', reason: 'article too long' },
+    ])
+    // One call, and no strict retry for the blocks that were never sent.
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.blocks.map((b) => b.id)).toEqual(['b1'])
+  })
+
+  test('reports every successful call through onChunk as it lands', async () => {
+    const calls: Parameters<ReturnType<typeof createMockTranslator>['translate']>[0][] = []
+    const chunks: Array<{ ids: string[]; inputTokens: number }> = []
+    const out = await translateBlocks(createMockTranslator({ calls }), {
+      blocks,
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+      maxTokensPerChunk: 20,
+      onChunk: async ({ translated, usage }) => {
+        chunks.push({ ids: [...translated.keys()], inputTokens: usage.inputTokens })
+      },
+    })
+    expect(out.failed).toEqual([])
+    expect(chunks).toHaveLength(calls.length)
+    expect(chunks.flatMap((c) => c.ids).sort()).toEqual(['b1', 'b2', 'b3'])
+    expect(chunks.every((c) => c.inputTokens > 0)).toBe(true)
+  })
+
   test('throws when the provider fails for every chunk', async () => {
     await expect(
       translateBlocks(createMockTranslator({ fail: true }), {
@@ -127,9 +166,58 @@ describe('translateBlocks with the mock translator', () => {
   })
 })
 
+describe('translateBlocks deadline', () => {
+  test('stops starting provider calls once the deadline has passed, and says so', async () => {
+    const calls: TranslationRequest[] = []
+    const inner = createMockTranslator({ calls })
+    const input: TranslateBlocksInput = {
+      blocks: [
+        { id: 'a', text: 'x'.repeat(400) },
+        { id: 'b', text: 'y'.repeat(400) },
+      ],
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+      maxTokensPerChunk: 100,
+      deadline: Date.now() + 60_000,
+    }
+    const translator = {
+      model: inner.model,
+      translate: async (req: TranslationRequest) => {
+        // Time runs out while the first chunk is in flight.
+        input.deadline = Date.now() - 1
+        return inner.translate(req)
+      },
+    }
+    const out = await translateBlocks(translator, input)
+    expect(calls.map((c) => c.blocks.map((b) => b.id))).toEqual([['a']])
+    expect(out.stopped).toBe(true)
+    expect([...out.translated.keys()]).toEqual(['a'])
+    expect(out.failed).toEqual([])
+    // Without a deadline the run is never stopped.
+    const { deadline: _deadline, ...noDeadline } = input
+    expect((await translateBlocks(inner, noDeadline)).stopped).toBe(false)
+  })
+})
+
 describe('configFromEnv', () => {
   test('falls back to the mock without keys and honors overrides', () => {
     expect(configFromEnv({})).toEqual({ provider: 'mock', model: 'mock' })
+    expect(isAccidentalMock(configFromEnv({}), {})).toBe(true)
+    expect(
+      isAccidentalMock(configFromEnv({ LLM_PROVIDER: 'mock' }), { LLM_PROVIDER: 'mock' }),
+    ).toBe(false)
+    // The mock never borrows a real model's name, so its cache rows stay recognizable.
+    expect(configFromEnv({ LLM_PROVIDER: 'mock', LLM_MODEL: 'glm-5.2' })).toEqual({
+      provider: 'mock',
+      model: 'mock',
+    })
+    expect(configFromEnv({ LLM_PROVIDER: 'bailian', LLM_MODEL: 'glm-5.2' })).toEqual({
+      provider: 'mock',
+      model: 'mock',
+    })
+    expect(() => configFromEnv({ LLM_PROVIDER: 'bailain', BAILIAN_API_KEY: 'k' })).toThrow(
+      /Unknown LLM_PROVIDER "bailain"/,
+    )
     expect(configFromEnv({ LLM_PROVIDER: 'bailian', BAILIAN_API_KEY: 'k' })).toMatchObject({
       provider: 'bailian',
       model: 'glm-5.2',
@@ -145,5 +233,49 @@ describe('configFromEnv', () => {
       provider: 'anthropic',
       model: 'claude-sonnet-5',
     })
+  })
+})
+
+describe('buildUserPayload', () => {
+  test('clips context strings so a feed cannot grow every prompt', () => {
+    const payload = JSON.parse(
+      buildUserPayload({
+        sourceLang: 'en',
+        targetLang: 'zh-Hans',
+        blocks: [{ id: 'b1', text: 'Hello' }],
+        context: {
+          title: 'T'.repeat(5000),
+          siteTitle: 'S'.repeat(5000),
+          previous: [{ source: 'p'.repeat(5000), target: 'q'.repeat(5000) }],
+        },
+      }),
+    ) as {
+      context: { title: string; site: string; previous: Array<{ source: string; target: string }> }
+    }
+    expect(payload.context.title).toHaveLength(201)
+    expect(payload.context.site).toHaveLength(201)
+    expect(payload.context.previous[0]?.source).toHaveLength(401)
+    expect(payload.context.previous[0]?.target).toHaveLength(401)
+  })
+})
+
+describe('createSdkTranslator', () => {
+  test('a provider call that never answers is abandoned at the deadline', async () => {
+    const model = new MockLanguageModelV4({
+      doGenerate: (options) =>
+        new Promise((_, reject) => {
+          options.abortSignal?.addEventListener('abort', () => reject(options.abortSignal?.reason))
+        }),
+    })
+    const translator = createSdkTranslator(model, { modelName: 'never', timeoutMs: 50 })
+    await expect(
+      translator.translate({
+        sourceLang: 'en',
+        targetLang: 'zh-Hans',
+        blocks: [{ id: 'a', text: 'hi' }],
+        context: { previous: [] },
+        strict: false,
+      }),
+    ).rejects.toThrow()
   })
 })

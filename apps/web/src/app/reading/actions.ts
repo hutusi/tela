@@ -1,7 +1,9 @@
 'use server'
 
-import { articles } from '@tela/db'
+import { estimateTokens, taggedTextsOf } from '@tela/content'
+import { articleContents, articles } from '@tela/db'
 import {
+  consumeRateLimit,
   markAllRead,
   markRead,
   recommend,
@@ -10,7 +12,11 @@ import {
   unrecommend,
 } from '@tela/db/queries'
 import { createJobSender } from '@tela/db/queue'
-import { isReadingLanguage } from '@tela/shared'
+import {
+  isReadingLanguage,
+  MAX_ARTICLE_TRANSLATION_TOKENS,
+  USER_DAILY_TRANSLATION_TOKENS,
+} from '@tela/shared'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { requireUser } from '@/lib/auth'
@@ -51,32 +57,60 @@ export async function toggleLikeAction(
 export async function requestTranslationAction(
   articleId: number,
   targetLang: string,
-): Promise<'requested' | 'in_progress' | 'ready' | 'invalid'> {
-  await requireUser()
+): Promise<
+  | 'requested'
+  | 'in_progress'
+  | 'ready'
+  | 'invalid'
+  | 'rate_limited'
+  | 'budget_exhausted'
+  | 'unavailable'
+> {
+  const user = await requireUser()
   const target = id(articleId)
   if (!target || !isReadingLanguage(targetLang)) return 'invalid'
   const db = await getDb()
+  // On-demand requests skip the daily budget, so this is the only ceiling on what one account
+  // can make the model do.
+  if (!(await consumeRateLimit(db, 'translate', user.id)).allowed) return 'rate_limited'
   const [article] = await db
-    .select({ contentHash: articles.contentHash })
+    .select({ contentHash: articles.contentHash, html: articleContents.html })
     .from(articles)
+    .leftJoin(articleContents, eq(articleContents.articleId, articles.id))
     .where(eq(articles.id, target))
   if (!article) return 'invalid'
-  const outcome = await requestBodyTranslation(db, target, targetLang, article.contentHash)
-  if (outcome === 'requested') {
-    try {
-      await createJobSender(db).send(
+  // What this attempt would send, estimated the way the worker chunks it and capped like the
+  // worker caps it; reserved against the member's daily allowance until the attempt concludes,
+  // so a burst of requests cannot all be admitted on usage that has not been recorded yet.
+  const reserveTokens = Math.min(
+    MAX_ARTICLE_TRANSLATION_TOKENS,
+    Object.values(taggedTextsOf(article.html ?? '')).reduce(
+      (n, text) => n + estimateTokens(text),
+      0,
+    ),
+  )
+  // The job is inserted in the same transaction as the `requested` status (ADR 0004): if the
+  // queue is unavailable the status rolls back too, and the reader can simply ask again.
+  return requestBodyTranslation(
+    db,
+    target,
+    targetLang,
+    article.contentHash,
+    async (tx, attempt) => {
+      await createJobSender(tx).send(
         'translate.body',
-        { articleId: target, targetLang },
+        { articleId: target, targetLang, onDemand: true, requestedBy: user.id, attempt },
         { singletonKey: `${target}:${targetLang}`, priority: 10 },
       )
-    } catch (err) {
-      console.warn('[tela] could not enqueue translate.body', {
-        articleId: target,
-        err: String(err),
-      })
-    }
-  }
-  return outcome
+    },
+    { requestedBy: user.id, reserveTokens, allowanceTokens: USER_DAILY_TRANSLATION_TOKENS },
+  ).catch((err: unknown) => {
+    console.warn('[tela] could not request translate.body', {
+      articleId: target,
+      err: String(err),
+    })
+    return 'unavailable' as const
+  })
 }
 
 export async function recommendAction(

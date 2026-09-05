@@ -47,11 +47,30 @@ export function buildSystemPrompt(request: TranslationRequest): string {
   return lines.join('\n')
 }
 
-/** The user message: JSON payload with context and blocks. */
+/** Context strings are hints for consistency; a feed can make them arbitrarily long, so they are clipped. */
+export const MAX_CONTEXT_TITLE_CHARS = 200
+export const MAX_CONTEXT_PREVIOUS_CHARS = 400
+
+function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+/**
+ * The user message: JSON payload with context and blocks. Blocks are bounded by chunking and the
+ * per-article ceiling; the context is bounded here, so nothing an attacker controls can grow a
+ * prompt past a few hundred extra tokens.
+ */
 export function buildUserPayload(request: TranslationRequest): string {
   const context: Record<string, unknown> = {}
-  if (request.context?.title) context.title = request.context.title
-  if (request.context?.siteTitle) context.site = request.context.siteTitle
-  if (request.context?.previous?.length) context.previous = request.context.previous
+  if (request.context?.title) context.title = clip(request.context.title, MAX_CONTEXT_TITLE_CHARS)
+  if (request.context?.siteTitle) {
+    context.site = clip(request.context.siteTitle, MAX_CONTEXT_TITLE_CHARS)
+  }
+  if (request.context?.previous?.length) {
+    context.previous = request.context.previous.map((p) => ({
+      source: clip(p.source, MAX_CONTEXT_PREVIOUS_CHARS),
+      target: clip(p.target, MAX_CONTEXT_PREVIOUS_CHARS),
+    }))
+  }
   return JSON.stringify({ context, blocks: request.blocks })
 }

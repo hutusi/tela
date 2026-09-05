@@ -79,7 +79,8 @@
     "cancel": "取消",
     "recommended": "已推荐。",
     "recommendedWithNote": "已附上你的推荐语。",
-    "unrecommended": "已取消推荐。"
+    "unrecommended": "已取消推荐。",
+    "fetchingFullText": "正在从原站获取全文…"
   },
   "add": {
     "title": "添加订阅",
@@ -99,7 +100,8 @@
       "invalid_url": "这不像是一个 URL。",
       "fetch_failed": "无法访问该地址。",
       "opml_invalid": "该文件不是 OPML 文档。",
-      "rate_limited": "操作太频繁，请稍后再试。"
+      "rate_limited": "操作太频繁，请稍后再试。",
+      "opml_too_large": "OPML 文件超过 1 MB。"
     }
   },
   "translation": {
@@ -113,7 +115,10 @@
       "orig": "原文"
     },
     "columnTranslated": "{target} · 译文",
-    "columnOriginal": "原文"
+    "columnOriginal": "原文",
+    "rateLimited": "翻译请求过于频繁，请稍后再试。",
+    "budgetExhausted": "今日的翻译额度已用完，明天会重置。",
+    "retry": "重新翻译"
   },
   "discover": {
     "title": "独立博客，任何语言。",

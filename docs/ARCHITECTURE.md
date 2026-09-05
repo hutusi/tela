@@ -55,9 +55,11 @@ Tables live in `packages/db/src/schema/`. bigint identity ids on high-volume tab
 | `rate_limits` | Fixed-window counters per action and member (`consumeRateLimit`). Service-only. |
 | `websub_subscriptions` | One per feed with a hub: topic, shared secret, status (pending/active/failed), lease. Service-only. |
 
-Row-level security is enabled on every table. Content tables are readable by `anon` and
-`authenticated`; user tables are owner-only via `(select auth.uid())`; writes happen through the
-service connection. Application code is the authority; RLS is the backstop (ADR 0003).
+Row-level security is enabled on every table and every policy is a `select`: members read all
+content tables, anonymous callers only the rows of `listed`/`featured` sites, and user tables are
+owner-readable via `(select auth.uid())`. No policy grants a write, so the Supabase Data API can
+never bypass the counters, rate limits, and handle rules that live in application code; all
+writes go through the service connection, which is the authority (ADR 0003).
 
 Unread count per feed = `articles.id > watermark_id AND fetched_at > now() - 30 days AND NOT EXISTS
 read row`. "Mark all read" moves the watermark and compacts read rows below it.
@@ -109,8 +111,8 @@ runtime-agnostic so the web app can reuse discovery; `apps/worker` only wires it
   paths; every result is fetched and parsed before being returned.
 - `ensureFeed` / `ensureSite`: feed rows keyed by `feed_url`, sites keyed by normalized origin;
   new feeds are due immediately, so the next scheduler tick fetches them.
-- `fetchFeed(db, http, feedId)`: conditional GET → body-hash short-circuit → parse → upsert
-  articles by dedup key (new rows, or `content_version + 1` when the content hash changed) → fill
+- `fetchFeed(db, http, feedId)`: conditional GET → body-hash short-circuit → parse → keep the newest
+  200 items → upsert articles by dedup key (new rows, or `content_version + 1` when the content hash changed) → fill
   site metadata → learn `content_mode` from three samples → reschedule. Interval = half the
   average gap between posts over 7 days, clamped to 30 min…24 h, ×1.5 when unchanged, raised to the
   publisher's `ttl`/`max-age` floor, ±10% jitter. Errors back off `interval × 2^n` capped at 7 days;
@@ -143,7 +145,13 @@ carries the previous chunk's tail as context.
 - **Reader**: `TranslationBar` (written in X, translated by Tela, status) with Side by side /
   Translation / Original modes (`?mode=`); the list shows translated titles and excerpts and an
   `XX → YY` badge. "Read in" in the header sets `profiles.reading_lang`.
-- **Cost**: `llm_usage` per call; `LLM_DAILY_BUDGET_TOKENS` gates background work only.
+- **Cost**: `llm_usage` per call, written as each chunk lands (a retried or expired job resumes
+  from the cache); `LLM_DAILY_BUDGET_TOKENS` gates background work (title jobs defer to the next
+  day on a cache miss once it is spent); reader requests carry `onDemand: true` in the job payload,
+  are rate-limited per member (`translate`, 30 per hour) and reserved against
+  `USER_DAILY_TRANSLATION_TOKENS` a day when requested (`article_translations.reserved_tokens`,
+  reconciled against `llm_usage.user_id` when the attempt concludes), and every body is capped at
+  `LLM_MAX_ARTICLE_TOKENS` source tokens (default 40,000), the rest rendering as source.
 
 ## Queue
 
@@ -156,9 +164,9 @@ declares every queue with its policy, retries, expiry, and a `<name>.dead` dead-
 | `maintenance.daily` | cron `17 3 * * *` | scheduler | revives dead feeds once a week, re-probes relay-routed feeds, prunes rate-limit windows |
 | `health.check` | cron `*/5 * * * *` (and at startup) | scheduler | logs queue depth, dead letters, failures in the last hour, and overdue feeds; `warn` level when something needs a look |
 | `feed.fetch` | scheduler, web (add feed) | fetch | `short` policy, 3 retries with backoff, 120 s expiry |
-| `article.extract` | web (first open) | extract | lazy full-text extraction for summary-only feeds |
-| `translate.title` | fetch (newest first) | translate | batches of 5, 4 in flight; every reading language the article is not in |
-| `translate.body` | web (open), fetch (prefetch) | translate | priority 10 on demand, 1 in the background; singleton per article and language |
+| `article.extract` | web (opening a summary-only article, or a summary-sized one from a feed too small to classify; at most one job per article per 10 minutes via `extract_requested_at`; `extract_checked_at` records a final outcome, transient failures retry) | extract | lazy full-text extraction; the reader polls and shows a hint until it lands |
+| `translate.title` | fetch (in the article's own transaction; at most 100 articles per fetch) | translate | batches of 5, 4 in flight; every reading language the article is not in; deferred to the next day when the budget is spent |
+| `translate.body` | web (open, same transaction as the `requested` row), scheduler (re-sends rows stuck `requested` for 5 min or `running` without a heartbeat for 15 min, at most twice, then gives up) | translate | priority 10 with `onDemand: true`; singleton per article and language |
 | `websub.subscribe` | fetch (feed advertises a hub), maintenance (renewals) | fetch | asks the hub to push to `/api/websub/<feedId>`; only when `WEBSUB_ENABLED=1` |
 | `site.assets` | fetch [phase 6] | assets | favicons and covers to R2 |
 | `site.claim.verify` | web [phase 6] | claim | claim verification |
@@ -176,7 +184,9 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 - Design tokens from `Tela.dc.html` live in `apps/web/src/app/globals.css` (`@theme`). Fonts
   (EB Garamond, Figtree) are self-hosted by `next/font`. See `docs/DESIGN.md`.
 - Auth: `lib/auth.ts` (Supabase SSR cookies, `getClaims()`, dev-auth mode; ADR 0012). Pages call
-  `requireUser()`; there is no middleware.
+  `requireUser()`. `src/middleware.ts` runs before every non-static request and refreshes an expiring
+  session, forwarding the rotated cookies to both the render and the browser: Server Components
+  cannot write cookies, and with refresh-token rotation a dropped refresh logs the reader out.
 - Reader queries live in `packages/db/src/queries/reader.ts` (`listSubscriptions`, `countTotals`,
   `listArticles` with keyset paging, `getArticle`, `markRead`, `markAllRead`, `toggleLike`,
   `subscribe`) and are tested in `packages/db/test/reader.test.ts`.
@@ -214,7 +224,10 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
   `similarity()`. Trigrams handle CJK substrings without a tokenizer; PGroonga is the upgrade
   path when full-text ranking is needed.
 - **Outbound fetches** from the web app (discovery, claim start) use the same HTTP client as the
-  worker: private ranges refused, 10 s timeout, 5 MB cap.
+  worker: private ranges refused, 10 s timeout, 5 MB cap. The worker additionally pins every
+  connection to the addresses it resolved and refuses names that resolve to a private address
+  (`apps/worker/src/net/safe-fetch.ts`); on Cloudflare the `global_fetch_strictly_public` flag
+  plays that role, and the image proxy checks the host name as well.
 
 ## Roadmap (milestone 1, branch `feat/mvp`)
 

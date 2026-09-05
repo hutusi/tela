@@ -1,0 +1,1 @@
+ALTER TABLE "translations" DROP COLUMN "source_lang_hint";

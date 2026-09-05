@@ -1,37 +1,47 @@
-import { articles, feeds } from '@tela/db'
+import { feeds } from '@tela/db'
 import { siteNeedsAssets } from '@tela/db/queries'
-import { fetchFeed, type RegionPolicy } from '@tela/ingest'
+import { createJobSender } from '@tela/db/queue'
+import { type FetchFeedOptions, fetchFeed, type RegionPolicy } from '@tela/ingest'
 import { READING_LANGUAGES } from '@tela/shared'
-import { desc, eq, inArray, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { Job } from 'pg-boss'
 import type { WorkerContext } from '../context'
 import { log } from '../logger'
 import { type FeedFetchJob, QUEUES } from '../queues'
 import { maybeQueueWebsub } from './websub'
 
-/** Queue eager title/excerpt translation into every reading language the article is not in. */
-async function enqueueTitleTranslations(ctx: WorkerContext, articleIds: number[]) {
-  if (articleIds.length === 0) return 0
-  // Newest first, in the order the list shows them: pg-boss serves equal priorities in creation
-  // order, so the titles readers see at the top are translated first.
-  const rows = await ctx.db
-    .select({ id: articles.id, sourceLang: articles.sourceLang })
-    .from(articles)
-    .where(inArray(articles.id, articleIds))
-    .orderBy(desc(sql`coalesce(${articles.publishedAt}, ${articles.fetchedAt})`), desc(articles.id))
-  let sent = 0
-  for (const row of rows) {
+/**
+ * Ceiling on articles per fetch that get eager title jobs. A first fetch of a long archive, or
+ * a hostile feed with thousands of items, otherwise turns into that many model calls; feeds
+ * list newest first, and those are the posts lists show, so they are the ones worth it.
+ */
+export const TITLE_JOBS_PER_FETCH = 100
+
+/**
+ * Title/excerpt translation into every reading language the article is not in, queued through
+ * the article's own transaction so the jobs commit with it: a crash between storing an article
+ * and queueing its titles cannot lose them, and a retried fetch (which sees those articles as
+ * unchanged) has nothing to make up. pg-boss serves equal priorities in creation order, so the
+ * newest posts are translated first as well.
+ */
+function titleEnqueuer(counters: {
+  articles: number
+  jobs: number
+}): NonNullable<FetchFeedOptions['onArticleStored']> {
+  return async (tx, article) => {
+    if (counters.articles >= TITLE_JOBS_PER_FETCH) return
+    counters.articles += 1
+    const sender = createJobSender(tx)
     for (const target of READING_LANGUAGES) {
-      if (row.sourceLang === target) continue
-      const id = await ctx.boss.send(
+      if (article.sourceLang === target) continue
+      const id = await sender.send(
         QUEUES.translateTitle,
-        { articleId: row.id, targetLang: target },
-        { singletonKey: `${row.id}:${target}`, priority: 5 },
+        { articleId: article.id, targetLang: target },
+        { singletonKey: `${article.id}:${target}`, priority: 5 },
       )
-      if (id) sent += 1
+      if (id) counters.jobs += 1
     }
   }
-  return sent
 }
 
 /** First successful fetch of a site: look for its favicon and cover once. */
@@ -68,21 +78,13 @@ export async function handleFeedFetch(ctx: WorkerContext, jobs: Job<FeedFetchJob
   const policy = regionPolicy(ctx)
   for (const job of jobs) {
     const started = Date.now()
-    const result = await fetchFeed(
-      ctx.db,
-      ctx.http,
-      job.data.feedId,
-      policy ? { region: policy } : {},
-    )
-    let titleJobs = 0
+    const titles = { articles: 0, jobs: 0 }
+    const result = await fetchFeed(ctx.db, ctx.http, job.data.feedId, {
+      ...(policy ? { region: policy } : {}),
+      onArticleStored: titleEnqueuer(titles),
+    })
     let websub = false
-    if (result.status === 'fetched') {
-      titleJobs = await enqueueTitleTranslations(ctx, [
-        ...result.newArticleIds,
-        ...result.updatedArticleIds,
-      ])
-      await enqueueSiteAssets(ctx, job.data.feedId)
-    }
+    if (result.status === 'fetched') await enqueueSiteAssets(ctx, job.data.feedId)
     if (result.status === 'fetched' || result.status === 'unchanged') {
       websub = await maybeQueueWebsub(ctx, job.data.feedId)
     }
@@ -97,7 +99,7 @@ export async function handleFeedFetch(ctx: WorkerContext, jobs: Job<FeedFetchJob
       feedId: job.data.feedId,
       jobId: job.id,
       ms: Date.now() - started,
-      titleJobs,
+      titleJobs: titles.jobs,
       websub,
       ...summary,
     }

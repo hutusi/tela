@@ -50,6 +50,14 @@ function str(value: unknown): string | null {
   return trimmed === '' ? null : trimmed
 }
 
+/** A feed's own title and description are shown and sent to the model; keep them sane. */
+export const MAX_FEED_TITLE_CHARS = 300
+export const MAX_FEED_DESCRIPTION_CHARS = 2000
+
+function clip(value: string | null, max: number): string | null {
+  return value !== null && value.length > max ? `${value.slice(0, max)}…` : value
+}
+
 function toDate(value: unknown): Date | null {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
   if (typeof value !== 'string' || value.trim() === '') return null
@@ -137,8 +145,8 @@ export function parseFeedText(text: string, feedUrl: string): ParsedFeed {
     const base = homeUrl ?? feedUrl
     return {
       format: 'rss',
-      title: str(f.title),
-      description: str(f.description),
+      title: clip(str(f.title), MAX_FEED_TITLE_CHARS),
+      description: clip(str(f.description), MAX_FEED_DESCRIPTION_CHARS),
       homeUrl,
       selfUrl: abs(linkByRel(f.atom?.links, 'self'), feedUrl),
       hubUrl: abs(linkByRel(f.atom?.links, 'hub'), feedUrl),
@@ -175,8 +183,8 @@ export function parseFeedText(text: string, feedUrl: string): ParsedFeed {
     const base = homeUrl ?? feedUrl
     return {
       format: 'atom',
-      title: str(f.title),
-      description: str(f.subtitle),
+      title: clip(str(f.title), MAX_FEED_TITLE_CHARS),
+      description: clip(str(f.subtitle), MAX_FEED_DESCRIPTION_CHARS),
       homeUrl,
       selfUrl: abs(linkByRel(f.links, 'self'), feedUrl),
       hubUrl: abs(linkByRel(f.links, 'hub'), feedUrl),
@@ -207,8 +215,8 @@ export function parseFeedText(text: string, feedUrl: string): ParsedFeed {
     const base = homeUrl ?? feedUrl
     return {
       format: 'json',
-      title: str(f.title),
-      description: str(f.description),
+      title: clip(str(f.title), MAX_FEED_TITLE_CHARS),
+      description: clip(str(f.description), MAX_FEED_DESCRIPTION_CHARS),
       homeUrl,
       selfUrl: abs(f.feed_url, feedUrl),
       hubUrl: abs(first(f.hubs)?.url, feedUrl),
@@ -239,8 +247,8 @@ export function parseFeedText(text: string, feedUrl: string): ParsedFeed {
   const base = homeUrl ?? feedUrl
   return {
     format: 'rdf',
-    title: str(f.title),
-    description: str(f.description),
+    title: clip(str(f.title), MAX_FEED_TITLE_CHARS),
+    description: clip(str(f.description), MAX_FEED_DESCRIPTION_CHARS),
     homeUrl,
     selfUrl: abs(linkByRel(f.atom?.links, 'self'), feedUrl),
     hubUrl: null,

@@ -8,6 +8,11 @@ export async function handleArticleExtract(ctx: WorkerContext, jobs: Job<Article
   for (const job of jobs) {
     const result = await extractArticleContent(ctx.db, ctx.http, job.data.articleId)
     const fields = { articleId: job.data.articleId, jobId: job.id, ...result }
+    if (result.status === 'failed' && result.retryable) {
+      // The article stays unstamped; pg-boss retries with backoff, and a later open can ask again.
+      log.warn('article extraction failed, will retry', fields)
+      throw new Error(`article extraction failed: ${result.error}`)
+    }
     if (result.status === 'failed') log.warn('article extraction failed', fields)
     else log.info('article extraction done', fields)
   }

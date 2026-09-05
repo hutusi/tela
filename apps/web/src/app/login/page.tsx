@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { getSessionUser, supabaseConfig } from '@/lib/auth'
 import { isDevAuthEnabled } from '@/lib/platform/env'
+import { safeNext } from '@/lib/redirect'
 import { continueAsDevUser, signInWithProvider } from './actions'
 import { LoginForm } from './login-form'
 
@@ -14,7 +15,7 @@ export default async function LoginPage({
 }) {
   const { next, error } = await searchParams
   const user = await getSessionUser()
-  if (user) redirect(next?.startsWith('/') ? next : '/reading')
+  if (user) redirect(safeNext(next, '/reading'))
   const t = await getTranslations('login')
   const configured = supabaseConfig() !== null
   const devAuth = await isDevAuthEnabled()

@@ -10,10 +10,12 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from 'drizzle-orm/pg-core'
 import { anonRole, authenticatedRole } from 'drizzle-orm/supabase'
 import { extractedFromEnum, translationStatusEnum } from './enums'
 import { feeds } from './feeds'
+import { profiles } from './profiles'
 
 /**
  * Article metadata. bigint ids give ingest order, which the unread watermark relies on.
@@ -38,6 +40,10 @@ export const articles = pgTable(
     contentVersion: integer('content_version').notNull().default(1),
     wordCount: integer('word_count'),
     readingMinutes: integer('reading_minutes'),
+    /** When full-text extraction last ran for a summary-only article, whatever the outcome. */
+    extractCheckedAt: timestamp('extract_checked_at', { withTimezone: true }),
+    /** When the reader last queued extraction; one request per cooldown window. */
+    extractRequestedAt: timestamp('extract_requested_at', { withTimezone: true }),
     likeCount: integer('like_count').notNull().default(0),
     recommendCount: integer('recommend_count').notNull().default(0),
   },
@@ -47,7 +53,12 @@ export const articles = pgTable(
     index('articles_feed_published_idx').on(t.feedId, t.publishedAt.desc()),
     pgPolicy('articles_select_public', {
       for: 'select',
-      to: [anonRole, authenticatedRole],
+      to: anonRole,
+      using: sql`exists (select 1 from feeds f join sites s on s.id = f.site_id where f.id = ${t.feedId} and s.listing in ('listed', 'featured'))`,
+    }),
+    pgPolicy('articles_select_member', {
+      for: 'select',
+      to: authenticatedRole,
       using: sql`true`,
     }),
   ],
@@ -78,33 +89,40 @@ export const articleContents = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  () => [
+  (t) => [
     pgPolicy('article_contents_select_public', {
       for: 'select',
-      to: [anonRole, authenticatedRole],
+      to: anonRole,
+      using: sql`exists (select 1 from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id where a.id = ${t.articleId} and s.listing in ('listed', 'featured'))`,
+    }),
+    pgPolicy('article_contents_select_member', {
+      for: 'select',
+      to: authenticatedRole,
       using: sql`true`,
     }),
   ],
 )
 
 /**
- * Content-addressed translation cache. Keyed by the block's tagged-text hash and the
- * target language, so identical paragraphs across articles and versions cost once.
+ * Content-addressed translation cache. Keyed by the block's tagged-text hash, the target
+ * language, and the source language ('und' when unknown), so identical paragraphs across
+ * articles and versions cost once, while a homograph such as "Gift" in English and in German
+ * cannot serve the other language's translation.
  */
 export const translations = pgTable(
   'translations',
   {
     sourceHash: text('source_hash').notNull(),
     targetLang: text('target_lang').notNull(),
+    sourceLang: text('source_lang').notNull().default('und'),
     taggedText: text('tagged_text').notNull(),
-    sourceLangHint: text('source_lang_hint'),
     model: text('model').notNull(),
     normVersion: integer('norm_version').notNull(),
     chars: integer('chars'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.sourceHash, t.targetLang] }),
+    primaryKey({ columns: [t.sourceHash, t.targetLang, t.sourceLang] }),
     pgPolicy('translations_select_public', {
       for: 'select',
       to: [anonRole, authenticatedRole],
@@ -127,6 +145,12 @@ export const articleTranslations = pgTable(
     excerpt: text('excerpt'),
     html: text('html'),
     failedBlockIds: text('failed_block_ids').array().notNull().default(sql`'{}'::text[]`),
+    /**
+     * Identity of the current attempt, carried by its job. Every worker write compares against
+     * it on this very row, so a job that was superseded, re-sent, or given up is refused without
+     * a race against the scheduler. Random by default, so rows written outside a request have one.
+     */
+    attempt: uuid('attempt').notNull().defaultRandom(),
     model: text('model'),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -138,8 +162,42 @@ export const articleTranslations = pgTable(
     index('article_translations_status_idx').on(t.status),
     pgPolicy('article_translations_select_public', {
       for: 'select',
-      to: [anonRole, authenticatedRole],
+      to: anonRole,
+      using: sql`exists (select 1 from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id where a.id = ${t.articleId} and s.listing in ('listed', 'featured'))`,
+    }),
+    pgPolicy('article_translations_select_member', {
+      for: 'select',
+      to: authenticatedRole,
       using: sql`true`,
     }),
   ],
 )
+
+/**
+ * Who asked for a body translation and what it was expected to cost. Service-only (RLS enabled,
+ * no policies): the requester must not be readable through the Data API, where article
+ * translations themselves are. A reservation counts against the member's daily allowance while
+ * the matching article_translations row is `requested` or `running`.
+ */
+export const translationRequests = pgTable(
+  'translation_requests',
+  {
+    articleId: bigint('article_id', { mode: 'number' })
+      .notNull()
+      .references(() => articles.id, { onDelete: 'cascade' }),
+    targetLang: text('target_lang').notNull(),
+    requestedBy: uuid('requested_by').references(() => profiles.id, { onDelete: 'set null' }),
+    /** Source tokens the attempt is expected to send, capped at the per-article ceiling. */
+    reservedTokens: integer('reserved_tokens').notNull().default(0),
+    /** Times the scheduler replaced a dead running attempt; past a small bound the row is given up. */
+    resends: integer('resends').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    primaryKey({ columns: [t.articleId, t.targetLang] }),
+    index('translation_requests_requested_by_idx').on(t.requestedBy),
+  ],
+).enableRLS()

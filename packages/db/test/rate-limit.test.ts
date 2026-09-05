@@ -30,6 +30,10 @@ describe('consumeRateLimit', () => {
     // Other subjects and other actions have their own counters.
     expect((await consumeRateLimit(t.db, 'opmlImport', 'user-b', now)).allowed).toBe(true)
     expect((await consumeRateLimit(t.db, 'discover', 'user-a', now)).allowed).toBe(true)
+    expect(await consumeRateLimit(t.db, 'translate', 'user-a', now)).toMatchObject({
+      allowed: true,
+      remaining: RATE_LIMITS.translate.limit - 1,
+    })
 
     // The next fixed window starts fresh.
     const later = new Date('2026-09-04T11:00:00Z')

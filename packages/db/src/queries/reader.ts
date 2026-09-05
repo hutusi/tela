@@ -1,6 +1,6 @@
 import { UNREAD_HORIZON_DAYS } from '@tela/shared'
-import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm'
-import type { Db } from '../client'
+import { and, desc, eq, gt, isNotNull, isNull, lt, or, sql } from 'drizzle-orm'
+import type { Db, DbExecutor } from '../client'
 import {
   articleContents,
   articles,
@@ -198,6 +198,13 @@ export type ArticleDetail = ArticleListItem & {
   blocks: (typeof articleContents.$inferSelect)['blocks']
   contentVersion: number
   contentHash: string | null
+  /** The feed's learned content mode; `summary` feeds get lazy full-text extraction. */
+  contentMode: (typeof feeds.$inferSelect)['contentMode']
+  extractedFrom: (typeof articleContents.$inferSelect)['extractedFrom']
+  /** Null until extraction has been attempted once (see article.extract). */
+  extractCheckedAt: Date | null
+  /** When the reader last queued extraction; one request per cooldown window. */
+  extractRequestedAt: Date | null
   site: {
     id: number
     title: string | null
@@ -267,6 +274,10 @@ export async function getArticle(
     blocks: row.contents?.blocks ?? [],
     contentVersion: a.contentVersion,
     contentHash: a.contentHash,
+    contentMode: row.feed.contentMode,
+    extractedFrom: row.contents?.extractedFrom ?? 'feed',
+    extractCheckedAt: a.extractCheckedAt,
+    extractRequestedAt: a.extractRequestedAt,
     site: {
       id: row.site.id,
       title: row.site.title,
@@ -277,6 +288,37 @@ export async function getArticle(
     },
     isSubscribed: row.watermarkId !== null,
   }
+}
+
+/** Minutes before the reader may queue extraction for the same article again. */
+export const EXTRACT_COOLDOWN_MINUTES = 10
+
+/**
+ * Claim the right to queue extraction for an article: once per cooldown window, and never once
+ * an attempt has concluded (`extract_checked_at`). The caller enqueues only when this returns
+ * true, so a tab that re-renders every two seconds still causes one job per window; pg-boss's
+ * own retries of that job stay inside it.
+ */
+export async function markExtractRequested(
+  db: Db,
+  articleId: number,
+  cooldownMinutes = EXTRACT_COOLDOWN_MINUTES,
+): Promise<boolean> {
+  const rows = await db
+    .update(articles)
+    .set({ extractRequestedAt: new Date() })
+    .where(
+      and(
+        eq(articles.id, articleId),
+        isNull(articles.extractCheckedAt),
+        or(
+          isNull(articles.extractRequestedAt),
+          lt(articles.extractRequestedAt, sql`now() - make_interval(mins => ${cooldownMinutes})`),
+        ),
+      ),
+    )
+    .returning({ id: articles.id })
+  return rows.length > 0
 }
 
 /** Record that the user opened an article. Idempotent. */
@@ -311,28 +353,31 @@ export async function markAllRead(db: Db, userId: string, feedId?: number | null
   })
 }
 
-/** Toggle a like; keeps articles.like_count in step. Returns the new state. */
+/**
+ * Toggle a like; keeps articles.like_count in step. Returns the new state.
+ *
+ * One upsert flips `liked_at` and reports the outcome, so two concurrent toggles serialise on
+ * the row lock and the counter moves by exactly the transition that happened, instead of both
+ * reading the same stale state and double-counting.
+ */
 export async function toggleLike(
   db: Db,
   userId: string,
   articleId: number,
 ): Promise<{ liked: boolean; likeCount: number }> {
   return db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({ likedAt: userArticleStates.likedAt })
-      .from(userArticleStates)
-      .where(and(eq(userArticleStates.userId, userId), eq(userArticleStates.articleId, articleId)))
-    const liked = !(existing?.likedAt != null)
-    await tx
+    const [state] = await tx
       .insert(userArticleStates)
-      .values({ userId, articleId, likedAt: liked ? new Date() : null, readAt: new Date() })
+      .values({ userId, articleId, likedAt: new Date(), readAt: new Date() })
       .onConflictDoUpdate({
         target: [userArticleStates.userId, userArticleStates.articleId],
         set: {
-          likedAt: liked ? new Date() : null,
+          likedAt: sql`case when ${userArticleStates.likedAt} is null then now() else null end`,
           readAt: sql`coalesce(${userArticleStates.readAt}, now())`,
         },
       })
+      .returning({ likedAt: userArticleStates.likedAt })
+    const liked = state?.likedAt != null
     const [row] = await tx
       .update(articles)
       .set({ likeCount: sql`greatest(0, ${articles.likeCount} + ${liked ? 1 : -1})` })
@@ -340,6 +385,25 @@ export async function toggleLike(
       .returning({ likeCount: articles.likeCount })
     return { liked, likeCount: row?.likeCount ?? 0 }
   })
+}
+
+/**
+ * Recount distinct readers across every feed of the given sites. Runs on a transaction handle
+ * too, so a feed move can recount the site it left and the one it joined before committing.
+ */
+export async function recomputeSiteReaderCounts(db: DbExecutor, siteIds: number[]): Promise<void> {
+  const ids = [...new Set(siteIds)]
+  if (ids.length === 0) return
+  await db.execute(sql`
+    update sites s set reader_count = (
+      select count(distinct sub.user_id) from subscriptions sub
+      join feeds f on f.id = sub.feed_id where f.site_id = s.id
+    )
+    where s.id in (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )})
+  `)
 }
 
 /** Recount distinct readers across every feed of the site a feed belongs to. */

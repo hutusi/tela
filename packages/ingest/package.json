@@ -6,7 +6,9 @@
   "description": "Ingestion library: HTTP client, feed discovery, feed fetching, article extraction (no queue, no runtime-specific APIs)",
   "exports": {
     ".": "./src/index.ts",
-    "./extract": "./src/extract-article.ts"
+    "./extract": "./src/extract-article.ts",
+    "./http": "./src/http.ts",
+    "./net": "./src/net.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

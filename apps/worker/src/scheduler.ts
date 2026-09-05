@@ -1,5 +1,10 @@
 import { feeds } from '@tela/db'
-import { pruneRateLimits } from '@tela/db/queries'
+import {
+  abandonStaleAttempts,
+  pruneRateLimits,
+  type SweepPolicy,
+  staleAttempts,
+} from '@tela/db/queries'
 import { DEAD_AFTER_ERRORS, reprobeRelayRegions } from '@tela/ingest'
 import { and, asc, eq, lte, sql } from 'drizzle-orm'
 import type { WorkerContext } from './context'
@@ -24,7 +29,54 @@ export async function schedulerTick(ctx: WorkerContext) {
     )
     if (jobId) enqueued += 1
   }
-  if (due.length > 0) log.info('scheduler tick', { due: due.length, enqueued })
+  const swept = await resweepStuckTranslations(ctx)
+  if (due.length > 0 || swept.resent > 0 || swept.abandoned > 0) {
+    log.info('scheduler tick', { due: due.length, enqueued, ...swept })
+  }
+}
+
+/**
+ * When an attempt counts as lost. The worker heartbeats after every chunk and a provider call
+ * is abandoned after two minutes, so a live attempt writes at least every few minutes; the
+ * handler flips a row to running as soon as it starts, so a `requested` row past the grace
+ * period has no job.
+ */
+export const SWEEP_POLICY: SweepPolicy = {
+  requestedMinutes: 5,
+  runningMinutes: 15,
+  maxResends: 2,
+  abandonedMinutes: 60,
+}
+
+/**
+ * ADR 0004's fallback for lost jobs. The web app inserts translate.body in the same
+ * transaction as the `requested` status, so a `requested` row past the grace period lost its
+ * job (expired, dead-lettered, or from before that change), and a `running` row without a
+ * heartbeat lost its worker. Both get a replacement job; a dead running attempt is replaced
+ * under a fresh id at most `maxResends` times, then the row is given up, which releases its
+ * reservation.
+ */
+export async function resweepStuckTranslations(
+  ctx: Pick<WorkerContext, 'db' | 'boss'>,
+): Promise<{ resent: number; abandoned: number }> {
+  const abandoned = await abandonStaleAttempts(ctx.db, SWEEP_POLICY)
+  let resent = 0
+  for (const row of await staleAttempts(ctx.db, SWEEP_POLICY)) {
+    const id = await ctx.boss.send(
+      QUEUES.translateBody,
+      // The member is restored so recovered work still counts against their allowance.
+      {
+        articleId: row.articleId,
+        targetLang: row.targetLang,
+        onDemand: true,
+        attempt: row.attempt,
+        ...(row.requestedBy ? { requestedBy: row.requestedBy } : {}),
+      },
+      { singletonKey: `${row.articleId}:${row.targetLang}`, priority: 10 },
+    )
+    if (id) resent += 1
+  }
+  return { resent, abandoned }
 }
 
 /** Daily: give dead feeds another chance once a week, and re-probe relay-routed feeds directly. */

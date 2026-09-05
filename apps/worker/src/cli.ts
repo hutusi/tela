@@ -8,11 +8,11 @@ import { createDb } from '@tela/db'
 import { discoverFeeds, ensureFeed, fetchFeed } from '@tela/ingest'
 import { extractArticleContent } from '@tela/ingest/extract'
 import { loadConfig } from './config'
-import { createHttp } from './context'
+import { createHttp, createOutboundFetch } from './context'
 
 const [command, arg] = process.argv.slice(2)
 const config = loadConfig({ ...process.env, WORKER_ROLES: 'fetch' })
-const http = createHttp(config)
+const http = createHttp(config, createOutboundFetch())
 
 if (!command || !arg) {
   console.error('usage: cli.ts <discover|fetch|extract> <url|id>')
