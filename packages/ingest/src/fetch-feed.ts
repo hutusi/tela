@@ -18,7 +18,7 @@ import {
   sites,
   type Tx,
 } from '@tela/db'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, ne, sql } from 'drizzle-orm'
 import { type ContentSample, learnContentMode } from './content-mode'
 import { type HttpClient, HttpError } from './http'
 import { type RegionPolicy, timeoutsWarrantRelay } from './region'
@@ -66,15 +66,17 @@ export type FetchFeedOptions = {
 
 type FeedRow = typeof feeds.$inferSelect
 
-export type HomeUrlOutcome = 'kept' | 'renamed' | 'joined' | 'blocked'
+export type HomeUrlOutcome = 'kept' | 'renamed' | 'joined' | 'split' | 'blocked'
 
 /**
- * Sites are keyed by origin, and a feed added by URL starts on a site keyed by the feed's own
- * origin. A feed served from elsewhere (FeedBurner, a CDN, a hosted newsletter) would leave the
- * blog attached to that host, which is where claim verification looks for the proof and what
- * readers see as the site. Once the feed declares its home, move the feed there: rename the site
- * when that origin is free, join an existing site nobody has claimed, and leave a claimed site
- * alone, since a feed must not be able to attach itself to another member's site.
+ * Sites are keyed by origin, and a feed added by URL starts on a placeholder site keyed by the
+ * feed's own origin. A feed served from elsewhere (FeedBurner, a CDN, a hosted newsletter)
+ * would leave the blog attached to that host, which is where claim verification looks for the
+ * proof and what readers see as the site. Once the feed declares its home, move the feed there:
+ * rename the placeholder when this is its only feed and the declared origin is free, otherwise
+ * give the feed its own site (`split`) or join an existing site nobody has claimed. A claimed
+ * placeholder or a claimed target is left alone: a feed must not be able to move a member's
+ * site or attach itself to one.
  */
 async function adoptDeclaredHome(
   db: Db,
@@ -90,27 +92,52 @@ async function adoptDeclaredHome(
   if (!site || !declared || declared === site.homeUrl || !keyedByFeedHost) {
     return { siteId: feed.siteId, outcome: 'kept' }
   }
+  if (site.claimedBy !== null) return { siteId: site.id, outcome: 'blocked' }
   const [target] = await db
     .select({ id: sites.id, claimedBy: sites.claimedBy })
     .from(sites)
     .where(eq(sites.homeUrl, declared))
-  if (!target) {
+  if (target?.claimedBy) return { siteId: site.id, outcome: 'blocked' }
+
+  const [siblings] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(feeds)
+    .where(and(eq(feeds.siteId, site.id), ne(feeds.id, feed.id)))
+  if (!target && (siblings?.n ?? 0) === 0) {
     await db.update(sites).set({ homeUrl: declared }).where(eq(sites.id, site.id))
     return { siteId: site.id, outcome: 'renamed' }
   }
-  if (target.claimedBy !== null || site.claimedBy !== null) {
-    return { siteId: site.id, outcome: 'blocked' }
-  }
-  await db.transaction(async (tx) => {
-    await tx.update(feeds).set({ siteId: target.id }).where(eq(feeds.id, feed.id))
+
+  // Other feeds share the placeholder: move only this one, onto the existing site or a new one.
+  const targetId = await db.transaction(async (tx) => {
+    let id = target?.id
+    if (id === undefined) {
+      const [created] = await tx
+        .insert(sites)
+        .values({ homeUrl: declared })
+        .onConflictDoNothing({ target: sites.homeUrl })
+        .returning({ id: sites.id })
+      id = created?.id
+      if (id === undefined) {
+        const [raced] = await tx
+          .select({ id: sites.id })
+          .from(sites)
+          .where(eq(sites.homeUrl, declared))
+        id = raced?.id
+      }
+    }
+    if (id === undefined) return undefined
+    await tx.update(feeds).set({ siteId: id }).where(eq(feeds.id, feed.id))
     const [left] = await tx
       .select({ n: sql<number>`count(*)::int` })
       .from(feeds)
       .where(eq(feeds.siteId, site.id))
     if ((left?.n ?? 0) === 0) await tx.delete(sites).where(eq(sites.id, site.id))
+    return id
   })
+  if (targetId === undefined) return { siteId: site.id, outcome: 'kept' }
   await recomputeReaderCount(db, feed.id)
-  return { siteId: target.id, outcome: 'joined' }
+  return { siteId: targetId, outcome: target ? 'joined' : 'split' }
 }
 
 function addSeconds(date: Date, sec: number): Date {

@@ -242,6 +242,45 @@ describe('fetchFeed', () => {
     expect(still?.siteId).not.toBe(claimed!.id)
   })
 
+  test('feeds sharing a placeholder split off one at a time; the last one renames it', async () => {
+    server.text('/a.xml', declaringHome('https://a.example/', '/a.xml'))
+    server.text('/b.xml', declaringHome('https://b.example/', '/b.xml'))
+    const a = await ensureFeed(t.db, { feedUrl: server.url('/a.xml') })
+    const b = await ensureFeed(t.db, { feedUrl: server.url('/b.xml') })
+    expect(a.siteId).toBe(b.siteId)
+
+    // a moves to its own site; b stays on the placeholder, which keeps the feed host's origin.
+    expect(await fetchFeed(t.db, http, a.feedId, opts)).toMatchObject({ siteHome: 'split' })
+    const [aRow] = await t.db.select().from(feeds).where(eq(feeds.id, a.feedId))
+    const [aSite] = await t.db
+      .select()
+      .from(sites)
+      .where(eq(sites.id, aRow?.siteId as number))
+    expect(aSite?.homeUrl).toBe('https://a.example')
+    const [bRow] = await t.db.select().from(feeds).where(eq(feeds.id, b.feedId))
+    expect(bRow?.siteId).toBe(b.siteId)
+    const [placeholder] = await t.db.select().from(sites).where(eq(sites.id, b.siteId))
+    expect(placeholder?.homeUrl).toBe(server.origin)
+
+    // b is now alone on the placeholder, so its fetch renames it.
+    expect(await fetchFeed(t.db, http, b.feedId, opts)).toMatchObject({ siteHome: 'renamed' })
+    const [renamed] = await t.db.select().from(sites).where(eq(sites.id, b.siteId))
+    expect(renamed?.homeUrl).toBe('https://b.example')
+  })
+
+  test('a claimed placeholder is never renamed or split', async () => {
+    const userA = '11111111-1111-4111-8111-111111111111'
+    await t.db.execute(sql`insert into auth.users (id, email) values (${userA}, 'a@x.test')`)
+    server.text('/feed.xml', declaringHome('https://elsewhere.example/'))
+    const mine = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
+    await t.db.update(sites).set({ claimedBy: userA }).where(eq(sites.id, mine.siteId))
+    expect(await fetchFeed(t.db, http, mine.feedId, opts)).toMatchObject({ siteHome: 'blocked' })
+    const [site] = await t.db.select().from(sites).where(eq(sites.id, mine.siteId))
+    expect(site?.homeUrl).toBe(server.origin)
+    const [row] = await t.db.select().from(feeds).where(eq(feeds.id, mine.feedId))
+    expect(row?.siteId).toBe(mine.siteId)
+  })
+
   test('is idempotent: unchanged bodies and 304s add nothing and back off', async () => {
     server.cached('/feed.xml', threeItems(), '"v1"')
     const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
