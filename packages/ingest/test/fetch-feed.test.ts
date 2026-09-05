@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { parseFeedText } from '@tela/content'
-import { articleContents, articles, feeds, sites } from '@tela/db'
+import { parseFeedText, sha256Hex } from '@tela/content'
+import { articleContents, articles, feeds, sites, subscribe } from '@tela/db'
 import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
 import { eq, sql } from 'drizzle-orm'
 import { ensureFeed } from '../src/ensure-feed'
@@ -243,11 +243,20 @@ describe('fetchFeed', () => {
   })
 
   test('feeds sharing a placeholder split off one at a time; the last one renames it', async () => {
+    const userA = '11111111-1111-4111-8111-111111111111'
+    const userB = '22222222-2222-4222-8222-222222222222'
+    await t.db.execute(
+      sql`insert into auth.users (id, email) values (${userA}, 'a@x.test'), (${userB}, 'b@x.test')`,
+    )
     server.text('/a.xml', declaringHome('https://a.example/', '/a.xml'))
     server.text('/b.xml', declaringHome('https://b.example/', '/b.xml'))
     const a = await ensureFeed(t.db, { feedUrl: server.url('/a.xml') })
     const b = await ensureFeed(t.db, { feedUrl: server.url('/b.xml') })
     expect(a.siteId).toBe(b.siteId)
+    await subscribe(t.db, userA, a.feedId)
+    await subscribe(t.db, userB, b.feedId)
+    await subscribe(t.db, userB, a.feedId)
+    expect((await t.db.select().from(sites).where(eq(sites.id, a.siteId)))[0]?.readerCount).toBe(2)
 
     // a moves to its own site; b stays on the placeholder, which keeps the feed host's origin.
     expect(await fetchFeed(t.db, http, a.feedId, opts)).toMatchObject({ siteHome: 'split' })
@@ -261,11 +270,152 @@ describe('fetchFeed', () => {
     expect(bRow?.siteId).toBe(b.siteId)
     const [placeholder] = await t.db.select().from(sites).where(eq(sites.id, b.siteId))
     expect(placeholder?.homeUrl).toBe(server.origin)
+    // Reader counts follow the feed: a's two readers on its new site, b's one on the placeholder.
+    expect(aSite?.readerCount).toBe(2)
+    expect(placeholder?.readerCount).toBe(1)
 
     // b is now alone on the placeholder, so its fetch renames it.
     expect(await fetchFeed(t.db, http, b.feedId, opts)).toMatchObject({ siteHome: 'renamed' })
     const [renamed] = await t.db.select().from(sites).where(eq(sites.id, b.siteId))
     expect(renamed?.homeUrl).toBe('https://b.example')
+  })
+
+  test('a URL on a claimed site that redirects elsewhere cannot put posts under that site', async () => {
+    const userA = '11111111-1111-4111-8111-111111111111'
+    await t.db.execute(sql`insert into auth.users (id, email) values (${userA}, 'a@x.test')`)
+    const attacker = await FixtureServer.start()
+    try {
+      attacker.text(
+        '/feed.xml',
+        rss({
+          link: attacker.url('/'),
+          items: [
+            {
+              guid: 'evil-1',
+              link: attacker.url('/p/1'),
+              title: 'Evil post',
+              description: 'x',
+              content: longHtml(2),
+            },
+          ],
+        }),
+      )
+      server.redirect('/redirect', attacker.url('/feed.xml'), 302)
+      const [victim] = await t.db
+        .insert(sites)
+        .values({ homeUrl: server.origin, claimedBy: userA, listing: 'listed' })
+        .returning({ id: sites.id })
+
+      // A reader subscribes to the redirecting URL: keyed by origin, it lands on the victim's site.
+      const hostile = await ensureFeed(t.db, { feedUrl: server.url('/redirect') })
+      expect(hostile.siteId).toBe(victim!.id)
+      // The fetch sees where the feed really came from and moves it before storing a post.
+      expect(await fetchFeed(t.db, http, hostile.feedId, opts)).toMatchObject({
+        status: 'fetched',
+        newArticles: 1,
+        siteHome: 'detached',
+      })
+      const [moved] = await t.db.select().from(feeds).where(eq(feeds.id, hostile.feedId))
+      expect(moved?.servedOrigin).toBe(attacker.origin)
+      expect(moved?.siteId).not.toBe(victim!.id)
+      const [home] = await t.db
+        .select()
+        .from(sites)
+        .where(eq(sites.id, moved?.siteId as number))
+      expect(home?.homeUrl).toBe(attacker.origin)
+      const underVictim = await t.db
+        .select({ id: articles.id })
+        .from(articles)
+        .innerJoin(feeds, eq(feeds.id, articles.feedId))
+        .where(eq(feeds.siteId, victim!.id))
+      expect(underVictim).toEqual([])
+
+      // A feed from before provenance: no served origin, and a body hash that makes the fetch
+
+      // short-circuit as unchanged. The served origin is still learned and enforced.
+
+      server.redirect('/legacy', attacker.url('/feed.xml'), 302)
+
+      const attackerBody = await (await fetch(attacker.url('/feed.xml'))).text()
+
+      const [legacy] = await t.db
+
+        .insert(feeds)
+
+        .values({
+          siteId: victim!.id,
+
+          feedUrl: server.url('/legacy'),
+
+          lastBodyHash: await sha256Hex(attackerBody),
+
+          nextFetchAt: new Date(),
+        })
+
+        .returning({ id: feeds.id })
+
+      expect(await fetchFeed(t.db, http, legacy!.id, opts)).toEqual({ status: 'unchanged' })
+
+      const [legacyRow] = await t.db.select().from(feeds).where(eq(feeds.id, legacy!.id))
+
+      expect(legacyRow?.servedOrigin).toBe(attacker.origin)
+
+      expect(legacyRow?.siteId).not.toBe(victim!.id)
+
+      // The owner adding a redirecting URL of their own is vouched: the feed stays on their site.
+      server.redirect('/mine', attacker.url('/feed.xml'), 302)
+      const mine = await ensureFeed(t.db, { feedUrl: server.url('/mine'), actorId: userA })
+      const out = await fetchFeed(t.db, http, mine.feedId, opts)
+      expect(out).toMatchObject({ status: 'fetched', newArticles: 1 })
+      expect(out.status === 'fetched' ? out.siteHome : '').not.toBe('detached')
+      const [kept] = await t.db.select().from(feeds).where(eq(feeds.id, mine.feedId))
+      expect(kept?.siteId).toBe(victim!.id)
+    } finally {
+      await attacker.stop()
+    }
+  })
+
+  test('a redirect that does not end in a feed never moves the feed', async () => {
+    const userA = '11111111-1111-4111-8111-111111111111'
+    await t.db.execute(sql`insert into auth.users (id, email) values (${userA}, 'a@x.test')`)
+    const elsewhere = await FixtureServer.start()
+    try {
+      const [victim] = await t.db
+        .insert(sites)
+        .values({ homeUrl: server.origin, claimedBy: userA, listing: 'listed' })
+        .returning({ id: sites.id })
+      server.redirect('/broken', elsewhere.url('/target'), 302)
+      const hostile = await ensureFeed(t.db, { feedUrl: server.url('/broken') })
+
+      // An outage at the destination: nothing is learned, nothing moves.
+      elsewhere.text('/target', 'down', { status: 503 })
+      expect(await fetchFeed(t.db, http, hostile.feedId, opts)).toMatchObject({ status: 'error' })
+      let [row] = await t.db.select().from(feeds).where(eq(feeds.id, hostile.feedId))
+      expect(row).toMatchObject({ siteId: victim!.id, servedOrigin: null })
+
+      // A login page instead of a feed: same.
+      elsewhere.text('/target', '<html><body>Sign in</body></html>', {
+        headers: { 'content-type': 'text/html' },
+      })
+      expect(await fetchFeed(t.db, http, hostile.feedId, opts)).toMatchObject({
+        status: 'error',
+        kind: 'parse',
+      })
+      ;[row] = await t.db.select().from(feeds).where(eq(feeds.id, hostile.feedId))
+      expect(row).toMatchObject({ siteId: victim!.id, servedOrigin: null })
+
+      // Only a real feed at the destination proves where the feed lives.
+      elsewhere.text('/target', declaringHome(`${elsewhere.origin}/`))
+      expect(await fetchFeed(t.db, http, hostile.feedId, opts)).toMatchObject({
+        status: 'fetched',
+        siteHome: 'detached',
+      })
+      ;[row] = await t.db.select().from(feeds).where(eq(feeds.id, hostile.feedId))
+      expect(row?.servedOrigin).toBe(elsewhere.origin)
+      expect(row?.siteId).not.toBe(victim!.id)
+    } finally {
+      await elsewhere.stop()
+    }
   })
 
   test('a claimed placeholder is never renamed or split', async () => {

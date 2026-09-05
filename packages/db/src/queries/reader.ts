@@ -1,6 +1,6 @@
 import { UNREAD_HORIZON_DAYS } from '@tela/shared'
 import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm'
-import type { Db } from '../client'
+import type { Db, DbExecutor } from '../client'
 import {
   articleContents,
   articles,
@@ -351,6 +351,25 @@ export async function toggleLike(
       .returning({ likeCount: articles.likeCount })
     return { liked, likeCount: row?.likeCount ?? 0 }
   })
+}
+
+/**
+ * Recount distinct readers across every feed of the given sites. Runs on a transaction handle
+ * too, so a feed move can recount the site it left and the one it joined before committing.
+ */
+export async function recomputeSiteReaderCounts(db: DbExecutor, siteIds: number[]): Promise<void> {
+  const ids = [...new Set(siteIds)]
+  if (ids.length === 0) return
+  await db.execute(sql`
+    update sites s set reader_count = (
+      select count(distinct sub.user_id) from subscriptions sub
+      join feeds f on f.id = sub.feed_id where f.site_id = s.id
+    )
+    where s.id in (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )})
+  `)
 }
 
 /** Recount distinct readers across every feed of the site a feed belongs to. */

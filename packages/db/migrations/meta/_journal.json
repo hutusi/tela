@@ -99,6 +99,13 @@
       "when": 1788559535405,
       "tag": "0013_translations_drop_source_lang_hint",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788571049254,
+      "tag": "0014_provenance_extraction_metering",
+      "breakpoints": true
     }
   ]
 }

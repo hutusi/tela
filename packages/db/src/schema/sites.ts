@@ -33,6 +33,8 @@ export const sites = pgTable(
     claimedBy: uuid('claimed_by').references(() => profiles.id, { onDelete: 'set null' }),
     claimedAt: timestamp('claimed_at', { withTimezone: true }),
     topics: text('topics').array().notNull().default(sql`'{}'::text[]`),
+    /** Feed URLs the home page declared (rel=alternate) when the claim was verified. */
+    declaredFeedUrls: text('declared_feed_urls').array().notNull().default(sql`'{}'::text[]`),
     readerCount: integer('reader_count').notNull().default(0),
     translationOptOut: boolean('translation_opt_out').notNull().default(false),
     /** When the assets job last looked for a favicon and cover (success or not). */

@@ -109,6 +109,7 @@ export async function ensureFeed(db: Db, input: EnsureFeedInput): Promise<Ensure
       title: parsed?.title ?? null,
       description: parsed?.description ?? null,
       hubUrl: parsed?.hubUrl ?? null,
+      addedBy: input.actorId ?? null,
       fetchRegion: input.fetchRegion ?? 'global',
       nextFetchAt: new Date(),
     })

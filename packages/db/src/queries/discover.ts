@@ -2,6 +2,7 @@ import { isTopic } from '@tela/shared'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import type { Db } from '../client'
 import { articles, feeds, profiles, siteClaims, sites, subscriptions } from '../schema'
+import { detachUnvouchedFeeds } from './provenance'
 import { likePattern, normalizeQuery } from './search'
 
 const NO_USER = '00000000-0000-0000-0000-000000000000'
@@ -257,7 +258,9 @@ export type ClaimResultOutcome = 'verified' | 'failed' | 'conflict' | 'missing'
 export async function markClaimResult(
   db: Db,
   claimId: number,
-  result: { ok: true; method: 'meta' | 'rel_me' } | { ok: false; error: string },
+  result:
+    | { ok: true; method: 'meta' | 'rel_me'; declaredFeedUrls?: string[] }
+    | { ok: false; error: string },
 ): Promise<ClaimResultOutcome> {
   return db.transaction(async (tx) => {
     const [claim] = await tx
@@ -303,8 +306,12 @@ export async function markClaimResult(
         claimedBy: claim.userId,
         claimedAt: now,
         listing: sql`case when ${sites.listing} = 'private' then 'listed'::site_listing else ${sites.listing} end`,
+        declaredFeedUrls: result.declaredFeedUrls ?? [],
       })
       .where(eq(sites.id, claim.siteId))
+    // Feeds that joined while the site was unclaimed, and that the owner's home page does not
+    // declare, move to the origin that serves them.
+    await detachUnvouchedFeeds(tx, claim.siteId)
     return 'verified'
   })
 }

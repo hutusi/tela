@@ -40,6 +40,8 @@ export const articles = pgTable(
     readingMinutes: integer('reading_minutes'),
     /** When full-text extraction last ran for a summary-only article, whatever the outcome. */
     extractCheckedAt: timestamp('extract_checked_at', { withTimezone: true }),
+    /** When the reader last queued extraction; one request per cooldown window. */
+    extractRequestedAt: timestamp('extract_requested_at', { withTimezone: true }),
     likeCount: integer('like_count').notNull().default(0),
     recommendCount: integer('recommend_count').notNull().default(0),
   },

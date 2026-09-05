@@ -8,9 +8,11 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from 'drizzle-orm/pg-core'
 import { anonRole, authenticatedRole } from 'drizzle-orm/supabase'
 import { contentModeEnum, feedFormatEnum, feedStatusEnum, fetchRegionEnum } from './enums'
+import { profiles } from './profiles'
 import { sites } from './sites'
 
 /** The fetch unit. Scheduling state lives here; the scheduler scans (status, next_fetch_at). */
@@ -43,6 +45,10 @@ export const feeds = pgTable(
     status: feedStatusEnum('status').notNull().default('active'),
     contentMode: contentModeEnum('content_mode').notNull().default('unknown'),
     hubUrl: text('hub_url'),
+    /** Member who added the feed; a claimant's own additions are vouched for their site. */
+    addedBy: uuid('added_by').references(() => profiles.id, { onDelete: 'set null' }),
+    /** Origin of the URL that last actually served the feed (after redirects); provenance. */
+    servedOrigin: text('served_origin'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()

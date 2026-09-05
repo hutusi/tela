@@ -13,8 +13,9 @@ import {
   articleContents,
   articles,
   type Db,
+  feedIsVouched,
   feeds,
-  recomputeReaderCount,
+  moveFeedToOriginSite,
   sites,
   type Tx,
 } from '@tela/db'
@@ -88,7 +89,36 @@ export function selectItems(items: ParsedItem[], limit = MAX_ITEMS_PER_FETCH): P
   return indexed.slice(0, limit).map((x) => x.item)
 }
 
-export type HomeUrlOutcome = 'kept' | 'renamed' | 'joined' | 'split' | 'blocked'
+export type HomeUrlOutcome = 'kept' | 'renamed' | 'joined' | 'split' | 'blocked' | 'detached'
+
+/**
+ * Provenance for claimed sites (see feedIsVouched in @tela/db): a feed's posts belong to the
+ * origin that actually served them. A URL on a member's site that redirects elsewhere (an open
+ * redirector, a hosted feed the owner never declared) must not put someone else's posts under
+ * that member's site, so before anything is stored the feed moves to the served origin's site.
+ */
+async function enforceProvenance(
+  db: Db,
+  feed: FeedRow,
+  servedOrigin: string | null,
+): Promise<{ feed: FeedRow; detached: boolean }> {
+  if (servedOrigin && servedOrigin !== feed.servedOrigin) {
+    await db.update(feeds).set({ servedOrigin }).where(eq(feeds.id, feed.id))
+  }
+  const current: FeedRow = { ...feed, servedOrigin: servedOrigin ?? feed.servedOrigin }
+  const [site] = await db
+    .select({
+      homeUrl: sites.homeUrl,
+      claimedBy: sites.claimedBy,
+      declaredFeedUrls: sites.declaredFeedUrls,
+    })
+    .from(sites)
+    .where(eq(sites.id, feed.siteId))
+  if (!site || !servedOrigin || feedIsVouched(current, site))
+    return { feed: current, detached: false }
+  const siteId = await db.transaction((tx) => moveFeedToOriginSite(tx, current, servedOrigin))
+  return { feed: { ...current, siteId }, detached: siteId !== feed.siteId }
+}
 
 /**
  * Sites are keyed by origin, and a feed added by URL starts on a placeholder site keyed by the
@@ -131,34 +161,8 @@ async function adoptDeclaredHome(
   }
 
   // Other feeds share the placeholder: move only this one, onto the existing site or a new one.
-  const targetId = await db.transaction(async (tx) => {
-    let id = target?.id
-    if (id === undefined) {
-      const [created] = await tx
-        .insert(sites)
-        .values({ homeUrl: declared })
-        .onConflictDoNothing({ target: sites.homeUrl })
-        .returning({ id: sites.id })
-      id = created?.id
-      if (id === undefined) {
-        const [raced] = await tx
-          .select({ id: sites.id })
-          .from(sites)
-          .where(eq(sites.homeUrl, declared))
-        id = raced?.id
-      }
-    }
-    if (id === undefined) return undefined
-    await tx.update(feeds).set({ siteId: id }).where(eq(feeds.id, feed.id))
-    const [left] = await tx
-      .select({ n: sql<number>`count(*)::int` })
-      .from(feeds)
-      .where(eq(feeds.siteId, site.id))
-    if ((left?.n ?? 0) === 0) await tx.delete(sites).where(eq(sites.id, site.id))
-    return id
-  })
-  if (targetId === undefined) return { siteId: site.id, outcome: 'kept' }
-  await recomputeReaderCount(db, feed.id)
+  const targetId = await db.transaction((tx) => moveFeedToOriginSite(tx, feed, declared))
+  if (targetId === site.id) return { siteId: site.id, outcome: 'kept' }
   return { siteId: targetId, outcome: target ? 'joined' : 'split' }
 }
 
@@ -369,9 +373,10 @@ export async function fetchFeed(
   opts: FetchFeedOptions = {},
 ): Promise<FetchFeedResult> {
   const now = opts.now ? opts.now() : new Date()
-  const [feed] = await db.select().from(feeds).where(eq(feeds.id, feedId))
-  if (!feed) return { status: 'skipped', reason: 'feed not found' }
-  if (feed.status !== 'active') return { status: 'skipped', reason: `feed is ${feed.status}` }
+  const [loaded] = await db.select().from(feeds).where(eq(feeds.id, feedId))
+  if (!loaded) return { status: 'skipped', reason: 'feed not found' }
+  if (loaded.status !== 'active') return { status: 'skipped', reason: `feed is ${loaded.status}` }
+  let feed: FeedRow = loaded
 
   let res: Awaited<ReturnType<HttpClient['get']>>
   try {
@@ -409,7 +414,11 @@ export async function fetchFeed(
     return recordError(db, feed, err.kind, err.message, now, {})
   }
 
+  // Provenance is judged only on responses proven to be this feed: a valid 304, a body already
+  // parsed and stored, or a body that parses now. A redirect that ends in an error page or a
+  // login form says nothing about where the feed lives and must not move it.
   if (res.status === 304) {
+    feed = (await enforceProvenance(db, feed, normalizeOrigin(res.finalUrl))).feed
     await recordSuccess(
       db,
       feed,
@@ -432,6 +441,7 @@ export async function fetchFeed(
 
   const bodyHash = await sha256Hex(res.body)
   if (bodyHash === feed.lastBodyHash) {
+    feed = (await enforceProvenance(db, feed, normalizeOrigin(res.finalUrl))).feed
     await recordSuccess(
       db,
       feed,
@@ -454,6 +464,10 @@ export async function fetchFeed(
     throw err
   }
 
+  // Before a single article is stored: the feed belongs to the origin that served it.
+  const provenance = await enforceProvenance(db, feed, normalizeOrigin(res.finalUrl))
+  feed = provenance.feed
+
   const samples: ContentSample[] = []
   const newArticleIds: number[] = []
   const updatedArticleIds: number[] = []
@@ -466,7 +480,9 @@ export async function fetchFeed(
   const newArticles = newArticleIds.length
   const updatedArticles = updatedArticleIds.length
 
-  const { siteId, outcome: siteHome } = await adoptDeclaredHome(db, feed, parsed.homeUrl)
+  const adopted = await adoptDeclaredHome(db, feed, parsed.homeUrl)
+  const siteId = adopted.siteId
+  const siteHome: HomeUrlOutcome = provenance.detached ? 'detached' : adopted.outcome
 
   // Fill in site metadata the feed knows and the site row lacks. The language comes from what
   // the site's articles are written in; feeds declare "zh", "en-us", or nothing at all, so the

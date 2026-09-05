@@ -71,6 +71,8 @@ describe('ensureFeed', () => {
       actorId: userB,
     })
     expect(owner).toMatchObject({ siteId: claimed!.id, siteHome: 'declared' })
+    const [ownerRow] = await t.db.select().from(feeds).where(eq(feeds.id, owner.feedId))
+    expect(ownerRow?.addedBy).toBe(userB)
     // A feed on the claimed site's own host belongs to it regardless of who adds it.
     const sameHost = await ensureFeed(t.db, {
       feedUrl: 'https://victim.example/feed.xml',

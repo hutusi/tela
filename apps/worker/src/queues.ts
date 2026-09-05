@@ -72,7 +72,9 @@ const SPECS: Record<QueueName, QueueSpec> = {
     retryLimit: 3,
     retryDelay: 60,
     retryBackoff: true,
-    expireInSeconds: 60,
+    // The home page (FETCH_TIMEOUT_MS) plus the declared feed lookups (DECLARED_FEEDS_BUDGET_MS),
+    // with slack.
+    expireInSeconds: 180,
   },
   [QUEUES.websubSubscribe]: {
     policy: 'short',

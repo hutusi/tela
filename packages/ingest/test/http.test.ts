@@ -62,6 +62,13 @@ describe('createHttpClient', () => {
     await expect(client().get(server.url('/slow'))).rejects.toMatchObject({ kind: 'timeout' })
   })
 
+  test('a request may shorten the timeout for a quick side lookup', async () => {
+    server.delay('/slow-side', 800)
+    await expect(
+      client({ timeoutMs: 5000 }).get(server.url('/slow-side'), { timeoutMs: 100 }),
+    ).rejects.toMatchObject({ kind: 'timeout' })
+  })
+
   test('rejects oversized bodies, whatever Content-Length claims', async () => {
     server.text('/big', 'x'.repeat(20_000))
     await expect(client().get(server.url('/big'))).rejects.toMatchObject({ kind: 'too_large' })

@@ -59,11 +59,16 @@ export const llmUsage = pgTable(
       onDelete: 'set null',
     }),
     targetLang: text('target_lang'),
+    /** Member whose request caused the call (reader-initiated work); null for background jobs. */
+    userId: uuid('user_id').references(() => profiles.id, { onDelete: 'set null' }),
     model: text('model').notNull(),
     inputTokens: integer('input_tokens'),
     outputTokens: integer('output_tokens'),
     latencyMs: integer('latency_ms'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('llm_usage_created_at_idx').on(t.createdAt)],
+  (t) => [
+    index('llm_usage_created_at_idx').on(t.createdAt),
+    index('llm_usage_user_id_created_at_idx').on(t.userId, t.createdAt),
+  ],
 ).enableRLS()

@@ -31,6 +31,8 @@ export type HttpGetOptions = {
   lastModified?: string | null
   region?: FetchRegion
   accept?: string
+  /** Override the client's timeout for this request (a quick side lookup inside a bounded job). */
+  timeoutMs?: number
 }
 
 export type HttpClient = {
@@ -205,7 +207,9 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
           headers,
           redirect: 'manual',
           // The relay applies the same timeout upstream; give its round trip some headroom.
-          signal: AbortSignal.timeout(relay ? timeoutMs + RELAY_HEADROOM_MS : timeoutMs),
+          signal: AbortSignal.timeout(
+            (opts.timeoutMs ?? timeoutMs) + (relay ? RELAY_HEADROOM_MS : 0),
+          ),
         }
         let response: Response
         try {

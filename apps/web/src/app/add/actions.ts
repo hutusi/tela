@@ -62,7 +62,7 @@ export async function subscribeAction(form: FormData): Promise<void> {
   const db = await getDb()
   if (!(await consumeRateLimit(db, 'subscribe', user.id)).allowed)
     redirect('/add?error=rate_limited')
-  const { feedId } = await ensureFeed(db, { feedUrl })
+  const { feedId } = await ensureFeed(db, { feedUrl, actorId: user.id })
   await subscribe(db, user.id, feedId)
   await enqueueFeedFetch(db, feedId)
   redirect(`/reading?feed=${feedId}`)
@@ -87,7 +87,7 @@ export async function importOpmlAction(_prev: ImportState, form: FormData): Prom
   }
   let imported = 0
   for (const feedUrl of urls) {
-    const { feedId } = await ensureFeed(db, { feedUrl })
+    const { feedId } = await ensureFeed(db, { feedUrl, actorId: user.id })
     const { created } = await subscribe(db, user.id, feedId)
     if (created) imported += 1
   }

@@ -13,10 +13,21 @@ import { MIGRATIONS_DIR, SUPABASE_STANDIN } from '../src/testing/local-postgres'
  * that depends on existing rows. This harness applies the journal up to a given migration into a
  * fresh database, lets a test seed rows, then applies the rest.
  */
-const DB_NAME = 'tela_migrations_check'
 let t: TestDb
-let fresh: Db
 let scratch: string
+const opened: Array<{ name: string; db: Db }> = []
+
+/** A new empty database in the test cluster, with the Supabase stand-in, for one test. */
+async function freshDatabase(name: string): Promise<Db> {
+  await t.db.execute(sql.raw(`drop database if exists ${name}`))
+  await t.db.execute(sql.raw(`create database ${name}`))
+  const url = new URL(t.url)
+  url.pathname = `/${name}`
+  const db = createDb(url.toString(), { max: 1 })
+  await db.execute(sql.raw(SUPABASE_STANDIN))
+  opened.push({ name, db })
+  return db
+}
 
 type Journal = { entries: Array<{ idx: number; tag: string }> }
 
@@ -37,23 +48,20 @@ async function folderUpTo(idx: number): Promise<string> {
 beforeAll(async () => {
   t = await startTestDb()
   scratch = await mkdtemp(join(tmpdir(), 'tela-migrations-'))
-  await t.db.execute(sql.raw(`drop database if exists ${DB_NAME}`))
-  await t.db.execute(sql.raw(`create database ${DB_NAME}`))
-  const url = new URL(t.url)
-  url.pathname = `/${DB_NAME}`
-  fresh = createDb(url.toString(), { max: 1 })
-  await fresh.execute(sql.raw(SUPABASE_STANDIN))
 }, 120_000)
 
 afterAll(async () => {
-  await fresh?.close()
-  await t?.db.execute(sql.raw(`drop database if exists ${DB_NAME}`))
+  for (const { name, db } of opened) {
+    await db.close()
+    await t?.db.execute(sql.raw(`drop database if exists ${name}`))
+  }
   await t?.stop()
   await rm(scratch, { recursive: true, force: true })
 })
 
 describe('0009 site_claims unique per user', () => {
   test('deduplicates existing claims, keeping the verified one or else the newest', async () => {
+    const fresh = await freshDatabase('tela_migrations_claims')
     await migrate(fresh, { migrationsFolder: await folderUpTo(8) })
     const userA = '11111111-1111-4111-8111-111111111111'
     const userB = '22222222-2222-4222-8222-222222222222'
@@ -86,5 +94,49 @@ describe('0009 site_claims unique per user', () => {
       sql`select indexdef from pg_indexes where indexname = 'site_claims_site_user_key'`,
     )
     expect(index?.indexdef).toContain('UNIQUE')
+  })
+})
+
+describe('0014 provenance columns', () => {
+  test('makes every active feed due for a full fetch so its served origin gets recorded', async () => {
+    const fresh = await freshDatabase('tela_migrations_provenance')
+    await migrate(fresh, { migrationsFolder: await folderUpTo(13) })
+    const [site] = await fresh.execute<{ id: number }>(
+      sql`insert into sites (home_url) values ('https://legacy.example') returning id`,
+    )
+    await fresh.execute(sql`
+      insert into feeds (site_id, feed_url, etag, last_modified, last_body_hash, next_fetch_at, status) values
+        (${site?.id}, 'https://legacy.example/feed', '"e1"', 'Mon, 01 Sep 2026 00:00:00 GMT', 'abc', now() + interval '1 day', 'active'),
+        (${site?.id}, 'https://legacy.example/dead', '"e2"', null, 'def', now() + interval '1 day', 'dead')
+    `)
+
+    await migrate(fresh, { migrationsFolder: MIGRATIONS_DIR })
+
+    const rows = await fresh.execute<{
+      feed_url: string
+      etag: string | null
+      last_body_hash: string | null
+      served_origin: string | null
+      due: boolean
+    }>(
+      sql`select feed_url, etag, last_body_hash, served_origin, next_fetch_at <= now() as due
+          from feeds order by feed_url`,
+    )
+    expect([...rows]).toEqual([
+      {
+        feed_url: 'https://legacy.example/dead',
+        etag: '"e2"',
+        last_body_hash: 'def',
+        served_origin: null,
+        due: false,
+      },
+      {
+        feed_url: 'https://legacy.example/feed',
+        etag: null,
+        last_body_hash: null,
+        served_origin: null,
+        due: true,
+      },
+    ])
   })
 })
