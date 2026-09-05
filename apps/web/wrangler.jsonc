@@ -4,6 +4,10 @@
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // The custom domain is created (DNS record and certificate) by the deploy; the zone lives in
+  // the same account. A route without `workers_dev` turns the workers.dev address off, which is
+  // wanted: the custom domain is the only public origin (workers.dev is blocked in mainland China).
+  "routes": [{ "pattern": "tela.ainaive.com", "custom_domain": true }],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
