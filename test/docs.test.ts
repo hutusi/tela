@@ -190,3 +190,51 @@ describe('environment variables are documented', () => {
     expect(OPERATIONS).toContain(`\`${name}\``)
   })
 })
+
+describe('the Node runtime is pinned consistently', () => {
+  /**
+   * AGENTS.md states that @types/node tracks the worker's runtime major. Types ahead of the
+   * runtime are the dangerous direction: tsc accepts an API the deployed Node does not have, and
+   * the failure lands in production. This is how it drifted once — @types/node ^26 against a
+   * Node 22 runtime — so the pins are checked against each other rather than trusted.
+   */
+  const nodeVersion = read('.node-version').trim()
+  const engines = (JSON.parse(read('package.json')) as { engines: { node: string } }).engines.node
+  const dockerfile = read('apps/worker/Dockerfile')
+  const workflow = read('.github/workflows/ci.yml')
+
+  const major = Number(nodeVersion.split('.')[0])
+
+  it('reads a plausible major from .node-version', () => {
+    expect(Number.isInteger(major)).toBe(true)
+    expect(major).toBeGreaterThanOrEqual(22)
+  })
+
+  it('agrees with the engines field', () => {
+    expect(engines).toContain(String(major))
+  })
+
+  it("agrees with the worker image's runtime stage", () => {
+    expect(dockerfile).toMatch(new RegExp(`FROM node:${major}[.\\-]`))
+  })
+
+  it('agrees with the node-version CI sets up', () => {
+    expect(workflow).toMatch(new RegExp(`node-version: ${major}\\b`))
+  })
+
+  it.each(
+    [...dirsIn('apps'), ...dirsIn('packages'), '.']
+      .map((ws) => (ws === '.' ? 'package.json' : `${ws}/package.json`))
+      .filter(exists)
+      .flatMap((p) => {
+        const pkg = JSON.parse(read(p)) as {
+          dependencies?: Record<string, string>
+          devDependencies?: Record<string, string>
+        }
+        const range = pkg.dependencies?.['@types/node'] ?? pkg.devDependencies?.['@types/node']
+        return range ? [[p, range] as const] : []
+      }),
+  )('%s pins @types/node to the runtime major (%s)', (_pkg, range) => {
+    expect(range.replace(/^[^0-9]*/, '').split('.')[0]).toBe(String(major))
+  })
+})

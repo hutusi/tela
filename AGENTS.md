@@ -76,6 +76,7 @@ cd apps/web && bun run preview       # OpenNext build + local Workers runtime
 - TypeScript strict, `verbatimModuleSyntax`, `noUncheckedIndexedAccess`. No enums: `as const` unions.
 - Single quotes, no semicolons, trailing commas. Biome owns formatting and linting for everything; there is no second formatter.
 - Tests are `*.test.ts` beside the code or under `test/`; Playwright specs are `*.e2e.ts`.
+- **`@types/node` tracks the worker's runtime major** (Node 22, per `.node-version` and `engines`), not the newest release. Types ahead of the runtime typecheck APIs that are not there when it runs; `test/docs.test.ts` holds the two together.
 - Use absolute paths in shell commands — the working directory persists between them.
 
 ## Gotchas
