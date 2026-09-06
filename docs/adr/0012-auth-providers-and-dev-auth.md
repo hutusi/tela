@@ -1,6 +1,9 @@
 # 0012 — Auth: email code, GitHub, Google via Supabase; dev-auth mode for local runs
 
-Status: accepted (2026-09-04)
+Status: accepted (2026-09-04). The email-code mechanics are amended by
+[ADR 0013](0013-auth-email-carries-the-code.md); the providers, session handling and dev-auth
+decisions stand. Signup is closed while Tela is in private testing
+([ADR 0015](0015-private-beta.md)).
 
 ## Context
 
