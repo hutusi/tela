@@ -56,11 +56,13 @@ bun run lint:fix                     # auto-fix
 bun run typecheck                    # tsc -p in every workspace (all noEmit)
 bun run test                         # bun test; DB tests need initdb on PATH, PG_BIN_DIR, or TEST_DATABASE_URL
 bun run e2e                          # Playwright against a built app, worker, and fixture feeds
+bun run build                        # build every workspace that has a build script
 bun run dev                          # web (http://localhost:3000)
 bun run dev:worker                   # worker on Bun for dev; Node 22 in production
 bun run db:generate                  # drizzle-kit generate; then commit packages/db/migrations/*
 bun run db:migrate                   # apply migrations (DATABASE_URL=…)
 bun run db:local --port 54322        # migrated Postgres with the development user, no Docker
+bun run db:prepare                   # apply that same setup to an existing database
 bun run worker:once fetch <feedUrl>  # run one job by hand (DATABASE_URL=…)
 cd apps/web && bun run preview       # OpenNext build + local Workers runtime
 ```

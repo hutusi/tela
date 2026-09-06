@@ -1,0 +1,192 @@
+/**
+ * The docs drift guard.
+ *
+ * AGENTS.md claims its repo map covers every workspace, README.md claims the same for its layout
+ * table, and both point at files by path. `packages/ingest` was absent from both for eleven
+ * modules' worth of history while AGENTS.md told agents to put worker logic there — nothing was
+ * looking. This file looks.
+ *
+ * It only reads files: no database, no network, and it runs under Bun and Node alike. When a check
+ * here fails, the fix is almost always to update the doc, not to loosen the check — these are
+ * claims the docs make, and the point is that they stay true.
+ */
+
+import { describe, expect, it } from 'bun:test'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
+const exists = (rel: string) => {
+  try {
+    statSync(join(ROOT, rel))
+    return true
+  } catch {
+    return false
+  }
+}
+const dirsIn = (rel: string) =>
+  readdirSync(join(ROOT, rel), { withFileTypes: true })
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules')
+    .map((e) => `${rel}/${e.name}`)
+
+const AGENTS = read('AGENTS.md')
+const README = read('README.md')
+const OPERATIONS = read('docs/OPERATIONS.md')
+
+/** Every workspace in the monorepo. */
+const WORKSPACES = [...dirsIn('apps'), ...dirsIn('packages')].sort()
+
+describe('workspace coverage', () => {
+  it('finds every workspace on disk', () => {
+    // A broken readdir would make every check below pass vacuously.
+    expect(WORKSPACES.length).toBeGreaterThanOrEqual(7)
+  })
+
+  it.each(WORKSPACES)('%s is in the AGENTS.md repo map', (ws) => {
+    expect(AGENTS).toContain(`\`${ws}\``)
+  })
+
+  it.each(WORKSPACES)('%s is in the README layout table', (ws) => {
+    expect(README).toContain(`\`${ws}\``)
+  })
+})
+
+/**
+ * Paths the docs name in backticks or markdown links. Only prefixes that are unambiguously
+ * repo-relative are checked; a bare `client.ts` in prose is not a claim about a location.
+ */
+const PATH_PREFIXES = ['apps/', 'packages/', 'docs/', 'supabase/', '.github/', 'test/']
+const DOC_FILES = [
+  'AGENTS.md',
+  'README.md',
+  'CHANGELOG.md',
+  'docs/ARCHITECTURE.md',
+  'docs/OPERATIONS.md',
+  'docs/DESIGN.md',
+]
+
+function referencedPaths(source: string): string[] {
+  const found = new Set<string>()
+  // `packages/db/src/schema/*.ts` in code spans, and [text](docs/adr/) in links.
+  const spans = source.match(/`[^`\n]+`/g) ?? []
+  const links = (source.match(/\]\(([^)\s]+)\)/g) ?? []).map((m) => m.slice(2, -1))
+  for (const raw of [...spans.map((s) => s.slice(1, -1)), ...links]) {
+    const candidate = raw.trim().replace(/[.,;:]+$/, '')
+    if (!PATH_PREFIXES.some((p) => candidate.startsWith(p))) continue
+    // Skip globs and placeholders: `packages/db/src/schema/*.ts`, `apps/<name>/.env`.
+    if (/[*<>{}|\s]/.test(candidate)) continue
+    // `.env` and `.dev.vars` are gitignored by design — the docs tell you to create them, so
+    // their absence is the correct state, not drift. Their `.example` twins are still checked.
+    if (/\/\.(env|dev\.vars)$/.test(candidate)) continue
+    found.add(candidate.replace(/\/$/, ''))
+  }
+  return [...found]
+}
+
+describe('path references resolve', () => {
+  const all = DOC_FILES.flatMap((f) => referencedPaths(read(f)).map((p) => [f, p] as const))
+
+  it('extracts a plausible number of paths', () => {
+    // Guards against a regex change that silently matches nothing.
+    expect(all.length).toBeGreaterThan(40)
+  })
+
+  it.each(all)('%s references %s, which exists', (_doc, path) => {
+    expect(exists(path)).toBe(true)
+  })
+})
+
+describe('worker roles are documented', () => {
+  const roles = [...read('apps/worker/src/roles.ts').matchAll(/^\s{2}'([a-z]+)',$/gm)].map(
+    (m) => m[1] as string,
+  )
+
+  it('reads the role list', () => {
+    expect(roles).toContain('relay')
+    expect(roles.length).toBeGreaterThanOrEqual(7)
+  })
+
+  it.each(roles)('%s is named in the README', (role) => {
+    expect(README).toContain(role)
+  })
+
+  it.each(roles)('%s is named in the operations runbook', (role) => {
+    expect(OPERATIONS).toContain(role)
+  })
+})
+
+describe('root scripts are documented', () => {
+  const scripts = Object.keys(
+    (JSON.parse(read('package.json')) as { scripts: Record<string, string> }).scripts,
+  )
+
+  it('reads the script list', () => {
+    expect(scripts.length).toBeGreaterThan(8)
+  })
+
+  it.each(scripts)('bun run %s appears in the AGENTS.md commands', (script) => {
+    expect(AGENTS).toContain(`bun run ${script}`)
+  })
+})
+
+describe('ADRs are well formed', () => {
+  const files = readdirSync(join(ROOT, 'docs/adr'))
+    .filter((f) => f.endsWith('.md'))
+    .sort()
+
+  it('numbers them sequentially from 0001, with no gaps', () => {
+    expect(files.length).toBeGreaterThan(10)
+    const numbers = files.map((f) => Number(f.slice(0, 4)))
+    expect(numbers).toEqual(files.map((_, i) => i + 1))
+  })
+
+  it.each(files)('%s has a heading matching its filename and a status line', (file) => {
+    const body = read(`docs/adr/${file}`)
+    expect(body).toMatch(new RegExp(`^# ${file.slice(0, 4)} — `))
+    expect(body).toMatch(/^Status: /m)
+  })
+})
+
+describe('environment variables are documented', () => {
+  /** Read by the runtime but not Tela's own configuration. */
+  const ALLOWED = new Set(['NODE_ENV', 'CI', 'NEXTJS_ENV'])
+
+  const sources = [...dirsIn('apps'), ...dirsIn('packages')].map((ws) => `${ws}/src`).filter(exists)
+
+  function tsFiles(dir: string): string[] {
+    return readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((e) => {
+      const rel = `${dir}/${e.name}`
+      if (e.isDirectory()) return tsFiles(rel)
+      return e.name.endsWith('.ts') || e.name.endsWith('.tsx') ? [rel] : []
+    })
+  }
+
+  const names = new Set<string>()
+  for (const dir of sources) {
+    for (const file of tsFiles(dir)) {
+      for (const m of read(file).matchAll(/process\.env\.([A-Z][A-Z0-9_]*)/g)) {
+        names.add(m[1] as string)
+      }
+    }
+  }
+  // The worker validates its environment through a zod schema rather than reading process.env
+  // per key, so its names live in the schema object.
+  const schema = read('apps/worker/src/config.ts')
+  const schemaBody = schema.slice(schema.indexOf('const envSchema'), schema.indexOf('\n})'))
+  for (const m of schemaBody.matchAll(/^ {2}([A-Z][A-Z0-9_]*):/gm)) names.add(m[1] as string)
+
+  const documented = [...names].filter((n) => !ALLOWED.has(n)).sort()
+
+  it('finds the environment variables the code reads', () => {
+    expect(documented).toContain('DATABASE_URL')
+    expect(documented).toContain('WORKER_ROLES')
+    expect(documented.length).toBeGreaterThan(20)
+  })
+
+  it.each(documented)('%s is in the operations env table', (name) => {
+    expect(OPERATIONS).toContain(`\`${name}\``)
+  })
+})

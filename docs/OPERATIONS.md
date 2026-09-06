@@ -20,6 +20,7 @@ How Tela is provisioned and deployed. Everything below is live unless marked *la
 | `DATABASE_URL` | worker, web (local / non-Cloudflare) | Postgres connection string. On Cloudflare the `HYPERDRIVE` binding replaces it. |
 | `WORKER_ROLES` | worker | Comma list of roles; default is every role except `relay` |
 | `LOG_LEVEL` | worker | `debug` / `info` / `warn` / `error` |
+| `HEARTBEAT_SEC` | worker | Seconds between pg-boss job heartbeats (default 60) |
 | `LLM_PROVIDER` | worker | `bailian` (default), `anthropic`, or `mock`; any other value is an error. Without the matching key the mock is used, but the `translate` role refuses to start on that fallback: its placeholder output would be cached for everyone. Set `LLM_PROVIDER=mock` to run the mock on purpose (e2e, local) |
 | `LLM_MODEL` | worker | Model id: `glm-5.2` (Bailian default), `claude-opus-5` (Anthropic default) |
 | `BAILIAN_API_KEY`, `BAILIAN_BASE_URL` | worker | Aliyun Bailian key; base URL defaults to `https://dashscope.aliyuncs.com/compatible-mode/v1` (use the workspace/region host from the console when required) |
@@ -39,6 +40,7 @@ How Tela is provisioned and deployed. Everything below is live unless marked *la
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web | Supabase Auth (cookies via `@supabase/ssr`) |
 | `IMAGE_PROXY_SECRET` | web | HMAC key for `/img` URLs; set as a Worker secret (`wrangler secret put`) |
 | `TELA_DEV_AUTH` | web (local only) | `1` signs every request in as the development user; refused on Cloudflare |
+| `TELA_DEV_USER_ID` | web (local only) | Overrides which user dev-auth signs in as; defaults to the development user `bun run db:local` creates |
 | `TELA_ALLOW_PRIVATE_HOSTS`, `WORKER_ALLOW_PRIVATE_HOSTS` | tests only | let discovery/fetch reach localhost fixture servers. In production the worker resolves every outbound host itself and refuses names that resolve to a private address (DNS-pinned via undici); the pinning is Node-only, so `bun run dev:worker` keeps just the name and literal checks. `apps/worker/scripts/safe-fetch-check.ts` verifies the Node path |
 | `NEXTJS_ENV` | web (`.dev.vars`) | Which `.env` files OpenNext loads locally |
 | `TEST_DATABASE_URL`, `PG_BIN_DIR` | tests | Use an existing database, or point at Postgres binaries |
