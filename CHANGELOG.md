@@ -69,6 +69,12 @@ everything so far sits under `[Unreleased]`.
 - **Supabase settings are code.** `supabase/config.toml` is the source of truth for everything
   `supabase config push` manages; the Dashboard is a mirror the next push overwrites (ADR 0014).
 
+- **The worker runs on Node 24 LTS, built with Bun 1.4.** Five pins have to agree for that to mean
+  anything — `.node-version`, `engines`, the Dockerfile's runtime stage, the CI `node-version`, and
+  `@types/node` — and a test now holds them together, along with the Node major the living docs
+  name. `@types/node` had drifted to 26 against a Node 22 runtime, which typechecks APIs the
+  deployed runtime does not have (ADR 0001).
+
 - **Toolchain and dependencies moved to current majors.** TypeScript 7 — the native compiler,
   which cuts Next's typecheck from 3.3s to under a second; undici 8 under the worker's DNS-pinned
   fetch; the htmlparser2 family (htmlparser2 12, domutils 4, domhandler 6, dom-serializer 3,

@@ -222,6 +222,21 @@ describe('the Node runtime is pinned consistently', () => {
     expect(workflow).toMatch(new RegExp(`node-version: ${major}\\b`))
   })
 
+  /**
+   * Docs that describe the present. CHANGELOG.md and the ADRs are excluded on purpose: both are
+   * dated records whose job is to say what was true then, so "drifted to 26 against a Node 22
+   * runtime" is correct there and must stay writable.
+   */
+  const LIVING_DOCS = DOC_FILES.filter((f) => f !== 'CHANGELOG.md')
+
+  it.each(LIVING_DOCS)('%s names no Node major but the pinned one', (doc) => {
+    // The pins agreed with each other while twelve lines of prose still said Node 22. A constraint
+    // quoted from someone else ("Node >= 22.12" for pg-boss) passes: the regex needs a digit
+    // straight after "Node", and those have the operator in between.
+    const claimed = [...read(doc).matchAll(/Node(?:\.js)? (\d+)/g)].map((m) => m[1] as string)
+    expect([...new Set(claimed)].filter((v) => v !== String(major))).toEqual([])
+  })
+
   it.each(
     [...dirsIn('apps'), ...dirsIn('packages'), '.']
       .map((ws) => (ws === '.' ? 'package.json' : `${ws}/package.json`))

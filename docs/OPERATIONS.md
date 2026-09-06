@@ -9,7 +9,7 @@ How Tela is provisioned and deployed. Everything below is live unless marked *la
 |---|---|---|
 | Web | Cloudflare Workers via OpenNext (`apps/web`) | Custom domain only; never share `workers.dev` URLs (blocked in mainland China) |
 | Database + Auth | Supabase, region Tokyo (`ap-northeast-1`) | session pooler as the connection path (the IPv4 add-on is optional, see Provisioning); custom SMTP (Resend); custom auth domain *later* |
-| Worker | Fly.io app `tela-worker`, region `nrt` (`apps/worker`) | Docker image, Node 22; roles via `WORKER_ROLES` |
+| Worker | Fly.io app `tela-worker`, region `nrt` (`apps/worker`) | Docker image, Node 24; roles via `WORKER_ROLES` |
 | Relay | HK or CN box running the same image with `WORKER_ROLES=relay` | Signed fetch endpoint only, no `DATABASE_URL`; runbook below |
 | Assets | Cloudflare R2 bucket behind `assets.<domain>` | favicons and covers |
 
