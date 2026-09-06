@@ -7,16 +7,21 @@ original, so anyone can read the world's indie blogs.
 
 Every feed here has a specific human behind it.
 
+Tela is in private testing: the site is live at <https://tela.ainaive.com>, but signup is closed
+and the way in is an admin invite.
+
 ## Layout
 
 | Path | What it is |
 |---|---|
 | `apps/web` | Next.js 16 app (App Router, Tailwind v4, next-intl), deployed to Cloudflare Workers via OpenNext |
 | `apps/worker` | Background worker: one codebase, roles selected by `WORKER_ROLES` (scheduler, fetch, extract, translate, assets, claim, relay) |
-| `packages/db` | Drizzle schema, migrations, query helpers |
-| `packages/content` | Pure content pipeline: feed discovery and parsing, sanitization, block ids, language detection |
+| `packages/db` | Drizzle schema, migrations, query helpers, the job sender |
+| `packages/content` | Pure content pipeline: feed parsing, sanitization, block ids and hashing, language detection |
+| `packages/ingest` | Ingestion library: HTTP client, feed discovery, fetching, article extraction, region routing, WebSub |
 | `packages/llm` | Translation provider adapter, prompts, validation |
 | `packages/shared` | Constants and small helpers shared by web and worker |
+| `packages/config` | Shared tsconfig bases |
 | `docs/` | [Architecture](docs/ARCHITECTURE.md), [Operations](docs/OPERATIONS.md), [ADRs](docs/adr/) |
 
 ## Quick start
@@ -71,8 +76,12 @@ DATABASE_URL=... bun run db:migrate       # apply packages/db/migrations
 
 ## Status
 
-Milestone 1 is complete on the `feat/mvp` branch: all eight roadmap phases are implemented and
-tested (unit, database, worker integration, and Playwright end-to-end). What remains before it
-merges to `main` is the deploy-side verification in `docs/OPERATIONS.md`: a Cloudflare preview,
-a real Bailian translation run, and a China smoke test from the relay box. See
-`docs/ARCHITECTURE.md` for the design and the route map.
+Milestone 1 is done and deployed. All eight roadmap phases are implemented and tested (unit,
+database, worker integration, and Playwright end-to-end); the web app runs on Cloudflare Workers
+at <https://tela.ainaive.com>, the worker runs every role on Fly.io in Tokyo, and translation
+runs against Aliyun Bailian.
+
+Signup is closed while Tela is in private testing, and the site is kept out of search indexes.
+Opening up is two switches, both named in the runbook. See `docs/ARCHITECTURE.md` for the design
+and the route map, `docs/OPERATIONS.md` for how it is provisioned and run, and `CHANGELOG.md` for
+what has shipped.

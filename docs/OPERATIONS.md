@@ -1,7 +1,7 @@
 # Operations
 
-How Tela is provisioned and deployed. Sections marked *later* are filled in by the phase that
-implements them (see `docs/ARCHITECTURE.md`).
+How Tela is provisioned and deployed. Everything below is live unless marked *later*; the
+"Later" section at the end is the open list.
 
 ## Environments
 
@@ -10,8 +10,8 @@ implements them (see `docs/ARCHITECTURE.md`).
 | Web | Cloudflare Workers via OpenNext (`apps/web`) | Custom domain only; never share `workers.dev` URLs (blocked in mainland China) |
 | Database + Auth | Supabase, region Tokyo (`ap-northeast-1`) | session pooler as the connection path (the IPv4 add-on is optional, see Provisioning); custom SMTP (Resend); custom auth domain *later* |
 | Worker | Fly.io app `tela-worker`, region `nrt` (`apps/worker`) | Docker image, Node 22; roles via `WORKER_ROLES` |
-| Relay | HK or CN box running the same image with `WORKER_ROLES=relay` | *later*, phase 8 |
-| Assets | Cloudflare R2 bucket behind `assets.<domain>` | favicons and covers; *later*, phase 3 |
+| Relay | HK or CN box running the same image with `WORKER_ROLES=relay` | Signed fetch endpoint only, no `DATABASE_URL`; runbook below |
+| Assets | Cloudflare R2 bucket behind `assets.<domain>` | favicons and covers |
 
 ## Environment variables
 

@@ -2,20 +2,20 @@
 
 Tela is a multi-user, multilingual RSS reader whose identity is "every feed here has a human behind
 it". This document is the living map of the system; decisions and their reasons are in `adr/`.
-Sections are tagged with the phase that implements them (see "Roadmap"); anything untagged exists.
+Everything described here is built and deployed.
 
 ## Topology
 
 ```
 Browser ──HTTPS──▶ Cloudflare Worker (Next.js via OpenNext)
                      ├─ Hyperdrive ──▶ Supabase Postgres (Tokyo, session pooler) ◀── worker(s)
-                     ├─ /img signed image proxy (Cache API) ──▶ origin images          [phase 4]
-                     └─ Supabase Auth (browser: @supabase/ssr)                          [phase 4]
+                     ├─ /img signed image proxy (Cache API) ──▶ origin images
+                     └─ Supabase Auth (browser: @supabase/ssr)
 Worker image (Node 22, Fly.io nrt), WORKER_ROLES selects subscriptions:
-   scheduler | fetch | extract | translate | assets | claim ──▶ Postgres (pg-boss + data) [phase 3+]
-   fetch ──(fetch_region=cn)──▶ relay role on a HK/CN box (HMAC-signed fetch endpoint)  [phase 8 ✓]
-   translate ──▶ Aliyun Bailian (GLM) or other providers through one adapter           [phase 5]
-   assets ──▶ R2 (S3 API), served from assets.<domain>                                  [phase 3]
+   scheduler | fetch | extract | translate | assets | claim ──▶ Postgres (pg-boss + data)
+   fetch ──(fetch_region=cn)──▶ relay role on a HK/CN box (HMAC-signed fetch endpoint)
+   translate ──▶ Aliyun Bailian (GLM) or other providers through one adapter
+   assets ──▶ R2 (S3 API), served from assets.<domain>
 ```
 
 ## Monorepo
@@ -23,9 +23,10 @@ Worker image (Node 22, Fly.io nrt), WORKER_ROLES selects subscriptions:
 ```
 apps/web            Next.js 16 App Router, Tailwind v4, next-intl (no i18n routing), Drizzle server-side
 apps/worker         Node 22 process bundled by Bun; src/roles.ts, src/config.ts, src/index.ts
-packages/db         Drizzle schema (src/schema/*.ts), migrations/, client.ts, test/ harness
-packages/content    pure TS content pipeline                                            [phase 2]
-packages/llm        translation adapter                                                 [phase 5]
+packages/db         Drizzle schema (src/schema/*.ts), migrations/, client.ts, queue.ts, test/ harness
+packages/content    pure TS content pipeline (sanitize, blocks, tagged text, hashing)
+packages/ingest     ingestion library: http, discovery, fetch, extract, region, websub
+packages/llm        translation adapter
 packages/shared     constants (languages, topics, NORM_VERSION, enums), helpers
 packages/config     shared tsconfig bases
 ```
@@ -168,8 +169,8 @@ declares every queue with its policy, retries, expiry, and a `<name>.dead` dead-
 | `translate.title` | fetch (in the article's own transaction; at most 100 articles per fetch) | translate | batches of 5, 4 in flight; every reading language the article is not in; deferred to the next day when the budget is spent |
 | `translate.body` | web (open, same transaction as the `requested` row), scheduler (re-sends rows stuck `requested` for 5 min or `running` without a heartbeat for 15 min, at most twice, then gives up) | translate | priority 10 with `onDemand: true`; singleton per article and language |
 | `websub.subscribe` | fetch (feed advertises a hub), maintenance (renewals) | fetch | asks the hub to push to `/api/websub/<feedId>`; only when `WEBSUB_ENABLED=1` |
-| `site.assets` | fetch [phase 6] | assets | favicons and covers to R2 |
-| `site.claim.verify` | web [phase 6] | claim | claim verification |
+| `site.assets` | fetch | assets | favicons and covers to R2 |
+| `site.claim.verify` | web | claim | claim verification |
 
 One process; `WORKER_ROLES` filters which `boss.work()` subscriptions start. Feed discovery runs
 in the request path (web) or the CLI rather than through a queue. `bun run worker:once
@@ -229,18 +230,21 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
   (`apps/worker/src/net/safe-fetch.ts`); on Cloudflare the `global_fetch_strictly_public` flag
   plays that role, and the image proxy checks the host name as well.
 
-## Roadmap (milestone 1, branch `feat/mvp`)
+## Milestone 1, as built
 
-1. Scaffold + infra ✓
-2. Content package ✓
-3. Ingestion worker ✓ (site assets to R2 moved to phase 6, where Discover first shows favicons)
-4. Reader web ✓
-5. Translation ✓
-6. Discover + sites + claim ✓ (site assets job included)
-7. Recommendations + profiles + dashboard ✓
-8. Hardening ✓ (China fetch relay with automatic region routing, rate limits, search, health
+The eight phases milestone 1 was planned in, all shipped and deployed:
+
+1. Scaffold + infra
+2. Content package
+3. Ingestion worker (site assets to R2 landed in phase 6, where Discover first shows favicons)
+4. Reader web
+5. Translation
+6. Discover + sites + claim
+7. Recommendations + profiles + dashboard
+8. Hardening (China fetch relay with automatic region routing, rate limits, search, health
    checks, WebSub, mobile fallback)
 
-Milestone 1 merges to `main` once the deploy-side checks in `docs/OPERATIONS.md` pass: a
-Cloudflare preview through Hyperdrive, one real Bailian translation run, and the China smoke test
-from the relay box (custom auth domain and image proxy reachability).
+The deploy-side checks that gated the merge have passed: Cloudflare through Hyperdrive, a real
+Bailian translation run, and the China smoke test from the relay box. What is still open is
+tracked in `docs/OPERATIONS.md` under "Later" — the custom auth domain, and the two switches that
+open signup. `CHANGELOG.md` records what shipped.
