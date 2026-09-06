@@ -62,6 +62,16 @@ implements them (see `docs/ARCHITECTURE.md`).
    templates carry neither, only a link that lands on the site root. Verify delivery to qq.com
    and 163.com addresses.
 3. Auth → Providers: Email (OTP), GitHub, Google (phase 4).
+
+   **Private testing.** `enable_signup = false` under both `[auth]` and `[auth.email]`: nobody can
+   create an account from the login page, which answers "Tela is in private testing" instead. Add
+   a tester with an admin invite — Dashboard → Authentication → Users → **Invite user**, or
+   `auth.admin.inviteUserByEmail` with the service-role key — which sends the invite template in
+   `supabase/templates/invite.html`; its link signs them in through `/auth/callback`. Like the
+   Data API, this is pushed from `config.toml`, so a Dashboard change would be overwritten by the
+   next `supabase config push`. The web app is also hidden from search engines while
+   `TELA_PRIVATE_BETA` is set in `apps/web/wrangler.jsonc` (robots.txt disallow plus a noindex
+   tag). Opening up = `enable_signup = true` + push, and removing that var + deploy.
 4. Apply migrations: `DATABASE_URL=<session pooler connection> bun run db:migrate`.
 5. The Data API is off: `[api] enabled = false` in `supabase/config.toml`, applied by
    `supabase config push`. The Dashboard toggle (Data API integration overview → **Enable Data
@@ -240,4 +250,6 @@ First run: `cd apps/web && bunx playwright install chromium`.
 - Before switching readers to the custom domain: the Supabase redirect allow-list and `site_url`
   step above, then sign in once with each provider from the new origin.
 - Before launch: the Data API is off (`[api] enabled = false`, Provisioning step 5).
+- To open Tela up: `enable_signup = true` in `supabase/config.toml` (both places) and
+  `supabase config push`; remove `TELA_PRIVATE_BETA` from `apps/web/wrangler.jsonc` and deploy.
 - China checks from a HK/CN box (custom auth domain, image proxy for `mmbiz.qpic.cn`-style hosts)

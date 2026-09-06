@@ -27,8 +27,14 @@ export async function sendCode(_prev: LoginState, form: FormData): Promise<Login
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { step: 'email', error: 'invalid_email' }
   const client = await supabaseServer()
   if (!client) return { step: 'email', error: 'not_configured' }
-  const { error } = await client.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
-  if (error) return { step: 'email', error: 'send_failed' }
+  // Signup is closed while Tela is in private testing: an address without an account is refused
+  // here rather than silently created (Supabase answers 422 once [auth] enable_signup is off).
+  const { error } = await client.auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
+  if (error) {
+    const closed =
+      error.status === 422 || /signups? not allowed|signup.*disabled/i.test(error.message)
+    return { step: 'email', error: closed ? 'not_invited' : 'send_failed' }
+  }
   return { step: 'code', email, error: null }
 }
 

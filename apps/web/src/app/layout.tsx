@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { EB_Garamond, Figtree } from 'next/font/google'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getTranslations } from 'next-intl/server'
+import { isPrivateBeta } from '@/lib/platform/env'
 import './globals.css'
 
 // next/font self-hosts these at build time: no runtime request to Google Fonts,
@@ -23,7 +24,12 @@ const figtree = Figtree({
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('app')
-  return { title: { default: t('name'), template: `%s · ${t('name')}` }, description: t('tagline') }
+  return {
+    title: { default: t('name'), template: `%s · ${t('name')}` },
+    description: t('tagline'),
+    // Belt and braces with robots.txt: a page reached directly is not indexed either.
+    ...(isPrivateBeta() ? { robots: { index: false, follow: false } } : {}),
+  }
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

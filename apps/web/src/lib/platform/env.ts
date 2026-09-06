@@ -17,6 +17,15 @@ export async function isDevAuthEnabled(): Promise<boolean> {
   return !(await onCloudflare())
 }
 
+/**
+ * Private testing: signup is closed and the site asks search engines to stay away. One var,
+ * `TELA_PRIVATE_BETA` (set in apps/web/wrangler.jsonc), drives robots.txt and the noindex tag;
+ * removing it and deploying is the whole launch switch.
+ */
+export function isPrivateBeta(): boolean {
+  return process.env.TELA_PRIVATE_BETA === '1'
+}
+
 let warned = false
 
 /** Secret for signing image-proxy URLs; falls back to a fixed value only in dev-auth mode. */

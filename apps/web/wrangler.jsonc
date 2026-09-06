@@ -26,6 +26,8 @@
       "localConnectionString": "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
     }
   ],
+  // Private testing: turns robots.txt into a disallow and adds noindex. Remove at launch.
+  "vars": { "TELA_PRIVATE_BETA": "1" },
   "placement": { "mode": "smart" },
   "observability": { "enabled": true }
 }
