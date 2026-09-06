@@ -14,8 +14,8 @@
   "dependencies": {
     "@tela/shared": "workspace:*",
     "@tela/content": "workspace:*",
-    "ai": "^7.0.92",
-    "@ai-sdk/openai-compatible": "^3.0.43",
+    "ai": "^7.0.93",
+    "@ai-sdk/openai-compatible": "^3.0.44",
     "@ai-sdk/anthropic": "^4.0.49",
     "zod": "^4.5.4"
   }
