@@ -69,6 +69,13 @@ everything so far sits under `[Unreleased]`.
 - **Supabase settings are code.** `supabase/config.toml` is the source of truth for everything
   `supabase config push` manages; the Dashboard is a mirror the next push overwrites (ADR 0014).
 
+- **Toolchain and dependencies moved to current majors.** TypeScript 7 — the native compiler,
+  which cuts Next's typecheck from 3.3s to under a second; undici 8 under the worker's DNS-pinned
+  fetch; the htmlparser2 family (htmlparser2 12, domutils 4, domhandler 6, dom-serializer 3,
+  entities 8), which also deduplicates a tree that was carrying htmlparser2 10 and 12 at once.
+  `NORM_VERSION` stays at 1: the block-hash snapshots over the real article fixtures are
+  unchanged, so the translation cache survives. Every GitHub Action moved to its current major.
+
 - **The session pooler is the database path** for Hyperdrive, the worker and migrations: it has
   IPv4 and keeps prepared statements. Supabase's paid IPv4 add-on stays off, and the runbook names
   the symptom that would justify buying it.
