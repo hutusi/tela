@@ -223,18 +223,22 @@ describe('the Node runtime is pinned consistently', () => {
   })
 
   /**
-   * Docs that describe the present. CHANGELOG.md and the ADRs are excluded on purpose: both are
-   * dated records whose job is to say what was true then, so "drifted to 26 against a Node 22
-   * runtime" is correct there and must stay writable.
+   * Only a major *older* than the pin is flagged. That is the failure this can actually detect —
+   * prose left behind by a bump, which is what happened: the pins moved to 24 while twelve lines
+   * still said Node 22. A newer major is a plan, not staleness ("move to Node 26 after
+   * 2026-10-28" in the runbook), and a constraint quoted from someone else ("Node >= 22.12" for
+   * pg-boss) never matches, because the regex needs a digit straight after "Node".
+   *
+   * CHANGELOG.md and the ADRs are excluded outright: both are dated records whose job is to say
+   * what was true then, so an old major is correct there and must stay writable.
    */
   const LIVING_DOCS = DOC_FILES.filter((f) => f !== 'CHANGELOG.md')
 
-  it.each(LIVING_DOCS)('%s names no Node major but the pinned one', (doc) => {
-    // The pins agreed with each other while twelve lines of prose still said Node 22. A constraint
-    // quoted from someone else ("Node >= 22.12" for pg-boss) passes: the regex needs a digit
-    // straight after "Node", and those have the operator in between.
-    const claimed = [...read(doc).matchAll(/Node(?:\.js)? (\d+)/g)].map((m) => m[1] as string)
-    expect([...new Set(claimed)].filter((v) => v !== String(major))).toEqual([])
+  it.each(LIVING_DOCS)('%s names no Node major older than the pinned one', (doc) => {
+    const stale = [...read(doc).matchAll(/Node(?:\.js)? (\d+)/g)]
+      .map((m) => Number(m[1]))
+      .filter((v) => v < major)
+    expect([...new Set(stale)]).toEqual([])
   })
 
   it.each(
