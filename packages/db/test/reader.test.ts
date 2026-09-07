@@ -3,11 +3,13 @@ import { eq, sql } from 'drizzle-orm'
 import {
   countTotals,
   getArticle,
+  getReadingRevision,
   listArticles,
   listSubscriptions,
   markAllRead,
   markExtractRequested,
   markRead,
+  readingRevision,
   subscribe,
   toggleLike,
   unsubscribe,
@@ -249,5 +251,60 @@ describe('reader queries', () => {
     expect(detail?.isSubscribed).toBe(false)
     expect(detail?.title).toBe('Fresh')
     expect(await getArticle(t.db, null, s.byTitle.Fresh as number)).not.toBeNull()
+  })
+})
+
+describe('readingRevision', () => {
+  const base = { contentHash: 'abc', extractCheckedAt: null, translation: null }
+
+  test('changes when the body is replaced', () => {
+    expect(readingRevision(base)).not.toBe(readingRevision({ ...base, contentHash: 'def' }))
+  })
+
+  test('changes when extraction concludes', () => {
+    expect(readingRevision(base)).not.toBe(
+      readingRevision({ ...base, extractCheckedAt: new Date() }),
+    )
+  })
+
+  test('changes as a translation moves through its states', () => {
+    const at = (status: string) =>
+      readingRevision({ ...base, translation: { status, contentHash: 'abc' } })
+    const tags = [readingRevision(base), at('requested'), at('running'), at('done')]
+    expect(new Set(tags).size).toBe(tags.length)
+  })
+
+  test('changes when a translation goes stale against a new body', () => {
+    const fresh = readingRevision({ ...base, translation: { status: 'done', contentHash: 'abc' } })
+    const stale = readingRevision({ ...base, translation: { status: 'done', contentHash: 'old' } })
+    expect(fresh).not.toBe(stale)
+  })
+})
+
+describe('getReadingRevision', () => {
+  test('is null for an article that does not exist', async () => {
+    expect(await getReadingRevision(t.db, 999_999, 'en')).toBeNull()
+  })
+
+  test('is stable until something the reader is waiting on moves', async () => {
+    const id = s.byTitle.Fresh as number
+    const before = await getReadingRevision(t.db, id, 'zh-Hans')
+    expect(before).not.toBeNull()
+    expect(await getReadingRevision(t.db, id, 'zh-Hans')).toBe(before as string)
+
+    await t.db.update(articles).set({ extractCheckedAt: new Date() }).where(eq(articles.id, id))
+    expect(await getReadingRevision(t.db, id, 'zh-Hans')).not.toBe(before as string)
+  })
+
+  test('follows the translation row for the asked-for language only', async () => {
+    const id = s.byTitle.Fresh as number
+    const beforeZh = await getReadingRevision(t.db, id, 'zh-Hans')
+    const beforeEn = await getReadingRevision(t.db, id, 'en')
+    await t.db.execute(
+      sql`insert into article_translations (article_id, target_lang, status, content_hash)
+          values (${id}, 'zh-Hans', 'running', 'abc')`,
+    )
+    expect(await getReadingRevision(t.db, id, 'zh-Hans')).not.toBe(beforeZh as string)
+    expect(await getReadingRevision(t.db, id, 'en')).toBe(beforeEn as string)
   })
 })

@@ -28,9 +28,12 @@ export function RequestTranslation({
     (outcome: Awaited<ReturnType<typeof requestTranslationAction>>) => {
       if (outcome === 'rate_limited') setNotice('rateLimited')
       else if (outcome === 'budget_exhausted') setNotice('budgetExhausted')
-      else router.refresh()
+      // In `auto` mode a PollUntil is already mounted and refreshes once the request has
+      // actually changed something. Refreshing here as well only re-rendered the page to show
+      // the same "requested" state it will show again a moment later.
+      else if (mode === 'button') router.refresh()
     },
-    [router],
+    [router, mode],
   )
   useEffect(() => {
     if (mode !== 'auto') return

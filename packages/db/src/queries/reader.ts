@@ -438,3 +438,63 @@ export async function unsubscribe(db: Db, userId: string, feedId: number): Promi
     .where(and(eq(subscriptions.userId, userId), eq(subscriptions.feedId, feedId)))
   await recomputeReaderCount(db, feedId)
 }
+
+export type ReadingRevisionInput = {
+  /** The article body the tab is showing; changes when extraction replaces it. */
+  contentHash: string | null
+  /** Non-null once extraction has concluded, whatever the outcome. */
+  extractCheckedAt: Date | null
+  /** The body translation row for the reading language, or null when there is none yet. */
+  translation: { status: string; contentHash: string | null } | null
+}
+
+/**
+ * An opaque tag for everything an open article can be waiting on: the body it is showing, and
+ * the state of its translation. A tab polls for this string and refreshes once, when it changes.
+ *
+ * The point is what it replaces. Re-rendering the reading page to discover that a translation is
+ * still running costs a full database wave for the sidebar, the sixty-article list and the body;
+ * comparing two short strings costs one indexed row.
+ */
+export function readingRevision(input: ReadingRevisionInput): string {
+  const t = input.translation
+  return [
+    input.contentHash ?? '',
+    input.extractCheckedAt === null ? '0' : '1',
+    t?.status ?? 'none',
+    t?.contentHash ?? '',
+  ].join('|')
+}
+
+/** The revision tag for one article, in one query. Null when the article does not exist. */
+export async function getReadingRevision(
+  db: Db,
+  articleId: number,
+  targetLang: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({
+      contentHash: articles.contentHash,
+      extractCheckedAt: articles.extractCheckedAt,
+      translationStatus: articleTranslations.status,
+      translationHash: articleTranslations.contentHash,
+    })
+    .from(articles)
+    .leftJoin(
+      articleTranslations,
+      and(
+        eq(articleTranslations.articleId, articles.id),
+        eq(articleTranslations.targetLang, targetLang),
+      ),
+    )
+    .where(eq(articles.id, articleId))
+  if (!row) return null
+  return readingRevision({
+    contentHash: row.contentHash,
+    extractCheckedAt: row.extractCheckedAt,
+    translation:
+      row.translationStatus === null
+        ? null
+        : { status: row.translationStatus, contentHash: row.translationHash },
+  })
+}

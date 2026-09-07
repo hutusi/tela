@@ -6,6 +6,7 @@ import {
   listArticles,
   listSubscriptions,
   markExtractRequested,
+  readingRevision,
 } from '@tela/db/queries'
 import { wantsExtraction } from '@tela/ingest'
 import { getLocale, getTranslations } from 'next-intl/server'
@@ -61,8 +62,10 @@ export default async function ReadingPage({ searchParams }: Props) {
 
   // Foreign article: look up the body translation state for the reading language.
   let translation: ReaderTranslation | null = null
+  let translationRow: Awaited<ReturnType<typeof getArticleTranslation>> = null
   if (article && article.sourceLang && article.sourceLang !== readingLang) {
     const row = await getArticleTranslation(db, article.id, readingLang)
+    translationRow = row
     const fresh = row !== null && row.contentHash === article.contentHash
     const state = row === null || !fresh || row.status === 'pending' ? 'none' : row.status
     translation = {
@@ -76,6 +79,19 @@ export default async function ReadingPage({ searchParams }: Props) {
       title: row?.title ?? null,
     }
   }
+
+  // What the open article is waiting on, as one string. A tab polls the state endpoint for it
+  // instead of re-rendering this whole page to find out whether anything moved.
+  const revision =
+    article === null
+      ? ''
+      : readingRevision({
+          contentHash: article.contentHash,
+          extractCheckedAt: article.extractCheckedAt,
+          translation: translationRow
+            ? { status: translationRow.status, contentHash: translationRow.contentHash }
+            : null,
+        })
 
   const open = article !== null
   const selected =
@@ -116,6 +132,8 @@ export default async function ReadingPage({ searchParams }: Props) {
             translation={translation}
             recommendation={recommendation}
             extracting={extracting}
+            readingLang={readingLang}
+            revision={revision}
           />
         ) : (
           <EmptyState unread={totals.all} hasSubscriptions={subscriptions.length > 0} />
