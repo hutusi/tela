@@ -1,4 +1,4 @@
-import { UNREAD_HORIZON_DAYS } from '@tela/shared'
+import { type TranslationStatus, UNREAD_HORIZON_DAYS } from '@tela/shared'
 import { and, desc, eq, gt, isNotNull, isNull, lt, or, sql } from 'drizzle-orm'
 import type { Db, DbExecutor } from '../client'
 import {
@@ -539,12 +539,13 @@ export type ReadingRevisionInput = {
   /** Non-null once extraction has concluded, whatever the outcome. */
   extractCheckedAt: Date | null
   /** The body translation row for the reading language, or null when there is none yet. */
-  translation: { status: string; contentHash: string | null } | null
+  translation: { status: TranslationStatus; contentHash: string | null } | null
 }
 
 /**
  * An opaque tag for everything an open article can be waiting on: the body it is showing, and
- * the state of its translation. A tab polls for this string and refreshes once, when it changes.
+ * whether its translation has reached a terminal outcome. A tab polls for this string and
+ * refreshes once, when the result is displayable or needs the reader's attention.
  *
  * The point is what it replaces. Re-rendering the reading page to discover that a translation is
  * still running costs a full database wave for the sidebar, the sixty-article list and the body;
@@ -552,12 +553,19 @@ export type ReadingRevisionInput = {
  */
 export function readingRevision(input: ReadingRevisionInput): string {
   const t = input.translation
-  return [
-    input.contentHash ?? '',
-    input.extractCheckedAt === null ? '0' : '1',
-    t?.status ?? 'none',
-    t?.contentHash ?? '',
-  ].join('|')
+  const fresh = t !== null && t.contentHash === input.contentHash
+  const settled = fresh && (t.status === 'done' || t.status === 'partial' || t.status === 'failed')
+  // A running attempt for an older body cannot be replaced yet. Wake once when it becomes a
+  // stale terminal row, so the reader can request the current body without refreshing for the
+  // ordinary pending → requested → running transitions.
+  const translation = settled
+    ? `${t.status}:${t.contentHash ?? ''}`
+    : !fresh && t?.status === 'running'
+      ? 'stale-running'
+      : 'waiting'
+  return [input.contentHash ?? '', input.extractCheckedAt === null ? '0' : '1', translation].join(
+    '|',
+  )
 }
 
 /** The revision tag for one article, in one query. Null when the article does not exist. */

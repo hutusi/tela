@@ -199,12 +199,14 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
   `waitUntil`; and the panes render behind Suspense boundaries under `app/reading/layout.tsx`, so
   the header does not wait for any of it. A server action whose caller applies its return value
   does not revalidate, and nothing calls `router.refresh()` on a timer — a tab waiting on a
-  translation or a full-text fetch polls `/api/reading/state` for one row instead.
+  translation or a full-text fetch polls `/api/reading/state` for one row and refreshes only when
+  the result becomes displayable or needs the reader's attention.
   `apps/web/e2e/reader.e2e.ts` asserts that opening an article renders the page once.
 - The reading language lives in a `tela_reading_lang` cookie (`lib/reading-lang-cookie.ts`) so the
   page does not have to read `profiles` before it knows which translations to join. The row stays
-  the source of truth and the fallback; the cookie carries the member id so one left in a shared
-  browser is ignored.
+  the source of truth and the fallback. Every sign-in path seeds the cookie; an existing session
+  that lacks it pays the profile lookup once and repairs the cache after hydration. The cookie
+  carries the member id so one left in a shared browser is ignored.
 - Known and deliberately unfixed: `articles.fetched_at` has no index, and `listArticles` sorts on
   the unindexed expression `coalesce(published_at, fetched_at)`. Both cost nothing at present
   volumes (17 ms on 142 articles) and will matter later.

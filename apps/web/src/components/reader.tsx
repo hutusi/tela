@@ -70,6 +70,8 @@ export async function Reader({
   const pending =
     translation !== null && (translation.state === 'requested' || translation.state === 'running')
   const needsRequest = translation !== null && translation.state === 'none'
+  const failed = translation?.state === 'failed'
+  const requestOwnsPolling = needsRequest || failed
 
   return (
     <main
@@ -84,9 +86,15 @@ export async function Reader({
         </p>
       ) : null}
       {needsRequest ? (
-        <RequestTranslation articleId={article.id} targetLang={translation.targetLang} />
+        <RequestTranslation
+          key={`request:${article.id}:${translation.targetLang}`}
+          articleId={article.id}
+          targetLang={translation.targetLang}
+          revision={revision}
+          pollInitially={extracting}
+        />
       ) : null}
-      {pending || extracting || needsRequest ? (
+      {!requestOwnsPolling && (pending || extracting) ? (
         <PollUntil articleId={article.id} lang={readingLang} revision={revision} />
       ) : null}
 
@@ -142,9 +150,12 @@ export async function Reader({
         ) : null}
         {translation?.state === 'failed' ? (
           <RequestTranslation
+            key={`retry:${article.id}:${translation.targetLang}`}
             articleId={article.id}
             targetLang={translation.targetLang}
             mode="button"
+            revision={revision}
+            pollInitially={extracting}
           />
         ) : null}
 

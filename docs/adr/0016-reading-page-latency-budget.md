@@ -28,14 +28,16 @@ Two budgets for `/reading`, and a rule about who may cause a render.
 - **One database wave per render.** Every query the page needs starts in one flight. Nothing on the
   page may await a query in order to decide what to query next. The reading language, which decides
   which translations to join, therefore comes from a cookie (`tela_reading_lang`, written by the
-  action that changes it and seeded at sign-in) with the `profiles` row as the source of truth and
-  the fallback.
+  action that changes it and seeded by every sign-in path) with the `profiles` row as the source of
+  truth and the fallback. A pre-existing session that misses the cookie pays that fallback once
+  and repairs the cache in the browser after the successful lookup.
 - **`getArticle` returns the whole reader pane** — content, read and liked state, the body
   translation for the reading language, and the member's own recommendation — because those were
   three sequential lookups building one pane and nothing forced them apart.
-- **Only navigation renders the page.** A server action that returns the truth its caller applies
-  does not revalidate, and its caller does not refresh. Waiting on background work is a poll of
-  `/api/reading/state`, one indexed row, not a re-render.
+- **Only navigation or a terminal background result renders the page.** A server action that
+  returns the truth its caller applies does not revalidate, and its caller does not refresh.
+  Waiting on background work is a poll of `/api/reading/state`, one indexed row, not a re-render;
+  transient translation states share one revision, and a refused request never starts polling.
 - **Writes nobody is waiting on run after the response**, through `waitUntil` — the claim on an
   extraction window, not the reader's view of it.
 - **The page streams.** The header lives in `app/reading/layout.tsx` and the panes render behind
@@ -58,7 +60,8 @@ wire at 0.26 s and the reader pane follows at 0.51 s. And that is one render —
 cause up to five.
 
 - Round trips per article click fall from about ten to one wave plus the header's profile row,
-  which streams; renders per click fall from up to five to one.
+  which streams; renders per ordinary click fall from up to five to one, with one later refresh
+  when a requested translation or extraction reaches a terminal result.
 - Sidebar unread counts can lag by one until the next navigation, because opening an article no
   longer re-renders the page to update them. The opened row is shown as read by the render that
   opens it.

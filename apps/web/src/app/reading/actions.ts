@@ -56,10 +56,7 @@ export async function toggleLikeAction(
 }
 
 /** Ask for a body translation; enqueues translate.body at reader priority when new. */
-export async function requestTranslationAction(
-  articleId: number,
-  targetLang: string,
-): Promise<
+export type TranslationRequestOutcome =
   | 'requested'
   | 'in_progress'
   | 'ready'
@@ -67,7 +64,11 @@ export async function requestTranslationAction(
   | 'rate_limited'
   | 'budget_exhausted'
   | 'unavailable'
-> {
+
+export async function requestTranslationAction(
+  articleId: number,
+  targetLang: string,
+): Promise<TranslationRequestOutcome> {
   const user = await requireUser()
   const target = id(articleId)
   if (!target || !isReadingLanguage(targetLang)) return 'invalid'

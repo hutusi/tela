@@ -325,17 +325,39 @@ describe('readingRevision', () => {
     )
   })
 
-  test('changes as a translation moves through its states', () => {
-    const at = (status: string) =>
+  test('stays stable while a translation moves through non-terminal states', () => {
+    const at = (status: 'pending' | 'requested' | 'running') =>
       readingRevision({ ...base, translation: { status, contentHash: 'abc' } })
-    const tags = [readingRevision(base), at('requested'), at('running'), at('done')]
-    expect(new Set(tags).size).toBe(tags.length)
+    const tags = [readingRevision(base), at('pending'), at('requested'), at('running')]
+    expect(new Set(tags).size).toBe(1)
   })
 
-  test('changes when a translation goes stale against a new body', () => {
-    const fresh = readingRevision({ ...base, translation: { status: 'done', contentHash: 'abc' } })
+  test('changes only when a fresh translation reaches a terminal state', () => {
+    const waiting = readingRevision(base)
+    for (const status of ['done', 'partial', 'failed'] as const) {
+      expect(readingRevision({ ...base, translation: { status, contentHash: 'abc' } })).not.toBe(
+        waiting,
+      )
+    }
+  })
+
+  test('treats a terminal translation for an old body as still waiting', () => {
     const stale = readingRevision({ ...base, translation: { status: 'done', contentHash: 'old' } })
-    expect(fresh).not.toBe(stale)
+    expect(stale).toBe(readingRevision(base))
+  })
+
+  test('wakes when an irreplaceable stale running attempt finishes', () => {
+    const running = readingRevision({
+      ...base,
+      translation: { status: 'running', contentHash: 'old' },
+    })
+    const failed = readingRevision({
+      ...base,
+      translation: { status: 'failed', contentHash: 'old' },
+    })
+    expect(running).not.toBe(readingRevision(base))
+    expect(failed).toBe(readingRevision(base))
+    expect(failed).not.toBe(running)
   })
 })
 
@@ -356,13 +378,18 @@ describe('getReadingRevision', () => {
 
   test('follows the translation row for the asked-for language only', async () => {
     const id = s.byTitle.Fresh as number
+    await t.db.update(articles).set({ contentHash: 'abc' }).where(eq(articles.id, id))
     const beforeZh = await getReadingRevision(t.db, id, 'zh-Hans')
     const beforeEn = await getReadingRevision(t.db, id, 'en')
     await t.db.execute(
       sql`insert into article_translations (article_id, target_lang, status, content_hash)
           values (${id}, 'zh-Hans', 'running', 'abc')`,
     )
-    expect(await getReadingRevision(t.db, id, 'zh-Hans')).not.toBe(beforeZh as string)
+    expect(await getReadingRevision(t.db, id, 'zh-Hans')).toBe(beforeZh as string)
     expect(await getReadingRevision(t.db, id, 'en')).toBe(beforeEn as string)
+    await t.db.execute(
+      sql`update article_translations set status = 'done' where article_id = ${id} and target_lang = 'zh-Hans'`,
+    )
+    expect(await getReadingRevision(t.db, id, 'zh-Hans')).not.toBe(beforeZh as string)
   })
 })

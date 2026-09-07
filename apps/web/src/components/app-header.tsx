@@ -4,9 +4,10 @@ import { Suspense } from 'react'
 import { signOut } from '@/app/login/actions'
 import { getSessionUser } from '@/lib/auth'
 import { getCurrentProfile } from '@/lib/profile'
-import { getReadingLang } from '@/lib/reading'
+import { getReadingLangState } from '@/lib/reading'
 import { LocaleSwitcher } from './locale-switcher'
 import { ReadInMenu } from './read-in-menu'
+import { ReadingLangCookieSeed } from './reading-lang-cookie-seed'
 
 type NavKey = 'reading' | 'discover' | 'dashboard' | 'settings'
 
@@ -117,5 +118,11 @@ export async function AppHeader({ active, query }: { active?: NavKey; query?: st
  * written yet falls back to the profile row — a query, and one this header must not block on.
  */
 async function ReadInMenuAsync() {
-  return <ReadInMenu readingLang={await getReadingLang()} />
+  const { lang, seed } = await getReadingLangState()
+  return (
+    <>
+      <ReadInMenu readingLang={lang} />
+      {seed ? <ReadingLangCookieSeed userId={seed.userId} lang={seed.lang} /> : null}
+    </>
+  )
 }

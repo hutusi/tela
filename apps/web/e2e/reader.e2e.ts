@@ -19,6 +19,14 @@ test.describe('reader', () => {
     await expect(subs).toHaveCount(2)
     await expect(subs.first()).toContainText(/Julia Evans|胡涂说/)
     await expect(page.getByTestId('article-row').first()).toBeVisible()
+    // Dev auth has no sign-in callback. The first profile fallback repairs the missing cache so
+    // later navigations do not keep putting that query in front of the reader's database wave.
+    await expect
+      .poll(async () => {
+        const cookies = await page.context().cookies()
+        return cookies.find((cookie) => cookie.name === 'tela_reading_lang')?.value
+      })
+      .toMatch(/:en$/)
   })
 
   test('opening an article marks it read and like toggles the counter', async ({ page }) => {
@@ -165,6 +173,15 @@ test.describe('translation', () => {
       )
       .toContain('en:')
 
+    const renders: string[] = []
+    page.on('request', (request) => {
+      if (
+        new URL(request.url()).pathname === '/reading' &&
+        request.headers()['next-router-prefetch'] !== '1'
+      ) {
+        renders.push(request.method())
+      }
+    })
     await row.click()
     const bar = page.getByTestId('translation-bar')
     await expect(bar).toBeVisible()
@@ -174,6 +191,9 @@ test.describe('translation', () => {
     await expect(page.getByTestId('body-translated')).toContainText('en:')
     await expect(page.getByTestId('body-original')).toBeVisible()
     await expect(page.getByTestId('article-title')).toContainText('en:')
+    // One navigation and one refresh when the body translation becomes displayable. Transient
+    // pending/requested/running states must not render the whole page.
+    expect(renders.filter((method) => method === 'GET')).toHaveLength(2)
 
     await page.getByTestId('mode-trans').click()
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans')

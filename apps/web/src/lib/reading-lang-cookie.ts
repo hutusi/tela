@@ -3,9 +3,11 @@ import { isReadingLanguage, type ReadingLanguage } from '@tela/shared'
 /** Where the browser remembers the reading language. See `getReadingLang`. */
 export const READING_LANG_COOKIE = 'tela_reading_lang'
 
+export const READING_LANG_COOKIE_MAX_AGE = 365 * 24 * 3600
+
 export const READING_LANG_COOKIE_OPTIONS = {
   path: '/',
-  maxAge: 365 * 24 * 3600,
+  maxAge: READING_LANG_COOKIE_MAX_AGE,
   sameSite: 'lax',
 } as const
 
@@ -21,6 +23,11 @@ export const READING_LANG_COOKIE_OPTIONS = {
  */
 export function readingLangCookie(userId: string, lang: ReadingLanguage): string {
   return `${userId}:${lang}`
+}
+
+/** Set-Cookie-shaped value for repairing a missing cache from a hydrated browser. */
+export function readingLangDocumentCookie(userId: string, lang: ReadingLanguage): string {
+  return `${READING_LANG_COOKIE}=${readingLangCookie(userId, lang)}; Path=/; Max-Age=${READING_LANG_COOKIE_MAX_AGE}; SameSite=Lax`
 }
 
 /** The language a cookie holds for this member, or null when it holds nothing usable. */

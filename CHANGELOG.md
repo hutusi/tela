@@ -64,7 +64,8 @@ everything so far sits under `[Unreleased]`.
   sequential, from a Worker running at the reader's edge. Now every query leaves in one flight,
   `getArticle` brings back the whole reader pane, the extraction claim runs after the response, the
   panes stream behind Suspense boundaries, and a tab waiting on a translation polls one indexed row
-  instead of re-rendering the page (ADR 0016).
+  until a terminal result arrives instead of re-rendering for transient or refused work
+  (ADR 0016).
 
 - **Tela serves from `tela.ainaive.com`, and `workers.dev` is off.** The `workers.dev` address is
   blocked in mainland China, so it is a dead link for part of the audience; a custom-domain route
