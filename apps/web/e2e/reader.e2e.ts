@@ -31,7 +31,8 @@ test.describe('reader', () => {
     await expect(page.getByTestId('article-title')).toHaveText(title)
     await expect(page.locator('.article-body')).toBeVisible()
 
-    // Marked read on open: the row loses its dot after the refresh.
+    // Marked read on open: the navigation render already shows the selected row as read, so
+    // the dot is gone without a second round trip.
     await expect(page.getByTestId('article-row').first().getByTestId('unread-dot')).toHaveCount(0)
 
     const like = page.getByTestId('like-button')

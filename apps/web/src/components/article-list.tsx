@@ -76,6 +76,10 @@ export async function ArticleList({
       <div className="flex flex-col px-3 pb-10">
         {items.map((a) => {
           const active = a.id === params.articleId
+          // Opening an article marks it read (MarkRead fires the action), and this render is the
+          // one the reader sees. Showing the selected row as read here is what lets that action
+          // stay fire-and-forget instead of costing a second render of the whole page.
+          const read = a.isRead || active
           const showBadge = foreign(a.sourceLang, readingLang)
           const shownTitle = showBadge && a.translatedTitle ? a.translatedTitle : a.title
           const shownExcerpt = showBadge && a.translatedExcerpt ? a.translatedExcerpt : a.excerpt
@@ -86,7 +90,7 @@ export async function ArticleList({
               className={`flex flex-col gap-1.5 rounded-lg border-t border-line px-2.5 py-3.5 text-ink hover:bg-hover hover:no-underline ${active ? 'bg-white' : ''}`}
               style={{ opacity: a.isRead && !active ? 0.62 : 1 }}
               data-testid="article-row"
-              data-read={a.isRead ? '1' : '0'}
+              data-read={read ? '1' : '0'}
             >
               <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
                 <Swatch id={a.feedId} title={a.feedTitle} size={10} />
@@ -111,7 +115,7 @@ export async function ArticleList({
                     {languageBadge(a.sourceLang ?? '')}
                   </span>
                 ) : null}
-                {!a.isRead ? (
+                {!read ? (
                   <span
                     className="size-[7px] shrink-0 rounded-full bg-accent"
                     data-testid="unread-dot"

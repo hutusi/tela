@@ -1,7 +1,6 @@
 'use client'
 
 import { RECOMMENDATION_NOTE_MAX } from '@tela/shared'
-import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useEffect, useState, useTransition } from 'react'
 import { recommendAction, unrecommendAction } from '@/app/reading/actions'
@@ -16,7 +15,6 @@ type Props = {
 /** "Recommend" with an optional note, shown on the member's profile and to the author. */
 export function RecommendPopover({ articleId, recommended, note, recommendCount }: Props) {
   const t = useTranslations('reader')
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [text, setText] = useState(note ?? '')
   const [state, setState] = useState({ recommended, recommendCount })
@@ -35,7 +33,6 @@ export function RecommendPopover({ articleId, recommended, note, recommendCount 
       setState({ recommended: true, recommendCount: result.recommendCount })
       setOpen(false)
       setToast(text.trim() ? t('recommendedWithNote') : t('recommended'))
-      router.refresh()
     })
 
   const remove = () =>
@@ -43,7 +40,6 @@ export function RecommendPopover({ articleId, recommended, note, recommendCount 
       const result = await unrecommendAction(articleId)
       setState({ recommended: false, recommendCount: result.recommendCount })
       setToast(t('unrecommended'))
-      router.refresh()
     })
 
   return (

@@ -31,8 +31,10 @@ export async function markReadAction(articleId: number): Promise<void> {
   const user = await requireUser()
   const target = id(articleId)
   if (!target) return
+  // No revalidatePath: MarkRead is fire-and-forget and the page that follows a click already
+  // renders the open article as read. Revalidating made the action's own response carry a full
+  // re-render of the three-pane page.
   await markRead(await getDb(), user.id, target)
-  revalidatePath('/reading')
 }
 
 export async function markAllReadAction(form: FormData): Promise<void> {
@@ -48,8 +50,8 @@ export async function toggleLikeAction(
   const user = await requireUser()
   const target = id(articleId)
   if (!target) return { liked: false, likeCount: 0 }
+  // The caller applies this return value, so there is nothing to re-render for.
   const result = await toggleLike(await getDb(), user.id, target)
-  revalidatePath('/reading')
   return result
 }
 
@@ -121,7 +123,6 @@ export async function recommendAction(
   const target = id(articleId)
   if (!target) return { recommended: false, recommendCount: 0 }
   const result = await recommend(await getDb(), user.id, target, note)
-  revalidatePath('/reading')
   return { recommended: true, recommendCount: result.recommendCount }
 }
 
@@ -132,6 +133,5 @@ export async function unrecommendAction(
   const target = id(articleId)
   if (!target) return { recommended: false, recommendCount: 0 }
   const result = await unrecommend(await getDb(), user.id, target)
-  revalidatePath('/reading')
   return { recommended: false, recommendCount: result.recommendCount }
 }
