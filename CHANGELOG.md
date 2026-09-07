@@ -76,14 +76,17 @@ everything so far sits under `[Unreleased]`.
   deployed runtime does not have (ADR 0001).
 
 - **Toolchain and dependencies moved to current majors.** TypeScript 7 — the native compiler,
-  which cuts Next's typecheck from 3.3s to under a second; undici 8 under the worker's DNS-pinned
-  fetch; the htmlparser2 family (htmlparser2 12, domutils 4, domhandler 6, dom-serializer 3,
-  entities 8), which puts our own parsing on the same version `sanitize-html` already used — the
-  two had drifted apart, so the pipeline sanitized with 12 and blocked with 10. The tree still
-  carries a second copy for `linkedom`, which pins `htmlparser2@^10.1`; that is the extraction
-  path, not the block path.
-  `NORM_VERSION` stays at 1: the block-hash snapshots over the real article fixtures are
-  unchanged, so the translation cache survives. Every GitHub Action moved to its current major.
+  which cuts Next's typecheck from 3.3s to under a second — and undici 8 under the worker's
+  DNS-pinned fetch. Every GitHub Action moved to its current major. `NORM_VERSION` stays at 1;
+  nothing here touches block normalization, so the translation cache survives.
+
+  The htmlparser2 family stays where it was. Moving it to htmlparser2 12 and its ESM-only
+  siblings made `sanitize-html` — which is CommonJS and `require`s htmlparser2 — fail to load
+  under the Bun test runner, intermittently and depending on which module the process reached
+  first. Production was never at risk (the worker runs on Node, which handles `require(esm)`), but
+  a test suite that fails on one run in several is not worth what the upgrade bought: our own
+  parsing matching the version `sanitize-html` already used. It never deduplicated the tree —
+  `linkedom` pins `htmlparser2@^10.1` regardless.
 
 - **The session pooler is the database path** for Hyperdrive, the worker and migrations: it has
   IPv4 and keeps prepared statements. Supabase's paid IPv4 add-on stays off, and the runbook names
