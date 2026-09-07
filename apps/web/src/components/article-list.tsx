@@ -5,6 +5,7 @@ import { getTranslations } from 'next-intl/server'
 import { markAllReadAction } from '@/app/reading/actions'
 import { type ReadingParams, readingHref } from '@/app/reading/href'
 import { relativeTime } from '@/lib/format'
+import { LinkPending } from './link-pending'
 import { Swatch } from './swatch'
 
 type Props = {
@@ -76,6 +77,10 @@ export async function ArticleList({
       <div className="flex flex-col px-3 pb-10">
         {items.map((a) => {
           const active = a.id === params.articleId
+          // Opening an article marks it read (MarkRead fires the action), and this render is the
+          // one the reader sees. Showing the selected row as read here is what lets that action
+          // stay fire-and-forget instead of costing a second render of the whole page.
+          const read = a.isRead || active
           const showBadge = foreign(a.sourceLang, readingLang)
           const shownTitle = showBadge && a.translatedTitle ? a.translatedTitle : a.title
           const shownExcerpt = showBadge && a.translatedExcerpt ? a.translatedExcerpt : a.excerpt
@@ -83,11 +88,12 @@ export async function ArticleList({
             <Link
               key={a.id}
               href={readingHref({ ...params, articleId: a.id })}
-              className={`flex flex-col gap-1.5 rounded-lg border-t border-line px-2.5 py-3.5 text-ink hover:bg-hover hover:no-underline ${active ? 'bg-white' : ''}`}
+              className={`relative flex flex-col gap-1.5 rounded-lg border-t border-line px-2.5 py-3.5 text-ink hover:bg-hover hover:no-underline ${active ? 'bg-white' : ''}`}
               style={{ opacity: a.isRead && !active ? 0.62 : 1 }}
               data-testid="article-row"
-              data-read={a.isRead ? '1' : '0'}
+              data-read={read ? '1' : '0'}
             >
+              <LinkPending />
               <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
                 <Swatch id={a.feedId} title={a.feedTitle} size={10} />
                 <span className="min-w-0 flex-1 truncate font-medium text-ink">{a.feedTitle}</span>
@@ -111,7 +117,7 @@ export async function ArticleList({
                     {languageBadge(a.sourceLang ?? '')}
                   </span>
                 ) : null}
-                {!a.isRead ? (
+                {!read ? (
                   <span
                     className="size-[7px] shrink-0 rounded-full bg-accent"
                     data-testid="unread-dot"

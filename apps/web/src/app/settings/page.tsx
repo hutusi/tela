@@ -1,11 +1,10 @@
-import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
+import { isReadingLanguage, LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
 import Link from 'next/link'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { AppHeader } from '@/components/app-header'
 import { ReadInMenu } from '@/components/read-in-menu'
 import { requireUser } from '@/lib/auth'
 import { getCurrentProfile } from '@/lib/profile'
-import { getReadingLang } from '@/lib/reading'
 import { SettingsForm } from './settings-form'
 
 export const dynamic = 'force-dynamic'
@@ -17,12 +16,18 @@ export async function generateMetadata() {
 
 export default async function SettingsPage() {
   await requireUser('/settings')
-  const [profile, t, locale, readingLang] = await Promise.all([
+  const [profile, t, locale] = await Promise.all([
     getCurrentProfile(),
     getTranslations('settings'),
     getLocale(),
-    getReadingLang(),
   ])
+  // Settings shows what the account holds, not what this browser's cookie remembers, so a value
+  // changed on another device is visible here.
+  const readingLang = isReadingLanguage(profile?.readingLang)
+    ? profile.readingLang
+    : isReadingLanguage(locale)
+      ? locale
+      : 'en'
   const names = LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en
   return (
     <>

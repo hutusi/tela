@@ -74,6 +74,9 @@
     "pickArticle": "在左侧选择一篇文章。其他语言的文章会与译文并排显示。",
     "unreadCount": "{n} 篇未读",
     "noContent": "这篇文章的订阅源中没有可读内容。",
+    "articleGone": "这篇文章已不存在。请在左侧另选一篇。",
+    "loadFailed": "加载时出错了。",
+    "retry": "重试",
     "recommendedLabel": "已推荐",
     "recommendTitle": "推荐给你的读者",
     "recommendPlaceholder": "为什么值得一读？（可选）",
@@ -120,6 +123,7 @@
     "columnOriginal": "原文",
     "rateLimited": "翻译请求过于频繁，请稍后再试。",
     "budgetExhausted": "今日的翻译额度已用完，明天会重置。",
+    "unavailable": "暂时无法开始翻译，请重试。",
     "retry": "重新翻译"
   },
   "discover": {

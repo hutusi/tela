@@ -3,11 +3,13 @@ import { eq, sql } from 'drizzle-orm'
 import {
   countTotals,
   getArticle,
+  getReadingRevision,
   listArticles,
   listSubscriptions,
   markAllRead,
   markExtractRequested,
   markRead,
+  readingRevision,
   subscribe,
   toggleLike,
   unsubscribe,
@@ -249,5 +251,198 @@ describe('reader queries', () => {
     expect(detail?.isSubscribed).toBe(false)
     expect(detail?.title).toBe('Fresh')
     expect(await getArticle(t.db, null, s.byTitle.Fresh as number)).not.toBeNull()
+  })
+})
+
+describe('getArticle carries the reader pane in one row', () => {
+  test('sums the body length in SQL, skipped blocks excluded', async () => {
+    const id = s.byTitle.Fresh as number
+    await t.db
+      .update(articleContents)
+      .set({
+        blocks: [
+          { id: 'b1', hash: 'h1', tag: 'p', chars: 400 },
+          { id: 'b2', hash: 'h2', tag: 'p', chars: 250 },
+          { id: 'b3', hash: 'h3', tag: 'figcaption', chars: 900, skip: true },
+        ],
+      })
+      .where(eq(articleContents.articleId, id))
+    expect((await getArticle(t.db, userA, id))?.bodyChars).toBe(650)
+  })
+
+  test('is zero when the article has no content row at all', async () => {
+    const id = s.byTitle.Fresh as number
+    await t.db.delete(articleContents).where(eq(articleContents.articleId, id))
+    const detail = await getArticle(t.db, userA, id)
+    expect(detail?.bodyChars).toBe(0)
+    expect(detail?.html).toBe('')
+  })
+
+  test('brings back the translation for the asked-for language, and only that one', async () => {
+    const id = s.byTitle.Fresh as number
+    await t.db.execute(
+      sql`insert into article_translations
+            (article_id, target_lang, status, content_hash, title, html, failed_block_ids)
+          values (${id}, 'zh-Hans', 'partial', 'h1', '译名', '<p>译文</p>', '{b7}')`,
+    )
+    expect(await getArticle(t.db, userA, id).then((a) => a?.translation)).toBeNull()
+    const zh = await getArticle(t.db, userA, id, { translateTo: 'zh-Hans' })
+    expect(zh?.translation).toEqual({
+      status: 'partial',
+      contentHash: 'h1',
+      attempt: expect.any(String),
+      title: '译名',
+      html: '<p>译文</p>',
+      failedBlocks: 1,
+    })
+    expect(zh?.translatedTitle).toBe('译名')
+    expect((await getArticle(t.db, userA, id, { translateTo: 'en' }))?.translation).toBeNull()
+  })
+
+  test('brings back the reader own recommendation, note or not', async () => {
+    const id = s.byTitle.Fresh as number
+    expect((await getArticle(t.db, userA, id))?.recommendation).toBeNull()
+    await t.db.execute(
+      sql`insert into recommendations (user_id, article_id, note) values (${userA}, ${id}, null)`,
+    )
+    // A recommendation with no note is still a recommendation: presence comes from the row, not
+    // from the note, which a left join reports as null either way.
+    expect((await getArticle(t.db, userA, id))?.recommendation).toEqual({ note: null })
+    expect((await getArticle(t.db, userB, id))?.recommendation).toBeNull()
+    expect((await getArticle(t.db, null, id))?.recommendation).toBeNull()
+  })
+})
+
+describe('readingRevision', () => {
+  const base = { contentHash: 'abc', extractCheckedAt: null, translation: null }
+  const ATTEMPT = '11111111-1111-4111-8111-111111111111'
+  const OTHER_ATTEMPT = '22222222-2222-4222-8222-222222222222'
+
+  test('changes when the body is replaced', () => {
+    expect(readingRevision(base)).not.toBe(readingRevision({ ...base, contentHash: 'def' }))
+  })
+
+  test('changes when extraction concludes', () => {
+    expect(readingRevision(base)).not.toBe(
+      readingRevision({ ...base, extractCheckedAt: new Date() }),
+    )
+  })
+
+  test('stays stable while a translation moves through non-terminal states', () => {
+    const at = (status: 'pending' | 'requested' | 'running') =>
+      readingRevision({ ...base, translation: { status, contentHash: 'abc', attempt: ATTEMPT } })
+    const tags = [readingRevision(base), at('pending'), at('requested'), at('running')]
+    expect(new Set(tags).size).toBe(1)
+  })
+
+  test('changes only when a fresh translation reaches a terminal state', () => {
+    const waiting = readingRevision(base)
+    for (const status of ['done', 'partial', 'failed'] as const) {
+      expect(
+        readingRevision({ ...base, translation: { status, contentHash: 'abc', attempt: ATTEMPT } }),
+      ).not.toBe(waiting)
+    }
+  })
+
+  test('changes when a retry fails the same way, so the reader gets the button back', () => {
+    // failed → requested → failed lands on the same status and hash it started from. Without the
+    // attempt the revision is identical, the tab polls until its budget runs out, and the retry
+    // button never comes back.
+    const first = readingRevision({
+      ...base,
+      translation: { status: 'failed', contentHash: 'abc', attempt: ATTEMPT },
+    })
+    const retried = readingRevision({
+      ...base,
+      translation: { status: 'failed', contentHash: 'abc', attempt: OTHER_ATTEMPT },
+    })
+    expect(retried).not.toBe(first)
+  })
+
+  test('does not churn on the attempt while a request is still waiting', () => {
+    const one = readingRevision({
+      ...base,
+      translation: { status: 'requested', contentHash: 'abc', attempt: ATTEMPT },
+    })
+    const two = readingRevision({
+      ...base,
+      translation: { status: 'running', contentHash: 'abc', attempt: OTHER_ATTEMPT },
+    })
+    expect(one).toBe(two)
+  })
+
+  test('treats a terminal translation for an old body as still waiting', () => {
+    const stale = readingRevision({
+      ...base,
+      translation: { status: 'done', contentHash: 'old', attempt: ATTEMPT },
+    })
+    expect(stale).toBe(readingRevision(base))
+  })
+
+  test('wakes when an irreplaceable stale running attempt finishes', () => {
+    const running = readingRevision({
+      ...base,
+      translation: { status: 'running', contentHash: 'old', attempt: ATTEMPT },
+    })
+    const failed = readingRevision({
+      ...base,
+      translation: { status: 'failed', contentHash: 'old', attempt: ATTEMPT },
+    })
+    expect(running).not.toBe(readingRevision(base))
+    expect(failed).toBe(readingRevision(base))
+    expect(failed).not.toBe(running)
+  })
+})
+
+describe('getReadingRevision', () => {
+  test('is null for an article that does not exist', async () => {
+    expect(await getReadingRevision(t.db, 999_999, 'en')).toBeNull()
+  })
+
+  test('is stable until something the reader is waiting on moves', async () => {
+    const id = s.byTitle.Fresh as number
+    const before = await getReadingRevision(t.db, id, 'zh-Hans')
+    expect(before).not.toBeNull()
+    expect(await getReadingRevision(t.db, id, 'zh-Hans')).toBe(before as string)
+
+    await t.db.update(articles).set({ extractCheckedAt: new Date() }).where(eq(articles.id, id))
+    expect(await getReadingRevision(t.db, id, 'zh-Hans')).not.toBe(before as string)
+  })
+
+  test('changes when a retry lands on the same terminal status', async () => {
+    const id = s.byTitle.Fresh as number
+    const hash = (await getArticle(t.db, userA, id))?.contentHash
+    await t.db.execute(
+      sql`insert into article_translations (article_id, target_lang, status, content_hash)
+          values (${id}, 'zh-Hans', 'failed', ${hash})`,
+    )
+    const failed = await getReadingRevision(t.db, id, 'zh-Hans')
+    // What a retry does: a fresh attempt on the same row, which then fails the same way.
+    await t.db.execute(
+      sql`update article_translations set status = 'requested', attempt = gen_random_uuid()
+          where article_id = ${id} and target_lang = 'zh-Hans'`,
+    )
+    await t.db.execute(
+      sql`update article_translations set status = 'failed'
+          where article_id = ${id} and target_lang = 'zh-Hans'`,
+    )
+    expect(await getReadingRevision(t.db, id, 'zh-Hans')).not.toBe(failed as string)
+  })
+
+  test('follows the translation row for the asked-for language only', async () => {
+    const id = s.byTitle.Fresh as number
+    await t.db.update(articles).set({ contentHash: 'abc' }).where(eq(articles.id, id))
+    const beforeZh = await getReadingRevision(t.db, id, 'zh-Hans')
+    const beforeEn = await getReadingRevision(t.db, id, 'en')
+    await t.db.execute(
+      sql`insert into article_translations (article_id, target_lang, status, content_hash)
+          values (${id}, 'zh-Hans', 'running', 'abc')`,
+    )
+    expect(await getReadingRevision(t.db, id, 'zh-Hans')).toBe(beforeZh as string)
+    expect(await getReadingRevision(t.db, id, 'en')).toBe(beforeEn as string)
+    await t.db.execute(
+      sql`update article_translations set status = 'done' where article_id = ${id} and target_lang = 'zh-Hans'`,
+    )
+    expect(await getReadingRevision(t.db, id, 'zh-Hans')).not.toBe(beforeZh as string)
   })
 })

@@ -1,4 +1,4 @@
-import { UNREAD_HORIZON_DAYS } from '@tela/shared'
+import { type TranslationStatus, UNREAD_HORIZON_DAYS } from '@tela/shared'
 import { and, desc, eq, gt, isNotNull, isNull, lt, or, sql } from 'drizzle-orm'
 import type { Db, DbExecutor } from '../client'
 import {
@@ -6,6 +6,7 @@ import {
   articles,
   articleTranslations,
   feeds,
+  recommendations,
   sites,
   subscriptions,
   userArticleStates,
@@ -193,9 +194,24 @@ export async function listArticles(
   }))
 }
 
+/** The body translation for the asked-for reading language, as the reader needs it. */
+export type ArticleTranslationDetail = {
+  status: (typeof articleTranslations.$inferSelect)['status']
+  contentHash: string | null
+  /** Identity of the attempt behind this status; part of the revision a tab polls for. */
+  attempt: string
+  title: string | null
+  html: string | null
+  failedBlocks: number
+}
+
 export type ArticleDetail = ArticleListItem & {
   html: string
-  blocks: (typeof articleContents.$inferSelect)['blocks']
+  /**
+   * Plain-text length of the body, skipped blocks excluded — summed in SQL rather than by
+   * shipping the whole `blocks` array to decide one boolean (`wantsExtraction`).
+   */
+  bodyChars: number
   contentVersion: number
   contentHash: string | null
   /** The feed's learned content mode; `summary` feeds get lazy full-text extraction. */
@@ -214,32 +230,99 @@ export type ArticleDetail = ArticleListItem & {
     claimedBy: string | null
   }
   isSubscribed: boolean
+  /** Present only when `translateTo` was asked for and a row exists. */
+  translation: ArticleTranslationDetail | null
+  /** The reader's own recommendation of this article, if any. */
+  recommendation: { note: string | null } | null
 }
 
 /** A uuid that matches no user, so anonymous lookups join nothing. */
 const NO_USER = '00000000-0000-0000-0000-000000000000'
 
-/** One article with its content, for the reader. Works for unsubscribed articles too. */
+export type GetArticleOptions = {
+  /** Reading language: joins the body translation and the eager title/excerpt for it. */
+  translateTo?: string | null
+}
+
+/**
+ * One article with everything the reader pane needs, in one round trip: its content, the
+ * member's read/liked state, the body translation for the reading language, and the member's own
+ * recommendation. Works for unsubscribed articles too.
+ *
+ * The joins are here rather than in separate helpers because the worker runs beside the database
+ * and the web app does not: from a Cloudflare edge the database is a continent away, so three
+ * sequential lookups cost three inter-continental round trips to build one pane.
+ */
 export async function getArticle(
   db: Db,
   userId: string | null,
   articleId: number,
+  options: GetArticleOptions = {},
 ): Promise<ArticleDetail | null> {
   const uid = userId ?? NO_USER
+  const targetLang = options.translateTo ?? ''
+  // Skipped blocks do not count toward the body length; summing here beats shipping the whole
+  // `blocks` array across the wire to decide one boolean (see `wantsExtraction`).
+  const bodyChars = sql<number>`coalesce((
+    select sum((b->>'chars')::int)
+      from jsonb_array_elements(coalesce(${articleContents.blocks}, '[]'::jsonb)) b
+     where coalesce((b->>'skip')::boolean, false) is false
+  ), 0)::int`
   const [row] = await db
     .select({
-      article: articles,
-      contents: articleContents,
-      feed: feeds,
-      site: sites,
+      id: articles.id,
+      feedId: articles.feedId,
+      title: articles.title,
+      excerpt: articles.excerpt,
+      author: articles.author,
+      url: articles.url,
+      publishedAt: articles.publishedAt,
+      fetchedAt: articles.fetchedAt,
+      sourceLang: articles.sourceLang,
+      readingMinutes: articles.readingMinutes,
+      likeCount: articles.likeCount,
+      recommendCount: articles.recommendCount,
+      contentVersion: articles.contentVersion,
+      contentHash: articles.contentHash,
+      extractCheckedAt: articles.extractCheckedAt,
+      extractRequestedAt: articles.extractRequestedAt,
+      html: articleContents.html,
+      extractedFrom: articleContents.extractedFrom,
+      bodyChars,
+      siteId: feeds.siteId,
+      feedTitle: feeds.title,
+      contentMode: feeds.contentMode,
+      siteTitle: sites.title,
+      siteHomeUrl: sites.homeUrl,
+      siteDescription: sites.description,
+      siteReaderCount: sites.readerCount,
+      siteClaimedBy: sites.claimedBy,
       readAt: userArticleStates.readAt,
       likedAt: userArticleStates.likedAt,
       watermarkId: subscriptions.watermarkId,
+      translationStatus: articleTranslations.status,
+      translationHash: articleTranslations.contentHash,
+      translationTitle: articleTranslations.title,
+      translationExcerpt: articleTranslations.excerpt,
+      translationHtml: articleTranslations.html,
+      translationFailedBlockIds: articleTranslations.failedBlockIds,
+      translationAttempt: articleTranslations.attempt,
+      // The id, not the note: a recommendation may carry no note, and a left join reports both
+      // "no row" and "no note" as null.
+      recommendationId: recommendations.id,
+      recommendationNote: recommendations.note,
     })
     .from(articles)
     .innerJoin(feeds, eq(feeds.id, articles.feedId))
     .innerJoin(sites, eq(sites.id, feeds.siteId))
     .leftJoin(articleContents, eq(articleContents.articleId, articles.id))
+    .leftJoin(
+      articleTranslations,
+      and(
+        eq(articleTranslations.articleId, articles.id),
+        eq(articleTranslations.targetLang, targetLang),
+      ),
+    )
     .leftJoin(
       userArticleStates,
       and(eq(userArticleStates.articleId, articles.id), eq(userArticleStates.userId, uid)),
@@ -248,45 +331,60 @@ export async function getArticle(
       subscriptions,
       and(eq(subscriptions.feedId, articles.feedId), eq(subscriptions.userId, uid)),
     )
+    .leftJoin(
+      recommendations,
+      and(eq(recommendations.articleId, articles.id), eq(recommendations.userId, uid)),
+    )
     .where(eq(articles.id, articleId))
   if (!row) return null
-  const a = row.article
   return {
-    id: a.id,
-    feedId: a.feedId,
-    siteId: row.feed.siteId,
-    feedTitle: row.feed.title ?? row.site.title ?? row.site.homeUrl,
-    title: a.title,
-    excerpt: a.excerpt,
-    author: a.author,
-    url: a.url,
-    publishedAt: a.publishedAt,
-    fetchedAt: a.fetchedAt,
-    sourceLang: a.sourceLang,
-    readingMinutes: a.readingMinutes,
-    likeCount: a.likeCount,
-    recommendCount: a.recommendCount,
-    isRead: row.readAt !== null || (row.watermarkId !== null && a.id <= row.watermarkId),
+    id: row.id,
+    feedId: row.feedId,
+    siteId: row.siteId,
+    feedTitle: row.feedTitle ?? row.siteTitle ?? row.siteHomeUrl,
+    title: row.title,
+    excerpt: row.excerpt,
+    author: row.author,
+    url: row.url,
+    publishedAt: row.publishedAt,
+    fetchedAt: row.fetchedAt,
+    sourceLang: row.sourceLang,
+    readingMinutes: row.readingMinutes,
+    likeCount: row.likeCount,
+    recommendCount: row.recommendCount,
+    isRead: row.readAt !== null || (row.watermarkId !== null && row.id <= row.watermarkId),
     isLiked: row.likedAt !== null,
-    translatedTitle: null,
-    translatedExcerpt: null,
-    html: row.contents?.html ?? '',
-    blocks: row.contents?.blocks ?? [],
-    contentVersion: a.contentVersion,
-    contentHash: a.contentHash,
-    contentMode: row.feed.contentMode,
-    extractedFrom: row.contents?.extractedFrom ?? 'feed',
-    extractCheckedAt: a.extractCheckedAt,
-    extractRequestedAt: a.extractRequestedAt,
+    translatedTitle: row.translationTitle,
+    translatedExcerpt: row.translationExcerpt,
+    html: row.html ?? '',
+    bodyChars: row.bodyChars,
+    contentVersion: row.contentVersion,
+    contentHash: row.contentHash,
+    contentMode: row.contentMode,
+    extractedFrom: row.extractedFrom ?? 'feed',
+    extractCheckedAt: row.extractCheckedAt,
+    extractRequestedAt: row.extractRequestedAt,
     site: {
-      id: row.site.id,
-      title: row.site.title,
-      homeUrl: row.site.homeUrl,
-      description: row.site.description,
-      readerCount: row.site.readerCount,
-      claimedBy: row.site.claimedBy,
+      id: row.siteId,
+      title: row.siteTitle,
+      homeUrl: row.siteHomeUrl,
+      description: row.siteDescription,
+      readerCount: row.siteReaderCount,
+      claimedBy: row.siteClaimedBy,
     },
     isSubscribed: row.watermarkId !== null,
+    translation:
+      row.translationStatus === null
+        ? null
+        : {
+            status: row.translationStatus,
+            contentHash: row.translationHash,
+            attempt: row.translationAttempt ?? '',
+            title: row.translationTitle,
+            html: row.translationHtml,
+            failedBlocks: row.translationFailedBlockIds?.length ?? 0,
+          },
+    recommendation: row.recommendationId === null ? null : { note: row.recommendationNote },
   }
 }
 
@@ -437,4 +535,86 @@ export async function unsubscribe(db: Db, userId: string, feedId: number): Promi
     .delete(subscriptions)
     .where(and(eq(subscriptions.userId, userId), eq(subscriptions.feedId, feedId)))
   await recomputeReaderCount(db, feedId)
+}
+
+export type ReadingRevisionInput = {
+  /** The article body the tab is showing; changes when extraction replaces it. */
+  contentHash: string | null
+  /** Non-null once extraction has concluded, whatever the outcome. */
+  extractCheckedAt: Date | null
+  /** The body translation row for the reading language, or null when there is none yet. */
+  translation: {
+    status: TranslationStatus
+    contentHash: string | null
+    /** Identity of the attempt behind this status; a new request mints a new one. */
+    attempt: string
+  } | null
+}
+
+/**
+ * An opaque tag for everything an open article can be waiting on: the body it is showing, and
+ * whether its translation has reached a terminal outcome. A tab polls for this string and
+ * refreshes once, when the result is displayable or needs the reader's attention.
+ *
+ * The point is what it replaces. Re-rendering the reading page to discover that a translation is
+ * still running costs a full database wave for the sidebar, the sixty-article list and the body;
+ * comparing two short strings costs one indexed row.
+ */
+export function readingRevision(input: ReadingRevisionInput): string {
+  const t = input.translation
+  const fresh = t !== null && t.contentHash === input.contentHash
+  const settled = fresh && (t.status === 'done' || t.status === 'partial' || t.status === 'failed')
+  // A running attempt for an older body cannot be replaced yet. Wake once when it becomes a
+  // stale terminal row, so the reader can request the current body without refreshing for the
+  // ordinary pending → requested → running transitions.
+  // The attempt is what separates one terminal row from the next. Without it a retry that fails
+  // the same way lands on the same status and hash as the one it replaced, the revision never
+  // changes, and the tab polls until its budget runs out while the reader waits for a retry
+  // button that will never come back.
+  const translation = settled
+    ? `${t.status}:${t.contentHash ?? ''}:${t.attempt}`
+    : !fresh && t?.status === 'running'
+      ? 'stale-running'
+      : 'waiting'
+  return [input.contentHash ?? '', input.extractCheckedAt === null ? '0' : '1', translation].join(
+    '|',
+  )
+}
+
+/** The revision tag for one article, in one query. Null when the article does not exist. */
+export async function getReadingRevision(
+  db: Db,
+  articleId: number,
+  targetLang: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({
+      contentHash: articles.contentHash,
+      extractCheckedAt: articles.extractCheckedAt,
+      translationStatus: articleTranslations.status,
+      translationHash: articleTranslations.contentHash,
+      translationAttempt: articleTranslations.attempt,
+    })
+    .from(articles)
+    .leftJoin(
+      articleTranslations,
+      and(
+        eq(articleTranslations.articleId, articles.id),
+        eq(articleTranslations.targetLang, targetLang),
+      ),
+    )
+    .where(eq(articles.id, articleId))
+  if (!row) return null
+  return readingRevision({
+    contentHash: row.contentHash,
+    extractCheckedAt: row.extractCheckedAt,
+    translation:
+      row.translationStatus === null
+        ? null
+        : {
+            status: row.translationStatus,
+            contentHash: row.translationHash,
+            attempt: row.translationAttempt ?? '',
+          },
+  })
 }

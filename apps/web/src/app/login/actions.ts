@@ -1,10 +1,11 @@
 'use server'
 
-import { headers } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/auth'
 import { loginErrorKey } from '@/lib/login-error'
 import { isDevAuthEnabled } from '@/lib/platform/env'
+import { seedReadingLangCookie } from '@/lib/reading-lang-cookie-server'
 import { safeNext } from '@/lib/redirect'
 
 export type LoginState = {
@@ -44,8 +45,14 @@ export async function verifyCode(_prev: LoginState, form: FormData): Promise<Log
   const token = String(form.get('code') ?? '').replace(/\s+/g, '')
   const client = await supabaseServer()
   if (!client) return { step: 'email', error: 'not_configured' }
-  const { error } = await client.auth.verifyOtp({ email, token, type: 'email' })
+  const { data, error } = await client.auth.verifyOtp({ email, token, type: 'email' })
   if (error) return { step: 'code', email, error: 'bad_code' }
+  if (data.user) {
+    const store = await cookies()
+    await seedReadingLangCookie(data.user.id, (name, value, options) =>
+      store.set(name, value, options),
+    )
+  }
   redirect(safeNext(form.get('next'), '/reading'))
 }
 

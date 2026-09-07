@@ -20,7 +20,8 @@ export type ExtractionCandidate = {
   contentMode: ContentMode
   extractedFrom: ExtractedFrom
   extractCheckedAt: Date | null
-  blocks: Array<{ chars: number; skip?: boolean }>
+  /** Plain-text length of the body, skipped blocks excluded. */
+  bodyChars: number
 }
 
 /**
@@ -32,8 +33,7 @@ export function wantsExtraction(article: ExtractionCandidate): boolean {
   if (article.extractedFrom !== 'feed' || article.extractCheckedAt !== null) return false
   if (article.contentMode === 'summary') return true
   if (article.contentMode !== 'unknown') return false
-  const chars = article.blocks.reduce((n, b) => n + (b.skip ? 0 : b.chars), 0)
-  return chars < SUMMARY_MAX_CHARS
+  return article.bodyChars < SUMMARY_MAX_CHARS
 }
 
 /**

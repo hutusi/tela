@@ -19,6 +19,14 @@ test.describe('reader', () => {
     await expect(subs).toHaveCount(2)
     await expect(subs.first()).toContainText(/Julia Evans|胡涂说/)
     await expect(page.getByTestId('article-row').first()).toBeVisible()
+    // Dev auth has no sign-in callback. The first profile fallback repairs the missing cache so
+    // later navigations do not keep putting that query in front of the reader's database wave.
+    await expect
+      .poll(async () => {
+        const cookies = await page.context().cookies()
+        return cookies.find((cookie) => cookie.name === 'tela_reading_lang')?.value
+      })
+      .toMatch(/:en$/)
   })
 
   test('opening an article marks it read and like toggles the counter', async ({ page }) => {
@@ -31,7 +39,8 @@ test.describe('reader', () => {
     await expect(page.getByTestId('article-title')).toHaveText(title)
     await expect(page.locator('.article-body')).toBeVisible()
 
-    // Marked read on open: the row loses its dot after the refresh.
+    // Marked read on open: the navigation render already shows the selected row as read, so
+    // the dot is gone without a second round trip.
     await expect(page.getByTestId('article-row').first().getByTestId('unread-dot')).toHaveCount(0)
 
     const like = page.getByTestId('like-button')
@@ -46,6 +55,55 @@ test.describe('reader', () => {
 
     await page.getByTestId('close-article').click()
     await expect(page).not.toHaveURL(/article=/)
+  })
+
+  test('opening an article renders the page once', async ({ page }) => {
+    await page.goto('/reading')
+    // An English feed while the reading language is EN: nothing here asks for a translation, so
+    // any second render would be one the page asked for itself.
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+/)
+    await expect(page.getByTestId('article-row').first()).toBeVisible()
+
+    const renders: string[] = []
+    page.on('request', (r) => {
+      if (new URL(r.url()).pathname === '/reading') renders.push(r.method())
+    })
+
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('article-title')).toBeVisible()
+    await expect(page.locator('.article-body')).toBeVisible()
+    // Long enough for a stray refresh to arrive: the ones this replaces fired the moment their
+    // server action resolved.
+    await page.waitForTimeout(1500)
+
+    // One navigation. mark-read still posts to this path, but its response no longer carries a
+    // re-render, and nothing calls router.refresh() any more. This used to be three.
+    expect(renders.filter((m) => m === 'GET')).toHaveLength(1)
+  })
+
+  test('unliking in the Liked view takes the article out of the list', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+/)
+    await page.getByTestId('article-row').first().click()
+    await expect(page).toHaveURL(/article=\d+/)
+    const articleId = new URL(page.url()).searchParams.get('article')
+    const likeButton = page.getByTestId('like-button')
+    if ((await likeButton.getAttribute('aria-pressed')) !== 'true') await likeButton.click()
+    await expect(likeButton).toHaveAttribute('aria-pressed', 'true')
+
+    await page.goto('/reading?filter=liked')
+    const liked = page.getByTestId('article-row')
+    await expect(liked).toHaveCount(1)
+    await liked.first().click()
+    await expect(page).toHaveURL(new RegExp(`article=${articleId}(&|$)`))
+
+    // The Liked list is defined by this button, so unliking has to empty it. Everywhere else the
+    // button holds the whole truth and no render is owed.
+    await page.getByTestId('like-button').click()
+    await expect(page.getByTestId('like-button')).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByTestId('article-row')).toHaveCount(0)
   })
 
   test('mark all read clears the counts for one feed', async ({ page }) => {
@@ -139,6 +197,15 @@ test.describe('translation', () => {
       )
       .toContain('en:')
 
+    const renders: string[] = []
+    page.on('request', (request) => {
+      if (
+        new URL(request.url()).pathname === '/reading' &&
+        request.headers()['next-router-prefetch'] !== '1'
+      ) {
+        renders.push(request.method())
+      }
+    })
     await row.click()
     const bar = page.getByTestId('translation-bar')
     await expect(bar).toBeVisible()
@@ -148,6 +215,9 @@ test.describe('translation', () => {
     await expect(page.getByTestId('body-translated')).toContainText('en:')
     await expect(page.getByTestId('body-original')).toBeVisible()
     await expect(page.getByTestId('article-title')).toContainText('en:')
+    // One navigation and one refresh when the body translation becomes displayable. Transient
+    // pending/requested/running states must not render the whole page.
+    expect(renders.filter((method) => method === 'GET')).toHaveLength(2)
 
     await page.getByTestId('mode-trans').click()
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans')

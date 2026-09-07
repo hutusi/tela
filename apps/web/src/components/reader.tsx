@@ -4,9 +4,9 @@ import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { type ReadingParams, readingHref } from '@/app/reading/href'
 import { relativeTime } from '@/lib/format'
-import { AutoRefresh } from './auto-refresh'
 import { LikeButton } from './like-button'
 import { MarkRead } from './mark-read'
+import { PollUntil } from './poll-until'
 import { RecommendPopover } from './recommend-popover'
 import { RequestTranslation } from './request-translation'
 import { Swatch } from './swatch'
@@ -27,6 +27,9 @@ type Props = {
   recommendation: { note: string | null } | null
   /** Full text is being fetched for a summary-only article: say so and poll. */
   extracting: boolean
+  readingLang: string
+  /** Opaque tag for what this render was built from; the poller waits for it to change. */
+  revision: string
 }
 
 function Body({ html, lang, testId }: { html: string; lang?: string | undefined; testId: string }) {
@@ -49,6 +52,8 @@ export async function Reader({
   translation,
   recommendation,
   extracting,
+  readingLang,
+  revision,
 }: Props) {
   const t = await getTranslations('reader')
   const tt = await getTranslations('translation')
@@ -65,6 +70,8 @@ export async function Reader({
   const pending =
     translation !== null && (translation.state === 'requested' || translation.state === 'running')
   const needsRequest = translation !== null && translation.state === 'none'
+  const failed = translation?.state === 'failed'
+  const requestOwnsPolling = needsRequest || failed
 
   return (
     <main
@@ -79,9 +86,17 @@ export async function Reader({
         </p>
       ) : null}
       {needsRequest ? (
-        <RequestTranslation articleId={article.id} targetLang={translation.targetLang} />
+        <RequestTranslation
+          key={`request:${article.id}:${translation.targetLang}`}
+          articleId={article.id}
+          targetLang={translation.targetLang}
+          revision={revision}
+          pollInitially={extracting}
+        />
       ) : null}
-      {pending || extracting ? <AutoRefresh intervalMs={2000} maxMs={180_000} /> : null}
+      {!requestOwnsPolling && (pending || extracting) ? (
+        <PollUntil articleId={article.id} lang={readingLang} revision={revision} />
+      ) : null}
 
       <div className="mx-auto mb-7 flex max-w-[1240px] flex-wrap items-center justify-between gap-2">
         <Link
@@ -96,6 +111,7 @@ export async function Reader({
             articleId={article.id}
             liked={article.isLiked}
             likeCount={article.likeCount}
+            listFiltersOnLiked={params.filter === 'liked'}
           />
           <RecommendPopover
             articleId={article.id}
@@ -135,9 +151,12 @@ export async function Reader({
         ) : null}
         {translation?.state === 'failed' ? (
           <RequestTranslation
+            key={`retry:${article.id}:${translation.targetLang}`}
             articleId={article.id}
             targetLang={translation.targetLang}
             mode="button"
+            revision={revision}
+            pollInitially={extracting}
           />
         ) : null}
 
