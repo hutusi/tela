@@ -254,6 +254,64 @@ describe('reader queries', () => {
   })
 })
 
+describe('getArticle carries the reader pane in one row', () => {
+  test('sums the body length in SQL, skipped blocks excluded', async () => {
+    const id = s.byTitle.Fresh as number
+    await t.db
+      .update(articleContents)
+      .set({
+        blocks: [
+          { id: 'b1', hash: 'h1', tag: 'p', chars: 400 },
+          { id: 'b2', hash: 'h2', tag: 'p', chars: 250 },
+          { id: 'b3', hash: 'h3', tag: 'figcaption', chars: 900, skip: true },
+        ],
+      })
+      .where(eq(articleContents.articleId, id))
+    expect((await getArticle(t.db, userA, id))?.bodyChars).toBe(650)
+  })
+
+  test('is zero when the article has no content row at all', async () => {
+    const id = s.byTitle.Fresh as number
+    await t.db.delete(articleContents).where(eq(articleContents.articleId, id))
+    const detail = await getArticle(t.db, userA, id)
+    expect(detail?.bodyChars).toBe(0)
+    expect(detail?.html).toBe('')
+  })
+
+  test('brings back the translation for the asked-for language, and only that one', async () => {
+    const id = s.byTitle.Fresh as number
+    await t.db.execute(
+      sql`insert into article_translations
+            (article_id, target_lang, status, content_hash, title, html, failed_block_ids)
+          values (${id}, 'zh-Hans', 'partial', 'h1', '译名', '<p>译文</p>', '{b7}')`,
+    )
+    expect(await getArticle(t.db, userA, id).then((a) => a?.translation)).toBeNull()
+    const zh = await getArticle(t.db, userA, id, { translateTo: 'zh-Hans' })
+    expect(zh?.translation).toEqual({
+      status: 'partial',
+      contentHash: 'h1',
+      title: '译名',
+      html: '<p>译文</p>',
+      failedBlocks: 1,
+    })
+    expect(zh?.translatedTitle).toBe('译名')
+    expect((await getArticle(t.db, userA, id, { translateTo: 'en' }))?.translation).toBeNull()
+  })
+
+  test('brings back the reader own recommendation, note or not', async () => {
+    const id = s.byTitle.Fresh as number
+    expect((await getArticle(t.db, userA, id))?.recommendation).toBeNull()
+    await t.db.execute(
+      sql`insert into recommendations (user_id, article_id, note) values (${userA}, ${id}, null)`,
+    )
+    // A recommendation with no note is still a recommendation: presence comes from the row, not
+    // from the note, which a left join reports as null either way.
+    expect((await getArticle(t.db, userA, id))?.recommendation).toEqual({ note: null })
+    expect((await getArticle(t.db, userB, id))?.recommendation).toBeNull()
+    expect((await getArticle(t.db, null, id))?.recommendation).toBeNull()
+  })
+})
+
 describe('readingRevision', () => {
   const base = { contentHash: 'abc', extractCheckedAt: null, translation: null }
 

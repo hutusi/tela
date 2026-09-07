@@ -1,8 +1,7 @@
 import {
   countTotals,
+  EXTRACT_COOLDOWN_MINUTES,
   getArticle,
-  getArticleTranslation,
-  getRecommendation,
   listArticles,
   listSubscriptions,
   markExtractRequested,
@@ -20,6 +19,7 @@ import { Sidebar } from '@/components/sidebar'
 import { renderArticleHtml } from '@/lib/article-html'
 import { requireUser } from '@/lib/auth'
 import { getDb } from '@/lib/platform/db'
+import { waitUntil } from '@/lib/platform/wait-until'
 import { enqueueArticleExtract } from '@/lib/queue'
 import { getReadingLang } from '@/lib/reading'
 import { parseReadingParams } from './href'
@@ -37,8 +37,11 @@ export default async function ReadingPage({ searchParams }: Props) {
   const user = await requireUser('/reading')
   const params = parseReadingParams(await searchParams)
   const db = await getDb()
-  const readingLang = await getReadingLang()
-  const [subscriptions, totals, items, article, locale] = await Promise.all([
+  // The reading language comes from a cookie, so nothing here waits on the database to learn
+  // which translations to join: the four queries below go out together, as one round trip to a
+  // database that is a continent away from wherever this worker happens to be running.
+  const [readingLang, locale] = await Promise.all([getReadingLang(), getLocale()])
+  const [subscriptions, totals, items, article] = await Promise.all([
     listSubscriptions(db, user.id),
     countTotals(db, user.id),
     listArticles(db, user.id, {
@@ -47,33 +50,45 @@ export default async function ReadingPage({ searchParams }: Props) {
       limit: 60,
       translateTo: readingLang,
     }),
-    params.articleId ? getArticle(db, user.id, params.articleId) : Promise.resolve(null),
-    getLocale(),
+    params.articleId
+      ? getArticle(db, user.id, params.articleId, { translateTo: readingLang })
+      : Promise.resolve(null),
   ])
-  // A summary-only article gets its full text fetched when opened. The job follows the row
-  // update that claims a cooldown window, not the render, so a tab polling every two seconds
-  // causes one job per window; the worker stamps the article on a final outcome.
-  const extracting = article !== null && wantsExtraction(article)
-  if (article && extracting && (await markExtractRequested(db, article.id))) {
-    await enqueueArticleExtract(db, article.id)
-  }
-  const html = article ? await renderArticleHtml(article.html) : ''
-  const recommendation = article ? await getRecommendation(db, user.id, article.id) : null
 
-  // Foreign article: look up the body translation state for the reading language.
+  // A summary-only article gets its full text fetched when opened. The claim is a write and the
+  // reader is not waiting on it, so it runs after the response: the job follows the row update
+  // that wins a cooldown window, not the render, and the worker stamps the article on a final
+  // outcome. `extractRequestedAt` is already in hand, so a request inside a window it cannot win
+  // never reaches the database at all.
+  const extracting = article !== null && wantsExtraction(article)
+  const mayClaim =
+    article !== null &&
+    extracting &&
+    (article.extractRequestedAt === null ||
+      Date.now() - article.extractRequestedAt.getTime() > EXTRACT_COOLDOWN_MINUTES * 60_000)
+  if (article && mayClaim) {
+    const id = article.id
+    await waitUntil(
+      markExtractRequested(db, id).then((won) => (won ? enqueueArticleExtract(db, id) : undefined)),
+    )
+  }
+
+  const html = article ? await renderArticleHtml(article.html) : ''
+  const recommendation = article?.recommendation ?? null
+
+  // Foreign article: the body translation for the reading language came back with the article.
   let translation: ReaderTranslation | null = null
-  let translationRow: Awaited<ReturnType<typeof getArticleTranslation>> = null
+  const translationRow = article?.translation ?? null
   if (article && article.sourceLang && article.sourceLang !== readingLang) {
-    const row = await getArticleTranslation(db, article.id, readingLang)
-    translationRow = row
+    const row = translationRow
     const fresh = row !== null && row.contentHash === article.contentHash
     const state = row === null || !fresh || row.status === 'pending' ? 'none' : row.status
     translation = {
       targetLang: readingLang,
       state,
-      failedBlocks: fresh ? (row?.failedBlockIds.length ?? 0) : 0,
+      failedBlocks: fresh ? row.failedBlocks : 0,
       html:
-        fresh && row?.html && (row.status === 'done' || row.status === 'partial')
+        fresh && row.html && (row.status === 'done' || row.status === 'partial')
           ? await renderArticleHtml(row.html)
           : null,
       title: row?.title ?? null,
