@@ -73,9 +73,19 @@ cause up to five.
 - Round trips per article click fall from about ten to one wave plus the header's profile row,
   which streams; renders per ordinary click fall from up to five to one, with one later refresh
   when a requested translation or extraction reaches a terminal result.
-- Sidebar unread counts can lag by one until the next navigation, because opening an article no
-  longer re-renders the page to update them. The opened row is shown as read by the render that
-  opens it.
+- **The sidebar's counts are deliberately stale aggregates.** Unread lags by one after an article
+  is opened, and Liked lags after the like button is used outside the Liked view, because neither
+  mutation re-renders the page any more. Both correct themselves on the next navigation, and the
+  thing the reader is actually looking at is right immediately: the opened row is shown as read by
+  the render that opens it, and the button holds its own count. Membership is the line — a
+  mutation that decides what is *in* the list on screen does force a render (see the Liked view
+  above); a number beside a filter does not.
+- **Retrying a failed translation costs two renders, and that is the right trade.** The retry polls
+  from the revision the failed page was rendered with, so the first poll refreshes as soon as the
+  attempt is accepted — which is what turns "Translation failed." into "Translating…" — and the
+  second when it finishes. Polling from the post-request state instead would save one render and
+  leave the reader staring at a dead failure notice for the length of the translation. This is a
+  render the reader asked for by clicking.
 - The reading language can diverge between devices until the member changes it or signs in again.
   The settings page reads the profile row directly, so it always shows the account's value.
 - There is no `loading.tsx` for `/reading`, deliberately: a route-level fallback would replace the

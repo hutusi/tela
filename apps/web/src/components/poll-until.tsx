@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import { createPollBudget } from '@/lib/poll-budget'
+import { createPoller } from '@/lib/poller'
 
 /**
  * Wait for a background job to change an open article — a body translation, or the full-text
@@ -13,8 +13,8 @@ import { createPollBudget } from '@/lib/poll-budget'
  * body, per tick, to learn that a translation was still running. Here a tick is one indexed row,
  * the interval backs off, and the expensive render happens exactly once.
  *
- * The window is measured in visible time, not wall-clock: a tab left in the background does not
- * spend it, and comes back to an immediate check rather than to a page frozen on "translating".
+ * The loop itself lives in `lib/poller.ts`, where its rules about visible time and overlapping
+ * reads can be tested against a clock instead of guessed at.
  */
 export function PollUntil({
   articleId,
@@ -34,72 +34,27 @@ export function PollUntil({
 }) {
   const router = useRouter()
   useEffect(() => {
-    const controller = new AbortController()
     const url = `/api/reading/state?article=${articleId}&lang=${encodeURIComponent(lang)}`
-    // Counts only the time this tab is actually in front of someone: a poller that skips its
-    // request while hidden must not spend its window while hidden either.
-    const budget = createPollBudget(maxMs)
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let interval = startMs
-    let stopped = false
-
-    const clear = () => {
-      if (timer) clearTimeout(timer)
-      timer = undefined
-    }
-
-    const stop = () => {
-      stopped = true
-      clear()
-      controller.abort()
-    }
-
-    const schedule = (delay = interval) => {
-      if (stopped || budget.exhausted()) return stop()
-      // A hidden tab is not waiting for anything anyone can see. Hold here; visibilitychange
-      // resumes with an immediate check.
-      if (document.hidden) return budget.pause()
-      timer = setTimeout(tick, delay)
-    }
-
-    async function tick() {
-      timer = undefined
-      if (stopped || document.hidden) return schedule()
-      try {
-        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' })
-        if (res.ok) {
-          const body = (await res.json()) as { revision?: unknown }
-          if (typeof body.revision === 'string' && body.revision !== revision) {
-            stop()
-            router.refresh()
-            return
-          }
-        }
-      } catch {
-        // A failed poll is not worth surfacing: the next tick tries again, and the reader can
-        // always reload. Aborting on unmount lands here too.
-      }
-      interval = Math.min(interval * 1.5, maxIntervalMs)
-      schedule()
-    }
-
-    const onVisibility = () => {
-      if (stopped) return
-      if (document.hidden) {
-        budget.pause()
-        clear()
-        return
-      }
-      budget.resume()
-      // The reader is looking again: check now, before carrying on with the backoff.
-      if (!timer) schedule(0)
-    }
-
+    const poller = createPoller({
+      revision,
+      startMs,
+      maxIntervalMs,
+      maxMs,
+      hidden: () => document.hidden,
+      read: async (signal) => {
+        const res = await fetch(url, { signal, cache: 'no-store' })
+        if (!res.ok) return null
+        const body = (await res.json()) as { revision?: unknown }
+        return typeof body.revision === 'string' ? body.revision : null
+      },
+      onChanged: () => router.refresh(),
+    })
+    const onVisibility = () => poller.visibilityChanged()
     document.addEventListener('visibilitychange', onVisibility)
-    schedule(startMs)
+    poller.start()
     return () => {
       document.removeEventListener('visibilitychange', onVisibility)
-      stop()
+      poller.stop()
     }
   }, [articleId, lang, revision, router, startMs, maxIntervalMs, maxMs])
   return null
