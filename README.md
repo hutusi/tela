@@ -26,7 +26,7 @@ and the way in is an admin invite.
 
 ## Quick start
 
-Prerequisites: Bun 1.3+, Node 22+, and a Postgres for tests (Homebrew `postgresql@17`, or Docker
+Prerequisites: Bun 1.4+, Node 24+, and a Postgres for tests (Homebrew `postgresql@17`, or Docker
 with the Supabase CLI, or any database in `TEST_DATABASE_URL`).
 
 ```sh

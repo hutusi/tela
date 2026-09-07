@@ -1,8 +1,8 @@
-# Build with Bun (bundles workspace TypeScript), run on Node 22 LTS.
+# Build with Bun (bundles workspace TypeScript), run on Node 24 LTS.
 # Build context is the repository root:
 #   docker build -f apps/worker/Dockerfile -t tela-worker .
 
-FROM oven/bun:1.3 AS build
+FROM oven/bun:1.4 AS build
 WORKDIR /app
 COPY . .
 RUN bun install --frozen-lockfile
@@ -10,7 +10,7 @@ RUN bun run --filter @tela/worker build
 # Prune to production dependencies for the runtime image.
 RUN rm -rf node_modules && bun install --frozen-lockfile --production
 
-FROM node:22-slim AS runtime
+FROM node:24-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules

@@ -9,7 +9,7 @@ How Tela is provisioned and deployed. Everything below is live unless marked *la
 |---|---|---|
 | Web | Cloudflare Workers via OpenNext (`apps/web`) | Custom domain only; never share `workers.dev` URLs (blocked in mainland China) |
 | Database + Auth | Supabase, region Tokyo (`ap-northeast-1`) | session pooler as the connection path (the IPv4 add-on is optional, see Provisioning); custom SMTP (Resend); custom auth domain *later* |
-| Worker | Fly.io app `tela-worker`, region `nrt` (`apps/worker`) | Docker image, Node 22; roles via `WORKER_ROLES` |
+| Worker | Fly.io app `tela-worker`, region `nrt` (`apps/worker`) | Docker image, Node 24; roles via `WORKER_ROLES` |
 | Relay | HK or CN box running the same image with `WORKER_ROLES=relay` | Signed fetch endpoint only, no `DATABASE_URL`; runbook below |
 | Assets | Cloudflare R2 bucket behind `assets.<domain>` | favicons and covers |
 
@@ -254,4 +254,10 @@ First run: `cd apps/web && bunx playwright install chromium`.
 - Before launch: the Data API is off (`[api] enabled = false`, Provisioning step 5).
 - To open Tela up: `enable_signup = true` in `supabase/config.toml` (both places) and
   `supabase config push`; remove `TELA_PRIVATE_BETA` from `apps/web/wrangler.jsonc` and deploy.
+- Move the worker to the next Node LTS **after 2026-10-28**, when Node 26 reaches LTS; Node 24 <!-- node-pin:planned -->
+  enters maintenance on 2026-10-20, so the two dates make one clean move (support then runs to <!-- node-pin:planned -->
+  2029-04 instead of 2028-04). Five pins have to change together — `.node-version`, `engines`,
+  the Dockerfile runtime stage, the CI `node-version` and `@types/node` — plus the Node major the
+  living docs name; `test/docs.test.ts` fails until they all agree. Deliberately not done early:
+  ADR 0001 runs the worker on the current LTS, and Node 26 is still Current until that date. <!-- node-pin:planned -->
 - China checks from a HK/CN box (custom auth domain, image proxy for `mmbiz.qpic.cn`-style hosts)

@@ -4,7 +4,7 @@ Guidance for AI coding agents (Claude Code, Codex, Cursor, …) working in this 
 
 ## Project
 
-Tela is a multilingual reader and gathering place for independent blogs: readers subscribe to feeds, bloggers claim theirs and see who reads them, and LLM translation shows a post beside its original block by block. Bun workspaces and TypeScript throughout; Next.js 16 on Cloudflare Workers, a Node 22 worker container, Supabase Postgres underneath.
+Tela is a multilingual reader and gathering place for independent blogs: readers subscribe to feeds, bloggers claim theirs and see who reads them, and LLM translation shows a post beside its original block by block. Bun workspaces and TypeScript throughout; Next.js 16 on Cloudflare Workers, a Node 24 worker container, Supabase Postgres underneath.
 
 Decisions that look odd but are deliberate:
 
@@ -26,7 +26,7 @@ Decisions that look odd but are deliberate:
 | `packages/llm` | Translation adapter, prompts, output validation |
 | `packages/config` | Shared tsconfig bases |
 | `apps/web` | Next.js 16 App Router, Tailwind v4, next-intl (no i18n routing), Drizzle server-side; Cloudflare Workers via OpenNext |
-| `apps/worker` | Node 22 process bundled by Bun: `src/roles.ts`, `src/queues.ts`, `src/jobs/` |
+| `apps/worker` | Node 24 process bundled by Bun: `src/roles.ts`, `src/queues.ts`, `src/jobs/` |
 
 ## Commands
 
@@ -38,7 +38,7 @@ bun run test                         # bun test; DB tests need initdb on PATH, P
 bun run e2e                          # Playwright against a built app, worker, and fixture feeds
 bun run build                        # every workspace that has a build script
 bun run dev                          # web (http://localhost:3000)
-bun run dev:worker                   # worker on Bun for dev; Node 22 in production
+bun run dev:worker                   # worker on Bun for dev; Node 24 in production
 bun run db:generate                  # drizzle-kit generate; then commit packages/db/migrations/*
 bun run db:migrate                   # apply migrations (DATABASE_URL=…)
 bun run db:local --port 54322        # migrated Postgres with the development user, no Docker
@@ -58,7 +58,7 @@ cd apps/web && bun run preview       # OpenNext build + local Workers runtime
 
 ## Hard invariants — do not break casually
 
-1. **Runtime-agnostic packages.** No `Bun.*` APIs in `packages/*` or `apps/worker` source: the worker runs on Node 22 in production, with Bun only as the bundler (ADR 0001).
+1. **Runtime-agnostic packages.** No `Bun.*` APIs in `packages/*` or `apps/worker` source: the worker runs on Node 24 in production, with Bun only as the bundler (ADR 0001).
 2. **Cloudflare-specific code lives only in `apps/web/src/lib/platform/`** (ADR 0002).
 3. **Migrations via `drizzle-kit generate`, never `push`** — `push` has skipped policies in a known bug. Custom SQL goes in `--custom` files; RLS policies are declared in the schema with `pgPolicy` (ADR 0003).
 4. **Bump `NORM_VERSION`** whenever block normalization, placeholder grammar or hashing in `packages/content` changes. It is part of every block hash, so a silent change mixes old and new cache entries (ADR 0005).
@@ -76,6 +76,7 @@ cd apps/web && bun run preview       # OpenNext build + local Workers runtime
 - TypeScript strict, `verbatimModuleSyntax`, `noUncheckedIndexedAccess`. No enums: `as const` unions.
 - Single quotes, no semicolons, trailing commas. Biome owns formatting and linting for everything; there is no second formatter.
 - Tests are `*.test.ts` beside the code or under `test/`; Playwright specs are `*.e2e.ts`.
+- **`@types/node` tracks the worker's runtime major** (Node 24, per `.node-version` and `engines`), not the newest release. Types ahead of the runtime typecheck APIs that are not there when it runs; `test/docs.test.ts` holds the two together.
 - Use absolute paths in shell commands — the working directory persists between them.
 
 ## Gotchas

@@ -11,7 +11,7 @@ Browser ──HTTPS──▶ Cloudflare Worker (Next.js via OpenNext)
                      ├─ Hyperdrive ──▶ Supabase Postgres (Tokyo, session pooler) ◀── worker(s)
                      ├─ /img signed image proxy (Cache API) ──▶ origin images
                      └─ Supabase Auth (browser: @supabase/ssr)
-Worker image (Node 22, Fly.io nrt), WORKER_ROLES selects subscriptions:
+Worker image (Node 24, Fly.io nrt), WORKER_ROLES selects subscriptions:
    scheduler | fetch | extract | translate | assets | claim ──▶ Postgres (pg-boss + data)
    fetch ──(fetch_region=cn)──▶ relay role on a HK/CN box (HMAC-signed fetch endpoint)
    translate ──▶ Aliyun Bailian (GLM) or other providers through one adapter
@@ -22,7 +22,7 @@ Worker image (Node 22, Fly.io nrt), WORKER_ROLES selects subscriptions:
 
 ```
 apps/web            Next.js 16 App Router, Tailwind v4, next-intl (no i18n routing), Drizzle server-side
-apps/worker         Node 22 process bundled by Bun; src/roles.ts, src/config.ts, src/index.ts
+apps/worker         Node 24 process bundled by Bun; src/roles.ts, src/config.ts, src/index.ts
 packages/db         Drizzle schema (src/schema/*.ts), migrations/, client.ts, queue.ts, test/ harness
 packages/content    pure TS content pipeline (sanitize, blocks, tagged text, hashing)
 packages/ingest     ingestion library: http, discovery, fetch, extract, region, websub
@@ -31,7 +31,7 @@ packages/shared     constants (languages, topics, NORM_VERSION, enums), helpers
 packages/config     shared tsconfig bases
 ```
 
-Bun is the package manager, script runner, and test runner. Node 22 LTS is the production runtime
+Bun is the package manager, script runner, and test runner. Node 24 LTS is the production runtime
 for the worker (ADR 0001). The web app is deployed to Cloudflare Workers through OpenNext and kept
 free of Cloudflare bindings outside `apps/web/src/lib/platform/` (ADR 0002).
 

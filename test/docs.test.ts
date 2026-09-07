@@ -6,12 +6,13 @@
  * modules' worth of history while AGENTS.md told agents to put worker logic there — nothing was
  * looking. This file looks.
  *
- * It only reads files: no database, no network, and it runs under Bun and Node alike. When a check
+ * It reads files and asks git what it tracks: no database, no network. When a check
  * here fails, the fix is almost always to update the doc, not to loosen the check — these are
  * claims the docs make, and the point is that they stay true.
  */
 
 import { describe, expect, it } from 'bun:test'
+import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,6 +28,44 @@ const exists = (rel: string) => {
     return false
   }
 }
+/**
+ * A path a doc names is fine if git tracks it, or if git deliberately ignores it — the runbook
+ * legitimately names files you create (`apps/web/.env`) and files a run generates
+ * (`apps/web/test-results`). What it must not name is a path that is neither: that is a typo or a
+ * file that moved.
+ *
+ * Asking the filesystem instead is what let this pass locally and fail in CI, because those two
+ * exist on a machine that has run the app and not on a clean checkout.
+ */
+const TRACKED = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
+  .split('\0')
+  .filter(Boolean)
+const TRACKED_SET = new Set(TRACKED)
+
+/** Tracked as a file, or a directory holding one. */
+const isTracked = (rel: string) =>
+  TRACKED_SET.has(rel) || TRACKED.some((f) => f.startsWith(`${rel}/`))
+
+/**
+ * Matched by a .gitignore rule, so its absence from a checkout is intended. The path is tried with
+ * a trailing slash too: a directory-only rule (`test-results/`) cannot match a path that is not
+ * there to be seen as a directory, which is precisely the clean-checkout case this guards.
+ */
+const isIgnored = (rel: string) =>
+  [rel, `${rel}/`].some((candidate) => {
+    try {
+      execFileSync('git', ['check-ignore', '-q', '--no-index', candidate], {
+        cwd: ROOT,
+        stdio: 'ignore',
+      })
+      return true
+    } catch {
+      return false
+    }
+  })
+
+const known = (rel: string) => isTracked(rel) || isIgnored(rel)
+
 const dirsIn = (rel: string) =>
   readdirSync(join(ROOT, rel), { withFileTypes: true })
     .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules')
@@ -78,9 +117,6 @@ function referencedPaths(source: string): string[] {
     if (!PATH_PREFIXES.some((p) => candidate.startsWith(p))) continue
     // Skip globs and placeholders: `packages/db/src/schema/*.ts`, `apps/<name>/.env`.
     if (/[*<>{}|\s]/.test(candidate)) continue
-    // `.env` and `.dev.vars` are gitignored by design — the docs tell you to create them, so
-    // their absence is the correct state, not drift. Their `.example` twins are still checked.
-    if (/\/\.(env|dev\.vars)$/.test(candidate)) continue
     found.add(candidate.replace(/\/$/, ''))
   }
   return [...found]
@@ -94,8 +130,8 @@ describe('path references resolve', () => {
     expect(all.length).toBeGreaterThan(40)
   })
 
-  it.each(all)('%s references %s, which exists', (_doc, path) => {
-    expect(exists(path)).toBe(true)
+  it.each(all)('%s references %s, which git tracks or ignores', (_doc, path) => {
+    expect(known(path)).toBe(true)
   })
 })
 
@@ -188,5 +224,81 @@ describe('environment variables are documented', () => {
 
   it.each(documented)('%s is in the operations env table', (name) => {
     expect(OPERATIONS).toContain(`\`${name}\``)
+  })
+})
+
+describe('the Node runtime is pinned consistently', () => {
+  /**
+   * AGENTS.md states that @types/node tracks the worker's runtime major. Types ahead of the
+   * runtime are the dangerous direction: tsc accepts an API the deployed Node does not have, and
+   * the failure lands in production. This is how it drifted once — @types/node ^26 against a
+   * Node 22 runtime — so the pins are checked against each other rather than trusted.
+   */
+  const nodeVersion = read('.node-version').trim()
+  const engines = (JSON.parse(read('package.json')) as { engines: { node: string } }).engines.node
+  const dockerfile = read('apps/worker/Dockerfile')
+  const workflow = read('.github/workflows/ci.yml')
+
+  const major = Number(nodeVersion.split('.')[0])
+
+  it('reads a plausible major from .node-version', () => {
+    expect(Number.isInteger(major)).toBe(true)
+    expect(major).toBeGreaterThanOrEqual(22)
+  })
+
+  it('agrees with the engines field', () => {
+    // Exact, not substring: `<24` contains "24" while excluding Node 24 outright.
+    expect(engines).toBe(`>=${major}`)
+  })
+
+  it("agrees with the worker image's runtime stage", () => {
+    expect(dockerfile).toMatch(new RegExp(`FROM node:${major}[.\\-]`))
+  })
+
+  it('agrees with the node-version CI sets up', () => {
+    expect(workflow).toMatch(new RegExp(`node-version: ${major}\\b`))
+  })
+
+  /**
+   * Living docs describe the present, so any Node major but the pinned one is wrong — including a
+   * newer one. Allowing newer was too lax: it would wave through a README that promoted the
+   * prerequisite to Node 26 while the worker still ran 24, which is a live proposal, not a
+   * hypothetical.
+   *
+   * A line that deliberately names another version — the runbook's dated plan to move after Node
+   * 26 reaches LTS — opts out with a `node-pin:planned` marker, so the exemption is visible where
+   * it applies rather than built into the rule. A constraint quoted from someone else
+   * ("Node >= 22.12" for pg-boss) never matches: the regex needs a digit straight after "Node".
+   *
+   * CHANGELOG.md and the ADRs are excluded outright, being dated records whose job is to say what
+   * was true then.
+   */
+  const LIVING_DOCS = DOC_FILES.filter((f) => f !== 'CHANGELOG.md')
+
+  it.each(LIVING_DOCS)('%s names only the pinned Node major', (doc) => {
+    const wrong = read(doc)
+      .split('\n')
+      .filter((line) => !line.includes('node-pin:planned'))
+      .flatMap((line) => [...line.matchAll(/Node(?:\.js)? (\d+)/g)].map((m) => Number(m[1])))
+      .filter((v) => v !== major)
+    expect([...new Set(wrong)]).toEqual([])
+  })
+
+  it.each(
+    [...dirsIn('apps'), ...dirsIn('packages'), '.']
+      .map((ws) => (ws === '.' ? 'package.json' : `${ws}/package.json`))
+      .filter(exists)
+      .flatMap((p) => {
+        const pkg = JSON.parse(read(p)) as {
+          dependencies?: Record<string, string>
+          devDependencies?: Record<string, string>
+        }
+        const range = pkg.dependencies?.['@types/node'] ?? pkg.devDependencies?.['@types/node']
+        return range ? [[p, range] as const] : []
+      }),
+  )('%s pins @types/node to the runtime major (%s)', (_pkg, range) => {
+    // Exact caret, not "starts with the right digits": `>=24` also admits Node 26 types, which is
+    // the drift this whole block exists to prevent.
+    expect(range).toBe(`^${major}`)
   })
 })

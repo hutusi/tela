@@ -69,6 +69,25 @@ everything so far sits under `[Unreleased]`.
 - **Supabase settings are code.** `supabase/config.toml` is the source of truth for everything
   `supabase config push` manages; the Dashboard is a mirror the next push overwrites (ADR 0014).
 
+- **The worker runs on Node 24 LTS, built with Bun 1.4.** Five pins have to agree for that to mean
+  anything — `.node-version`, `engines`, the Dockerfile's runtime stage, the CI `node-version`, and
+  `@types/node` — and a test now holds them together, along with the Node major the living docs
+  name. `@types/node` had drifted to 26 against a Node 22 runtime, which typechecks APIs the
+  deployed runtime does not have (ADR 0001).
+
+- **Toolchain and dependencies moved to current majors.** TypeScript 7 — the native compiler,
+  which cuts Next's typecheck from 3.3s to under a second — and undici 8 under the worker's
+  DNS-pinned fetch. Every GitHub Action moved to its current major. `NORM_VERSION` stays at 1;
+  nothing here touches block normalization, so the translation cache survives.
+
+  The htmlparser2 family stays where it was. Moving it to htmlparser2 12 and its ESM-only
+  siblings made `sanitize-html` — which is CommonJS and `require`s htmlparser2 — fail to load
+  under the Bun test runner, intermittently and depending on which module the process reached
+  first. Production was never at risk (the worker runs on Node, which handles `require(esm)`), but
+  a test suite that fails on one run in several is not worth what the upgrade bought: our own
+  parsing matching the version `sanitize-html` already used. It never deduplicated the tree —
+  `linkedom` pins `htmlparser2@^10.1` regardless.
+
 - **The session pooler is the database path** for Hyperdrive, the worker and migrations: it has
   IPv4 and keeps prepared statements. Supabase's paid IPv4 add-on stays off, and the runbook names
   the symptom that would justify buying it.
