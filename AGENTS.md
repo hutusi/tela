@@ -84,6 +84,8 @@ cd apps/web && bun run preview       # OpenNext build + local Workers runtime
 Defects that already cost time here, not hypotheticals.
 
 - **`supabase config push` overwrites the Dashboard.** `config.toml` is the source of truth; a Dashboard toggle is a mirror the next push reverts. This is how the Data API got switched back on (ADR 0014).
+- **`[auth.email] enable_signup` is the email *provider* switch, not a signup switch.** The CLI maps it to GoTrue's `EXTERNAL_EMAIL_ENABLED`, so `false` disables email sign-in for everyone — existing accounts included — and every member is locked out while the login page still looks healthy. Registration is closed by `enable_signup = false` under `[auth]` alone. `GET /auth/v1/settings` with the anon key reports the truth: `external.email` and `disable_signup` (ADR 0015).
+- **Branch a Supabase auth failure on `error.code`, never the HTTP status.** GoTrue answers 422 for a missing account (`otp_disabled`), a disabled provider (`email_provider_disabled`) and a rejected address alike; mapping the status told members with working accounts that they had never registered (`apps/web/src/lib/login-error.ts`).
 - **Supabase's stock auth templates carry only `{{ .ConfirmationURL }}`** — no code for a form that calls `verifyOtp`, and a link that lands on the site root with nothing to make a session from. Ours live in `supabase/templates/` (ADR 0013).
 - **A Next route file may only export handlers** — a helper exported beside `GET` breaks the build. Give it its own module and its own test.
 - **Create the abort signal once per request, not inside the redirect loop**, or every hop gets the full timeout again: 100 ms was observed taking ~500 ms through five redirects.

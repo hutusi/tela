@@ -94,6 +94,16 @@ everything so far sits under `[Unreleased]`.
 
 ### Fixed
 
+- **Members could not sign in at all.** Closing signup for private testing set
+  `enable_signup = false` under both `[auth]` and `[auth.email]` in `supabase/config.toml`. The
+  second is not a signup switch — the CLI maps it to GoTrue's `EXTERNAL_EMAIL_ENABLED` — so it
+  disabled email sign-in for everyone, and with GitHub and Google unconfigured that was every way
+  in. The login form then reported it as "this address does not have an account yet", because it
+  chose that message from the HTTP status and GoTrue answers 422 both for an unknown address and
+  for a disabled provider. The provider is back on, registration stays closed by `[auth]` alone,
+  and the message now comes from the error code with the no-account case reserved to
+  `otp_disabled` (ADR 0015).
+
 - **A request has one deadline, spanning redirects and politeness waits.** The abort signal was
   built inside the redirect loop, so every hop got the full timeout again: a request configured
   for 100 ms was observed succeeding after about 500 ms through five redirects.

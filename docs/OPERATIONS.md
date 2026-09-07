@@ -222,6 +222,20 @@ First run: `cd apps/web && bunx playwright install chromium`.
 - **It is not an open proxy**: only signed `POST /fetch` requests are served, private ranges are
   refused, redirects are not followed, the upstream body is capped at 5 MB, and a request larger than 64 KiB is refused before it is read (the signature covers the body, so that cap is the only pre-authentication limit).
 
+### Auth
+- **What the project actually allows**, without the Dashboard: `curl -s
+  "$NEXT_PUBLIC_SUPABASE_URL/auth/v1/settings" -H "apikey: $NEXT_PUBLIC_SUPABASE_ANON_KEY"`.
+  `external.email` must be `true` (email sign-in works) and `disable_signup` must be `true`
+  (registration closed) while Tela is in private testing. Both false-negatives are silent from the
+  outside: a locked-out member sees a login page that looks fine.
+- **Nobody can sign in**: check `external.email` first. If it is `false`, `[auth.email]
+  enable_signup` is `false` in `config.toml` — that is the provider switch, not a signup switch.
+  Set it `true` and push (ADR 0015). GoTrue answers `POST /auth/v1/otp` with 422
+  `email_provider_disabled` in that state, and 422 `otp_disabled` for a genuinely unknown address.
+- **A member says they have no account** but the row exists: confirm with `select email,
+  last_sign_in_at from auth.users where email = '…'`, then compare the two 422s above — the app
+  keys its message on the error code (`apps/web/src/lib/login-error.ts`), not the status.
+
 ### Web
 - **Rate limits**: rules live in `RATE_LIMITS` (`packages/db/src/queries/rate-limit.ts`); change a
   number and redeploy. To lift a member's block early: `delete from rate_limits where key like
@@ -252,8 +266,10 @@ First run: `cd apps/web && bunx playwright install chromium`.
 - Before switching readers to the custom domain: the Supabase redirect allow-list and `site_url`
   step above, then sign in once with each provider from the new origin.
 - Before launch: the Data API is off (`[api] enabled = false`, Provisioning step 5).
-- To open Tela up: `enable_signup = true` in `supabase/config.toml` (both places) and
+- To open Tela up: `enable_signup = true` under **`[auth]`** in `supabase/config.toml` and
   `supabase config push`; remove `TELA_PRIVATE_BETA` from `apps/web/wrangler.jsonc` and deploy.
+  Leave `[auth.email] enable_signup` alone — it is the provider switch, not a signup switch, and
+  setting it `false` locks existing members out (ADR 0015).
 - Move the worker to the next Node LTS **after 2026-10-28**, when Node 26 reaches LTS; Node 24 <!-- node-pin:planned -->
   enters maintenance on 2026-10-20, so the two dates make one clean move (support then runs to <!-- node-pin:planned -->
   2029-04 instead of 2028-04). Five pins have to change together — `.node-version`, `engines`,

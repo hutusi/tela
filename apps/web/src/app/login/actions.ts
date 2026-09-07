@@ -3,6 +3,7 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { supabaseServer } from '@/lib/auth'
+import { loginErrorKey } from '@/lib/login-error'
 import { isDevAuthEnabled } from '@/lib/platform/env'
 import { safeNext } from '@/lib/redirect'
 
@@ -27,14 +28,11 @@ export async function sendCode(_prev: LoginState, form: FormData): Promise<Login
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { step: 'email', error: 'invalid_email' }
   const client = await supabaseServer()
   if (!client) return { step: 'email', error: 'not_configured' }
-  // Signup is closed while Tela is in private testing: an address without an account is refused
-  // here rather than silently created (Supabase answers 422 once [auth] enable_signup is off).
+  // Signup is closed while Tela is in private testing, so an address without an account is
+  // refused here rather than silently created. Which message that earns depends on GoTrue's
+  // error_code, not the status: it answers 422 for several unrelated reasons (see login-error.ts).
   const { error } = await client.auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
-  if (error) {
-    const closed =
-      error.status === 422 || /signups? not allowed|signup.*disabled/i.test(error.message)
-    return { step: 'email', error: closed ? 'not_invited' : 'send_failed' }
-  }
+  if (error) return { step: 'email', error: loginErrorKey(error) }
   return { step: 'code', email, error: null }
 }
 
