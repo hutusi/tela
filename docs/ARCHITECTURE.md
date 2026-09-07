@@ -191,6 +191,23 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 - Reader queries live in `packages/db/src/queries/reader.ts` (`listSubscriptions`, `countTotals`,
   `listArticles` with keyset paging, `getArticle`, `markRead`, `markAllRead`, `toggleLike`,
   `subscribe`) and are tested in `packages/db/test/reader.test.ts`.
+- **Latency budget: one database wave per render, and no render the reader did not ask for**
+  (ADR 0016). The Worker runs at the reader's edge and the database is in Tokyo, so a *sequential*
+  query is an ocean crossing. `/reading` starts every query in one flight; `getArticle` carries the
+  whole reader pane (content, read and liked state, the body translation for the reading language,
+  the member's own recommendation); the extraction claim runs after the response through
+  `waitUntil`; and the panes render behind Suspense boundaries under `app/reading/layout.tsx`, so
+  the header does not wait for any of it. A server action whose caller applies its return value
+  does not revalidate, and nothing calls `router.refresh()` on a timer — a tab waiting on a
+  translation or a full-text fetch polls `/api/reading/state` for one row instead.
+  `apps/web/e2e/reader.e2e.ts` asserts that opening an article renders the page once.
+- The reading language lives in a `tela_reading_lang` cookie (`lib/reading-lang-cookie.ts`) so the
+  page does not have to read `profiles` before it knows which translations to join. The row stays
+  the source of truth and the fallback; the cookie carries the member id so one left in a shared
+  browser is ignored.
+- Known and deliberately unfixed: `articles.fetched_at` has no index, and `listArticles` sorts on
+  the unindexed expression `coalesce(published_at, fetched_at)`. Both cost nothing at present
+  volumes (17 ms on 142 articles) and will matter later.
 - Enqueueing from the web: `createJobSender(db)` (`@tela/db/queue`) inserts into `pgboss.job`
   with plain SQL that mirrors pg-boss's own insert plan (queue defaults from `pgboss.queue`,
   `ON CONFLICT DO NOTHING` for singleton dedup). The web app never imports pg-boss, whose `pg`
@@ -203,6 +220,7 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 | `/` | ✓ | landing for anonymous users; signed-in users go to `/reading` |
 | `/login`, `/auth/callback` | ✓ | email code, GitHub, Google; dev-auth button locally |
 | `/reading?filter=&feed=&article=` | ✓ | three-column reader; URL carries the selection |
+| `/api/reading/state?article=&lang=` | ✓ | one row: what an open article is still waiting on, so a tab polls instead of re-rendering (ADR 0016) |
 | `/add` | ✓ | discover feeds from any URL, subscribe, OPML import |
 | `/img` | ✓ | signed image proxy (ADR 0007) |
 | `/discover?topic=&lang=` | ✓ | listed and featured sites with topic chips, language menu, subscribe toggles, claim banner |
