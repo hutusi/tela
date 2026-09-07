@@ -78,7 +78,10 @@ everything so far sits under `[Unreleased]`.
 - **Toolchain and dependencies moved to current majors.** TypeScript 7 — the native compiler,
   which cuts Next's typecheck from 3.3s to under a second; undici 8 under the worker's DNS-pinned
   fetch; the htmlparser2 family (htmlparser2 12, domutils 4, domhandler 6, dom-serializer 3,
-  entities 8), which also deduplicates a tree that was carrying htmlparser2 10 and 12 at once.
+  entities 8), which puts our own parsing on the same version `sanitize-html` already used — the
+  two had drifted apart, so the pipeline sanitized with 12 and blocked with 10. The tree still
+  carries a second copy for `linkedom`, which pins `htmlparser2@^10.1`; that is the extraction
+  path, not the block path.
   `NORM_VERSION` stays at 1: the block-hash snapshots over the real article fixtures are
   unchanged, so the translation cache survives. Every GitHub Action moved to its current major.
 

@@ -247,7 +247,8 @@ describe('the Node runtime is pinned consistently', () => {
   })
 
   it('agrees with the engines field', () => {
-    expect(engines).toContain(String(major))
+    // Exact, not substring: `<24` contains "24" while excluding Node 24 outright.
+    expect(engines).toBe(`>=${major}`)
   })
 
   it("agrees with the worker image's runtime stage", () => {
@@ -259,22 +260,28 @@ describe('the Node runtime is pinned consistently', () => {
   })
 
   /**
-   * Only a major *older* than the pin is flagged. That is the failure this can actually detect —
-   * prose left behind by a bump, which is what happened: the pins moved to 24 while twelve lines
-   * still said Node 22. A newer major is a plan, not staleness ("move to Node 26 after
-   * 2026-10-28" in the runbook), and a constraint quoted from someone else ("Node >= 22.12" for
-   * pg-boss) never matches, because the regex needs a digit straight after "Node".
+   * Living docs describe the present, so any Node major but the pinned one is wrong — including a
+   * newer one. Allowing newer was too lax: it would wave through a README that promoted the
+   * prerequisite to Node 26 while the worker still ran 24, which is a live proposal, not a
+   * hypothetical.
    *
-   * CHANGELOG.md and the ADRs are excluded outright: both are dated records whose job is to say
-   * what was true then, so an old major is correct there and must stay writable.
+   * A line that deliberately names another version — the runbook's dated plan to move after Node
+   * 26 reaches LTS — opts out with a `node-pin:planned` marker, so the exemption is visible where
+   * it applies rather than built into the rule. A constraint quoted from someone else
+   * ("Node >= 22.12" for pg-boss) never matches: the regex needs a digit straight after "Node".
+   *
+   * CHANGELOG.md and the ADRs are excluded outright, being dated records whose job is to say what
+   * was true then.
    */
   const LIVING_DOCS = DOC_FILES.filter((f) => f !== 'CHANGELOG.md')
 
-  it.each(LIVING_DOCS)('%s names no Node major older than the pinned one', (doc) => {
-    const stale = [...read(doc).matchAll(/Node(?:\.js)? (\d+)/g)]
-      .map((m) => Number(m[1]))
-      .filter((v) => v < major)
-    expect([...new Set(stale)]).toEqual([])
+  it.each(LIVING_DOCS)('%s names only the pinned Node major', (doc) => {
+    const wrong = read(doc)
+      .split('\n')
+      .filter((line) => !line.includes('node-pin:planned'))
+      .flatMap((line) => [...line.matchAll(/Node(?:\.js)? (\d+)/g)].map((m) => Number(m[1])))
+      .filter((v) => v !== major)
+    expect([...new Set(wrong)]).toEqual([])
   })
 
   it.each(
@@ -290,6 +297,8 @@ describe('the Node runtime is pinned consistently', () => {
         return range ? [[p, range] as const] : []
       }),
   )('%s pins @types/node to the runtime major (%s)', (_pkg, range) => {
-    expect(range.replace(/^[^0-9]*/, '').split('.')[0]).toBe(String(major))
+    // Exact caret, not "starts with the right digits": `>=24` also admits Node 26 types, which is
+    // the drift this whole block exists to prevent.
+    expect(range).toBe(`^${major}`)
   })
 })
