@@ -10,7 +10,11 @@ export function articleRevision(article: ArticleDetail): string {
     contentHash: article.contentHash,
     extractCheckedAt: article.extractCheckedAt,
     translation: article.translation
-      ? { status: article.translation.status, contentHash: article.translation.contentHash }
+      ? {
+          status: article.translation.status,
+          contentHash: article.translation.contentHash,
+          attempt: article.translation.attempt,
+        }
       : null,
   })
 }

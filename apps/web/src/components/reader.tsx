@@ -111,6 +111,7 @@ export async function Reader({
             articleId={article.id}
             liked={article.isLiked}
             likeCount={article.likeCount}
+            listFiltersOnLiked={params.filter === 'liked'}
           />
           <RecommendPopover
             articleId={article.id}

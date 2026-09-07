@@ -82,6 +82,30 @@ test.describe('reader', () => {
     expect(renders.filter((m) => m === 'GET')).toHaveLength(1)
   })
 
+  test('unliking in the Liked view takes the article out of the list', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+/)
+    await page.getByTestId('article-row').first().click()
+    await expect(page).toHaveURL(/article=\d+/)
+    const articleId = new URL(page.url()).searchParams.get('article')
+    const likeButton = page.getByTestId('like-button')
+    if ((await likeButton.getAttribute('aria-pressed')) !== 'true') await likeButton.click()
+    await expect(likeButton).toHaveAttribute('aria-pressed', 'true')
+
+    await page.goto('/reading?filter=liked')
+    const liked = page.getByTestId('article-row')
+    await expect(liked).toHaveCount(1)
+    await liked.first().click()
+    await expect(page).toHaveURL(new RegExp(`article=${articleId}(&|$)`))
+
+    // The Liked list is defined by this button, so unliking has to empty it. Everywhere else the
+    // button holds the whole truth and no render is owed.
+    await page.getByTestId('like-button').click()
+    await expect(page.getByTestId('like-button')).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByTestId('article-row')).toHaveCount(0)
+  })
+
   test('mark all read clears the counts for one feed', async ({ page }) => {
     await page.goto('/reading')
     const first = page.getByTestId('subscription').first()

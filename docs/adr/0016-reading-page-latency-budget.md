@@ -38,6 +38,17 @@ Two budgets for `/reading`, and a rule about who may cause a render.
   returns the truth its caller applies does not revalidate, and its caller does not refresh.
   Waiting on background work is a poll of `/api/reading/state`, one indexed row, not a re-render;
   transient translation states share one revision, and a refused request never starts polling.
+  The exception is a mutation that decides what is *in* the list on screen: unliking in the Liked
+  view has to remove the row, so `LikeButton` refreshes there and only there.
+- **A revision must distinguish one attempt from the next.** It carries
+  `article_translations.attempt`, because a retry that fails the same way lands on the status and
+  content hash it started from. Without that, the revision never changes, the tab polls until its
+  window runs out, and the retry button never comes back. Client state describing a request is
+  scoped to the revision it was decided for, so the render that a poll triggers does not carry a
+  stale "still polling" across it.
+- **A poller's window is visible time, not wall-clock.** A tab that skips its request while hidden
+  must not spend its window while hidden either, or three minutes in the background ends with the
+  work finished and the page still saying it is running.
 - **Writes nobody is waiting on run after the response**, through `waitUntil` — the claim on an
   extraction window, not the reader's view of it.
 - **The page streams.** The header lives in `app/reading/layout.tsx` and the panes render behind

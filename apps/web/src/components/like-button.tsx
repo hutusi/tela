@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useState, useTransition } from 'react'
 import { toggleLikeAction } from '@/app/reading/actions'
@@ -8,12 +9,16 @@ export function LikeButton({
   articleId,
   liked,
   likeCount,
+  listFiltersOnLiked = false,
 }: {
   articleId: number
   liked: boolean
   likeCount: number
+  /** The list beside this article is the Liked view, whose membership this button decides. */
+  listFiltersOnLiked?: boolean
 }) {
   const t = useTranslations('reader')
+  const router = useRouter()
   const [state, setState] = useState({ liked, likeCount })
   const [pending, start] = useTransition()
   return (
@@ -25,9 +30,12 @@ export function LikeButton({
       onClick={() =>
         start(async () => {
           setState((s) => ({ liked: !s.liked, likeCount: s.likeCount + (s.liked ? -1 : 1) }))
-          // toggleLikeAction returns the post-toggle truth, so there is nothing left to
-          // re-render for; a refresh here would re-run the whole page for a number we hold.
+          // toggleLikeAction returns the post-toggle truth, so the button needs nothing more.
           setState(await toggleLikeAction(articleId))
+          // The Liked view is the exception: its list is defined by the value just changed, so
+          // the row has to leave (or arrive), and the sidebar's count with it. Everywhere else a
+          // render would re-run the whole page for a number already in hand.
+          if (listFiltersOnLiked) router.refresh()
         })
       }
       className={`flex items-center gap-1.5 rounded-full border px-3.5 py-[7px] font-medium hover:border-ink disabled:opacity-70 ${

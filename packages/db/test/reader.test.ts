@@ -290,6 +290,7 @@ describe('getArticle carries the reader pane in one row', () => {
     expect(zh?.translation).toEqual({
       status: 'partial',
       contentHash: 'h1',
+      attempt: expect.any(String),
       title: '译名',
       html: '<p>译文</p>',
       failedBlocks: 1,
@@ -314,6 +315,8 @@ describe('getArticle carries the reader pane in one row', () => {
 
 describe('readingRevision', () => {
   const base = { contentHash: 'abc', extractCheckedAt: null, translation: null }
+  const ATTEMPT = '11111111-1111-4111-8111-111111111111'
+  const OTHER_ATTEMPT = '22222222-2222-4222-8222-222222222222'
 
   test('changes when the body is replaced', () => {
     expect(readingRevision(base)).not.toBe(readingRevision({ ...base, contentHash: 'def' }))
@@ -327,7 +330,7 @@ describe('readingRevision', () => {
 
   test('stays stable while a translation moves through non-terminal states', () => {
     const at = (status: 'pending' | 'requested' | 'running') =>
-      readingRevision({ ...base, translation: { status, contentHash: 'abc' } })
+      readingRevision({ ...base, translation: { status, contentHash: 'abc', attempt: ATTEMPT } })
     const tags = [readingRevision(base), at('pending'), at('requested'), at('running')]
     expect(new Set(tags).size).toBe(1)
   })
@@ -335,25 +338,55 @@ describe('readingRevision', () => {
   test('changes only when a fresh translation reaches a terminal state', () => {
     const waiting = readingRevision(base)
     for (const status of ['done', 'partial', 'failed'] as const) {
-      expect(readingRevision({ ...base, translation: { status, contentHash: 'abc' } })).not.toBe(
-        waiting,
-      )
+      expect(
+        readingRevision({ ...base, translation: { status, contentHash: 'abc', attempt: ATTEMPT } }),
+      ).not.toBe(waiting)
     }
   })
 
+  test('changes when a retry fails the same way, so the reader gets the button back', () => {
+    // failed → requested → failed lands on the same status and hash it started from. Without the
+    // attempt the revision is identical, the tab polls until its budget runs out, and the retry
+    // button never comes back.
+    const first = readingRevision({
+      ...base,
+      translation: { status: 'failed', contentHash: 'abc', attempt: ATTEMPT },
+    })
+    const retried = readingRevision({
+      ...base,
+      translation: { status: 'failed', contentHash: 'abc', attempt: OTHER_ATTEMPT },
+    })
+    expect(retried).not.toBe(first)
+  })
+
+  test('does not churn on the attempt while a request is still waiting', () => {
+    const one = readingRevision({
+      ...base,
+      translation: { status: 'requested', contentHash: 'abc', attempt: ATTEMPT },
+    })
+    const two = readingRevision({
+      ...base,
+      translation: { status: 'running', contentHash: 'abc', attempt: OTHER_ATTEMPT },
+    })
+    expect(one).toBe(two)
+  })
+
   test('treats a terminal translation for an old body as still waiting', () => {
-    const stale = readingRevision({ ...base, translation: { status: 'done', contentHash: 'old' } })
+    const stale = readingRevision({
+      ...base,
+      translation: { status: 'done', contentHash: 'old', attempt: ATTEMPT },
+    })
     expect(stale).toBe(readingRevision(base))
   })
 
   test('wakes when an irreplaceable stale running attempt finishes', () => {
     const running = readingRevision({
       ...base,
-      translation: { status: 'running', contentHash: 'old' },
+      translation: { status: 'running', contentHash: 'old', attempt: ATTEMPT },
     })
     const failed = readingRevision({
       ...base,
-      translation: { status: 'failed', contentHash: 'old' },
+      translation: { status: 'failed', contentHash: 'old', attempt: ATTEMPT },
     })
     expect(running).not.toBe(readingRevision(base))
     expect(failed).toBe(readingRevision(base))
@@ -374,6 +407,26 @@ describe('getReadingRevision', () => {
 
     await t.db.update(articles).set({ extractCheckedAt: new Date() }).where(eq(articles.id, id))
     expect(await getReadingRevision(t.db, id, 'zh-Hans')).not.toBe(before as string)
+  })
+
+  test('changes when a retry lands on the same terminal status', async () => {
+    const id = s.byTitle.Fresh as number
+    const hash = (await getArticle(t.db, userA, id))?.contentHash
+    await t.db.execute(
+      sql`insert into article_translations (article_id, target_lang, status, content_hash)
+          values (${id}, 'zh-Hans', 'failed', ${hash})`,
+    )
+    const failed = await getReadingRevision(t.db, id, 'zh-Hans')
+    // What a retry does: a fresh attempt on the same row, which then fails the same way.
+    await t.db.execute(
+      sql`update article_translations set status = 'requested', attempt = gen_random_uuid()
+          where article_id = ${id} and target_lang = 'zh-Hans'`,
+    )
+    await t.db.execute(
+      sql`update article_translations set status = 'failed'
+          where article_id = ${id} and target_lang = 'zh-Hans'`,
+    )
+    expect(await getReadingRevision(t.db, id, 'zh-Hans')).not.toBe(failed as string)
   })
 
   test('follows the translation row for the asked-for language only', async () => {

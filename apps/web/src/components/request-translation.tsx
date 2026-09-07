@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { requestTranslationAction } from '@/app/reading/actions'
 import { PollUntil } from './poll-until'
 import {
+  type TranslationRequestDecision,
   type TranslationRequestNotice,
   translationRequestDecision,
 } from './translation-request-state'
@@ -31,14 +32,22 @@ export function RequestTranslation({
 }) {
   const router = useRouter()
   const t = useTranslations('translation')
-  const [notice, setNotice] = useState<TranslationRequestNotice | null>(null)
-  const [translationPolling, setTranslationPolling] = useState(false)
+  // What the last request decided, and which server revision it decided it for. Scoping it that
+  // way is what lets the retry button come back: a poll refreshes the page the moment an attempt
+  // lands, and this component keeps its identity across that render, so a "polling" flag left
+  // over from the previous revision would hide the button for good.
+  const [decided, setDecided] = useState<{
+    revision: string
+    decision: TranslationRequestDecision
+  } | null>(null)
   const [busy, setBusy] = useState(false)
+  const current = decided?.revision === revision ? decided.decision : null
+  const notice: TranslationRequestNotice | null = current?.notice ?? null
+  const translationPolling = current?.poll === true
   const settle = useCallback(
-    (outcome: Awaited<ReturnType<typeof requestTranslationAction>>) => {
+    (outcome: Awaited<ReturnType<typeof requestTranslationAction>>, forRevision: string) => {
       const decision = translationRequestDecision(outcome)
-      setTranslationPolling(decision.poll === true)
-      setNotice(decision.notice ?? null)
+      setDecided({ revision: forRevision, decision })
       if (decision.refresh) router.refresh()
     },
     [router],
@@ -47,8 +56,9 @@ export function RequestTranslation({
     const outcome = await requestTranslationAction(articleId, targetLang).catch(
       () => 'unavailable' as const,
     )
-    // Bind an automatic attempt to the server revision that decided it was needed. A changed
-    // revision starts a fresh effect, which is how a stale running attempt is retried once it ends.
+    // Bind the attempt to the server revision that decided it was needed. A changed revision
+    // starts a fresh effect, which is how a stale running attempt is retried once it ends, and it
+    // is what the outcome above is filed under.
     return { outcome, revision }
   }, [articleId, targetLang, revision])
   useEffect(() => {
@@ -56,8 +66,8 @@ export function RequestTranslation({
     let cancelled = false
     setBusy(true)
     request()
-      .then(({ outcome }) => {
-        if (!cancelled) settle(outcome)
+      .then(({ outcome, revision: forRevision }) => {
+        if (!cancelled) settle(outcome, forRevision)
       })
       .finally(() => {
         if (!cancelled) setBusy(false)
@@ -84,8 +94,9 @@ export function RequestTranslation({
           className="mb-7 rounded-full border border-line bg-white px-3.5 py-1.5 text-[13px] hover:border-muted disabled:opacity-50"
           onClick={async () => {
             setBusy(true)
-            setNotice(null)
-            settle((await request()).outcome)
+            setDecided(null)
+            const { outcome, revision: forRevision } = await request()
+            settle(outcome, forRevision)
             setBusy(false)
           }}
         >

@@ -198,6 +198,8 @@ export async function listArticles(
 export type ArticleTranslationDetail = {
   status: (typeof articleTranslations.$inferSelect)['status']
   contentHash: string | null
+  /** Identity of the attempt behind this status; part of the revision a tab polls for. */
+  attempt: string
   title: string | null
   html: string | null
   failedBlocks: number
@@ -304,6 +306,7 @@ export async function getArticle(
       translationExcerpt: articleTranslations.excerpt,
       translationHtml: articleTranslations.html,
       translationFailedBlockIds: articleTranslations.failedBlockIds,
+      translationAttempt: articleTranslations.attempt,
       // The id, not the note: a recommendation may carry no note, and a left join reports both
       // "no row" and "no note" as null.
       recommendationId: recommendations.id,
@@ -376,6 +379,7 @@ export async function getArticle(
         : {
             status: row.translationStatus,
             contentHash: row.translationHash,
+            attempt: row.translationAttempt ?? '',
             title: row.translationTitle,
             html: row.translationHtml,
             failedBlocks: row.translationFailedBlockIds?.length ?? 0,
@@ -539,7 +543,12 @@ export type ReadingRevisionInput = {
   /** Non-null once extraction has concluded, whatever the outcome. */
   extractCheckedAt: Date | null
   /** The body translation row for the reading language, or null when there is none yet. */
-  translation: { status: TranslationStatus; contentHash: string | null } | null
+  translation: {
+    status: TranslationStatus
+    contentHash: string | null
+    /** Identity of the attempt behind this status; a new request mints a new one. */
+    attempt: string
+  } | null
 }
 
 /**
@@ -558,8 +567,12 @@ export function readingRevision(input: ReadingRevisionInput): string {
   // A running attempt for an older body cannot be replaced yet. Wake once when it becomes a
   // stale terminal row, so the reader can request the current body without refreshing for the
   // ordinary pending → requested → running transitions.
+  // The attempt is what separates one terminal row from the next. Without it a retry that fails
+  // the same way lands on the same status and hash as the one it replaced, the revision never
+  // changes, and the tab polls until its budget runs out while the reader waits for a retry
+  // button that will never come back.
   const translation = settled
-    ? `${t.status}:${t.contentHash ?? ''}`
+    ? `${t.status}:${t.contentHash ?? ''}:${t.attempt}`
     : !fresh && t?.status === 'running'
       ? 'stale-running'
       : 'waiting'
@@ -580,6 +593,7 @@ export async function getReadingRevision(
       extractCheckedAt: articles.extractCheckedAt,
       translationStatus: articleTranslations.status,
       translationHash: articleTranslations.contentHash,
+      translationAttempt: articleTranslations.attempt,
     })
     .from(articles)
     .leftJoin(
@@ -597,6 +611,10 @@ export async function getReadingRevision(
     translation:
       row.translationStatus === null
         ? null
-        : { status: row.translationStatus, contentHash: row.translationHash },
+        : {
+            status: row.translationStatus,
+            contentHash: row.translationHash,
+            attempt: row.translationAttempt ?? '',
+          },
   })
 }
