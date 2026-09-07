@@ -5,6 +5,7 @@ import { getTranslations } from 'next-intl/server'
 import { markAllReadAction } from '@/app/reading/actions'
 import { type ReadingParams, readingHref } from '@/app/reading/href'
 import { relativeTime } from '@/lib/format'
+import { LinkPending } from './link-pending'
 import { Swatch } from './swatch'
 
 type Props = {
@@ -87,11 +88,12 @@ export async function ArticleList({
             <Link
               key={a.id}
               href={readingHref({ ...params, articleId: a.id })}
-              className={`flex flex-col gap-1.5 rounded-lg border-t border-line px-2.5 py-3.5 text-ink hover:bg-hover hover:no-underline ${active ? 'bg-white' : ''}`}
+              className={`relative flex flex-col gap-1.5 rounded-lg border-t border-line px-2.5 py-3.5 text-ink hover:bg-hover hover:no-underline ${active ? 'bg-white' : ''}`}
               style={{ opacity: a.isRead && !active ? 0.62 : 1 }}
               data-testid="article-row"
               data-read={read ? '1' : '0'}
             >
+              <LinkPending />
               <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
                 <Swatch id={a.feedId} title={a.feedTitle} size={10} />
                 <span className="min-w-0 flex-1 truncate font-medium text-ink">{a.feedTitle}</span>

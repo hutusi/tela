@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { getLocale, getTranslations } from 'next-intl/server'
+import { Suspense } from 'react'
 import { signOut } from '@/app/login/actions'
 import { getSessionUser } from '@/lib/auth'
 import { getCurrentProfile } from '@/lib/profile'
@@ -9,13 +10,36 @@ import { ReadInMenu } from './read-in-menu'
 
 type NavKey = 'reading' | 'discover' | 'dashboard' | 'settings'
 
+/**
+ * The member's avatar, which is the one thing in this header that can need the database — the
+ * display name and handle live on the profile row. It renders inside its own Suspense boundary so
+ * the header reaches the browser without waiting for a query, on every page that has a header.
+ */
+async function HeaderAvatar({ email }: { email: string | null }) {
+  const profile = await getCurrentProfile()
+  const initial = (profile?.displayName ?? profile?.handle ?? email ?? 'U').charAt(0).toUpperCase()
+  return (
+    <Link
+      href={profile?.handle ? `/@${profile.handle}` : '/settings'}
+      data-testid="nav-profile"
+      className="flex size-[30px] items-center justify-center rounded-full bg-accent font-semibold text-white hover:no-underline"
+      title={profile?.displayName ?? email ?? ''}
+    >
+      {initial}
+    </Link>
+  )
+}
+
+function HeaderAvatarSkeleton() {
+  return <div aria-hidden className="size-[30px] rounded-full bg-hover" />
+}
+
 export async function AppHeader({ active, query }: { active?: NavKey; query?: string }) {
   const [t, user, locale] = await Promise.all([
     getTranslations('nav'),
     getSessionUser(),
     getLocale(),
   ])
-  const profile = user ? await getCurrentProfile() : null
   const pill = (key: NavKey, href: string) => (
     <Link
       href={href}
@@ -25,9 +49,6 @@ export async function AppHeader({ active, query }: { active?: NavKey; query?: st
       {t(key)}
     </Link>
   )
-  const initial = (profile?.displayName ?? profile?.handle ?? user?.email ?? 'U')
-    .charAt(0)
-    .toUpperCase()
   return (
     <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-line bg-paper px-4 md:gap-7 md:px-7">
       <Link
@@ -60,18 +81,17 @@ export async function AppHeader({ active, query }: { active?: NavKey; query?: st
           className="w-full bg-transparent text-ink outline-none placeholder:text-muted"
         />
       </form>
-      {user ? <ReadInMenu readingLang={await getReadingLang()} /> : null}
+      {user ? (
+        <Suspense fallback={null}>
+          <ReadInMenuAsync />
+        </Suspense>
+      ) : null}
       <LocaleSwitcher locale={locale} />
       {user ? (
         <form action={signOut} className="flex items-center gap-2">
-          <Link
-            href={profile?.handle ? `/@${profile.handle}` : '/settings'}
-            data-testid="nav-profile"
-            className="flex size-[30px] items-center justify-center rounded-full bg-accent font-semibold text-white hover:no-underline"
-            title={profile?.displayName ?? user.email ?? ''}
-          >
-            {initial}
-          </Link>
+          <Suspense fallback={<HeaderAvatarSkeleton />}>
+            <HeaderAvatar email={user.email} />
+          </Suspense>
           <button
             type="submit"
             className="text-[13px] text-muted hover:text-ink"
@@ -90,4 +110,12 @@ export async function AppHeader({ active, query }: { active?: NavKey; query?: st
       )}
     </header>
   )
+}
+
+/**
+ * The reading language usually comes from a cookie, but a member whose cookie has not been
+ * written yet falls back to the profile row — a query, and one this header must not block on.
+ */
+async function ReadInMenuAsync() {
+  return <ReadInMenu readingLang={await getReadingLang()} />
 }

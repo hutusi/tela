@@ -49,6 +49,31 @@ test.describe('reader', () => {
     await expect(page).not.toHaveURL(/article=/)
   })
 
+  test('opening an article renders the page once', async ({ page }) => {
+    await page.goto('/reading')
+    // An English feed while the reading language is EN: nothing here asks for a translation, so
+    // any second render would be one the page asked for itself.
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+/)
+    await expect(page.getByTestId('article-row').first()).toBeVisible()
+
+    const renders: string[] = []
+    page.on('request', (r) => {
+      if (new URL(r.url()).pathname === '/reading') renders.push(r.method())
+    })
+
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('article-title')).toBeVisible()
+    await expect(page.locator('.article-body')).toBeVisible()
+    // Long enough for a stray refresh to arrive: the ones this replaces fired the moment their
+    // server action resolved.
+    await page.waitForTimeout(1500)
+
+    // One navigation. mark-read still posts to this path, but its response no longer carries a
+    // re-render, and nothing calls router.refresh() any more. This used to be three.
+    expect(renders.filter((m) => m === 'GET')).toHaveLength(1)
+  })
+
   test('mark all read clears the counts for one feed', async ({ page }) => {
     await page.goto('/reading')
     const first = page.getByTestId('subscription').first()
