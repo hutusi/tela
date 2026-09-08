@@ -1,27 +1,38 @@
+'use client'
+
 import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
-import Link from 'next/link'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { type ReadingMode, type ReadingParams, readingHref } from '@/app/reading/href'
+import { useLocale, useTranslations } from 'next-intl'
+import type { ReadingMode } from '@/app/reading/href'
+import type { ReaderTranslationState } from './reader-data'
 
 export type TranslationView = {
   targetLang: string
-  state: 'none' | 'requested' | 'running' | 'done' | 'partial' | 'failed'
+  state: ReaderTranslationState
   failedBlocks: number
 }
 
 const MODES: ReadingMode[] = ['side', 'trans', 'orig']
 
-/** "Written in Spanish. Translated to English by Tela." plus the mode toggle and status. */
-export async function TranslationBar({
+/**
+ * "Written in Spanish. Translated to English by Tela." plus the mode toggle and status.
+ *
+ * The mode toggle is buttons rather than links: switching between side-by-side, translation and
+ * original changes nothing the server knows, and routing it through a navigation cost a full page
+ * render (ADR 0017). The URL still follows, so the view stays shareable.
+ */
+export function TranslationBar({
   sourceLang,
   view,
-  params,
+  mode,
+  onMode,
 }: {
   sourceLang: string
   view: TranslationView
-  params: ReadingParams
+  mode: ReadingMode
+  onMode: (mode: ReadingMode) => void
 }) {
-  const [t, locale] = await Promise.all([getTranslations('translation'), getLocale()])
+  const t = useTranslations('translation')
+  const locale = useLocale()
   const names = LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en
   const sourceName = names[sourceLang] ?? sourceLang
   const targetName = names[view.targetLang] ?? view.targetLang
@@ -44,24 +55,26 @@ export async function TranslationBar({
       </span>
       <div className="flex-1" />
       <div className="flex gap-0.5 rounded-lg bg-paper p-0.5">
-        {MODES.map((mode) => {
-          const active = params.mode === mode
-          const disabled = !ready && mode !== 'orig'
+        {MODES.map((m) => {
+          const active = mode === m
+          const disabled = !ready && m !== 'orig'
           return (
-            <Link
-              key={mode}
-              href={readingHref({ ...params, mode })}
+            <button
+              key={m}
+              type="button"
+              disabled={disabled}
+              onClick={() => onMode(m)}
               aria-current={active ? 'true' : undefined}
               aria-disabled={disabled ? 'true' : undefined}
-              data-testid={`mode-${mode}`}
+              data-testid={`mode-${m}`}
               className={`rounded-md px-2.5 py-[5px] text-[12.5px] hover:no-underline ${
                 active
                   ? 'bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]'
                   : 'text-muted hover:text-ink'
               } ${disabled ? 'pointer-events-none opacity-50' : ''}`}
             >
-              {t(`modes.${mode}`)}
-            </Link>
+              {t(`modes.${m}`)}
+            </button>
           )
         })}
       </div>

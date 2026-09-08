@@ -4,18 +4,16 @@ import type {
   SubscriptionRow,
   UnreadTotals,
 } from '@tela/db/queries'
-import { wantsExtraction } from '@tela/ingest'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { ArticleList } from '@/components/article-list'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { EmptyState } from '@/components/empty-state'
 import { MobileNav } from '@/components/mobile-nav'
-import { Reader, type ReaderTranslation } from '@/components/reader'
+import { Reader } from '@/components/reader'
 import { Sidebar } from '@/components/sidebar'
-import { renderArticleHtml } from '@/lib/article-html'
+import { buildReaderData } from '@/lib/reader-data'
 import type { ReadingParams } from './href'
-import { articleRevision } from './revision'
 
 export type ListData = {
   subscriptions: SubscriptionRow[]
@@ -67,52 +65,24 @@ export async function ListPanes({
   )
 }
 
-/** The article itself: body, translation, and what it is still waiting on. */
+/** The article itself, built into the shape the client pane renders. */
 export async function ReaderPane({
   data,
   params,
   readingLang,
-  locale,
 }: {
   data: Promise<ArticleDetail | null>
   params: ReadingParams
   readingLang: string
-  locale: string
 }) {
   const article = await data
   // A link to an article that has since been dropped: say so rather than leaving the pane blank.
   if (!article) return <ArticleGone />
-  const html = await renderArticleHtml(article.html)
-  const row = article.translation
-
-  // Foreign article: the body translation for the reading language came back with the article.
-  let translation: ReaderTranslation | null = null
-  if (article.sourceLang && article.sourceLang !== readingLang) {
-    const fresh = row !== null && row.contentHash === article.contentHash
-    const state = row === null || !fresh || row.status === 'pending' ? 'none' : row.status
-    translation = {
-      targetLang: readingLang,
-      state,
-      failedBlocks: fresh ? row.failedBlocks : 0,
-      html:
-        fresh && row.html && (row.status === 'done' || row.status === 'partial')
-          ? await renderArticleHtml(row.html)
-          : null,
-      title: row?.title ?? null,
-    }
-  }
-
   return (
     <Reader
-      article={article}
-      html={html}
-      params={params}
-      locale={locale}
-      translation={translation}
-      recommendation={article.recommendation}
-      extracting={wantsExtraction(article)}
+      data={await buildReaderData(article, readingLang)}
       readingLang={readingLang}
-      revision={articleRevision(article)}
+      params={params}
     />
   )
 }

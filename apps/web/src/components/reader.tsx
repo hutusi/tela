@@ -1,35 +1,26 @@
-import type { ArticleDetail } from '@tela/db/queries'
+'use client'
+
 import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
 import Link from 'next/link'
-import { getTranslations } from 'next-intl/server'
-import { type ReadingParams, readingHref } from '@/app/reading/href'
+import { useLocale, useTranslations } from 'next-intl'
+import { useState } from 'react'
+import { type ReadingMode, type ReadingParams, readingHref } from '@/app/reading/href'
 import { relativeTime } from '@/lib/format'
 import { LikeButton } from './like-button'
 import { MarkRead } from './mark-read'
 import { PollUntil } from './poll-until'
+import type { ReaderData } from './reader-data'
 import { RecommendPopover } from './recommend-popover'
 import { RequestTranslation } from './request-translation'
 import { Swatch } from './swatch'
-import { TranslationBar, type TranslationView } from './translation-bar'
+import { TranslationBar } from './translation-bar'
 
-export type ReaderTranslation = TranslationView & {
-  html: string | null
-  title: string | null
-}
+export type { ReaderTranslation } from './reader-data'
 
 type Props = {
-  article: ArticleDetail
-  html: string
-  params: ReadingParams
-  locale: string
-  /** Present when the article is not in the reading language. */
-  translation: ReaderTranslation | null
-  recommendation: { note: string | null } | null
-  /** Full text is being fetched for a summary-only article: say so and poll. */
-  extracting: boolean
+  data: ReaderData
   readingLang: string
-  /** Opaque tag for what this render was built from; the poller waits for it to change. */
-  revision: string
+  params: ReadingParams
 }
 
 function Body({ html, lang, testId }: { html: string; lang?: string | undefined; testId: string }) {
@@ -44,27 +35,28 @@ function Body({ html, lang, testId }: { html: string; lang?: string | undefined;
   )
 }
 
-export async function Reader({
-  article,
-  html,
-  params,
-  locale,
-  translation,
-  recommendation,
-  extracting,
-  readingLang,
-  revision,
-}: Props) {
-  const t = await getTranslations('reader')
-  const tt = await getTranslations('translation')
+/**
+ * The article itself.
+ *
+ * A client component fed by `ReaderData`, so that the pane can later arrive from a fetch rather
+ * than from a server render of the whole page. Mode switching is local state for the same reason:
+ * side-by-side, translation and original change nothing the server knows.
+ */
+export function Reader({ data, readingLang, params }: Props) {
+  const t = useTranslations('reader')
+  const tt = useTranslations('translation')
+  const locale = useLocale()
+  const [mode, setMode] = useState<ReadingMode>(params.mode)
+  const { article, html, translation, recommendation, extracting, revision } = data
+
   const sourceLang = article.sourceLang ?? undefined
   const ready =
     translation !== null &&
     translation.html !== null &&
     (translation.state === 'done' || translation.state === 'partial')
-  const mode = translation === null ? 'orig' : ready ? params.mode : 'orig'
-  const showTrans = ready && mode !== 'orig'
-  const showOrig = mode !== 'trans'
+  const shown = translation === null ? 'orig' : ready ? mode : 'orig'
+  const showTrans = ready && shown !== 'orig'
+  const showOrig = shown !== 'trans'
   const twoCols = showTrans && showOrig
   const title = showTrans && translation?.title ? translation.title : article.title
   const pending =
@@ -73,11 +65,19 @@ export async function Reader({
   const failed = translation?.state === 'failed'
   const requestOwnsPolling = needsRequest || failed
 
+  const onMode = (next: ReadingMode) => {
+    setMode(next)
+    const url = new URL(window.location.href)
+    if (next === 'side') url.searchParams.delete('mode')
+    else url.searchParams.set('mode', next)
+    window.history.replaceState(null, '', url)
+  }
+
   return (
     <main
       className="min-w-0 overflow-hidden px-5 pb-20 pt-6 animate-fade md:px-8"
       data-testid="reader"
-      data-mode={mode}
+      data-mode={shown}
     >
       <MarkRead articleId={article.id} isRead={article.isRead} />
       {extracting ? (
@@ -133,7 +133,7 @@ export async function Reader({
             </>
           ) : null}
           <span>·</span>
-          <span>{relativeTime(article.publishedAt ?? article.fetchedAt, locale)}</span>
+          <span>{relativeTime(new Date(article.publishedAt ?? article.fetchedAt), locale)}</span>
           <span>·</span>
           <span>{t('minRead', { n: article.readingMinutes ?? 1 })}</span>
           {article.url ? (
@@ -147,7 +147,7 @@ export async function Reader({
         </div>
 
         {translation && sourceLang ? (
-          <TranslationBar sourceLang={sourceLang} view={translation} params={params} />
+          <TranslationBar sourceLang={sourceLang} view={translation} mode={mode} onMode={onMode} />
         ) : null}
         {translation?.state === 'failed' ? (
           <RequestTranslation

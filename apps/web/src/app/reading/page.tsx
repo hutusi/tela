@@ -1,18 +1,10 @@
-import {
-  countTotals,
-  EXTRACT_COOLDOWN_MINUTES,
-  getArticle,
-  listArticles,
-  listSubscriptions,
-  markExtractRequested,
-} from '@tela/db/queries'
-import { wantsExtraction } from '@tela/ingest'
+import { countTotals, getArticle, listArticles, listSubscriptions } from '@tela/db/queries'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { Suspense } from 'react'
 import { requireUser } from '@/lib/auth'
+import { claimExtraction } from '@/lib/extraction'
 import { getDb } from '@/lib/platform/db'
 import { waitUntil } from '@/lib/platform/wait-until'
-import { enqueueArticleExtract } from '@/lib/queue'
 import { getReadingLang } from '@/lib/reading'
 import { parseReadingParams } from './href'
 import { ListPanes, ReaderPane } from './panes'
@@ -57,7 +49,7 @@ export default async function ReadingPage({ searchParams }: Props) {
   // window, not the render, and the worker stamps the article on a final outcome.
   // `extract_requested_at` comes back with the article, so a request inside a window it cannot win
   // never reaches the database at all.
-  await waitUntil(claimExtraction(articleData, db))
+  await waitUntil(articleData.then((article) => claimExtraction(article, db)))
 
   const open = params.articleId !== null
   return (
@@ -80,28 +72,9 @@ export default async function ReadingPage({ searchParams }: Props) {
       </Suspense>
       {open ? (
         <Suspense fallback={<ReaderPaneSkeleton />}>
-          <ReaderPane
-            data={articleData}
-            params={params}
-            readingLang={readingLang}
-            locale={locale}
-          />
+          <ReaderPane data={articleData} params={params} readingLang={readingLang} />
         </Suspense>
       ) : null}
     </div>
   )
-}
-
-/** Claim one extraction window for an opened summary-only article, or do nothing. */
-async function claimExtraction(
-  articleData: Promise<Awaited<ReturnType<typeof getArticle>>>,
-  db: Awaited<ReturnType<typeof getDb>>,
-): Promise<void> {
-  const article = await articleData
-  if (!article || !wantsExtraction(article)) return
-  const requested = article.extractRequestedAt
-  const cooled =
-    requested === null || Date.now() - requested.getTime() > EXTRACT_COOLDOWN_MINUTES * 60_000
-  if (!cooled) return
-  if (await markExtractRequested(db, article.id)) await enqueueArticleExtract(db, article.id)
 }
