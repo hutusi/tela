@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { Suspense } from 'react'
 import { EmptyState } from '@/components/empty-state'
 import { MobileNav } from '@/components/mobile-nav'
+import type { InitialReaderState } from '@/components/reader-data'
 import { ReadingShell } from '@/components/reading-shell'
 import { requireUser } from '@/lib/auth'
 import { claimExtraction } from '@/lib/extraction'
@@ -62,14 +63,17 @@ export default async function ReadingPage({ searchParams }: Props) {
   // /api/reading/article, which costs a route handler rather than this whole page (ADR 0017).
   const article = await articleData
   await waitUntil(claimExtraction(article, db))
-  const initial = article ? await buildReaderData(article, readingLang) : null
+  const initial: InitialReaderState = article
+    ? { kind: 'ready', data: await buildReaderData(article, readingLang) }
+    : params.articleId === null
+      ? { kind: 'empty' }
+      : { kind: 'gone', articleId: params.articleId }
 
   return (
     <ReadingShell
       initial={initial}
       readingLang={readingLang}
       filter={params.filter}
-      initialMode={params.mode}
       emptyState={
         <Suspense fallback={null}>
           <EmptyPane data={listData} />

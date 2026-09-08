@@ -87,6 +87,37 @@ test.describe('reader', () => {
     expect(documents.filter((m) => m === 'GET')).toHaveLength(0)
   })
 
+  test('filter and subscription navigations close a client-opened article', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+
+    await page.locator('aside').getByRole('link', { name: /Today/ }).click()
+    await expect(page).toHaveURL(/\/reading\?filter=today$/)
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+    await expect(page.getByTestId('reading-layout')).not.toHaveAttribute('data-open')
+
+    await page.locator('aside a[href="/reading"]').click()
+    await expect(page).toHaveURL(/\/reading$/)
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    await page.getByTestId('subscription').first().click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+    await expect(page.getByTestId('reading-layout')).not.toHaveAttribute('data-open')
+  })
+
+  test('a direct link to a missing article says it is gone', async ({ page }) => {
+    await page.goto('/reading?article=999999999')
+    await expect(page.getByTestId('article-gone')).toBeVisible()
+    await expect(page.getByTestId('reading-layout')).toHaveAttribute('data-open', '1')
+
+    await page.getByRole('button', { name: 'Close' }).click()
+    await expect(page).toHaveURL(/\/reading$/)
+    await expect(page.getByTestId('article-gone')).toHaveCount(0)
+    await expect(page.getByTestId('article-list')).toBeVisible()
+  })
+
   test('unliking in the Liked view takes the article out of the list', async ({ page }) => {
     await page.goto('/reading')
     await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
@@ -232,6 +263,16 @@ test.describe('translation', () => {
     await page.getByTestId('mode-orig').click()
     await expect(page.getByTestId('body-translated')).toHaveCount(0)
     await expect(page.getByTestId('article-title')).not.toContainText('en:')
+    await expect(page).toHaveURL(/mode=orig/)
+
+    // Mode is URL state: closing and going back must restore the same view without a page render.
+    await page.getByTestId('close-article').click()
+    await expect(page).not.toHaveURL(/article=/)
+    await page.goBack()
+    await expect(page).toHaveURL(/article=\d+.*mode=orig/)
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
+    await expect(page.getByTestId('body-original')).toBeVisible()
+    await expect(page.getByTestId('body-translated')).toHaveCount(0)
   })
 
   test('switching the reading language changes what gets translated', async ({ page }) => {

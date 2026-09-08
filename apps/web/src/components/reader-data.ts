@@ -56,3 +56,9 @@ export type ReaderData = {
   /** Opaque tag for what this was built from; the poller waits for it to change. */
   revision: string
 }
+
+/** The reader pane state supplied by a server render. */
+export type InitialReaderState =
+  | { kind: 'empty' }
+  | { kind: 'ready'; data: ReaderData }
+  | { kind: 'gone'; articleId: number }

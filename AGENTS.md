@@ -88,7 +88,7 @@ Defects that already cost time here, not hypotheticals.
 - **Branch a Supabase auth failure on `error.code`, never the HTTP status.** GoTrue answers 422 for a missing account (`otp_disabled`), a disabled provider (`email_provider_disabled`) and a rejected address alike; mapping the status told members with working accounts that they had never registered (`apps/web/src/lib/login-error.ts`).
 - **Supabase's stock auth templates carry only `{{ .ConfirmationURL }}`** — no code for a form that calls `verifyOtp`, and a link that lands on the site root with nothing to make a session from. Ours live in `supabase/templates/` (ADR 0013).
 - **`revalidatePath` in a server action re-renders the page inside the action's own response**, and a `router.refresh()` in the caller renders it again. On `/reading` that was two full renders of a three-pane page for a value the caller already held. Revalidate only when server state changed and the caller has no optimistic path; never pair it with a refresh (ADR 0016).
-- **`router.refresh()` on a timer re-renders the whole page.** Waiting on background work polls `/api/reading/state` for one row and refreshes once, when something actually changed (ADR 0016).
+- **`router.refresh()` on a timer re-renders the whole page.** Waiting on background work polls `/api/reading/state` for one row and re-fetches only the article pane from `/api/reading/article` when something actually changed (ADR 0017).
 - **A Next route file may only export handlers** — a helper exported beside `GET` breaks the build. Give it its own module and its own test.
 - **Create the abort signal once per request, not inside the redirect loop**, or every hop gets the full timeout again: 100 ms was observed taking ~500 ms through five redirects.
 - **A job's execution budget must be shorter than its pg-boss lease**, or a job outlives the lease, runs concurrently with its own retry, and pays the provider twice.
@@ -109,7 +109,7 @@ Defects that already cost time here, not hypotheticals.
 Update whichever covers what you changed, in the same change:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the living system map. Tracks: schema changes, new jobs, new routes, new safeguards.
-- [docs/adr/](docs/adr/) — decision records 0001–0015. A reversed decision gets a superseding ADR, not a silent edit.
+- [docs/adr/](docs/adr/) — decision records 0001–0017. A reversed decision gets a superseding ADR, not a silent edit.
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — provisioning and day-2 runbooks. Anything touching env vars, secrets, deploys, rate limits or failure signatures lands here.
 - [docs/DESIGN.md](docs/DESIGN.md) — tokens, layout rules, components, the i18n string convention.
 - [packages/content/README.md](packages/content/README.md) — the normative spec for sanitization, blocks and hashing. Changing a rule here means bumping `NORM_VERSION`.

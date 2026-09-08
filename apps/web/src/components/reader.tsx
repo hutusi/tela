@@ -2,9 +2,9 @@
 
 import type { ArticleFilter } from '@tela/db/queries'
 import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
+import { useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { useState } from 'react'
-import type { ReadingMode } from '@/app/reading/href'
+import { parseReadingMode, type ReadingMode } from '@/app/reading/href'
 import { relativeTime } from '@/lib/format'
 import { LikeButton } from './like-button'
 import { MarkRead } from './mark-read'
@@ -22,7 +22,6 @@ type Props = {
   readingLang: string
   /** Decides whether the like button owes the list a refresh. */
   filter: ArticleFilter
-  initialMode: ReadingMode
   onClose: () => void
   /** Re-fetch this pane, for when a background job has changed it. */
   onReload: () => void
@@ -48,11 +47,11 @@ function Body({ html, lang, testId }: { html: string; lang?: string | undefined;
  * budget (ADR 0017). The server still renders it for a direct link; every click after that is
  * this component swapping its data.
  */
-export function Reader({ data, readingLang, filter, initialMode, onClose, onReload }: Props) {
+export function Reader({ data, readingLang, filter, onClose, onReload }: Props) {
   const t = useTranslations('reader')
   const tt = useTranslations('translation')
   const locale = useLocale()
-  const [mode, setMode] = useState<ReadingMode>(initialMode)
+  const mode = parseReadingMode(useSearchParams().get('mode'))
   const { article, html, translation, recommendation, extracting, revision } = data
 
   const sourceLang = article.sourceLang ?? undefined
@@ -72,7 +71,6 @@ export function Reader({ data, readingLang, filter, initialMode, onClose, onRelo
   const requestOwnsPolling = needsRequest || failed
 
   const onMode = (next: ReadingMode) => {
-    setMode(next)
     const url = new URL(window.location.href)
     if (next === 'side') url.searchParams.delete('mode')
     else url.searchParams.set('mode', next)

@@ -3,17 +3,16 @@
 import type { ArticleFilter } from '@tela/db/queries'
 import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ReadingMode } from '@/app/reading/href'
+import { parseReadingArticleId, parseReadingMode } from '@/app/reading/href'
 import { ReaderPaneSkeleton } from '@/app/reading/skeletons'
 import { Reader } from './reader'
-import type { ReaderData } from './reader-data'
+import type { InitialReaderState, ReaderData } from './reader-data'
 
 type Props = {
   /** The pane the server rendered, when the URL arrived with an article on it. */
-  initial: ReaderData | null
+  initial: InitialReaderState
   readingLang: string
   filter: ArticleFilter
-  initialMode: ReadingMode
   /** Sidebar and article list, rendered on the server and passed straight through. */
   children: React.ReactNode
   /** Shown in the third column when no article is open. */
@@ -38,14 +37,15 @@ export function ReadingShell({
   initial,
   readingLang,
   filter,
-  initialMode,
   children,
   emptyState,
   mobileNav,
 }: Props) {
   const t = useTranslations('reader')
-  const [data, setData] = useState<ReaderData | null>(initial)
-  const [gone, setGone] = useState(false)
+  const [data, setData] = useState<ReaderData | null>(
+    initial.kind === 'ready' ? initial.data : null,
+  )
+  const [gone, setGone] = useState(initial.kind === 'gone')
   const [loading, setLoading] = useState(false)
   // A real navigation still happens sometimes — a filter change, a router.refresh() after a like —
   // and React keeps this instance across it, so `useState(initial)` alone would hold the article
@@ -53,12 +53,19 @@ export function ReadingShell({
   const [servedInitial, setServedInitial] = useState(initial)
   if (servedInitial !== initial) {
     setServedInitial(initial)
-    setData(initial)
-    setGone(false)
+    setData(initial.kind === 'ready' ? initial.data : null)
+    setGone(initial.kind === 'gone')
     setLoading(false)
   }
   const listRef = useRef<HTMLDivElement>(null)
   const inFlight = useRef<AbortController | null>(null)
+
+  // A server navigation or refresh has authoritative pane data. Stop any older endpoint request
+  // from competing with it; `load` also checks the live URL before accepting a response.
+  useEffect(() => {
+    inFlight.current?.abort(new DOMException(`server state: ${initial.kind}`, 'AbortError'))
+    inFlight.current = null
+  }, [initial])
 
   /**
    * The list is server-rendered and never re-renders here, so the selected row is marked in the
@@ -100,6 +107,10 @@ export function ReadingShell({
       try {
         const url = `/api/reading/article?article=${articleId}&lang=${encodeURIComponent(readingLang)}`
         const res = await fetch(url, { signal: controller.signal, cache: 'no-store' })
+        // A navigation may have replaced this request while it was in flight. The URL owns which
+        // article is open, so a late response must never put the old one back.
+        const currentId = parseReadingArticleId(new URLSearchParams(location.search).get('article'))
+        if (controller.signal.aborted || currentId !== articleId) return
         // A link to an article that has since been dropped: say so rather than navigating into a
         // page that would only find the same nothing.
         if (res.status === 404) {
@@ -111,8 +122,10 @@ export function ReadingShell({
         setData((await res.json()) as ReaderData)
       } catch (err) {
         if ((err as Error).name === 'AbortError') return
+        const currentId = parseReadingArticleId(new URLSearchParams(location.search).get('article'))
+        if (currentId !== articleId) return
         // Fall back to a real navigation: the server renders the pane, slowly but correctly.
-        window.location.href = `/reading?article=${articleId}`
+        window.location.reload()
         return
       } finally {
         if (!controller.signal.aborted && !options.silent) setLoading(false)
@@ -133,6 +146,11 @@ export function ReadingShell({
       const href = new URL(link.href, location.origin)
       const id = Number(href.searchParams.get('article'))
       if (!Number.isInteger(id) || id <= 0) return
+      // The anchors carry the mode from their server render. Mode changes do not render the
+      // server, so carry the live URL value forward when opening the next article.
+      const mode = parseReadingMode(new URLSearchParams(location.search).get('mode'))
+      if (mode === 'side') href.searchParams.delete('mode')
+      else href.searchParams.set('mode', mode)
       event.preventDefault()
       window.history.pushState(null, '', href)
       void load(id)
@@ -157,8 +175,8 @@ export function ReadingShell({
   // Back and forward move between articles without touching the server for anything but the pane.
   useEffect(() => {
     const onPop = () => {
-      const id = Number(new URLSearchParams(window.location.search).get('article'))
-      void load(Number.isInteger(id) && id > 0 ? id : null)
+      const id = parseReadingArticleId(new URLSearchParams(window.location.search).get('article'))
+      void load(id)
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
@@ -191,7 +209,6 @@ export function ReadingShell({
           data={data}
           readingLang={readingLang}
           filter={filter}
-          initialMode={initialMode}
           onClose={close}
           onReload={reload}
         />

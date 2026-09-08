@@ -57,15 +57,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
-- **Opening an article is one render and one database wave.** It had been up to five renders of the
-  whole three-pane page — the navigation, one carried by each server action that revalidated, one
-  from each caller that also refreshed — followed by a full re-render every two seconds while a
-  translation was pending. Each of those made about ten round trips to Tokyo, five of them
-  sequential, from a Worker running at the reader's edge. Now every query leaves in one flight,
-  `getArticle` brings back the whole reader pane, the extraction claim runs after the response, the
-  panes stream behind Suspense boundaries, and a tab waiting on a translation polls one indexed row
-  until a terminal result arrives instead of re-rendering for transient or refused work
-  (ADR 0016).
+- **Opening an article after the first render does not render the page again.** It had been up to
+  five renders of the whole three-pane page, then ADR 0016 reduced that to one database wave and one
+  render. Production CPU measurements showed even that render was too costly for Workers Free.
+  Article links now keep their normal browser behavior while ordinary clicks fetch an authenticated
+  JSON pane; Back, Forward, translation completion, and full-text extraction replace only that pane.
+  Direct links remain server-rendered, and the URL remains the source of truth (ADRs 0016, 0017).
 
 - **Tela serves from `tela.ainaive.com`, and `workers.dev` is off.** The `workers.dev` address is
   blocked in mainland China, so it is a dead link for part of the audience; a custom-domain route
