@@ -1,10 +1,10 @@
 'use client'
 
+import type { ArticleFilter } from '@tela/db/queries'
 import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
-import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
 import { useState } from 'react'
-import { type ReadingMode, type ReadingParams, readingHref } from '@/app/reading/href'
+import type { ReadingMode } from '@/app/reading/href'
 import { relativeTime } from '@/lib/format'
 import { LikeButton } from './like-button'
 import { MarkRead } from './mark-read'
@@ -20,7 +20,12 @@ export type { ReaderTranslation } from './reader-data'
 type Props = {
   data: ReaderData
   readingLang: string
-  params: ReadingParams
+  /** Decides whether the like button owes the list a refresh. */
+  filter: ArticleFilter
+  initialMode: ReadingMode
+  onClose: () => void
+  /** Re-fetch this pane, for when a background job has changed it. */
+  onReload: () => void
 }
 
 function Body({ html, lang, testId }: { html: string; lang?: string | undefined; testId: string }) {
@@ -38,15 +43,16 @@ function Body({ html, lang, testId }: { html: string; lang?: string | undefined;
 /**
  * The article itself.
  *
- * A client component fed by `ReaderData`, so that the pane can later arrive from a fetch rather
- * than from a server render of the whole page. Mode switching is local state for the same reason:
- * side-by-side, translation and original change nothing the server knows.
+ * A client component, so that opening an article fetches JSON from a route handler instead of
+ * re-rendering the page on the server — around 20 ms against 67 ms, against a 10 ms Workers Free
+ * budget (ADR 0017). The server still renders it for a direct link; every click after that is
+ * this component swapping its data.
  */
-export function Reader({ data, readingLang, params }: Props) {
+export function Reader({ data, readingLang, filter, initialMode, onClose, onReload }: Props) {
   const t = useTranslations('reader')
   const tt = useTranslations('translation')
   const locale = useLocale()
-  const [mode, setMode] = useState<ReadingMode>(params.mode)
+  const [mode, setMode] = useState<ReadingMode>(initialMode)
   const { article, html, translation, recommendation, extracting, revision } = data
 
   const sourceLang = article.sourceLang ?? undefined
@@ -91,27 +97,34 @@ export function Reader({ data, readingLang, params }: Props) {
           articleId={article.id}
           targetLang={translation.targetLang}
           revision={revision}
+          onReload={onReload}
           pollInitially={extracting}
         />
       ) : null}
       {!requestOwnsPolling && (pending || extracting) ? (
-        <PollUntil articleId={article.id} lang={readingLang} revision={revision} />
+        <PollUntil
+          articleId={article.id}
+          lang={readingLang}
+          revision={revision}
+          onChanged={onReload}
+        />
       ) : null}
 
       <div className="mx-auto mb-7 flex max-w-[1240px] flex-wrap items-center justify-between gap-2">
-        <Link
-          href={readingHref({ ...params, articleId: null })}
+        <button
+          type="button"
+          onClick={onClose}
           className="-ml-2.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink hover:no-underline"
           data-testid="close-article"
         >
           {t('close')}
-        </Link>
+        </button>
         <div className="flex flex-wrap items-center gap-2">
           <LikeButton
             articleId={article.id}
             liked={article.isLiked}
             likeCount={article.likeCount}
-            listFiltersOnLiked={params.filter === 'liked'}
+            listFiltersOnLiked={filter === 'liked'}
           />
           <RecommendPopover
             articleId={article.id}
@@ -156,6 +169,7 @@ export function Reader({ data, readingLang, params }: Props) {
             targetLang={translation.targetLang}
             mode="button"
             revision={revision}
+            onReload={onReload}
             pollInitially={extracting}
           />
         ) : null}

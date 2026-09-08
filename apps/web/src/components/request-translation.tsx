@@ -1,6 +1,5 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useState } from 'react'
 import { requestTranslationAction } from '@/app/reading/actions'
@@ -21,16 +20,18 @@ export function RequestTranslation({
   targetLang,
   mode = 'auto',
   revision,
+  onReload,
   pollInitially = false,
 }: {
   articleId: number
   targetLang: string
   mode?: 'auto' | 'button'
   revision: string
+  /** Re-fetch the reader pane; far cheaper than re-rendering the page. */
+  onReload: () => void
   /** Other work, currently full-text extraction, already requires this article to be polled. */
   pollInitially?: boolean
 }) {
-  const router = useRouter()
   const t = useTranslations('translation')
   // What the last request decided, and which server revision it decided it for. Scoping it that
   // way is what lets the retry button come back: a poll refreshes the page the moment an attempt
@@ -48,9 +49,9 @@ export function RequestTranslation({
     (outcome: Awaited<ReturnType<typeof requestTranslationAction>>, forRevision: string) => {
       const decision = translationRequestDecision(outcome)
       setDecided({ revision: forRevision, decision })
-      if (decision.refresh) router.refresh()
+      if (decision.refresh) onReload()
     },
-    [router],
+    [onReload],
   )
   const request = useCallback(async () => {
     const outcome = await requestTranslationAction(articleId, targetLang).catch(
@@ -104,7 +105,12 @@ export function RequestTranslation({
         </button>
       ) : null}
       {pollInitially || translationPolling ? (
-        <PollUntil articleId={articleId} lang={targetLang} revision={revision} />
+        <PollUntil
+          articleId={articleId}
+          lang={targetLang}
+          revision={revision}
+          onChanged={onReload}
+        />
       ) : null}
     </>
   )

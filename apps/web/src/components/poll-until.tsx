@@ -1,6 +1,5 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { createPoller } from '@/lib/poller'
 
@@ -15,24 +14,29 @@ import { createPoller } from '@/lib/poller'
  *
  * The loop itself lives in `lib/poller.ts`, where its rules about visible time and overlapping
  * reads can be tested against a clock instead of guessed at.
+ *
+ * What to do about a change is the caller's business: the reader re-fetches its own pane from a
+ * route handler, which is far cheaper than the page render this used to trigger.
  */
 export function PollUntil({
   articleId,
   lang,
   revision,
+  onChanged,
   startMs = 2000,
   maxIntervalMs = 30_000,
   maxMs = 180_000,
 }: {
   articleId: number
   lang: string
-  /** The revision this page was rendered from; a different one means it is worth re-rendering. */
+  /** The revision this page was rendered from; a different one means something has moved. */
   revision: string
+  /** Called once, when it has. */
+  onChanged: () => void
   startMs?: number
   maxIntervalMs?: number
   maxMs?: number
 }) {
-  const router = useRouter()
   useEffect(() => {
     const url = `/api/reading/state?article=${articleId}&lang=${encodeURIComponent(lang)}`
     const poller = createPoller({
@@ -47,7 +51,7 @@ export function PollUntil({
         const body = (await res.json()) as { revision?: unknown }
         return typeof body.revision === 'string' ? body.revision : null
       },
-      onChanged: () => router.refresh(),
+      onChanged,
     })
     const onVisibility = () => poller.visibilityChanged()
     document.addEventListener('visibilitychange', onVisibility)
@@ -56,6 +60,6 @@ export function PollUntil({
       document.removeEventListener('visibilitychange', onVisibility)
       poller.stop()
     }
-  }, [articleId, lang, revision, router, startMs, maxIntervalMs, maxMs])
+  }, [articleId, lang, revision, onChanged, startMs, maxIntervalMs, maxMs])
   return null
 }

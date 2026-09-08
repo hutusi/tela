@@ -57,29 +57,34 @@ test.describe('reader', () => {
     await expect(page).not.toHaveURL(/article=/)
   })
 
-  test('opening an article renders the page once', async ({ page }) => {
+  test('opening an article does not render the page at all', async ({ page }) => {
     await page.goto('/reading')
     // An English feed while the reading language is EN: nothing here asks for a translation, so
-    // any second render would be one the page asked for itself.
+    // any request beyond the article's own is one the page asked for itself.
     await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
     await expect(page).toHaveURL(/\/reading\?feed=\d+/)
     await expect(page.getByTestId('article-row').first()).toBeVisible()
 
-    const renders: string[] = []
+    const documents: string[] = []
+    const paneFetches: string[] = []
     page.on('request', (r) => {
-      if (new URL(r.url()).pathname === '/reading') renders.push(r.method())
+      const path = new URL(r.url()).pathname
+      if (path === '/reading') documents.push(r.method())
+      if (path === '/api/reading/article') paneFetches.push(r.method())
     })
 
     await page.getByTestId('article-row').first().click()
     await expect(page.getByTestId('article-title')).toBeVisible()
     await expect(page.locator('.article-body')).toBeVisible()
-    // Long enough for a stray refresh to arrive: the ones this replaces fired the moment their
-    // server action resolved.
+    await expect(page).toHaveURL(/article=\d+/)
+    // Long enough for a stray refresh to arrive.
     await page.waitForTimeout(1500)
 
-    // One navigation. mark-read still posts to this path, but its response no longer carries a
-    // re-render, and nothing calls router.refresh() any more. This used to be three.
-    expect(renders.filter((m) => m === 'GET')).toHaveLength(1)
+    // The pane comes from a route handler. Rendering this page on the server costs about 67 ms of
+    // CPU against a 10 ms Workers Free budget, which is what produced Error 1102 (ADR 0017); the
+    // route handler costs about 20 ms. mark-read still posts to /reading, hence GETs only.
+    expect(paneFetches).toHaveLength(1)
+    expect(documents.filter((m) => m === 'GET')).toHaveLength(0)
   })
 
   test('unliking in the Liked view takes the article out of the list', async ({ page }) => {
@@ -198,13 +203,13 @@ test.describe('translation', () => {
       .toContain('en:')
 
     const renders: string[] = []
+    const paneFetches: string[] = []
     page.on('request', (request) => {
-      if (
-        new URL(request.url()).pathname === '/reading' &&
-        request.headers()['next-router-prefetch'] !== '1'
-      ) {
+      const path = new URL(request.url()).pathname
+      if (path === '/reading' && request.headers()['next-router-prefetch'] !== '1') {
         renders.push(request.method())
       }
+      if (path === '/api/reading/article') paneFetches.push(request.method())
     })
     await row.click()
     const bar = page.getByTestId('translation-bar')
@@ -215,9 +220,11 @@ test.describe('translation', () => {
     await expect(page.getByTestId('body-translated')).toContainText('en:')
     await expect(page.getByTestId('body-original')).toBeVisible()
     await expect(page.getByTestId('article-title')).toContainText('en:')
-    // One navigation and one refresh when the body translation becomes displayable. Transient
-    // pending/requested/running states must not render the whole page.
-    expect(renders.filter((method) => method === 'GET')).toHaveLength(2)
+    // Opening the article and watching its translation land costs no page render at all: the pane
+    // is fetched once on the click and once more when the translation becomes displayable, both
+    // from the route handler. Transient pending/requested/running states must move neither.
+    expect(renders.filter((method) => method === 'GET')).toHaveLength(0)
+    expect(paneFetches.length).toBeGreaterThanOrEqual(2)
 
     await page.getByTestId('mode-trans').click()
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans')
