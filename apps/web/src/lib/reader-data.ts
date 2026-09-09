@@ -1,8 +1,10 @@
 import type { ArticleDetail } from '@tela/db/queries'
 import { wantsExtraction } from '@tela/ingest'
+import { getLocale } from 'next-intl/server'
 import { articleRevision } from '@/app/reading/revision'
 import type { ReaderData, ReaderTranslation } from '@/components/reader-data'
 import { renderArticleHtml } from './article-html'
+import { relativeTime } from './format'
 
 /**
  * Whether a translation row describes the body the reader is looking at, and is readable.
@@ -25,6 +27,7 @@ export async function buildReaderData(
   article: ArticleDetail,
   readingLang: string,
 ): Promise<ReaderData> {
+  const locale = await getLocale()
   const row = article.translation
 
   // Foreign article: the body translation for the reading language came back with the article.
@@ -49,8 +52,7 @@ export async function buildReaderData(
       title: article.title,
       author: article.author,
       url: article.url,
-      publishedAt: article.publishedAt?.toISOString() ?? null,
-      fetchedAt: article.fetchedAt.toISOString(),
+      publishedLabel: relativeTime(article.publishedAt ?? article.fetchedAt, locale),
       sourceLang: article.sourceLang,
       readingMinutes: article.readingMinutes,
       likeCount: article.likeCount,

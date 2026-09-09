@@ -5,7 +5,6 @@ import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
 import { useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { parseReadingMode, type ReadingMode } from '@/app/reading/href'
-import { relativeTime } from '@/lib/format'
 import { LikeButton } from './like-button'
 import { MarkRead } from './mark-read'
 import { PollUntil } from './poll-until'
@@ -147,7 +146,7 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
             </>
           ) : null}
           <span>·</span>
-          <span>{relativeTime(new Date(article.publishedAt ?? article.fetchedAt), locale)}</span>
+          <span>{article.publishedLabel}</span>
           <span>·</span>
           <span>{t('minRead', { n: article.readingMinutes ?? 1 })}</span>
           {article.url ? (

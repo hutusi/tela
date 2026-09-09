@@ -30,9 +30,14 @@ export type ReaderArticle = {
   title: string
   author: string | null
   url: string | null
-  /** ISO strings, not Dates: this arrives as JSON. */
-  publishedAt: string | null
-  fetchedAt: string
+  /**
+   * Already formatted, and deliberately not a Date.
+   *
+   * `relativeTime` reads the clock and formats in the local time zone. Doing that in a client
+   * component runs it twice — once on the server, once on hydration — and the worker is UTC while
+   * the reader is not, so the two can disagree by a threshold or by a whole day.
+   */
+  publishedLabel: string
   sourceLang: string | null
   readingMinutes: number | null
   likeCount: number
