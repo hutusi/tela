@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { markAllReadAction } from '@/app/reading/actions'
 import { type ReadingParams, readingHref } from '@/app/reading/href'
 import { relativeTime } from '@/lib/format'
-import { showsTranslation } from './shows-translation'
+import { displayTitle, showsTranslationBadge } from './shows-translation'
 import { Swatch } from './swatch'
 
 type Props = {
@@ -71,9 +71,10 @@ export async function ArticleList({
           // one the reader sees. Showing the selected row as read here is what lets that action
           // stay fire-and-forget instead of costing a second render of the whole page.
           const read = a.isRead || active
-          const showBadge = showsTranslation(a.sourceLang, readingLang, a.translatedTitle)
-          const shownTitle = showBadge ? a.translatedTitle : a.title
-          const shownExcerpt = showBadge && a.translatedExcerpt ? a.translatedExcerpt : a.excerpt
+          const showBadge = showsTranslationBadge(a.sourceLang, readingLang, a.translatedTitle)
+          // Show a translation whenever we hold one, badge or no: the two questions are separate.
+          const shownTitle = displayTitle(a.title, a.translatedTitle)
+          const shownExcerpt = a.translatedExcerpt ?? a.excerpt
           return (
             <a
               key={a.id}

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { readingHref } from '@/app/reading/href'
 import { AppHeader } from '@/components/app-header'
-import { showsTranslation } from '@/components/shows-translation'
+import { displayTitle, showsTranslationBadge } from '@/components/shows-translation'
 import { SiteCard } from '@/components/site-card'
 import { getSessionUser } from '@/lib/auth'
 import { relativeTime } from '@/lib/format'
@@ -81,11 +81,14 @@ export default async function SearchPage({ searchParams }: Props) {
             ) : (
               <div className="flex flex-col" data-testid="search-articles">
                 {hits.map((hit) => {
-                  const showTranslation = showsTranslation(
+                  const showBadge = showsTranslationBadge(
                     hit.sourceLang,
                     readingLang,
                     hit.translatedTitle,
                   )
+                  // The query matched `translated_title` in SQL, so the translation is the text
+                  // the reader is looking for -- render it even where the badge stays quiet.
+                  const shownTitle = displayTitle(hit.title, hit.translatedTitle)
                   return (
                     <Link
                       key={hit.id}
@@ -95,17 +98,15 @@ export default async function SearchPage({ searchParams }: Props) {
                     >
                       <span className="flex items-center gap-2 text-xs text-muted">
                         <span>{hit.siteTitle ?? hit.feedTitle}</span>
-                        {showTranslation ? (
+                        {showBadge ? (
                           <span className="rounded border border-line px-1.5 py-px text-[10.5px] uppercase tracking-wide">
                             {languageBadge(hit.sourceLang ?? '')} → {languageBadge(readingLang)}
                           </span>
                         ) : null}
                         {hit.at ? <span>{relativeTime(hit.at, locale)}</span> : null}
                       </span>
-                      <span className="font-serif text-[18px] leading-snug">
-                        {showTranslation ? hit.translatedTitle : hit.title}
-                      </span>
-                      {showTranslation && hit.translatedTitle !== hit.title ? (
+                      <span className="font-serif text-[18px] leading-snug">{shownTitle}</span>
+                      {shownTitle !== hit.title ? (
                         <span className="text-[13px] text-ink-2">{hit.title}</span>
                       ) : null}
                     </Link>

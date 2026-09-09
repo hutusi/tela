@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
-import { articles, createDb, feeds, sites } from '@tela/db'
+import { articles, articleTranslations, createDb, feeds, sites } from '@tela/db'
 import { subscribe } from '@tela/db/queries'
 
 const FIXTURES = process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'
@@ -537,6 +537,8 @@ test.describe('search', () => {
     const db = createDb(databaseUrl, { max: 1 })
     const suffix = randomUUID()
     const untranslatedTitle = `Untranslated search sentinel ${suffix}`
+    const quietOriginal = `Quiet original sentinel ${suffix}`
+    const quietTranslated = `Quiet translated sentinel ${suffix}`
     try {
       const [site] = await db
         .insert(sites)
@@ -560,6 +562,21 @@ test.describe('search', () => {
         title: untranslatedTitle,
         sourceLang: 'zh-Hans',
       })
+      // A translation the badge stays quiet about: en-GB and en share a primary subtag, so no
+      // "EN → EN" badge, but search still matches translated_title and must render it.
+      const [quiet] = await db
+        .insert(articles)
+        .values({
+          feedId: feed.id,
+          dedupKey: `${suffix}-quiet`,
+          title: quietOriginal,
+          sourceLang: 'en-GB',
+        })
+        .returning({ id: articles.id })
+      if (!quiet) throw new Error('Failed to seed quiet search fixture article')
+      await db
+        .insert(articleTranslations)
+        .values({ articleId: quiet.id, targetLang: 'en', title: quietTranslated })
       await subscribe(db, DEV_USER_ID, feed.id)
     } finally {
       await db.close()
@@ -589,6 +606,14 @@ test.describe('search', () => {
     const untranslated = page.getByTestId('article-hit').filter({ hasText: untranslatedTitle })
     await expect(untranslated).toBeVisible()
     await expect(untranslated).not.toContainText('ZH → EN')
+
+    // The query matched translated_title, so that is the text the hit must show -- gating the
+    // displayed title on badge eligibility rendered a result with none of the words typed.
+    await page.getByTestId('search-input').fill(quietTranslated)
+    await page.getByTestId('search-input').press('Enter')
+    const quietHit = page.getByTestId('article-hit').filter({ hasText: quietTranslated })
+    await expect(quietHit).toBeVisible()
+    await expect(quietHit).toContainText(quietOriginal)
 
     await page.getByTestId('search-input').fill(word)
     await page.getByTestId('search-input').press('Enter')
