@@ -1,22 +1,19 @@
-import {
-  countTotals,
-  EXTRACT_COOLDOWN_MINUTES,
-  getArticle,
-  listArticles,
-  listSubscriptions,
-  markExtractRequested,
-} from '@tela/db/queries'
-import { wantsExtraction } from '@tela/ingest'
+import { countTotals, getArticle, listArticles, listSubscriptions } from '@tela/db/queries'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { Suspense } from 'react'
+import { EmptyState } from '@/components/empty-state'
+import { MobileNav } from '@/components/mobile-nav'
+import type { InitialReaderState } from '@/components/reader-data'
+import { ReadingShell } from '@/components/reading-shell'
 import { requireUser } from '@/lib/auth'
+import { claimExtraction } from '@/lib/extraction'
 import { getDb } from '@/lib/platform/db'
 import { waitUntil } from '@/lib/platform/wait-until'
-import { enqueueArticleExtract } from '@/lib/queue'
+import { buildReaderData } from '@/lib/reader-data'
 import { getReadingLang } from '@/lib/reading'
-import { parseReadingParams } from './href'
-import { ListPanes, ReaderPane } from './panes'
-import { ListPanesSkeleton, ReaderPaneSkeleton } from './skeletons'
+import { parseReadingParams, type ReadingParams } from './href'
+import { type ListData, ListPanes } from './panes'
+import { ListPanesSkeleton } from './skeletons'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +24,18 @@ export async function generateMetadata() {
   return { title: t('reading') }
 }
 
+/** The empty third column, which needs the list's own numbers. */
+async function EmptyPane({ data }: { data: Promise<ListData> }) {
+  const { subscriptions, totals } = await data
+  return <EmptyState unread={totals.all} hasSubscriptions={subscriptions.length > 0} />
+}
+
+/** The small-screen feed picker, which the shell drops once an article is open. */
+async function MobileNavPane({ data, params }: { data: Promise<ListData>; params: ReadingParams }) {
+  const { subscriptions, totals } = await data
+  return <MobileNav subscriptions={subscriptions} totals={totals} params={params} />
+}
+
 export default async function ReadingPage({ searchParams }: Props) {
   const user = await requireUser('/reading')
   const params = parseReadingParams(await searchParams)
@@ -35,10 +44,8 @@ export default async function ReadingPage({ searchParams }: Props) {
   // which translations to join.
   const [readingLang, locale] = await Promise.all([getReadingLang(), getLocale()])
 
-  // Start every query, await none. They leave together — one round trip to a database that is a
-  // continent away from wherever this worker is running — and each pane below renders as its own
-  // answer lands, behind a Suspense boundary, so the header and the frame do not wait for either.
-  const listData = Promise.all([
+  // Both queries leave together — one round trip to a database a continent away.
+  const listData: Promise<ListData> = Promise.all([
     listSubscriptions(db, user.id),
     countTotals(db, user.id),
     listArticles(db, user.id, {
@@ -52,56 +59,35 @@ export default async function ReadingPage({ searchParams }: Props) {
     ? getArticle(db, user.id, params.articleId, { translateTo: readingLang })
     : Promise.resolve(null)
 
-  // A summary-only article gets its full text fetched when opened. The claim is a write nobody is
-  // waiting on, so it runs after the response: the job follows the row update that wins a cooldown
-  // window, not the render, and the worker stamps the article on a final outcome.
-  // `extract_requested_at` comes back with the article, so a request inside a window it cannot win
-  // never reaches the database at all.
-  await waitUntil(claimExtraction(articleData, db))
-
-  const open = params.articleId !== null
-  return (
-    <div
-      className={`grid flex-1 grid-cols-1 lg:min-h-0 ${
-        open
-          ? 'lg:grid-cols-[220px_260px_minmax(0,1fr)]'
-          : 'lg:grid-cols-[220px_minmax(280px,380px)_minmax(0,1fr)]'
-      }`}
-      data-testid="reading-layout"
-    >
-      <Suspense fallback={<ListPanesSkeleton open={open} />}>
-        <ListPanes
-          data={listData}
-          params={params}
-          readingLang={readingLang}
-          locale={locale}
-          open={open}
-        />
-      </Suspense>
-      {open ? (
-        <Suspense fallback={<ReaderPaneSkeleton />}>
-          <ReaderPane
-            data={articleData}
-            params={params}
-            readingLang={readingLang}
-            locale={locale}
-          />
-        </Suspense>
-      ) : null}
-    </div>
-  )
-}
-
-/** Claim one extraction window for an opened summary-only article, or do nothing. */
-async function claimExtraction(
-  articleData: Promise<Awaited<ReturnType<typeof getArticle>>>,
-  db: Awaited<ReturnType<typeof getDb>>,
-): Promise<void> {
+  // Only a direct link renders the pane here. Every click after that fetches it from
+  // /api/reading/article, which costs a route handler rather than this whole page (ADR 0017).
   const article = await articleData
-  if (!article || !wantsExtraction(article)) return
-  const requested = article.extractRequestedAt
-  const cooled =
-    requested === null || Date.now() - requested.getTime() > EXTRACT_COOLDOWN_MINUTES * 60_000
-  if (!cooled) return
-  if (await markExtractRequested(db, article.id)) await enqueueArticleExtract(db, article.id)
+  await waitUntil(claimExtraction(article, db))
+  const initial: InitialReaderState = article
+    ? { kind: 'ready', data: await buildReaderData(article, readingLang) }
+    : params.articleId === null
+      ? { kind: 'empty' }
+      : { kind: 'gone', articleId: params.articleId }
+
+  return (
+    <ReadingShell
+      initial={initial}
+      readingLang={readingLang}
+      filter={params.filter}
+      emptyState={
+        <Suspense fallback={null}>
+          <EmptyPane data={listData} />
+        </Suspense>
+      }
+      mobileNav={
+        <Suspense fallback={null}>
+          <MobileNavPane data={listData} params={params} />
+        </Suspense>
+      }
+    >
+      <Suspense fallback={<ListPanesSkeleton />}>
+        <ListPanes data={listData} params={params} readingLang={readingLang} locale={locale} />
+      </Suspense>
+    </ReadingShell>
+  )
 }

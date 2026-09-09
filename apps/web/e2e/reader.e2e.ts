@@ -57,29 +57,177 @@ test.describe('reader', () => {
     await expect(page).not.toHaveURL(/article=/)
   })
 
-  test('opening an article renders the page once', async ({ page }) => {
+  test('opening an article does not render the page at all', async ({ page }) => {
     await page.goto('/reading')
     // An English feed while the reading language is EN: nothing here asks for a translation, so
-    // any second render would be one the page asked for itself.
+    // any request beyond the article's own is one the page asked for itself.
     await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
     await expect(page).toHaveURL(/\/reading\?feed=\d+/)
     await expect(page.getByTestId('article-row').first()).toBeVisible()
 
-    const renders: string[] = []
+    const documents: string[] = []
+    const paneFetches: string[] = []
     page.on('request', (r) => {
-      if (new URL(r.url()).pathname === '/reading') renders.push(r.method())
+      const path = new URL(r.url()).pathname
+      if (path === '/reading') documents.push(r.method())
+      if (path === '/api/reading/article') paneFetches.push(r.method())
     })
 
     await page.getByTestId('article-row').first().click()
     await expect(page.getByTestId('article-title')).toBeVisible()
     await expect(page.locator('.article-body')).toBeVisible()
-    // Long enough for a stray refresh to arrive: the ones this replaces fired the moment their
-    // server action resolved.
+    await expect(page).toHaveURL(/article=\d+/)
+    // Long enough for a stray refresh to arrive.
     await page.waitForTimeout(1500)
 
-    // One navigation. mark-read still posts to this path, but its response no longer carries a
-    // re-render, and nothing calls router.refresh() any more. This used to be three.
-    expect(renders.filter((m) => m === 'GET')).toHaveLength(1)
+    // The pane comes from a route handler. Rendering this page on the server costs about 67 ms of
+    // CPU against a 10 ms Workers Free budget, which is what produced Error 1102 (ADR 0017); the
+    // route handler costs about 20 ms. mark-read still posts to /reading, hence GETs only.
+    expect(paneFetches).toHaveLength(1)
+    expect(documents.filter((m) => m === 'GET')).toHaveLength(0)
+  })
+
+  test('going back to a client-opened article brings the article back', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    const opened = page.url()
+    expect(opened).toMatch(/article=\d+/)
+
+    // A real navigation away. The history entry we came from was written by pushState, so Next
+    // has no server payload for it and replays the one from before the article was opened.
+    await page.locator('aside').getByRole('link', { name: /Today/ }).click()
+    await expect(page).toHaveURL(/\/reading\?filter=today$/)
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+
+    // Back must restore the article, not just its URL. Trusting that stale server state over the
+    // URL left the address bar saying article=… with an empty third column.
+    await page.goBack()
+    await expect(page).toHaveURL(opened)
+    await expect(page.getByTestId('reader')).toBeVisible()
+    await expect(page.getByTestId('article-title')).toBeVisible()
+
+    // And forward again closes it, for the same reason in the other direction.
+    await page.goForward()
+    await expect(page).toHaveURL(/\/reading\?filter=today$/)
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+  })
+
+  test('a new article opens at its top, not where the last one was left', async ({ page }) => {
+    await page.goto('/reading')
+    const rows = page.getByTestId('article-row')
+    await rows.first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+
+    // Read a way down the first article. A navigation used to reset this for free; pushState
+    // does not, so the next article used to open with its title above the fold.
+    await page.evaluate(() => window.scrollTo(0, 700))
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+
+    await rows.nth(1).click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    await expect.poll(async () => page.evaluate(() => window.scrollY), { timeout: 5000 }).toBe(0)
+    await expect(page.getByTestId('article-title')).toBeInViewport()
+  })
+
+  test('a row read during this visit stays dimmed after the article closes', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+/)
+    const row = page.getByTestId('article-row').first()
+    const opacity = () => row.evaluate((el) => getComputedStyle(el).opacity)
+
+    if ((await row.getAttribute('data-read')) === '0') expect(Number(await opacity())).toBe(1)
+    await row.click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    await page.getByTestId('close-article').click()
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+
+    // Opening it marked it read. The dimming has to follow the state the row is actually in, not
+    // the one the server rendered it in.
+    await expect(row).toHaveAttribute('data-read', '1')
+    expect(Number(await opacity())).toBeLessThan(1)
+  })
+
+  test('opening an article moves focus into it once it is there', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+
+    // The pane is a skeleton while it loads, so focusing on the id alone focused nothing — and
+    // the id does not change again when the body arrives. A keyboard reader was left in the list.
+    await expect
+      .poll(async () => page.evaluate(() => document.activeElement?.getAttribute('data-testid')), {
+        timeout: 5000,
+      })
+      .toBe('reader')
+  })
+
+  test('re-opening the article already showing does not stack a history entry', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    const row = page.getByTestId('article-row').first()
+    await row.click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    const opened = page.url()
+
+    // Clicking it again changes nothing, so it must not add an entry: Back would otherwise
+    // traverse two identical URLs and appear to do nothing the first time.
+    await row.click()
+    await expect(page).toHaveURL(opened)
+    await expect(page.getByTestId('reader')).toBeVisible()
+
+    await page.goBack()
+    await expect(page).not.toHaveURL(/article=/)
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+  })
+
+  test('nor does it when the URL spells the same state differently', async ({ page }) => {
+    await page.goto('/reading')
+    const href = await page.getByTestId('article-row').first().getAttribute('href')
+    const id = new URL(href ?? '', 'http://x').searchParams.get('article')
+
+    // A shared or hand-typed link naming the default mode explicitly. It is the same place as
+    // /reading?article=N, and comparing the two as text said otherwise.
+    await page.goto(`/reading?mode=side&article=${id}`)
+    await expect(page.getByTestId('reader')).toBeVisible()
+    const before = await page.evaluate(() => history.length)
+
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    expect(await page.evaluate(() => history.length)).toBe(before)
+  })
+
+  test('filter and subscription navigations close a client-opened article', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+
+    await page.locator('aside').getByRole('link', { name: /Today/ }).click()
+    await expect(page).toHaveURL(/\/reading\?filter=today$/)
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+    await expect(page.getByTestId('reading-layout')).not.toHaveAttribute('data-open')
+
+    await page.locator('aside a[href="/reading"]').click()
+    await expect(page).toHaveURL(/\/reading$/)
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    await page.getByTestId('subscription').first().click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+    await expect(page.getByTestId('reading-layout')).not.toHaveAttribute('data-open')
+  })
+
+  test('a direct link to a missing article says it is gone', async ({ page }) => {
+    await page.goto('/reading?article=999999999')
+    await expect(page.getByTestId('article-gone')).toBeVisible()
+    await expect(page.getByTestId('reading-layout')).toHaveAttribute('data-open', '1')
+
+    await page.getByRole('button', { name: 'Close' }).click()
+    await expect(page).toHaveURL(/\/reading$/)
+    await expect(page.getByTestId('article-gone')).toHaveCount(0)
+    await expect(page.getByTestId('article-list')).toBeVisible()
   })
 
   test('unliking in the Liked view takes the article out of the list', async ({ page }) => {
@@ -198,13 +346,13 @@ test.describe('translation', () => {
       .toContain('en:')
 
     const renders: string[] = []
+    const paneFetches: string[] = []
     page.on('request', (request) => {
-      if (
-        new URL(request.url()).pathname === '/reading' &&
-        request.headers()['next-router-prefetch'] !== '1'
-      ) {
+      const path = new URL(request.url()).pathname
+      if (path === '/reading' && request.headers()['next-router-prefetch'] !== '1') {
         renders.push(request.method())
       }
+      if (path === '/api/reading/article') paneFetches.push(request.method())
     })
     await row.click()
     const bar = page.getByTestId('translation-bar')
@@ -215,9 +363,11 @@ test.describe('translation', () => {
     await expect(page.getByTestId('body-translated')).toContainText('en:')
     await expect(page.getByTestId('body-original')).toBeVisible()
     await expect(page.getByTestId('article-title')).toContainText('en:')
-    // One navigation and one refresh when the body translation becomes displayable. Transient
-    // pending/requested/running states must not render the whole page.
-    expect(renders.filter((method) => method === 'GET')).toHaveLength(2)
+    // Opening the article and watching its translation land costs no page render at all: the pane
+    // is fetched once on the click and once more when the translation becomes displayable, both
+    // from the route handler. Transient pending/requested/running states must move neither.
+    expect(renders.filter((method) => method === 'GET')).toHaveLength(0)
+    expect(paneFetches.length).toBeGreaterThanOrEqual(2)
 
     await page.getByTestId('mode-trans').click()
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans')
@@ -225,6 +375,16 @@ test.describe('translation', () => {
     await page.getByTestId('mode-orig').click()
     await expect(page.getByTestId('body-translated')).toHaveCount(0)
     await expect(page.getByTestId('article-title')).not.toContainText('en:')
+    await expect(page).toHaveURL(/mode=orig/)
+
+    // Mode is URL state: closing and going back must restore the same view without a page render.
+    await page.getByTestId('close-article').click()
+    await expect(page).not.toHaveURL(/article=/)
+    await page.goBack()
+    await expect(page).toHaveURL(/article=\d+.*mode=orig/)
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
+    await expect(page.getByTestId('body-original')).toBeVisible()
+    await expect(page.getByTestId('body-translated')).toHaveCount(0)
   })
 
   test('switching the reading language changes what gets translated', async ({ page }) => {

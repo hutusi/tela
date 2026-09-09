@@ -1,6 +1,7 @@
 # 0016 — One database wave per render, and no render the reader did not ask for
 
-Status: accepted (2026-09-07)
+Status: accepted (2026-09-07). Amended by ADR 0017: the one-wave render budget stands, but
+article clicks and terminal background results no longer render the page.
 
 ## Context
 

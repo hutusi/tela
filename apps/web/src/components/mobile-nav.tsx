@@ -30,7 +30,10 @@ export async function MobileNav({ subscriptions, totals, params }: Props) {
     </Link>
   )
   return (
-    <details className="border-b border-line bg-paper lg:hidden" data-testid="mobile-nav">
+    <details
+      className="border-b border-line bg-paper group-data-[open=1]:hidden lg:hidden"
+      data-testid="mobile-nav"
+    >
       <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 font-medium">
         <span className="truncate">{current}</span>
         <span className="text-xs text-muted">{t('browse')} ▾</span>

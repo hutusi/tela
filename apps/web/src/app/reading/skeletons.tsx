@@ -10,7 +10,7 @@ function Line({ w, h = 12 }: { w: string; h?: number }) {
   return <div className="rounded bg-hover" style={{ width: w, height: h }} />
 }
 
-export function ListPanesSkeleton({ open }: { open: boolean }) {
+export function ListPanesSkeleton() {
   return (
     <>
       <aside
@@ -28,12 +28,15 @@ export function ListPanesSkeleton({ open }: { open: boolean }) {
           ))}
         </div>
       </aside>
-      <div aria-hidden className={`flex flex-col gap-6 px-3 py-5 ${open ? 'hidden lg:flex' : ''}`}>
+      <div
+        aria-hidden
+        className="flex flex-col gap-6 px-3 py-5 group-data-[open=1]:hidden lg:group-data-[open=1]:flex"
+      >
         {['a', 'b', 'c', 'd', 'e', 'f'].map((row) => (
           <div key={row} className="flex flex-col gap-2 border-t border-line pt-3.5">
             <Line w="40%" h={10} />
             <Line w="85%" h={16} />
-            {open ? null : <Line w="70%" h={12} />}
+            <Line w="70%" h={12} />
           </div>
         ))}
       </div>

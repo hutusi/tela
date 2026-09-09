@@ -1,35 +1,29 @@
-import type { ArticleDetail } from '@tela/db/queries'
+'use client'
+
+import type { ArticleFilter } from '@tela/db/queries'
 import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
-import Link from 'next/link'
-import { getTranslations } from 'next-intl/server'
-import { type ReadingParams, readingHref } from '@/app/reading/href'
-import { relativeTime } from '@/lib/format'
+import { useSearchParams } from 'next/navigation'
+import { useLocale, useTranslations } from 'next-intl'
+import { parseReadingMode, type ReadingMode } from '@/app/reading/href'
 import { LikeButton } from './like-button'
 import { MarkRead } from './mark-read'
 import { PollUntil } from './poll-until'
+import type { ReaderData } from './reader-data'
 import { RecommendPopover } from './recommend-popover'
 import { RequestTranslation } from './request-translation'
 import { Swatch } from './swatch'
-import { TranslationBar, type TranslationView } from './translation-bar'
+import { TranslationBar } from './translation-bar'
 
-export type ReaderTranslation = TranslationView & {
-  html: string | null
-  title: string | null
-}
+export type { ReaderTranslation } from './reader-data'
 
 type Props = {
-  article: ArticleDetail
-  html: string
-  params: ReadingParams
-  locale: string
-  /** Present when the article is not in the reading language. */
-  translation: ReaderTranslation | null
-  recommendation: { note: string | null } | null
-  /** Full text is being fetched for a summary-only article: say so and poll. */
-  extracting: boolean
+  data: ReaderData
   readingLang: string
-  /** Opaque tag for what this render was built from; the poller waits for it to change. */
-  revision: string
+  /** Decides whether the like button owes the list a refresh. */
+  filter: ArticleFilter
+  onClose: () => void
+  /** Re-fetch this pane, for when a background job has changed it. */
+  onReload: () => void
 }
 
 function Body({ html, lang, testId }: { html: string; lang?: string | undefined; testId: string }) {
@@ -44,27 +38,29 @@ function Body({ html, lang, testId }: { html: string; lang?: string | undefined;
   )
 }
 
-export async function Reader({
-  article,
-  html,
-  params,
-  locale,
-  translation,
-  recommendation,
-  extracting,
-  readingLang,
-  revision,
-}: Props) {
-  const t = await getTranslations('reader')
-  const tt = await getTranslations('translation')
+/**
+ * The article itself.
+ *
+ * A client component, so that opening an article fetches JSON from a route handler instead of
+ * re-rendering the page on the server — around 20 ms against 67 ms, against a 10 ms Workers Free
+ * budget (ADR 0017). The server still renders it for a direct link; every click after that is
+ * this component swapping its data.
+ */
+export function Reader({ data, readingLang, filter, onClose, onReload }: Props) {
+  const t = useTranslations('reader')
+  const tt = useTranslations('translation')
+  const locale = useLocale()
+  const mode = parseReadingMode(useSearchParams().get('mode'))
+  const { article, html, translation, recommendation, extracting, revision } = data
+
   const sourceLang = article.sourceLang ?? undefined
   const ready =
     translation !== null &&
     translation.html !== null &&
     (translation.state === 'done' || translation.state === 'partial')
-  const mode = translation === null ? 'orig' : ready ? params.mode : 'orig'
-  const showTrans = ready && mode !== 'orig'
-  const showOrig = mode !== 'trans'
+  const shown = translation === null ? 'orig' : ready ? mode : 'orig'
+  const showTrans = ready && shown !== 'orig'
+  const showOrig = shown !== 'trans'
   const twoCols = showTrans && showOrig
   const title = showTrans && translation?.title ? translation.title : article.title
   const pending =
@@ -73,11 +69,21 @@ export async function Reader({
   const failed = translation?.state === 'failed'
   const requestOwnsPolling = needsRequest || failed
 
+  const onMode = (next: ReadingMode) => {
+    const url = new URL(window.location.href)
+    if (next === 'side') url.searchParams.delete('mode')
+    else url.searchParams.set('mode', next)
+    window.history.replaceState(null, '', url)
+  }
+
   return (
     <main
-      className="min-w-0 overflow-hidden px-5 pb-20 pt-6 animate-fade md:px-8"
+      className="min-w-0 overflow-hidden px-5 pb-20 pt-6 outline-none animate-fade md:px-8"
       data-testid="reader"
-      data-mode={mode}
+      data-mode={shown}
+      // A navigation used to move focus here for nothing; opening an article on the client has to
+      // do it deliberately, or a keyboard reader stays parked in the list.
+      tabIndex={-1}
     >
       <MarkRead articleId={article.id} isRead={article.isRead} />
       {extracting ? (
@@ -91,27 +97,34 @@ export async function Reader({
           articleId={article.id}
           targetLang={translation.targetLang}
           revision={revision}
+          onReload={onReload}
           pollInitially={extracting}
         />
       ) : null}
       {!requestOwnsPolling && (pending || extracting) ? (
-        <PollUntil articleId={article.id} lang={readingLang} revision={revision} />
+        <PollUntil
+          articleId={article.id}
+          lang={readingLang}
+          revision={revision}
+          onChanged={onReload}
+        />
       ) : null}
 
       <div className="mx-auto mb-7 flex max-w-[1240px] flex-wrap items-center justify-between gap-2">
-        <Link
-          href={readingHref({ ...params, articleId: null })}
+        <button
+          type="button"
+          onClick={onClose}
           className="-ml-2.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink hover:no-underline"
           data-testid="close-article"
         >
           {t('close')}
-        </Link>
+        </button>
         <div className="flex flex-wrap items-center gap-2">
           <LikeButton
             articleId={article.id}
             liked={article.isLiked}
             likeCount={article.likeCount}
-            listFiltersOnLiked={params.filter === 'liked'}
+            listFiltersOnLiked={filter === 'liked'}
           />
           <RecommendPopover
             articleId={article.id}
@@ -133,7 +146,7 @@ export async function Reader({
             </>
           ) : null}
           <span>·</span>
-          <span>{relativeTime(article.publishedAt ?? article.fetchedAt, locale)}</span>
+          <span>{article.publishedLabel}</span>
           <span>·</span>
           <span>{t('minRead', { n: article.readingMinutes ?? 1 })}</span>
           {article.url ? (
@@ -147,7 +160,7 @@ export async function Reader({
         </div>
 
         {translation && sourceLang ? (
-          <TranslationBar sourceLang={sourceLang} view={translation} params={params} />
+          <TranslationBar sourceLang={sourceLang} view={translation} mode={mode} onMode={onMode} />
         ) : null}
         {translation?.state === 'failed' ? (
           <RequestTranslation
@@ -156,6 +169,7 @@ export async function Reader({
             targetLang={translation.targetLang}
             mode="button"
             revision={revision}
+            onReload={onReload}
             pollInitially={extracting}
           />
         ) : null}
