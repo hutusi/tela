@@ -141,6 +141,22 @@ everything so far sits under `[Unreleased]`.
 - **A site is keyed by the home its feed declares**, not by the feed's host, and a declared home
   can never attach a feed to another member's site.
 
+- **An active blog is no longer polled as if it had gone quiet.** The fetch interval is stored
+  with its ±10% jitter applied and read back as the input to the next backoff, so the jitter
+  compounded on every step and the column ratcheted past the 24h ceiling it is clamped to — four
+  production feeds sat between 88 540 s and 93 028 s. The jitter now moves only `next_fetch_at`,
+  which is what it is for: spreading feeds that were fetched together.
+
+- **A feed seeded by hand gets its title translations.** `worker:once fetch` called `fetchFeed`
+  with no options, and `onArticleStored` is the only thing that queues `translate.title` — so
+  every article of the four feeds seeded that way was left untranslatable, with nothing to retry.
+
+- **A title that translates to itself is kept, not thrown away.** Validation refuses a block the
+  model echoes back, which is right for prose and wrong for a package name or a version string.
+  The rejection was also silent: no row, no dead letter, no retry, so the post kept its original
+  title indefinitely under a badge announcing a translated one. Titles and excerpts now allow an
+  echo, and the badge appears only over a title we actually hold.
+
 ### Security
 
 - **Outbound fetches are pinned to vetted addresses.** The worker resolves every host itself and

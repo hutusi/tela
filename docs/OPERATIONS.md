@@ -193,6 +193,11 @@ First run: `cd apps/web && bunx playwright install chromium`.
   rows; `overdue` feeds → the fetch role is down or too slow (raise `FETCH_CONCURRENCY` or add a
   fetch instance); `oldestSec` high on `translate.body` → the provider is slow or the daily budget
   is exhausted (`LLM_DAILY_BUDGET_TOKENS`).
+- **Drain a dead letter once you have dealt with it.** `problems` flags a dead-letter queue that
+  holds *any* job, so one job left lying around keeps every health line at `warn` for its full
+  30-day retention and the signal is gone. Check the work was covered another way — for a title,
+  `select title from article_translations where article_id = …` — then
+  `delete from pgboss.job where name = '<queue>.dead' and id = '<id>'`.
 
 ### WebSub
 - Turn on with `WEBSUB_ENABLED=1` on the fetch/scheduler workers once `PUBLIC_URL` is the real
@@ -255,6 +260,21 @@ First run: `cd apps/web && bunx playwright install chromium`.
   translations keep their `model` label, so old and new output can be compared.
 - **Force a retranslation** of an article: `delete from article_translations where article_id = …`
   (the block cache stays; use `delete from translations where model = '…'` to drop a model's output).
+- **Find posts with no translated title**, the shape a silently-failed or never-queued title job
+  leaves behind — there is no job row to inspect, so the articles themselves are the only record:
+
+  ```sql
+  select a.id, a.feed_id, a.title, a.source_lang, l.lang
+  from articles a
+  cross join (values ('zh-Hans'), ('en')) l(lang)
+  left join article_translations t on t.article_id = a.id and t.target_lang = l.lang
+  where a.source_lang is distinct from l.lang
+    and (t.article_id is null or t.title is null);
+  ```
+
+  Re-queue them through `createJobSender` (`@tela/db/queue`) as `translate.title` with
+  `singletonKey` `'<articleId>:<lang>'` and `priority` 5 — the same shape `titleEnqueuer` sends.
+  Never insert into `pgboss.job` by hand.
 - **Add a reading language**: append it to `READING_LANGUAGES` in `packages/shared`, add the
   name to `LANGUAGE_NAMES`, and (if it is also a UI locale) a message catalog.
 - **Spot-check quality**: `LLM_PROVIDER=bailian BAILIAN_API_KEY=… bun run --filter @tela/llm spot-check`
