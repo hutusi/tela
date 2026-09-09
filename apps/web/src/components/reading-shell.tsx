@@ -155,20 +155,33 @@ export function ReadingShell({
    * page, and the next navigation re-renders the list from the truth anyway.
    */
   const openId = pane.kind === 'empty' ? null : pane.articleId
+  const readyId = pane.kind === 'ready' ? pane.articleId : null
 
   /**
    * Start a new article at its beginning.
    *
-   * A real navigation scrolled to the top and moved focus; `pushState` does neither, so opening a
-   * second article while halfway down the first one left it opening mid-page with its title above
-   * the fold. Keyed on the article, so a silent re-fetch after a background job does not yank the
-   * reader back to the top of what they are already reading.
+   * A real navigation scrolled to the top; `pushState` does not, so opening a second article while
+   * halfway down the first one left it opening mid-page with its title above the fold. This fires
+   * as soon as the article is asked for, so the jump happens with the skeleton rather than after
+   * the body lands. Keyed on the article, so a silent re-fetch after a background job does not
+   * yank the reader back to the top of what they are already reading.
    */
   useEffect(() => {
     if (openId === null) return
     window.scrollTo({ top: 0 })
-    document.querySelector<HTMLElement>('[data-testid="reader"]')?.focus({ preventScroll: true })
   }, [openId])
+
+  /**
+   * And move focus into it, which a navigation also used to do.
+   *
+   * Separately from the scroll, and keyed on the article being *ready*: while it is loading the
+   * pane is a skeleton, so there is nothing to focus, and the id does not change again when the
+   * body arrives — so doing both together meant focus was never moved at all.
+   */
+  useEffect(() => {
+    if (readyId === null) return
+    document.querySelector<HTMLElement>('[data-testid="reader"]')?.focus({ preventScroll: true })
+  }, [readyId])
 
   useEffect(() => {
     const root = listRef.current
@@ -203,6 +216,9 @@ export function ReadingShell({
     if (mode === 'side') href.searchParams.delete('mode')
     else href.searchParams.set('mode', mode)
     event.preventDefault()
+    // Re-clicking the article already open would otherwise stack an identical history entry, and
+    // Back would then appear to do nothing the first time it is pressed.
+    if (href.toString() === window.location.href) return
     window.history.pushState(null, '', href)
     setUrlMoved((n) => n + 1)
   }, [])

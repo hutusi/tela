@@ -149,6 +149,40 @@ test.describe('reader', () => {
     expect(Number(await opacity())).toBeLessThan(1)
   })
 
+  test('opening an article moves focus into it once it is there', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+
+    // The pane is a skeleton while it loads, so focusing on the id alone focused nothing — and
+    // the id does not change again when the body arrives. A keyboard reader was left in the list.
+    await expect
+      .poll(async () => page.evaluate(() => document.activeElement?.getAttribute('data-testid')), {
+        timeout: 5000,
+      })
+      .toBe('reader')
+  })
+
+  test('re-opening the article already showing does not stack a history entry', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    const row = page.getByTestId('article-row').first()
+    await row.click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    const opened = page.url()
+
+    // Clicking it again changes nothing, so it must not add an entry: Back would otherwise
+    // traverse two identical URLs and appear to do nothing the first time.
+    await row.click()
+    await expect(page).toHaveURL(opened)
+    await expect(page.getByTestId('reader')).toBeVisible()
+
+    await page.goBack()
+    await expect(page).not.toHaveURL(/article=/)
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+  })
+
   test('filter and subscription navigations close a client-opened article', async ({ page }) => {
     await page.goto('/reading')
     await page.getByTestId('article-row').first().click()
