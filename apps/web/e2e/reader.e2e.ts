@@ -87,6 +87,32 @@ test.describe('reader', () => {
     expect(documents.filter((m) => m === 'GET')).toHaveLength(0)
   })
 
+  test('going back to a client-opened article brings the article back', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    const opened = page.url()
+    expect(opened).toMatch(/article=\d+/)
+
+    // A real navigation away. The history entry we came from was written by pushState, so Next
+    // has no server payload for it and replays the one from before the article was opened.
+    await page.locator('aside').getByRole('link', { name: /Today/ }).click()
+    await expect(page).toHaveURL(/\/reading\?filter=today$/)
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+
+    // Back must restore the article, not just its URL. Trusting that stale server state over the
+    // URL left the address bar saying article=… with an empty third column.
+    await page.goBack()
+    await expect(page).toHaveURL(opened)
+    await expect(page.getByTestId('reader')).toBeVisible()
+    await expect(page.getByTestId('article-title')).toBeVisible()
+
+    // And forward again closes it, for the same reason in the other direction.
+    await page.goForward()
+    await expect(page).toHaveURL(/\/reading\?filter=today$/)
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+  })
+
   test('filter and subscription navigations close a client-opened article', async ({ page }) => {
     await page.goto('/reading')
     await page.getByTestId('article-row').first().click()

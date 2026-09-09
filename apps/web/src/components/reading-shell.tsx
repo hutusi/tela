@@ -5,11 +5,12 @@ import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { parseReadingArticleId, parseReadingMode } from '@/app/reading/href'
 import { ReaderPaneSkeleton } from '@/app/reading/skeletons'
+import { type PaneState, reconcile, type ServerState } from '@/lib/reader-navigation'
 import { Reader } from './reader'
 import type { InitialReaderState, ReaderData } from './reader-data'
 
 type Props = {
-  /** The pane the server rendered, when the URL arrived with an article on it. */
+  /** What the server rendered for the URL it was given. */
   initial: InitialReaderState
   readingLang: string
   filter: ArticleFilter
@@ -19,6 +20,33 @@ type Props = {
   emptyState: React.ReactNode
   /** The small-screen feed picker, which has no place once an article fills the screen. */
   mobileNav: React.ReactNode
+}
+
+/** The pane, as one value rather than three flags that can disagree. */
+type Pane =
+  | { kind: 'empty' }
+  | { kind: 'loading'; articleId: number }
+  | { kind: 'ready'; articleId: number; data: ReaderData }
+  | { kind: 'gone'; articleId: number }
+
+function paneFromServer(initial: InitialReaderState): Pane {
+  if (initial.kind === 'ready') {
+    return { kind: 'ready', articleId: initial.data.article.id, data: initial.data }
+  }
+  if (initial.kind === 'gone') return { kind: 'gone', articleId: initial.articleId }
+  return { kind: 'empty' }
+}
+
+function serverState(initial: InitialReaderState): ServerState {
+  return initial.kind === 'ready' ? { kind: 'ready', articleId: initial.data.article.id } : initial
+}
+
+function paneState(pane: Pane): PaneState {
+  return pane.kind === 'ready' ? { kind: 'ready', articleId: pane.articleId } : pane
+}
+
+function currentUrlArticleId(): number | null {
+  return parseReadingArticleId(new URLSearchParams(window.location.search).get('article'))
 }
 
 /**
@@ -32,6 +60,10 @@ type Props = {
  * The rows stay real links: the click is intercepted, so middle-click, ctrl-click and "open in new
  * tab" keep working, the URL still follows through `pushState`, and back and forward still do what
  * they should.
+ *
+ * Every trigger — mount, a server render, a click, Back — does the same two things: move the URL,
+ * then ask `reconcile` what the pane owes it. Deciding that inline, per trigger, is what kept
+ * getting it wrong.
  */
 export function ReadingShell({
   initial,
@@ -42,45 +74,95 @@ export function ReadingShell({
   mobileNav,
 }: Props) {
   const t = useTranslations('reader')
-  const [data, setData] = useState<ReaderData | null>(
-    initial.kind === 'ready' ? initial.data : null,
-  )
-  const [gone, setGone] = useState(initial.kind === 'gone')
-  const [loading, setLoading] = useState(false)
-  // A real navigation still happens sometimes — a filter change, a router.refresh() after a like —
-  // and React keeps this instance across it, so `useState(initial)` alone would hold the article
-  // the page first mounted with. Adopt whatever the server just sent.
-  const [servedInitial, setServedInitial] = useState(initial)
-  if (servedInitial !== initial) {
-    setServedInitial(initial)
-    setData(initial.kind === 'ready' ? initial.data : null)
-    setGone(initial.kind === 'gone')
-    setLoading(false)
-  }
+  const [pane, setPane] = useState<Pane>(() => paneFromServer(initial))
+  /** Bumped whenever the URL moves under us, which React has no way to observe. */
+  const [urlMoved, setUrlMoved] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
   const inFlight = useRef<AbortController | null>(null)
+  const lastServer = useRef<InitialReaderState>(initial)
 
-  // A server navigation or refresh has authoritative pane data. Stop any older endpoint request
-  // from competing with it; `load` also checks the live URL before accepting a response.
+  const load = useCallback(
+    async (articleId: number, options: { silent?: boolean } = {}) => {
+      inFlight.current?.abort()
+      const controller = new AbortController()
+      inFlight.current = controller
+      if (!options.silent) setPane({ kind: 'loading', articleId })
+      try {
+        const url = `/api/reading/article?article=${articleId}&lang=${encodeURIComponent(readingLang)}`
+        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' })
+        // A navigation may have replaced this request while it was in flight. The URL owns which
+        // article is open, so a late response must never put the old one back.
+        if (controller.signal.aborted || currentUrlArticleId() !== articleId) return
+        // A link to an article that has since been dropped: say so rather than navigating into a
+        // page that would only find the same nothing.
+        if (res.status === 404) {
+          setPane({ kind: 'gone', articleId })
+          return
+        }
+        if (!res.ok) throw new Error(`reader ${res.status}`)
+        const data = (await res.json()) as ReaderData
+        if (controller.signal.aborted || currentUrlArticleId() !== articleId) return
+        setPane({ kind: 'ready', articleId, data })
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return
+        if (currentUrlArticleId() !== articleId) return
+        // Fall back to a real navigation: the server renders the pane, slowly but correctly.
+        window.location.reload()
+      }
+    },
+    [readingLang],
+  )
+
+  /**
+   * The one place that decides what the pane should be showing.
+   *
+   * It runs on mount, on every server render, and whenever the URL moves. The URL is authoritative
+   * (ADR 0017): a server state that disagrees with it — which is exactly what Next replays when
+   * you press Back onto an entry written by `pushState` — is overruled rather than adopted.
+   */
+  // The URL is read fresh inside; bumping urlMoved is how a pushState or a popstate — neither of
+  // which React can observe — asks this to run again.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: urlMoved is a trigger, not a value
   useEffect(() => {
-    inFlight.current?.abort(new DOMException(`server state: ${initial.kind}`, 'AbortError'))
-    inFlight.current = null
-  }, [initial])
+    const serverChanged = lastServer.current !== initial
+    lastServer.current = initial
+    const action = reconcile({
+      urlArticleId: currentUrlArticleId(),
+      server: serverState(initial),
+      serverChanged,
+      pane: paneState(pane),
+    })
+    switch (action.do) {
+      case 'nothing':
+        return
+      case 'clear':
+        inFlight.current?.abort()
+        setPane({ kind: 'empty' })
+        return
+      case 'adopt':
+        inFlight.current?.abort()
+        setPane(paneFromServer(initial))
+        return
+      case 'fetch':
+        void load(action.articleId)
+        return
+    }
+  }, [initial, pane, load, urlMoved])
 
   /**
    * The list is server-rendered and never re-renders here, so the selected row is marked in the
    * DOM. The unread dot is removed rather than hidden: it is gone from the reader's model of the
    * page, and the next navigation re-renders the list from the truth anyway.
    */
-  const markRow = useCallback((articleId: number | null) => {
+  const openId = pane.kind === 'empty' ? null : pane.articleId
+  useEffect(() => {
     const root = listRef.current
     if (!root) return
     for (const a of root.querySelectorAll<HTMLElement>('[data-testid="article-row"]')) {
-      const id = Number(
+      const id = parseReadingArticleId(
         new URL(a.getAttribute('href') ?? '', location.origin).searchParams.get('article'),
       )
-      const active = id === articleId
-      if (active) {
+      if (id === openId) {
         a.dataset.active = '1'
         a.dataset.read = '1'
         a.querySelector('[data-testid="unread-dot"]')?.remove()
@@ -88,105 +170,49 @@ export function ReadingShell({
         delete a.dataset.active
       }
     }
-  }, [])
-
-  const load = useCallback(
-    async (articleId: number | null, options: { silent?: boolean } = {}) => {
-      inFlight.current?.abort()
-      markRow(articleId)
-      if (articleId === null) {
-        setData(null)
-        setGone(false)
-        setLoading(false)
-        return
-      }
-      const controller = new AbortController()
-      inFlight.current = controller
-      if (!options.silent) setLoading(true)
-      setGone(false)
-      try {
-        const url = `/api/reading/article?article=${articleId}&lang=${encodeURIComponent(readingLang)}`
-        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' })
-        // A navigation may have replaced this request while it was in flight. The URL owns which
-        // article is open, so a late response must never put the old one back.
-        const currentId = parseReadingArticleId(new URLSearchParams(location.search).get('article'))
-        if (controller.signal.aborted || currentId !== articleId) return
-        // A link to an article that has since been dropped: say so rather than navigating into a
-        // page that would only find the same nothing.
-        if (res.status === 404) {
-          setData(null)
-          setGone(true)
-          return
-        }
-        if (!res.ok) throw new Error(`reader ${res.status}`)
-        setData((await res.json()) as ReaderData)
-      } catch (err) {
-        if ((err as Error).name === 'AbortError') return
-        const currentId = parseReadingArticleId(new URLSearchParams(location.search).get('article'))
-        if (currentId !== articleId) return
-        // Fall back to a real navigation: the server renders the pane, slowly but correctly.
-        window.location.reload()
-        return
-      } finally {
-        if (!controller.signal.aborted && !options.silent) setLoading(false)
-      }
-    },
-    [markRow, readingLang],
-  )
+  }, [openId])
 
   // A click on an article row, anywhere in the list.
-  const onClick = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      if (event.defaultPrevented || event.button !== 0) return
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-      const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(
-        'a[data-testid="article-row"]',
-      )
-      if (!link) return
-      const href = new URL(link.href, location.origin)
-      const id = Number(href.searchParams.get('article'))
-      if (!Number.isInteger(id) || id <= 0) return
-      // The anchors carry the mode from their server render. Mode changes do not render the
-      // server, so carry the live URL value forward when opening the next article.
-      const mode = parseReadingMode(new URLSearchParams(location.search).get('mode'))
-      if (mode === 'side') href.searchParams.delete('mode')
-      else href.searchParams.set('mode', mode)
-      event.preventDefault()
-      window.history.pushState(null, '', href)
-      void load(id)
-    },
-    [load],
-  )
+  const onClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented || event.button !== 0) return
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(
+      'a[data-testid="article-row"]',
+    )
+    if (!link) return
+    const href = new URL(link.href, location.origin)
+    if (parseReadingArticleId(href.searchParams.get('article')) === null) return
+    // The anchors carry the mode from their server render. Mode changes do not render the server,
+    // so carry the live URL value forward when opening the next article.
+    const mode = parseReadingMode(new URLSearchParams(location.search).get('mode'))
+    if (mode === 'side') href.searchParams.delete('mode')
+    else href.searchParams.set('mode', mode)
+    event.preventDefault()
+    window.history.pushState(null, '', href)
+    setUrlMoved((n) => n + 1)
+  }, [])
 
   /** Re-fetch the open pane in place, without the skeleton: a background job has moved it on. */
   const reload = useCallback(() => {
-    const id = data?.article.id
-    if (id !== undefined) void load(id, { silent: true })
-  }, [data, load])
+    if (pane.kind === 'ready') void load(pane.articleId, { silent: true })
+  }, [pane, load])
 
   const close = useCallback(() => {
     const url = new URL(window.location.href)
     url.searchParams.delete('article')
     url.searchParams.delete('mode')
     window.history.pushState(null, '', url)
-    void load(null)
-  }, [load])
+    setUrlMoved((n) => n + 1)
+  }, [])
 
   // Back and forward move between articles without touching the server for anything but the pane.
   useEffect(() => {
-    const onPop = () => {
-      const id = parseReadingArticleId(new URLSearchParams(window.location.search).get('article'))
-      void load(id)
-    }
+    const onPop = () => setUrlMoved((n) => n + 1)
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
-  }, [load])
+  }, [])
 
-  useEffect(() => {
-    markRow(data?.article.id ?? null)
-  }, [markRow, data])
-
-  const open = data !== null || loading || gone
+  const open = pane.kind !== 'empty'
   return (
     <div
       className={`group grid flex-1 grid-cols-1 lg:min-h-0 ${
@@ -203,18 +229,18 @@ export function ReadingShell({
       <div ref={listRef} onClick={onClick} className="contents">
         {children}
       </div>
-      {data ? (
+      {pane.kind === 'ready' ? (
         <Reader
-          key={data.article.id}
-          data={data}
+          key={pane.articleId}
+          data={pane.data}
           readingLang={readingLang}
           filter={filter}
           onClose={close}
           onReload={reload}
         />
-      ) : loading ? (
+      ) : pane.kind === 'loading' ? (
         <ReaderPaneSkeleton />
-      ) : gone ? (
+      ) : pane.kind === 'gone' ? (
         <main
           className="flex items-center justify-center p-10 text-muted"
           data-testid="article-gone"
