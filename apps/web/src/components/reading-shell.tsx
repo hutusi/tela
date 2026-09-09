@@ -155,6 +155,21 @@ export function ReadingShell({
    * page, and the next navigation re-renders the list from the truth anyway.
    */
   const openId = pane.kind === 'empty' ? null : pane.articleId
+
+  /**
+   * Start a new article at its beginning.
+   *
+   * A real navigation scrolled to the top and moved focus; `pushState` does neither, so opening a
+   * second article while halfway down the first one left it opening mid-page with its title above
+   * the fold. Keyed on the article, so a silent re-fetch after a background job does not yank the
+   * reader back to the top of what they are already reading.
+   */
+  useEffect(() => {
+    if (openId === null) return
+    window.scrollTo({ top: 0 })
+    document.querySelector<HTMLElement>('[data-testid="reader"]')?.focus({ preventScroll: true })
+  }, [openId])
+
   useEffect(() => {
     const root = listRef.current
     if (!root) return

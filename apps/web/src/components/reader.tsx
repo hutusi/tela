@@ -79,9 +79,12 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
 
   return (
     <main
-      className="min-w-0 overflow-hidden px-5 pb-20 pt-6 animate-fade md:px-8"
+      className="min-w-0 overflow-hidden px-5 pb-20 pt-6 outline-none animate-fade md:px-8"
       data-testid="reader"
       data-mode={shown}
+      // A navigation used to move focus here for nothing; opening an article on the client has to
+      // do it deliberately, or a keyboard reader stays parked in the list.
+      tabIndex={-1}
     >
       <MarkRead articleId={article.id} isRead={article.isRead} />
       {extracting ? (

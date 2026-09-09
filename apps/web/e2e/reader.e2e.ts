@@ -113,6 +113,23 @@ test.describe('reader', () => {
     await expect(page.getByTestId('reader')).toHaveCount(0)
   })
 
+  test('a new article opens at its top, not where the last one was left', async ({ page }) => {
+    await page.goto('/reading')
+    const rows = page.getByTestId('article-row')
+    await rows.first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+
+    // Read a way down the first article. A navigation used to reset this for free; pushState
+    // does not, so the next article used to open with its title above the fold.
+    await page.evaluate(() => window.scrollTo(0, 700))
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+
+    await rows.nth(1).click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    await expect.poll(async () => page.evaluate(() => window.scrollY), { timeout: 5000 }).toBe(0)
+    await expect(page.getByTestId('article-title')).toBeInViewport()
+  })
+
   test('filter and subscription navigations close a client-opened article', async ({ page }) => {
     await page.goto('/reading')
     await page.getByTestId('article-row').first().click()
