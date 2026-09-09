@@ -158,7 +158,9 @@ everything so far sits under `[Unreleased]`.
   The rejection was also silent: no row, no dead letter, no retry, so the post kept its original
   title indefinitely under a badge announcing a translated one. Title blocks now allow an echo;
   excerpts and bodies keep the safeguard so prose cannot poison their shared cache. Reading and
-  search badges appear only over a title we actually hold.
+  search badges appear only over a title we actually hold. An echo accepted that way is kept out of the shared
+  block cache, which is content-addressed and first-write-wins: a body heading repeating the
+  headline hashes identically and would have inherited that judgement permanently.
 
 ### Security
 
