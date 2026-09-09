@@ -183,6 +183,22 @@ test.describe('reader', () => {
     await expect(page.getByTestId('reader')).toHaveCount(0)
   })
 
+  test('nor does it when the URL spells the same state differently', async ({ page }) => {
+    await page.goto('/reading')
+    const href = await page.getByTestId('article-row').first().getAttribute('href')
+    const id = new URL(href ?? '', 'http://x').searchParams.get('article')
+
+    // A shared or hand-typed link naming the default mode explicitly. It is the same place as
+    // /reading?article=N, and comparing the two as text said otherwise.
+    await page.goto(`/reading?mode=side&article=${id}`)
+    await expect(page.getByTestId('reader')).toBeVisible()
+    const before = await page.evaluate(() => history.length)
+
+    await page.getByTestId('article-row').first().click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    expect(await page.evaluate(() => history.length)).toBe(before)
+  })
+
   test('filter and subscription navigations close a client-opened article', async ({ page }) => {
     await page.goto('/reading')
     await page.getByTestId('article-row').first().click()

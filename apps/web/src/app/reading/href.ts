@@ -48,6 +48,22 @@ export function parseReadingParams(
 }
 
 /** Build a /reading URL; defaults are omitted so links stay clean. */
+/**
+ * The canonical reading URL for whatever a search string currently says, with optional overrides.
+ *
+ * Two URLs can name the same reader state and still differ as text — `?mode=side&article=1` against
+ * `?article=1`, or the same params in another order. Anything comparing reading URLs has to compare
+ * them through here, or it will think they are different and, for instance, stack a history entry
+ * for a state the reader is already in.
+ */
+export function canonicalReadingHref(
+  search: string,
+  overrides: Partial<ReadingParams> = {},
+): string {
+  const raw = Object.fromEntries(new URLSearchParams(search))
+  return readingHref({ ...parseReadingParams(raw), ...overrides })
+}
+
 export function readingHref(params: Partial<ReadingParams>): string {
   const q = new URLSearchParams()
   if (params.filter && params.filter !== 'all') q.set('filter', params.filter)

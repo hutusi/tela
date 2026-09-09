@@ -3,7 +3,7 @@
 import type { ArticleFilter } from '@tela/db/queries'
 import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { parseReadingArticleId, parseReadingMode } from '@/app/reading/href'
+import { canonicalReadingHref, parseReadingArticleId, parseReadingMode } from '@/app/reading/href'
 import { ReaderPaneSkeleton } from '@/app/reading/skeletons'
 import { type PaneState, reconcile, type ServerState } from '@/lib/reader-navigation'
 import { Reader } from './reader'
@@ -210,16 +210,16 @@ export function ReadingShell({
     if (!link) return
     const href = new URL(link.href, location.origin)
     if (parseReadingArticleId(href.searchParams.get('article')) === null) return
+    event.preventDefault()
     // The anchors carry the mode from their server render. Mode changes do not render the server,
     // so carry the live URL value forward when opening the next article.
     const mode = parseReadingMode(new URLSearchParams(location.search).get('mode'))
-    if (mode === 'side') href.searchParams.delete('mode')
-    else href.searchParams.set('mode', mode)
-    event.preventDefault()
-    // Re-clicking the article already open would otherwise stack an identical history entry, and
-    // Back would then appear to do nothing the first time it is pressed.
-    if (href.toString() === window.location.href) return
-    window.history.pushState(null, '', href)
+    const target = canonicalReadingHref(href.search, { mode })
+    // Both sides through the same canonical form: `?mode=side&article=1` and `?article=1` are the
+    // same place, and comparing them as text stacked a history entry for a state the reader was
+    // already in, so the next Back appeared to do nothing.
+    if (target === canonicalReadingHref(location.search)) return
+    window.history.pushState(null, '', target)
     setUrlMoved((n) => n + 1)
   }, [])
 
@@ -229,10 +229,9 @@ export function ReadingShell({
   }, [pane, load])
 
   const close = useCallback(() => {
-    const url = new URL(window.location.href)
-    url.searchParams.delete('article')
-    url.searchParams.delete('mode')
-    window.history.pushState(null, '', url)
+    const target = canonicalReadingHref(window.location.search, { articleId: null })
+    if (target === canonicalReadingHref(window.location.search)) return
+    window.history.pushState(null, '', target)
     setUrlMoved((n) => n + 1)
   }, [])
 
