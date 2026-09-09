@@ -24,7 +24,7 @@ export const TITLE_JOBS_PER_FETCH = 100
  * unchanged) has nothing to make up. pg-boss serves equal priorities in creation order, so the
  * newest posts are translated first as well.
  */
-function titleEnqueuer(counters: {
+export function titleEnqueuer(counters: {
   articles: number
   jobs: number
 }): NonNullable<FetchFeedOptions['onArticleStored']> {

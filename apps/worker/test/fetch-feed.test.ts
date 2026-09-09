@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { execFile } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { articles } from '@tela/db'
 import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
 import { createHttpClient, ensureFeed } from '@tela/ingest'
@@ -93,4 +96,44 @@ describe('handleFeedFetch', () => {
     )
     expect(again[0]?.n).toBe(2)
   })
+})
+
+describe('worker:once fetch', () => {
+  const cli = fileURLToPath(new URL('../src/cli.ts', import.meta.url))
+
+  test('queues title jobs too, so a hand-seeded feed is not left untranslatable', async () => {
+    // The CLI used to call fetchFeed with no options at all. onArticleStored is where title
+    // jobs come from, so every feed seeded by hand landed articles nothing would translate.
+    server.text(
+      '/feed.xml',
+      rss({
+        link: server.url('/'),
+        items: [
+          {
+            guid: 'post-1',
+            link: server.url('/posts/1'),
+            title: 'Post 1',
+            description: 'Summary 1',
+            content: longHtml(4),
+            date: 'Thu, 03 Sep 2026 08:00:00 GMT',
+          },
+        ],
+      }),
+    )
+
+    const { stdout } = await promisify(execFile)(
+      'bun',
+      ['run', cli, 'fetch', server.url('/feed.xml')],
+      {
+        env: { ...process.env, DATABASE_URL: t.url, WORKER_ALLOW_PRIVATE_HOSTS: '1' },
+      },
+    )
+    expect(JSON.parse(stdout)).toMatchObject({ status: 'fetched', newArticles: 1, titleJobs: 1 })
+
+    const [stored] = await t.db.select({ id: articles.id }).from(articles)
+    const queued = await t.db.execute<{ singleton_key: string }>(
+      sql`select singleton_key from pgboss.job where name = ${QUEUES.translateTitle}`,
+    )
+    expect(queued.map((q) => q.singleton_key)).toEqual([`${stored?.id}:zh-Hans`])
+  }, 60_000)
 })
