@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { markAllReadAction } from '@/app/reading/actions'
 import { type ReadingParams, readingHref } from '@/app/reading/href'
 import { relativeTime } from '@/lib/format'
+import { showsTranslation } from './shows-translation'
 import { Swatch } from './swatch'
 
 type Props = {
@@ -14,11 +15,6 @@ type Props = {
   locale: string
   pendingFetch?: boolean
   className?: string
-}
-
-function foreign(sourceLang: string | null, locale: string): boolean {
-  if (!sourceLang) return false
-  return sourceLang.split('-')[0] !== locale.split('-')[0]
 }
 
 export async function ArticleList({
@@ -75,8 +71,8 @@ export async function ArticleList({
           // one the reader sees. Showing the selected row as read here is what lets that action
           // stay fire-and-forget instead of costing a second render of the whole page.
           const read = a.isRead || active
-          const showBadge = foreign(a.sourceLang, readingLang)
-          const shownTitle = showBadge && a.translatedTitle ? a.translatedTitle : a.title
+          const showBadge = showsTranslation(a.sourceLang, readingLang, a.translatedTitle)
+          const shownTitle = showBadge ? a.translatedTitle : a.title
           const shownExcerpt = showBadge && a.translatedExcerpt ? a.translatedExcerpt : a.excerpt
           return (
             <a
