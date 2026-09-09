@@ -21,6 +21,11 @@ and display mode.
   `/api/reading/article?article=&lang=`. Modified clicks and unhydrated anchors navigate normally.
 - The URL is authoritative for the article and display mode. Filter and subscription navigations
   without `article` close the pane; Back and Forward load the article named by their history entry.
+  That rule lives in `apps/web/src/lib/reader-navigation.ts` as a pure function over (what the URL
+  asks for, what the server just said, what the pane is doing), and `ReadingShell` does what it
+  says. It is not spread across effects, because three review passes found a coordination bug each
+  time it was — most sharply when Back onto a `pushState` entry made Next replay the payload from
+  before the article was opened, and the shell believed it over the URL.
 - The server passes an explicit empty, ready, or gone state so a missing direct link is not confused
   with a page where no article was requested.
 - Waiting for translation or extraction still polls `/api/reading/state`, but a changed revision
@@ -33,6 +38,11 @@ and display mode.
   render. The sidebar and list stay mounted, and only the pane crosses the network.
 - Server navigations and explicit refreshes remain authoritative and replace client pane state.
 - The sidebar's aggregate counts retain the deliberate staleness accepted in ADR 0016.
+- What a navigation used to give away has to be done deliberately: a new article scrolls to the top
+  and takes focus, the selected row's dimming and unread dot follow the data attributes the shell
+  maintains rather than the server's render, and the article timestamp is formatted on the server
+  because `relativeTime` reads the clock and the local time zone — running it again on hydration
+  can disagree with the render by a threshold or by a day.
 - `/api/reading/article` is authenticated, validates the article and reading language, disables
   caching, and returns only the fields the client pane renders.
 - Alternatives considered: keeping App Router navigation (still pays the React CPU cost); making
