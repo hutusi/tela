@@ -52,6 +52,20 @@ describe('validateTranslation', () => {
   test('short blocks may stay identical (names, labels)', () => {
     expect(validateTranslation('GitHub', 'GitHub').ok).toBe(true)
   })
+  test('allowIdentical accepts an echo, for titles that are their own translation', () => {
+    // Both are just past SHORT_BLOCK, so the echo check applies and used to reject them: a
+    // package name plus a version, and a pair of map projections.
+    const pkg = 'llm-openrouter 0.7.1'
+    const projections = 'Mercator to Equal Earth'
+    expect(validateTranslation(pkg, pkg)).toMatchObject({ reason: 'identical to source' })
+    expect(validateTranslation(pkg, pkg, { allowIdentical: true }).ok).toBe(true)
+    expect(validateTranslation(projections, projections, { allowIdentical: true }).ok).toBe(true)
+    // It relaxes only that rule; a mangled translation is still refused.
+    expect(validateTranslation(projections, '', { allowIdentical: true })).toMatchObject({
+      ok: false,
+      reason: 'empty translation',
+    })
+  })
 })
 
 describe('parseJsonReply', () => {

@@ -12,7 +12,7 @@ import {
 } from '@tela/db'
 import { requestBodyTranslation, setTranslationStatus } from '@tela/db/queries'
 import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
-import { createMockTranslator, type TranslationRequest } from '@tela/llm'
+import { createMockTranslator, type TranslationRequest, type Translator } from '@tela/llm'
 import { eq, sql } from 'drizzle-orm'
 import { type Job, PgBoss } from 'pg-boss'
 import type { WorkerContext } from '../src/context'
@@ -490,6 +490,30 @@ describe('translateArticleTitle', () => {
       .where(eq(articleTranslations.articleId, article.id))
     expect(after?.status).toBe('done')
     expect(after?.title).toBe('zh-Hans:The bakery that outlived three metro lines')
+  })
+
+  test('keeps a title the model returns unchanged, like a package name', async () => {
+    // 'llm-openrouter 0.7.1' is exactly at the short-block guard, so the echo check applied and
+    // rejected it as 'identical to source'. That failure wrote no row and never retried, so the
+    // post kept its English title forever. A name is its own translation.
+    await seedArticle()
+    const title = 'llm-openrouter 0.7.1'
+    const articleId = await seedArticleWithKey('k-pkg', title)
+    const echo: Translator = {
+      model: 'echo',
+      translate: async (request) => ({
+        translations: request.blocks.map((b) => ({ id: b.id, text: b.text })),
+        usage: { model: 'echo', inputTokens: 1, outputTokens: 1, latencyMs: 1 },
+      }),
+    }
+    expect(
+      await translateArticleTitle({ db: t.db, translator: echo }, articleId, 'zh-Hans'),
+    ).toEqual({ status: 'done' })
+    const [row] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, articleId))
+    expect(row?.title).toBe(title)
   })
 
   test('skips when the language already matches', async () => {

@@ -76,6 +76,10 @@ export async function translateArticleTitle(
       sourceLang: article.sourceLang,
       targetLang,
       context: { siteTitle: row.siteTitle ?? row.feedTitle },
+      // A title is often a name, a package or a version string that reads the same in every
+      // language. Treating an echo as a failure here left the post with no translated title at
+      // all, and the failure is silent: no row, no retry, no dead letter.
+      allowIdentical: true,
     })
     await storeTranslations(
       deps.db,

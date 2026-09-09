@@ -20,6 +20,11 @@ export type TranslateBlocksInput = {
    * sent, so one article costs a bounded number of calls.
    */
   maxSourceTokens?: number
+  /**
+   * Accept a block whose translation comes back identical to its source. Set it for titles,
+   * where a name or a version string legitimately translates to itself.
+   */
+  allowIdentical?: boolean
   /** Called after every successful provider call, so progress can be persisted before the next. */
   onChunk?: (chunk: ChunkResult) => Promise<void>
   /**
@@ -103,7 +108,9 @@ export async function translateBlocks(
         failed.set(b.id, 'missing from reply')
         continue
       }
-      const check = validateTranslation(b.text, text)
+      const check = validateTranslation(b.text, text, {
+        allowIdentical: input.allowIdentical ?? false,
+      })
       if (check.ok) {
         translated.set(b.id, text)
         chunkTranslated.set(b.id, text)
