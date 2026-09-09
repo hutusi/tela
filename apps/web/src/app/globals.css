@@ -66,6 +66,22 @@ a:hover {
   border-radius: 4px;
 }
 
+/*
+ * Article rows dim when read and undim while selected.
+ *
+ * Both live here rather than as Tailwind variants because they are the same property under two
+ * conditions, and which utility wins would then depend on Tailwind's emission order rather than on
+ * anything written down. Declared explicitly, the selected rule is second and that is the whole
+ * rule. They read from the data attributes, not from the server's render, because ReadingShell
+ * updates those when an article is opened without a navigation.
+ */
+[data-testid="article-row"][data-read="1"] {
+  opacity: 0.62;
+}
+[data-testid="article-row"][data-active="1"] {
+  opacity: 1;
+}
+
 /* Article bodies: sanitized HTML from @tela/content, one leaf block per data-tb id. */
 .article-body {
   font-family: var(--font-serif);

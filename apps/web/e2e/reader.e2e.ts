@@ -130,6 +130,25 @@ test.describe('reader', () => {
     await expect(page.getByTestId('article-title')).toBeInViewport()
   })
 
+  test('a row read during this visit stays dimmed after the article closes', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+/)
+    const row = page.getByTestId('article-row').first()
+    const opacity = () => row.evaluate((el) => getComputedStyle(el).opacity)
+
+    if ((await row.getAttribute('data-read')) === '0') expect(Number(await opacity())).toBe(1)
+    await row.click()
+    await expect(page.getByTestId('reader')).toBeVisible()
+    await page.getByTestId('close-article').click()
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+
+    // Opening it marked it read. The dimming has to follow the state the row is actually in, not
+    // the one the server rendered it in.
+    await expect(row).toHaveAttribute('data-read', '1')
+    expect(Number(await opacity())).toBeLessThan(1)
+  })
+
   test('filter and subscription navigations close a client-opened article', async ({ page }) => {
     await page.goto('/reading')
     await page.getByTestId('article-row').first().click()
