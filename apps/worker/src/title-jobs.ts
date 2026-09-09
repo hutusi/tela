@@ -81,6 +81,18 @@ export async function repairMissingTitleJobs(
     where a.source_lang is distinct from target.lang
       and not s.translation_opt_out
       and t.title is null
+      -- The singleton key alone is not enough. translate.title uses pg-boss's short policy,
+      -- whose unique index covers state = 'created' only, so a job that is already active or
+      -- retrying does not block an insert -- and an in-flight job is exactly when t.title is
+      -- still null. Recovery is documented as safe to run beside the worker, so skip anything
+      -- already in flight rather than pay the provider twice for one title.
+      and not exists (
+        select 1
+        from pgboss.job j
+        where j.name = ${QUEUES.translateTitle}
+          and j.singleton_key = a.id::text || ':' || target.lang
+          and j.state < 'completed'::pgboss.job_state
+      )
     order by coalesce(a.published_at, a.fetched_at) desc, a.id desc, target.lang
     limit ${limit}
   `)

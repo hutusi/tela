@@ -151,10 +151,12 @@ describe('repairMissingTitleJobs', () => {
       enqueued: 3,
       alreadyQueued: 0,
     })
+    // Repeating it now finds nothing to do: the candidate query itself excludes anything with a
+    // live job, so the singleton key is a backstop for the race, not the only guard.
     expect(await repairMissingTitleJobs(t.db, 10)).toEqual({
-      selected: 3,
+      selected: 0,
       enqueued: 0,
-      alreadyQueued: 3,
+      alreadyQueued: 0,
     })
 
     const queued = await t.db.execute<{
@@ -181,6 +183,40 @@ describe('repairMissingTitleJobs', () => {
         return { articleId: Number(articleId), targetLang: targetLang as string }
       }),
     )
+  })
+
+  test('skips a title already in flight, not just one still queued', async () => {
+    const [site] = await t.db
+      .insert(sites)
+      .values({ homeUrl: 'https://inflight.example' })
+      .returning()
+    const [feed] = await t.db
+      .insert(feeds)
+      .values({ siteId: site!.id, feedUrl: 'https://inflight.example/feed' })
+      .returning()
+    const [article] = await t.db
+      .insert(articles)
+      .values({ feedId: feed!.id, dedupKey: 'inflight', title: 'In flight', sourceLang: 'en' })
+      .returning({ id: articles.id })
+
+    expect(await repairMissingTitleJobs(t.db, 10)).toMatchObject({ enqueued: 1 })
+
+    // pg-boss's `short` policy dedups created jobs only, so once the worker picks this up the
+    // singleton key stops protecting us -- and t.title is still null the whole time it runs.
+    await t.db.execute(
+      sql`update pgboss.job set state = 'active'::pgboss.job_state
+          where name = ${QUEUES.translateTitle} and singleton_key = ${`${article!.id}:zh-Hans`}`,
+    )
+    expect(await repairMissingTitleJobs(t.db, 10)).toEqual({
+      selected: 0,
+      enqueued: 0,
+      alreadyQueued: 0,
+    })
+    const rows = await t.db.execute<{ n: number }>(
+      sql`select count(*)::int as n from pgboss.job
+          where name = ${QUEUES.translateTitle} and singleton_key = ${`${article!.id}:zh-Hans`}`,
+    )
+    expect(rows[0]?.n).toBe(1)
   })
 
   test('validates the repair batch limit', async () => {
