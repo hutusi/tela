@@ -516,6 +516,43 @@ describe('translateArticleTitle', () => {
     expect(row?.title).toBe(title)
   })
 
+  test('rejects an echoed excerpt so it cannot poison the body cache', async () => {
+    const prose =
+      'This ordinary prose is the whole article and still needs to be translated for the reader.'
+    const { article } = await seedArticle({ html: `<p>${prose}</p>` })
+    const echoExcerpt: Translator = {
+      model: 'partial-echo',
+      translate: async (request) => ({
+        translations: request.blocks.map((block) => ({
+          id: block.id,
+          text: block.id === 'title' ? `zh-Hans:${block.text}` : block.text,
+        })),
+        usage: { model: 'partial-echo', inputTokens: 1, outputTokens: 1, latencyMs: 1 },
+      }),
+    }
+
+    expect(
+      await translateArticleTitle({ db: t.db, translator: echoExcerpt }, article.id, 'zh-Hans'),
+    ).toEqual({ status: 'done' })
+    const [titleRow] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(titleRow?.title).toStartWith('zh-Hans:')
+    expect(titleRow?.excerpt).toBeNull()
+    expect(await t.db.select().from(translations)).toHaveLength(1)
+
+    const calls: TranslationRequest[] = []
+    const body = await translateArticleBody(
+      { db: t.db, translator: createMockTranslator({ calls }) },
+      article.id,
+      'zh-Hans',
+      { onDemand: true },
+    )
+    expect(body).toMatchObject({ status: 'done', translated: 1, cached: 0 })
+    expect(calls).toHaveLength(1)
+  })
+
   test('skips when the language already matches', async () => {
     const { article } = await seedArticle({ sourceLang: 'zh-Hans' })
     expect(

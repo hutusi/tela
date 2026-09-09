@@ -1,9 +1,12 @@
-import { createHmac } from 'node:crypto'
+import { createHmac, randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
+import { articles, createDb, feeds, sites } from '@tela/db'
+import { subscribe } from '@tela/db/queries'
 
 const FIXTURES = process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'
 const IMAGE_SECRET = process.env.IMAGE_PROXY_SECRET ?? 'e2e-image-secret'
+const DEV_USER_ID = '00000000-0000-4000-8000-000000000001'
 
 function signedImageUrl(url: string, secret = IMAGE_SECRET): string {
   const u = Buffer.from(url, 'utf8').toString('base64url')
@@ -528,6 +531,40 @@ test.describe('recommendations, profile, dashboard, settings', () => {
 
 test.describe('search', () => {
   test('finds blogs by name and posts in subscriptions by title', async ({ page }) => {
+    const databaseUrl = process.env.DATABASE_URL
+    if (!databaseUrl) throw new Error('DATABASE_URL is required')
+
+    const db = createDb(databaseUrl, { max: 1 })
+    const suffix = randomUUID()
+    const untranslatedTitle = `Untranslated search sentinel ${suffix}`
+    try {
+      const [site] = await db
+        .insert(sites)
+        .values({ homeUrl: `https://search-${suffix}.example`, title: 'Search fixture' })
+        .returning({ id: sites.id })
+      if (!site) throw new Error('Failed to seed search fixture site')
+
+      const [feed] = await db
+        .insert(feeds)
+        .values({
+          siteId: site.id,
+          feedUrl: `https://search-${suffix}.example/feed.xml`,
+          title: 'Search fixture',
+        })
+        .returning({ id: feeds.id })
+      if (!feed) throw new Error('Failed to seed search fixture feed')
+
+      await db.insert(articles).values({
+        feedId: feed.id,
+        dedupKey: suffix,
+        title: untranslatedTitle,
+        sourceLang: 'zh-Hans',
+      })
+      await subscribe(db, DEV_USER_ID, feed.id)
+    } finally {
+      await db.close()
+    }
+
     await page.goto('/reading')
     const firstTitle =
       (await page.getByTestId('article-row').first().locator('h2').textContent())?.trim() ?? ''
@@ -544,6 +581,14 @@ test.describe('search', () => {
     await page.getByTestId('search-input').fill('胡涂')
     await page.getByTestId('search-input').press('Enter')
     await expect(page.getByTestId('site-card').filter({ hasText: '胡涂说' })).toBeVisible()
+
+    // A foreign-language article without an eager title row must not badge its original title as
+    // translated merely because its source language differs from the reader's language.
+    await page.getByTestId('search-input').fill(untranslatedTitle)
+    await page.getByTestId('search-input').press('Enter')
+    const untranslated = page.getByTestId('article-hit').filter({ hasText: untranslatedTitle })
+    await expect(untranslated).toBeVisible()
+    await expect(untranslated).not.toContainText('ZH → EN')
 
     await page.getByTestId('search-input').fill(word)
     await page.getByTestId('search-input').press('Enter')

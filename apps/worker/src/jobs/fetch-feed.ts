@@ -1,48 +1,13 @@
 import { feeds } from '@tela/db'
 import { siteNeedsAssets } from '@tela/db/queries'
-import { createJobSender } from '@tela/db/queue'
-import { type FetchFeedOptions, fetchFeed, type RegionPolicy } from '@tela/ingest'
-import { READING_LANGUAGES } from '@tela/shared'
+import { fetchFeed, type RegionPolicy } from '@tela/ingest'
 import { eq } from 'drizzle-orm'
 import type { Job } from 'pg-boss'
 import type { WorkerContext } from '../context'
 import { log } from '../logger'
 import { type FeedFetchJob, QUEUES } from '../queues'
+import { titleEnqueuer } from '../title-jobs'
 import { maybeQueueWebsub } from './websub'
-
-/**
- * Ceiling on articles per fetch that get eager title jobs. A first fetch of a long archive, or
- * a hostile feed with thousands of items, otherwise turns into that many model calls; feeds
- * list newest first, and those are the posts lists show, so they are the ones worth it.
- */
-export const TITLE_JOBS_PER_FETCH = 100
-
-/**
- * Title/excerpt translation into every reading language the article is not in, queued through
- * the article's own transaction so the jobs commit with it: a crash between storing an article
- * and queueing its titles cannot lose them, and a retried fetch (which sees those articles as
- * unchanged) has nothing to make up. pg-boss serves equal priorities in creation order, so the
- * newest posts are translated first as well.
- */
-export function titleEnqueuer(counters: {
-  articles: number
-  jobs: number
-}): NonNullable<FetchFeedOptions['onArticleStored']> {
-  return async (tx, article) => {
-    if (counters.articles >= TITLE_JOBS_PER_FETCH) return
-    counters.articles += 1
-    const sender = createJobSender(tx)
-    for (const target of READING_LANGUAGES) {
-      if (article.sourceLang === target) continue
-      const id = await sender.send(
-        QUEUES.translateTitle,
-        { articleId: article.id, targetLang: target },
-        { singletonKey: `${article.id}:${target}`, priority: 5 },
-      )
-      if (id) counters.jobs += 1
-    }
-  }
-}
 
 /** First successful fetch of a site: look for its favicon and cover once. */
 async function enqueueSiteAssets(ctx: WorkerContext, feedId: number) {

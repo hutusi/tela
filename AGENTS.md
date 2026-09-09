@@ -44,6 +44,7 @@ bun run db:migrate                   # apply migrations (DATABASE_URL=…)
 bun run db:local --port 54322        # migrated Postgres with the development user, no Docker
 bun run db:prepare                   # the same setup applied to an existing database
 bun run worker:once fetch <feedUrl>  # run one job by hand (DATABASE_URL=…)
+bun run worker:once repair-titles    # requeue missing eager title translations in batches
 cd apps/web && bun run preview       # OpenNext build + local Workers runtime
 ```
 
@@ -98,7 +99,7 @@ Defects that already cost time here, not hypotheticals.
 - **A queue's policy is fixed at creation.** Change one in code and the worker refuses to start: drain it, `select pgboss.delete_queue('<name>')`, restart.
 - **`LLM_PROVIDER` without a matching key falls back to the mock, and the `translate` role refuses to start on that fallback** — placeholder output would be cached for everyone. Set `LLM_PROVIDER=mock` deliberately for e2e and local runs.
 - **`onArticleStored` is the only thing that queues title translations.** `fetchFeed` stores articles; the caller supplies `titleEnqueuer`. A caller that forgets it ingests articles nothing will ever translate, and nothing retries — that is how 46 live articles ended up with no title job. Any new `fetchFeed` caller passes it.
-- **A title may legitimately translate to itself.** `validateTranslation` rejects an echo, so titles and excerpts pass `allowIdentical`. Body blocks keep the check. Note the failure shape it caused: `translateArticleTitle` returning `failed` only warns, and the pg-boss job *completes* — no row, no dead letter, nothing to query.
+- **A title may legitimately translate to itself.** `validateTranslation` rejects an echo, so the title block opts out by id. Excerpts and bodies keep the check: an echoed excerpt can share a hash with a body block and poison the first-write-wins cache. Note the failure shape this caused: `translateArticleTitle` returning `failed` only warns, and the pg-boss job *completes* — no row, no dead letter, nothing to query.
 - **Never store a jittered value back into the field the jitter is computed from.** `fetch_interval_sec` fed its own ±10% back in as the next input, so the spread compounded per backoff step and the column climbed past the clamp. Jitter the derived timestamp, not the stored interval.
 
 ## How to

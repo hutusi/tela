@@ -21,10 +21,10 @@ export type TranslateBlocksInput = {
    */
   maxSourceTokens?: number
   /**
-   * Accept a block whose translation comes back identical to its source. Set it for titles,
-   * where a name or a version string legitimately translates to itself.
+   * Block ids whose translation may equal their source. This is deliberately per-block: a title
+   * can be a name that stays unchanged while prose beside it still needs the echo guard.
    */
-  allowIdentical?: boolean
+  allowIdenticalBlockIds?: readonly string[]
   /** Called after every successful provider call, so progress can be persisted before the next. */
   onChunk?: (chunk: ChunkResult) => Promise<void>
   /**
@@ -58,6 +58,7 @@ export async function translateBlocks(
   const failed = new Map<string, string>()
   const usage: TranslationUsage[] = []
   const bySource = new Map(input.blocks.map((b) => [b.id, b.text]))
+  const allowIdentical = new Set(input.allowIdenticalBlockIds ?? [])
   const capped = new Set<string>()
   let accepted = input.blocks
   if (input.maxSourceTokens !== undefined) {
@@ -109,7 +110,7 @@ export async function translateBlocks(
         continue
       }
       const check = validateTranslation(b.text, text, {
-        allowIdentical: input.allowIdentical ?? false,
+        allowIdentical: allowIdentical.has(b.id),
       })
       if (check.ok) {
         translated.set(b.id, text)

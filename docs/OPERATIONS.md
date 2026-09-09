@@ -172,7 +172,9 @@ First run: `cd apps/web && bunx playwright install chromium`.
 - Logs are JSON lines on stdout/stderr. `feed fetch failed` lines carry `kind` (`timeout`,
   `network`, `http_429`, `parse`, …) and the feed id.
 - **Fetch one feed now**: `DATABASE_URL=… bun run worker:once fetch <feedUrl>` (creates the feed if
-  needed). `… discover <url>` prints candidates; `… extract <articleId>` runs Readability.
+  needed). `… discover <url>` prints candidates; `… extract <articleId>` runs Readability. If the
+  worker has not created pg-boss yet, fetch still stores the feed and warns that no title jobs
+  were queued.
 - **Revive a dead feed**: `update feeds set status = 'active', error_count = 0, next_fetch_at =
   now() where id = …`. The daily maintenance job does this automatically after seven days.
 - **Inspect the queue**: `select name, policy from pgboss.queue`; failed jobs land in
@@ -266,14 +268,20 @@ First run: `cd apps/web && bunx playwright install chromium`.
   ```sql
   select a.id, a.feed_id, a.title, a.source_lang, l.lang
   from articles a
+  join feeds f on f.id = a.feed_id
+  join sites s on s.id = f.site_id
   cross join (values ('zh-Hans'), ('en')) l(lang)
   left join article_translations t on t.article_id = a.id and t.target_lang = l.lang
   where a.source_lang is distinct from l.lang
+    and not s.translation_opt_out
     and (t.article_id is null or t.title is null);
   ```
 
-  Re-queue them through `createJobSender` (`@tela/db/queue`) as `translate.title` with
-  `singletonKey` `'<articleId>:<lang>'` and `priority` 5 — the same shape `titleEnqueuer` sends.
+  With the translate worker running, queue a newest-first batch with
+  `DATABASE_URL=… bun run worker:once repair-titles [limit]`. The default is 500 pairs and the
+  maximum is 5,000. The JSON result reports selected, newly enqueued and already-queued pairs;
+  wait for the worker, then rerun until `selected` is zero. Singleton keys make reruns safe. The
+  command skips sites that opted out and refuses to run before the worker has created the queue.
   Never insert into `pgboss.job` by hand.
 - **Add a reading language**: append it to `READING_LANGUAGES` in `packages/shared`, add the
   name to `LANGUAGE_NAMES`, and (if it is also a UI locale) a message catalog.
