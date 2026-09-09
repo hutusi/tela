@@ -39,6 +39,12 @@ export type TranslateBlocksOutcome = {
   /** id → validated translated tagged text */
   translated: Map<string, string>
   failed: Array<{ id: string; reason: string }>
+  /**
+   * Ids accepted only because `allowIdenticalBlockIds` permitted an echo of the source. The
+   * caller decides whether such a block is safe to write to the shared, content-addressed
+   * translation cache — for a title it is not, see translateArticleTitle.
+   */
+  echoed: Set<string>
   usage: TranslationUsage[]
   /** The deadline passed with blocks still unattempted. */
   stopped: boolean
@@ -59,6 +65,7 @@ export async function translateBlocks(
   const usage: TranslationUsage[] = []
   const bySource = new Map(input.blocks.map((b) => [b.id, b.text]))
   const allowIdentical = new Set(input.allowIdenticalBlockIds ?? [])
+  const echoed = new Set<string>()
   const capped = new Set<string>()
   let accepted = input.blocks
   if (input.maxSourceTokens !== undefined) {
@@ -115,6 +122,8 @@ export async function translateBlocks(
       if (check.ok) {
         translated.set(b.id, text)
         chunkTranslated.set(b.id, text)
+        if (check.identical) echoed.add(b.id)
+        else echoed.delete(b.id)
         failed.delete(b.id)
       } else {
         failed.set(b.id, check.reason)
@@ -151,6 +160,7 @@ export async function translateBlocks(
   return {
     translated,
     failed: [...failed.entries()].map(([id, reason]) => ({ id, reason })),
+    echoed,
     usage,
     stopped,
   }

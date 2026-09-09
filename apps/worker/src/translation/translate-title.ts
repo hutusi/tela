@@ -83,15 +83,22 @@ export async function translateArticleTitle(
     })
     await storeTranslations(
       deps.db,
-      [...outcome.translated.entries()].map(([id, text]) => ({
-        sourceHash: hashes.get(id) as string,
-        targetLang,
-        taggedText: text,
-        sourceLang: article.sourceLang,
-        model: deps.translator.model,
-        normVersion: NORM_VERSION,
-        chars: text.length,
-      })),
+      // An echo accepted only by the title exemption stays out of the shared cache. That cache is
+      // content-addressed and first-write-wins, so caching "this text is its own translation"
+      // would freeze the judgement for every block with the same text -- a body <h1> repeating
+      // the headline hashes identically -- and no later model could replace it. The title row
+      // itself is still written; a re-run costs one cheap call.
+      [...outcome.translated.entries()]
+        .filter(([id]) => !outcome.echoed.has(id))
+        .map(([id, text]) => ({
+          sourceHash: hashes.get(id) as string,
+          targetLang,
+          taggedText: text,
+          sourceLang: article.sourceLang,
+          model: deps.translator.model,
+          normVersion: NORM_VERSION,
+          chars: text.length,
+        })),
     )
     for (const [id, text] of outcome.translated) result.set(id, text)
     await recordUsage(deps.db, 'translate.title', articleId, targetLang, outcome.usage)

@@ -149,6 +149,9 @@ describe('translateBlocks with the mock translator', () => {
     expect(out.translated.get('title')).toBe(title)
     expect(out.translated.has('excerpt')).toBe(false)
     expect(out.failed).toEqual([{ id: 'excerpt', reason: 'identical to source' }])
+    // The caller needs to know the title passed only by exemption, so it can keep that judgement
+    // out of the shared, content-addressed cache.
+    expect([...out.echoed]).toEqual(['title'])
   })
 
   test('retries invalid blocks once in strict mode and reports the rest', async () => {

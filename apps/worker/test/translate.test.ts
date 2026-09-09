@@ -553,6 +553,41 @@ describe('translateArticleTitle', () => {
     expect(calls).toHaveLength(1)
   })
 
+  test('keeps an echoed title out of the shared block cache', async () => {
+    // The body repeats the headline, which is common after extraction: a plain <h1>/<p> with the
+    // title's text hashes identically to the title block. The shared cache is first-write-wins,
+    // so an echo cached from the title would decide that text for every article forever.
+    const headline = 'The bakery that outlived three metro lines'
+    const { article } = await seedArticle({ html: `<p>${headline}</p>` })
+    const echo: Translator = {
+      model: 'echo',
+      translate: async (request) => ({
+        translations: request.blocks.map((b) => ({ id: b.id, text: b.text })),
+        usage: { model: 'echo', inputTokens: 1, outputTokens: 1, latencyMs: 1 },
+      }),
+    }
+
+    expect(
+      await translateArticleTitle({ db: t.db, translator: echo }, article.id, 'zh-Hans'),
+    ).toEqual({ status: 'done' })
+    // The reader still gets the title: only the cache entry is withheld.
+    const [titleRow] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(titleRow?.title).toBe(headline)
+    expect(await t.db.select().from(translations)).toHaveLength(0)
+
+    // So the identical body block still goes to the model rather than inheriting the echo.
+    const body = await translateArticleBody(
+      { db: t.db, translator: createMockTranslator() },
+      article.id,
+      'zh-Hans',
+      { onDemand: true },
+    )
+    expect(body).toMatchObject({ status: 'done', translated: 1, cached: 0 })
+  })
+
   test('skips when the language already matches', async () => {
     const { article } = await seedArticle({ sourceLang: 'zh-Hans' })
     expect(

@@ -1,6 +1,8 @@
 import { checkPlaceholders, plainText } from '@tela/content/tagged'
 
-export type BlockCheck = { ok: true } | { ok: false; reason: string }
+export type BlockCheck =
+  /** `identical` marks a block accepted only because `allowIdentical` permitted an echo. */
+  { ok: true; identical?: boolean } | { ok: false; reason: string }
 
 export type ValidateOptions = {
   /**
@@ -36,8 +38,10 @@ export function validateTranslation(
     if (ratio < MIN_RATIO || ratio > MAX_RATIO) {
       return { ok: false, reason: `length ratio ${ratio.toFixed(2)} is out of range` }
     }
-    if (!options.allowIdentical && dst === src && /\p{L}/u.test(src))
-      return { ok: false, reason: 'identical to source' }
+    if (dst === src && /\p{L}/u.test(src)) {
+      if (!options.allowIdentical) return { ok: false, reason: 'identical to source' }
+      return { ok: true, identical: true }
+    }
   }
   return { ok: true }
 }
