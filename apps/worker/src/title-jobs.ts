@@ -49,9 +49,7 @@ export function titleEnqueuer(counters: {
 }
 
 export type RepairTitleJobsResult = {
-  selected: number
   enqueued: number
-  alreadyQueued: number
 }
 
 /** Queue a bounded, newest-first batch of title translations that never landed. */
@@ -70,47 +68,43 @@ export async function repairMissingTitleJobs(
     READING_LANGUAGES.map((target) => sql`(${target})`),
     sql`, `,
   )
-  const candidates = await db.execute<{ article_id: string | number; target_lang: string }>(sql`
-    select a.id as article_id, target.lang as target_lang
-    from articles a
-    join feeds f on f.id = a.feed_id
-    join sites s on s.id = f.site_id
-    cross join (values ${targetRows}) as target(lang)
-    left join article_translations t
-      on t.article_id = a.id and t.target_lang = target.lang
-    where a.source_lang is distinct from target.lang
-      and not s.translation_opt_out
-      and t.title is null
-      -- The singleton key alone is not enough. translate.title uses pg-boss's short policy,
-      -- whose unique index covers state = 'created' only, so a job that is already active or
-      -- retrying does not block an insert -- and an in-flight job is exactly when t.title is
-      -- still null. Recovery is documented as safe to run beside the worker, so skip anything
-      -- already in flight rather than pay the provider twice for one title.
-      and not exists (
-        select 1
-        from pgboss.job j
-        where j.name = ${QUEUES.translateTitle}
-          and j.singleton_key = a.id::text || ':' || target.lang
-          and j.state < 'completed'::pgboss.job_state
-      )
-    order by coalesce(a.published_at, a.fetched_at) desc, a.id desc, target.lang
-    limit ${limit}
-  `)
-
-  const sender = createJobSender(db)
-  let enqueued = 0
-  for (const row of candidates) {
-    const articleId = Number(row.article_id)
-    const id = await sender.send(
-      QUEUES.translateTitle,
-      { articleId, targetLang: row.target_lang },
-      { singletonKey: `${articleId}:${row.target_lang}`, priority: 5 },
-    )
-    if (id) enqueued += 1
-  }
-  return {
-    selected: candidates.length,
-    enqueued,
-    alreadyQueued: candidates.length - enqueued,
-  }
+  // Selected and inserted in one statement, so the exclusions below are evaluated against the
+  // same snapshot as the insert -- and so a 5,000-pair batch is one round trip rather than 5,000.
+  const enqueued = await createJobSender(db).sendFrom(
+    QUEUES.translateTitle,
+    sql`
+      select jsonb_build_object('articleId', a.id, 'targetLang', target.lang) as data,
+             a.id::text || ':' || target.lang as singleton_key,
+             5 as priority
+      from articles a
+      join feeds f on f.id = a.feed_id
+      join sites s on s.id = f.site_id
+      cross join (values ${targetRows}) as target(lang)
+      left join article_translations t
+        on t.article_id = a.id and t.target_lang = target.lang
+      where a.source_lang is distinct from target.lang
+        and not s.translation_opt_out
+        and t.title is null
+        -- The singleton key alone is not enough. translate.title uses pg-boss's short policy,
+        -- whose unique index covers state = 'created' only, so a job that is already active or
+        -- retrying does not block an insert -- and an in-flight job is exactly when t.title is
+        -- still null. Recovery is documented as safe to run beside the worker, so skip anything
+        -- already in flight rather than pay for one title twice.
+        --
+        -- One statement narrows but does not close that window: under read committed a job can
+        -- still be activated between this snapshot and the insert. The cost of losing that race
+        -- is one duplicate provider call, and a created job beside an active one is a state the
+        -- worker already relies on (see the budget deferral in jobs/translate.ts).
+        and not exists (
+          select 1
+          from pgboss.job j
+          where j.name = ${QUEUES.translateTitle}
+            and j.singleton_key = a.id::text || ':' || target.lang
+            and j.state < 'completed'::pgboss.job_state
+        )
+      order by coalesce(a.published_at, a.fetched_at) desc, a.id desc, target.lang
+      limit ${limit}
+    `,
+  )
+  return { enqueued }
 }

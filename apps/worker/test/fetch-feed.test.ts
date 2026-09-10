@@ -147,17 +147,11 @@ describe('repairMissingTitleJobs', () => {
     expect(JSON.parse(stdout)).toMatchObject({
       command: 'repair-titles',
       limit: 10,
-      selected: 3,
       enqueued: 3,
-      alreadyQueued: 0,
     })
     // Repeating it now finds nothing to do: the candidate query itself excludes anything with a
     // live job, so the singleton key is a backstop for the race, not the only guard.
-    expect(await repairMissingTitleJobs(t.db, 10)).toEqual({
-      selected: 0,
-      enqueued: 0,
-      alreadyQueued: 0,
-    })
+    expect(await repairMissingTitleJobs(t.db, 10)).toEqual({ enqueued: 0 })
 
     const queued = await t.db.execute<{
       singleton_key: string
@@ -207,16 +201,48 @@ describe('repairMissingTitleJobs', () => {
       sql`update pgboss.job set state = 'active'::pgboss.job_state
           where name = ${QUEUES.translateTitle} and singleton_key = ${`${article!.id}:zh-Hans`}`,
     )
-    expect(await repairMissingTitleJobs(t.db, 10)).toEqual({
-      selected: 0,
-      enqueued: 0,
-      alreadyQueued: 0,
-    })
+    expect(await repairMissingTitleJobs(t.db, 10)).toEqual({ enqueued: 0 })
     const rows = await t.db.execute<{ n: number }>(
       sql`select count(*)::int as n from pgboss.job
           where name = ${QUEUES.translateTitle} and singleton_key = ${`${article!.id}:zh-Hans`}`,
     )
     expect(rows[0]?.n).toBe(1)
+  })
+
+  test('caps a batch at the limit, newest first', async () => {
+    const [site] = await t.db
+      .insert(sites)
+      .values({ homeUrl: 'https://capped.example' })
+      .returning()
+    const [feed] = await t.db
+      .insert(feeds)
+      .values({ siteId: site!.id, feedUrl: 'https://capped.example/feed' })
+      .returning()
+    // Three English articles: three zh-Hans pairs eligible, published oldest to newest.
+    const ids: number[] = []
+    for (const n of [1, 2, 3]) {
+      const [row] = await t.db
+        .insert(articles)
+        .values({
+          feedId: feed!.id,
+          dedupKey: `capped-${n}`,
+          title: `Capped ${n}`,
+          sourceLang: 'en',
+          publishedAt: new Date(`2026-09-0${n}T00:00:00Z`),
+        })
+        .returning({ id: articles.id })
+      ids.push(row!.id)
+    }
+
+    // The limit lives inside the source select the bulk insert draws from; if it drifted out,
+    // one batch would enqueue the whole backlog.
+    expect(await repairMissingTitleJobs(t.db, 2)).toEqual({ enqueued: 2 })
+    const queued = await t.db.execute<{ singleton_key: string }>(
+      sql`select singleton_key from pgboss.job where name = ${QUEUES.translateTitle}`,
+    )
+    expect(queued.map((row) => row.singleton_key).sort()).toEqual(
+      [`${ids[2]}:zh-Hans`, `${ids[1]}:zh-Hans`].sort(),
+    )
   })
 
   test('validates the repair batch limit', async () => {
