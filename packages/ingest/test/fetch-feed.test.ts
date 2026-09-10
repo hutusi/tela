@@ -6,6 +6,7 @@ import { eq, sql } from 'drizzle-orm'
 import { ensureFeed } from '../src/ensure-feed'
 import { fetchFeed } from '../src/fetch-feed'
 import { createHttpClient } from '../src/http'
+import { MAX_INTERVAL_SEC } from '../src/schedule'
 import { FixtureServer, longHtml, rss } from './fixture-server'
 
 let t: TestDb
@@ -484,6 +485,26 @@ describe('fetchFeed', () => {
     expect(rows).toHaveLength(3)
     const after = await feedRow(feedId)
     expect(after.fetchIntervalSec).toBeGreaterThanOrEqual(before.fetchIntervalSec)
+  })
+
+  test('keeps jitter out of the stored interval, so it cannot ratchet past the cap', async () => {
+    // random() === 1 is the top of the ±10% spread. Jitter used to be written to
+    // fetch_interval_sec and read back as the next currentSec, so it compounded on every
+    // backoff step and pushed the column past MAX_INTERVAL_SEC instead of settling on it.
+    const jittery = { now: () => NOW, random: () => 1 }
+    server.cached('/feed.xml', threeItems(), '"v1"')
+    const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
+    await fetchFeed(t.db, http, feedId, jittery)
+
+    for (let i = 0; i < 5; i++) {
+      expect(await fetchFeed(t.db, http, feedId, jittery)).toEqual({ status: 'unchanged' })
+      expect((await feedRow(feedId)).fetchIntervalSec).toBeLessThanOrEqual(MAX_INTERVAL_SEC)
+    }
+
+    const feed = await feedRow(feedId)
+    expect(feed.fetchIntervalSec).toBe(MAX_INTERVAL_SEC)
+    // The wake-up still carries the jitter the column no longer keeps.
+    expect(feed.nextFetchAt?.getTime()).toBe(NOW.getTime() + MAX_INTERVAL_SEC * 1.1 * 1000)
   })
 
   test('updates changed articles and bumps the content version', async () => {

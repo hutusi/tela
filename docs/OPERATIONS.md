@@ -172,7 +172,9 @@ First run: `cd apps/web && bunx playwright install chromium`.
 - Logs are JSON lines on stdout/stderr. `feed fetch failed` lines carry `kind` (`timeout`,
   `network`, `http_429`, `parse`, …) and the feed id.
 - **Fetch one feed now**: `DATABASE_URL=… bun run worker:once fetch <feedUrl>` (creates the feed if
-  needed). `… discover <url>` prints candidates; `… extract <articleId>` runs Readability.
+  needed). `… discover <url>` prints candidates; `… extract <articleId>` runs Readability. If the
+  worker has not created pg-boss yet, fetch still stores the feed and warns that no title jobs
+  were queued.
 - **Revive a dead feed**: `update feeds set status = 'active', error_count = 0, next_fetch_at =
   now() where id = …`. The daily maintenance job does this automatically after seven days.
 - **Inspect the queue**: `select name, policy from pgboss.queue`; failed jobs land in
@@ -193,6 +195,11 @@ First run: `cd apps/web && bunx playwright install chromium`.
   rows; `overdue` feeds → the fetch role is down or too slow (raise `FETCH_CONCURRENCY` or add a
   fetch instance); `oldestSec` high on `translate.body` → the provider is slow or the daily budget
   is exhausted (`LLM_DAILY_BUDGET_TOKENS`).
+- **Drain a dead letter once you have dealt with it.** `problems` flags a dead-letter queue that
+  holds *any* job, so one job left lying around keeps every health line at `warn` for its full
+  30-day retention and the signal is gone. Check the work was covered another way — for a title,
+  `select title from article_translations where article_id = …` — then
+  `delete from pgboss.job where name = '<queue>.dead' and id = '<id>'`.
 
 ### WebSub
 - Turn on with `WEBSUB_ENABLED=1` on the fetch/scheduler workers once `PUBLIC_URL` is the real
@@ -255,6 +262,38 @@ First run: `cd apps/web && bunx playwright install chromium`.
   translations keep their `model` label, so old and new output can be compared.
 - **Force a retranslation** of an article: `delete from article_translations where article_id = …`
   (the block cache stays; use `delete from translations where model = '…'` to drop a model's output).
+- **Find posts with no translated title**, the shape a silently-failed or never-queued title job
+  leaves behind — there is no job row to inspect, so the articles themselves are the only record:
+
+  ```sql
+  select a.id, a.feed_id, a.title, a.source_lang, l.lang
+  from articles a
+  join feeds f on f.id = a.feed_id
+  join sites s on s.id = f.site_id
+  cross join (values ('zh-Hans'), ('en')) l(lang)
+  left join article_translations t on t.article_id = a.id and t.target_lang = l.lang
+  where a.source_lang is distinct from l.lang
+    and not s.translation_opt_out
+    and (t.article_id is null or t.title is null);
+  ```
+
+  With the translate worker running, queue a newest-first batch with
+  `DATABASE_URL=… bun run worker:once repair-titles [limit]`. The default is 500 pairs and the
+  maximum is 5,000. The whole batch is one `INSERT … SELECT`, so a 5,000-pair run is one round
+  trip; the JSON result reports `enqueued`.
+
+  It is safe to run beside the worker: candidates exclude every pair that already has a job in
+  `created`, `retry` or `active`, which the singleton key alone would not — pg-boss's `short`
+  policy dedups created jobs only. Losing the remaining race costs one duplicate provider call:
+  read committed still allows a job to be activated between the statement's snapshot and its
+  insert, and nothing can prevent that under `short` (excluding active jobs would need the
+  `exclusive` policy, which would break the budget-deferral re-send and take a queue migration).
+
+  `enqueued: 0` means "nothing missing and idle", not "all titles are in": let `translate.title`
+  drain, then rerun, and a repeat `enqueued: 0` with an empty queue is done. Titles that keep
+  coming back are failing, not queueing — check `translate.title.dead` and the worker's
+  `title translation failed` lines. The command skips sites that opted out and refuses to run
+  before the worker has created the queue. Never insert into `pgboss.job` by hand.
 - **Add a reading language**: append it to `READING_LANGUAGES` in `packages/shared`, add the
   name to `LANGUAGE_NAMES`, and (if it is also a UI locale) a message catalog.
 - **Spot-check quality**: `LLM_PROVIDER=bailian BAILIAN_API_KEY=… bun run --filter @tela/llm spot-check`

@@ -20,6 +20,11 @@ export type TranslateBlocksInput = {
    * sent, so one article costs a bounded number of calls.
    */
   maxSourceTokens?: number
+  /**
+   * Block ids whose translation may equal their source. This is deliberately per-block: a title
+   * can be a name that stays unchanged while prose beside it still needs the echo guard.
+   */
+  allowIdenticalBlockIds?: readonly string[]
   /** Called after every successful provider call, so progress can be persisted before the next. */
   onChunk?: (chunk: ChunkResult) => Promise<void>
   /**
@@ -34,6 +39,12 @@ export type TranslateBlocksOutcome = {
   /** id → validated translated tagged text */
   translated: Map<string, string>
   failed: Array<{ id: string; reason: string }>
+  /**
+   * Ids accepted only because `allowIdenticalBlockIds` permitted an echo of the source. The
+   * caller decides whether such a block is safe to write to the shared, content-addressed
+   * translation cache — for a title it is not, see translateArticleTitle.
+   */
+  echoed: Set<string>
   usage: TranslationUsage[]
   /** The deadline passed with blocks still unattempted. */
   stopped: boolean
@@ -53,6 +64,8 @@ export async function translateBlocks(
   const failed = new Map<string, string>()
   const usage: TranslationUsage[] = []
   const bySource = new Map(input.blocks.map((b) => [b.id, b.text]))
+  const allowIdentical = new Set(input.allowIdenticalBlockIds ?? [])
+  const echoed = new Set<string>()
   const capped = new Set<string>()
   let accepted = input.blocks
   if (input.maxSourceTokens !== undefined) {
@@ -103,10 +116,14 @@ export async function translateBlocks(
         failed.set(b.id, 'missing from reply')
         continue
       }
-      const check = validateTranslation(b.text, text)
+      const check = validateTranslation(b.text, text, {
+        allowIdentical: allowIdentical.has(b.id),
+      })
       if (check.ok) {
         translated.set(b.id, text)
         chunkTranslated.set(b.id, text)
+        if (check.identical) echoed.add(b.id)
+        else echoed.delete(b.id)
         failed.delete(b.id)
       } else {
         failed.set(b.id, check.reason)
@@ -143,6 +160,7 @@ export async function translateBlocks(
   return {
     translated,
     failed: [...failed.entries()].map(([id, reason]) => ({ id, reason })),
+    echoed,
     usage,
     stopped,
   }

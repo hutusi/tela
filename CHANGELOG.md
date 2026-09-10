@@ -141,6 +141,36 @@ everything so far sits under `[Unreleased]`.
 - **A site is keyed by the home its feed declares**, not by the feed's host, and a declared home
   can never attach a feed to another member's site.
 
+- **An active blog is no longer polled as if it had gone quiet.** The fetch interval is stored
+  with its ±10% jitter applied and read back as the input to the next backoff, so the jitter
+  compounded on every step and the column ratcheted past the 24h ceiling it is clamped to — four
+  production feeds sat between 88 540 s and 93 028 s. The jitter now moves only `next_fetch_at`,
+  which is what it is for: spreading feeds that were fetched together.
+
+- **A feed seeded by hand gets its title translations.** `worker:once fetch` called `fetchFeed`
+  with no options, and `onArticleStored` is the only thing that queues `translate.title` — so
+  every article of the four feeds seeded that way was left untranslatable, with nothing to retry.
+  Fresh databases still ingest before pg-boss exists, and `worker:once repair-titles` safely
+  queues the missing work once the worker has created its queues.
+
+- **A title that translates to itself is kept, not thrown away.** Validation refuses a block the
+  model echoes back, which is right for prose and wrong for a package name or a version string.
+  The rejection was also silent: no row, no dead letter, no retry, so the post kept its original
+  title indefinitely under a badge announcing a translated one. Title blocks now allow an echo;
+  excerpts and bodies keep the safeguard so prose cannot poison their shared cache. Reading and
+  search badges appear only over a title we actually hold. An echo accepted that way is kept out of the shared
+  block cache, which is content-addressed and first-write-wins: a body heading repeating the
+  headline hashes identically and would have inherited that judgement permanently.
+
+- **A Traditional Chinese post says so when it is shown in Simplified.** The list badge compared
+  primary subtags, making it the only place in the codebase that treated `zh-Hant` and `zh-Hans`
+  as one language — the worker translates the pair, the cache namespaces them apart, and the
+  article pane already named both — so a converted title appeared with nothing to indicate it.
+
+- **Title recovery is one statement.** `worker:once repair-titles` looped an insert per job, up to
+  5,000 round trips for one batch. It now hands its candidate select to the job sender, which
+  evaluates the in-flight exclusion against the snapshot it inserts from.
+
 ### Security
 
 - **Outbound fetches are pinned to vetted addresses.** The worker resolves every host itself and

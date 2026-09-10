@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { readingHref } from '@/app/reading/href'
 import { AppHeader } from '@/components/app-header'
+import { displayTitle, showsTranslationBadge } from '@/components/shows-translation'
 import { SiteCard } from '@/components/site-card'
 import { getSessionUser } from '@/lib/auth'
 import { relativeTime } from '@/lib/format'
@@ -79,30 +80,38 @@ export default async function SearchPage({ searchParams }: Props) {
               <p className="text-[13.5px] text-muted">{t('noArticles')}</p>
             ) : (
               <div className="flex flex-col" data-testid="search-articles">
-                {hits.map((hit) => (
-                  <Link
-                    key={hit.id}
-                    href={readingHref({ feedId: hit.feedId, articleId: hit.id })}
-                    className="flex flex-col gap-1 border-t border-line py-3.5 text-ink hover:bg-hover hover:no-underline"
-                    data-testid="article-hit"
-                  >
-                    <span className="flex items-center gap-2 text-xs text-muted">
-                      <span>{hit.siteTitle ?? hit.feedTitle}</span>
-                      {hit.sourceLang && hit.sourceLang !== readingLang ? (
-                        <span className="rounded border border-line px-1.5 py-px text-[10.5px] uppercase tracking-wide">
-                          {languageBadge(hit.sourceLang)} → {languageBadge(readingLang)}
-                        </span>
+                {hits.map((hit) => {
+                  const showBadge = showsTranslationBadge(
+                    hit.sourceLang,
+                    readingLang,
+                    hit.translatedTitle,
+                  )
+                  // The query matched `translated_title` in SQL, so the translation is the text
+                  // the reader is looking for -- render it even where the badge stays quiet.
+                  const shownTitle = displayTitle(hit.title, hit.translatedTitle)
+                  return (
+                    <Link
+                      key={hit.id}
+                      href={readingHref({ feedId: hit.feedId, articleId: hit.id })}
+                      className="flex flex-col gap-1 border-t border-line py-3.5 text-ink hover:bg-hover hover:no-underline"
+                      data-testid="article-hit"
+                    >
+                      <span className="flex items-center gap-2 text-xs text-muted">
+                        <span>{hit.siteTitle ?? hit.feedTitle}</span>
+                        {showBadge ? (
+                          <span className="rounded border border-line px-1.5 py-px text-[10.5px] uppercase tracking-wide">
+                            {languageBadge(hit.sourceLang ?? '')} → {languageBadge(readingLang)}
+                          </span>
+                        ) : null}
+                        {hit.at ? <span>{relativeTime(hit.at, locale)}</span> : null}
+                      </span>
+                      <span className="font-serif text-[18px] leading-snug">{shownTitle}</span>
+                      {shownTitle !== hit.title ? (
+                        <span className="text-[13px] text-ink-2">{hit.title}</span>
                       ) : null}
-                      {hit.at ? <span>{relativeTime(hit.at, locale)}</span> : null}
-                    </span>
-                    <span className="font-serif text-[18px] leading-snug">
-                      {hit.translatedTitle ?? hit.title}
-                    </span>
-                    {hit.translatedTitle && hit.translatedTitle !== hit.title ? (
-                      <span className="text-[13px] text-ink-2">{hit.title}</span>
-                    ) : null}
-                  </Link>
-                ))}
+                    </Link>
+                  )
+                })}
               </div>
             )}
           </section>

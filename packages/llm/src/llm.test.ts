@@ -6,7 +6,7 @@ import { buildUserPayload } from './prompt'
 import { configFromEnv, isAccidentalMock } from './providers'
 import { type TranslateBlocksInput, translateBlocks } from './translate'
 import { createSdkTranslator, parseJsonReply, parseTranslations } from './translator'
-import type { TranslationRequest } from './types'
+import type { TranslationRequest, Translator } from './types'
 import { validateTranslation } from './validate'
 
 describe('chunking', () => {
@@ -51,6 +51,20 @@ describe('validateTranslation', () => {
   })
   test('short blocks may stay identical (names, labels)', () => {
     expect(validateTranslation('GitHub', 'GitHub').ok).toBe(true)
+  })
+  test('allowIdentical accepts an echo, for titles that are their own translation', () => {
+    // Both are just past SHORT_BLOCK, so the echo check applies and used to reject them: a
+    // package name plus a version, and a pair of map projections.
+    const pkg = 'llm-openrouter 0.7.1'
+    const projections = 'Mercator to Equal Earth'
+    expect(validateTranslation(pkg, pkg)).toMatchObject({ reason: 'identical to source' })
+    expect(validateTranslation(pkg, pkg, { allowIdentical: true }).ok).toBe(true)
+    expect(validateTranslation(projections, projections, { allowIdentical: true }).ok).toBe(true)
+    // It relaxes only that rule; a mangled translation is still refused.
+    expect(validateTranslation(projections, '', { allowIdentical: true })).toMatchObject({
+      ok: false,
+      reason: 'empty translation',
+    })
   })
 })
 
@@ -111,6 +125,33 @@ describe('translateBlocks with the mock translator', () => {
     expect(out.usage).toHaveLength(1)
     expect(calls[0]?.context?.title).toBe('The bakery')
     expect(calls[0]?.strict).toBe(false)
+  })
+
+  test('allows an identical title without exempting prose in the same request', async () => {
+    const translator: Translator = {
+      model: 'echo',
+      translate: async (request) => ({
+        translations: request.blocks.map((block) => ({ id: block.id, text: block.text })),
+        usage: { model: 'echo', inputTokens: 1, outputTokens: 1, latencyMs: 1 },
+      }),
+    }
+    const title = 'llm-openrouter 0.7.1'
+    const excerpt = 'This ordinary prose still needs to be translated for the reader.'
+    const out = await translateBlocks(translator, {
+      blocks: [
+        { id: 'title', text: title },
+        { id: 'excerpt', text: excerpt },
+      ],
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+      allowIdenticalBlockIds: ['title'],
+    })
+    expect(out.translated.get('title')).toBe(title)
+    expect(out.translated.has('excerpt')).toBe(false)
+    expect(out.failed).toEqual([{ id: 'excerpt', reason: 'identical to source' }])
+    // The caller needs to know the title passed only by exemption, so it can keep that judgement
+    // out of the shared, content-addressed cache.
+    expect([...out.echoed]).toEqual(['title'])
   })
 
   test('retries invalid blocks once in strict mode and reports the rest', async () => {

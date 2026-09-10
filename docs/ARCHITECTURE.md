@@ -116,7 +116,8 @@ runtime-agnostic so the web app can reuse discovery; `apps/worker` only wires it
   200 items → upsert articles by dedup key (new rows, or `content_version + 1` when the content hash changed) → fill
   site metadata → learn `content_mode` from three samples → reschedule. Interval = half the
   average gap between posts over 7 days, clamped to 30 min…24 h, ×1.5 when unchanged, raised to the
-  publisher's `ttl`/`max-age` floor, ±10% jitter. Errors back off `interval × 2^n` capped at 7 days;
+  publisher's `ttl`/`max-age` floor; that clamped interval is what `fetch_interval_sec` stores, and
+  ±10% jitter is applied only to the `next_fetch_at` derived from it, so it cannot compound. Errors back off `interval × 2^n` capped at 7 days;
   429/503 honor `Retry-After`; 410 or 30 consecutive errors mark the feed dead; only
   timeouts/resets bump `timeout_streak` (the future cn-flip signal). Permanent redirects
   rewrite `feed_url`.
@@ -174,7 +175,8 @@ declares every queue with its policy, retries, expiry, and a `<name>.dead` dead-
 
 One process; `WORKER_ROLES` filters which `boss.work()` subscriptions start. Feed discovery runs
 in the request path (web) or the CLI rather than through a queue. `bun run worker:once
-<discover|fetch|extract> <arg>` runs any step directly against `DATABASE_URL`.
+<discover|fetch|extract> <arg>` runs any step directly against `DATABASE_URL`;
+`worker:once repair-titles [limit]` queues a bounded repair batch for missing eager titles.
 
 ## Web app
 

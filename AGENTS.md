@@ -44,6 +44,7 @@ bun run db:migrate                   # apply migrations (DATABASE_URL=…)
 bun run db:local --port 54322        # migrated Postgres with the development user, no Docker
 bun run db:prepare                   # the same setup applied to an existing database
 bun run worker:once fetch <feedUrl>  # run one job by hand (DATABASE_URL=…)
+bun run worker:once repair-titles    # requeue missing eager title translations in batches
 cd apps/web && bun run preview       # OpenNext build + local Workers runtime
 ```
 
@@ -97,6 +98,12 @@ Defects that already cost time here, not hypotheticals.
 - **GLM copies straight quotes into JSON unescaped**, invalidating the whole reply and making the job retry into the same reply; `packages/llm` recovers entries one at a time by id.
 - **A queue's policy is fixed at creation.** Change one in code and the worker refuses to start: drain it, `select pgboss.delete_queue('<name>')`, restart.
 - **`LLM_PROVIDER` without a matching key falls back to the mock, and the `translate` role refuses to start on that fallback** — placeholder output would be cached for everyone. Set `LLM_PROVIDER=mock` deliberately for e2e and local runs.
+- **`onArticleStored` is the only thing that queues title translations.** `fetchFeed` stores articles; the caller supplies `titleEnqueuer`. A caller that forgets it ingests articles nothing will ever translate, and nothing retries — that is how 46 live articles ended up with no title job. Any new `fetchFeed` caller passes it.
+- **A title may legitimately translate to itself.** `validateTranslation` rejects an echo, so the title block opts out by id. Excerpts and bodies keep the check, and an echo accepted by that exemption is deliberately **not** written to the shared block cache: it is content-addressed and first-write-wins, so a body `<h1>` repeating the headline hashes identically and would inherit the judgement forever. Note the failure shape this caused: `translateArticleTitle` returning `failed` only warns, and the pg-boss job *completes* — no row, no dead letter, nothing to query.
+- **pg-boss's `short` policy dedups `created` jobs only.** Its unique index is `where state = 'created'`, so a singleton key does not stop a second job while the first is `active` or `retry`. Anything that re-queues work already in flight — recovery commands especially — must check `pgboss.job` itself, not rely on the key.
+- **"Which title do I show?" and "do I badge it?" are different questions.** Answering both with one predicate has been written twice. Display uses the translation whenever one exists — search matches `translated_title` in SQL, so hiding it renders a hit with none of the words typed; the badge additionally needs the languages to differ. `apps/web/src/components/shows-translation.ts`.
+- **`zh-Hant` and `zh-Hans` are different languages here, and comparing language tags means comparing them exactly.** `normalizeLangTag` keeps those two variants and collapses every other tag to its primary subtag before storage, so a stored tag is never regional and a `split('-')` comparison buys nothing — it only merges the one pair the pipeline went out of its way to tell apart. The worker translates between them, the block cache namespaces them separately, `languageBadge` renders `ZH-TW` against `ZH`, and discover lists them as two languages.
+- **Never store a jittered value back into the field the jitter is computed from.** `fetch_interval_sec` fed its own ±10% back in as the next input, so the spread compounded per backoff step and the column climbed past the clamp. Jitter the derived timestamp, not the stored interval.
 
 ## How to
 

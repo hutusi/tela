@@ -221,15 +221,15 @@ async function recordSuccess(
   opts: FetchFeedOptions,
 ) {
   const count = await itemsLast7d(db, feed.id, now)
-  const interval = withJitter(
-    nextIntervalSec({
-      currentSec: feed.fetchIntervalSec,
-      itemsLast7d: count,
-      hadNewItems: args.hadNewItems,
-      floorSec: args.floorSec,
-    }),
-    opts.random,
-  )
+  // Store the clean interval and jitter only the wake-up time. Jittering the stored value too
+  // fed it back in as `currentSec` on the next fetch, so the ±10% compounded on every backoff
+  // step and the column ratcheted past the 24h clamp instead of settling at it.
+  const interval = nextIntervalSec({
+    currentSec: feed.fetchIntervalSec,
+    itemsLast7d: count,
+    hadNewItems: args.hadNewItems,
+    floorSec: args.floorSec,
+  })
   await db
     .update(feeds)
     .set({
@@ -237,7 +237,7 @@ async function recordSuccess(
       timeoutStreak: 0,
       lastError: null,
       lastFetchedAt: now,
-      nextFetchAt: addSeconds(now, interval),
+      nextFetchAt: addSeconds(now, withJitter(interval, opts.random)),
       fetchIntervalSec: interval,
       ...args.extra,
     })

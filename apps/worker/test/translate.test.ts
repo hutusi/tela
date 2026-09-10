@@ -12,7 +12,7 @@ import {
 } from '@tela/db'
 import { requestBodyTranslation, setTranslationStatus } from '@tela/db/queries'
 import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
-import { createMockTranslator, type TranslationRequest } from '@tela/llm'
+import { createMockTranslator, type TranslationRequest, type Translator } from '@tela/llm'
 import { eq, sql } from 'drizzle-orm'
 import { type Job, PgBoss } from 'pg-boss'
 import type { WorkerContext } from '../src/context'
@@ -490,6 +490,102 @@ describe('translateArticleTitle', () => {
       .where(eq(articleTranslations.articleId, article.id))
     expect(after?.status).toBe('done')
     expect(after?.title).toBe('zh-Hans:The bakery that outlived three metro lines')
+  })
+
+  test('keeps a title the model returns unchanged, like a package name', async () => {
+    // 'llm-openrouter 0.7.1' is exactly at the short-block guard, so the echo check applied and
+    // rejected it as 'identical to source'. That failure wrote no row and never retried, so the
+    // post kept its English title forever. A name is its own translation.
+    await seedArticle()
+    const title = 'llm-openrouter 0.7.1'
+    const articleId = await seedArticleWithKey('k-pkg', title)
+    const echo: Translator = {
+      model: 'echo',
+      translate: async (request) => ({
+        translations: request.blocks.map((b) => ({ id: b.id, text: b.text })),
+        usage: { model: 'echo', inputTokens: 1, outputTokens: 1, latencyMs: 1 },
+      }),
+    }
+    expect(
+      await translateArticleTitle({ db: t.db, translator: echo }, articleId, 'zh-Hans'),
+    ).toEqual({ status: 'done' })
+    const [row] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, articleId))
+    expect(row?.title).toBe(title)
+  })
+
+  test('rejects an echoed excerpt so it cannot poison the body cache', async () => {
+    const prose =
+      'This ordinary prose is the whole article and still needs to be translated for the reader.'
+    const { article } = await seedArticle({ html: `<p>${prose}</p>` })
+    const echoExcerpt: Translator = {
+      model: 'partial-echo',
+      translate: async (request) => ({
+        translations: request.blocks.map((block) => ({
+          id: block.id,
+          text: block.id === 'title' ? `zh-Hans:${block.text}` : block.text,
+        })),
+        usage: { model: 'partial-echo', inputTokens: 1, outputTokens: 1, latencyMs: 1 },
+      }),
+    }
+
+    expect(
+      await translateArticleTitle({ db: t.db, translator: echoExcerpt }, article.id, 'zh-Hans'),
+    ).toEqual({ status: 'done' })
+    const [titleRow] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(titleRow?.title).toStartWith('zh-Hans:')
+    expect(titleRow?.excerpt).toBeNull()
+    expect(await t.db.select().from(translations)).toHaveLength(1)
+
+    const calls: TranslationRequest[] = []
+    const body = await translateArticleBody(
+      { db: t.db, translator: createMockTranslator({ calls }) },
+      article.id,
+      'zh-Hans',
+      { onDemand: true },
+    )
+    expect(body).toMatchObject({ status: 'done', translated: 1, cached: 0 })
+    expect(calls).toHaveLength(1)
+  })
+
+  test('keeps an echoed title out of the shared block cache', async () => {
+    // The body repeats the headline, which is common after extraction: a plain <h1>/<p> with the
+    // title's text hashes identically to the title block. The shared cache is first-write-wins,
+    // so an echo cached from the title would decide that text for every article forever.
+    const headline = 'The bakery that outlived three metro lines'
+    const { article } = await seedArticle({ html: `<p>${headline}</p>` })
+    const echo: Translator = {
+      model: 'echo',
+      translate: async (request) => ({
+        translations: request.blocks.map((b) => ({ id: b.id, text: b.text })),
+        usage: { model: 'echo', inputTokens: 1, outputTokens: 1, latencyMs: 1 },
+      }),
+    }
+
+    expect(
+      await translateArticleTitle({ db: t.db, translator: echo }, article.id, 'zh-Hans'),
+    ).toEqual({ status: 'done' })
+    // The reader still gets the title: only the cache entry is withheld.
+    const [titleRow] = await t.db
+      .select()
+      .from(articleTranslations)
+      .where(eq(articleTranslations.articleId, article.id))
+    expect(titleRow?.title).toBe(headline)
+    expect(await t.db.select().from(translations)).toHaveLength(0)
+
+    // So the identical body block still goes to the model rather than inheriting the echo.
+    const body = await translateArticleBody(
+      { db: t.db, translator: createMockTranslator() },
+      article.id,
+      'zh-Hans',
+      { onDemand: true },
+    )
+    expect(body).toMatchObject({ status: 'done', translated: 1, cached: 0 })
   })
 
   test('skips when the language already matches', async () => {
