@@ -9,9 +9,8 @@ describe('displayTitle', () => {
 
   test('does not consult the language pair, unlike the badge', () => {
     // Search matches translated_title in SQL and the worker queues these translations, so
-    // hiding them renders a hit that does not contain what the reader typed.
-    expect(displayTitle('繁體標題', '简体标题')).toBe('简体标题')
-    expect(showsTranslationBadge('zh-Hant', 'zh-Hans', '简体标题')).toBe(false)
+    // hiding them renders a hit that does not contain what the reader typed. An undetected
+    // source language is the one case that is shown without a badge.
     expect(displayTitle('Undetected source', '未知来源')).toBe('未知来源')
     expect(showsTranslationBadge(null, 'zh-Hans', '未知来源')).toBe(false)
   })
@@ -29,6 +28,16 @@ describe('showsTranslationBadge', () => {
 
   test('a post already in the reading language is not, translated title or no', () => {
     expect(showsTranslationBadge('zh-Hans', 'zh-Hans', '标题')).toBe(false)
-    expect(showsTranslationBadge('en-GB', 'en', 'Title')).toBe(false)
   })
+
+  test('Traditional into Simplified is a translation and says so', () => {
+    // The two variants are separate languages everywhere else in the codebase: the worker
+    // queues this pair, translates it, caches it under its own source tag, and the article
+    // pane names both. languageBadge renders it ZH-TW → ZH, not a meaningless ZH → ZH.
+    expect(showsTranslationBadge('zh-Hant', 'zh-Hans', '简体标题')).toBe(true)
+  })
+
+  // No en-GB case here on purpose: normalizeLangTag collapses every tag but the two Chinese
+  // ones to its primary subtag before storage, so a regional variant cannot reach this
+  // predicate. Asserting on one tested an input the pipeline cannot produce.
 })

@@ -562,15 +562,16 @@ test.describe('search', () => {
         title: untranslatedTitle,
         sourceLang: 'zh-Hans',
       })
-      // A translation the badge stays quiet about: en-GB and en share a primary subtag, so no
-      // "EN → EN" badge, but search still matches translated_title and must render it.
+      // A translation the badge stays quiet about. Undetected source language is the only such
+      // case -- fetch-feed stores 'und' as NULL, and titleEnqueuer still queues both reading
+      // languages for it -- but search matches translated_title and must render it.
       const [quiet] = await db
         .insert(articles)
         .values({
           feedId: feed.id,
           dedupKey: `${suffix}-quiet`,
           title: quietOriginal,
-          sourceLang: 'en-GB',
+          sourceLang: null,
         })
         .returning({ id: articles.id })
       if (!quiet) throw new Error('Failed to seed quiet search fixture article')

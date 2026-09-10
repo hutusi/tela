@@ -11,13 +11,19 @@ export function displayTitle(title: string, translatedTitle: string | null): str
 }
 
 /**
- * Whether to badge a row as a cross-language translation.
+ * Whether to badge a row as a translation.
  *
- * Deliberately narrower than `displayTitle`. It requires a translation to actually exist — the
- * badge reads "EN → ZH" and must never hang over an untouched original — and it compares primary
- * subtags, so the translations we hold but should stay quiet about (zh-Hant rendered into
- * zh-Hans, en-GB into en) are shown without a badge that would read "ZH → ZH". An article whose
- * source language was never detected is never claimed as translated either.
+ * Exact tags, like every other language comparison in the codebase — `titleEnqueuer`,
+ * `translateArticleTitle`, `translateArticleBody`, `reader-data.ts`, the block cache and the
+ * discover filter all treat `zh-Hant` and `zh-Hans` as different languages, because they are.
+ * Comparing primary subtags here silently converted a Traditional title to Simplified with
+ * nothing to say so, while the article pane it opened said "Written in 繁體中文. Translated to
+ * 简体中文." — the badge reads ZH-TW → ZH, which is exactly what the reader was missing.
+ *
+ * Regional variants are not a concern: `normalizeLangTag` collapses every tag to its primary
+ * subtag before it is stored, keeping only the two Chinese ones, so `en-GB` never reaches here.
+ * A translation must exist for the badge to appear at all, and an undetected source language
+ * (stored as NULL) is never claimed as translated.
  */
 export function showsTranslationBadge(
   sourceLang: string | null,
@@ -25,5 +31,5 @@ export function showsTranslationBadge(
   translatedTitle: string | null,
 ): boolean {
   if (!sourceLang || translatedTitle === null) return false
-  return sourceLang.split('-')[0] !== readingLang.split('-')[0]
+  return sourceLang !== readingLang
 }
