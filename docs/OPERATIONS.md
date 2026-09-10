@@ -279,14 +279,21 @@ First run: `cd apps/web && bunx playwright install chromium`.
 
   With the translate worker running, queue a newest-first batch with
   `DATABASE_URL=… bun run worker:once repair-titles [limit]`. The default is 500 pairs and the
-  maximum is 5,000. The JSON result reports selected, newly enqueued and already-queued pairs.
+  maximum is 5,000. The whole batch is one `INSERT … SELECT`, so a 5,000-pair run is one round
+  trip; the JSON result reports `enqueued`.
+
   It is safe to run beside the worker: candidates exclude every pair that already has a job in
   `created`, `retry` or `active`, which the singleton key alone would not — pg-boss's `short`
-  policy dedups created jobs only. That also means `selected: 0` says "nothing missing and idle",
-  not "all titles are in": let `translate.title` drain, then rerun, and a repeat `selected: 0`
-  with an empty queue is done. Titles that keep coming back are failing, not queueing. The
-  command skips sites that opted out and refuses to run before the worker has created the queue.
-  Never insert into `pgboss.job` by hand.
+  policy dedups created jobs only. Losing the remaining race costs one duplicate provider call:
+  read committed still allows a job to be activated between the statement's snapshot and its
+  insert, and nothing can prevent that under `short` (excluding active jobs would need the
+  `exclusive` policy, which would break the budget-deferral re-send and take a queue migration).
+
+  `enqueued: 0` means "nothing missing and idle", not "all titles are in": let `translate.title`
+  drain, then rerun, and a repeat `enqueued: 0` with an empty queue is done. Titles that keep
+  coming back are failing, not queueing — check `translate.title.dead` and the worker's
+  `title translation failed` lines. The command skips sites that opted out and refuses to run
+  before the worker has created the queue. Never insert into `pgboss.job` by hand.
 - **Add a reading language**: append it to `READING_LANGUAGES` in `packages/shared`, add the
   name to `LANGUAGE_NAMES`, and (if it is also a UI locale) a message catalog.
 - **Spot-check quality**: `LLM_PROVIDER=bailian BAILIAN_API_KEY=… bun run --filter @tela/llm spot-check`

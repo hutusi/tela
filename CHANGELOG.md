@@ -162,6 +162,15 @@ everything so far sits under `[Unreleased]`.
   block cache, which is content-addressed and first-write-wins: a body heading repeating the
   headline hashes identically and would have inherited that judgement permanently.
 
+- **A Traditional Chinese post says so when it is shown in Simplified.** The list badge compared
+  primary subtags, making it the only place in the codebase that treated `zh-Hant` and `zh-Hans`
+  as one language — the worker translates the pair, the cache namespaces them apart, and the
+  article pane already named both — so a converted title appeared with nothing to indicate it.
+
+- **Title recovery is one statement.** `worker:once repair-titles` looped an insert per job, up to
+  5,000 round trips for one batch. It now hands its candidate select to the job sender, which
+  evaluates the in-flight exclusion against the snapshot it inserts from.
+
 ### Security
 
 - **Outbound fetches are pinned to vetted addresses.** The worker resolves every host itself and
