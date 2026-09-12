@@ -61,10 +61,7 @@ export default async function DashboardPage() {
               />
               <div className="min-w-0 flex-1">
                 <h2 className="truncate font-serif text-[24px] font-medium leading-tight">
-                  <Link
-                    href={`/s/${site.id}`}
-                    className="text-ink hover:no-underline hover:underline"
-                  >
+                  <Link href={`/s/${site.id}`} className="text-ink hover:underline">
                     {site.title ?? displayHost(site.homeUrl)}
                   </Link>
                 </h2>
@@ -102,7 +99,7 @@ export default async function DashboardPage() {
                     <td className="border-b border-line py-2.5 pr-4">
                       <Link
                         href={`/reading?article=${post.id}`}
-                        className="font-serif text-[17px] text-ink hover:no-underline hover:underline"
+                        className="font-serif text-[17px] text-ink hover:underline"
                       >
                         {post.title}
                       </Link>

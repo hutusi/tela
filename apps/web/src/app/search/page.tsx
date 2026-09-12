@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { readingHref } from '@/app/reading/href'
 import { AppHeader } from '@/components/app-header'
+import { SearchField } from '@/components/search-field'
 import { displayTitle, showsTranslationBadge } from '@/components/shows-translation'
 import { SiteCard } from '@/components/site-card'
 import { getSessionUser } from '@/lib/auth'
@@ -51,7 +52,15 @@ export default async function SearchPage({ searchParams }: Props) {
         <h1 className="mb-2 font-serif text-[34px] font-medium leading-tight tracking-tight">
           {query ? t('resultsFor', { query }) : t('title')}
         </h1>
-        <p className="mb-8 text-[15px] text-ink-2">{t('hint')}</p>
+        <p className="mb-6 text-[15px] text-ink-2">{t('hint')}</p>
+
+        {/* The header's field only appears at xl. Below that its search link leads here, so the
+            page has to carry the input or there is no way to run a search at all. */}
+        <SearchField
+          query={query}
+          testId="search-page-input"
+          className="mb-8 flex w-full max-w-[520px] items-center gap-2 rounded-full border border-line bg-white px-4 py-2.5 text-[15px] text-muted focus-within:border-muted xl:hidden"
+        />
 
         {nothing ? (
           <p className="text-muted" data-testid="search-empty">

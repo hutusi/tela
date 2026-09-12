@@ -67,7 +67,7 @@ export function TranslationBar({
               aria-current={active ? 'true' : undefined}
               aria-disabled={disabled ? 'true' : undefined}
               data-testid={`mode-${m}`}
-              className={`rounded-md px-2.5 py-[5px] text-[12.5px] hover:no-underline ${
+              className={`rounded-md px-2.5 py-[5px] text-[12.5px] ${
                 active
                   ? 'bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]'
                   : 'text-muted hover:text-ink'

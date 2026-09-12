@@ -27,10 +27,7 @@ export async function SiteCard({
         <SiteAvatar id={site.id} title={site.title} faviconKey={site.faviconKey} size={40} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 font-medium">
-            <Link
-              href={`/s/${site.id}`}
-              className="truncate text-ink hover:no-underline hover:underline"
-            >
+            <Link href={`/s/${site.id}`} className="truncate text-ink hover:underline">
               {site.title}
             </Link>
             {site.claimed ? (
