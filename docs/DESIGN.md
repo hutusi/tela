@@ -77,7 +77,9 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   scrolls: from `sm` up every other control is `shrink-0`, since squeezed below its one-line width
   each one wraps its label into the 56px bar instead. Below `sm` they stay shrinkable — the phone
   header has no room to spare, and a wrapped pill beats a nav with nothing left to scroll.
-  `styles.e2e.ts` measures this at 640, 768, 800, 1024 and 1280.
+  `styles.e2e.ts` measures this at 640, 768, 800, 1024 and 1280: at most one pill may be clipped
+  from 800 up, and none at all from 1024. The tolerance is in pills rather than pixels because the
+  row measures 335px on macOS and 341px in CI's Linux Chromium.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
   list are sticky and scroll independently. Below `lg` the sidebar is hidden, a `MobileNav`
