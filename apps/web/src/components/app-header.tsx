@@ -6,6 +6,7 @@ import { getSessionUser } from '@/lib/auth'
 import { getCurrentProfile } from '@/lib/profile'
 import { getReadingLangState } from '@/lib/reading'
 import { LocaleSwitcher } from './locale-switcher'
+import { LogoMark } from './logo'
 import { ReadInMenu } from './read-in-menu'
 import { ReadingLangCookieSeed } from './reading-lang-cookie-seed'
 
@@ -45,7 +46,7 @@ export async function AppHeader({ active, query }: { active?: NavKey; query?: st
     <Link
       href={href}
       data-testid={`nav-${key}`}
-      className={`rounded-full px-3 py-1.5 font-medium hover:bg-hover ${active === key ? 'bg-hover text-ink' : 'text-ink-2'}`}
+      className={`rounded-full px-3 py-1.5 font-medium text-ink hover:bg-hover hover:no-underline ${active === key ? 'bg-hover' : ''}`}
     >
       {t(key)}
     </Link>
@@ -54,9 +55,10 @@ export async function AppHeader({ active, query }: { active?: NavKey; query?: st
     <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-line bg-paper px-4 md:gap-7 md:px-7">
       <Link
         href="/"
-        className="font-serif text-[26px] font-semibold tracking-tight text-ink hover:no-underline"
+        className="flex shrink-0 items-center gap-[9px] font-serif text-[26px] font-semibold tracking-tight text-ink hover:no-underline"
       >
-        Tela
+        <LogoMark />
+        <span>Tela</span>
       </Link>
       <nav className="flex min-w-0 gap-1 overflow-x-auto whitespace-nowrap text-sm [scrollbar-width:none]">
         {pill('reading', '/reading')}
