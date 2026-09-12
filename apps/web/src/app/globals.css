@@ -29,41 +29,52 @@
   }
 }
 
-html,
-body {
-  margin: 0;
-  padding: 0;
-  background: var(--color-paper);
-  color: var(--color-ink);
-  -webkit-font-smoothing: antialiased;
-}
+/*
+ * Base element styles, in @layer base so Tailwind utilities can override them.
+ *
+ * Tailwind v4 emits every utility into @layer utilities, and an unlayered declaration outranks
+ * every layered one regardless of specificity. Left unlayered, the `a` rules below beat the class
+ * list on every link: `text-ink` and `hover:no-underline` in the chrome were silently dead, so the
+ * wordmark, the nav pills and every article title rendered accent green and underlined on hover.
+ * Layered, the default still applies to a bare <a> and a class can say otherwise.
+ */
+@layer base {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
 
-body {
-  font-family: var(--font-sans);
-  font-size: 14px;
-}
+  body {
+    font-family: var(--font-sans);
+    font-size: 14px;
+  }
 
-a {
-  color: var(--color-accent);
-  text-decoration: none;
-}
-a:hover {
-  color: var(--color-accent-strong);
-  text-decoration: underline;
-}
+  a {
+    color: var(--color-accent);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--color-accent-strong);
+    text-decoration: underline;
+  }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
 
-::-webkit-scrollbar {
-  width: 8px;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--color-thumb);
-  border-radius: 4px;
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-thumb);
+    border-radius: 4px;
+  }
 }
 
 /*
