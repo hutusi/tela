@@ -172,7 +172,7 @@ export default async function SitePage({ params }: Props) {
                 <li key={a.id} className="border-t border-line py-3">
                   <Link
                     href={`/reading?article=${a.id}`}
-                    className="font-serif text-[19px] font-medium leading-tight text-ink hover:no-underline hover:underline"
+                    className="font-serif text-[19px] font-medium leading-tight text-ink hover:underline"
                   >
                     {a.title}
                   </Link>

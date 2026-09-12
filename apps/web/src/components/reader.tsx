@@ -114,7 +114,7 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
         <button
           type="button"
           onClick={onClose}
-          className="-ml-2.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink hover:no-underline"
+          className="-ml-2.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink"
           data-testid="close-article"
         >
           {t('close')}

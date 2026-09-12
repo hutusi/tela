@@ -91,7 +91,7 @@ export default async function ProfilePage({ params }: Props) {
             <article key={r.id} className="rounded-xl border border-line bg-white p-4">
               <Link
                 href={`/reading?article=${r.article.id}`}
-                className="font-serif text-[19px] font-medium leading-tight text-ink hover:no-underline hover:underline"
+                className="font-serif text-[19px] font-medium leading-tight text-ink hover:underline"
               >
                 {r.article.title}
               </Link>
