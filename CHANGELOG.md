@@ -55,6 +55,10 @@ everything so far sits under `[Unreleased]`.
   deliberately not built — their design should follow the decision about how to open up
   (ADR 0015).
 
+- **A logo.** Two mirrored strands crossing at the centre, in the header beside the wordmark and
+  on a dark tile as the favicon and app icon — until now browser tabs showed the stock Next.js
+  mark. The tile's strands thicken as it shrinks so the crossing survives 16px.
+
 ### Changed
 
 - **Opening an article after the first render does not render the page again.** It had been up to
@@ -170,6 +174,13 @@ everything so far sits under `[Unreleased]`.
 - **Title recovery is one statement.** `worker:once repair-titles` looped an insert per job, up to
   5,000 round trips for one batch. It now hands its candidate select to the job sender, which
   evaluates the in-flight exclusion against the snapshot it inserts from.
+
+- **The chrome said one thing and rendered another.** The `a` rules in `globals.css` sat outside
+  any cascade layer, and an unlayered declaration outranks every layered one — including
+  `@layer utilities`, where Tailwind v4 puts everything. Thirty `hover:no-underline` and every
+  `text-ink` on a link were dead code, so the wordmark, the nav pills, article titles and sidebar
+  rows all rendered accent green and underlined on hover while the class strings read correctly.
+  Base element styles now live in `@layer base`, and `styles.e2e.ts` asserts the computed values.
 
 ### Security
 

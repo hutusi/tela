@@ -46,6 +46,7 @@ bun run db:prepare                   # the same setup applied to an existing dat
 bun run worker:once fetch <feedUrl>  # run one job by hand (DATABASE_URL=…)
 bun run worker:once repair-titles    # requeue missing eager title translations in batches
 cd apps/web && bun run preview       # OpenNext build + local Workers runtime
+cd apps/web && bun run icons         # redraw icon.svg, favicon.ico, apple-icon.png from the mark
 ```
 
 ## Development workflow
@@ -91,6 +92,7 @@ Defects that already cost time here, not hypotheticals.
 - **`revalidatePath` in a server action re-renders the page inside the action's own response**, and a `router.refresh()` in the caller renders it again. On `/reading` that was two full renders of a three-pane page for a value the caller already held. Revalidate only when server state changed and the caller has no optimistic path; never pair it with a refresh (ADR 0016).
 - **`router.refresh()` on a timer re-renders the whole page.** Waiting on background work polls `/api/reading/state` for one row and re-fetches only the article pane from `/api/reading/article` when something actually changed (ADR 0017).
 - **Two owners of one piece of state is the bug, not the symptom.** On `/reading` the URL and Next's cached server state both claim to know which article is open, and they disagree after a `pushState` entry is restored. Settling that inline, per trigger, was wrong three reviews running; the rule now lives in `apps/web/src/lib/reader-navigation.ts` where it can be read and tested (ADR 0017).
+- **An unlayered rule in `globals.css` beats every Tailwind utility.** Tailwind v4 emits utilities into `@layer utilities`, and an unlayered declaration outranks every layered one whatever its specificity. The `a { }` block sat outside a layer: 30 `hover:no-underline` and every `text-ink` on a link were dead code while the class strings still read correctly, so the whole chrome rendered accent green and underlined on hover. Base element styles go in `@layer base`; `styles.e2e.ts` asserts the computed values, because nothing in the JSX shows this.
 - **Two Tailwind utilities for the same property under different variants have no defined winner.** `data-[read=1]:opacity-[.62]` against `data-[active=1]:opacity-100` resolves by Tailwind's emission order, not by the order in the class string. Where one must beat the other, write both in `globals.css` and let source order say so.
 - **A Next route file may only export handlers** — a helper exported beside `GET` breaks the build. Give it its own module and its own test.
 - **Create the abort signal once per request, not inside the redirect loop**, or every hop gets the full timeout again: 100 ms was observed taking ~500 ms through five redirects.
