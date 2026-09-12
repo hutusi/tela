@@ -19,7 +19,11 @@ export default defineConfig({
     locale: 'en-US',
   },
   projects: [
-    { name: 'chromium', testMatch: /reader\.e2e\.ts/, use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      testMatch: /(reader|styles)\.e2e\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     // The stacked fallback below the desktop breakpoint: list → article as a page. A Chromium
     // device profile so CI needs only one browser download.
     { name: 'mobile', testMatch: /mobile\.e2e\.ts/, use: { ...devices['Pixel 7'] } },
