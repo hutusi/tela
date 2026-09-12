@@ -48,14 +48,31 @@ test.describe('stylesheet', () => {
     await page.goto('/reading')
     // .first(): earlier specs add feeds, so by the time this runs the name is not unique.
     await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).first().click()
-    await page.getByTestId('article-row').first().click()
-    await expect(page.locator('.article-body')).toBeVisible()
+    // Wait for this feed's own list before reaching into it. Clicking straight through picked
+    // whichever row "All articles" still had, which is a different post that need not have a body.
+    await expect(page).toHaveURL(/\/reading\?feed=\d+/)
+    await expect(page.getByTestId('article-row').first()).toBeVisible()
+
+    // Not every post contains a link, so walk until one does rather than trusting row zero. The
+    // title match is what proves the pane has actually swapped: it arrives from a route handler,
+    // so the previous article's body stays on screen until it does.
+    const rows = page.getByTestId('article-row')
+    const tries = Math.min(await rows.count(), 5)
+    let link: Locator | null = null
+    for (let i = 0; i < tries && link === null; i++) {
+      const row = rows.nth(i)
+      const title = (await row.locator('h2').textContent())?.trim() ?? ''
+      await row.click()
+      await expect(page.getByTestId('article-title')).toHaveText(title)
+      const body = page.locator('.article-body').first()
+      await expect(body).toBeVisible()
+      if ((await body.locator('a').count()) > 0) link = body.locator('a').first()
+    }
 
     // The .article-body rules stay unlayered on purpose. Prose links need an affordance the
     // chrome does not, and layering them alongside the rest would take it away everywhere.
-    const link = page.locator('.article-body a').first()
-    await expect(link).toBeAttached()
-    expect(await decoration(link)).toBe('underline')
+    expect(link, 'no post in this feed has a link in its body').not.toBeNull()
+    expect(await decoration(link as Locator)).toBe('underline')
   })
 
   /**
@@ -99,6 +116,15 @@ test.describe('stylesheet', () => {
     await expect(page.getByTestId('search-input')).toBeHidden()
     await page.getByTestId('search-link').click()
     await expect(page).toHaveURL(/\/search$/)
+
+    // Arriving is not the point — the link was a dead end while the only input on the site was the
+    // header's, which is hidden at this width. The page has to carry one that submits.
+    const field = page.getByTestId('search-page-input')
+    await expect(field).toBeVisible()
+    await field.fill('Julia')
+    await field.press('Enter')
+    await expect(page).toHaveURL(/\/search\?q=Julia/)
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Julia')
 
     await page.setViewportSize({ width: 1280, height: 900 })
     await page.goto('/reading')

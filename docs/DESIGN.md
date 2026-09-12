@@ -69,6 +69,10 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   the wider desktop spacing at `lg`, the 240px search field at `xl`. Turning the wordmark and the
   field on together at one breakpoint is what previously left 768–1100px with a 4px-wide nav and a
   page that scrolled sideways.
+- `SearchField` is the site's one search input, and `/search` renders it below `xl` while the
+  header renders it from `xl` — exactly one is visible at any width. The page needs its own copy
+  because the header's collapsed search link lands there: without it the link reaches a results
+  page with nothing to type into.
 - **The nav is the only control in the header allowed to shrink**, because it is the only one that
   scrolls: from `sm` up every other control is `shrink-0`, since squeezed below its one-line width
   each one wraps its label into the 56px bar instead. Below `sm` they stay shrinkable — the phone
@@ -94,7 +98,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 `AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `ArticleList`, `Reader`,
 `TranslationBar`, `LikeButton`, `MarkRead`, `RequestTranslation`, `AutoRefresh`, `EmptyState`,
-`LogoMark`, `Swatch`, `SiteAvatar`, `SiteCard`, `RecommendPopover`. Discover's hero, topic chips,
+`LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `RecommendPopover`. Discover's hero, topic chips,
 language menu (a native `<details>` dropdown), and claim banner live in `app/discover/page.tsx`.
 
 Recommend (from the design): the reader's action row holds Like and Recommend pills; Recommend

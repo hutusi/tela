@@ -9,6 +9,7 @@ import { LocaleSwitcher } from './locale-switcher'
 import { LogoMark } from './logo'
 import { ReadInMenu } from './read-in-menu'
 import { ReadingLangCookieSeed } from './reading-lang-cookie-seed'
+import { SearchField } from './search-field'
 
 type NavKey = 'reading' | 'discover' | 'dashboard' | 'settings'
 
@@ -85,23 +86,11 @@ export async function AppHeader({ active, query }: { active?: NavKey; query?: st
       >
         <span aria-hidden="true">⌕</span>
       </Link>
-      <form
-        action="/search"
-        method="get"
+      <SearchField
+        query={query}
+        testId="search-input"
         className="hidden w-60 min-w-0 items-center gap-2 rounded-full border border-line bg-white px-3.5 py-1.5 text-[13px] text-muted focus-within:border-muted xl:flex"
-      >
-        <span aria-hidden="true">⌕</span>
-        <input
-          type="search"
-          name="q"
-          defaultValue={query ?? ''}
-          placeholder={t('search')}
-          aria-label={t('search')}
-          maxLength={100}
-          data-testid="search-input"
-          className="w-full bg-transparent text-ink outline-none placeholder:text-muted"
-        />
-      </form>
+      />
       {user ? (
         <Suspense fallback={null}>
           <ReadInMenuAsync />

@@ -180,7 +180,8 @@ everything so far sits under `[Unreleased]`.
   that could absorb it and rendered 4px wide, leaving no way to reach Dashboard or Settings between
   768px and roughly 1100px. The controls now arrive across `lg` and `xl`, search collapses to a
   link below `xl` rather than a field that crowds the nav out, and the full nav is present from
-  800px. `styles.e2e.ts` measures the header at 640, 768, 800, 1024 and 1280.
+  800px. The search page carries the input itself below `xl`, so that link leads somewhere a query
+  can be typed. `styles.e2e.ts` measures the header at 640, 768, 800, 1024 and 1280.
 
 - **The chrome said one thing and rendered another.** The `a` rules in `globals.css` sat outside
   any cascade layer, and an unlayered declaration outranks every layered one — including
