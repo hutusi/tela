@@ -11,7 +11,8 @@
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "e2e": "e2e/run.sh"
+    "e2e": "e2e/run.sh",
+    "icons": "bun run scripts/generate-icons.ts"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.20.6",
