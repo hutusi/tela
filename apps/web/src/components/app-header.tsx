@@ -58,7 +58,9 @@ export async function AppHeader({ active, query }: { active?: NavKey; query?: st
         className="flex shrink-0 items-center gap-[9px] font-serif text-[26px] font-semibold tracking-tight text-ink hover:no-underline"
       >
         <LogoMark />
-        <span>Tela</span>
+        {/* Below md the mark carries the brand alone: the header is 28px over the Pixel 7 viewport
+            with the wordmark, and sr-only keeps it as the link's accessible name at every width. */}
+        <span className="sr-only md:not-sr-only">Tela</span>
       </Link>
       <nav className="flex min-w-0 gap-1 overflow-x-auto whitespace-nowrap text-sm [scrollbar-width:none]">
         {pill('reading', '/reading')}

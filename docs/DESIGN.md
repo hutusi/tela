@@ -48,7 +48,9 @@ forms, and the transparent one is primary:
 
 - **Transparent** — `LogoMark` (`apps/web/src/components/logo.tsx`), 28px in the header lockup
   beside the wordmark. Strands in `currentColor` and `accent`, stroke 3.4 on a 48 viewBox, round
-  caps. It sits on the paper; there is no badge behind it.
+  caps. It sits on the paper; there is no badge behind it. Below `md` the mark carries the brand
+  alone — the header does not fit a 412px viewport otherwise — and the wordmark stays as the
+  link's accessible name.
 - **Tiled** — only where the mark needs a shape of its own: `src/app/icon.svg` (32px weight),
   `favicon.ico` (16 and 32) and `apple-icon.png` (180, square-cornered because iOS masks it
   itself). A dark `ink` tile, `rx=11`, strands in `paper` and the lifted accent, on the inset path.
