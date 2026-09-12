@@ -8,7 +8,7 @@ export async function ReadInMenu({ readingLang }: { readingLang: string }) {
   return (
     <form
       action={setReadingLang}
-      className="flex items-center gap-1.5 rounded-full border border-line bg-white py-0.5 pl-3 pr-0.5 text-[12px] font-medium"
+      className="flex items-center gap-1.5 rounded-full border border-line bg-white py-0.5 pl-3 pr-0.5 text-[12px] font-medium sm:shrink-0"
       data-testid="read-in"
     >
       <span className="text-muted">{t('readIn')}</span>

@@ -48,9 +48,8 @@ forms, and the transparent one is primary:
 
 - **Transparent** — `LogoMark` (`apps/web/src/components/logo.tsx`), 28px in the header lockup
   beside the wordmark. Strands in `currentColor` and `accent`, stroke 3.4 on a 48 viewBox, round
-  caps. It sits on the paper; there is no badge behind it. Below `md` the mark carries the brand
-  alone — the header does not fit a 412px viewport otherwise — and the wordmark stays as the
-  link's accessible name.
+  caps. It sits on the paper; there is no badge behind it. Below `lg` the mark carries the brand
+  alone, and the wordmark stays as the link's accessible name.
 - **Tiled** — only where the mark needs a shape of its own: `src/app/icon.svg` (32px weight),
   `favicon.ico` (16 and 32) and `apple-icon.png` (180, square-cornered because iOS masks it
   itself). A dark `ink` tile, `rx=11`, strands in `paper` and the lifted accent, on the inset path.
@@ -62,10 +61,19 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 ## Layout rules
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
-  Reading/Discover/Dashboard/Settings pills (the pill row scrolls horizontally on narrow screens),
-  search field (md+, submits to `/search`), Read-in menu, locale switcher, avatar (accent circle
-  with initial, links to the profile) and sign-out. Pills are ink in every state: the active one is
-  distinguished by its `hover` background alone, never by colour.
+  Reading/Discover/Dashboard/Settings pills, search, Read-in menu, locale switcher, avatar (accent
+  circle with initial, links to the profile) and sign-out. Pills are ink in every state: the active
+  one is distinguished by its `hover` background alone, never by colour.
+- The header holds more controls than a narrow viewport fits, so it arrives in three stages:
+  compact below `lg` (mark only, `gap-2.5`, search as a 34px link to `/search`), the wordmark and
+  the wider desktop spacing at `lg`, the 240px search field at `xl`. Turning the wordmark and the
+  field on together at one breakpoint is what previously left 768–1100px with a 4px-wide nav and a
+  page that scrolled sideways.
+- **The nav is the only control in the header allowed to shrink**, because it is the only one that
+  scrolls: from `sm` up every other control is `shrink-0`, since squeezed below its one-line width
+  each one wraps its label into the 56px bar instead. Below `sm` they stay shrinkable — the phone
+  header has no room to spare, and a wrapped pill beats a nav with nothing left to scroll.
+  `styles.e2e.ts` measures this at 640, 768, 800, 1024 and 1280.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
   list are sticky and scroll independently. Below `lg` the sidebar is hidden, a `MobileNav`

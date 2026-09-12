@@ -175,6 +175,13 @@ everything so far sits under `[Unreleased]`.
   5,000 round trips for one batch. It now hands its candidate select to the job sender, which
   evaluates the in-flight exclusion against the snapshot it inserts from.
 
+- **Tablet-width windows had no navigation.** The header turned on the wordmark and a fixed 240px
+  search field together at `md`, which cost more width than 768px had; the nav was the only item
+  that could absorb it and rendered 4px wide, leaving no way to reach Dashboard or Settings between
+  768px and roughly 1100px. The controls now arrive across `lg` and `xl`, search collapses to a
+  link below `xl` rather than a field that crowds the nav out, and the full nav is present from
+  800px. `styles.e2e.ts` measures the header at 640, 768, 800, 1024 and 1280.
+
 - **The chrome said one thing and rendered another.** The `a` rules in `globals.css` sat outside
   any cascade layer, and an unlayered declaration outranks every layered one — including
   `@layer utilities`, where Tailwind v4 puts everything. Thirty `hover:no-underline` and every
