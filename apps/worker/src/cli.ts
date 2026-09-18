@@ -5,7 +5,7 @@
  *   bun run src/cli.ts fetch <feedUrl>       # ensureFeed + fetchFeed
  *   bun run src/cli.ts extract <articleId>
  *   bun run src/cli.ts repair-titles [limit]
- *   bun run src/cli.ts seed-discover [--dry-run] [--limit N] [--only <match>]
+ *   bun run src/cli.ts seed-discover [--dry-run] [--limit N] [--skip N] [--only <match>]
  */
 import { createDb } from '@tela/db'
 import { discoverFeeds, ensureFeed, fetchFeed } from '@tela/ingest'
@@ -24,9 +24,9 @@ import {
 
 const USAGE =
   'usage: cli.ts <discover|fetch|extract> <url|id> | cli.ts repair-titles [limit]\n' +
-  '     | cli.ts seed-discover [--dry-run] [--limit N] [--only <match>]'
+  '     | cli.ts seed-discover [--dry-run] [--limit N] [--skip N] [--only <match>]'
 
-const VALUE_FLAGS = new Set(['limit', 'only'])
+const VALUE_FLAGS = new Set(['limit', 'skip', 'only'])
 
 function usage(message?: string): never {
   if (message) console.error(message)
@@ -83,7 +83,7 @@ if (!takesArg && !seeding && flags.size > 0) usage(`${command} takes no flags`)
 if (seeding) {
   if (arg) usage('seed-discover takes no positional argument')
   for (const name of flags.keys()) {
-    if (!['dry-run', 'limit', 'only'].includes(name)) usage(`unknown flag --${name}`)
+    if (!['dry-run', 'limit', 'skip', 'only'].includes(name)) usage(`unknown flag --${name}`)
   }
 }
 
@@ -113,11 +113,13 @@ try {
     console.log(JSON.stringify(result, null, 2))
   } else if (seeding) {
     const limit = intFlag(flags.get('limit'), 'limit', CURATED_SITES.length)
+    const skip = intFlag(flags.get('skip'), 'skip', CURATED_SITES.length)
     const only = flags.get('only')
     if (only === true) usage('--only needs a value')
     const result = await seedDiscover(db, http, CURATED_SITES, {
       ...(flags.has('dry-run') ? { dryRun: true } : {}),
       ...(limit === undefined ? {} : { limit }),
+      ...(skip === undefined ? {} : { skip }),
       ...(only === undefined ? {} : { only }),
       // Progress goes to stderr as it happens, so a long run is watchable and a crash still
       // leaves a trail of what was done.

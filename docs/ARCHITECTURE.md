@@ -177,7 +177,7 @@ One process; `WORKER_ROLES` filters which `boss.work()` subscriptions start. Fee
 in the request path (web) or the CLI rather than through a queue. `bun run worker:once
 <discover|fetch|extract> <arg>` runs any step directly against `DATABASE_URL`;
 `worker:once repair-titles [limit]` queues a bounded repair batch for missing eager titles;
-`worker:once seed-discover [--dry-run] [--limit N] [--only <match>]` applies the editorial list in
+`worker:once seed-discover [--dry-run] [--limit N] [--skip N] [--only <match>]` applies the editorial list in
 `apps/worker/src/seed/curated-sites.ts` (ADR 0018).
 
 ## Web app

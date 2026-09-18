@@ -29,7 +29,6 @@ export const CURATED_SITES = [
   // English
   { feedUrl: 'https://simonwillison.net/atom/everything/', topics: ['tech'] },
   { feedUrl: 'https://jvns.ca/atom.xml', topics: ['tech'] },
-  { feedUrl: 'https://rachelbythebay.com/w/atom.xml', topics: ['tech'] },
   { feedUrl: 'https://fasterthanli.me/index.xml', topics: ['tech'] },
   { feedUrl: 'https://overreacted.io/rss.xml', topics: ['tech'] },
   { feedUrl: 'https://daringfireball.net/feeds/main', topics: ['tech'] },
@@ -78,3 +77,9 @@ export const CURATED_SITES = [
   { feedUrl: 'https://www.44bits.io/ko/feed/all', topics: ['tech'], note: '한국어' },
   { feedUrl: 'https://blog.koalite.com/feed/', topics: ['tech'], note: 'Español' },
 ] as const satisfies readonly CuratedSite[]
+
+// Deliberately absent: rachelbythebay.com. She runs a feed-reader conformance test and blocks
+// readers that poll too often — seeding her blog three times in fifteen minutes while staging
+// this earned an outright connection refusal. Our scheduled fetches do honour conditional
+// requests, so the entry is defensible; re-add it only after verifying that from an address we
+// have not already burned, and never inside a `--skip`-less widening run.

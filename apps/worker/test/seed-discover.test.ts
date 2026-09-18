@@ -179,7 +179,7 @@ describe('seedDiscover', () => {
     })
   })
 
-  test('limit and only select entries', async () => {
+  test('limit, skip and only select entries', async () => {
     const one = blog('/one.xml', ['One'])
     const two = blog('/two.xml', ['Two'])
     const three = blog('/three.xml', ['Three'])
@@ -187,6 +187,10 @@ describe('seedDiscover', () => {
 
     const limited = await seedDiscover(t.db, http, entries, { limit: 2 })
     expect(limited.entries.map((e) => e.feedUrl)).toEqual([one.feedUrl, two.feedUrl])
+
+    // Staging covers each blog once rather than re-fetching the earlier ones every widening.
+    const next = await seedDiscover(t.db, http, entries, { skip: 2, limit: 2 })
+    expect(next.entries.map((e) => e.feedUrl)).toEqual([three.feedUrl])
 
     const picked = await seedDiscover(t.db, http, entries, { only: '/three.xml' })
     expect(picked.entries.map((e) => e.feedUrl)).toEqual([three.feedUrl])

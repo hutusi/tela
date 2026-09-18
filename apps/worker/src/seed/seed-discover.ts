@@ -49,6 +49,12 @@ export type SeedDiscoverOptions = {
   dryRun?: boolean
   /** First N entries in list order, for staging a large seed across runs. */
   limit?: number
+  /**
+   * Drop the first N entries. With `limit`, this makes a staged seed cover each blog once:
+   * widening `limit` alone re-fetches every earlier entry, and a host that counts requests per
+   * hour rather than bytes reads that as a misbehaving reader.
+   */
+  skip?: number
   /** Substring of feedUrl, for retrying the one entry that failed. */
   only?: string
   onEntry?: (report: SeedEntryReport) => void
@@ -61,7 +67,8 @@ function select(
   const matched = opts.only
     ? entries.filter((e) => e.feedUrl.includes(opts.only as string))
     : entries
-  return opts.limit === undefined ? matched : matched.slice(0, opts.limit)
+  const from = opts.skip ?? 0
+  return matched.slice(from, opts.limit === undefined ? undefined : from + opts.limit)
 }
 
 type SiteFacts = {

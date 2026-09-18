@@ -130,12 +130,16 @@ distinct subscribers on an unclaimed site.
 
 - **Apply the editorial list**: `DATABASE_URL=… bun run worker:once seed-discover`, which fetches
   every blog in `apps/worker/src/seed/curated-sites.ts` and features its site with the list's
-  topics. Flags: `--dry-run` (resolve and report, no network and no writes), `--limit N` (the
-  first N entries, for staging a large seed across runs — widening re-runs the earlier ones at the
-  cost of one conditional GET each), `--only <match>` (substring of the feed URL, for retrying one
-  failure). Re-running is the normal case: a second run answers 304, stores nothing, and skips a
-  write that would change nothing. Exit 1 means at least one entry errored; the report still
-  prints.
+  topics. Flags: `--dry-run` (resolve and report, no network and no writes), `--limit N` and
+  `--skip N` (a window into the list, for staging a large seed across runs), `--only <match>`
+  (substring of the feed URL, for retrying one failure). Re-running is the normal case: a second
+  run answers 304, stores nothing, and skips a write that would change nothing. Exit 1 means at
+  least one entry errored; the report still prints.
+- **Stage with `--skip`, not by widening `--limit`.** Widening alone re-fetches every earlier
+  entry, and a blog that counts requests per hour rather than bytes reads three conditional GETs
+  in fifteen minutes as a misbehaving reader — rachelbythebay.com, which runs a feed-reader
+  conformance test, refused the connection outright after exactly that. `--limit 5`, then
+  `--skip 5 --limit 10`, then `--skip 15` covers each blog once.
 - **Start the worker first.** pg-boss creates `translate.title` on start, and a seed run against a
   database it has never touched warns `titleQueue: missing` and seeds articles with no title
   translations. The recovery is `bun run worker:once repair-titles`, which is also how to pick up
