@@ -1,4 +1,8 @@
-import { type TranslationStatus, UNREAD_HORIZON_DAYS } from '@tela/shared'
+import {
+  COMMUNITY_LISTING_MIN_READERS,
+  type TranslationStatus,
+  UNREAD_HORIZON_DAYS,
+} from '@tela/shared'
 import { and, desc, eq, gt, isNotNull, isNull, lt, or, sql } from 'drizzle-orm'
 import type { Db, DbExecutor } from '../client'
 import {
@@ -512,6 +516,14 @@ export async function recomputeReaderCount(db: Db, feedId: number): Promise<void
       join feeds f on f.id = sub.feed_id where f.site_id = s.id
     )
     where s.id = (select site_id from feeds where id = ${feedId})
+  `)
+  // The community door into Discover (ADR 0018): enough distinct readers list a site nobody has
+  // claimed. One-way — an unsubscribe never pulls a site back out — and it touches neither an
+  // editorial pick nor a site an operator rejected, both of which are already decided.
+  await db.execute(sql`
+    update sites set listing = 'listed'
+    where id = (select site_id from feeds where id = ${feedId})
+      and listing = 'private' and reader_count >= ${COMMUNITY_LISTING_MIN_READERS}
   `)
 }
 

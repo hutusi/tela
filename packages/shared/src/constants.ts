@@ -19,6 +19,14 @@ export const USER_DAILY_TRANSLATION_TOKENS = 400_000
 export const SITE_LISTINGS = ['private', 'listed', 'featured', 'rejected'] as const
 export type SiteListing = (typeof SITE_LISTINGS)[number]
 
+/**
+ * Distinct subscribers that list a site in Discover without anyone claiming it. Three, not one:
+ * at one, "a site somebody subscribed to" is one member's reading list, published. Three makes
+ * the signal an aggregate nobody can read backwards, and costs nothing while the beta is small
+ * because nothing reaches it. Promotion is one-way; `rejected` is the veto (ADR 0018).
+ */
+export const COMMUNITY_LISTING_MIN_READERS = 3
+
 export const FEED_FORMATS = ['rss', 'atom', 'rdf', 'json'] as const
 export type FeedFormat = (typeof FEED_FORMATS)[number]
 
