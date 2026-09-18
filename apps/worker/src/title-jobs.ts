@@ -11,16 +11,24 @@ export const TITLE_JOBS_PER_FETCH = 100
 export const DEFAULT_TITLE_REPAIR_LIMIT = 500
 export const MAX_TITLE_REPAIR_LIMIT = 5_000
 
-/** Whether the pg-boss schema and translate.title queue are ready to accept work. */
-export async function titleQueueAvailable(db: Db): Promise<boolean> {
+/**
+ * Whether the pg-boss schema exists and holds this queue. The worker creates both on start, so
+ * a one-off command run against a database the worker has never touched finds neither.
+ */
+export async function queueAvailable(db: Db, name: string): Promise<boolean> {
   const [table] = await db.execute<{ queue_table: string | null }>(
     sql`select to_regclass('pgboss.queue')::text as queue_table`,
   )
   if (!table?.queue_table) return false
   const rows = await db.execute<{ name: string }>(
-    sql`select name from pgboss.queue where name = ${QUEUES.translateTitle}`,
+    sql`select name from pgboss.queue where name = ${name}`,
   )
   return rows.length > 0
+}
+
+/** Whether translate.title is ready to accept work. */
+export async function titleQueueAvailable(db: Db): Promise<boolean> {
+  return queueAvailable(db, QUEUES.translateTitle)
 }
 
 /**
