@@ -29,7 +29,15 @@ export type SeedEntryReport = {
   topics: string[]
   topicsChanged: boolean
   curated: boolean
-  reason?: 'dry_run' | 'fetch_failed' | 'no_articles' | 'rejected' | 'claimed'
+  reason?: 'dry_run' | 'fetch_failed' | 'no_articles' | 'rejected' | 'claimed' | 'duplicate'
+  /**
+   * Set when the curated URL turned out to be an alias of a feed already stored: the id it
+   * duplicates. The entry still works; update the list to the canonical URL to stop paying for
+   * the redirect on every run.
+   */
+  duplicateOf?: number
+  /** Why a write would be (or was) withheld, when that is not the whole story of the entry. */
+  withheld?: 'rejected' | 'claimed'
 }
 
 export type SeedDiscoverResult = {
@@ -190,19 +198,46 @@ async function seedOne(
       .select({ siteId: feeds.siteId })
       .from(feeds)
       .where(eq(feeds.id, ensured.feedId))
-    const siteId = feed?.siteId ?? ensured.siteId
+    let feedId = ensured.feedId
+    let siteId = feed?.siteId ?? ensured.siteId
+    let duplicateOf: number | undefined
+
+    // The curated URL permanently redirects onto a feed we already hold. fetchFeed kept both
+    // rows; ours is one we created seconds ago, has no subscriber, and exists only because the
+    // lookup by URL missed — so drop it (articles cascade) and curate the feed it duplicates.
+    // Without this the run is not idempotent: every rerun would add another feed and another
+    // copy of every post, because the first run renamed the feed away from the curated URL.
+    if (result.status === 'fetched' && result.duplicateOf !== undefined && ensured.created) {
+      duplicateOf = result.duplicateOf
+      await db.delete(feeds).where(eq(feeds.id, ensured.feedId))
+      const [canonical] = await db
+        .select({ id: feeds.id, siteId: feeds.siteId })
+        .from(feeds)
+        .where(eq(feeds.id, duplicateOf))
+      feedId = canonical?.id ?? feedId
+      siteId = canonical?.siteId ?? siteId
+    }
     const facts = await siteFacts(db, siteId)
     const report: SeedEntryReport = {
       ...base,
-      feedId: ensured.feedId,
+      feedId,
       siteId,
       siteTitle: facts.title,
       primaryLang: facts.primaryLang,
       fetch: result.status,
-      newArticles: result.status === 'fetched' ? result.newArticles : 0,
+      newArticles:
+        duplicateOf === undefined && result.status === 'fetched' ? result.newArticles : 0,
       articles: facts.articles,
       titleJobs: titles.jobs,
-      outcome: ensured.created ? 'created' : result.status === 'fetched' ? 'updated' : 'unchanged',
+      outcome:
+        duplicateOf !== undefined
+          ? 'unchanged'
+          : ensured.created
+            ? 'created'
+            : result.status === 'fetched'
+              ? 'updated'
+              : 'unchanged',
+      ...(duplicateOf === undefined ? {} : { duplicateOf, reason: 'duplicate' as const }),
       ...('kind' in result ? { errorKind: result.kind } : {}),
       ...('error' in result ? { error: result.error } : {}),
       ...('reason' in result ? { error: result.reason } : {}),
@@ -253,6 +288,13 @@ async function dryRunOne(
     .where(eq(feeds.feedUrl, entry.feedUrl))
   if (!feed) return { ...base, outcome: 'skipped', reason: 'dry_run' }
   const facts = await siteFacts(db, feed.siteId)
+  // Asking curateSite itself rather than re-deriving its rules: a preview that says it will
+  // retopic a claimed site, or relist a rejected one, is worse than no preview.
+  const planned = await curateSite(db, feed.siteId, {
+    listing: 'featured',
+    topics: [...entry.topics],
+    dryRun: true,
+  })
   return {
     ...base,
     outcome: 'skipped',
@@ -262,9 +304,10 @@ async function dryRunOne(
     siteTitle: facts.title,
     primaryLang: facts.primaryLang,
     articles: facts.articles,
-    listing: facts.listing,
-    listingChanged: facts.listing !== 'featured',
-    topics: facts.topics,
-    topicsChanged: facts.topics.join() !== [...entry.topics].join(),
+    listing: planned?.listing ?? facts.listing,
+    listingChanged: planned?.listingChanged ?? false,
+    topics: planned?.topics ?? facts.topics,
+    topicsChanged: planned?.topicsChanged ?? false,
+    ...(planned?.withheld ? { withheld: planned.withheld } : {}),
   }
 }

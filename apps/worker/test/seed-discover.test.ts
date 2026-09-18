@@ -157,6 +157,36 @@ describe('seedDiscover', () => {
     expect(others.every((s) => s.listing === 'private')).toBe(true)
   })
 
+  test('a curated URL that permanently redirects does not duplicate the blog on a rerun', async () => {
+    // The first run renames the feed to its destination, so the second run's lookup by curated
+    // URL misses and creates a second feed — which then collides on rename. Left alone that is
+    // one blog, twice, with every post twice, and an error on every run from then on.
+    server.redirect('/old.xml', server.url('/new.xml'), 301)
+    server.text(
+      '/new.xml',
+      rss({ link: server.url('/'), items: [{ guid: 'a', title: 'A', link: server.url('/p/1') }] }),
+    )
+    const entry = { feedUrl: server.url('/old.xml'), topics: ['tech'] } as CuratedSite
+
+    const first = await seedDiscover(t.db, http, [entry])
+    expect(first.entries[0]).toMatchObject({ outcome: 'created', curated: true })
+
+    const second = await seedDiscover(t.db, http, [entry])
+    expect(second.entries[0]).toMatchObject({
+      outcome: 'unchanged',
+      reason: 'duplicate',
+      newArticles: 0,
+      curated: true,
+    })
+    expect(second.entries[0]?.duplicateOf).toBe(first.entries[0]?.feedId as number)
+    expect(second.totals.errors).toBe(0)
+
+    const third = await seedDiscover(t.db, http, [entry])
+    expect(third.totals.errors).toBe(0)
+    expect(await t.db.select().from(feeds)).toHaveLength(1)
+    expect(await t.db.select().from(articles)).toHaveLength(1)
+  })
+
   test('dry run writes nothing and reports what would change', async () => {
     const entry = blog('/feed.xml', ['Hello'])
     const planned = await seedDiscover(t.db, http, [entry], { dryRun: true })
@@ -176,6 +206,19 @@ describe('seedDiscover', () => {
       listing: 'featured',
       listingChanged: false,
       topicsChanged: false,
+    })
+  })
+
+  test('a dry run does not promise writes curateSite would withhold', async () => {
+    const entry = blog('/feed.xml', ['Hello'])
+    await seedDiscover(t.db, http, [entry])
+    await t.db.update(sites).set({ listing: 'rejected' }).where(sql`true`)
+
+    const planned = await seedDiscover(t.db, http, [entry], { dryRun: true })
+    expect(planned.entries[0]).toMatchObject({
+      listing: 'rejected',
+      listingChanged: false,
+      withheld: 'rejected',
     })
   })
 
@@ -215,5 +258,18 @@ describe('the seed-discover command', () => {
         env: { ...process.env, DATABASE_URL: t.url },
       }),
     ).rejects.toMatchObject({ code: 2 })
+  })
+
+  test('the other commands refuse the seed flags rather than ignoring them', async () => {
+    // `fetch <url> --dry-run` looked like a rehearsal and did a real fetch.
+    for (const argv of [
+      ['fetch', 'https://example.invalid/feed.xml', '--dry-run'],
+      ['repair-titles', '--limit', '5'],
+      ['extract', '1', '--only', 'x'],
+    ]) {
+      await expect(
+        run('bun', ['run', cli, ...argv], { env: { ...process.env, DATABASE_URL: t.url } }),
+      ).rejects.toMatchObject({ code: 2 })
+    }
   })
 })

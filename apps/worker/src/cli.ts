@@ -79,12 +79,15 @@ if (extra.length > 0) usage(`${command} takes at most one argument`)
 const seeding = command === 'seed-discover'
 const takesArg = command === 'discover' || command === 'fetch' || command === 'extract'
 if (takesArg && !arg) usage(`${command} needs an argument`)
-if (!takesArg && !seeding && flags.size > 0) usage(`${command} takes no flags`)
 if (seeding) {
   if (arg) usage('seed-discover takes no positional argument')
   for (const name of flags.keys()) {
     if (!['dry-run', 'limit', 'skip', 'only'].includes(name)) usage(`unknown flag --${name}`)
   }
+} else if (flags.size > 0) {
+  // Every other command ignores flags entirely, so accepting them silently would let
+  // `fetch <url> --dry-run` do a real fetch while looking like a rehearsal.
+  usage(`${command} takes no flags`)
 }
 
 if (command === 'discover') {
