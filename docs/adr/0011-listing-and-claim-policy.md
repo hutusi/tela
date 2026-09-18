@@ -1,6 +1,6 @@
 # 0011 — Listing and claim policy: any feed is subscribable, Discover shows claimed sites
 
-Status: accepted (2026-09-04)
+Status: accepted (2026-09-04). Listing rule superseded by ADR 0018; the claim mechanics stand.
 
 ## Context
 

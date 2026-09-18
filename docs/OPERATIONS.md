@@ -125,7 +125,31 @@ tokens; wrangler cannot), set the `R2_*` variables on the worker, and
 `NEXT_PUBLIC_ASSETS_URL` on the web app.
 
 ### Curation
-- Feature a site: `update sites set listing = 'featured' where id = …`; hide one: `'rejected'`.
+Discover has three doors (ADR 0018): the editorial seed below, a verified claim, and three
+distinct subscribers on an unclaimed site.
+
+- **Apply the editorial list**: `DATABASE_URL=… bun run worker:once seed-discover`, which fetches
+  every blog in `apps/worker/src/seed/curated-sites.ts` and features its site with the list's
+  topics. Flags: `--dry-run` (resolve and report, no network and no writes), `--limit N` (the
+  first N entries, for staging a large seed across runs — widening re-runs the earlier ones at the
+  cost of one conditional GET each), `--only <match>` (substring of the feed URL, for retrying one
+  failure). Re-running is the normal case: a second run answers 304, stores nothing, and skips a
+  write that would change nothing. Exit 1 means at least one entry errored; the report still
+  prints.
+- **Start the worker first.** pg-boss creates `translate.title` on start, and a seed run against a
+  database it has never touched warns `titleQueue: missing` and seeds articles with no title
+  translations. The recovery is `bun run worker:once repair-titles`, which is also how to pick up
+  the tail of a long archive: a fetch stores up to `MAX_ITEMS_PER_FETCH` (200) articles but queues
+  at most `TITLE_JOBS_PER_FETCH` (100) titles.
+- **Cost**: two reading languages, so at most one title job per article per language and at most
+  100 per feed — roughly 3,500 for a 35-blog seed. Bodies stay lazy, so the seed costs nothing
+  until somebody opens a post. Batch it with `--limit` and watch `LLM_DAILY_BUDGET_TOKENS`.
+- **Failure signatures** in a run's report: `too_large` — the feed is over the worker's 5 MB body
+  cap, so use the blog's recent-items feed instead of its full archive; `timeout` on a mainland
+  host — the CLI passes no region policy and never flips a feed itself, so add `region: 'cn'` to
+  that entry; `no_articles` — the feed parsed but held nothing, so the site is left unlisted.
+- Feature a site by hand: `update sites set listing = 'featured' where id = …`; hide one:
+  `'rejected'`, which the seed then leaves alone on every later run.
 - Release a claim so another member can claim the site: `update sites set claimed_by = null,
   claimed_at = null where id = …; delete from site_claims where site_id = …`.
 
