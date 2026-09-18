@@ -22,7 +22,7 @@ export type DiscoverState = {
 export type ImportState = { imported: number | null; error: string | null }
 
 const http = createHttpClient({
-  userAgent: 'Tela/0.1 (+https://tela.app/bot; feed reader)',
+  userAgent: 'Tela/0.1 (+https://tela.ainaive.com; feed reader)',
   timeoutMs: 10_000,
   politenessMs: 0,
   // Tests point discovery at a fixture server on localhost; never set in production.

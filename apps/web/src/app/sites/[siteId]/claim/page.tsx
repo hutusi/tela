@@ -33,7 +33,10 @@ export default async function SiteClaimPage({ params }: Props) {
   const claimedByOther = page.site.claimedBy !== null && page.site.claimedBy !== user.id
   // No token is minted for a site somebody else already proved control of.
   const claim = claimedByOther ? null : await getOrCreateClaim(db, siteId, user.id)
-  const publicUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://tela.app').replace(/\/+$/, '')
+  const publicUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://tela.ainaive.com').replace(
+    /\/+$/,
+    '',
+  )
   const profileUrl = `${publicUrl}/@${profile.handle}`
   const metaSnippet = `<meta name="tela-site-verification" content="${claim?.token ?? ''}">`
   const relMeSnippet = `<link rel="me" href="${profileUrl}">`

@@ -11,7 +11,7 @@ export const VERIFICATION_META = 'tela-site-verification'
 export type VerifyDeps = {
   db: Db
   http: HttpClient
-  /** Public origin of this Tela deployment, for rel="me" links (https://tela.app). */
+  /** Public origin of this Tela deployment, for rel="me" links (https://tela.ainaive.com). */
   publicUrl: string
 }
 
