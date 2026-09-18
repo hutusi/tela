@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { sql } from 'drizzle-orm'
 import {
+  curateSite,
   discoverLanguageCounts,
   getOrCreateClaim,
   getSitePage,
@@ -178,5 +179,68 @@ describe('discover', () => {
     // The owner verifying again keeps the site.
     expect(await markClaimResult(t.db, a.id, { ok: true, method: 'meta' })).toBe('verified')
     expect(await markClaimResult(t.db, 999999, { ok: false, error: 'x' })).toBe('missing')
+  })
+})
+
+describe('curateSite', () => {
+  test('features a private site with editorial topics, and says what changed', async () => {
+    const siteId = s.byTitle.Private!.id
+    const r = await curateSite(t.db, siteId, {
+      listing: 'featured',
+      topics: ['tech', 'bogus', 'tech'],
+    })
+    expect(r).toMatchObject({
+      siteId,
+      listing: 'featured',
+      topics: ['tech'],
+      listingChanged: true,
+      topicsChanged: true,
+      claimed: false,
+      withheld: null,
+    })
+    expect((await listDiscoverSites(t.db)).map((x) => x.title)).toContain('Private')
+    // 'Listed' is also en+tech, so featuring 'Private' takes the language menu from one to two.
+    expect(await discoverLanguageCounts(t.db, 'tech')).toContainEqual({ lang: 'en', count: 2 })
+    expect(await curateSite(t.db, 999999, { listing: 'featured' })).toBeNull()
+  })
+
+  test('a re-run changes nothing and does not touch updated_at', async () => {
+    const siteId = s.byTitle.Private!.id
+    const input = { listing: 'featured' as const, topics: ['tech'] }
+    await curateSite(t.db, siteId, input)
+    const before = (await t.db.select().from(sites).where(sql`id = ${siteId}`))[0]?.updatedAt
+    const again = await curateSite(t.db, siteId, input)
+    expect(again).toMatchObject({ listingChanged: false, topicsChanged: false, withheld: null })
+    const after = (await t.db.select().from(sites).where(sql`id = ${siteId}`))[0]?.updatedAt
+    expect(after).toEqual(before!)
+  })
+
+  test('rejected is sticky until forced', async () => {
+    const siteId = s.byTitle.Private!.id
+    await curateSite(t.db, siteId, { listing: 'rejected' })
+    const held = await curateSite(t.db, siteId, { listing: 'featured', topics: ['tech'] })
+    expect(held).toMatchObject({ listing: 'rejected', listingChanged: false, withheld: 'rejected' })
+    expect((await listDiscoverSites(t.db)).map((x) => x.title)).not.toContain('Private')
+    // Topics are still curated: only the listing is held back.
+    expect(held?.topics).toEqual(['tech'])
+    const forced = await curateSite(t.db, siteId, { listing: 'featured', force: true })
+    expect(forced).toMatchObject({ listing: 'featured', listingChanged: true, withheld: null })
+  })
+
+  test("a claimant's topics survive a seed re-run, but the listing still moves", async () => {
+    const siteId = s.byTitle.Private!.id
+    const claim = await getOrCreateClaim(t.db, siteId, userA)
+    await markClaimResult(t.db, claim.id, { ok: true, method: 'meta' })
+    await setSiteTopics(t.db, siteId, userA, ['tech'])
+
+    const r = await curateSite(t.db, siteId, { listing: 'featured', topics: ['food'] })
+    expect(r).toMatchObject({
+      listing: 'featured',
+      topics: ['tech'],
+      listingChanged: true,
+      topicsChanged: false,
+      claimed: true,
+      withheld: 'claimed',
+    })
   })
 })
