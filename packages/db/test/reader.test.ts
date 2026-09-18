@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { eq, sql } from 'drizzle-orm'
 import { listDiscoverSites } from '../src/queries/discover'
+import { moveFeedToOriginSite } from '../src/queries/provenance'
 import {
   countTotals,
   getArticle,
@@ -483,6 +484,22 @@ describe('community listing', () => {
     await unsubscribe(t.db, userC, s.feed.id)
     await unsubscribe(t.db, userB, s.feed.id)
     expect(await listingOf()).toBe('listed')
+  })
+
+  test('a feed move promotes the site it joins, not just the one it left', async () => {
+    // Readers are recounted on a move as well as on subscribe, and a site can cross the
+    // threshold by gaining a feed. Promoting only from subscribe left that site private with
+    // three readers on it.
+    await readers(3)
+    const [target] = await t.db
+      .insert(sites)
+      .values({ homeUrl: 'https://moved.example', title: 'Moved' })
+      .returning()
+    await moveFeedToOriginSite(t.db, { id: s.feed.id, siteId: s.site.id }, 'https://moved.example')
+
+    const [joined] = await t.db.select().from(sites).where(eq(sites.id, target!.id))
+    expect(joined?.readerCount).toBe(3)
+    expect(joined?.listing).toBe('listed')
   })
 
   test('an editorial pick and an operator rejection are both left alone', async () => {

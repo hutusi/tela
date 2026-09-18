@@ -349,6 +349,8 @@ export type CurateSiteInput = {
   topics?: string[]
   /** Also move a 'rejected' site. Seeding never passes this. */
   force?: boolean
+  /** Compute the result without writing, so a preview cannot drift from what a run would do. */
+  dryRun?: boolean
 }
 
 export type CurateSiteResult = {
@@ -395,7 +397,7 @@ export async function curateSite(
         ? null
         : input.listing
     const nextTopics = wanted === null || claimed || sameTopics(site.topics, wanted) ? null : wanted
-    if (nextListing !== null || nextTopics !== null) {
+    if (!input.dryRun && (nextListing !== null || nextTopics !== null)) {
       await tx
         .update(sites)
         .set({
