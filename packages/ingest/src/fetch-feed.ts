@@ -44,6 +44,12 @@ export type FetchFeedResult =
       siteHome: HomeUrlOutcome
       /** Items beyond MAX_ITEMS_PER_FETCH, left alone this time. */
       itemsSkipped: number
+      /**
+       * Set when this feed's permanent redirect lands on a URL another feed already holds. This
+       * feed keeps its own URL; the id is the feed it duplicates, so a caller that just created
+       * it can undo that rather than keep two rows for one blog.
+       */
+      duplicateOf?: number
     }
   | { status: 'unchanged' }
   | { status: 'error'; error: string; kind: string }
@@ -517,6 +523,9 @@ export async function fetchFeed(
     null,
   )
 
+  // Held in an object because it is assigned inside the catch below, where control-flow
+  // narrowing on a plain `let` would not follow.
+  const duplicate: { of?: number } = {}
   await recordSuccess(
     db,
     feed,
@@ -540,7 +549,18 @@ export async function fetchFeed(
     opts,
   ).catch(async (err: unknown) => {
     // A permanent redirect onto a URL that already exists as another feed: keep ours.
-    if (res.permanentRedirectTo && String(err).includes('feeds_feed_url_key')) {
+    //
+    // The constraint name lives on the driver error's `cause`, never in its message -- the
+    // message is drizzle's "Failed query: ..." -- so matching on String(err) never fired and
+    // this recovery was dead from the day it was written. `social.ts` reads the same shape.
+    const cause = (err as { cause?: { code?: string; constraint_name?: string } }).cause
+    const collision = cause?.code === '23505' && cause?.constraint_name === 'feeds_feed_url_key'
+    if (res.permanentRedirectTo && collision) {
+      const [other] = await db
+        .select({ id: feeds.id })
+        .from(feeds)
+        .where(eq(feeds.feedUrl, res.permanentRedirectTo))
+      if (other) duplicate.of = other.id
       await recordSuccess(
         db,
         feed,
@@ -562,5 +582,6 @@ export async function fetchFeed(
     newArticleIds,
     updatedArticleIds,
     siteHome,
+    ...(duplicate.of === undefined ? {} : { duplicateOf: duplicate.of }),
   }
 }

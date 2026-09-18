@@ -527,6 +527,23 @@ describe('fetchFeed', () => {
     expect((await feedRow(feedId)).feedUrl).toBe(server.url('/new.xml'))
   })
 
+  test('a permanent redirect onto an existing feed keeps its own URL and names the duplicate', async () => {
+    // The recovery this exercises was dead code: it matched the constraint name against the
+    // error's message, where the driver never puts it. Nothing caught that because nothing
+    // tested it, and the caller saw a failed query on every fetch, for ever.
+    server.text('/canonical.xml', threeItems())
+    server.redirect('/alias.xml', '/canonical.xml', 301)
+    const canonical = await ensureFeed(t.db, { feedUrl: server.url('/canonical.xml') })
+    expect(await fetchFeed(t.db, http, canonical.feedId, opts)).toMatchObject({ status: 'fetched' })
+
+    const alias = await ensureFeed(t.db, { feedUrl: server.url('/alias.xml') })
+    const result = await fetchFeed(t.db, http, alias.feedId, opts)
+    expect(result).toMatchObject({ status: 'fetched', duplicateOf: canonical.feedId })
+    // Ours keeps its own URL rather than colliding with the canonical feed's.
+    expect((await feedRow(alias.feedId)).feedUrl).toBe(server.url('/alias.xml'))
+    expect((await feedRow(canonical.feedId)).feedUrl).toBe(server.url('/canonical.xml'))
+  })
+
   test('honors Retry-After on 429', async () => {
     server.text('/feed.xml', 'slow down', { status: 429, headers: { 'retry-after': '120' } })
     const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
