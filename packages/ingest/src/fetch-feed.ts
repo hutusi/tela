@@ -17,6 +17,7 @@ import {
   feeds,
   moveFeedToOriginSite,
   sites,
+  subscriptions,
   type Tx,
 } from '@tela/db'
 import { and, eq, ne, sql } from 'drizzle-orm'
@@ -54,7 +55,7 @@ export type FetchFeedResult =
   | { status: 'unchanged' }
   | { status: 'error'; error: string; kind: string }
   | { status: 'dead'; error: string }
-  | { status: 'skipped'; reason: string }
+  | { status: 'skipped'; reason: string; duplicateOf?: number }
 
 /** What `onArticleStored` learns about the article whose transaction is about to commit. */
 export type StoredArticle = { id: number; sourceLang: string | null; kind: 'inserted' | 'updated' }
@@ -213,6 +214,24 @@ async function itemsLast7d(db: Db, feedId: number, now: Date): Promise<number> {
       ),
     )
   return row?.n ?? 0
+}
+
+/**
+ * The id of the feed this one permanently redirects onto, when adopting that verdict costs
+ * nobody anything: the destination exists, it is not us, and no member subscribes to this row.
+ */
+async function aliasOf(db: Db, feed: FeedRow, destination: string): Promise<number | null> {
+  const [other] = await db
+    .select({ id: feeds.id })
+    .from(feeds)
+    .where(eq(feeds.feedUrl, destination))
+  if (!other || other.id === feed.id) return null
+  const [subscriber] = await db
+    .select({ feedId: subscriptions.feedId })
+    .from(subscriptions)
+    .where(eq(subscriptions.feedId, feed.id))
+    .limit(1)
+  return subscriber ? null : other.id
 }
 
 async function recordSuccess(
@@ -418,6 +437,22 @@ export async function fetchFeed(
       return { status: 'error', error: 'routed through the relay', kind: 'region_flip' }
     }
     return recordError(db, feed, err.kind, err.message, now, {})
+  }
+
+  // A permanent redirect onto a URL another feed already holds means this row is an alias of
+  // that feed. Decide it here, the moment the redirect is known and before anything is written:
+  // everything below would store a second copy of every post and queue a translation for each,
+  // and a 304 would return without ever looking at the redirect at all.
+  //
+  // A feed somebody subscribes to is left alone — skipping its articles would empty the blog for
+  // its readers — and keeps its own URL through the collision guard further down.
+  if (res.permanentRedirectTo) {
+    const alias = await aliasOf(db, feed, res.permanentRedirectTo)
+    if (alias !== null) {
+      // Still record the visit, or the scheduler re-runs this every tick.
+      await recordSuccess(db, feed, now, { hadNewItems: false, floorSec: null }, opts)
+      return { status: 'skipped', reason: 'duplicate', duplicateOf: alias }
+    }
   }
 
   // Provenance is judged only on responses proven to be this feed: a valid 304, a body already

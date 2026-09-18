@@ -2,9 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { articles, feeds, sites } from '@tela/db'
+import { articles, feeds, sites, subscribe } from '@tela/db'
 import { resetDatabase, startTestDb, type TestDb } from '@tela/db/testing'
-import { createHttpClient } from '@tela/ingest'
+import { createHttpClient, ensureFeed } from '@tela/ingest'
 import { eq, sql } from 'drizzle-orm'
 import { PgBoss } from 'pg-boss'
 import { ensureQueues, QUEUES } from '../src/queues'
@@ -185,6 +185,69 @@ describe('seedDiscover', () => {
     expect(third.totals.errors).toBe(0)
     expect(await t.db.select().from(feeds)).toHaveLength(1)
     expect(await t.db.select().from(articles)).toHaveLength(1)
+
+    // Nothing was stored for the alias, so nothing was queued for it either. A title job whose
+    // article is deleted out from under it is provider spend on a post nobody will ever see.
+    expect(second.entries[0]?.titleJobs).toBe(0)
+    const [orphans] = await t.db.execute<{ n: number }>(sql`
+      select count(*)::int as n from pgboss.job j
+      where j.name = ${QUEUES.translateTitle}
+        and not exists (select 1 from articles a where a.id = (j.data->>'articleId')::bigint)
+    `)
+    expect(Number(orphans?.n ?? 0)).toBe(0)
+  })
+
+  test('an alias a member follows is reported, not deleted', async () => {
+    server.text(
+      '/canonical.xml',
+      rss({ link: server.url('/'), items: [{ guid: 'a', title: 'A', link: server.url('/p/1') }] }),
+    )
+    server.redirect('/alias.xml', server.url('/canonical.xml'), 301)
+    const canonical = await ensureFeed(t.db, { feedUrl: server.url('/canonical.xml') })
+    const alias = await ensureFeed(t.db, { feedUrl: server.url('/alias.xml') })
+    const reader = '11111111-1111-4111-8111-111111111111'
+    await t.db.execute(sql`insert into auth.users (id, email) values (${reader}, 'a@x.test')`)
+    await subscribe(t.db, reader, alias.feedId)
+
+    const entry = { feedUrl: server.url('/alias.xml'), topics: ['tech'] } as CuratedSite
+    const result = await seedDiscover(t.db, http, [entry])
+    expect(result.entries[0]).toMatchObject({
+      reason: 'duplicate',
+      duplicateOf: canonical.feedId,
+      orphaned: true,
+      curated: true,
+    })
+    // Their feed still has the posts; emptying it would take the blog away from them.
+    expect(await t.db.select().from(feeds)).toHaveLength(2)
+    expect(
+      await t.db.select().from(articles).where(eq(articles.feedId, alias.feedId)),
+    ).not.toHaveLength(0)
+  })
+
+  test('adopting an alias fetches the feed it duplicates, even if that one is empty', async () => {
+    // The canonical feed exists but has never been fetched — a member subscribed to it a moment
+    // ago, say. Adopting it without fetching would leave the site with no articles and so
+    // unfeatured, on this run and every run after it.
+    server.text(
+      '/canonical.xml',
+      rss({ link: server.url('/'), items: [{ guid: 'a', title: 'A', link: server.url('/p/1') }] }),
+    )
+    server.redirect('/alias.xml', server.url('/canonical.xml'), 301)
+    const canonical = await ensureFeed(t.db, { feedUrl: server.url('/canonical.xml') })
+    expect(await t.db.select().from(articles)).toHaveLength(0)
+
+    const entry = { feedUrl: server.url('/alias.xml'), topics: ['tech'] } as CuratedSite
+    const result = await seedDiscover(t.db, http, [entry])
+    expect(result.entries[0]).toMatchObject({
+      reason: 'duplicate',
+      duplicateOf: canonical.feedId,
+      feedId: canonical.feedId,
+      articles: 1,
+      listing: 'featured',
+      curated: true,
+    })
+    expect(result.totals.errors).toBe(0)
+    expect(await t.db.select().from(feeds)).toHaveLength(1)
   })
 
   test('dry run writes nothing and reports what would change', async () => {

@@ -38,6 +38,12 @@ export type SeedEntryReport = {
   duplicateOf?: number
   /** Why a write would be (or was) withheld, when that is not the whole story of the entry. */
   withheld?: 'rejected' | 'claimed'
+  /**
+   * Set with `duplicateOf` when the alias row could not be dropped because it already holds
+   * articles a member may have read, liked or recommended. Needs a human: point the list entry
+   * at the canonical URL, then decide what to do with the leftover feed.
+   */
+  orphaned?: boolean
 }
 
 export type SeedDiscoverResult = {
@@ -187,36 +193,42 @@ async function seedOne(
       ...(entry.region ? { fetchRegion: entry.region } : {}),
     })
     const titles = { articles: 0, jobs: 0 }
-    const result = await fetchFeed(db, http, ensured.feedId, {
-      ...(titlesReady ? { onArticleStored: titleEnqueuer(titles) } : {}),
-    })
-
-    // Not ensured.siteId: fetchFeed moves a feed to the site its declared home points at, so the
-    // id from ensureFeed can be a placeholder. Curating that one would feature an empty site and
-    // leave the real one private.
-    const [feed] = await db
-      .select({ siteId: feeds.siteId })
-      .from(feeds)
-      .where(eq(feeds.id, ensured.feedId))
+    const fetchOpts = titlesReady ? { onArticleStored: titleEnqueuer(titles) } : {}
     let feedId = ensured.feedId
-    let siteId = feed?.siteId ?? ensured.siteId
+    let result = await fetchFeed(db, http, feedId, fetchOpts)
     let duplicateOf: number | undefined
+    let orphaned = false
 
-    // The curated URL permanently redirects onto a feed we already hold. fetchFeed kept both
-    // rows; ours is one we created seconds ago, has no subscriber, and exists only because the
-    // lookup by URL missed — so drop it (articles cascade) and curate the feed it duplicates.
-    // Without this the run is not idempotent: every rerun would add another feed and another
-    // copy of every post, because the first run renamed the feed away from the curated URL.
-    if (result.status === 'fetched' && result.duplicateOf !== undefined && ensured.created) {
+    // The curated URL permanently redirects onto a feed we already hold, so this row is an alias
+    // of it. fetchFeed says so before storing anything, which is what keeps a rerun honest: the
+    // first run renames the feed to its destination, so the next lookup by curated URL misses and
+    // lands here. Adopt the feed it duplicates and fetch that instead, so the run still does its
+    // job even when the canonical feed has never been fetched.
+    if (result.status === 'skipped' && result.duplicateOf !== undefined) {
       duplicateOf = result.duplicateOf
-      await db.delete(feeds).where(eq(feeds.id, ensured.feedId))
-      const [canonical] = await db
-        .select({ id: feeds.id, siteId: feeds.siteId })
-        .from(feeds)
-        .where(eq(feeds.id, duplicateOf))
-      feedId = canonical?.id ?? feedId
-      siteId = canonical?.siteId ?? siteId
+      const [ours] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(articles)
+        .where(eq(articles.feedId, feedId))
+      // Ours holds nothing anybody could miss, so drop it. One that already accumulated
+      // articles is left alone and reported: a member may have read, liked or recommended
+      // them, and a seed command has no business deciding that silently.
+      if (Number(ours?.n ?? 0) === 0) await db.delete(feeds).where(eq(feeds.id, feedId))
+      else orphaned = true
+      feedId = duplicateOf
+      result = await fetchFeed(db, http, feedId, fetchOpts)
+    } else if (result.status === 'fetched' && result.duplicateOf !== undefined) {
+      // A member subscribes to the alias, so fetchFeed populated it rather than emptying their
+      // blog. Nothing to undo here — just say so, since the list entry is still the wrong URL.
+      duplicateOf = result.duplicateOf
+      orphaned = true
     }
+
+    // Not ensureFeed's siteId: fetchFeed moves a feed to the site its declared home points at, so
+    // that id can be a placeholder. Curating it would feature an empty site and leave the real
+    // one private.
+    const [feed] = await db.select({ siteId: feeds.siteId }).from(feeds).where(eq(feeds.id, feedId))
+    const siteId = feed?.siteId ?? ensured.siteId
     const facts = await siteFacts(db, siteId)
     const report: SeedEntryReport = {
       ...base,
@@ -225,8 +237,7 @@ async function seedOne(
       siteTitle: facts.title,
       primaryLang: facts.primaryLang,
       fetch: result.status,
-      newArticles:
-        duplicateOf === undefined && result.status === 'fetched' ? result.newArticles : 0,
+      newArticles: result.status === 'fetched' ? result.newArticles : 0,
       articles: facts.articles,
       titleJobs: titles.jobs,
       outcome:
@@ -237,7 +248,7 @@ async function seedOne(
             : result.status === 'fetched'
               ? 'updated'
               : 'unchanged',
-      ...(duplicateOf === undefined ? {} : { duplicateOf, reason: 'duplicate' as const }),
+      ...(duplicateOf === undefined ? {} : { duplicateOf, reason: 'duplicate' as const, orphaned }),
       ...('kind' in result ? { errorKind: result.kind } : {}),
       ...('error' in result ? { error: result.error } : {}),
       ...('reason' in result ? { error: result.reason } : {}),
