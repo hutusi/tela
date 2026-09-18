@@ -197,6 +197,46 @@ describe('seedDiscover', () => {
     expect(Number(orphans?.n ?? 0)).toBe(0)
   })
 
+  test('a cross-host alias never features its own placeholder site', async () => {
+    // The alias lives on another host, so it sits on a placeholder site of its own and stays
+    // there: unclaimed sites vouch for any feed, so provenance never moves it. Featuring that
+    // placeholder would publish the blog under a site nobody owns — here, while the real site is
+    // one an operator rejected, which is the whole point of rejecting it.
+    const other = await FixtureServer.start()
+    try {
+      other.text(
+        '/canonical.xml',
+        rss({ link: other.url('/'), items: [{ guid: 'a', title: 'A', link: other.url('/p/1') }] }),
+      )
+      server.redirect('/alias.xml', other.url('/canonical.xml'), 301)
+      const canonical = await ensureFeed(t.db, { feedUrl: other.url('/canonical.xml') })
+      await t.db.update(sites).set({ listing: 'rejected' }).where(eq(sites.id, canonical.siteId))
+
+      // Subscribed, so the alias row survives and the seed has to adopt rather than delete.
+      const reader = '11111111-1111-4111-8111-111111111111'
+      await t.db.execute(sql`insert into auth.users (id, email) values (${reader}, 'a@x.test')`)
+      const aliasFeed = await ensureFeed(t.db, { feedUrl: server.url('/alias.xml') })
+      await subscribe(t.db, reader, aliasFeed.feedId)
+
+      const entry = { feedUrl: server.url('/alias.xml'), topics: ['tech'] } as CuratedSite
+      const result = await seedDiscover(t.db, http, [entry])
+      expect(result.entries[0]).toMatchObject({
+        duplicateOf: canonical.feedId,
+        siteId: canonical.siteId,
+        orphaned: true,
+        curated: true,
+        listing: 'rejected',
+        listingChanged: false,
+        withheld: 'rejected',
+      })
+      const listed = await t.db.select().from(sites).where(sql`listing <> 'private'`)
+      expect(listed.map((s) => s.listing)).toEqual(['rejected'])
+      expect(listed[0]?.id).toBe(canonical.siteId)
+    } finally {
+      await other.stop()
+    }
+  })
+
   test('an alias a member follows is reported, not deleted', async () => {
     server.text(
       '/canonical.xml',

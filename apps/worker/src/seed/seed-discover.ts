@@ -1,5 +1,5 @@
 import { articles, type Db, feeds, sites } from '@tela/db'
-import { curateSite, siteNeedsAssets } from '@tela/db/queries'
+import { curateSite, deleteFeedIfUnused, siteNeedsAssets } from '@tela/db/queries'
 import { createJobSender } from '@tela/db/queue'
 import { ensureFeed, type FetchFeedResult, fetchFeed, type HttpClient } from '@tela/ingest'
 import type { SiteListing } from '@tela/shared'
@@ -29,7 +29,8 @@ export type SeedEntryReport = {
   topics: string[]
   topicsChanged: boolean
   curated: boolean
-  reason?: 'dry_run' | 'fetch_failed' | 'no_articles' | 'rejected' | 'claimed' | 'duplicate'
+  /** How the entry ended. Independent of `withheld`, which says what curateSite refused. */
+  reason?: 'dry_run' | 'fetch_failed' | 'no_articles' | 'duplicate'
   /**
    * Set when the curated URL turned out to be an alias of a feed already stored: the id it
    * duplicates. The entry still works; update the list to the canonical URL to stop paying for
@@ -200,28 +201,24 @@ async function seedOne(
     let orphaned = false
 
     // The curated URL permanently redirects onto a feed we already hold, so this row is an alias
-    // of it. fetchFeed says so before storing anything, which is what keeps a rerun honest: the
-    // first run renames the feed to its destination, so the next lookup by curated URL misses and
-    // lands here. Adopt the feed it duplicates and fetch that instead, so the run still does its
-    // job even when the canonical feed has never been fetched.
-    if (result.status === 'skipped' && result.duplicateOf !== undefined) {
-      duplicateOf = result.duplicateOf
-      const [ours] = await db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(articles)
-        .where(eq(articles.feedId, feedId))
-      // Ours holds nothing anybody could miss, so drop it. One that already accumulated
-      // articles is left alone and reported: a member may have read, liked or recommended
-      // them, and a seed command has no business deciding that silently.
-      if (Number(ours?.n ?? 0) === 0) await db.delete(feeds).where(eq(feeds.id, feedId))
-      else orphaned = true
-      feedId = duplicateOf
+    // of it. fetchFeed says so before storing anything (or, for an alias a member follows, after
+    // populating it for them), which is what keeps a rerun honest: the first run renames the feed
+    // to its destination, so the next lookup by curated URL misses and lands here.
+    //
+    // Adopt the feed it duplicates, whatever happens to our row. The directory entry has to be
+    // the canonical blog: an alias on another host sits on a placeholder site of its own —
+    // unclaimed sites vouch for any feed, so nothing ever moves it — and featuring that would
+    // publish the posts under a site nobody owns, including when the real site is one an
+    // operator rejected. Fetch it too, so the run still works when it has never been fetched.
+    const alias = 'duplicateOf' in result ? result.duplicateOf : undefined
+    if (alias !== undefined) {
+      duplicateOf = alias
+      // Our row goes only while nothing depends on it. One that a member subscribes to, or that
+      // already accumulated articles they may have read, liked or recommended, stays and is
+      // reported instead: a seed command has no business deciding that silently.
+      orphaned = !(await deleteFeedIfUnused(db, feedId))
+      feedId = alias
       result = await fetchFeed(db, http, feedId, fetchOpts)
-    } else if (result.status === 'fetched' && result.duplicateOf !== undefined) {
-      // A member subscribes to the alias, so fetchFeed populated it rather than emptying their
-      // blog. Nothing to undo here — just say so, since the list entry is still the wrong URL.
-      duplicateOf = result.duplicateOf
-      orphaned = true
     }
 
     // Not ensureFeed's siteId: fetchFeed moves a feed to the site its declared home points at, so
@@ -276,7 +273,7 @@ async function seedOne(
       listingChanged: curated?.listingChanged ?? false,
       topics: curated?.topics ?? [],
       topicsChanged: curated?.topicsChanged ?? false,
-      ...(curated?.withheld ? { reason: curated.withheld } : {}),
+      ...(curated?.withheld ? { withheld: curated.withheld } : {}),
     }
   } catch (err) {
     return {

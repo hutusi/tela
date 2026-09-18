@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { sql } from 'drizzle-orm'
 import {
   curateSite,
+  deleteFeedIfUnused,
   discoverLanguageCounts,
   getOrCreateClaim,
   getSitePage,
@@ -242,5 +243,32 @@ describe('curateSite', () => {
       claimed: true,
       withheld: 'claimed',
     })
+  })
+})
+
+describe('deleteFeedIfUnused', () => {
+  test('goes only when nothing depends on the feed', async () => {
+    const siteId = s.byTitle.Featured!.id
+    const [spare] = await t.db
+      .insert(feeds)
+      .values({ siteId, feedUrl: 'https://featured.example/spare.xml' })
+      .returning()
+    expect(await deleteFeedIfUnused(t.db, spare!.id)).toBe(true)
+    expect(await deleteFeedIfUnused(t.db, spare!.id)).toBe(false) // already gone
+
+    // A feed a member follows stays, even with no articles: the checks happen under a lock on
+    // the feed row precisely so a subscription landing mid-flight is seen rather than cascaded
+    // away by the delete.
+    const [followed] = await t.db
+      .insert(feeds)
+      .values({ siteId, feedUrl: 'https://featured.example/followed.xml' })
+      .returning()
+    await subscribe(t.db, userA, followed!.id)
+    expect(await deleteFeedIfUnused(t.db, followed!.id)).toBe(false)
+
+    // And one carrying posts stays, whether or not anyone follows it: they can be read, liked
+    // or recommended, and a cascade would take all of that with them.
+    const withPosts = s.feedBySite[s.byTitle.Listed!.id]!
+    expect(await deleteFeedIfUnused(t.db, withPosts.id)).toBe(false)
   })
 })

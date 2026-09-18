@@ -154,11 +154,13 @@ distinct subscribers on an unclaimed site.
   that entry; `no_articles` — the feed parsed but held nothing, so the site is left unlisted;
   `duplicate` — the curated URL permanently redirects onto a feed already stored, so the run
   adopts that one and reports its id. Harmless but not free: point the list entry at the URL the
-  blog actually serves and the redirect stops being paid for on every run. With `orphaned: true`
-  the alias row was left in place because it already holds articles a member may have read, liked
-  or recommended (or still subscribes to it) — decide that by hand rather than letting a seed
-  run delete it: `select * from feeds where id = …`, then `delete from feeds where id = …` once
-  you are satisfied nobody is reading it.
+  blog actually serves and the redirect stops being paid for on every run. The entry is always
+  curated against the feed it duplicates, never the alias — an alias on another host sits on a
+  placeholder site of its own, and featuring that would publish the blog under a site nobody
+  owns. With `orphaned: true` the alias row was left in place because a member subscribes to it
+  or it already holds articles they may have read, liked or recommended; decide that by hand
+  rather than letting a seed run delete it: `select * from feeds where id = …`, then `delete
+  from feeds where id = …` once you are satisfied nobody is reading it.
 - Feature a site by hand: `update sites set listing = 'featured' where id = …`; hide one:
   `'rejected'`, which the seed then leaves alone on every later run.
 - Release a claim so another member can claim the site: `update sites set claimed_by = null,

@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm'
-import type { DbExecutor } from '../client'
-import { feeds, sites } from '../schema'
+import type { Db, DbExecutor } from '../client'
+import { articles, feeds, sites, subscriptions } from '../schema'
 import { recomputeSiteReaderCounts } from './reader'
 
 export type ProvenanceFeed = {
@@ -124,4 +124,41 @@ export async function detachUnvouchedFeeds(tx: DbExecutor, siteId: number): Prom
     if ((await moveFeedToOriginSite(tx, feed, origin)) !== siteId) moved += 1
   }
   return moved
+}
+
+/**
+ * Drop a feed row nothing depends on, reporting whether it went. For undoing a feed that turned
+ * out to be an alias of one already stored: it is only safe to remove while no member subscribes
+ * to it and it holds no articles, because both carry things a person can miss — a subscription,
+ * and posts they may have read, liked or recommended.
+ *
+ * Both checks happen under `for update` on the feed row rather than before the call. Inserting a
+ * subscription takes a key-share lock on the feed it references, which that conflicts with, so a
+ * member subscribing at the same moment either lands first and is seen here, or waits and finds
+ * the row gone (a failed subscribe they can retry, rather than one silently deleted underneath
+ * them).
+ */
+export async function deleteFeedIfUnused(db: Db, feedId: number): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [feed] = await tx
+      .select({ id: feeds.id })
+      .from(feeds)
+      .where(eq(feeds.id, feedId))
+      .for('update')
+    if (!feed) return false
+    const [subscriber] = await tx
+      .select({ feedId: subscriptions.feedId })
+      .from(subscriptions)
+      .where(eq(subscriptions.feedId, feedId))
+      .limit(1)
+    if (subscriber) return false
+    const [article] = await tx
+      .select({ id: articles.id })
+      .from(articles)
+      .where(eq(articles.feedId, feedId))
+      .limit(1)
+    if (article) return false
+    await tx.delete(feeds).where(eq(feeds.id, feedId))
+    return true
+  })
 }
