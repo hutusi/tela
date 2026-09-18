@@ -27,6 +27,13 @@ everything so far sits under `[Unreleased]`.
   and subscribe from a card. A blogger proves ownership with a meta tag or a `rel="me"` link;
   claimed sites are listed, and can opt out of translation entirely (ADR 0011).
 
+- **Three doors into Discover.** A claim gate alone left the directory empty until the first
+  blogger claimed a site, which reads as a broken page rather than an empty one. An editorial list
+  of independent blogs now seeds it — checked into `apps/worker/src/seed/curated-sites.ts` and
+  applied by `worker:once seed-discover` — and an unclaimed site lists itself once three distinct
+  members subscribe to it. Three, not one: at one, the directory would republish a single member's
+  reading list (ADR 0018).
+
 - **Recommendations and profiles.** Recommend a post with a note; the note appears on your public
   profile at `/@handle` and in the author's dashboard, beside likes and reader counts. Settings
   cover handle, display name, bio, public subscriptions, reading language and OPML export.

@@ -42,7 +42,7 @@ Tables live in `packages/db/src/schema/`. bigint identity ids on high-volume tab
 | Table | Role |
 |---|---|
 | `profiles` | One per auth user, created by the `on_auth_user_created` trigger. `handle`, `ui_locale`, `reading_lang`. |
-| `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `topics[]`, `reader_count`. |
+| `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `topics[]`, `reader_count`. `listing` is written by a verified claim, by the editorial seed, and by the community threshold (ADR 0018). |
 | `feeds` | The fetch unit: `feed_url`, validators (`etag`, `last_modified`, `last_body_hash`), scheduling (`next_fetch_at`, `fetch_interval_sec`), `fetch_region`, `status`, `content_mode`. |
 | `articles` | Metadata: `dedup_key` (unique per feed), `source_lang`, `content_hash`, counters. `id` order is ingest order. |
 | `article_contents` | Sanitized `html` with `data-tb` block ids, `blocks` summary. |
@@ -176,7 +176,9 @@ declares every queue with its policy, retries, expiry, and a `<name>.dead` dead-
 One process; `WORKER_ROLES` filters which `boss.work()` subscriptions start. Feed discovery runs
 in the request path (web) or the CLI rather than through a queue. `bun run worker:once
 <discover|fetch|extract> <arg>` runs any step directly against `DATABASE_URL`;
-`worker:once repair-titles [limit]` queues a bounded repair batch for missing eager titles.
+`worker:once repair-titles [limit]` queues a bounded repair batch for missing eager titles;
+`worker:once seed-discover [--dry-run] [--limit N] [--skip N] [--only <match>]` applies the editorial list in
+`apps/worker/src/seed/curated-sites.ts` (ADR 0018).
 
 ## Web app
 
@@ -226,7 +228,7 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
 | `/api/reading/state?article=&lang=` | ✓ | one row: what an open article is still waiting on, so a tab polls instead of re-rendering (ADR 0016) |
 | `/add` | ✓ | discover feeds from any URL, subscribe, OPML import |
 | `/img` | ✓ | signed image proxy (ADR 0007) |
-| `/discover?topic=&lang=` | ✓ | listed and featured sites with topic chips, language menu, subscribe toggles, claim banner |
+| `/discover?topic=&lang=` | ✓ | listed and featured sites with topic chips, language menu, subscribe toggles, claim banner. Three doors in (ADR 0018): the editorial seed (`featured`), a verified claim, and three distinct subscribers on an unclaimed site |
 | `/s/[siteId]` | ✓ | public site page: avatar, description, readers, claimed badge, topics (owner-editable), latest posts |
 | `/claim`, `/sites/[id]/claim` | ✓ | find the feed, then verify by meta tag or rel=me (ADR 0011) |
 | `/@[handle]` | ✓ | public profile: sites written, recommendations with notes, subscriptions when public (root `[handle]` segment, only `@…` matches) |

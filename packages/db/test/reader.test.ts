@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { eq, sql } from 'drizzle-orm'
+import { listDiscoverSites } from '../src/queries/discover'
+import { moveFeedToOriginSite } from '../src/queries/provenance'
 import {
   countTotals,
   getArticle,
@@ -444,5 +446,69 @@ describe('getReadingRevision', () => {
       sql`update article_translations set status = 'done' where article_id = ${id} and target_lang = 'zh-Hans'`,
     )
     expect(await getReadingRevision(t.db, id, 'zh-Hans')).not.toBe(beforeZh as string)
+  })
+})
+
+describe('community listing', () => {
+  const userC = '33333333-3333-4333-8333-333333333333'
+
+  async function readers(n: number) {
+    await t.db.execute(sql`insert into auth.users (id, email) values (${userC}, 'c@x.test')`)
+    const users = [userA, userB, userC].slice(0, n)
+    for (const u of users) await subscribe(t.db, u, s.feed.id)
+  }
+
+  async function listingOf(): Promise<string | undefined> {
+    const [site] = await t.db.select().from(sites).where(eq(sites.id, s.site.id))
+    return site?.listing
+  }
+
+  test('the third distinct reader lists a site nobody claimed; the second does not', async () => {
+    await readers(2)
+    expect(await listingOf()).toBe('private')
+    await subscribe(t.db, userC, s.feed.id)
+    expect(await listingOf()).toBe('listed')
+    expect((await listDiscoverSites(t.db)).map((x) => x.title)).toContain('Blog')
+  })
+
+  test('distinct readers, not distinct subscriptions: one member on both feeds is one reader', async () => {
+    await subscribe(t.db, userA, s.feed.id)
+    await subscribe(t.db, userA, s.other.id)
+    await subscribe(t.db, userB, s.feed.id)
+    expect(await listingOf()).toBe('private')
+  })
+
+  test('promotion is one-way: unsubscribing below the threshold keeps the site listed', async () => {
+    await readers(3)
+    expect(await listingOf()).toBe('listed')
+    await unsubscribe(t.db, userC, s.feed.id)
+    await unsubscribe(t.db, userB, s.feed.id)
+    expect(await listingOf()).toBe('listed')
+  })
+
+  test('a feed move promotes the site it joins, not just the one it left', async () => {
+    // Readers are recounted on a move as well as on subscribe, and a site can cross the
+    // threshold by gaining a feed. Promoting only from subscribe left that site private with
+    // three readers on it.
+    await readers(3)
+    const [target] = await t.db
+      .insert(sites)
+      .values({ homeUrl: 'https://moved.example', title: 'Moved' })
+      .returning()
+    await moveFeedToOriginSite(t.db, { id: s.feed.id, siteId: s.site.id }, 'https://moved.example')
+
+    const [joined] = await t.db.select().from(sites).where(eq(sites.id, target!.id))
+    expect(joined?.readerCount).toBe(3)
+    expect(joined?.listing).toBe('listed')
+  })
+
+  test('an editorial pick and an operator rejection are both left alone', async () => {
+    for (const listing of ['featured', 'rejected'] as const) {
+      await resetDatabase(t.db)
+      s = await seed()
+      await t.db.update(sites).set({ listing }).where(eq(sites.id, s.site.id))
+      await readers(3)
+      expect(await listingOf()).toBe(listing)
+    }
   })
 })

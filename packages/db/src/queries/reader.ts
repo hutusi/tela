@@ -1,4 +1,8 @@
-import { type TranslationStatus, UNREAD_HORIZON_DAYS } from '@tela/shared'
+import {
+  COMMUNITY_LISTING_MIN_READERS,
+  type TranslationStatus,
+  UNREAD_HORIZON_DAYS,
+} from '@tela/shared'
 import { and, desc, eq, gt, isNotNull, isNull, lt, or, sql } from 'drizzle-orm'
 import type { Db, DbExecutor } from '../client'
 import {
@@ -492,27 +496,35 @@ export async function toggleLike(
 export async function recomputeSiteReaderCounts(db: DbExecutor, siteIds: number[]): Promise<void> {
   const ids = [...new Set(siteIds)]
   if (ids.length === 0) return
+  const idList = sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  )
   await db.execute(sql`
     update sites s set reader_count = (
       select count(distinct sub.user_id) from subscriptions sub
       join feeds f on f.id = sub.feed_id where f.site_id = s.id
     )
-    where s.id in (${sql.join(
-      ids.map((id) => sql`${id}`),
-      sql`, `,
-    )})
+    where s.id in (${idList})
+  `)
+  // The community door into Discover (ADR 0018): enough distinct readers list a site nobody has
+  // claimed. It belongs here rather than beside the subscribe call, because a feed move recounts
+  // readers too — a site can cross the threshold by gaining a feed, and answering "how many
+  // readers does this site have" is exactly when the answer should be acted on.
+  //
+  // One-way: an unsubscribe never pulls a site back out, nor does losing a feed. It touches
+  // neither an editorial pick nor a site an operator rejected, both of which are already decided.
+  await db.execute(sql`
+    update sites set listing = 'listed'
+    where id in (${idList}) and listing = 'private'
+      and reader_count >= ${COMMUNITY_LISTING_MIN_READERS}
   `)
 }
 
 /** Recount distinct readers across every feed of the site a feed belongs to. */
 export async function recomputeReaderCount(db: Db, feedId: number): Promise<void> {
-  await db.execute(sql`
-    update sites s set reader_count = (
-      select count(distinct sub.user_id) from subscriptions sub
-      join feeds f on f.id = sub.feed_id where f.site_id = s.id
-    )
-    where s.id = (select site_id from feeds where id = ${feedId})
-  `)
+  const [feed] = await db.select({ siteId: feeds.siteId }).from(feeds).where(eq(feeds.id, feedId))
+  if (feed) await recomputeSiteReaderCounts(db, [feed.siteId])
 }
 
 /** Subscribe; existing articles count as unread from here on. Idempotent. */

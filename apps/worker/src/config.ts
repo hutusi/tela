@@ -8,7 +8,7 @@ const envSchema = z.object({
   WORKER_ROLES: z.string().optional(),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   HEARTBEAT_SEC: z.coerce.number().int().positive().default(60),
-  WORKER_USER_AGENT: z.string().default('Tela/0.1 (+https://tela.app/bot; feed reader)'),
+  WORKER_USER_AGENT: z.string().default('Tela/0.1 (+https://tela.ainaive.com; feed reader)'),
   FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
   /** How many feeds one fetch worker processes concurrently. */
   FETCH_CONCURRENCY: z.coerce.number().int().positive().default(4),
@@ -23,7 +23,7 @@ const envSchema = z.object({
     .positive()
     .default(MAX_ARTICLE_TRANSLATION_TOKENS),
   /** Public origin of the web app, used to verify rel="me" claim links. */
-  PUBLIC_URL: z.string().url().default('https://tela.app'),
+  PUBLIC_URL: z.string().url().default('https://tela.ainaive.com'),
   /** Global workers: origin of the relay role (e.g. https://relay-hk.example.com); unset = no relay. */
   RELAY_URL: z.string().url().optional(),
   /** Shared secret that signs relay requests; required by the relay role and by RELAY_URL users. */

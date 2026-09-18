@@ -527,6 +527,65 @@ describe('fetchFeed', () => {
     expect((await feedRow(feedId)).feedUrl).toBe(server.url('/new.xml'))
   })
 
+  test('a permanent redirect onto an existing feed nobody follows stores nothing', async () => {
+    server.text('/canonical.xml', threeItems())
+    server.redirect('/alias.xml', '/canonical.xml', 301)
+    const canonical = await ensureFeed(t.db, { feedUrl: server.url('/canonical.xml') })
+    expect(await fetchFeed(t.db, http, canonical.feedId, opts)).toMatchObject({ status: 'fetched' })
+
+    const alias = await ensureFeed(t.db, { feedUrl: server.url('/alias.xml') })
+    expect(await fetchFeed(t.db, http, alias.feedId, opts)).toMatchObject({
+      status: 'skipped',
+      reason: 'duplicate',
+      duplicateOf: canonical.feedId,
+    })
+    // The point of deciding this from the redirect rather than from the failed rename: a second
+    // copy of every post is never written, and no translation is ever queued for one.
+    const stored = await t.db.select().from(articles).where(eq(articles.feedId, alias.feedId))
+    expect(stored).toHaveLength(0)
+    // And the visit is recorded, or the scheduler would re-run it on every tick.
+    expect((await feedRow(alias.feedId)).nextFetchAt?.getTime()).toBeGreaterThan(NOW.getTime())
+  })
+
+  test('a 304 on an alias is caught too, since the rename never runs on that path', async () => {
+    server.text('/canonical.xml', threeItems())
+    server.cached('/alias.xml', threeItems(), 'W/"a1"')
+    const canonical = await ensureFeed(t.db, { feedUrl: server.url('/canonical.xml') })
+    await fetchFeed(t.db, http, canonical.feedId, opts)
+    const alias = await ensureFeed(t.db, { feedUrl: server.url('/alias.xml') })
+    await fetchFeed(t.db, http, alias.feedId, opts) // stores the etag
+    server.redirect('/alias.xml', '/canonical.xml', 301)
+
+    expect(await fetchFeed(t.db, http, alias.feedId, opts)).toMatchObject({
+      status: 'skipped',
+      duplicateOf: canonical.feedId,
+    })
+  })
+
+  test('an alias someone subscribes to keeps working, and keeps its own URL', async () => {
+    // Skipping this feed's articles would empty the blog for its readers, so it stays as it is.
+    // The rename still collides; before the fix that surfaced as a failed query on every fetch,
+    // because the guard matched the constraint name against the error's message, where the
+    // driver never puts it.
+    server.text('/canonical.xml', threeItems())
+    server.redirect('/alias.xml', '/canonical.xml', 301)
+    const canonical = await ensureFeed(t.db, { feedUrl: server.url('/canonical.xml') })
+    await fetchFeed(t.db, http, canonical.feedId, opts)
+
+    const reader = '11111111-1111-4111-8111-111111111111'
+    await t.db.execute(sql`insert into auth.users (id, email) values (${reader}, 'a@x.test')`)
+    const alias = await ensureFeed(t.db, { feedUrl: server.url('/alias.xml') })
+    await subscribe(t.db, reader, alias.feedId)
+    expect(await fetchFeed(t.db, http, alias.feedId, opts)).toMatchObject({
+      status: 'fetched',
+      duplicateOf: canonical.feedId,
+    })
+    expect((await feedRow(alias.feedId)).feedUrl).toBe(server.url('/alias.xml'))
+    expect(
+      await t.db.select().from(articles).where(eq(articles.feedId, alias.feedId)),
+    ).not.toHaveLength(0)
+  })
+
   test('honors Retry-After on 429', async () => {
     server.text('/feed.xml', 'slow down', { status: 429, headers: { 'retry-after': '120' } })
     const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })

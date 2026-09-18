@@ -17,6 +17,7 @@ import {
   feeds,
   moveFeedToOriginSite,
   sites,
+  subscriptions,
   type Tx,
 } from '@tela/db'
 import { and, eq, ne, sql } from 'drizzle-orm'
@@ -44,11 +45,17 @@ export type FetchFeedResult =
       siteHome: HomeUrlOutcome
       /** Items beyond MAX_ITEMS_PER_FETCH, left alone this time. */
       itemsSkipped: number
+      /**
+       * Set when this feed's permanent redirect lands on a URL another feed already holds. This
+       * feed keeps its own URL; the id is the feed it duplicates, so a caller that just created
+       * it can undo that rather than keep two rows for one blog.
+       */
+      duplicateOf?: number
     }
   | { status: 'unchanged' }
   | { status: 'error'; error: string; kind: string }
   | { status: 'dead'; error: string }
-  | { status: 'skipped'; reason: string }
+  | { status: 'skipped'; reason: string; duplicateOf?: number }
 
 /** What `onArticleStored` learns about the article whose transaction is about to commit. */
 export type StoredArticle = { id: number; sourceLang: string | null; kind: 'inserted' | 'updated' }
@@ -207,6 +214,24 @@ async function itemsLast7d(db: Db, feedId: number, now: Date): Promise<number> {
       ),
     )
   return row?.n ?? 0
+}
+
+/**
+ * The id of the feed this one permanently redirects onto, when adopting that verdict costs
+ * nobody anything: the destination exists, it is not us, and no member subscribes to this row.
+ */
+async function aliasOf(db: Db, feed: FeedRow, destination: string): Promise<number | null> {
+  const [other] = await db
+    .select({ id: feeds.id })
+    .from(feeds)
+    .where(eq(feeds.feedUrl, destination))
+  if (!other || other.id === feed.id) return null
+  const [subscriber] = await db
+    .select({ feedId: subscriptions.feedId })
+    .from(subscriptions)
+    .where(eq(subscriptions.feedId, feed.id))
+    .limit(1)
+  return subscriber ? null : other.id
 }
 
 async function recordSuccess(
@@ -414,6 +439,22 @@ export async function fetchFeed(
     return recordError(db, feed, err.kind, err.message, now, {})
   }
 
+  // A permanent redirect onto a URL another feed already holds means this row is an alias of
+  // that feed. Decide it here, the moment the redirect is known and before anything is written:
+  // everything below would store a second copy of every post and queue a translation for each,
+  // and a 304 would return without ever looking at the redirect at all.
+  //
+  // A feed somebody subscribes to is left alone — skipping its articles would empty the blog for
+  // its readers — and keeps its own URL through the collision guard further down.
+  if (res.permanentRedirectTo) {
+    const alias = await aliasOf(db, feed, res.permanentRedirectTo)
+    if (alias !== null) {
+      // Still record the visit, or the scheduler re-runs this every tick.
+      await recordSuccess(db, feed, now, { hadNewItems: false, floorSec: null }, opts)
+      return { status: 'skipped', reason: 'duplicate', duplicateOf: alias }
+    }
+  }
+
   // Provenance is judged only on responses proven to be this feed: a valid 304, a body already
   // parsed and stored, or a body that parses now. A redirect that ends in an error page or a
   // login form says nothing about where the feed lives and must not move it.
@@ -517,6 +558,9 @@ export async function fetchFeed(
     null,
   )
 
+  // Held in an object because it is assigned inside the catch below, where control-flow
+  // narrowing on a plain `let` would not follow.
+  const duplicate: { of?: number } = {}
   await recordSuccess(
     db,
     feed,
@@ -540,7 +584,18 @@ export async function fetchFeed(
     opts,
   ).catch(async (err: unknown) => {
     // A permanent redirect onto a URL that already exists as another feed: keep ours.
-    if (res.permanentRedirectTo && String(err).includes('feeds_feed_url_key')) {
+    //
+    // The constraint name lives on the driver error's `cause`, never in its message -- the
+    // message is drizzle's "Failed query: ..." -- so matching on String(err) never fired and
+    // this recovery was dead from the day it was written. `social.ts` reads the same shape.
+    const cause = (err as { cause?: { code?: string; constraint_name?: string } }).cause
+    const collision = cause?.code === '23505' && cause?.constraint_name === 'feeds_feed_url_key'
+    if (res.permanentRedirectTo && collision) {
+      const [other] = await db
+        .select({ id: feeds.id })
+        .from(feeds)
+        .where(eq(feeds.feedUrl, res.permanentRedirectTo))
+      if (other) duplicate.of = other.id
       await recordSuccess(
         db,
         feed,
@@ -562,5 +617,6 @@ export async function fetchFeed(
     newArticleIds,
     updatedArticleIds,
     siteHome,
+    ...(duplicate.of === undefined ? {} : { duplicateOf: duplicate.of }),
   }
 }

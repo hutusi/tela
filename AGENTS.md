@@ -45,6 +45,7 @@ bun run db:local --port 54322        # migrated Postgres with the development us
 bun run db:prepare                   # the same setup applied to an existing database
 bun run worker:once fetch <feedUrl>  # run one job by hand (DATABASE_URL=…)
 bun run worker:once repair-titles    # requeue missing eager title translations in batches
+bun run worker:once seed-discover    # fetch the curated blogs and feature them in Discover
 cd apps/web && bun run preview       # OpenNext build + local Workers runtime
 cd apps/web && bun run icons         # redraw icon.svg, favicon.ico, apple-icon.png from the mark
 ```

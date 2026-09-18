@@ -40,7 +40,7 @@ export async function GET(request: Request): Promise<Response> {
     upstream = await fetch(target, {
       headers: {
         accept: 'image/avif,image/webp,image/*;q=0.9,*/*;q=0.5',
-        'user-agent': 'Tela/0.1 (+https://tela.app/bot; image proxy)',
+        'user-agent': 'Tela/0.1 (+https://tela.ainaive.com; image proxy)',
       },
       redirect: 'follow',
       signal: AbortSignal.timeout(TIMEOUT_MS),

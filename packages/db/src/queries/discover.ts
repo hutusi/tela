@@ -1,4 +1,4 @@
-import { isTopic } from '@tela/shared'
+import { isTopic, type SiteListing } from '@tela/shared'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import type { Db } from '../client'
 import { articles, feeds, profiles, siteClaims, sites, subscriptions } from '../schema'
@@ -101,7 +101,8 @@ export async function listDiscoverSites(
           : sql``
       }
     order by ${query ? sql`similarity(coalesce(s.title, ''), ${query}) desc,` : sql``}
-             (s.listing = 'featured') desc, s.reader_count desc, s.id
+             (s.listing = 'featured') desc, (s.claimed_by is not null) desc,
+             s.reader_count desc, s.id
     limit ${Math.min(filter.limit ?? 60, 200)}
   `)
   return rows.map((r) => ({
@@ -339,4 +340,84 @@ export async function siteNeedsAssets(db: Db, siteId: number): Promise<boolean> 
     .from(sites)
     .where(eq(sites.id, siteId))
   return row !== undefined && row.checked === null
+}
+
+export type CurateSiteInput = {
+  /** New listing. Seeding only ever passes 'featured'. */
+  listing?: SiteListing
+  /** Editorial topics, applied only while the site is unclaimed. */
+  topics?: string[]
+  /** Also move a 'rejected' site. Seeding never passes this. */
+  force?: boolean
+  /** Compute the result without writing, so a preview cannot drift from what a run would do. */
+  dryRun?: boolean
+}
+
+export type CurateSiteResult = {
+  siteId: number
+  /** State after the call. */
+  listing: SiteListing
+  topics: string[]
+  listingChanged: boolean
+  topicsChanged: boolean
+  claimed: boolean
+  /** Why a requested write was withheld. */
+  withheld: 'rejected' | 'claimed' | null
+}
+
+/**
+ * The operator's curation write: the counterpart to `setSiteTopics`, which belongs to the
+ * claimant and so cannot serve the editorial seed. Three rules make a re-run safe:
+ *
+ * - **Topics are written only while the site is unclaimed.** A claimant curates their own
+ *   topics, including choosing to have none, and a seed re-run must not stomp that.
+ * - **`rejected` is sticky.** Hiding a site is a deliberate operator act; only `force` undoes it.
+ * - **No-op writes are skipped**, so `updated_at` does not churn when nothing changed.
+ *
+ * It does not encode "never downgrade" — un-featuring has to be possible — so a caller that
+ * wants monotonic promotion gets it by only ever passing a higher listing.
+ */
+export async function curateSite(
+  db: Db,
+  siteId: number,
+  input: CurateSiteInput,
+): Promise<CurateSiteResult | null> {
+  const wanted = input.topics === undefined ? null : [...new Set(input.topics.filter(isTopic))]
+  return db.transaction(async (tx) => {
+    const [site] = await tx
+      .select({ listing: sites.listing, topics: sites.topics, claimedBy: sites.claimedBy })
+      .from(sites)
+      .where(eq(sites.id, siteId))
+      .for('update')
+    if (!site) return null
+    const claimed = site.claimedBy !== null
+    const rejected = site.listing === 'rejected' && input.force !== true
+    const nextListing =
+      input.listing === undefined || rejected || input.listing === site.listing
+        ? null
+        : input.listing
+    const nextTopics = wanted === null || claimed || sameTopics(site.topics, wanted) ? null : wanted
+    if (!input.dryRun && (nextListing !== null || nextTopics !== null)) {
+      await tx
+        .update(sites)
+        .set({
+          ...(nextListing === null ? {} : { listing: nextListing }),
+          ...(nextTopics === null ? {} : { topics: nextTopics }),
+        })
+        .where(eq(sites.id, siteId))
+    }
+    return {
+      siteId,
+      listing: nextListing ?? site.listing,
+      topics: nextTopics ?? site.topics,
+      listingChanged: nextListing !== null,
+      topicsChanged: nextTopics !== null,
+      claimed,
+      withheld: rejected ? 'rejected' : wanted !== null && claimed ? 'claimed' : null,
+    }
+  })
+}
+
+function sameTopics(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((t, i) => t === b[i])
 }

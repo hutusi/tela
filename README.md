@@ -59,6 +59,8 @@ DATABASE_URL=... bun run db:migrate       # apply packages/db/migrations
   content-addressed cache so nothing is translated twice. Providers are pluggable (Aliyun Bailian
   GLM first, Anthropic second, a mock for tests).
 - **Discover**: listed blogs with topic and language filters, site pages, subscribe from a card.
+  A blog gets there three ways: an editorial pick, its author claiming it, or three distinct
+  members subscribing to it.
 - **Claim your feed**: prove ownership with a meta tag or `rel="me"` link; claimed sites are listed
   and can opt out of translation.
 - **Recommendations**: recommend a post with a note; the note appears on your public profile
