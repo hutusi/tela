@@ -151,7 +151,10 @@ distinct subscribers on an unclaimed site.
 - **Failure signatures** in a run's report: `too_large` — the feed is over the worker's 5 MB body
   cap, so use the blog's recent-items feed instead of its full archive; `timeout` on a mainland
   host — the CLI passes no region policy and never flips a feed itself, so add `region: 'cn'` to
-  that entry; `no_articles` — the feed parsed but held nothing, so the site is left unlisted.
+  that entry; `no_articles` — the feed parsed but held nothing, so the site is left unlisted;
+  `duplicate` — the curated URL permanently redirects onto a feed already stored, so the run
+  adopts that one and reports its id. Harmless but not free: point the list entry at the URL the
+  blog actually serves and the redirect stops being paid for on every run.
 - Feature a site by hand: `update sites set listing = 'featured' where id = …`; hide one:
   `'rejected'`, which the seed then leaves alone on every later run.
 - Release a claim so another member can claim the site: `update sites set claimed_by = null,
