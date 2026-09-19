@@ -586,6 +586,38 @@ describe('fetchFeed', () => {
     ).not.toHaveLength(0)
   })
 
+  test('two fetches of one feed at once store each article exactly once', async () => {
+    // Reachable without any hand-run command: feed.fetch uses pg-boss's `short` policy, whose
+    // unique index covers state = 'created', so a retry can run beside its own active job. Before
+    // this, the loser hit articles_feed_dedup_key and threw away the whole fetch.
+    server.text('/feed.xml', threeItems())
+    const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
+    const seen: Array<{ id: number }> = []
+    const both = await Promise.all([
+      fetchFeed(t.db, http, feedId, {
+        ...opts,
+        onArticleStored: async (_tx, a) => void seen.push({ id: a.id }),
+      }),
+      fetchFeed(t.db, http, feedId, {
+        ...opts,
+        onArticleStored: async (_tx, a) => void seen.push({ id: a.id }),
+      }),
+    ])
+    expect(both.every((r) => r.status === 'fetched' || r.status === 'unchanged')).toBe(true)
+
+    const rows = await t.db.select().from(articles).where(eq(articles.feedId, feedId))
+    expect(rows).toHaveLength(3)
+    // Every stored article got its content, and each was announced once -- a second
+    // announcement would mean a second title translation billed for the same post.
+    const contents = await t.db.select().from(articleContents)
+    expect(contents).toHaveLength(3)
+    expect(seen).toHaveLength(3)
+    expect(new Set(seen.map((s) => s.id)).size).toBe(3)
+    // And the two runs agree on how many articles were new between them.
+    const counted = both.reduce((n, r) => n + (r.status === 'fetched' ? r.newArticles : 0), 0)
+    expect(counted).toBe(3)
+  })
+
   test('honors Retry-After on 429', async () => {
     server.text('/feed.xml', 'slow down', { status: 429, headers: { 'retry-after': '120' } })
     const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })

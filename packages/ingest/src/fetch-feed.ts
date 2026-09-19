@@ -313,7 +313,9 @@ async function upsertArticle(
     .where(and(eq(articles.feedId, feed.id), eq(articles.dedupKey, key)))
 
   if (!existing) {
-    let insertedId: number | null = null
+    // Held in an object because it is assigned inside the transaction callback, where
+    // control-flow narrowing on a plain `let` would not follow.
+    const stored: { id?: number } = {}
     await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(articles)
@@ -331,9 +333,18 @@ async function upsertArticle(
           wordCount: processed.wordCount,
           readingMinutes: processed.readingMinutes,
         })
+        // Two fetches of one feed can run at once -- a retry beside its own active job, since
+        // pg-boss's `short` policy dedups `created` jobs only, or a hand-run command beside the
+        // scheduler. Both then insert the same items, and without this the loser threw and lost
+        // the whole fetch. Jobs have to be idempotent (ADR 0004), which includes against
+        // themselves.
+        .onConflictDoNothing({ target: [articles.feedId, articles.dedupKey] })
         .returning({ id: articles.id })
+      // No row means the other fetch got there first: it stored the content and queued the
+      // translation, so this one must not count the article again or queue it twice.
+      if (!row) return
       const id = (row as { id: number }).id
-      insertedId = id
+      stored.id = id
       await tx.insert(articleContents).values({
         articleId: id,
         html: processed.html,
@@ -342,7 +353,8 @@ async function upsertArticle(
       })
       if (onStored) await onStored(tx, { id, sourceLang, kind: 'inserted' })
     })
-    return { kind: 'inserted', id: insertedId }
+    if (stored.id === undefined) return { kind: 'unchanged', id: null }
+    return { kind: 'inserted', id: stored.id }
   }
 
   if (existing.contentHash === processed.contentHash || processed.text.length === 0) {

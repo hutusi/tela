@@ -98,6 +98,11 @@ Defects that already cost time here, not hypotheticals.
 - **Two Tailwind utilities for the same property under different variants have no defined winner.** `data-[read=1]:opacity-[.62]` against `data-[active=1]:opacity-100` resolves by Tailwind's emission order, not by the order in the class string. Where one must beat the other, write both in `globals.css` and let source order say so.
 - **A Next route file may only export handlers** — a helper exported beside `GET` breaks the build. Give it its own module and its own test.
 - **Create the abort signal once per request, not inside the redirect loop**, or every hop gets the full timeout again: 100 ms was observed taking ~500 ms through five redirects.
+- **Two fetches of one feed can run at once**, so storing an article must tolerate losing that
+  race. pg-boss's `short` policy dedups `created` jobs only, so a retry runs beside its own active
+  job; a hand-run command races the scheduler the same way. The insert is
+  `onConflictDoNothing` on `(feed_id, dedup_key)` and the loser reports the article as unchanged,
+  which keeps a title translation from being billed twice for one post.
 - **A job's execution budget must be shorter than its pg-boss lease**, or a job outlives the lease, runs concurrently with its own retry, and pays the provider twice.
 - **GLM copies straight quotes into JSON unescaped**, invalidating the whole reply and making the job retry into the same reply; `packages/llm` recovers entries one at a time by id.
 - **A queue's policy is fixed at creation.** Change one in code and the worker refuses to start: drain it, `select pgboss.delete_queue('<name>')`, restart.
