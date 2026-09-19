@@ -116,6 +116,16 @@ Defects that already cost time here, not hypotheticals.
   matches, so a hash recorded beside another fetch's article writes strands the stale copy until
   the feed changes again. The loser of that check clears the hash instead, which makes the next
   fetch reprocess and repair whatever the interleaving left.
+
+  **Known residual, deliberately not patched further.** The claim keys on `last_fetched_at`, which
+  only moves when the other fetch finishes. A fetch that commits some article updates and *then
+  throws* mid-loop leaves that column untouched, so a concurrent fetch still claims its hash over
+  the older content. It needs all three of: a second fetch of the same feed, a different body, and
+  a mid-loop failure — and it repairs itself the next time the feed changes. Three rounds of
+  making individual writes defensive each closed one seam and revealed the next; the fix is to
+  stop two fetches of one feed running at once, which is what pg-boss's singleton is supposed to
+  provide and does not (its unique index covers `created` only). Serialize per feed rather than
+  adding a fourth guard here.
 - **A job's execution budget must be shorter than its pg-boss lease**, or a job outlives the lease, runs concurrently with its own retry, and pays the provider twice.
 - **GLM copies straight quotes into JSON unescaped**, invalidating the whole reply and making the job retry into the same reply; `packages/llm` recovers entries one at a time by id.
 - **A queue's policy is fixed at creation.** Change one in code and the worker refuses to start: drain it, `select pgboss.delete_queue('<name>')`, restart.

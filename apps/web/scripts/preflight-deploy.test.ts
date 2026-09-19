@@ -86,6 +86,13 @@ describe('deploy preflight', () => {
     ])
   })
 
+  test('a second declaration of the same key does not hide behind the first', () => {
+    // dotenv keeps the last one a file makes; a guard that stopped at the first read the empty
+    // value as decisive while Next loaded the URL under it.
+    const dir = envDir({ '.env.production': `DATABASE_URL=\nDATABASE_URL=${LOCAL}\n` })
+    expect(findForbidden(dir, none).map((f) => f.source)).toEqual(['apps/web/.env.production'])
+  })
+
   test('reads the syntax Next reads: export, colon, quotes, comments', () => {
     // Both forms are in the regex @next/env bundles; a guard that read only `KEY=` missed one.
     const exported = envDir({ '.env': `# DATABASE_URL=ignored\nexport DATABASE_URL="${LOCAL}"\n` })

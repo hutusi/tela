@@ -41,8 +41,8 @@ const FORBIDDEN: Record<string, { why: string; off: string[] }> = {
  * honours it and a guard that did not would miss the value), optional quotes, `#` comments, no
  * interpolation.
  */
-function parse(text: string): Map<string, string> {
-  const out = new Map<string, string>()
+function parse(text: string): Map<string, string[]> {
+  const out = new Map<string, string[]>()
   for (const raw of text.split('\n')) {
     const line = raw.trim().replace(/^export\s+/, '')
     if (!line || line.startsWith('#')) continue
@@ -52,7 +52,9 @@ function parse(text: string): Map<string, string> {
     if (!m) continue
     const key = m[1] as string
     const value = (m[2] as string).trim().replace(/^(['"])(.*)\1$/, '$2')
-    if (!out.has(key)) out.set(key, value)
+    // Every declaration, not the first: dotenv keeps the last one a file makes, and a guard that
+    // stopped at the first read `DATABASE_URL=` as decisive while Next took the URL below it.
+    out.set(key, [...(out.get(key) ?? []), value])
   }
   return out
 }
@@ -83,8 +85,8 @@ export function findForbidden(
     for (const file of FILES) {
       const path = join(dir, file)
       if (!existsSync(path)) continue
-      const value = parse(readFileSync(path, 'utf8')).get(key)
-      if (value !== undefined && !off.includes(value)) seen.push(`apps/web/${file}`)
+      const values = parse(readFileSync(path, 'utf8')).get(key) ?? []
+      if (values.some((value) => !off.includes(value))) seen.push(`apps/web/${file}`)
     }
     const fromEnv = env[key]
     // Bun may have put a file's value here, so only say "the environment" when no file did.
