@@ -457,6 +457,15 @@ test.describe('translation', () => {
     // Back to the default, or every spec after this one inherits the cookie.
     await page.getByTestId('mode-side').click()
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'side')
+
+    // A mode in the URL governs its own view and nothing after it. Someone else's ?mode=orig
+    // link must not silently become this reader's preference the moment they close it — only
+    // the toggle changes that, because only the toggle writes the cookie.
+    await page.goto(`${bare.toString()}&mode=orig`)
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
+    await page.getByTestId('close-article').click()
+    await foreign.click()
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'side')
     await page.getByTestId('close-article').click()
   })
 })

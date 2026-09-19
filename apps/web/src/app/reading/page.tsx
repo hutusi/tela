@@ -42,12 +42,15 @@ export default async function ReadingPage({ searchParams }: Props) {
   const user = await requireUser('/reading')
   const raw = await searchParams
   // A URL with no article carries no mode — a display mode for no article means nothing — so
-  // closing an article used to forget it. The cookie supplies the default; the URL still wins.
+  // closing an article used to forget it. The cookie remembers it instead.
+  //
+  // Two values, deliberately. `params.mode` is what this view shows and what its row hrefs carry,
+  // so a URL that names a mode governs itself. `defaultMode` is what the reader chose, and only
+  // the cookie speaks for that: a shared ?mode=orig link is someone else's choice, and must not
+  // become this reader's default the moment they close it.
   const remembered = readingModeFromCookie((await cookies()).get(READING_MODE_COOKIE)?.value)
-  const params = {
-    ...parseReadingParams(raw),
-    mode: readingModeParam(raw.mode) ?? remembered ?? 'side',
-  }
+  const defaultMode = remembered ?? 'side'
+  const params = { ...parseReadingParams(raw), mode: readingModeParam(raw.mode) ?? defaultMode }
   const db = await getDb()
   // The reading language comes from a cookie, so nothing here waits on the database to learn
   // which translations to join.
@@ -82,7 +85,7 @@ export default async function ReadingPage({ searchParams }: Props) {
     <ReadingShell
       initial={initial}
       readingLang={readingLang}
-      defaultMode={params.mode}
+      defaultMode={defaultMode}
       filter={params.filter}
       emptyState={
         <Suspense fallback={null}>
