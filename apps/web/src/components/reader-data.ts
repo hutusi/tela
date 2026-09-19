@@ -34,6 +34,8 @@ export type ReaderTranslation = {
   targetLang: string
   state: ReaderTranslationState
   failedBlocks: number
+  /** Ids of the top-level blocks holding one, so the reader can mark where the source shows. */
+  untranslatedBlocks: string[]
   /** Rendered translated body, present only when it is fresh and readable. */
   blocks: ReaderBlock[] | null
   title: string | null

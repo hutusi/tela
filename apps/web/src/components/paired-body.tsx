@@ -75,15 +75,28 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
           const cell = `min-w-0 article-body${pair.tag === null ? '' : ' article-block'}${
             pair.tag !== null && LEAD.has(pair.tag) ? ' mt-3' : ''
           }`
+          // A block whose translation failed is showing its source text. Say so, in a real
+          // element rather than generated content: ::before is unselectable and only most
+          // screen readers announce it. Only the failures pay for the wrapper.
+          const translatedCell = (
+            <div
+              className={cell}
+              lang={pair.untranslated ? sourceLang : targetLang}
+              data-testid="body-translated"
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: allowlist-sanitized by @tela/content; images go through the signed proxy
+              dangerouslySetInnerHTML={{ __html: pair.translated }}
+            />
+          )
           return (
             <Fragment key={pair.id}>
-              <div
-                className={cell}
-                lang={targetLang}
-                data-testid="body-translated"
-                // biome-ignore lint/security/noDangerouslySetInnerHtml: allowlist-sanitized by @tela/content; images go through the signed proxy
-                dangerouslySetInnerHTML={{ __html: pair.translated }}
-              />
+              {pair.untranslated ? (
+                <div className="article-untranslated min-w-0">
+                  <span className="article-untranslated-label">{tt('blockUntranslated')}</span>
+                  {translatedCell}
+                </div>
+              ) : (
+                translatedCell
+              )}
               <div
                 className={`${cell} article-source`}
                 lang={sourceLang}

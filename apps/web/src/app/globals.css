@@ -243,6 +243,24 @@
   margin-bottom: 8px;
 }
 
+/* A block the translator could not do keeps its source text in the translation column; passing
+   that off as a translation is the thing to avoid. The label is a real element, so it can be
+   selected and is announced like any other text. */
+.article-untranslated {
+  border-left: 2px dashed var(--color-thumb);
+  padding-left: 12px;
+}
+.article-untranslated-label {
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
 @container (min-width: 1080px) {
   /* Rows are contiguous, so stretching each source cell tiles the tint into one continuous band
      down the second column rather than a stack of rectangles. Only the two ends of that band

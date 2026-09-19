@@ -83,8 +83,11 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
   const shownBlocks = showTrans ? (translation?.blocks ?? []) : blocks
   const shownHtml = useMemo(() => shownBlocks.map((b) => b.html).join(''), [shownBlocks])
   const pairs = useMemo(
-    () => (twoCols ? pairBlocks(translation?.blocks ?? [], blocks) : []),
-    [twoCols, translation?.blocks, blocks],
+    () =>
+      twoCols
+        ? pairBlocks(translation?.blocks ?? [], blocks, translation?.untranslatedBlocks ?? [])
+        : [],
+    [twoCols, translation?.blocks, translation?.untranslatedBlocks, blocks],
   )
 
   const onMode = (next: ReadingMode) => {

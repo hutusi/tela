@@ -121,6 +121,7 @@
     },
     "columnTranslated": "{target} · translation",
     "columnOriginal": "original",
+    "blockUntranslated": "not translated",
     "rateLimited": "Too many translation requests for now. Please try again in a little while.",
     "budgetExhausted": "You have used today's translation allowance. It resets tomorrow.",
     "unavailable": "The translation could not be started. Please try again.",

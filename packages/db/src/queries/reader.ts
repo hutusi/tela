@@ -207,6 +207,8 @@ export type ArticleTranslationDetail = {
   title: string | null
   html: string | null
   failedBlocks: number
+  /** Leaf blocks that fell back to their source text, so the reader can say which. */
+  failedBlockIds: string[]
 }
 
 export type ArticleDetail = ArticleListItem & {
@@ -387,6 +389,7 @@ export async function getArticle(
             title: row.translationTitle,
             html: row.translationHtml,
             failedBlocks: row.translationFailedBlockIds?.length ?? 0,
+            failedBlockIds: row.translationFailedBlockIds ?? [],
           },
     recommendation: row.recommendationId === null ? null : { note: row.recommendationNote },
   }

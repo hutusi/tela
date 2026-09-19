@@ -121,6 +121,7 @@
     },
     "columnTranslated": "{target} · 译文",
     "columnOriginal": "原文",
+    "blockUntranslated": "未翻译",
     "rateLimited": "翻译请求过于频繁，请稍后再试。",
     "budgetExhausted": "今日的翻译额度已用完，明天会重置。",
     "unavailable": "暂时无法开始翻译，请重试。",

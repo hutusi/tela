@@ -102,7 +102,8 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   visibility note.
 - Paired reading: one grid row per top-level block, translation first. The original — its title
   included — sits on `source`, continuous down the second column and a rounded panel per block
-  when the two stack.
+  when the two stack. A block whose translation failed keeps its source text in the translation
+  column, behind a dashed `thumb` rule and a "not translated" label.
 - Swatch colors are derived from the feed id (`oklch(0.55 0.11 hue)`, hue = id × 137.508 mod 360)
   so a feed keeps its color everywhere without storing one.
 
