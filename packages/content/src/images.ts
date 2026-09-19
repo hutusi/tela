@@ -4,7 +4,7 @@
  * signature before fetching, so it cannot be used as an open proxy.
  */
 import render from 'dom-serializer'
-import { type Element, isTag } from 'domhandler'
+import { type Element, isTag, type ParentNode } from 'domhandler'
 import { findAll } from 'domutils'
 import { parseDocument } from 'htmlparser2'
 
@@ -91,12 +91,16 @@ export async function verifyImageParams(
   }
 }
 
-/** Rewrite every <img src> in article HTML through `sign`. */
-export async function rewriteImages(
-  html: string,
+/**
+ * Rewrite every <img src> in an already-parsed tree through `sign`, in place.
+ *
+ * Separate from `rewriteImages` so a caller that parses for its own reasons pays for one parse
+ * rather than two: `renderArticleBlocks` splits and signs in the same pass.
+ */
+export async function rewriteImagesIn(
+  doc: ParentNode,
   sign: (url: string) => Promise<string>,
-): Promise<string> {
-  const doc = parseDocument(html)
+): Promise<void> {
   const images = findAll((el): el is Element => isTag(el) && el.name === 'img', doc.children)
   await Promise.all(
     images.map(async (img) => {
@@ -106,5 +110,14 @@ export async function rewriteImages(
       img.attribs.src = await sign(src)
     }),
   )
+}
+
+/** Rewrite every <img src> in article HTML through `sign`. */
+export async function rewriteImages(
+  html: string,
+  sign: (url: string) => Promise<string>,
+): Promise<string> {
+  const doc = parseDocument(html)
+  await rewriteImagesIn(doc, sign)
   return render(doc, { encodeEntities: 'utf8' })
 }
