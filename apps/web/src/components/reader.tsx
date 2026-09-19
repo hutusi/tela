@@ -1,13 +1,14 @@
 'use client'
 
 import type { ArticleFilter } from '@tela/db/queries'
-import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
 import { useSearchParams } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
+import { useTranslations } from 'next-intl'
 import { useMemo } from 'react'
 import { parseReadingMode, type ReadingMode } from '@/app/reading/href'
+import { pairBlocks } from '@/lib/block-pairs'
 import { LikeButton } from './like-button'
 import { MarkRead } from './mark-read'
+import { PairedBody } from './paired-body'
 import { PollUntil } from './poll-until'
 import type { ReaderData } from './reader-data'
 import { RecommendPopover } from './recommend-popover'
@@ -27,11 +28,22 @@ type Props = {
   onReload: () => void
 }
 
-function Body({ html, lang, testId }: { html: string; lang?: string | undefined; testId: string }) {
+function Body({
+  html,
+  lang,
+  dir,
+  testId,
+}: {
+  html: string
+  lang?: string | undefined
+  dir?: 'auto' | undefined
+  testId: string
+}) {
   return (
     <div
       className="article-body"
       lang={lang}
+      dir={dir}
       data-testid={testId}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: allowlist-sanitized by @tela/content; images go through the signed proxy
       dangerouslySetInnerHTML={{ __html: html }}
@@ -49,8 +61,6 @@ function Body({ html, lang, testId }: { html: string; lang?: string | undefined;
  */
 export function Reader({ data, readingLang, filter, onClose, onReload }: Props) {
   const t = useTranslations('reader')
-  const tt = useTranslations('translation')
-  const locale = useLocale()
   const mode = parseReadingMode(useSearchParams().get('mode'))
   const { article, blocks, translation, recommendation, extracting, revision } = data
 
@@ -70,10 +80,11 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
   const failed = translation?.state === 'failed'
   const requestOwnsPolling = needsRequest || failed
 
-  const originalHtml = useMemo(() => blocks.map((b) => b.html).join(''), [blocks])
-  const translatedHtml = useMemo(
-    () => (translation?.blocks ?? []).map((b) => b.html).join(''),
-    [translation?.blocks],
+  const shownBlocks = showTrans ? (translation?.blocks ?? []) : blocks
+  const shownHtml = useMemo(() => shownBlocks.map((b) => b.html).join(''), [shownBlocks])
+  const pairs = useMemo(
+    () => (twoCols ? pairBlocks(translation?.blocks ?? [], blocks) : []),
+    [twoCols, translation?.blocks, blocks],
   )
 
   const onMode = (next: ReadingMode) => {
@@ -181,56 +192,35 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
           />
         ) : null}
 
-        <div
-          className={`grid items-start gap-10 ${twoCols ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}
-        >
-          {showTrans && translation?.blocks ? (
-            <div className="min-w-0 max-w-[640px]" lang={translation.targetLang}>
-              {twoCols ? (
-                <div className="mb-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-accent">
-                  {tt('columnTranslated', {
-                    target:
-                      (LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en)[
-                        translation.targetLang
-                      ] ?? translation.targetLang,
-                  })}
-                </div>
-              ) : null}
-              <h1
-                className={`mb-6 font-serif font-medium leading-[1.12] tracking-tight ${twoCols ? 'text-[32px]' : 'text-[40px]'}`}
-                style={{ textWrap: 'pretty' }}
-                data-testid="article-title"
-              >
-                {title}
-              </h1>
-              <Body html={translatedHtml} lang={translation.targetLang} testId="body-translated" />
-            </div>
-          ) : null}
-          {showOrig ? (
-            <div
-              className={`min-w-0 max-w-[640px] ${twoCols ? 'text-ink-2' : ''}`}
-              lang={sourceLang}
+        {twoCols ? (
+          <PairedBody
+            pairs={pairs}
+            title={title}
+            originalTitle={article.title}
+            targetLang={translation?.targetLang ?? readingLang}
+            sourceLang={sourceLang}
+          />
+        ) : (
+          <div className="max-w-[640px]">
+            <h1
+              className="mb-6 font-serif text-[40px] font-medium leading-[1.12] tracking-tight"
+              style={{ textWrap: 'pretty' }}
+              data-testid="article-title"
             >
-              {twoCols ? (
-                <div className="mb-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-                  {tt('columnOriginal')}
-                </div>
-              ) : null}
-              <h1
-                className={`mb-6 font-serif font-medium leading-[1.12] tracking-tight ${twoCols ? 'text-[32px]' : 'text-[40px]'}`}
-                style={{ textWrap: 'pretty' }}
-                data-testid={showTrans ? 'article-title-original' : 'article-title'}
-              >
-                {article.title}
-              </h1>
-              {originalHtml ? (
-                <Body html={originalHtml} lang={sourceLang} testId="body-original" />
-              ) : (
-                <p className="text-muted">{t('noContent')}</p>
-              )}
-            </div>
-          ) : null}
-        </div>
+              {title}
+            </h1>
+            {shownHtml ? (
+              <Body
+                html={shownHtml}
+                lang={showTrans ? translation?.targetLang : sourceLang}
+                dir={showTrans ? undefined : 'auto'}
+                testId={showTrans ? 'body-translated' : 'body-original'}
+              />
+            ) : (
+              <p className="text-muted">{t('noContent')}</p>
+            )}
+          </div>
+        )}
 
         <div className="mt-10 flex max-w-[640px] items-center gap-4 border-t border-line pt-6">
           <Swatch id={article.feedId} title={article.feedTitle} size={44} round />

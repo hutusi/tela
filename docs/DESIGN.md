@@ -17,6 +17,7 @@ stay aligned.
 | `line` | `#e3dccf` | borders |
 | `hover` | `#ece6da` | hover and selected backgrounds |
 | `thumb` | `#d9d2c5` | scrollbar thumb, dashed borders |
+| `source` | `color-mix(hover 55%, paper)` | ground for the original beside its translation |
 | `accent` | `oklch(0.50 0.10 150)` | unread dot, avatar, links, the mark's second strand |
 | `accent-strong` | `oklch(0.40 0.10 150)` | link hover |
 
@@ -84,21 +85,30 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
   list are sticky and scroll independently. Below `lg` the sidebar is hidden, a `MobileNav`
   disclosure above the list carries the filters, subscriptions and "Add a feed", and the list gives
-  way to the reader when an article is open (stacked fallback: list → article as a page; the
-  side-by-side body stacks below `xl`). Mobile is a fallback, not a design; `mobile.e2e.ts` keeps
-  it working.
+  way to the reader when an article is open (stacked fallback: list → article as a page). Mobile is
+  a fallback, not a design; `mobile.e2e.ts` keeps it working.
+- Side by side is a container query on the reader pane, not a viewport breakpoint: two columns of
+  640px appear once the pane itself is 1080px, which is about a 1624px viewport after the sidebar
+  and list have taken 480. Below that the same grid is one column and the pairs interleave —
+  translation, its original, next paragraph — at the full measure. `styles.e2e.ts` measures the
+  columns at 1280, 1440 and 1700; the previous `xl` breakpoint rendered 348px columns at 1280 and
+  nothing caught it (ADR 0019).
 - List rows: feed swatch (10px), feed name, relative time, `XX → EN` badge for foreign posts,
   accent unread dot, serif title (19px wide / 15.5px slim), two-line excerpt, `min · ♡ · ↗` row.
   Read rows render at 62% opacity; the open row has a white background.
 - Reader: `✕ Close` left, Like (and Recommend, phase 7) right; meta line with swatch, feed,
-  author, time, reading time, original link; serif title 40px/1.12; body max 640px; author card
-  with a 44px round swatch, site title, tagline, reader count, and the visibility note.
+  author, time, reading time, original link; serif title 40px/1.12 alone and 32px when paired;
+  body max 640px; author card with a 44px round swatch, site title, tagline, reader count, and the
+  visibility note.
+- Paired reading: one grid row per top-level block, translation first. The original — its title
+  included — sits on `source`, continuous down the second column and a rounded panel per block
+  when the two stack.
 - Swatch colors are derived from the feed id (`oklch(0.55 0.11 hue)`, hue = id × 137.508 mod 360)
   so a feed keeps its color everywhere without storing one.
 
 ## Components (`apps/web/src/components`)
 
-`AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `ArticleList`, `Reader`,
+`AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `ArticleList`, `Reader`, `PairedBody`,
 `TranslationBar`, `LikeButton`, `MarkRead`, `RequestTranslation`, `AutoRefresh`, `EmptyState`,
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `RecommendPopover`. Discover's hero, topic chips,
 language menu (a native `<details>` dropdown), and claim banner live in `app/discover/page.tsx`.

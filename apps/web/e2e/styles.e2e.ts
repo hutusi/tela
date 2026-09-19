@@ -115,6 +115,66 @@ test.describe('stylesheet', () => {
     })
   }
 
+  /**
+   * The bilingual body was two whole documents in two grid cells, switched by `xl:grid-cols-2` —
+   * a 1280px *viewport*. But the reader pane is the third cell of a `220px 260px 1fr` grid, so at
+   * 1280 it is 800px wide: less padding and the gap, that is 348px per column, about 32 characters
+   * of 19.5px Garamond. The suite ran 412 and 1280 and asserted only that both bodies were
+   * *visible*, which is equally true when they are stacked. Nothing measured the columns.
+   */
+  for (const width of [1280, 1440, 1700]) {
+    test(`the bilingual reader never renders a cramped column at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto('/reading')
+      const row = page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first()
+      await row.click()
+      await expect(page.getByTestId('translation-bar')).toHaveAttribute(
+        'data-state',
+        /done|partial/,
+        { timeout: 30_000 },
+      )
+      await expect(page.getByTestId('paired-body')).toBeVisible()
+
+      const m = await page.evaluate(() => {
+        const at = (sel: string) =>
+          [...document.querySelectorAll(sel)].map((el) => el.getBoundingClientRect())
+        const t = at('[data-testid="body-translated"]')
+        const o = at('[data-testid="body-original"]')
+        const doc = document.documentElement
+        return {
+          count: t.length,
+          paired: o.length,
+          overflow: doc.scrollWidth - doc.clientWidth,
+          t0: { top: t[0]?.top ?? 0, width: t[0]?.width ?? 0 },
+          o0: { top: o[0]?.top ?? 0, width: o[0]?.width ?? 0 },
+          t1: t[1]?.top ?? 0,
+          o1: o[1]?.top ?? 0,
+        }
+      })
+
+      // More than one of each is the proof that this is really paired block by block rather than
+      // two whole bodies in two cells, which is what every earlier assertion would also accept.
+      expect(m.count, 'blocks are not paired').toBeGreaterThan(1)
+      expect(m.paired).toBe(m.count)
+      expect(m.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)
+
+      const sideBySide = Math.abs(m.t0.top - m.o0.top) < 4
+      if (sideBySide) {
+        // Two columns only when each can hold a line. 348px is the number this test exists for.
+        expect(m.t0.width, 'translation column is cramped').toBeGreaterThanOrEqual(500)
+        expect(m.o0.width, 'original column is cramped').toBeGreaterThanOrEqual(500)
+        // Rows align by construction; if this drifts the pairing has stopped being a grid.
+        expect(Math.abs(m.t1 - m.o1), 'pair 2 does not line up').toBeLessThan(1)
+      } else {
+        // Stacked is the interleave, not two whole bodies: the original sits between its own
+        // translation and the next one, and keeps the full measure.
+        expect(m.t0.width, 'interleaved column is cramped').toBeGreaterThanOrEqual(500)
+        expect(m.o0.top, 'original does not follow its translation').toBeGreaterThan(m.t0.top)
+        expect(m.t1, 'next pair does not follow the original').toBeGreaterThan(m.o0.top)
+      }
+    })
+  }
+
   test('search is reachable below the desktop breakpoint too', async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 })
     await page.goto('/reading')

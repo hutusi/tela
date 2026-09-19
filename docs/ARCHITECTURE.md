@@ -146,7 +146,11 @@ carries the previous chunk's tail as context.
   recorded as `done`/`failed`/skipped explicitly.
 - **Reader**: `TranslationBar` (written in X, translated by Tela, status) with Side by side /
   Translation / Original modes (`?mode=`); the list shows translated titles and excerpts and an
-  `XX → YY` badge. "Read in" in the header sets `profiles.reading_lang`.
+  `XX → YY` badge. "Read in" in the header sets `profiles.reading_lang`. Side by side is one grid
+  with a row per top-level block: `buildReaderData` sends both bodies already split
+  (`renderArticleBlocks`), `pairBlocks` zips them by index and refuses to zip when they disagree,
+  and a container query turns the pane into two 640px columns or leaves the pairs interleaved
+  (ADR 0019).
 - **Cost**: `llm_usage` per call, written as each chunk lands (a retried or expired job resumes
   from the cache); `LLM_DAILY_BUDGET_TOKENS` gates background work (title jobs defer to the next
   day on a cache miss once it is spent); reader requests carry `onDemand: true` in the job payload,

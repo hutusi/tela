@@ -363,8 +363,15 @@ test.describe('translation', () => {
     await expect(bar).toContainText('Written in Japanese')
     // Requested on open; the mock provider answers within seconds.
     await expect(bar).toHaveAttribute('data-state', /done|partial/, { timeout: 30_000 })
-    await expect(page.getByTestId('body-translated')).toContainText('en:')
-    await expect(page.getByTestId('body-original')).toBeVisible()
+    // Side by side is a grid of paired blocks, so both testids repeat: one cell per top-level
+    // block per side. Equal counts above one is the assertion that the two really are paired —
+    // "both bodies are visible" was also true of the two whole documents this replaced.
+    const translated = page.getByTestId('body-translated')
+    const original = page.getByTestId('body-original')
+    await expect(translated.first()).toContainText('en:')
+    await expect(original.first()).toBeVisible()
+    expect(await translated.count()).toBeGreaterThan(1)
+    expect(await original.count()).toBe(await translated.count())
     await expect(page.getByTestId('article-title')).toContainText('en:')
     // Opening the article and watching its translation land costs no page render at all: the pane
     // is fetched once on the click and once more when the translation becomes displayable, both
@@ -375,6 +382,8 @@ test.describe('translation', () => {
     await page.getByTestId('mode-trans').click()
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans')
     await expect(page.getByTestId('body-original')).toHaveCount(0)
+    // One language is one column and one measure: the body is a single block again, not a grid.
+    await expect(page.locator('.article-body')).toHaveCount(1)
     await page.getByTestId('mode-orig').click()
     await expect(page.getByTestId('body-translated')).toHaveCount(0)
     await expect(page.getByTestId('article-title')).not.toContainText('en:')
@@ -386,7 +395,7 @@ test.describe('translation', () => {
     await page.goBack()
     await expect(page).toHaveURL(/article=\d+.*mode=orig/)
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
-    await expect(page.getByTestId('body-original')).toBeVisible()
+    await expect(page.getByTestId('body-original').first()).toBeVisible()
     await expect(page.getByTestId('body-translated')).toHaveCount(0)
   })
 
