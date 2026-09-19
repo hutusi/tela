@@ -303,14 +303,17 @@ async function upsertArticle(
   const title = titleFor(item, processed.excerpt)
   const sourceLang = processed.lang === 'und' ? null : processed.lang
 
-  const [existing] = await db
-    .select({
-      id: articles.id,
-      contentHash: articles.contentHash,
-      contentVersion: articles.contentVersion,
-    })
-    .from(articles)
-    .where(and(eq(articles.feedId, feed.id), eq(articles.dedupKey, key)))
+  const columns = {
+    id: articles.id,
+    contentHash: articles.contentHash,
+    contentVersion: articles.contentVersion,
+  }
+  let existing = (
+    await db
+      .select(columns)
+      .from(articles)
+      .where(and(eq(articles.feedId, feed.id), eq(articles.dedupKey, key)))
+  )[0]
 
   if (!existing) {
     // Held in an object because it is assigned inside the transaction callback, where
@@ -353,8 +356,19 @@ async function upsertArticle(
       })
       if (onStored) await onStored(tx, { id, sourceLang, kind: 'inserted' })
     })
-    if (stored.id === undefined) return { kind: 'unchanged', id: null }
-    return { kind: 'inserted', id: stored.id }
+    if (stored.id !== undefined) return { kind: 'inserted', id: stored.id }
+    // The other fetch inserted it between our select and our insert. Re-read and carry on as if
+    // it had been there all along: reporting `unchanged` without comparing content would lose
+    // this fetch's version of the item whenever the two fetches read different bodies, and
+    // silently — the feed's body hash is recorded on the way out, so an identical body later
+    // short-circuits before ever reaching the article again.
+    existing = (
+      await db
+        .select(columns)
+        .from(articles)
+        .where(and(eq(articles.feedId, feed.id), eq(articles.dedupKey, key)))
+    )[0]
+    if (!existing) return { kind: 'unchanged', id: null }
   }
 
   if (existing.contentHash === processed.contentHash || processed.text.length === 0) {

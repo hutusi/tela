@@ -618,6 +618,37 @@ describe('fetchFeed', () => {
     expect(counted).toBe(3)
   })
 
+  test('losing the insert race still compares content instead of skipping it', async () => {
+    // The loser used to report the article unchanged without comparing content, then record its
+    // own body hash on the way out — after which an identical body short-circuits at the hash
+    // check and the article is never revisited. That fetch's version was lost for good.
+    const body = (content: string) =>
+      rss({
+        link: server.url('/'),
+        items: [{ guid: 'post-1', link: server.url('/posts/1'), title: 'Post 1', content }],
+      })
+    let served = 0
+    server.set('/feed.xml', (_req, res) => {
+      served += 1
+      res.writeHead(200, { 'content-type': 'application/xml; charset=utf-8' })
+      res.end(body(served === 1 ? '<p>first</p>' : '<p>second</p>'))
+    })
+    const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
+
+    await Promise.all([fetchFeed(t.db, http, feedId, opts), fetchFeed(t.db, http, feedId, opts)])
+
+    const rows = await t.db.select().from(articles).where(eq(articles.feedId, feedId))
+    expect(rows).toHaveLength(1)
+    // Two different bodies, so exactly one insert and one update: a loser that skipped without
+    // comparing would leave this at 1, whichever fetch won.
+    expect(rows[0]?.contentVersion).toBe(2)
+    const [content] = await t.db
+      .select()
+      .from(articleContents)
+      .where(eq(articleContents.articleId, rows[0]?.id as number))
+    expect(content?.html).toMatch(/first|second/)
+  })
+
   test('honors Retry-After on 429', async () => {
     server.text('/feed.xml', 'slow down', { status: 429, headers: { 'retry-after': '120' } })
     const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
