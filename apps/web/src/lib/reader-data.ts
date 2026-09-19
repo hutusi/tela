@@ -3,7 +3,7 @@ import { wantsExtraction } from '@tela/ingest'
 import { getLocale } from 'next-intl/server'
 import { articleRevision } from '@/app/reading/revision'
 import type { ReaderData, ReaderTranslation } from '@/components/reader-data'
-import { renderArticleHtml } from './article-html'
+import { articleBlocks } from './article-html'
 import { relativeTime } from './format'
 
 /**
@@ -39,8 +39,8 @@ export async function buildReaderData(
       targetLang: readingLang,
       state,
       failedBlocks: fresh ? row.failedBlocks : 0,
-      html: translationIsShowable(row, article.contentHash)
-        ? await renderArticleHtml(row?.html ?? '')
+      blocks: translationIsShowable(row, article.contentHash)
+        ? await articleBlocks(row?.html ?? '')
         : null,
       title: row?.title ?? null,
     }
@@ -67,7 +67,7 @@ export async function buildReaderData(
         readerCount: article.site.readerCount,
       },
     },
-    html: await renderArticleHtml(article.html),
+    blocks: await articleBlocks(article.html),
     translation,
     recommendation: article.recommendation,
     extracting: wantsExtraction(article),

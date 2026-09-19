@@ -16,12 +16,26 @@ export type ReaderTranslationState =
   | 'partial'
   | 'failed'
 
+/**
+ * One top-level block of a body.
+ *
+ * The reader pairs a translation against its original a block at a time, so both bodies cross
+ * the wire already split. `id` is the block's first `data-tb`; blocks that carry none — an
+ * `<hr>`, an image-only `<figure>` — fall back to their position, which is stable because both
+ * sides are the same elements in the same order.
+ */
+export type ReaderBlock = {
+  id: string
+  tag: string
+  html: string
+}
+
 export type ReaderTranslation = {
   targetLang: string
   state: ReaderTranslationState
   failedBlocks: number
   /** Rendered translated body, present only when it is fresh and readable. */
-  html: string | null
+  blocks: ReaderBlock[] | null
   title: string | null
 }
 
@@ -52,7 +66,7 @@ export type ReaderArticle = {
 export type ReaderData = {
   article: ReaderArticle
   /** Rendered original body, images already routed through the signed proxy. */
-  html: string
+  blocks: ReaderBlock[]
   /** Present when the article is not in the reading language. */
   translation: ReaderTranslation | null
   recommendation: { note: string | null } | null

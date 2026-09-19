@@ -4,6 +4,7 @@ import type { ArticleFilter } from '@tela/db/queries'
 import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
 import { useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
+import { useMemo } from 'react'
 import { parseReadingMode, type ReadingMode } from '@/app/reading/href'
 import { LikeButton } from './like-button'
 import { MarkRead } from './mark-read'
@@ -51,12 +52,12 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
   const tt = useTranslations('translation')
   const locale = useLocale()
   const mode = parseReadingMode(useSearchParams().get('mode'))
-  const { article, html, translation, recommendation, extracting, revision } = data
+  const { article, blocks, translation, recommendation, extracting, revision } = data
 
   const sourceLang = article.sourceLang ?? undefined
   const ready =
     translation !== null &&
-    translation.html !== null &&
+    translation.blocks !== null &&
     (translation.state === 'done' || translation.state === 'partial')
   const shown = translation === null ? 'orig' : ready ? mode : 'orig'
   const showTrans = ready && shown !== 'orig'
@@ -68,6 +69,12 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
   const needsRequest = translation !== null && translation.state === 'none'
   const failed = translation?.state === 'failed'
   const requestOwnsPolling = needsRequest || failed
+
+  const originalHtml = useMemo(() => blocks.map((b) => b.html).join(''), [blocks])
+  const translatedHtml = useMemo(
+    () => (translation?.blocks ?? []).map((b) => b.html).join(''),
+    [translation?.blocks],
+  )
 
   const onMode = (next: ReadingMode) => {
     const url = new URL(window.location.href)
@@ -177,7 +184,7 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
         <div
           className={`grid items-start gap-10 ${twoCols ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}
         >
-          {showTrans && translation?.html ? (
+          {showTrans && translation?.blocks ? (
             <div className="min-w-0 max-w-[640px]" lang={translation.targetLang}>
               {twoCols ? (
                 <div className="mb-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-accent">
@@ -196,11 +203,7 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
               >
                 {title}
               </h1>
-              <Body
-                html={translation.html}
-                lang={translation.targetLang}
-                testId="body-translated"
-              />
+              <Body html={translatedHtml} lang={translation.targetLang} testId="body-translated" />
             </div>
           ) : null}
           {showOrig ? (
@@ -220,8 +223,8 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
               >
                 {article.title}
               </h1>
-              {html ? (
-                <Body html={html} lang={sourceLang} testId="body-original" />
+              {originalHtml ? (
+                <Body html={originalHtml} lang={sourceLang} testId="body-original" />
               ) : (
                 <p className="text-muted">{t('noContent')}</p>
               )}
