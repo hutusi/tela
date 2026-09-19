@@ -20,7 +20,7 @@ import {
   subscriptions,
   type Tx,
 } from '@tela/db'
-import { and, eq, ne, sql } from 'drizzle-orm'
+import { and, eq, isNull, ne, sql } from 'drizzle-orm'
 import { type ContentSample, learnContentMode } from './content-mode'
 import { type HttpClient, HttpError } from './http'
 import { type RegionPolicy, timeoutsWarrantRelay } from './region'
@@ -255,18 +255,47 @@ async function recordSuccess(
     hadNewItems: args.hadNewItems,
     floorSec: args.floorSec,
   })
-  await db
-    .update(feeds)
-    .set({
-      errorCount: 0,
-      timeoutStreak: 0,
-      lastError: null,
-      lastFetchedAt: now,
-      nextFetchAt: addSeconds(now, withJitter(interval, opts.random)),
-      fetchIntervalSec: interval,
-      ...args.extra,
-    })
-    .where(eq(feeds.id, feed.id))
+  const set = {
+    errorCount: 0,
+    timeoutStreak: 0,
+    lastError: null,
+    lastFetchedAt: now,
+    nextFetchAt: addSeconds(now, withJitter(interval, opts.random)),
+    fetchIntervalSec: interval,
+    ...args.extra,
+  }
+
+  // `last_body_hash` is a promise that the stored articles reflect that body, and the next fetch
+  // skips everything when it matches. Two fetches of one feed each write their own articles and
+  // their own hash in separate commits, so an older body can land on the article after a newer
+  // one recorded its hash, and the stale copy then survives until the feed changes again.
+  //
+  // Claim the hash only while nothing else has completed a fetch since we read the row. The
+  // loser of that check clears the hash instead, so the next fetch reprocesses and repairs
+  // whatever the interleaving left -- and because the loser writes after the winner, a concurrent
+  // pair always settles on the clearing write.
+  if (set.lastBodyHash !== undefined && set.lastBodyHash !== null) {
+    const claimed = await db
+      .update(feeds)
+      .set(set)
+      .where(
+        and(
+          eq(feeds.id, feed.id),
+          feed.lastFetchedAt === null
+            ? isNull(feeds.lastFetchedAt)
+            : eq(feeds.lastFetchedAt, feed.lastFetchedAt),
+        ),
+      )
+      .returning({ id: feeds.id })
+    if (claimed.length > 0) return
+    await db
+      .update(feeds)
+      .set({ ...set, lastBodyHash: null })
+      .where(eq(feeds.id, feed.id))
+    return
+  }
+
+  await db.update(feeds).set(set).where(eq(feeds.id, feed.id))
 }
 
 function titleFor(item: ParsedItem, excerpt: string): string {

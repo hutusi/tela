@@ -104,11 +104,18 @@ Defects that already cost time here, not hypotheticals.
   fails. `.env` is gitignored, so nothing in git says a word — and `.env.example` ships that
   localhost URL for the documented local setup. `apps/web/scripts/preflight-deploy.ts` refuses the
   deploy now; it took the site down once first.
-- **Two fetches of one feed can run at once**, so storing an article must tolerate losing that
-  race. pg-boss's `short` policy dedups `created` jobs only, so a retry runs beside its own active
-  job; a hand-run command races the scheduler the same way. The insert is
-  `onConflictDoNothing` on `(feed_id, dedup_key)` and the loser reports the article as unchanged,
-  which keeps a title translation from being billed twice for one post.
+- **Two fetches of one feed can run at once**, and every part of storing a fetch has to survive
+  it. pg-boss's `short` policy dedups `created` jobs only, so a retry runs beside its own active
+  job; a hand-run command races the scheduler the same way. Three things follow, and the first two
+  were each written without the third. The insert is `onConflictDoNothing` on
+  `(feed_id, dedup_key)`, so the loser does not throw away the whole fetch. The loser then
+  *re-reads the row and compares content* rather than reporting it unchanged, or it drops its own
+  version of the item whenever the two fetches read different bodies. And `last_body_hash` is
+  claimed only while `last_fetched_at` still holds the value the fetch started with — it is a
+  promise that the stored articles match that body, and the next fetch skips everything when it
+  matches, so a hash recorded beside another fetch's article writes strands the stale copy until
+  the feed changes again. The loser of that check clears the hash instead, which makes the next
+  fetch reprocess and repair whatever the interleaving left.
 - **A job's execution budget must be shorter than its pg-boss lease**, or a job outlives the lease, runs concurrently with its own retry, and pays the provider twice.
 - **GLM copies straight quotes into JSON unescaped**, invalidating the whole reply and making the job retry into the same reply; `packages/llm` recovers entries one at a time by id.
 - **A queue's policy is fixed at creation.** Change one in code and the worker refuses to start: drain it, `select pgboss.delete_queue('<name>')`, restart.

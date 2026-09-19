@@ -642,11 +642,21 @@ describe('fetchFeed', () => {
     // Two different bodies, so exactly one insert and one update: a loser that skipped without
     // comparing would leave this at 1, whichever fetch won.
     expect(rows[0]?.contentVersion).toBe(2)
+
+    // Which body won is up to the interleaving, and that is fine — what must not survive is a
+    // recorded body hash that the stored article does not match, because the next fetch of that
+    // body short-circuits on it and the stale copy then lasts until the feed changes again. A
+    // fetch that ran beside another clears the hash instead of claiming it.
+    expect((await feedRow(feedId)).lastBodyHash).toBeNull()
+
+    // So serving the newer body again repairs the article, whichever way the race fell.
+    served = 2
+    expect(await fetchFeed(t.db, http, feedId, opts)).toMatchObject({ status: 'fetched' })
     const [content] = await t.db
       .select()
       .from(articleContents)
       .where(eq(articleContents.articleId, rows[0]?.id as number))
-    expect(content?.html).toMatch(/first|second/)
+    expect(content?.html).toContain('second')
   })
 
   test('honors Retry-After on 429', async () => {
