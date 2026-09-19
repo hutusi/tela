@@ -98,6 +98,12 @@ Defects that already cost time here, not hypotheticals.
 - **Two Tailwind utilities for the same property under different variants have no defined winner.** `data-[read=1]:opacity-[.62]` against `data-[active=1]:opacity-100` resolves by Tailwind's emission order, not by the order in the class string. Where one must beat the other, write both in `globals.css` and let source order say so.
 - **A Next route file may only export handlers** — a helper exported beside `GET` breaks the build. Give it its own module and its own test.
 - **Create the abort signal once per request, not inside the redirect loop**, or every hop gets the full timeout again: 100 ms was observed taking ~500 ms through five redirects.
+- **`apps/web/.env` and `bun run deploy` do not mix.** `next build` inlines what it finds in
+  `.env*`, and `getDb` prefers an explicit `DATABASE_URL` over the HYPERDRIVE binding, so a deploy
+  from a checkout you also develop in bakes a localhost database into the Worker and every request
+  fails. `.env` is gitignored, so nothing in git says a word — and `.env.example` ships that
+  localhost URL for the documented local setup. `apps/web/scripts/preflight-deploy.ts` refuses the
+  deploy now; it took the site down once first.
 - **Two fetches of one feed can run at once**, so storing an article must tolerate losing that
   race. pg-boss's `short` policy dedups `created` jobs only, so a retry runs beside its own active
   job; a hand-run command races the scheduler the same way. The insert is

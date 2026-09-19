@@ -193,7 +193,13 @@ First run: `cd apps/web && bunx playwright install chromium`.
 
 ## Local development
 
-- Web: `cp apps/web/.env.example apps/web/.env`, set `DATABASE_URL`, `bun run dev`.
+- Web: `cp apps/web/.env.example apps/web/.env`, set `DATABASE_URL`, `bun run dev`. **That file
+  and `cd apps/web && bun run deploy` do not mix**: `next build` loads `.env*` and inlines what it
+  finds, and `getDb` prefers an explicit `DATABASE_URL` over the HYPERDRIVE binding, so a deploy
+  from a checkout you also develop in dials a database that is not there and every request fails.
+  It is silent — `.env` is gitignored, so `git status` stays clean and `git checkout` on it does
+  nothing. `apps/web/scripts/preflight-deploy.ts` now refuses such a deploy; move the file aside
+  (`mv apps/web/.env apps/web/.env.localdev`) and put it back afterwards.
 - Cloudflare runtime locally: `cd apps/web && bun run preview` (uses `localConnectionString` from
   `wrangler.jsonc` for Hyperdrive).
 - Worker: `cp apps/worker/.env.example apps/worker/.env`, `bun run dev:worker`.
