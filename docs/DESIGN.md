@@ -29,7 +29,10 @@ Fonts: EB Garamond (headings, article body, excerpts; 400/500/600, italic) and F
 serif, PingFang SC / Noto Sans CJK SC for sans. Base UI size 14px; article body 19.5px/1.55
 (CJK 18px/1.8).
 
-Motion: `animate-fade` (250 ms fade + 4px rise) on view changes and popovers.
+Motion: `animate-fade` (250 ms fade + 4px rise) on view changes and popovers. Under
+`prefers-reduced-motion: reduce` the token itself becomes `none`, which covers every use at once;
+`styles.e2e.ts` checks the computed `animation-name`, since that relies on Tailwind compiling
+`animate-*` to `animation: var(--animate-fade)`.
 
 ## Links
 

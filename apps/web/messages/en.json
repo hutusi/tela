@@ -114,6 +114,7 @@
     "translating": "Translating…",
     "failed": "Translation failed.",
     "partial": "{n, plural, one {# paragraph} other {# paragraphs}} could not be translated.",
+    "modesLabel": "Reading layout",
     "modes": {
       "side": "Side by side",
       "trans": "Translation",

@@ -114,6 +114,7 @@
     "translating": "翻译中…",
     "failed": "翻译失败。",
     "partial": "有 {n} 段未能翻译。",
+    "modesLabel": "阅读版式",
     "modes": {
       "side": "对照",
       "trans": "译文",

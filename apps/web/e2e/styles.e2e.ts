@@ -175,6 +175,85 @@ test.describe('stylesheet', () => {
     })
   }
 
+  test('the fade is off when the reader asks for less motion', async ({ page }) => {
+    // Opening an article is the most repeated interaction in the app, and it fades every time.
+    // The override is on the token rather than the utility, which assumes Tailwind compiles
+    // `animate-fade` to `animation: var(--animate-fade)` — an assumption only a browser settles.
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.goto('/reading')
+    await page.getByTestId('article-row').first().click()
+    const reader = page.getByTestId('reader')
+    await expect(reader).toBeVisible()
+    expect(await reader.evaluate((el) => getComputedStyle(el).animationName)).toBe('none')
+
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.reload()
+    expect(await reader.evaluate((el) => getComputedStyle(el).animationName)).toBe('fade')
+  })
+
+  test('pairing the blocks keeps the single-column vertical rhythm', async ({ page }) => {
+    // Every block is its own .article-body and a grid item, and grid items do not collapse
+    // margins with siblings: a 20px paragraph margin against a 32px heading margin would sum to
+    // 52 where one column resolves them to 32. Nothing in the JSX shows that.
+    //
+    // The margins are the invariant, not the gap on screen. Rows align to the taller side, so a
+    // longer original legitimately pushes the next row down — that slack is what alignment is.
+    await page.setViewportSize({ width: 1700, height: 1000 })
+    await page.goto('/reading')
+    await page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first().click()
+    await expect(page.getByTestId('translation-bar')).toHaveAttribute(
+      'data-state',
+      /done|partial/,
+      {
+        timeout: 30_000,
+      },
+    )
+
+    const paired = await page.evaluate(() => {
+      const cells = [...document.querySelectorAll('[data-testid="body-translated"]')]
+      // From index 1: a gap needs something before the heading, and this article opens with one.
+      const i = cells.findIndex(
+        (el, idx) => idx > 0 && (el.firstElementChild?.matches('h1,h2,h3,h4,h5,h6') ?? false),
+      )
+      if (i < 1) return null
+      const cell = cells[i] as HTMLElement
+      const head = cell.firstElementChild as HTMLElement
+      const prevCell = cells[i - 1] as HTMLElement
+      const prev = prevCell.lastElementChild as HTMLElement
+      const px = (el: Element, prop: 'marginTop' | 'marginBottom') =>
+        Number.parseFloat(getComputedStyle(el)[prop])
+      return {
+        id: head.getAttribute('data-tb'),
+        prevId: prev.getAttribute('data-tb'),
+        // What one column would have collapsed to, assembled from the three parts instead.
+        margins: px(prev, 'marginBottom') + px(cell, 'marginTop') + px(head, 'marginTop'),
+        gap: head.getBoundingClientRect().top - prev.getBoundingClientRect().bottom,
+      }
+    })
+    expect(paired, 'no heading to measure against').not.toBeNull()
+
+    await page.getByTestId('mode-trans').click()
+    await expect(page.locator('.article-body')).toHaveCount(1)
+    const single = await page.evaluate(
+      ({ id, prevId }) => {
+        const head = document.querySelector(`[data-tb="${id}"]`)
+        const prev = document.querySelector(`[data-tb="${prevId}"]`)
+        if (!head || !prev) return null
+        return head.getBoundingClientRect().top - prev.getBoundingClientRect().bottom
+      },
+      { id: paired?.id, prevId: paired?.prevId },
+    )
+    expect(single, 'the same two blocks are not in the single column').not.toBeNull()
+
+    // 32, not 52: the top margin is zeroed on the block and put back on the row.
+    expect(paired?.margins, 'paired margins do not add up to the collapsed gap').toBe(
+      single as number,
+    )
+    expect(paired?.gap, 'paired blocks sit tighter than one column').toBeGreaterThanOrEqual(
+      single as number,
+    )
+  })
+
   test('search is reachable below the desktop breakpoint too', async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 })
     await page.goto('/reading')

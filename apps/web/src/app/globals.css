@@ -33,6 +33,17 @@
 }
 
 /*
+ * Motion is opt-out at the token, which is where every use of it resolves: Tailwind compiles
+ * `animate-fade` to `animation: var(--animate-fade)`, so one override covers all of them.
+ * `styles.e2e.ts` checks the computed value, because nothing in the JSX shows this.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --animate-fade: none;
+  }
+}
+
+/*
  * Base element styles, in @layer base so Tailwind utilities can override them.
  *
  * Tailwind v4 emits every utility into @layer utilities, and an unlayered declaration outranks
@@ -281,7 +292,9 @@
     border-end-start-radius: 8px;
     border-end-end-radius: 8px;
   }
-  .article-body.article-block > :last-child {
+  /* Matching the narrow rule selector for selector: :not(.article-source) makes that one
+     (0,4,0), so a tidier (0,3,0) here loses wherever the two disagree, container query or not. */
+  .article-body.article-block:not(.article-source) > :last-child {
     margin-bottom: 20px;
   }
 }
