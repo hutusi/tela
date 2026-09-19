@@ -586,6 +586,79 @@ describe('fetchFeed', () => {
     ).not.toHaveLength(0)
   })
 
+  test('two fetches of one feed at once store each article exactly once', async () => {
+    // Reachable without any hand-run command: feed.fetch uses pg-boss's `short` policy, whose
+    // unique index covers state = 'created', so a retry can run beside its own active job. Before
+    // this, the loser hit articles_feed_dedup_key and threw away the whole fetch.
+    server.text('/feed.xml', threeItems())
+    const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
+    const seen: Array<{ id: number }> = []
+    const both = await Promise.all([
+      fetchFeed(t.db, http, feedId, {
+        ...opts,
+        onArticleStored: async (_tx, a) => void seen.push({ id: a.id }),
+      }),
+      fetchFeed(t.db, http, feedId, {
+        ...opts,
+        onArticleStored: async (_tx, a) => void seen.push({ id: a.id }),
+      }),
+    ])
+    expect(both.every((r) => r.status === 'fetched' || r.status === 'unchanged')).toBe(true)
+
+    const rows = await t.db.select().from(articles).where(eq(articles.feedId, feedId))
+    expect(rows).toHaveLength(3)
+    // Every stored article got its content, and each was announced once -- a second
+    // announcement would mean a second title translation billed for the same post.
+    const contents = await t.db.select().from(articleContents)
+    expect(contents).toHaveLength(3)
+    expect(seen).toHaveLength(3)
+    expect(new Set(seen.map((s) => s.id)).size).toBe(3)
+    // And the two runs agree on how many articles were new between them.
+    const counted = both.reduce((n, r) => n + (r.status === 'fetched' ? r.newArticles : 0), 0)
+    expect(counted).toBe(3)
+  })
+
+  test('losing the insert race still compares content instead of skipping it', async () => {
+    // The loser used to report the article unchanged without comparing content, then record its
+    // own body hash on the way out — after which an identical body short-circuits at the hash
+    // check and the article is never revisited. That fetch's version was lost for good.
+    const body = (content: string) =>
+      rss({
+        link: server.url('/'),
+        items: [{ guid: 'post-1', link: server.url('/posts/1'), title: 'Post 1', content }],
+      })
+    let served = 0
+    server.set('/feed.xml', (_req, res) => {
+      served += 1
+      res.writeHead(200, { 'content-type': 'application/xml; charset=utf-8' })
+      res.end(body(served === 1 ? '<p>first</p>' : '<p>second</p>'))
+    })
+    const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })
+
+    await Promise.all([fetchFeed(t.db, http, feedId, opts), fetchFeed(t.db, http, feedId, opts)])
+
+    const rows = await t.db.select().from(articles).where(eq(articles.feedId, feedId))
+    expect(rows).toHaveLength(1)
+    // Two different bodies, so exactly one insert and one update: a loser that skipped without
+    // comparing would leave this at 1, whichever fetch won.
+    expect(rows[0]?.contentVersion).toBe(2)
+
+    // Which body won is up to the interleaving, and that is fine — what must not survive is a
+    // recorded body hash that the stored article does not match, because the next fetch of that
+    // body short-circuits on it and the stale copy then lasts until the feed changes again. A
+    // fetch that ran beside another clears the hash instead of claiming it.
+    expect((await feedRow(feedId)).lastBodyHash).toBeNull()
+
+    // So serving the newer body again repairs the article, whichever way the race fell.
+    served = 2
+    expect(await fetchFeed(t.db, http, feedId, opts)).toMatchObject({ status: 'fetched' })
+    const [content] = await t.db
+      .select()
+      .from(articleContents)
+      .where(eq(articleContents.articleId, rows[0]?.id as number))
+    expect(content?.html).toContain('second')
+  })
+
   test('honors Retry-After on 429', async () => {
     server.text('/feed.xml', 'slow down', { status: 429, headers: { 'retry-after': '120' } })
     const { feedId } = await ensureFeed(t.db, { feedUrl: server.url('/feed.xml') })

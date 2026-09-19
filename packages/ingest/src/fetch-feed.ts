@@ -20,7 +20,7 @@ import {
   subscriptions,
   type Tx,
 } from '@tela/db'
-import { and, eq, ne, sql } from 'drizzle-orm'
+import { and, eq, isNull, ne, sql } from 'drizzle-orm'
 import { type ContentSample, learnContentMode } from './content-mode'
 import { type HttpClient, HttpError } from './http'
 import { type RegionPolicy, timeoutsWarrantRelay } from './region'
@@ -255,18 +255,47 @@ async function recordSuccess(
     hadNewItems: args.hadNewItems,
     floorSec: args.floorSec,
   })
-  await db
-    .update(feeds)
-    .set({
-      errorCount: 0,
-      timeoutStreak: 0,
-      lastError: null,
-      lastFetchedAt: now,
-      nextFetchAt: addSeconds(now, withJitter(interval, opts.random)),
-      fetchIntervalSec: interval,
-      ...args.extra,
-    })
-    .where(eq(feeds.id, feed.id))
+  const set = {
+    errorCount: 0,
+    timeoutStreak: 0,
+    lastError: null,
+    lastFetchedAt: now,
+    nextFetchAt: addSeconds(now, withJitter(interval, opts.random)),
+    fetchIntervalSec: interval,
+    ...args.extra,
+  }
+
+  // `last_body_hash` is a promise that the stored articles reflect that body, and the next fetch
+  // skips everything when it matches. Two fetches of one feed each write their own articles and
+  // their own hash in separate commits, so an older body can land on the article after a newer
+  // one recorded its hash, and the stale copy then survives until the feed changes again.
+  //
+  // Claim the hash only while nothing else has completed a fetch since we read the row. The
+  // loser of that check clears the hash instead, so the next fetch reprocesses and repairs
+  // whatever the interleaving left -- and because the loser writes after the winner, a concurrent
+  // pair always settles on the clearing write.
+  if (set.lastBodyHash !== undefined && set.lastBodyHash !== null) {
+    const claimed = await db
+      .update(feeds)
+      .set(set)
+      .where(
+        and(
+          eq(feeds.id, feed.id),
+          feed.lastFetchedAt === null
+            ? isNull(feeds.lastFetchedAt)
+            : eq(feeds.lastFetchedAt, feed.lastFetchedAt),
+        ),
+      )
+      .returning({ id: feeds.id })
+    if (claimed.length > 0) return
+    await db
+      .update(feeds)
+      .set({ ...set, lastBodyHash: null })
+      .where(eq(feeds.id, feed.id))
+    return
+  }
+
+  await db.update(feeds).set(set).where(eq(feeds.id, feed.id))
 }
 
 function titleFor(item: ParsedItem, excerpt: string): string {
@@ -303,17 +332,22 @@ async function upsertArticle(
   const title = titleFor(item, processed.excerpt)
   const sourceLang = processed.lang === 'und' ? null : processed.lang
 
-  const [existing] = await db
-    .select({
-      id: articles.id,
-      contentHash: articles.contentHash,
-      contentVersion: articles.contentVersion,
-    })
-    .from(articles)
-    .where(and(eq(articles.feedId, feed.id), eq(articles.dedupKey, key)))
+  const columns = {
+    id: articles.id,
+    contentHash: articles.contentHash,
+    contentVersion: articles.contentVersion,
+  }
+  let existing = (
+    await db
+      .select(columns)
+      .from(articles)
+      .where(and(eq(articles.feedId, feed.id), eq(articles.dedupKey, key)))
+  )[0]
 
   if (!existing) {
-    let insertedId: number | null = null
+    // Held in an object because it is assigned inside the transaction callback, where
+    // control-flow narrowing on a plain `let` would not follow.
+    const stored: { id?: number } = {}
     await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(articles)
@@ -331,9 +365,18 @@ async function upsertArticle(
           wordCount: processed.wordCount,
           readingMinutes: processed.readingMinutes,
         })
+        // Two fetches of one feed can run at once -- a retry beside its own active job, since
+        // pg-boss's `short` policy dedups `created` jobs only, or a hand-run command beside the
+        // scheduler. Both then insert the same items, and without this the loser threw and lost
+        // the whole fetch. Jobs have to be idempotent (ADR 0004), which includes against
+        // themselves.
+        .onConflictDoNothing({ target: [articles.feedId, articles.dedupKey] })
         .returning({ id: articles.id })
+      // No row means the other fetch got there first: it stored the content and queued the
+      // translation, so this one must not count the article again or queue it twice.
+      if (!row) return
       const id = (row as { id: number }).id
-      insertedId = id
+      stored.id = id
       await tx.insert(articleContents).values({
         articleId: id,
         html: processed.html,
@@ -342,7 +385,19 @@ async function upsertArticle(
       })
       if (onStored) await onStored(tx, { id, sourceLang, kind: 'inserted' })
     })
-    return { kind: 'inserted', id: insertedId }
+    if (stored.id !== undefined) return { kind: 'inserted', id: stored.id }
+    // The other fetch inserted it between our select and our insert. Re-read and carry on as if
+    // it had been there all along: reporting `unchanged` without comparing content would lose
+    // this fetch's version of the item whenever the two fetches read different bodies, and
+    // silently — the feed's body hash is recorded on the way out, so an identical body later
+    // short-circuits before ever reaching the article again.
+    existing = (
+      await db
+        .select(columns)
+        .from(articles)
+        .where(and(eq(articles.feedId, feed.id), eq(articles.dedupKey, key)))
+    )[0]
+    if (!existing) return { kind: 'unchanged', id: null }
   }
 
   if (existing.contentHash === processed.contentHash || processed.text.length === 0) {
