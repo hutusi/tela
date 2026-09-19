@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { canonicalReadingHref } from './href'
+import { canonicalReadingHref, parseReadingMode, readingModeParam } from './href'
 
 describe('canonicalReadingHref', () => {
   test('drops the defaults that carry no meaning', () => {
@@ -30,5 +30,24 @@ describe('canonicalReadingHref', () => {
     expect(canonicalReadingHref('?article=1&mode=trans', { mode: 'side' })).toBe(
       '/reading?article=1',
     )
+  })
+})
+
+describe('readingModeParam', () => {
+  test('names a mode only when the value is one', () => {
+    expect(readingModeParam('orig')).toBe('orig')
+    expect(readingModeParam(['trans', 'orig'])).toBe('trans')
+  })
+
+  test('says nothing rather than side, so a remembered default can answer instead', () => {
+    expect(readingModeParam(undefined)).toBeNull()
+    expect(readingModeParam(null)).toBeNull()
+    expect(readingModeParam('sideways')).toBeNull()
+  })
+
+  test('parseReadingMode still answers side when nothing is named', () => {
+    expect(parseReadingMode(undefined)).toBe('side')
+    expect(parseReadingMode('sideways')).toBe('side')
+    expect(parseReadingMode('orig')).toBe('orig')
   })
 })

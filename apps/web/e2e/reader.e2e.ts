@@ -412,6 +412,53 @@ test.describe('translation', () => {
     await page.getByTestId('read-in').getByRole('button', { name: 'EN' }).click()
     await expect(page.getByTestId('article-row').first()).not.toContainText('EN → ZH')
   })
+
+  /**
+   * Runs last in this describe, and reopens the article it already translated: opening a second
+   * foreign article would spend on-demand translation budget the specs after this one need.
+   */
+  test('the display mode outlives closing an article', async ({ page }) => {
+    // A URL with no article carries no mode, so this used to reset to side by side every time:
+    // anyone who reads translation-only re-picked it on every article they opened.
+    await page.goto('/reading')
+    const foreign = page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first()
+    await foreign.click()
+    await expect(page.getByTestId('translation-bar')).toHaveAttribute(
+      'data-state',
+      /done|partial/,
+      {
+        timeout: 30_000,
+      },
+    )
+
+    const renders: string[] = []
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname
+      if (path === '/reading' && request.headers()['next-router-prefetch'] !== '1') {
+        renders.push(request.method())
+      }
+    })
+
+    await page.getByTestId('mode-orig').click()
+    await page.getByTestId('close-article').click()
+    await expect(page).not.toHaveURL(/article=/)
+    await foreign.click()
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
+    await expect(page).toHaveURL(/mode=orig/)
+    // Remembering it costs no render: the cookie is written in the browser, not by an action.
+    expect(renders.filter((method) => method === 'GET')).toHaveLength(0)
+
+    // And the server honours it, so a link with no mode opens the way this reader reads.
+    const bare = new URL(page.url())
+    bare.searchParams.delete('mode')
+    await page.goto(bare.toString())
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
+
+    // Back to the default, or every spec after this one inherits the cookie.
+    await page.getByTestId('mode-side').click()
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'side')
+    await page.getByTestId('close-article').click()
+  })
 })
 
 test.describe('discover and claim', () => {

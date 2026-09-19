@@ -27,10 +27,20 @@ export function parseReadingArticleId(value: string | string[] | null | undefine
   return positiveId(value)
 }
 
+/**
+ * The display mode a value actually names, or null when it names none.
+ *
+ * Separate from `parseReadingMode` because "said nothing" and "said side by side" are different
+ * answers once a remembered default exists: only the first one may fall back to the cookie.
+ */
+export function readingModeParam(value: string | string[] | null | undefined): ReadingMode | null {
+  const raw = one(value)
+  return MODES.includes(raw as ReadingMode) ? (raw as ReadingMode) : null
+}
+
 /** Parse the reader's display mode from either server or browser search params. */
 export function parseReadingMode(value: string | string[] | null | undefined): ReadingMode {
-  const raw = one(value)
-  return MODES.includes(raw as ReadingMode) ? (raw as ReadingMode) : 'side'
+  return readingModeParam(value) ?? 'side'
 }
 
 /** Parse the reading view's search params, tolerating garbage. */

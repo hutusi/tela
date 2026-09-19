@@ -4,7 +4,7 @@ import type { ArticleFilter } from '@tela/db/queries'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useMemo } from 'react'
-import { parseReadingMode, type ReadingMode } from '@/app/reading/href'
+import { type ReadingMode, readingModeParam } from '@/app/reading/href'
 import { pairBlocks } from '@/lib/block-pairs'
 import { LikeButton } from './like-button'
 import { MarkRead } from './mark-read'
@@ -21,9 +21,13 @@ export type { ReaderTranslation } from './reader-data'
 type Props = {
   data: ReaderData
   readingLang: string
+  /** What a URL with no `mode` means for this reader: their last choice, remembered. */
+  defaultMode: ReadingMode
   /** Decides whether the like button owes the list a refresh. */
   filter: ArticleFilter
   onClose: () => void
+  /** Remember a mode change for the next article. */
+  onModeChange: (mode: ReadingMode) => void
   /** Re-fetch this pane, for when a background job has changed it. */
   onReload: () => void
 }
@@ -59,9 +63,17 @@ function Body({
  * budget (ADR 0017). The server still renders it for a direct link; every click after that is
  * this component swapping its data.
  */
-export function Reader({ data, readingLang, filter, onClose, onReload }: Props) {
+export function Reader({
+  data,
+  readingLang,
+  defaultMode,
+  filter,
+  onClose,
+  onReload,
+  onModeChange,
+}: Props) {
   const t = useTranslations('reader')
-  const mode = parseReadingMode(useSearchParams().get('mode'))
+  const mode = readingModeParam(useSearchParams().get('mode')) ?? defaultMode
   const { article, blocks, translation, recommendation, extracting, revision } = data
 
   const sourceLang = article.sourceLang ?? undefined
@@ -91,6 +103,7 @@ export function Reader({ data, readingLang, filter, onClose, onReload }: Props) 
   )
 
   const onMode = (next: ReadingMode) => {
+    onModeChange(next)
     const url = new URL(window.location.href)
     if (next === 'side') url.searchParams.delete('mode')
     else url.searchParams.set('mode', next)

@@ -1,4 +1,5 @@
 import { countTotals, getArticle, listArticles, listSubscriptions } from '@tela/db/queries'
+import { cookies } from 'next/headers'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { Suspense } from 'react'
 import { EmptyState } from '@/components/empty-state'
@@ -11,7 +12,8 @@ import { getDb } from '@/lib/platform/db'
 import { waitUntil } from '@/lib/platform/wait-until'
 import { buildReaderData } from '@/lib/reader-data'
 import { getReadingLang } from '@/lib/reading'
-import { parseReadingParams, type ReadingParams } from './href'
+import { READING_MODE_COOKIE, readingModeFromCookie } from '@/lib/reading-mode-cookie'
+import { parseReadingParams, type ReadingParams, readingModeParam } from './href'
 import { type ListData, ListPanes } from './panes'
 import { ListPanesSkeleton } from './skeletons'
 
@@ -38,7 +40,14 @@ async function MobileNavPane({ data, params }: { data: Promise<ListData>; params
 
 export default async function ReadingPage({ searchParams }: Props) {
   const user = await requireUser('/reading')
-  const params = parseReadingParams(await searchParams)
+  const raw = await searchParams
+  // A URL with no article carries no mode — a display mode for no article means nothing — so
+  // closing an article used to forget it. The cookie supplies the default; the URL still wins.
+  const remembered = readingModeFromCookie((await cookies()).get(READING_MODE_COOKIE)?.value)
+  const params = {
+    ...parseReadingParams(raw),
+    mode: readingModeParam(raw.mode) ?? remembered ?? 'side',
+  }
   const db = await getDb()
   // The reading language comes from a cookie, so nothing here waits on the database to learn
   // which translations to join.
@@ -73,6 +82,7 @@ export default async function ReadingPage({ searchParams }: Props) {
     <ReadingShell
       initial={initial}
       readingLang={readingLang}
+      defaultMode={params.mode}
       filter={params.filter}
       emptyState={
         <Suspense fallback={null}>

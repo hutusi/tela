@@ -3,9 +3,15 @@
 import type { ArticleFilter } from '@tela/db/queries'
 import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { canonicalReadingHref, parseReadingArticleId, parseReadingMode } from '@/app/reading/href'
+import {
+  canonicalReadingHref,
+  parseReadingArticleId,
+  type ReadingMode,
+  readingModeParam,
+} from '@/app/reading/href'
 import { ReaderPaneSkeleton } from '@/app/reading/skeletons'
 import { type PaneState, reconcile, type ServerState } from '@/lib/reader-navigation'
+import { readingModeDocumentCookie } from '@/lib/reading-mode-cookie'
 import { Reader } from './reader'
 import type { InitialReaderState, ReaderData } from './reader-data'
 
@@ -13,6 +19,8 @@ type Props = {
   /** What the server rendered for the URL it was given. */
   initial: InitialReaderState
   readingLang: string
+  /** The mode a URL with no `mode` means: what this reader last chose, from the cookie. */
+  defaultMode: ReadingMode
   filter: ArticleFilter
   /** Sidebar and article list, rendered on the server and passed straight through. */
   children: React.ReactNode
@@ -68,6 +76,7 @@ function currentUrlArticleId(): number | null {
 export function ReadingShell({
   initial,
   readingLang,
+  defaultMode: serverMode,
   filter,
   children,
   emptyState,
@@ -75,6 +84,12 @@ export function ReadingShell({
 }: Props) {
   const t = useTranslations('reader')
   const [pane, setPane] = useState<Pane>(() => paneFromServer(initial))
+  /**
+   * Held in state, not read from the prop, because a mode change never renders the server.
+   * Choosing "side by side" deletes the param, so the next article would otherwise open in
+   * whatever default this page was rendered with — the one the reader just moved away from.
+   */
+  const [defaultMode, setDefaultMode] = useState<ReadingMode>(serverMode)
   /** Bumped whenever the URL moves under us, which React has no way to observe. */
   const [urlMoved, setUrlMoved] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
@@ -201,26 +216,37 @@ export function ReadingShell({
   }, [openId])
 
   // A click on an article row, anywhere in the list.
-  const onClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.defaultPrevented || event.button !== 0) return
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(
-      'a[data-testid="article-row"]',
-    )
-    if (!link) return
-    const href = new URL(link.href, location.origin)
-    if (parseReadingArticleId(href.searchParams.get('article')) === null) return
-    event.preventDefault()
-    // The anchors carry the mode from their server render. Mode changes do not render the server,
-    // so carry the live URL value forward when opening the next article.
-    const mode = parseReadingMode(new URLSearchParams(location.search).get('mode'))
-    const target = canonicalReadingHref(href.search, { mode })
-    // Both sides through the same canonical form: `?mode=side&article=1` and `?article=1` are the
-    // same place, and comparing them as text stacked a history entry for a state the reader was
-    // already in, so the next Back appeared to do nothing.
-    if (target === canonicalReadingHref(location.search)) return
-    window.history.pushState(null, '', target)
-    setUrlMoved((n) => n + 1)
+  const onClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (event.defaultPrevented || event.button !== 0) return
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(
+        'a[data-testid="article-row"]',
+      )
+      if (!link) return
+      const href = new URL(link.href, location.origin)
+      if (parseReadingArticleId(href.searchParams.get('article')) === null) return
+      event.preventDefault()
+      // The anchors carry the mode from their server render. Mode changes do not render the server,
+      // so carry the live URL value forward when opening the next article, and the remembered
+      // default when the URL is silent — which it is whenever no article is open.
+      const mode = readingModeParam(new URLSearchParams(location.search).get('mode')) ?? defaultMode
+      const target = canonicalReadingHref(href.search, { mode })
+      // Both sides through the same canonical form: `?mode=side&article=1` and `?article=1` are the
+      // same place, and comparing them as text stacked a history entry for a state the reader was
+      // already in, so the next Back appeared to do nothing.
+      if (target === canonicalReadingHref(location.search)) return
+      window.history.pushState(null, '', target)
+      setUrlMoved((n) => n + 1)
+    },
+    [defaultMode],
+  )
+
+  /** Remember the reader's choice for the next article they open, without a server round trip. */
+  const onModeChange = useCallback((next: ReadingMode) => {
+    setDefaultMode(next)
+    // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store is not available in every browser Tela supports.
+    document.cookie = readingModeDocumentCookie(next)
   }, [])
 
   /** Re-fetch the open pane in place, without the skeleton: a background job has moved it on. */
@@ -264,9 +290,11 @@ export function ReadingShell({
           key={pane.articleId}
           data={pane.data}
           readingLang={readingLang}
+          defaultMode={defaultMode}
           filter={filter}
           onClose={close}
           onReload={reload}
+          onModeChange={onModeChange}
         />
       ) : pane.kind === 'loading' ? (
         <ReaderPaneSkeleton />
