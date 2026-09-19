@@ -3,12 +3,7 @@
 import type { ArticleFilter } from '@tela/db/queries'
 import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  canonicalReadingHref,
-  parseReadingArticleId,
-  type ReadingMode,
-  readingModeParam,
-} from '@/app/reading/href'
+import { canonicalReadingHref, parseReadingArticleId, type ReadingMode } from '@/app/reading/href'
 import { ReaderPaneSkeleton } from '@/app/reading/skeletons'
 import { type PaneState, reconcile, type ServerState } from '@/lib/reader-navigation'
 import { readingModeDocumentCookie } from '@/lib/reading-mode-cookie'
@@ -225,13 +220,19 @@ export function ReadingShell({
       )
       if (!link) return
       const href = new URL(link.href, location.origin)
-      if (parseReadingArticleId(href.searchParams.get('article')) === null) return
+      const targetId = parseReadingArticleId(href.searchParams.get('article'))
+      if (targetId === null) return
       event.preventDefault()
-      // The anchors carry the mode from their server render. Mode changes do not render the server,
-      // so carry the live URL value forward when opening the next article, and the remembered
-      // default when the URL is silent — which it is whenever no article is open.
-      const mode = readingModeParam(new URLSearchParams(location.search).get('mode')) ?? defaultMode
-      const target = canonicalReadingHref(href.search, { mode })
+      // Clicking the row you are already reading is not a navigation. Leave the view alone,
+      // mode included — the canonical comparison below would otherwise treat a URL-supplied
+      // mode as a difference and push a history entry that only changes how you are reading.
+      if (targetId === currentUrlArticleId()) return
+      // The remembered mode, not the live URL's. This used to read the URL because a toggle
+      // never renders the server, so the anchors went stale and the URL was the only place the
+      // new mode lived; `defaultMode` holds it now, updated in the same handler that writes the
+      // cookie. Reading the URL also picked up a mode that came from a shared link rather than
+      // from this reader, and carried it into every article they opened next.
+      const target = canonicalReadingHref(href.search, { mode: defaultMode })
       // Both sides through the same canonical form: `?mode=side&article=1` and `?article=1` are the
       // same place, and comparing them as text stacked a history entry for a state the reader was
       // already in, so the next Back appeared to do nothing.

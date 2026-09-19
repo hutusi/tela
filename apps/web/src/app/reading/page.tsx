@@ -13,7 +13,7 @@ import { waitUntil } from '@/lib/platform/wait-until'
 import { buildReaderData } from '@/lib/reader-data'
 import { getReadingLang } from '@/lib/reading'
 import { READING_MODE_COOKIE, readingModeFromCookie } from '@/lib/reading-mode-cookie'
-import { parseReadingParams, type ReadingParams, readingModeParam } from './href'
+import { parseReadingParams, type ReadingParams } from './href'
 import { type ListData, ListPanes } from './panes'
 import { ListPanesSkeleton } from './skeletons'
 
@@ -44,13 +44,14 @@ export default async function ReadingPage({ searchParams }: Props) {
   // A URL with no article carries no mode — a display mode for no article means nothing — so
   // closing an article used to forget it. The cookie remembers it instead.
   //
-  // Two values, deliberately. `params.mode` is what this view shows and what its row hrefs carry,
-  // so a URL that names a mode governs itself. `defaultMode` is what the reader chose, and only
-  // the cookie speaks for that: a shared ?mode=orig link is someone else's choice, and must not
-  // become this reader's default the moment they close it.
+  // The mode in `params` is the cookie's, never the URL's, because its only consumer is the
+  // article rows' hrefs — where they point is a question about the reader's preference, not
+  // about the article they happen to be looking at. `Reader` reads the URL for the view itself,
+  // so a link naming a mode still governs the article it names, and only that one: someone
+  // else's ?mode=orig must not follow this reader through their list.
   const remembered = readingModeFromCookie((await cookies()).get(READING_MODE_COOKIE)?.value)
   const defaultMode = remembered ?? 'side'
-  const params = { ...parseReadingParams(raw), mode: readingModeParam(raw.mode) ?? defaultMode }
+  const params = { ...parseReadingParams(raw), mode: defaultMode }
   const db = await getDb()
   // The reading language comes from a cookie, so nothing here waits on the database to learn
   // which translations to join.
