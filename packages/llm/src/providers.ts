@@ -19,6 +19,8 @@ export type ProviderConfig = {
   jsonMode?: 'schema' | 'text'
   /** Extra JSON fields merged into every chat request body (e.g. Bailian's enable_thinking). */
   extraBody?: Record<string, unknown>
+  /** Mock only: leave every block whose source text contains this out of the reply. */
+  mockDropMarker?: string
 }
 
 /** Aliyun Bailian (Model Studio), OpenAI-compatible endpoint. Also the international host. */
@@ -45,7 +47,10 @@ function fetchWithExtraBody(extra: Record<string, unknown>): typeof fetch {
 export function createTranslator(config: ProviderConfig): Translator {
   switch (config.provider) {
     case 'mock':
-      return createMockTranslator({ model: config.model || 'mock' })
+      return createMockTranslator({
+        model: config.model || 'mock',
+        ...(config.mockDropMarker ? { dropMarker: config.mockDropMarker } : {}),
+      })
     case 'bailian': {
       if (!config.apiKey) throw new Error('BAILIAN_API_KEY is required for the bailian provider')
       const extra = config.extraBody ?? { enable_thinking: false }
@@ -115,7 +120,11 @@ export function configFromEnv(
       ...(jsonMode ? { jsonMode } : {}),
     }
   }
-  return { provider: 'mock', model: 'mock' }
+  return {
+    provider: 'mock',
+    model: 'mock',
+    ...(env.LLM_MOCK_DROP_MARKER ? { mockDropMarker: env.LLM_MOCK_DROP_MARKER } : {}),
+  }
 }
 
 /** True when the mock was chosen as a fallback rather than asked for with LLM_PROVIDER=mock. */

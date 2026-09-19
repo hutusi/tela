@@ -123,6 +123,25 @@ const routes: Record<string, () => { body: Buffer | string; type: string }> = {
   }),
   '/pixel.png': () => ({ body: PNG, type: 'image/png' }),
   // A summary-only feed (descriptions, no content) whose posts are full pages on this server.
+  /**
+   * A Japanese feed with one post whose middle paragraph the mock translator is told to drop
+   * (LLM_MOCK_DROP_MARKER), so the body lands as `partial` — the one translation state no
+   * captured feed produces, and the state the "not translated" mark exists for. Dated 2020 so
+   * it sorts below every other fixture and no other spec picks it up by accident.
+   */
+  '/partial.xml': () => ({
+    body: `<?xml version="1.0"?><rss version="2.0"><channel><title>Partial Fixture</title>
+      <link>http://127.0.0.1:${port}/partial</link><language>ja</language>
+      <item><guid>partial-1</guid><link>http://127.0.0.1:${port}/partial/posts/1</link>
+        <title>部分的に翻訳された記事</title>
+        <pubDate>Tue, 07 Jan 2020 08:00:00 GMT</pubDate>
+        <description><![CDATA[<p>最初の段落はふつうに翻訳されます。</p>
+          <p>この段落は [[drop]] 翻訳されません。</p>
+          <p>最後の段落もふつうに翻訳されます。</p>]]></description></item>
+      </channel></rss>`,
+    type: 'application/rss+xml; charset=utf-8',
+  }),
+
   '/summary.xml': () => ({
     body: `<?xml version="1.0"?><rss version="2.0"><channel><title>Summary Fixture</title>
       <link>http://127.0.0.1:${port}/summary</link><language>en</language>

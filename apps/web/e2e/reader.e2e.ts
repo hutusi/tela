@@ -414,6 +414,47 @@ test.describe('translation', () => {
   })
 
   /**
+   * The one body state no captured fixture reaches. The mock is told to drop a marked block
+   * (LLM_MOCK_DROP_MARKER), which is what a provider omitting an entry looks like, so the body
+   * lands `partial` with that paragraph still in its source language inside the translation.
+   */
+  test('a paragraph that failed to translate says so, in both layouts', async ({ page }) => {
+    await page.goto('/add')
+    await page.getByTestId('feed-url').fill(`${FIXTURES}/partial.xml`)
+    await page.getByTestId('find-feeds').click()
+    await page.getByTestId('feed-candidates').getByTestId('subscribe').first().click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+/)
+
+    const row = page.getByTestId('article-row').first()
+    await expect(row).toBeVisible({ timeout: 45_000 })
+    await row.click()
+    const bar = page.getByTestId('translation-bar')
+    await expect(bar).toHaveAttribute('data-state', 'partial', { timeout: 30_000 })
+    await expect(bar).toContainText('1 paragraph could not be translated')
+
+    // Side by side: exactly the block that failed is marked, and it is the one still in
+    // Japanese inside the English column.
+    const marked = page.locator('.article-untranslated')
+    await expect(marked).toHaveCount(1)
+    await expect(marked).toContainText('not translated')
+    await expect(marked).toContainText('この段落は')
+    await expect(marked.getByTestId('body-translated')).toHaveAttribute('lang', 'ja')
+
+    // Translation only is where it matters most: nothing else on screen explains why a
+    // paragraph is in the wrong language. The bar's count never said which one.
+    await page.getByTestId('mode-trans').click()
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans')
+    await expect(page.getByTestId('body-original')).toHaveCount(0)
+    await expect(page.locator('.article-untranslated')).toHaveCount(1)
+    await expect(page.locator('.article-untranslated')).toContainText('not translated')
+    // The blocks that did translate stay one body between the marks, not one per paragraph.
+    await expect(page.locator('.article-body')).toHaveCount(3)
+
+    await page.getByTestId('mode-side').click()
+    await page.getByTestId('close-article').click()
+  })
+
+  /**
    * Runs last in this describe, and reopens the article it already translated: opening a second
    * foreign article would spend on-demand translation budget the specs after this one need.
    */

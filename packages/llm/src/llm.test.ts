@@ -264,6 +264,36 @@ describe('translateBlocks deadline', () => {
   })
 })
 
+describe('the mock drop marker', () => {
+  test('leaves marked blocks out of the reply, which reads as a failed block', async () => {
+    const translator = createMockTranslator({ dropMarker: '[[drop]]' })
+    const outcome = await translateBlocks(translator, {
+      blocks: [
+        { id: 'a', text: 'Hello' },
+        { id: 'b', text: 'Skip [[drop]] me' },
+      ],
+      sourceLang: 'ja',
+      targetLang: 'en',
+    })
+    expect([...outcome.translated.keys()]).toEqual(['a'])
+    expect(outcome.failed.map((f) => f.id)).toEqual(['b'])
+  })
+
+  test('is only read for a mock asked for by name', () => {
+    expect(configFromEnv({ LLM_PROVIDER: 'mock', LLM_MOCK_DROP_MARKER: '[[drop]]' })).toEqual({
+      provider: 'mock',
+      model: 'mock',
+      mockDropMarker: '[[drop]]',
+    })
+    // A provider that fell back to the mock for want of a key is not a test rig: injecting
+    // failures there would corrupt a real deployment that had simply lost its key.
+    expect(configFromEnv({ LLM_PROVIDER: 'bailian', LLM_MOCK_DROP_MARKER: '[[drop]]' })).toEqual({
+      provider: 'mock',
+      model: 'mock',
+    })
+  })
+})
+
 describe('configFromEnv', () => {
   test('falls back to the mock without keys and honors overrides', () => {
     expect(configFromEnv({})).toEqual({ provider: 'mock', model: 'mock' })
