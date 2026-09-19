@@ -46,13 +46,12 @@ function parse(text: string): Map<string, string> {
   for (const raw of text.split('\n')) {
     const line = raw.trim().replace(/^export\s+/, '')
     if (!line || line.startsWith('#')) continue
-    const eq = line.indexOf('=')
-    if (eq < 1) continue
-    const key = line.slice(0, eq).trim()
-    const value = line
-      .slice(eq + 1)
-      .trim()
-      .replace(/^(['"])(.*)\1$/, '$2')
+    // `KEY=value`, and `KEY: value` with whitespace after the colon -- both are in the regex
+    // Next bundles (`@next/env`), so a guard that read only the first would miss the second.
+    const m = /^([\w.-]+)(?:\s*=|:\s)\s*(.*)$/.exec(line)
+    if (!m) continue
+    const key = m[1] as string
+    const value = (m[2] as string).trim().replace(/^(['"])(.*)\1$/, '$2')
     if (!out.has(key)) out.set(key, value)
   }
   return out
@@ -61,38 +60,38 @@ function parse(text: string): Map<string, string> {
 export type Offender = { key: string; source: string; why: string }
 
 /**
- * Forbidden keys the production build would pick up, from `dir`'s env files or from the
- * environment the deploy runs in.
+ * Every place a forbidden key is set to something live: `dir`'s env files, and the environment
+ * the deploy runs in.
  *
- * Two rules matter. Within the files, the first one to *mention* a key wins whatever its value,
- * because that is how Next resolves them — so an empty `DATABASE_URL` in `.env.production`
- * genuinely disables the one in `.env` and must not be reported. And a value in the environment
- * counts too: `DATABASE_URL=… bun run deploy` never touches a file, and the build inherits it.
+ * It deliberately does not model precedence. Which layer wins is genuinely ambiguous here — Bun
+ * loads `.env` into the environment before any of this runs, Next's loader then reconciles its
+ * own files against what it finds there, and the answer depends on NODE_ENV and on load order.
+ * An earlier version guessed, and the guess is what let a shell-exported URL through while an
+ * empty value in `.env.production` looked decisive.
  *
- * Bun loads `.env` into the environment before this script runs, so a value that matches one a
- * file supplies is attributed to the file and resolved by the rules above; only a value no file
- * explains can have come from the shell.
+ * So the rule is: if a live value is reachable at all, refuse and name every place it came from.
+ * A deploy blocked for a value that some other layer would have overridden costs a message and a
+ * deleted line; the other way round costs an outage.
  */
 export function findForbidden(
   dir: string,
   env: Record<string, string | undefined> = process.env,
 ): Offender[] {
   const found: Offender[] = []
-  const files = FILES.map((file) => {
-    const path = join(dir, file)
-    return { file, values: existsSync(path) ? parse(readFileSync(path, 'utf8')) : undefined }
-  })
-
   for (const [key, { why, off }] of Object.entries(FORBIDDEN)) {
-    const defined = files.find((f) => f.values?.has(key))
-    if (defined) {
-      const value = defined.values?.get(key) as string
-      if (!off.includes(value)) found.push({ key, source: `apps/web/${defined.file}`, why })
-      continue
+    const seen: string[] = []
+    for (const file of FILES) {
+      const path = join(dir, file)
+      if (!existsSync(path)) continue
+      const value = parse(readFileSync(path, 'utf8')).get(key)
+      if (value !== undefined && !off.includes(value)) seen.push(`apps/web/${file}`)
     }
     const fromEnv = env[key]
-    if (fromEnv === undefined || off.includes(fromEnv)) continue
-    found.push({ key, source: 'the environment this deploy runs in', why })
+    // Bun may have put a file's value here, so only say "the environment" when no file did.
+    if (fromEnv !== undefined && !off.includes(fromEnv) && seen.length === 0) {
+      seen.push('the environment this deploy runs in')
+    }
+    for (const source of seen) found.push({ key, source, why })
   }
   return found
 }

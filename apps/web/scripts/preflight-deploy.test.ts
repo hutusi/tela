@@ -66,26 +66,37 @@ describe('deploy preflight', () => {
     expect(findForbidden(dir, none).map((f) => f.key)).toEqual(['DATABASE_URL'])
   })
 
-  test('the first file to mention a key wins, whatever its value', () => {
-    const shadowed = envDir({
+  test('a shell URL is caught even when a file looks like it disables one', () => {
+    // The guard used to treat the file as decisive and skip the environment entirely, so an
+    // exported URL sailed through while `.env.production` looked like it had turned one off.
+    const dir = envDir({ '.env.production': 'DATABASE_URL=\n' })
+    expect(findForbidden(dir, { DATABASE_URL: LOCAL }).map((f) => f.source)).toEqual([
+      'the environment this deploy runs in',
+    ])
+  })
+
+  test('names every file a live value came from, without ranking them', () => {
+    const dir = envDir({
       '.env.production': `DATABASE_URL=${LOCAL}\n`,
       '.env': 'DATABASE_URL=postgresql://user@db.example.com:5432/postgres\n',
     })
-    expect(findForbidden(shadowed, none)[0]?.source).toBe('apps/web/.env.production')
-
-    // An empty value in the higher-priority file genuinely disables the lower one, so refusing
-    // here would be a deploy blocked for no reason.
-    const disabled = envDir({
-      '.env.production': 'DATABASE_URL=\n',
-      '.env': `DATABASE_URL=${LOCAL}\n`,
-    })
-    expect(findForbidden(disabled, { DATABASE_URL: LOCAL })).toEqual([])
+    expect(findForbidden(dir, none).map((f) => f.source)).toEqual([
+      'apps/web/.env.production',
+      'apps/web/.env',
+    ])
   })
 
-  test('reads the syntax Next reads: export, quotes, comments', () => {
-    // dotenv strips `export`, so a guard that did not would miss the value Next loads.
-    const dir = envDir({ '.env': `# DATABASE_URL=ignored\nexport DATABASE_URL="${LOCAL}"\n` })
-    expect(findForbidden(dir, none).map((f) => f.key)).toEqual(['DATABASE_URL'])
+  test('reads the syntax Next reads: export, colon, quotes, comments', () => {
+    // Both forms are in the regex @next/env bundles; a guard that read only `KEY=` missed one.
+    const exported = envDir({ '.env': `# DATABASE_URL=ignored\nexport DATABASE_URL="${LOCAL}"\n` })
+    expect(findForbidden(exported, none).map((f) => f.key)).toEqual(['DATABASE_URL'])
+
+    const colon = envDir({ '.env': `DATABASE_URL: ${LOCAL}\n` })
+    expect(findForbidden(colon, none).map((f) => f.key)).toEqual(['DATABASE_URL'])
+
+    // A colon with no space after it is not the dotenv form, so it is not a setting.
+    const glued = envDir({ '.env': `DATABASE_URL:${LOCAL}\n` })
+    expect(findForbidden(glued, none)).toEqual([])
   })
 
   test('dev auth is refused as well', () => {
