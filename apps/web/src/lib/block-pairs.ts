@@ -74,3 +74,32 @@ export function pairBlocks(
     untranslated: failed.has(block.id),
   }))
 }
+
+export type BlockRun = {
+  /** React key: the first block of the run. */
+  id: string
+  html: string
+  untranslated: boolean
+}
+
+/**
+ * Consecutive blocks joined into runs by whether their translation fell back to source text.
+ *
+ * One column renders one `.article-body` per run instead of one for the whole body, so a fully
+ * translated article is still a single body with a single measure and the rhythm it always had,
+ * and only a partial one splits — exactly where there is something to say about it.
+ */
+export function runsOf(
+  blocks: readonly ReaderBlock[],
+  untranslated: readonly string[] = [],
+): BlockRun[] {
+  const failed = new Set(untranslated)
+  const runs: BlockRun[] = []
+  for (const block of blocks) {
+    const flag = failed.has(block.id)
+    const last = runs[runs.length - 1]
+    if (last && last.untranslated === flag) last.html += block.html
+    else runs.push({ id: block.id, html: block.html, untranslated: flag })
+  }
+  return runs
+}

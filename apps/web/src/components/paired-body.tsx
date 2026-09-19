@@ -4,6 +4,7 @@ import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
 import { useLocale, useTranslations } from 'next-intl'
 import { Fragment } from 'react'
 import type { BlockPair } from '@/lib/block-pairs'
+import { Untranslated } from './untranslated'
 
 /** Headings carry their own lead, which `.article-block` zeroes; the row puts it back. */
 const LEAD = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
@@ -75,9 +76,8 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
           const cell = `min-w-0 article-body${pair.tag === null ? '' : ' article-block'}${
             pair.tag !== null && LEAD.has(pair.tag) ? ' mt-3' : ''
           }`
-          // A block whose translation failed is showing its source text. Say so, in a real
-          // element rather than generated content: ::before is unselectable and only most
-          // screen readers announce it. Only the failures pay for the wrapper.
+          // A block whose translation failed is showing its source text; only the failures pay
+          // for the wrapper that says so.
           const translatedCell = (
             <div
               className={cell}
@@ -89,14 +89,7 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
           )
           return (
             <Fragment key={pair.id}>
-              {pair.untranslated ? (
-                <div className="article-untranslated min-w-0">
-                  <span className="article-untranslated-label">{tt('blockUntranslated')}</span>
-                  {translatedCell}
-                </div>
-              ) : (
-                translatedCell
-              )}
+              {pair.untranslated ? <Untranslated>{translatedCell}</Untranslated> : translatedCell}
               <div
                 className={`${cell} article-source`}
                 lang={sourceLang}

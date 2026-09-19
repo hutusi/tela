@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useMemo } from 'react'
 import { type ReadingMode, readingModeParam } from '@/app/reading/href'
-import { pairBlocks } from '@/lib/block-pairs'
+import { pairBlocks, runsOf } from '@/lib/block-pairs'
 import { LikeButton } from './like-button'
 import { MarkRead } from './mark-read'
 import { PairedBody } from './paired-body'
@@ -15,6 +15,7 @@ import { RecommendPopover } from './recommend-popover'
 import { RequestTranslation } from './request-translation'
 import { Swatch } from './swatch'
 import { TranslationBar } from './translation-bar'
+import { Untranslated } from './untranslated'
 
 export type { ReaderTranslation } from './reader-data'
 
@@ -93,7 +94,12 @@ export function Reader({
   const requestOwnsPolling = needsRequest || failed
 
   const shownBlocks = showTrans ? (translation?.blocks ?? []) : blocks
-  const shownHtml = useMemo(() => shownBlocks.map((b) => b.html).join(''), [shownBlocks])
+  // One run unless the translation is partial: the untranslated blocks are the only reason a
+  // single column is ever more than one body.
+  const runs = useMemo(
+    () => runsOf(shownBlocks, showTrans ? (translation?.untranslatedBlocks ?? []) : []),
+    [shownBlocks, showTrans, translation?.untranslatedBlocks],
+  )
   const pairs = useMemo(
     () =>
       twoCols
@@ -225,13 +231,22 @@ export function Reader({
             >
               {title}
             </h1>
-            {shownHtml ? (
-              <Body
-                html={shownHtml}
-                lang={showTrans ? translation?.targetLang : sourceLang}
-                dir={showTrans ? undefined : 'auto'}
-                testId={showTrans ? 'body-translated' : 'body-original'}
-              />
+            {runs.length ? (
+              runs.map((run) =>
+                run.untranslated ? (
+                  <Untranslated key={run.id}>
+                    <Body html={run.html} lang={sourceLang} dir="auto" testId="body-translated" />
+                  </Untranslated>
+                ) : (
+                  <Body
+                    key={run.id}
+                    html={run.html}
+                    lang={showTrans ? translation?.targetLang : sourceLang}
+                    dir={showTrans ? undefined : 'auto'}
+                    testId={showTrans ? 'body-translated' : 'body-original'}
+                  />
+                ),
+              )
             ) : (
               <p className="text-muted">{t('noContent')}</p>
             )}

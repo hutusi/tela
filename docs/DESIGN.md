@@ -114,7 +114,8 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 ## Components (`apps/web/src/components`)
 
 `AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `ArticleList`, `Reader`, `PairedBody`,
-`TranslationBar`, `LikeButton`, `MarkRead`, `RequestTranslation`, `AutoRefresh`, `EmptyState`,
+`TranslationBar`, `Untranslated`, `LikeButton`, `MarkRead`, `RequestTranslation`, `AutoRefresh`,
+`EmptyState`,
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `RecommendPopover`. Discover's hero, topic chips,
 language menu (a native `<details>` dropdown), and claim banner live in `app/discover/page.tsx`.
 

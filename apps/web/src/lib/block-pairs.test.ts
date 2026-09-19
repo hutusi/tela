@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { ArticleBlock } from '@tela/content'
 import type { ReaderBlock } from '@/components/reader-data'
-import { blocksContaining, pairBlocks } from './block-pairs'
+import { blocksContaining, pairBlocks, runsOf } from './block-pairs'
 
 const block = (id: string, tag: string, html: string): ReaderBlock => ({ id, tag, html })
 
@@ -95,5 +95,37 @@ describe('blocksContaining', () => {
   test('falls back to the position for a block that carries no ids', () => {
     const rule: ArticleBlock = { html: '<hr>', tag: 'hr', ids: [] }
     expect(blocksContaining([rule, b('p1')], ['p1'])).toEqual(['p1'])
+  })
+})
+
+describe('runsOf', () => {
+  const b = (id: string, html: string) => block(id, 'p', html)
+
+  test('a fully translated body stays one run, as it always rendered', () => {
+    expect(runsOf([b('a', '<p>一</p>'), b('b', '<p>二</p>')])).toEqual([
+      { id: 'a', html: '<p>一</p><p>二</p>', untranslated: false },
+    ])
+  })
+
+  test('splits only around the blocks that failed', () => {
+    const runs = runsOf([b('a', '<p>一</p>'), b('b', '<p>Two</p>'), b('c', '<p>三</p>')], ['b'])
+    expect(runs).toEqual([
+      { id: 'a', html: '<p>一</p>', untranslated: false },
+      { id: 'b', html: '<p>Two</p>', untranslated: true },
+      { id: 'c', html: '<p>三</p>', untranslated: false },
+    ])
+  })
+
+  test('adjacent failures share one run, so the label is said once', () => {
+    const runs = runsOf(
+      [b('a', '<p>One</p>'), b('b', '<p>Two</p>'), b('c', '<p>三</p>')],
+      ['a', 'b'],
+    )
+    expect(runs.map((r) => r.untranslated)).toEqual([true, false])
+    expect(runs[0]?.html).toBe('<p>One</p><p>Two</p>')
+  })
+
+  test('no blocks is no runs, which is what the empty body renders from', () => {
+    expect(runsOf([])).toEqual([])
   })
 })
