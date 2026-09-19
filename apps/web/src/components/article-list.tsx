@@ -78,7 +78,12 @@ export async function ArticleList({
           return (
             <a
               key={a.id}
-              href={readingHref({ ...params, articleId: a.id })}
+              // Deliberately no mode. An href is a snapshot of this render, and a toggle
+              // afterwards never renders the server again, so a mode baked in here goes stale
+              // the moment the reader changes it — and an explicit one in the URL outranks the
+              // cookie, which is the only copy that is always current. Leaving it out is what
+              // makes a ⌘-click land where a plain click does. Search already does the same.
+              href={readingHref({ filter: params.filter, feedId: params.feedId, articleId: a.id })}
               className="relative flex flex-col gap-1.5 rounded-lg border-t border-line px-2.5 py-3.5 text-ink hover:bg-hover hover:no-underline data-[active=1]:bg-white"
               data-testid="article-row"
               data-read={read ? '1' : '0'}

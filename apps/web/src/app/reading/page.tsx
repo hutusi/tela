@@ -44,14 +44,14 @@ export default async function ReadingPage({ searchParams }: Props) {
   // A URL with no article carries no mode — a display mode for no article means nothing — so
   // closing an article used to forget it. The cookie remembers it instead.
   //
-  // The mode in `params` is the cookie's, never the URL's, because its only consumer is the
-  // article rows' hrefs — where they point is a question about the reader's preference, not
-  // about the article they happen to be looking at. `Reader` reads the URL for the view itself,
-  // so a link naming a mode still governs the article it names, and only that one: someone
-  // else's ?mode=orig must not follow this reader through their list.
+  // Two readers of the mode, and they are asking different questions. `Reader` asks what this
+  // view shows and takes it from the URL, so a link naming a mode governs the article it names.
+  // Everything that decides where to go next — the shell's click handler, the rows' hrefs —
+  // asks what this reader prefers, and only the cookie answers that: it is the one copy a
+  // client-side toggle keeps current, and the one that cannot be set by someone else's link.
   const remembered = readingModeFromCookie((await cookies()).get(READING_MODE_COOKIE)?.value)
   const defaultMode = remembered ?? 'side'
-  const params = { ...parseReadingParams(raw), mode: defaultMode }
+  const params = parseReadingParams(raw)
   const db = await getDb()
   // The reading language comes from a cookie, so nothing here waits on the database to learn
   // which translations to join.

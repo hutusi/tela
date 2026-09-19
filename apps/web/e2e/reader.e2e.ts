@@ -454,6 +454,15 @@ test.describe('translation', () => {
     await page.goto(bare.toString())
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
 
+    // Even now, with the cookie set to a non-default mode, the rows must not name it. An href
+    // is fixed at render time and a toggle never renders the server again, so a mode baked in
+    // here would outrank the cookie in the new tab a ⌘-click opens — and be the mode the reader
+    // had before the toggle, not the one they are looking at.
+    expect(
+      await page.getByTestId('article-row').first().getAttribute('href'),
+      'a row href pins a mode that a later toggle cannot update',
+    ).not.toContain('mode=')
+
     // Back to the default, or every spec after this one inherits the cookie.
     await page.getByTestId('mode-side').click()
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'side')
