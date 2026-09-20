@@ -363,8 +363,15 @@ test.describe('translation', () => {
     await expect(bar).toContainText('Written in Japanese')
     // Requested on open; the mock provider answers within seconds.
     await expect(bar).toHaveAttribute('data-state', /done|partial/, { timeout: 30_000 })
-    await expect(page.getByTestId('body-translated')).toContainText('en:')
-    await expect(page.getByTestId('body-original')).toBeVisible()
+    // Side by side is a grid of paired blocks, so both testids repeat: one cell per top-level
+    // block per side. Equal counts above one is the assertion that the two really are paired —
+    // "both bodies are visible" was also true of the two whole documents this replaced.
+    const translated = page.getByTestId('body-translated')
+    const original = page.getByTestId('body-original')
+    await expect(translated.first()).toContainText('en:')
+    await expect(original.first()).toBeVisible()
+    expect(await translated.count()).toBeGreaterThan(1)
+    expect(await original.count()).toBe(await translated.count())
     await expect(page.getByTestId('article-title')).toContainText('en:')
     // Opening the article and watching its translation land costs no page render at all: the pane
     // is fetched once on the click and once more when the translation becomes displayable, both
@@ -375,6 +382,8 @@ test.describe('translation', () => {
     await page.getByTestId('mode-trans').click()
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans')
     await expect(page.getByTestId('body-original')).toHaveCount(0)
+    // One language is one column and one measure: the body is a single block again, not a grid.
+    await expect(page.locator('.article-body')).toHaveCount(1)
     await page.getByTestId('mode-orig').click()
     await expect(page.getByTestId('body-translated')).toHaveCount(0)
     await expect(page.getByTestId('article-title')).not.toContainText('en:')
@@ -386,7 +395,7 @@ test.describe('translation', () => {
     await page.goBack()
     await expect(page).toHaveURL(/article=\d+.*mode=orig/)
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
-    await expect(page.getByTestId('body-original')).toBeVisible()
+    await expect(page.getByTestId('body-original').first()).toBeVisible()
     await expect(page.getByTestId('body-translated')).toHaveCount(0)
   })
 
@@ -402,6 +411,125 @@ test.describe('translation', () => {
     await expect(page.getByTestId('article-row').first()).toContainText('EN → ZH')
     await page.getByTestId('read-in').getByRole('button', { name: 'EN' }).click()
     await expect(page.getByTestId('article-row').first()).not.toContainText('EN → ZH')
+  })
+
+  /**
+   * The one body state no captured fixture reaches. The mock is told to drop a marked block
+   * (LLM_MOCK_DROP_MARKER), which is what a provider omitting an entry looks like, so the body
+   * lands `partial` with that paragraph still in its source language inside the translation.
+   */
+  test('a paragraph that failed to translate says so, in both layouts', async ({ page }) => {
+    await page.goto('/add')
+    await page.getByTestId('feed-url').fill(`${FIXTURES}/partial.xml`)
+    await page.getByTestId('find-feeds').click()
+    await page.getByTestId('feed-candidates').getByTestId('subscribe').first().click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+/)
+
+    const row = page.getByTestId('article-row').first()
+    await expect(row).toBeVisible({ timeout: 45_000 })
+    await row.click()
+    const bar = page.getByTestId('translation-bar')
+    await expect(bar).toHaveAttribute('data-state', 'partial', { timeout: 30_000 })
+    await expect(bar).toContainText('1 paragraph could not be translated')
+
+    // Side by side: exactly the block that failed is marked, and it is the one still in
+    // Japanese inside the English column.
+    const marked = page.locator('.article-untranslated')
+    await expect(marked).toHaveCount(1)
+    await expect(marked).toContainText('not translated')
+    await expect(marked).toContainText('この段落は')
+    await expect(marked.getByTestId('body-translated')).toHaveAttribute('lang', 'ja')
+
+    // Translation only is where it matters most: nothing else on screen explains why a
+    // paragraph is in the wrong language. The bar's count never said which one.
+    await page.getByTestId('mode-trans').click()
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans')
+    await expect(page.getByTestId('body-original')).toHaveCount(0)
+    await expect(page.locator('.article-untranslated')).toHaveCount(1)
+    await expect(page.locator('.article-untranslated')).toContainText('not translated')
+    // The blocks that did translate stay one body between the marks, not one per paragraph.
+    await expect(page.locator('.article-body')).toHaveCount(3)
+
+    await page.getByTestId('mode-side').click()
+    await page.getByTestId('close-article').click()
+  })
+
+  /**
+   * Runs last in this describe, and reopens the article it already translated: opening a second
+   * foreign article would spend on-demand translation budget the specs after this one need.
+   */
+  test('the display mode outlives closing an article', async ({ page }) => {
+    // A URL with no article carries no mode, so this used to reset to side by side every time:
+    // anyone who reads translation-only re-picked it on every article they opened.
+    await page.goto('/reading')
+    const foreign = page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first()
+    await foreign.click()
+    await expect(page.getByTestId('translation-bar')).toHaveAttribute(
+      'data-state',
+      /done|partial/,
+      {
+        timeout: 30_000,
+      },
+    )
+
+    const renders: string[] = []
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname
+      if (path === '/reading' && request.headers()['next-router-prefetch'] !== '1') {
+        renders.push(request.method())
+      }
+    })
+
+    await page.getByTestId('mode-orig').click()
+    await page.getByTestId('close-article').click()
+    await expect(page).not.toHaveURL(/article=/)
+    await foreign.click()
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
+    await expect(page).toHaveURL(/mode=orig/)
+    // Remembering it costs no render: the cookie is written in the browser, not by an action.
+    expect(renders.filter((method) => method === 'GET')).toHaveLength(0)
+
+    // And the server honours it, so a link with no mode opens the way this reader reads.
+    const bare = new URL(page.url())
+    bare.searchParams.delete('mode')
+    await page.goto(bare.toString())
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
+
+    // Even now, with the cookie set to a non-default mode, the rows must not name it. An href
+    // is fixed at render time and a toggle never renders the server again, so a mode baked in
+    // here would outrank the cookie in the new tab a ⌘-click opens — and be the mode the reader
+    // had before the toggle, not the one they are looking at.
+    expect(
+      await page.getByTestId('article-row').first().getAttribute('href'),
+      'a row href pins a mode that a later toggle cannot update',
+    ).not.toContain('mode=')
+
+    // Back to the default, or every spec after this one inherits the cookie.
+    await page.getByTestId('mode-side').click()
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'side')
+
+    // A mode in the URL governs the article it names and nothing else. Someone else's ?mode=orig
+    // link must not become this reader's preference — only the toggle does that, because only
+    // the toggle writes the cookie.
+    await page.goto(`${bare.toString()}&mode=orig`)
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
+
+    // Not by clicking through to the next article, either. Asserted on the URL rather than on
+    // data-mode so it holds for an article with no translation to display, and checked on the
+    // row's href too: that is the copy middle-click and open-in-new-tab follow, and the two
+    // must not disagree about where the same row goes.
+    const row = page.getByTestId('article-row').filter({ hasText: 'Julia Evans' }).first()
+    expect(await row.getAttribute('href')).not.toContain('mode=')
+    await row.click()
+    await expect(page).toHaveURL(/article=\d+/)
+    expect(new URL(page.url()).searchParams.get('mode')).toBeNull()
+
+    // Nor by closing it first.
+    await page.goto(`${bare.toString()}&mode=orig`)
+    await page.getByTestId('close-article').click()
+    await foreign.click()
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'side')
+    await page.getByTestId('close-article').click()
   })
 })
 

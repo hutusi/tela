@@ -114,6 +114,7 @@
     "translating": "Translating…",
     "failed": "Translation failed.",
     "partial": "{n, plural, one {# paragraph} other {# paragraphs}} could not be translated.",
+    "modesLabel": "Reading layout",
     "modes": {
       "side": "Side by side",
       "trans": "Translation",
@@ -121,6 +122,7 @@
     },
     "columnTranslated": "{target} · translation",
     "columnOriginal": "original",
+    "blockUntranslated": "not translated",
     "rateLimited": "Too many translation requests for now. Please try again in a little while.",
     "budgetExhausted": "You have used today's translation allowance. It resets tomorrow.",
     "unavailable": "The translation could not be started. Please try again.",

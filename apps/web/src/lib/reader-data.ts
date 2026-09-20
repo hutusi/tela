@@ -3,7 +3,8 @@ import { wantsExtraction } from '@tela/ingest'
 import { getLocale } from 'next-intl/server'
 import { articleRevision } from '@/app/reading/revision'
 import type { ReaderData, ReaderTranslation } from '@/components/reader-data'
-import { renderArticleHtml } from './article-html'
+import { articleBlocks, readerBlocks } from './article-html'
+import { blocksContaining } from './block-pairs'
 import { relativeTime } from './format'
 
 /**
@@ -35,13 +36,18 @@ export async function buildReaderData(
   if (article.sourceLang && article.sourceLang !== readingLang) {
     const fresh = row !== null && row.contentHash === article.contentHash
     const state = row === null || !fresh || row.status === 'pending' ? 'none' : row.status
+    const translated = translationIsShowable(row, article.contentHash)
+      ? await articleBlocks(row?.html ?? '')
+      : null
     translation = {
       targetLang: readingLang,
       state,
       failedBlocks: fresh ? row.failedBlocks : 0,
-      html: translationIsShowable(row, article.contentHash)
-        ? await renderArticleHtml(row?.html ?? '')
-        : null,
+      // Mapped here rather than shipping every block's leaf ids and intersecting on the client:
+      // the failures are a handful of ids, the leaves are one per paragraph.
+      untranslatedBlocks:
+        translated && fresh ? blocksContaining(translated, row.failedBlockIds) : [],
+      blocks: translated && readerBlocks(translated),
       title: row?.title ?? null,
     }
   }
@@ -67,7 +73,7 @@ export async function buildReaderData(
         readerCount: article.site.readerCount,
       },
     },
-    html: await renderArticleHtml(article.html),
+    blocks: readerBlocks(await articleBlocks(article.html)),
     translation,
     recommendation: article.recommendation,
     extracting: wantsExtraction(article),

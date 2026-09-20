@@ -49,12 +49,20 @@ export function TranslationBar({
           target: targetName,
           b: (chunks) => <b className="font-medium text-ink">{chunks}</b>,
         })}
-        {view.state === 'requested' || view.state === 'running' ? ` ${t('translating')}` : null}
-        {view.state === 'failed' ? ` ${t('failed')}` : null}
-        {view.state === 'partial' ? ` ${t('partial', { n: view.failedBlocks })}` : null}
+      </span>
+      {/* Its own live region: the sentence above is static, and re-announcing "Written in
+          Japanese" every time the status moves would bury the part that changed. */}
+      <span className="text-ink-2" aria-live="polite" data-testid="translation-status">
+        {view.state === 'requested' || view.state === 'running' ? t('translating') : null}
+        {view.state === 'failed' ? t('failed') : null}
+        {view.state === 'partial' ? t('partial', { n: view.failedBlocks }) : null}
       </span>
       <div className="flex-1" />
-      <div className="flex gap-0.5 rounded-lg bg-paper p-0.5">
+      {/* A fieldset rather than role="group": same semantics, and the one Biome asks for. */}
+      <fieldset
+        className="flex min-w-0 gap-0.5 rounded-lg bg-paper p-0.5"
+        aria-label={t('modesLabel')}
+      >
         {MODES.map((m) => {
           const active = mode === m
           const disabled = !ready && m !== 'orig'
@@ -77,7 +85,7 @@ export function TranslationBar({
             </button>
           )
         })}
-      </div>
+      </fieldset>
     </div>
   )
 }

@@ -146,7 +146,11 @@ carries the previous chunk's tail as context.
   recorded as `done`/`failed`/skipped explicitly.
 - **Reader**: `TranslationBar` (written in X, translated by Tela, status) with Side by side /
   Translation / Original modes (`?mode=`); the list shows translated titles and excerpts and an
-  `XX → YY` badge. "Read in" in the header sets `profiles.reading_lang`.
+  `XX → YY` badge. "Read in" in the header sets `profiles.reading_lang`. Side by side is one grid
+  with a row per top-level block: `buildReaderData` sends both bodies already split
+  (`renderArticleBlocks`), `pairBlocks` zips them by index and refuses to zip when they disagree,
+  and a container query turns the pane into two 640px columns or leaves the pairs interleaved
+  (ADR 0019).
 - **Cost**: `llm_usage` per call, written as each chunk lands (a retried or expired job resumes
   from the cache); `LLM_DAILY_BUDGET_TOKENS` gates background work (title jobs defer to the next
   day on a cache miss once it is spent); reader requests carry `onDemand: true` in the job payload,
@@ -209,6 +213,11 @@ in the request path (web) or the CLI rather than through a queue. `bun run worke
   the source of truth and the fallback. Every sign-in path seeds the cookie; an existing session
   that lacks it pays the profile lookup once and repairs the cache after hydration. The cookie
   carries the member id so one left in a shared browser is ignored.
+- The display mode lives in a `tela_reading_mode` cookie (`lib/reading-mode-cookie.ts`), written
+  in the browser so a mode change still costs no render. It supplies the default only where the
+  URL says nothing, which is every URL with no article open — `readingHref` drops `mode` there —
+  so the URL stays authoritative per view (ADR 0017) while closing an article stops forgetting
+  how the reader reads. No member id: unlike the reading language it mirrors no row.
 - Known and deliberately unfixed: `articles.fetched_at` has no index, and `listArticles` sorts on
   the unindexed expression `coalesce(published_at, fetched_at)`. Both cost nothing at present
   volumes (17 ms on 142 articles) and will matter later.

@@ -296,6 +296,7 @@ describe('getArticle carries the reader pane in one row', () => {
       title: '译名',
       html: '<p>译文</p>',
       failedBlocks: 1,
+      failedBlockIds: ['b7'],
     })
     expect(zh?.translatedTitle).toBe('译名')
     expect((await getArticle(t.db, userA, id, { translateTo: 'en' }))?.translation).toBeNull()

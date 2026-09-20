@@ -19,8 +19,12 @@ everything so far sits under `[Unreleased]`.
   and normalized so every text-bearing element is a leaf block; each leaf's inline content becomes
   XLIFF-style tagged text, and its id is a hash of that text plus `NORM_VERSION`. Translations are
   cached against that hash, so a recurring footer is translated once across every article that
-  carries it, and an edit costs only the blocks that changed (ADR 0005). Side-by-side, translation
-  and original modes line the two up block for block. Providers are pluggable — Aliyun Bailian GLM
+  carries it, and an edit costs only the blocks that changed (ADR 0005). Side by side, translation
+  and original modes line the two up block for block: one grid row per top-level block, original
+  first, so the two cannot drift apart — collapsing to a source-then-translation interleave when
+  the pane is too narrow for two columns, with nothing changing places at the threshold
+  (ADR 0019). A paragraph the translator could not do says so instead of
+  passing its source text off as a translation. Providers are pluggable — Aliyun Bailian GLM
   first, Anthropic second, a mock for tests (ADR 0006).
 
 - **Discover, and claiming your feed.** Listed blogs with topic and language filters, site pages,
@@ -67,6 +71,13 @@ everything so far sits under `[Unreleased]`.
   mark. The tile's strands thicken as it shrinks so the crossing survives 16px.
 
 ### Changed
+
+- **Side by side is a container query on the reader pane, and the reader's choice is remembered.**
+  Two columns used to appear at a 1280px viewport, where the pane — the third cell of a
+  `220px 260px 1fr` grid — leaves 348px per column, about 32 characters. They now wait until each
+  column can hold 640px, and below that the pairs interleave at full measure. The display mode
+  survives closing an article, so translation-only no longer has to be re-picked every time
+  (ADR 0019).
 
 - **Opening an article after the first render does not render the page again.** It had been up to
   five renders of the whole three-pane page, then ADR 0016 reduced that to one database wave and one

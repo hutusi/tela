@@ -8,6 +8,15 @@ export type MockTranslatorOptions = {
   failIds?: Set<string>
   /** Block ids left out of the reply entirely. */
   dropIds?: Set<string>
+  /**
+   * Leave out every block whose source text contains this marker.
+   *
+   * `dropIds` needs ids, which are content hashes nobody can know in advance, so it can only be
+   * used from a test that annotated the blocks itself. An end-to-end run goes through the whole
+   * pipeline and can only reach in through the text — which is how the e2e reaches a `partial`
+   * translation at all, the one body state no fixture otherwise produces.
+   */
+  dropMarker?: string
   /** Throw for every call; simulates a provider outage. */
   fail?: boolean
   /** Observed requests, for assertions. */
@@ -28,6 +37,7 @@ export function createMockTranslator(options: MockTranslatorOptions = {}): Trans
       if (options.fail) throw new Error('mock provider failure')
       const translations = request.blocks
         .filter((b) => !options.dropIds?.has(b.id))
+        .filter((b) => !(options.dropMarker && b.text.includes(options.dropMarker)))
         .map((b) => {
           let text = tokenize(b.text)
             .map((t) => {
