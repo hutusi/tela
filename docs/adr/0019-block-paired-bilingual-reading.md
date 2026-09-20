@@ -35,11 +35,17 @@ it again in English underneath. That is not a bilingual reading mode.
   on hydration or re-lay-out after mount. Shipping `htmlparser2` to the browser would also add tens
   of kilobytes to the bundle of a pane whose whole justification is being cheap (ADR 0017).
   Signing and splitting share one parse, so this costs no more CPU than the render it replaced.
-- **One grid, one row per block, cells in `t1, o1, t2, o2 …` order.** Two columns place pair *i* on
+- **One grid, one row per block, cells in `o1, t1, o2, t2 …` order.** Two columns place pair *i* on
   row *i*, so the sides align by construction and no scroll-sync code is needed. One column reads
   the same DOM as an interleave, at the full 640px measure. Per-side wrappers were rejected for
   exactly this reason: `display: contents` and `grid-template-rows: subgrid` both preserve the two
   columns but put every translation before every original when they collapse.
+- **The original leads, in both.** Left-hand column where there are two, above the translation
+  where they stack. That is the arrangement of every facing-page edition, and because one DOM
+  order produces both, it is also the only choice where nothing changes places as the window
+  crosses the two-column threshold. Translation-first was built first, on the reasoning that the
+  translation is what the reader reads and the eye lands left; seeing it rendered settled it the
+  other way.
 - **A container query on the pane, not a viewport breakpoint.** Two columns appear at a 1080px
   container — 520px each — because the pane is not the viewport and never was. In practice that is
   about a 1624px viewport, so the interleave is what most readers see. It is the better read of

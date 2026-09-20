@@ -93,7 +93,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 - Side by side is a container query on the reader pane, not a viewport breakpoint: two columns of
   640px appear once the pane itself is 1080px, which is about a 1624px viewport after the sidebar
   and list have taken 480. Below that the same grid is one column and the pairs interleave —
-  translation, its original, next paragraph — at the full measure. `styles.e2e.ts` measures the
+  a source paragraph, its translation, the next paragraph — at the full measure. `styles.e2e.ts` measures the
   columns at 1280, 1440 and 1700; the previous `xl` breakpoint rendered 348px columns at 1280 and
   nothing caught it (ADR 0019).
 - List rows: feed swatch (10px), feed name, relative time, `XX → EN` badge for foreign posts,
@@ -103,10 +103,11 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   author, time, reading time, original link; serif title 40px/1.12 alone and 32px when paired;
   body max 640px; author card with a 44px round swatch, site title, tagline, reader count, and the
   visibility note.
-- Paired reading: one grid row per top-level block, translation first. The original — its title
-  included — sits on `source`, continuous down the second column and a rounded panel per block
-  when the two stack. A block whose translation failed keeps its source text in the translation
-  column, behind a dashed `thumb` rule and a "not translated" label. The chosen mode is remembered
+- Paired reading: one grid row per top-level block, the original first — left-hand column when
+  there are two, above the translation when they stack, so nothing changes places at the
+  threshold. The original — its title included — sits on `source`, continuous down its column and
+  a rounded panel per block when the two stack. A block whose translation failed keeps its source
+  text in the translation column, behind a dashed `thumb` rule and a "not translated" label. The chosen mode is remembered
   across articles, so closing one does not send the next back to side by side.
 - Swatch colors are derived from the feed id (`oklch(0.55 0.11 hue)`, hue = id × 137.508 mod 360)
   so a feed keeps its color everywhere without storing one.

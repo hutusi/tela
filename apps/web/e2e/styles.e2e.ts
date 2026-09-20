@@ -145,8 +145,8 @@ test.describe('stylesheet', () => {
           count: t.length,
           paired: o.length,
           overflow: doc.scrollWidth - doc.clientWidth,
-          t0: { top: t[0]?.top ?? 0, width: t[0]?.width ?? 0 },
-          o0: { top: o[0]?.top ?? 0, width: o[0]?.width ?? 0 },
+          t0: { top: t[0]?.top ?? 0, width: t[0]?.width ?? 0, left: t[0]?.left ?? 0 },
+          o0: { top: o[0]?.top ?? 0, width: o[0]?.width ?? 0, left: o[0]?.left ?? 0 },
           t1: t[1]?.top ?? 0,
           o1: o[1]?.top ?? 0,
         }
@@ -160,17 +160,19 @@ test.describe('stylesheet', () => {
 
       const sideBySide = Math.abs(m.t0.top - m.o0.top) < 4
       if (sideBySide) {
+        // The original leads, as every facing-page edition does, and as the stacked order does.
+        expect(m.o0.left, 'the original is not the left-hand column').toBeLessThan(m.t0.left)
         // Two columns only when each can hold a line. 348px is the number this test exists for.
         expect(m.t0.width, 'translation column is cramped').toBeGreaterThanOrEqual(500)
         expect(m.o0.width, 'original column is cramped').toBeGreaterThanOrEqual(500)
         // Rows align by construction; if this drifts the pairing has stopped being a grid.
         expect(Math.abs(m.t1 - m.o1), 'pair 2 does not line up').toBeLessThan(1)
       } else {
-        // Stacked is the interleave, not two whole bodies: the original sits between its own
-        // translation and the next one, and keeps the full measure.
+        // Stacked is the interleave, not two whole bodies: each source paragraph is followed by
+        // its own translation and then the next pair, and both keep the full measure.
         expect(m.t0.width, 'interleaved column is cramped').toBeGreaterThanOrEqual(500)
-        expect(m.o0.top, 'original does not follow its translation').toBeGreaterThan(m.t0.top)
-        expect(m.t1, 'next pair does not follow the original').toBeGreaterThan(m.o0.top)
+        expect(m.t0.top, 'translation does not follow its original').toBeGreaterThan(m.o0.top)
+        expect(m.o1, 'next pair does not follow the translation').toBeGreaterThan(m.t0.top)
       }
     })
   }

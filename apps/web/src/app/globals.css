@@ -216,7 +216,7 @@
 }
 
 /*
- * Paired bilingual body (`PairedBody`): one grid row per top-level block.
+ * Paired bilingual body (`PairedBody`): one grid row per top-level block, original first.
  *
  * Stacked is the base case and two columns are the override, because two columns need the pane
  * to be about 1080px — roughly a 1624px viewport, once the sidebar and list have taken 480 —
@@ -243,15 +243,15 @@
   background: var(--color-source);
   border-radius: 8px;
   padding: 12px 16px;
-  margin-bottom: 24px;
+  margin-bottom: 8px;
 }
-/* Stacked, the original belongs to the block above it: it hugs its own translation, and the gap
-   to the next pair is the larger one. */
+/* Stacked, a pair is the source paragraph and the translation under it: the two hug, and the
+   larger gap falls after the translation, where one pair ends and the next begins. */
 .article-body.article-source > :last-child {
   margin-bottom: 0;
 }
 .article-body.article-block:not(.article-source) > :last-child {
-  margin-bottom: 8px;
+  margin-bottom: 24px;
 }
 
 /* A block the translator could not do keeps its source text in the translation column; passing

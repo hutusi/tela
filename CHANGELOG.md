@@ -20,9 +20,10 @@ everything so far sits under `[Unreleased]`.
   XLIFF-style tagged text, and its id is a hash of that text plus `NORM_VERSION`. Translations are
   cached against that hash, so a recurring footer is translated once across every article that
   carries it, and an edit costs only the blocks that changed (ADR 0005). Side by side, translation
-  and original modes line the two up block for block: one grid row per top-level block, so the two
-  cannot drift apart, collapsing to a translation-then-original interleave when the pane is too
-  narrow for two columns (ADR 0019). A paragraph the translator could not do says so instead of
+  and original modes line the two up block for block: one grid row per top-level block, original
+  first, so the two cannot drift apart — collapsing to a source-then-translation interleave when
+  the pane is too narrow for two columns, with nothing changing places at the threshold
+  (ADR 0019). A paragraph the translator could not do says so instead of
   passing its source text off as a translation. Providers are pluggable — Aliyun Bailian GLM
   first, Anthropic second, a mock for tests (ADR 0006).
 
