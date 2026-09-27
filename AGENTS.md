@@ -25,6 +25,7 @@ Decisions that look odd but are deliberate:
 | `packages/ingest` | Ingestion library: HTTP, discovery, fetch, extraction, region routing, WebSub. No queue, no runtime-specific APIs |
 | `packages/llm` | Translation adapter, prompts, output validation |
 | `packages/config` | Shared tsconfig bases |
+| `packages/platform` | *(refactor/local-first)* The seams to whatever runs Tela: `Db` (Drizzle SQLite, batch-only), `Blobs`, `Jobs`, `Clock`, `Mail`. `./cloudflare` is the only module that touches a binding; `./portable` (libSQL held to D1's limits, S3, memory) is what tests and the exit path run (ADR 0021) |
 | `apps/web` | Next.js 16 App Router, Tailwind v4, next-intl (no i18n routing), Drizzle server-side; Cloudflare Workers via OpenNext |
 | `apps/worker` | Node 24 process bundled by Bun: `src/roles.ts`, `src/queues.ts`, `src/jobs/` |
 
