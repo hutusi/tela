@@ -29,6 +29,7 @@ Decisions that look odd but are deliberate:
 | `packages/data` | *(refactor/local-first)* The SQLite data model for D1 and libSQL: schema, migrations, the lease primitive, the sync sequence, query helpers. Replaces `packages/db` at cutover |
 | `apps/web` | Next.js 16 App Router, Tailwind v4, next-intl (no i18n routing), Drizzle server-side; Cloudflare Workers via OpenNext |
 | `apps/worker` | Node 24 process bundled by Bun: `src/roles.ts`, `src/queues.ts`, `src/jobs/` |
+| `apps/jobs` | *(refactor/local-first)* The `tela-jobs` Worker. `src/kinds.ts` is every kind of background work (due query, lease, backoff, queue, handler). `src/runner.ts` holds `tick` and `runJob`, both portable. `src/worker.ts` is the Cloudflare entry: its cron and queue handlers only dispatch to the Singapore-pinned fetch handler over `SELF`. `src/portable.ts` runs the same work on a timer. Replaces `apps/worker` at cutover |
 
 ## Commands
 

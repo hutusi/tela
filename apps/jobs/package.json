@@ -1,0 +1,23 @@
+{
+  "name": "@tela/jobs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The tela-jobs Worker: cron sweeps claim due work under leases, queues fan it out, and every job runs pinned beside D1",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "@tela/content": "workspace:*",
+    "@tela/data": "workspace:*",
+    "@tela/ingest": "workspace:*",
+    "@tela/platform": "workspace:*",
+    "@tela/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260927.1",
+    "wrangler": "^4.129.0"
+  }
+}

@@ -9,7 +9,8 @@
     "./extract": "./src/extract-article.ts",
     "./http": "./src/http.ts",
     "./net": "./src/net.ts",
-    "./pipeline": "./src/pipeline/index.ts"
+    "./pipeline": "./src/pipeline/index.ts",
+    "./relay": "./src/relay.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

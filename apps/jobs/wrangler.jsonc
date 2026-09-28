@@ -1,0 +1,69 @@
+{
+  // tela-jobs (ADR 0020): cron sweeps and queue consumers, every job run by this Worker's own
+  // fetch handler, which placement pins beside the D1 primary in Singapore. No public route.
+  "name": "tela-jobs",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "placement": { "region": "aws:ap-southeast-1" },
+  // A whole-feed pass measured ≤ 513 ms and an extraction ≤ 397 ms (spike S2); a minute is room.
+  "limits": { "cpu_ms": 60000 },
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tela",
+      // Set when the database is provisioned (`wrangler d1 create tela --location apac`).
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "../../packages/data/migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content" }],
+  "services": [{ "binding": "SELF", "service": "tela-jobs" }],
+  "queues": {
+    "producers": [
+      { "binding": "FETCH_QUEUE", "queue": "tela-fetch" },
+      { "binding": "EXTRACT_QUEUE", "queue": "tela-extract" },
+      { "binding": "TRANSLATE_QUEUE", "queue": "tela-translate" },
+      { "binding": "MISC_QUEUE", "queue": "tela-misc" }
+    ],
+    // Consumers always ack; retries come from lease state. The DLQ is only an alarm.
+    "consumers": [
+      {
+        "queue": "tela-fetch",
+        "max_batch_size": 5,
+        "max_concurrency": 10,
+        "max_retries": 2,
+        "dead_letter_queue": "tela-dlq"
+      },
+      {
+        "queue": "tela-extract",
+        "max_batch_size": 3,
+        "max_concurrency": 5,
+        "max_retries": 2,
+        "dead_letter_queue": "tela-dlq"
+      },
+      {
+        "queue": "tela-translate",
+        "max_batch_size": 1,
+        "max_concurrency": 4,
+        "max_retries": 2,
+        "dead_letter_queue": "tela-dlq"
+      },
+      {
+        "queue": "tela-misc",
+        "max_batch_size": 5,
+        "max_concurrency": 4,
+        "max_retries": 2,
+        "dead_letter_queue": "tela-dlq"
+      }
+    ]
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "WORKER_USER_AGENT": "Tela/0.1 (+https://tela.ainaive.com; feed reader)",
+    "FETCH_TIMEOUT_MS": "20000",
+    "WEBSUB_ENABLED": "0"
+  }
+}
