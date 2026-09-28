@@ -17,6 +17,7 @@ and the way in is an admin invite.
 | `apps/web` | Next.js 16 app (App Router, Tailwind v4, next-intl), deployed to Cloudflare Workers via OpenNext |
 | `apps/worker` | Background worker: one codebase, roles selected by `WORKER_ROLES` (scheduler, fetch, extract, translate, assets, claim, relay) |
 | `apps/jobs` | The `tela-jobs` Worker: cron sweeps claim due work under leases, queues fan it out, jobs run pinned beside D1 (refactor/local-first) |
+| `apps/relay` | The China fetch relay on a HK or mainland box: a signed fetch endpoint, the one Node process Tela runs (refactor/local-first) |
 | `packages/db` | Drizzle schema, migrations, query helpers, the job sender |
 | `packages/content` | Pure content pipeline: feed parsing, sanitization, block ids and hashing, language detection |
 | `packages/ingest` | Ingestion library: HTTP client, feed discovery, fetching, article extraction, region routing, WebSub |

@@ -30,6 +30,7 @@ Decisions that look odd but are deliberate:
 | `apps/web` | Next.js 16 App Router, Tailwind v4, next-intl (no i18n routing), Drizzle server-side; Cloudflare Workers via OpenNext |
 | `apps/worker` | Node 24 process bundled by Bun: `src/roles.ts`, `src/queues.ts`, `src/jobs/` |
 | `apps/jobs` | *(refactor/local-first)* The `tela-jobs` Worker. `src/kinds.ts` is every kind of background work (due query, lease, backoff, queue, handler). `src/runner.ts` holds `tick` and `runJob`, both portable. `src/worker.ts` is the Cloudflare entry: its cron and queue handlers only dispatch to the Singapore-pinned fetch handler over `SELF`. `src/portable.ts` runs the same work on a timer. Replaces `apps/worker` at cutover |
+| `apps/relay` | *(refactor/local-first)* The China fetch relay (ADR 0008) as its own Node app: `src/server.ts` over `node:http`, `src/safe-fetch.ts` (DNS-pinned undici), `src/config.ts`, and a Dockerfile. It is the only Node process Tela runs; it replaces the `relay` role at cutover |
 
 ## Commands
 
