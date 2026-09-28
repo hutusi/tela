@@ -91,31 +91,88 @@ export async function usageOn(db: TelaDb, subject: string, day: string): Promise
 }
 
 /**
- * Articles with a title translation to make: some launch language they are not written in has no
- * translation from the article's current title hash. Titles are background work, so nothing is
- * due once the day's budget is spent (`budget` 0 means unlimited).
+ * An article with a title translation to make: it has a title, its site allows translation, and
+ * some launch language it is not written in has no row made from its current title hash. Written
+ * against `a` (articles) and `s` (sites).
+ */
+function titleIsDue(): SQL {
+  return sql`a.title_hash is not null and a.title <> '' and s.translation_opt_out = 0
+    and exists (
+      select 1 from json_each(${JSON.stringify(READING_LANGUAGES)}) as l
+      where l.value <> coalesce(a.source_lang, '')
+        and not exists (
+          select 1 from article_titles t
+          where t.article_id = a.id and t.lang = l.value and t.source_hash = a.title_hash
+        )
+    )`
+}
+
+const withSite = sql`articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id`
+
+/**
+ * Feeds with titles to translate, for `claimDue`. A job takes a feed's due titles together, so one
+ * call per language carries up to `TITLES_PER_JOB` of them and the prompt is paid once, not once
+ * an article: production's title calls averaged 393 input tokens for about 90 of title and
+ * excerpt. Titles are background work, so nothing is due once the day's budget is spent
+ * (`budget` 0 means unlimited).
  */
 export function dueTitles(now: number, budget: number): SQL {
-  const languages = JSON.stringify(READING_LANGUAGES)
   const withinBudget =
     budget > 0
       ? sql`and (select coalesce(sum(used + reserved), 0) from usage_daily
                  where subject = ${BACKGROUND} and day = ${utcDay(now)}) < ${budget}`
       : sql``
   return sql`
-    select a.id as key, null as host, a.id as ord
-    from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-    where a.title_hash is not null and a.title <> '' and s.translation_opt_out = 0
-      and exists (
-        select 1 from json_each(${languages}) as l
-        where l.value <> coalesce(a.source_lang, '')
-          and not exists (
-            select 1 from article_titles t
-            where t.article_id = a.id and t.lang = l.value and t.source_hash = a.title_hash
-          )
-      )
-      ${withinBudget}
+    select a.feed_id as key, null as host, min(a.id) as ord
+    from ${withSite}
+    where ${titleIsDue()} ${withinBudget}
+    group by a.feed_id
   `
+}
+
+/** Titles and excerpts one title job translates: at most this many articles of one feed. */
+export const TITLES_PER_JOB = 20
+
+export type DueTitle = {
+  id: number
+  title: string
+  excerpt: string | null
+  source_lang: string | null
+  title_hash: string
+}
+
+/** The feed's articles whose titles are due, oldest first, one job's worth. */
+export function dueTitlesOfFeed(db: TelaDb, feedId: number): Promise<DueTitle[]> {
+  return db.all<DueTitle>(sql`
+    select a.id, a.title, a.excerpt, a.source_lang, a.title_hash
+    from ${withSite}
+    where a.feed_id = ${feedId} and ${titleIsDue()}
+    order by a.id limit ${TITLES_PER_JOB}
+  `)
+}
+
+/**
+ * Record the titles a job kept failing on as failed, so the sweep stops asking until they change.
+ * The batch these statements join must bump the sync sequence.
+ */
+export function failDueTitles(db: TelaDb, feedId: number, now: number) {
+  return db.run(sql`
+    insert into article_titles (article_id, lang, feed_id, status, source_hash, updated_at, seq)
+    select d.id, l.value, d.feed_id, 'failed', d.title_hash, ${now}, ${currentSeq}
+    from (
+      select a.id, a.feed_id, a.source_lang, a.title_hash from ${withSite}
+      where a.feed_id = ${feedId} and ${titleIsDue()}
+      order by a.id limit ${TITLES_PER_JOB}
+    ) as d, json_each(${JSON.stringify(READING_LANGUAGES)}) as l
+    where l.value <> coalesce(d.source_lang, '')
+      and not exists (
+        select 1 from article_titles t
+        where t.article_id = d.id and t.lang = l.value and t.source_hash = d.title_hash
+      )
+    on conflict (article_id, lang) do update set
+      status = 'failed', source_hash = excluded.source_hash, updated_at = excluded.updated_at,
+      seq = excluded.seq
+  `)
 }
 
 /** A title translation, stored whatever the outcome so the sweep stops asking (echo, failed). */

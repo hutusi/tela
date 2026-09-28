@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { first, type TelaDb, utcDay } from '@tela/data'
+import { first, headSeq, type TelaDb, TITLES_PER_JOB, utcDay } from '@tela/data'
 import { createTestDb } from '@tela/data/testing'
 import { createHttpClient } from '@tela/ingest'
 import { registerFeed } from '@tela/ingest/pipeline'
@@ -171,6 +171,112 @@ describe('titles', () => {
     await cycle(ctx)
     expect(calls).toHaveLength(0)
     expect(await db.all(sql`select 1 from article_titles`)).toHaveLength(0)
+  })
+})
+
+describe('titles, batched by feed', () => {
+  function manyPosts(n: number) {
+    return rss({
+      link: server.url('/'),
+      items: Array.from({ length: n }, (_, i) => ({
+        guid: `p${i + 1}`,
+        link: server.url(`/posts/${i + 1}`),
+        title: `Post ${i + 1}`,
+        description: `Summary of post ${i + 1}`,
+        content: longHtml(3),
+      })),
+    })
+  }
+
+  test('share one call per language: the prompt is paid once, not once an article', async () => {
+    const ctx = context()
+    await ingest(ctx, manyPosts(5))
+    await cycle(ctx)
+    // English posts: zh-Hans is the only other launch language.
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.targetLang).toBe('zh-Hans')
+    expect(calls[0]?.blocks).toHaveLength(10) // five titles, five excerpts
+    const rows = await db.all<{ status: string; n: number }>(
+      sql`select status, count(*) as n from article_titles group by status`,
+    )
+    expect(rows).toEqual([{ status: 'done', n: 5 }])
+    const logged = await db.all<{ n: number }>(
+      sql`select count(*) as n from llm_calls where job = 'translate.title'`,
+    )
+    expect(logged).toEqual([{ n: 1 }])
+  })
+
+  test('a backlog larger than one job finishes over the next ticks', async () => {
+    const ctx = context()
+    await ingest(ctx, manyPosts(TITLES_PER_JOB + 5))
+    await cycle(ctx)
+    const count = async () =>
+      (await first<{ n: number }>(db, sql`select count(*) as n from article_titles`))?.n ?? 0
+    expect(await count()).toBe(TITLES_PER_JOB)
+    clock.advance(MIN)
+    await cycle(ctx)
+    expect(await count()).toBe(TITLES_PER_JOB + 5)
+    expect(calls).toHaveLength(2)
+  })
+
+  test('a provider failure in one language keeps what the other made, and backs off', async () => {
+    // Japanese posts need both launch languages; English is refused for a while.
+    let refuseEnglish = true
+    const mock = createMockTranslator({ calls })
+    const flaky: Translator = {
+      model: mock.model,
+      async translate(request) {
+        if (refuseEnglish && request.targetLang === 'en') throw new Error('HTTP 503')
+        return mock.translate(request)
+      },
+    }
+    const ctx = context({ translator: flaky })
+    await ingest(ctx, manyPosts(3))
+    await db.run(sql`update articles set source_lang = 'ja'`)
+    const { outcomes } = await cycle(ctx)
+    expect(outcomes).toMatchObject([{ status: 'retrying', error: 'HTTP 503' }])
+    const made = await db.all<{ lang: string; n: number }>(
+      sql`select lang, count(*) as n from article_titles group by lang`,
+    )
+    expect(made).toEqual([{ lang: 'zh-Hans', n: 3 }])
+    const spent = await first<{ used: number }>(
+      db,
+      sql`select used from usage_daily where subject = '*'`,
+    )
+    expect(spent?.used).toBeGreaterThan(0)
+    // Past the backoff, with the provider back: only English is asked for.
+    refuseEnglish = false
+    calls.length = 0
+    clock.advance(6 * MIN)
+    await cycle(ctx)
+    expect(calls.map((c) => c.targetLang)).toEqual(['en'])
+    const all = await db.all<{ lang: string; n: number }>(
+      sql`select lang, count(*) as n from article_titles where status = 'done' group by lang order by lang`,
+    )
+    expect(all).toEqual([
+      { lang: 'en', n: 3 },
+      { lang: 'zh-Hans', n: 3 },
+    ])
+  })
+
+  test('a batch that keeps failing is recorded failed, stamped for sync, and asked for no more', async () => {
+    const ctx = context({ translator: createMockTranslator({ calls, fail: true }) })
+    await ingest(ctx, manyPosts(2))
+    for (let i = 0; i < 4; i++) {
+      await cycle(ctx)
+      clock.advance(6 * 60 * MIN)
+    }
+    const rows = await db.all<{ status: string; seq: number }>(
+      sql`select status, seq from article_titles`,
+    )
+    expect(rows.map((r) => r.status)).toEqual(['failed', 'failed'])
+    expect(rows[0]?.seq).toBe(await headSeq(db))
+    expect(await db.all(sql`select kind, key from dead_letters`)).toEqual([
+      { kind: 'translate.title', key: '1' },
+    ])
+    calls.length = 0
+    await cycle(ctx)
+    expect(calls).toHaveLength(0)
   })
 })
 

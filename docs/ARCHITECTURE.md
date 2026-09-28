@@ -339,3 +339,17 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, /o/* content objects, /
   - `daily` is one batch: relay re-probes, dead-feed revival, pruning, and compacting read-only
     state under a watermark.
   - `src/portable.ts` runs the same thing on a timer.
+- **Translation** (`apps/jobs/src/translation`, ADR 0023):
+  - `translate.title` is keyed by feed. The sweep finds feeds with articles whose current
+    `title_hash` has no `article_titles` row in some launch language. A job takes up to 20 of a
+    feed's due titles and excerpts, one call per language, so the prompt is paid once, not once
+    an article. Echoes and failures are recorded against the hash, and the day's background
+    budget (`usage_daily`, subject `'*'`) stops the sweep once spent.
+  - `translate.body` runs what a reader requested (`body_translations`, keyed by content version
+    and language). It streams: groups along top-level block boundaries, about 400 source tokens
+    first and then about 3k, each a chunk object `tc/<key>/<lang>/<request>/<n>.json` committed
+    in a fenced batch with its cache rows, call log and token count. The finished object is
+    `t/<key>/<lang>/<sha>.json`. An execution stops starting groups after ten minutes and the
+    next tick continues it from the cache.
+  - The block cache (`block_translations`) is content-addressed by block hash and
+    `NORM_VERSION`, and shared by titles and bodies; a title echo never enters it.

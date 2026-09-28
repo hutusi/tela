@@ -10,6 +10,7 @@ import {
   dueExtractions,
   dueFeeds,
   dueTitles,
+  failDueTitles,
   type LeaseKind,
   settleExtraction,
   type TelaDb,
@@ -24,10 +25,9 @@ import {
   verifyClaimJob,
   websubSubscribeJob,
 } from '@tela/ingest/pipeline'
-import { READING_LANGUAGES } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
 import { translateBodyJob } from './translation/body'
-import { type TranslationContext, translateTitlesJob } from './translation/titles'
+import { TITLE_TTL_MS, type TranslationContext, translateTitlesJob } from './translation/titles'
 
 export const QUEUES = ['fetch', 'extract', 'translate', 'misc'] as const
 export type QueueName = (typeof QUEUES)[number]
@@ -139,22 +139,15 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     enabled: (ctx) => ctx.translator !== undefined,
     // Background work: a queue of its own would only compete with bodies, which readers wait on.
     queue: 'misc',
-    ttlMs: 3 * MIN,
+    // Keyed by feed: one job translates up to TITLES_PER_JOB of its titles, a call per language.
+    ttlMs: TITLE_TTL_MS,
     limit: 100,
     backoff: { baseMs: 5 * MIN, maxMs: 6 * 60 * MIN, maxAttempts: 4 },
     due: (now, ctx) => dueTitles(now, ctx.backgroundBudget ?? 0),
     run: translateTitlesJob,
-    // The provider kept failing on it: record the failure so the sweep stops until the title changes.
-    exhausted: (db, key, now) => [
-      db.run(sql`
-        insert into article_titles (article_id, lang, feed_id, status, source_hash, updated_at, seq)
-        select a.id, l.value, a.feed_id, 'failed', a.title_hash, ${now}, ${currentSeq}
-        from articles a, json_each(${JSON.stringify(READING_LANGUAGES)}) as l
-        where a.id = ${Number(key)} and a.title_hash is not null and l.value <> coalesce(a.source_lang, '')
-        on conflict (article_id, lang) do update set status = 'failed', source_hash = excluded.source_hash,
-          seq = excluded.seq
-      `),
-    ],
+    // The provider kept failing on this batch: record it failed so the sweep stops until the
+    // titles change.
+    exhausted: (db, key, now) => [failDueTitles(db, Number(key), now)],
   },
   'translate.body': {
     enabled: (ctx) => ctx.translator !== undefined,

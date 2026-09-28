@@ -204,6 +204,11 @@ The background Worker that replaces the Fly worker at cutover (ADR 0020). The co
   runs.
 - Vars: `WORKER_USER_AGENT`, `FETCH_TIMEOUT_MS`, `WEBSUB_ENABLED`, `PUBLIC_URL`, as in the
   environment table.
+- Translation: `wrangler secret put BAILIAN_API_KEY`. The key is a mainland one, so leave
+  `BAILIAN_BASE_URL` unset (`dashscope.aliyuncs.com`; the international endpoint refuses it).
+  Vars `LLM_DAILY_BUDGET_TOKENS` (background titles; production ran 2,000,000) and
+  `LLM_MAX_ARTICLE_TOKENS` (default 40,000). Without a key the translation kinds are disabled,
+  never run on the mock: set `LLM_PROVIDER=mock` deliberately, for local runs only.
 
 **Where it runs.** `placement.region = aws:ap-southeast-1` pins the fetch handler beside the D1
 primary. The cron (`* * * * *` tick, `17 3 * * *` daily) and the queue consumers run elsewhere
@@ -228,6 +233,13 @@ and only call `SELF.fetch()`. The Worker has no public route.
   that `info` never shows.
 - **Fetch a feed now:** `update feeds set next_fetch_at = 0 where id = …`. The next tick claims
   it; a live lease is never stolen.
+- **Translation spend:** `select * from usage_daily order by day desc limit 14` (subject `'*'` is
+  background titles, anything else a member), and per call `select job, count(*),
+  sum(input_tokens), sum(output_tokens) from llm_calls where created_at > … group by job`.
+- **Retranslate titles:** `delete from article_titles where article_id in (…)`; the sweep finds
+  them again. **A stuck body:** `select * from body_translations where state in ('requested',
+  'running')`. A row stays `running` between executions of one request and needs nothing; one
+  that exhausted its attempts is `failed`, with its dead letter beside it.
 - Queue messages are only accelerators. Purging a queue loses no work, because the next tick
   finds everything still due.
 

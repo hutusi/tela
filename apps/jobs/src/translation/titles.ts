@@ -1,7 +1,9 @@
 /**
  * Eager title translations (ADR 0006): what lists show, for a few hundred tokens an article. The
- * sweep finds articles whose current title hash has no translation into some launch language, so
- * an article whose title or excerpt changes is translated again without anything being queued.
+ * sweep finds feeds with articles whose current title hash has no translation into some launch
+ * language, so an article whose title or excerpt changes is translated again without anything
+ * being queued. A job takes one feed's due titles together: one call per language carries up to
+ * `TITLES_PER_JOB` of them, so the prompt is paid once, not once an article.
  */
 import { blockHash } from '@tela/content'
 import { plainText } from '@tela/content/tagged'
@@ -9,6 +11,8 @@ import {
   BACKGROUND,
   cachedTranslations,
   chargeUsage,
+  type DueTitle,
+  dueTitlesOfFeed,
   first,
   type Lease,
   recordLlmCall,
@@ -32,88 +36,116 @@ export type TranslationContext = IngestContext & {
 }
 
 export type TitleResult =
-  | { status: 'done'; languages: string[] }
+  | { status: 'done'; articles: number; languages: Record<string, number> }
   | { status: 'skipped'; reason: string }
   | { status: 'retry'; error: string }
   | { status: 'lost' }
 
-/** Translate an article's title and excerpt into every launch language it is not written in. */
+/** How long a title job holds its lease: a call per language for up to 20 titles, and retries. */
+export const TITLE_TTL_MS = 5 * 60_000
+
+type Block = { id: string; text: string; hash: string }
+
+/** An article's title and excerpt as blocks, ids unique across the batch. */
+async function blocksOf(article: DueTitle): Promise<Block[]> {
+  const blocks = [{ id: `t${article.id}`, text: escapeUTF8(article.title) }]
+  if (article.excerpt) blocks.push({ id: `e${article.id}`, text: escapeUTF8(article.excerpt) })
+  return Promise.all(blocks.map(async (b) => ({ ...b, hash: await blockHash(b.text) })))
+}
+
+/**
+ * Translate a feed's due titles and excerpts into every launch language each is not written in.
+ * The key is the feed id. Work is grouped by (target language, source language), one
+ * `translateBlocks` call a group. A group the provider refuses leaves the rest standing: what
+ * succeeded is committed and the lease backs off, so paid work is never thrown away.
+ */
 export async function translateTitlesJob(
   ctx: TranslationContext,
   lease: Lease,
 ): Promise<TitleResult> {
   const { db } = ctx
-  const articleId = Number(lease.key)
+  const feedId = Number(lease.key)
   const skip = async (reason: string): Promise<TitleResult> => {
     const committed = await commit(ctx, lease, [])
     return committed.ok ? { status: 'skipped', reason } : { status: 'lost' }
   }
   const translator = ctx.translator
   if (!translator) return skip('no translator configured')
-  const article = await first<{
-    feed_id: number
-    title: string
-    excerpt: string | null
-    source_lang: string | null
-    title_hash: string | null
-    site_title: string | null
-    opt_out: number
-  }>(
+  const site = await first<{ site_title: string | null }>(
     db,
     sql`
-      select a.feed_id, a.title, a.excerpt, a.source_lang, a.title_hash,
-        coalesce(s.title, f.title) as site_title, s.translation_opt_out as opt_out
-      from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-      where a.id = ${articleId}
+      select coalesce(s.title, f.title) as site_title
+      from feeds f join sites s on s.id = f.site_id where f.id = ${feedId}
     `,
   )
-  if (!article?.title_hash || !article.title.trim()) return skip('no title')
-  if (article.opt_out) return skip('the site opted out of translation')
+  // The due query already leaves out opted-out sites and blank titles.
+  const articles = site ? await dueTitlesOfFeed(db, feedId) : []
+  if (articles.length === 0) return skip('up to date')
+
   const done = new Map(
     (
-      await db.all<{ lang: string; source_hash: string }>(
-        sql`select lang, source_hash from article_titles where article_id = ${articleId}`,
-      )
-    ).map((r) => [r.lang, r.source_hash]),
+      await db.all<{ article_id: number; lang: string; source_hash: string }>(sql`
+        select article_id, lang, source_hash from article_titles
+        where article_id in (select value from json_each(${JSON.stringify(articles.map((a) => a.id))}))
+      `)
+    ).map((r) => [`${r.article_id}:${r.lang}`, r.source_hash]),
   )
-  const targets = READING_LANGUAGES.filter(
-    (lang) => lang !== article.source_lang && done.get(lang) !== article.title_hash,
-  )
-  if (targets.length === 0) return skip('up to date')
+  const blocks = new Map<number, Block[]>()
+  for (const article of articles) blocks.set(article.id, await blocksOf(article))
 
-  const blocks = [{ id: 'title', text: escapeUTF8(article.title) }]
-  if (article.excerpt) blocks.push({ id: 'excerpt', text: escapeUTF8(article.excerpt) })
-  const hashes = new Map<string, string>()
-  for (const b of blocks) hashes.set(b.id, await blockHash(b.text))
+  // (target, source) → the articles that need it.
+  const groups = new Map<
+    string,
+    { lang: string; sourceLang: string | null; articles: DueTitle[] }
+  >()
+  for (const article of articles) {
+    for (const lang of READING_LANGUAGES) {
+      if (lang === article.source_lang) continue
+      if (done.get(`${article.id}:${lang}`) === article.title_hash) continue
+      const key = `${lang}\u0000${article.source_lang ?? ''}`
+      const group = groups.get(key) ?? { lang, sourceLang: article.source_lang, articles: [] }
+      group.articles.push(article)
+      groups.set(key, group)
+    }
+  }
 
   const now = ctx.clock.now()
   const statements: Statement[] = []
+  const translatedCount = new Map<string, number>()
   let spent = 0
-  for (const lang of targets) {
-    const cached = await cachedTranslations(db, [...hashes.values()], lang, article.source_lang)
+  let providerError: string | null = null
+  for (const { lang, sourceLang, articles: members } of groups.values()) {
+    const all = members.flatMap((a) => blocks.get(a.id) as Block[])
+    const cached = await cachedTranslations(
+      db,
+      all.map((b) => b.hash),
+      lang,
+      sourceLang,
+    )
     const result = new Map<string, string>()
-    const missing: typeof blocks = []
-    for (const b of blocks) {
-      const hit = cached.get(hashes.get(b.id) as string)
+    const missing: Block[] = []
+    for (const b of all) {
+      const hit = cached.get(b.hash)
       if (hit !== undefined) result.set(b.id, hit)
       else missing.push(b)
     }
-    let echoedTitle = false
+    const echoed = new Set<string>()
     if (missing.length > 0) {
       let outcome: Awaited<ReturnType<typeof translateBlocks>>
       try {
         outcome = await translateBlocks(translator, {
-          blocks: missing,
-          sourceLang: article.source_lang,
+          blocks: missing.map(({ id, text }) => ({ id, text })),
+          sourceLang,
           targetLang: lang,
-          context: { siteTitle: article.site_title },
-          // A title may be a name that reads the same in every language; the excerpt keeps the
+          context: { siteTitle: site?.site_title ?? null },
+          // A title may be a name that reads the same in every language; excerpts keep the
           // echo guard.
-          allowIdenticalBlockIds: ['title'],
+          allowIdenticalBlockIds: missing.filter((b) => b.id.startsWith('t')).map((b) => b.id),
         })
       } catch (err) {
-        // The provider is down or refusing: back the lease off rather than record a failure.
-        return { status: 'retry', error: err instanceof Error ? err.message : String(err) }
+        // The provider is down or refusing: keep what other groups made, back off for the rest.
+        providerError = err instanceof Error ? err.message : String(err)
+        continue
       }
       for (const usage of outcome.usage) {
         spent += usage.inputTokens + usage.outputTokens
@@ -123,7 +155,7 @@ export async function translateTitlesJob(
             {
               job: 'translate.title',
               contentKey: null,
-              articleId,
+              articleId: members.length === 1 ? (members[0] as DueTitle).id : null,
               targetLang: lang,
               userId: null,
               model: usage.model,
@@ -138,50 +170,59 @@ export async function translateTitlesJob(
       // An echo accepted only by the title exemption stays out of the shared cache: it is
       // content-addressed and first-write-wins, so a body <h1> repeating the headline would
       // inherit "this is its own translation" for ever (AGENTS.md).
+      const hashOf = new Map(missing.map((b) => [b.id, b.hash]))
       const cacheable = [...outcome.translated.entries()].filter(([id]) => !outcome.echoed.has(id))
       if (cacheable.length > 0) {
         statements.push(
           storeBlockTranslations(
             db,
             cacheable.map(([id, text]) => ({
-              sourceHash: hashes.get(id) as string,
+              sourceHash: hashOf.get(id) as string,
               taggedText: text,
             })),
-            {
-              targetLang: lang,
-              sourceLang: article.source_lang,
-              model: translator.model,
-              normVersion: NORM_VERSION,
-            },
+            { targetLang: lang, sourceLang, model: translator.model, normVersion: NORM_VERSION },
             now,
           ),
         )
       }
       for (const [id, text] of outcome.translated) result.set(id, text)
-      echoedTitle = outcome.echoed.has('title')
+      for (const id of outcome.echoed) echoed.add(id)
     }
-    const title = result.get('title')
-    const excerpt = result.get('excerpt')
-    statements.push(
-      upsertArticleTitle(
-        db,
-        {
-          articleId,
-          lang,
-          feedId: article.feed_id,
-          title: title === undefined ? null : plainText(title),
-          excerpt: excerpt === undefined ? null : plainText(excerpt),
-          // Failed and echoed titles are recorded too, so the sweep stops asking until the
-          // title itself changes.
-          status: title === undefined ? 'failed' : echoedTitle ? 'echo' : 'done',
-          sourceHash: article.title_hash,
-          model: translator.model,
-        },
-        now,
-      ),
-    )
+    for (const article of members) {
+      const title = result.get(`t${article.id}`)
+      const excerpt = result.get(`e${article.id}`)
+      statements.push(
+        upsertArticleTitle(
+          db,
+          {
+            articleId: article.id,
+            lang,
+            feedId,
+            title: title === undefined ? null : plainText(title),
+            excerpt: excerpt === undefined ? null : plainText(excerpt),
+            // Failed and echoed titles are recorded too, so the sweep stops asking until the
+            // title itself changes.
+            status: title === undefined ? 'failed' : echoed.has(`t${article.id}`) ? 'echo' : 'done',
+            sourceHash: article.title_hash,
+            model: translator.model,
+          },
+          now,
+        ),
+      )
+    }
+    translatedCount.set(lang, (translatedCount.get(lang) ?? 0) + members.length)
   }
   if (spent > 0) statements.push(chargeUsage(db, BACKGROUND, utcDay(now), spent))
+  if (providerError !== null) {
+    // Keep the lease so runJob can back it off; what succeeded is written now.
+    if (statements.length > 0) {
+      const kept = await commit(ctx, lease, statements, { hold: { ttlMs: TITLE_TTL_MS } })
+      if (!kept.ok) return { status: 'lost' }
+    }
+    return { status: 'retry', error: providerError }
+  }
   const committed = await commit(ctx, lease, statements)
-  return committed.ok ? { status: 'done', languages: targets } : { status: 'lost' }
+  return committed.ok
+    ? { status: 'done', articles: articles.length, languages: Object.fromEntries(translatedCount) }
+    : { status: 'lost' }
 }

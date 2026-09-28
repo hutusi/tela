@@ -49,6 +49,12 @@ that way (AGENTS.md).
   readers see. A title is due when some launch language has no translation made from that hash.
   Echoes and failures are recorded against the hash too, so the sweep stops asking until the
   title changes. An echo still never enters the shared cache.
+- **Titles are batched by feed.** The title lease is keyed by feed, and one job translates up to
+  20 of its due titles and excerpts in one call per language, with the site's name as context.
+  Titles were 81% of production's model spend (937k of 1.16M tokens over 1,961 calls), and a
+  call averaged 393 input tokens to carry about 90 of title and excerpt: the prompt was paid
+  once an article. If the provider fails for one language, what the others made is committed
+  and only the rest backs off.
 - **Budgets live in `usage_daily`**, one row per subject and UTC day:
   - A member's subject is their user id. The API reserves an estimate against it when the reader
     asks; ADR 0024 will say how.
