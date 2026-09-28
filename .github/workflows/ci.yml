@@ -62,6 +62,33 @@ jobs:
       - name: OpenNext build
         run: cd apps/web && bunx opennextjs-cloudflare build
 
+  build-workers:
+    # The local-first stack's three Workers, bundled as a deploy would (no credentials needed):
+    # a Node-only import or a missing entrypoint fails here, not on deploy day.
+    name: Build tela-web, tela-api and tela-jobs (dry run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Bundle each Worker
+        run: |
+          for app in jobs api reader; do
+            (cd "apps/$app" && ../jobs/node_modules/.bin/wrangler deploy --dry-run --outdir "$RUNNER_TEMP/$app")
+          done
+      - uses: docker/setup-buildx-action@v4
+      - name: Build the relay image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/relay/Dockerfile
+          push: false
+          tags: tela-relay:ci
+
   build-worker:
     name: Build worker image
     runs-on: ubuntu-latest
