@@ -1,5 +1,11 @@
 {
   "extends": "../../../packages/config/tsconfig.base.json",
   "compilerOptions": { "types": ["bun"] },
-  "include": ["./**/*.ts", "../src/kinds.ts", "../src/runner.ts", "../src/portable.ts"]
+  "include": [
+    "./**/*.ts",
+    "../src/kinds.ts",
+    "../src/runner.ts",
+    "../src/portable.ts",
+    "../src/daily.ts"
+  ]
 }

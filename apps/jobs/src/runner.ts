@@ -22,6 +22,7 @@ function ownerFor(kind: LeaseKind, now: number): string {
 export async function tick(ctx: JobsContext): Promise<TickReport> {
   const report: TickReport = {}
   for (const [kind, spec] of Object.entries(KINDS) as [LeaseKind, KindSpec][]) {
+    if (spec.enabled && !spec.enabled(ctx)) continue
     const now = ctx.clock.now()
     const owner = ownerFor(kind, now)
     const claimed = await claimDue(ctx.db, {

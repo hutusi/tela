@@ -11,7 +11,17 @@ import {
   settleExtraction,
   type TelaDb,
 } from '@tela/data'
-import { extractArticleJob, type IngestContext, ingestFeed } from '@tela/ingest/pipeline'
+import {
+  dueAssets,
+  dueClaims,
+  dueWebsub,
+  extractArticleJob,
+  type IngestContext,
+  ingestFeed,
+  siteAssetsJob,
+  verifyClaimJob,
+  websubSubscribeJob,
+} from '@tela/ingest/pipeline'
 import { type SQL, sql } from 'drizzle-orm'
 
 export const QUEUES = ['fetch', 'extract', 'translate', 'misc'] as const
@@ -25,6 +35,8 @@ export type JobQueues = { [Q in QueueName]: JobMessage }
 export type StepResult = { status: string; error?: string }
 
 export type KindSpec = {
+  /** Whether this deployment does this kind at all; a disabled kind is never claimed. */
+  enabled?: (ctx: IngestContext) => boolean
   queue: QueueName
   ttlMs: number
   /** Most items one tick claims. */
@@ -65,5 +77,49 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     due: () => dueExtractions(),
     run: extractArticleJob,
     exhausted: (db, key) => [settleExtraction(db, Number(key), 'failed')],
+  },
+  'site.assets': {
+    // Without an asset store nothing could be stored, and every site would stay due forever.
+    enabled: (ctx) => ctx.assets !== undefined,
+    queue: 'misc',
+    ttlMs: 2 * MIN,
+    limit: 50,
+    backoff: { baseMs: 10 * MIN, maxMs: 24 * 60 * MIN, maxAttempts: 3 },
+    due: () => dueAssets(),
+    run: siteAssetsJob,
+    // Looked for often enough: stamp it so it stops being due.
+    exhausted: (db, key, now) => [
+      db.run(sql`update sites set assets_checked_at = ${now} where id = ${Number(key)}`),
+    ],
+  },
+  'site.claim': {
+    queue: 'misc',
+    // The home page, then up to 20 declared feeds under a 90 s budget.
+    ttlMs: 4 * MIN,
+    limit: 20,
+    backoff: { baseMs: MIN, maxMs: 30 * MIN, maxAttempts: 3 },
+    due: () => dueClaims(),
+    run: verifyClaimJob,
+    exhausted: (db, key, now) => [
+      db.run(sql`
+        update site_claims set status = 'failed', error = 'verification kept failing; try again',
+          last_checked_at = ${now}
+        where id = ${Number(key)} and status = 'pending'
+      `),
+    ],
+  },
+  'websub.subscribe': {
+    enabled: (ctx) => ctx.websub === true && ctx.publicUrl !== undefined,
+    queue: 'misc',
+    ttlMs: MIN,
+    limit: 50,
+    backoff: { baseMs: 10 * MIN, maxMs: 24 * 60 * MIN, maxAttempts: 3 },
+    due: dueWebsub,
+    run: (ctx, lease) => websubSubscribeJob(ctx, lease),
+    exhausted: (db, key, now) => [
+      db.run(
+        sql`update websub_subscriptions set status = 'failed', updated_at = ${now} where feed_id = ${Number(key)}`,
+      ),
+    ],
   },
 }

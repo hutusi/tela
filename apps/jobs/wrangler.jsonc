@@ -19,7 +19,12 @@
       "migrations_dir": "../../packages/data/migrations"
     }
   ],
-  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content" }],
+  "r2_buckets": [
+    // Members-only content objects (served through tela-web's /o/*).
+    { "binding": "BLOBS", "bucket_name": "tela-content" },
+    // Public favicons, the existing bucket behind assets.tela.ainaive.com.
+    { "binding": "ASSETS", "bucket_name": "tela-assets" }
+  ],
   "services": [{ "binding": "SELF", "service": "tela-jobs" }],
   "queues": {
     "producers": [
@@ -60,10 +65,11 @@
       }
     ]
   },
-  "triggers": { "crons": ["* * * * *"] },
+  "triggers": { "crons": ["* * * * *", "17 3 * * *"] },
   "vars": {
     "WORKER_USER_AGENT": "Tela/0.1 (+https://tela.ainaive.com; feed reader)",
     "FETCH_TIMEOUT_MS": "20000",
-    "WEBSUB_ENABLED": "0"
+    "WEBSUB_ENABLED": "0",
+    "PUBLIC_URL": "https://tela.ainaive.com"
   }
 }

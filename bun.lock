@@ -27,6 +27,14 @@
         "wrangler": "^4.129.0",
       },
     },
+    "apps/relay": {
+      "name": "@tela/relay",
+      "version": "0.0.0",
+      "dependencies": {
+        "@tela/ingest": "workspace:*",
+        "undici": "^8.10.2",
+      },
+    },
     "apps/web": {
       "name": "@tela/web",
       "version": "0.0.0",
@@ -141,7 +149,9 @@
         "@tela/db": "workspace:*",
         "@tela/platform": "workspace:*",
         "@tela/shared": "workspace:*",
+        "domutils": "^3.2.2",
         "drizzle-orm": "^0.45.2",
+        "htmlparser2": "^10.1.0",
       },
     },
     "packages/llm": {
@@ -792,6 +802,8 @@
     "@tela/llm": ["@tela/llm@workspace:packages/llm"],
 
     "@tela/platform": ["@tela/platform@workspace:packages/platform"],
+
+    "@tela/relay": ["@tela/relay@workspace:apps/relay"],
 
     "@tela/shared": ["@tela/shared@workspace:packages/shared"],
 

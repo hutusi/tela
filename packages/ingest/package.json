@@ -10,7 +10,9 @@
     "./http": "./src/http.ts",
     "./net": "./src/net.ts",
     "./pipeline": "./src/pipeline/index.ts",
-    "./relay": "./src/relay.ts"
+    "./relay": "./src/relay.ts",
+    "./schedule": "./src/schedule.ts",
+    "./region-policy": "./src/region-policy.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
@@ -21,6 +23,8 @@
     "@tela/db": "workspace:*",
     "@tela/platform": "workspace:*",
     "@tela/shared": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "domutils": "^3.2.2",
+    "drizzle-orm": "^0.45.2",
+    "htmlparser2": "^10.1.0"
   }
 }

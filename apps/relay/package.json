@@ -1,0 +1,17 @@
+{
+  "name": "@tela/relay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The China fetch relay (ADR 0008): a signed fetch endpoint on a HK or mainland box; the one Node process Tela runs",
+  "scripts": {
+    "dev": "bun run --watch src/main.ts",
+    "build": "bun build src/main.ts --target=node --outdir dist --sourcemap=external",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tela/ingest": "workspace:*",
+    "undici": "^8.10.2"
+  }
+}

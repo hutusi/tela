@@ -16,11 +16,14 @@ import { createHttpClient } from '@tela/ingest/http'
 import { createRelayClient } from '@tela/ingest/relay'
 import { systemClock } from '@tela/platform'
 import { d1Db, queueJobs, r2Blobs } from '@tela/platform/cloudflare'
+import { daily } from './daily'
 import type { Env } from './env'
 import type { JobMessage, JobQueues } from './kinds'
 import { type JobsContext, runJob, tick } from './runner'
 
 const INTERNAL = 'https://tela-jobs.internal'
+/** Must match the second cron in wrangler.jsonc. */
+const DAILY_CRON = '17 3 * * *'
 
 function context(env: Env): JobsContext {
   const relay =
@@ -31,6 +34,8 @@ function context(env: Env): JobsContext {
   return {
     db: d1Db(env.DB, schema),
     blobs: r2Blobs(env.BLOBS),
+    assets: r2Blobs(env.ASSETS),
+    publicUrl: env.PUBLIC_URL ?? 'https://tela.ainaive.com',
     jobs: queueJobs<JobQueues>({
       fetch: env.FETCH_QUEUE,
       extract: env.EXTRACT_QUEUE,
@@ -69,6 +74,9 @@ export default {
     if (request.method === 'POST' && url.pathname === '/jobs/tick') {
       return Response.json(await tick(context(env)))
     }
+    if (request.method === 'POST' && url.pathname === '/jobs/daily') {
+      return Response.json(await daily(context(env).db, Date.now()))
+    }
     if (request.method === 'POST' && url.pathname === '/jobs/run') {
       const message = (await request.json()) as JobMessage
       return Response.json(await runJob(context(env), message))
@@ -76,12 +84,9 @@ export default {
     return new Response('not found', { status: 404 })
   },
 
-  async scheduled(
-    _controller: ScheduledController,
-    env: Env,
-    ctx: ExecutionContext,
-  ): Promise<void> {
-    ctx.waitUntil(env.SELF.fetch(`${INTERNAL}/jobs/tick`, { method: 'POST' }).then(() => undefined))
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    const path = controller.cron === DAILY_CRON ? '/jobs/daily' : '/jobs/tick'
+    ctx.waitUntil(env.SELF.fetch(`${INTERNAL}${path}`, { method: 'POST' }).then(() => undefined))
   },
 
   async queue(batch: MessageBatch<JobMessage>, env: Env): Promise<void> {

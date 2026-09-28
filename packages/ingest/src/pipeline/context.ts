@@ -16,6 +16,12 @@ export type IngestContext = {
   region?: RegionPolicy
   /** Record WebSub hubs so the subscribe sweep follows them. */
   websub?: boolean
+  /** Public asset store (favicons), served at assets.<domain>; absent disables the assets job. */
+  assets?: Blobs
+  /** Public origin of the web app: claim `rel="me"` targets and the WebSub callback. */
+  publicUrl?: string
+  /** Tests only: let side requests the HTTP client does not make (WebSub hubs) reach localhost. */
+  allowPrivateHosts?: boolean
 }
 
 /** A statement for a batch (anything drizzle's batch accepts). */
