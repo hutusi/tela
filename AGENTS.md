@@ -42,7 +42,7 @@ bun install                          # workspaces: apps/*, packages/*
 bun run lint                         # Biome (format + lint); bun run lint:fix to auto-fix
 bun run typecheck                    # tsc -p in every workspace (all noEmit)
 bun run test                         # bun test; DB tests need initdb on PATH, PG_BIN_DIR, or TEST_DATABASE_URL
-bun run test:workers                 # the D1 half of the data contract, in workerd (Vitest + @cloudflare/vitest-pool-workers)
+bun run test:workers                 # on D1 in workerd: the data contract, and tela-api's sign-in, push and pull (Vitest + @cloudflare/vitest-pool-workers)
 bun run e2e                          # Playwright against a built app, worker, and fixture feeds
 bun run build                        # every workspace that has a build script
 bun run dev                          # web (http://localhost:3000)

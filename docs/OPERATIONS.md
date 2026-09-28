@@ -184,6 +184,31 @@ fly deploy --config fly.worker.toml --remote-only --ha=false   # from the reposi
   translations), so a forgotten secret shows up as a crash loop, not as garbled titles.
 - Logs: `fly logs --app tela-worker`; the JSON lines are the same as locally.
 
+### Running the new stack locally (`refactor/local-first`)
+
+All three Workers in one `wrangler dev`, the first config being the one served. Service bindings,
+the `Ingest` RPC, local queues, D1 and R2 all work locally, and D1 and R2 are shared because the
+configs name the same database and bucket.
+
+```sh
+P=/tmp/tela-local
+cd apps/api && wrangler d1 migrations apply tela --local --persist-to $P && cd ../..
+# apps/api/.dev.vars:    AUTH_SECRET=<same as below>  ADMIN_TOKEN=local  ENV=test  PUBLIC_URL=http://localhost:8795
+# apps/reader/.dev.vars: AUTH_SECRET=<same as above>  TELA_PRIVATE_BETA=1
+# apps/jobs/.dev.vars:   LLM_PROVIDER=mock
+wrangler dev -c apps/reader/wrangler.jsonc -c apps/api/wrangler.jsonc -c apps/jobs/wrangler.jsonc \
+  --persist-to $P --port 8795
+```
+
+Then:
+1. Invite: `TELA_URL=http://localhost:8795 ADMIN_TOKEN=local bun run admin invite you@x.test`.
+2. Read the code from `/api/test/outbox?email=you@x.test`, and sign in with `POST
+   /api/auth/sign-in/email-otp`.
+3. Add a real feed with `POST /api/v1/feeds`. Its posts arrive in a second; the crons do not run
+   in dev.
+
+`.dev.vars` is gitignored.
+
 ### Cloudflare: tela-web, the new edge Worker (`refactor/local-first`, deployed at cutover)
 
 `apps/reader/wrangler.jsonc`. The Next.js app holds the name `tela-web` until phase 8 replaces it.
