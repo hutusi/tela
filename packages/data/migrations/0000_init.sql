@@ -85,6 +85,7 @@ CREATE TABLE `body_translations` (
 	`request_id` text,
 	`requested_by` text,
 	`reserved_tokens` integer DEFAULT 0 NOT NULL,
+	`used_tokens` integer DEFAULT 0 NOT NULL,
 	`reserved_day` text,
 	`chunk_keys` text DEFAULT '[]' NOT NULL,
 	`object_key` text,

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9b98fa93-e3f3-4403-92ae-f0d5607ad9aa",
+  "id": "824ac2cf-e26a-4d82-b66d-5d79b21fc980",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "article_titles": {
@@ -599,6 +599,14 @@
         },
         "reserved_tokens": {
           "name": "reserved_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "used_tokens": {
+          "name": "used_tokens",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

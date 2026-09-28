@@ -1,6 +1,7 @@
 import type { Lease, TelaDb } from '@tela/data'
 import { bumpSeq, fence, isFenceRefusal, release } from '@tela/data'
 import type { Blobs, Clock } from '@tela/platform'
+import { sql } from 'drizzle-orm'
 import type { HttpClient } from '../http'
 import type { RegionPolicy } from '../region-policy'
 
@@ -36,14 +37,23 @@ export async function commit(
   ctx: IngestContext,
   lease: Lease,
   statements: Statement[],
+  /** Keep the lease for more work (a translation's next chunk) instead of releasing it. */
+  options: { hold?: { ttlMs: number } } = {},
 ): Promise<{ ok: true; results: unknown[] } | { ok: false; reason: 'lost' }> {
   const { db } = ctx
+  const now = ctx.clock.now()
+  const last = options.hold
+    ? db.run(sql`
+        update leases set until = ${now + options.hold.ttlMs}
+        where kind = ${lease.kind} and key = ${lease.key} and owner = ${lease.owner}
+      `)
+    : release(db, lease)
   try {
     const results = await db.batch([
-      fence(db, lease, ctx.clock.now()),
+      fence(db, lease, now),
       bumpSeq(db),
       ...statements,
-      release(db, lease),
+      last,
     ] as unknown as Parameters<TelaDb['batch']>[0])
     return { ok: true, results: results as unknown as unknown[] }
   } catch (err) {

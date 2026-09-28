@@ -158,6 +158,11 @@ export const bodyTranslations = sqliteTable(
     requestId: text(),
     requestedBy: text().references(() => user.id, { onDelete: 'set null' }),
     reservedTokens: integer().notNull().default(0),
+    /**
+     * Tokens this request has spent so far, across every execution that continued it. What the
+     * member's reservation is reconciled against when it concludes.
+     */
+    usedTokens: integer().notNull().default(0),
     /** UTC day (YYYY-MM-DD) the reservation was charged to, so completion reconciles that day. */
     reservedDay: text(),
     chunkKeys: text().notNull().default('[]'),

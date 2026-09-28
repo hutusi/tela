@@ -5,8 +5,8 @@ import type { JobMessage } from './kinds'
 export type Env = {
   DB: D1Database
   BLOBS: R2Bucket
-  /** The public asset bucket (favicons), served at assets.<domain>. */
-  ASSETS: R2Bucket
+  /** The public asset bucket (favicons), served at assets.<domain>; absent disables favicons. */
+  ASSETS?: R2Bucket
   /** This Worker itself: cron and queue handlers call its pinned fetch handler through it. */
   SELF: Fetcher
   FETCH_QUEUE: Queue<JobMessage>
@@ -23,4 +23,15 @@ export type Env = {
   WEBSUB_ENABLED?: string
   /** Public origin of the web app: claim rel="me" targets and the WebSub callback. */
   PUBLIC_URL?: string
+  /** Translation provider (bailian, anthropic, mock) and its key; see the environment table. */
+  LLM_PROVIDER?: string
+  LLM_MODEL?: string
+  BAILIAN_API_KEY?: string
+  BAILIAN_BASE_URL?: string
+  ANTHROPIC_API_KEY?: string
+  LLM_JSON_MODE?: string
+  /** Daily token budget for background (title) work; 0 = unlimited. */
+  LLM_DAILY_BUDGET_TOKENS?: string
+  /** Source tokens translated per article body before the rest renders as source. */
+  LLM_MAX_ARTICLE_TOKENS?: string
 }

@@ -4,13 +4,19 @@
  * queue consumer the second, both through the Worker's own Singapore-pinned fetch handler. The
  * exit path calls them from a timer (`runPortable`).
  */
-import { claimDue, deadLetter, failLease, type Lease, type LeaseKind } from '@tela/data'
-import type { IngestContext } from '@tela/ingest/pipeline'
+import {
+  claimDue,
+  deadLetter,
+  extendLease,
+  failLease,
+  type Lease,
+  type LeaseKind,
+} from '@tela/data'
 import type { Jobs } from '@tela/platform'
 import { sql } from 'drizzle-orm'
-import { type JobMessage, type JobQueues, KINDS, type KindSpec } from './kinds'
+import { type JobMessage, type JobQueues, KINDS, type KindSpec, type WorkContext } from './kinds'
 
-export type JobsContext = IngestContext & { jobs: Jobs<JobQueues> }
+export type JobsContext = WorkContext & { jobs: Jobs<JobQueues> }
 
 export type TickReport = Partial<Record<LeaseKind, number>>
 
@@ -31,7 +37,7 @@ export async function tick(ctx: JobsContext): Promise<TickReport> {
       now,
       ttlMs: spec.ttlMs,
       limit: spec.limit,
-      due: spec.due(now),
+      due: spec.due(now, ctx),
     })
     if (claimed.length > 0) {
       await ctx.jobs.sendBatch(
@@ -61,6 +67,10 @@ export async function runJob(ctx: JobsContext, message: JobMessage): Promise<Run
   const spec = KINDS[message.kind]
   if (!spec) return { status: 'unknown-kind' }
   const lease: Lease = { kind: message.kind, key: message.key, owner: message.owner }
+  // Renew the claim before any work. A message that waited in its queue past the lease is
+  // dropped here, before it spends a model call the fence would then throw away; and the lease
+  // counts from when the work starts, not from when the tick claimed it.
+  if (!(await extendLease(ctx.db, lease, ctx.clock.now(), spec.ttlMs))) return { status: 'lost' }
   let error: string
   try {
     const result = await spec.run(ctx, lease)

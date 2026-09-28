@@ -14,6 +14,7 @@ import * as schema from '@tela/data/schema'
 // Subpaths only: the package root still re-exports the Postgres-era fetch code (until cutover).
 import { createHttpClient } from '@tela/ingest/http'
 import { createRelayClient } from '@tela/ingest/relay'
+import { configFromEnv, createTranslator, isAccidentalMock, type Translator } from '@tela/llm'
 import { systemClock } from '@tela/platform'
 import { d1Db, queueJobs, r2Blobs } from '@tela/platform/cloudflare'
 import { daily } from './daily'
@@ -25,6 +26,17 @@ const INTERNAL = 'https://tela-jobs.internal'
 /** Must match the second cron in wrangler.jsonc. */
 const DAILY_CRON = '17 3 * * *'
 
+/**
+ * The translator, or none. A missing key falls back to the mock, and the mock's placeholder output
+ * would be cached for everyone, so an accidental mock disables translation instead (AGENTS.md).
+ */
+function translatorFrom(env: Env): Translator | undefined {
+  const vars = env as unknown as Record<string, string | undefined>
+  const config = configFromEnv(vars)
+  if (isAccidentalMock(config, vars)) return undefined
+  return createTranslator(config)
+}
+
 function context(env: Env): JobsContext {
   const relay =
     env.RELAY_URL && env.RELAY_SECRET
@@ -34,7 +46,7 @@ function context(env: Env): JobsContext {
   return {
     db: d1Db(env.DB, schema),
     blobs: r2Blobs(env.BLOBS),
-    assets: r2Blobs(env.ASSETS),
+    ...(env.ASSETS ? { assets: r2Blobs(env.ASSETS) } : {}),
     publicUrl: env.PUBLIC_URL ?? 'https://tela.ainaive.com',
     jobs: queueJobs<JobQueues>({
       fetch: env.FETCH_QUEUE,
@@ -51,6 +63,12 @@ function context(env: Env): JobsContext {
       ...(relay ? { relay } : {}),
     }),
     websub: env.WEBSUB_ENABLED === '1',
+    ...(() => {
+      const translator = translatorFrom(env)
+      return translator ? { translator } : {}
+    })(),
+    backgroundBudget: Number(env.LLM_DAILY_BUDGET_TOKENS ?? 0),
+    maxArticleTokens: Number(env.LLM_MAX_ARTICLE_TOKENS ?? 40_000),
     ...(relay
       ? {
           region: {

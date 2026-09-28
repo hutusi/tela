@@ -5,8 +5,10 @@
  */
 import {
   type Backoff,
+  dueBodies,
   dueExtractions,
   dueFeeds,
+  dueTitles,
   type LeaseKind,
   settleExtraction,
   type TelaDb,
@@ -16,13 +18,15 @@ import {
   dueClaims,
   dueWebsub,
   extractArticleJob,
-  type IngestContext,
   ingestFeed,
   siteAssetsJob,
   verifyClaimJob,
   websubSubscribeJob,
 } from '@tela/ingest/pipeline'
+import { READING_LANGUAGES } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
+import { translateBodyJob } from './translation/body'
+import { type TranslationContext, translateTitlesJob } from './translation/titles'
 
 export const QUEUES = ['fetch', 'extract', 'translate', 'misc'] as const
 export type QueueName = (typeof QUEUES)[number]
@@ -34,17 +38,20 @@ export type JobQueues = { [Q in QueueName]: JobMessage }
 /** What a step reports. `retry` asks the runner to back the lease off. */
 export type StepResult = { status: string; error?: string }
 
+/** What every job runs against: the ingest context plus the translator and its budgets. */
+export type WorkContext = TranslationContext
+
 export type KindSpec = {
   /** Whether this deployment does this kind at all; a disabled kind is never claimed. */
-  enabled?: (ctx: IngestContext) => boolean
+  enabled?: (ctx: WorkContext) => boolean
   queue: QueueName
   ttlMs: number
   /** Most items one tick claims. */
   limit: number
   backoff: Backoff
-  due: (now: number) => SQL
+  due: (now: number, ctx: WorkContext) => SQL
   run: (
-    ctx: IngestContext,
+    ctx: WorkContext,
     lease: { kind: LeaseKind; key: string; owner: string },
   ) => Promise<StepResult>
   /** Statements that stop an exhausted item being due again (beside its dead letter). */
@@ -121,5 +128,45 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
         sql`update websub_subscriptions set status = 'failed', updated_at = ${now} where feed_id = ${Number(key)}`,
       ),
     ],
+  },
+  'translate.title': {
+    enabled: (ctx) => ctx.translator !== undefined,
+    // Background work: a queue of its own would only compete with bodies, which readers wait on.
+    queue: 'misc',
+    ttlMs: 3 * MIN,
+    limit: 100,
+    backoff: { baseMs: 5 * MIN, maxMs: 6 * 60 * MIN, maxAttempts: 4 },
+    due: (now, ctx) => dueTitles(now, ctx.backgroundBudget ?? 0),
+    run: translateTitlesJob,
+    // The provider kept failing on it: record the failure so the sweep stops until the title changes.
+    exhausted: (db, key, now) => [
+      db.run(sql`
+        insert into article_titles (article_id, lang, feed_id, status, source_hash, updated_at)
+        select a.id, l.value, a.feed_id, 'failed', a.title_hash, ${now}
+        from articles a, json_each(${JSON.stringify(READING_LANGUAGES)}) as l
+        where a.id = ${Number(key)} and a.title_hash is not null and l.value <> coalesce(a.source_lang, '')
+        on conflict (article_id, lang) do update set status = 'failed', source_hash = excluded.source_hash
+      `),
+    ],
+  },
+  'translate.body': {
+    enabled: (ctx) => ctx.translator !== undefined,
+    // Bodies have the translate queue to themselves: a reader is waiting on every one.
+    queue: 'translate',
+    // Held for the first chunk; each chunk's batch extends it for the next.
+    ttlMs: 4 * MIN,
+    limit: 20,
+    backoff: { baseMs: MIN, maxMs: 30 * MIN, maxAttempts: 3 },
+    due: () => dueBodies(),
+    run: translateBodyJob,
+    exhausted: (db, key, now) => {
+      const split = key.lastIndexOf(':')
+      return [
+        db.run(sql`
+          update body_translations set state = 'failed', updated_at = ${now}
+          where content_key = ${key.slice(0, split)} and lang = ${key.slice(split + 1)}
+        `),
+      ]
+    },
   },
 }

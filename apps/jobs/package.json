@@ -12,9 +12,11 @@
     "@tela/content": "workspace:*",
     "@tela/data": "workspace:*",
     "@tela/ingest": "workspace:*",
+    "@tela/llm": "workspace:*",
     "@tela/platform": "workspace:*",
     "@tela/shared": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "entities": "^7.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260927.1",
