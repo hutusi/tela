@@ -1,0 +1,9 @@
+{
+  "extends": "../../../config/tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types"]
+  },
+  "include": ["./**/*.ts", "../../src/**/*.ts"],
+  "exclude": ["../../src/**/*.test.ts", "../../src/testing.ts"]
+}

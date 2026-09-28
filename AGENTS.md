@@ -37,6 +37,7 @@ bun install                          # workspaces: apps/*, packages/*
 bun run lint                         # Biome (format + lint); bun run lint:fix to auto-fix
 bun run typecheck                    # tsc -p in every workspace (all noEmit)
 bun run test                         # bun test; DB tests need initdb on PATH, PG_BIN_DIR, or TEST_DATABASE_URL
+bun run test:workers                 # the D1 half of the data contract, in workerd (Vitest + @cloudflare/vitest-pool-workers)
 bun run e2e                          # Playwright against a built app, worker, and fixture feeds
 bun run build                        # every workspace that has a build script
 bun run dev                          # web (http://localhost:3000)
@@ -58,7 +59,7 @@ cd apps/web && bun run icons         # redraw icon.svg, favicon.ico, apple-icon.
 - **Commit in focused slices**, keeping lint green at each so branches stay bisectable. Conventional Commits. **No `Co-Authored-By` trailers and no AI-attribution lines anywhere** — commits or PR descriptions.
 - **Explain the why in the commit body.** The subject says what changed; the body says why, and names any non-obvious trade-off. `git log` should make sense without opening the PR.
 - **Docs and tests ship *with* the change.** The Docs section below says what each page tracks; `test/docs.test.ts` catches the drift that can be caught mechanically, which is not most of it.
-- **Verify gate**, the list CI runs: `bun run lint && bun run typecheck && bun run test && bun run e2e`. CI also builds the web app and the worker image; those are slow, so run them when you touch build config, `wrangler.jsonc`, the Dockerfile, or a dependency — not for a change the gate already covers.
+- **Verify gate**, the list CI runs: `bun run lint && bun run typecheck && bun run test && bun run test:workers && bun run e2e`. CI also builds the web app and the worker image; those are slow, so run them when you touch build config, `wrangler.jsonc`, the Dockerfile, or a dependency — not for a change the gate already covers.
 - **Pushing and opening PRs are user-authorized** — don't do either unless asked.
 
 ## Hard invariants — do not break casually
@@ -75,6 +76,17 @@ cd apps/web && bun run icons         # redraw icon.svg, favicon.ico, apple-icon.
 10. **Never interpolate numbers or identifiers into `` sql`` `` for DDL** without `sql.raw(...)` — drizzle turns interpolations into `$1` parameters.
 11. **Raw SQL returns bigint columns as strings.** Convert ids with `Number()` in query helpers, or use the typed query builder.
 12. **Never name a package script `prepare`, `postinstall`, or another npm lifecycle hook** — Bun runs them on install.
+
+### The local-first stack (`refactor/local-first`: `packages/platform`, `packages/data`, and what builds on them)
+
+These govern the new packages now. They become the whole list at cutover, when the Postgres-era invariants above go with the code they protect (ADRs 0020, 0021).
+
+13. **Batch-only SQL.** A `Db` has no `transaction()`, and the portable libSQL client throws if one is reached. Anything that must be atomic is a single statement or a `db.batch([...])`. D1 offers nothing else.
+14. **Nothing exceeds D1's per-statement limits:** 100 bound parameters, 100 KB of SQL. Bulk work passes one JSON parameter through `json_each(?1)`. The portable client enforces this, so the test that trips it is the one to fix, not the limit.
+15. **Know what a write touched through `RETURNING`, never the run result.** D1 and libSQL report affected rows differently, so `Db`'s run result is `unknown` on purpose.
+16. **Background work is state-driven.** A domain row says what is due; `claimDue` takes it under a lease, and a queue only speeds that up. Any write decided in JavaScript commits as a fenced batch (`fence(...)` first, `release(...)` last), so a holder that lost its lease writes nothing. Never add a job whose only record is a queue message.
+17. **A batch that writes a synced row starts with `bumpSeq(db)` and stamps `seq: currentSeq`.** Otherwise readers never see the change.
+18. **Only `packages/platform/src/cloudflare.ts` touches a Cloudflare binding.** Only the fetch handlers of the Singapore-pinned Workers query D1; cron and queue handlers dispatch to them over `SELF.fetch()` (ADR 0020).
 
 ## Style
 
@@ -138,6 +150,10 @@ Defects that already cost time here, not hypotheticals.
 - **"Which title do I show?" and "do I badge it?" are different questions.** Answering both with one predicate has been written twice. Display uses the translation whenever one exists — search matches `translated_title` in SQL, so hiding it renders a hit with none of the words typed; the badge additionally needs the languages to differ. `apps/web/src/components/shows-translation.ts`.
 - **`zh-Hant` and `zh-Hans` are different languages here, and comparing language tags means comparing them exactly.** `normalizeLangTag` keeps those two variants and collapses every other tag to its primary subtag before storage, so a stored tag is never regional and a `split('-')` comparison buys nothing — it only merges the one pair the pipeline went out of its way to tell apart. The worker translates between them, the block cache namespaces them separately, `languageBadge` renders `ZH-TW` against `ZH`, and discover lists them as two languages.
 - **Never store a jittered value back into the field the jitter is computed from.** `fetch_interval_sec` fed its own ±10% back in as the next input, so the spread compounded per backoff step and the column climbed past the clamp. Jitter the derived timestamp, not the stored interval.
+- **drizzle 0.45's D1 `batch` crashes on raw statements with parameters** ("cannot read properties of undefined (reading 'bind')"). It binds through a prepared `stmt` that `db.run(sql…)` items do not have, and every fenced or seq-stamped batch has such items. `d1Db` in `packages/platform/src/cloudflare.ts` rebuilds `batch` from each item's `getQuery()`. libSQL never had the bug, which is why the contract suite runs on D1 too (`bun run test:workers`); keep it green across drizzle upgrades.
+- **SQLite's `INSERT … SELECT … ON CONFLICT` needs a `WHERE` on the SELECT**, or the upsert clause parses as a join constraint. `WHERE true` is enough; `claimDue` is the example.
+- **better-auth validates its schema at runtime by default**, which costs about three D1 round trips on every new instance (560–590 ms from the reader's edge, spike S4). Production sets `advanced.database.validateSchema: false` and CI runs the check. Behind Cloudflare it must also key IPs on `cf-connecting-ip`, or every visitor shares one rate-limit bucket.
+- **Cron and queue handlers run far from D1** (Paris and Los Angeles in the spikes, 160–250 ms per round trip), and placement never moves them. Only a fetch handler pinned with `placement.region = aws:ap-southeast-1` sits beside the Singapore primary (6–10 ms). That is why every job body runs behind `SELF.fetch()`.
 
 ## How to
 
@@ -152,7 +168,7 @@ Defects that already cost time here, not hypotheticals.
 Update whichever covers what you changed, in the same change:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the living system map. Tracks: schema changes, new jobs, new routes, new safeguards.
-- [docs/adr/](docs/adr/) — decision records 0001–0017. A reversed decision gets a superseding ADR, not a silent edit.
+- [docs/adr/](docs/adr/) — decision records 0001–0021. A reversed decision gets a superseding ADR, not a silent edit.
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — provisioning and day-2 runbooks. Anything touching env vars, secrets, deploys, rate limits or failure signatures lands here.
 - [docs/DESIGN.md](docs/DESIGN.md) — tokens, layout rules, components, the i18n string convention.
 - [packages/content/README.md](packages/content/README.md) — the normative spec for sanitization, blocks and hashing. Changing a rule here means bumping `NORM_VERSION`.

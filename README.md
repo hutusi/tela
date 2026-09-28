@@ -36,6 +36,7 @@ bun install
 bun run lint        # biome
 bun run typecheck   # tsc in every workspace
 bun run test        # bun test; DB tests start a throwaway local Postgres
+bun run test:workers  # the data contract again, on D1 inside workerd
 bun run e2e         # Playwright against a built app, worker, and fixture feeds
 
 # web (no Supabase project needed locally: dev-auth mode + a local Postgres)

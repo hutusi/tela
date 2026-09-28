@@ -8,12 +8,36 @@ import type { Blobs } from './blobs'
 import type { Db } from './db'
 import type { Jobs, QueueMap } from './jobs'
 
-/** Drizzle over a D1 binding. */
+/** What drizzle's batch items expose once prepared (internal, but stable across 0.4x). */
+type PreparedBatchItem = {
+  getQuery(): { sql: string; params: unknown[] }
+  mapResult(result: unknown, isFromBatch: boolean): unknown
+}
+
+/**
+ * Drizzle over a D1 binding.
+ *
+ * `batch` is rebuilt: drizzle 0.45's D1 batch binds parameterized items through the prepared
+ * statement it expects every item to carry, and raw `db.run(sql…)` items carry none, so any
+ * fenced or seq-stamped batch crashed with "cannot read 'bind' of undefined". Binding each item
+ * from its own query is what drizzle does for parameterless items anyway. The D1 contract suite
+ * (`packages/data`, `test:workers`) is what notices if a drizzle upgrade changes these internals.
+ */
 export function d1Db<TSchema extends Record<string, unknown>>(
   binding: D1Database,
   schema: TSchema,
 ): Db<TSchema> {
-  return drizzle(binding, { schema, casing: 'snake_case' }) as unknown as Db<TSchema>
+  const db = drizzle(binding, { schema, casing: 'snake_case' })
+  const batch = async (items: readonly { _prepare(): PreparedBatchItem }[]) => {
+    const prepared = items.map((item) => item._prepare())
+    const statements = prepared.map((p) => {
+      const { sql, params } = p.getQuery()
+      return binding.prepare(sql).bind(...params)
+    })
+    const results = await binding.batch(statements)
+    return results.map((result, i) => prepared[i]?.mapResult(result, true))
+  }
+  return Object.assign(db, { batch }) as unknown as Db<TSchema>
 }
 
 /** R2 through its Worker binding. */
