@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { libsqlDb } from '@tela/platform/portable'
+import { sql } from 'drizzle-orm'
 import type { TelaDb } from './db'
 import * as schema from './schema'
 
@@ -35,4 +36,12 @@ export async function createTestDb(): Promise<{
   await client.execute('pragma foreign_keys = on')
   for (const migration of migrationStatements()) await client.batch(migration.statements)
   return { db, client }
+}
+
+/** A member as better-auth would have created one, for tests that need a user row. */
+export async function addTestUser(db: TelaDb, id: string, email = `${id}@x.test`): Promise<void> {
+  await db.run(sql`
+    insert into user (id, name, email, email_verified, created_at, updated_at)
+    values (${id}, ${id}, ${email}, 1, 0, 0)
+  `)
 }

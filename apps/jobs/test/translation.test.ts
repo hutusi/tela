@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { first, headSeq, type TelaDb, TITLES_PER_JOB, utcDay } from '@tela/data'
-import { createTestDb } from '@tela/data/testing'
+import { addTestUser, createTestDb } from '@tela/data/testing'
 import { createHttpClient } from '@tela/ingest'
 import { registerFeed } from '@tela/ingest/pipeline'
 import {
@@ -85,10 +85,7 @@ async function ingest(ctx: PortableContext, body: string) {
 }
 
 async function addReader(id = 'reader') {
-  await db.run(sql`
-    insert into user (id, name, email, emailVerified, createdAt, updatedAt)
-    values (${id}, ${id}, ${`${id}@x.test`}, 1, '', '')
-  `)
+  await addTestUser(db, id)
 }
 
 /** What the API will do when a reader asks: a requested row and a reservation. */

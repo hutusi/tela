@@ -1,46 +1,41 @@
 /**
- * better-auth's tables, mirrored column for column from `@better-auth/cli generate` (1.7.x) so one
- * migration system owns the whole database. better-auth talks to D1 itself; Tela's code reads
- * `user` only to join a profile. Column names are better-auth's camelCase, set explicitly because
- * the rest of the schema maps camelCase keys to snake_case.
+ * better-auth's tables, mirrored from `auth generate` (the better-auth 1.7 CLI) for its Drizzle
+ * adapter on SQLite, so one migration system owns the whole database and better-auth goes through
+ * the same `Db` seam as everything else: D1 in production, libSQL in tests and on the exit path
+ * (ADR 0024). Dates are epoch milliseconds, as everywhere in Tela. Regenerate with
+ * `bunx auth@<version> generate` when better-auth is upgraded, and compare.
  */
 import { sql } from 'drizzle-orm'
-import {
-  check,
-  customType,
-  index,
-  integer,
-  primaryKey,
-  sqliteTable,
-  text,
-} from 'drizzle-orm/sqlite-core'
+import { check, index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { ms, seq } from './columns'
 
-/** better-auth writes dates to SQLite as ISO strings in columns it declares as `date`. */
-const authDate = customType<{ data: string; driverData: string }>({ dataType: () => 'date' })
-const bigint = customType<{ data: number; driverData: number }>({ dataType: () => 'bigint' })
+const stamp = (name: string) => integer(name, { mode: 'timestamp_ms' })
 
 export const user = sqliteTable('user', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
-  emailVerified: integer('emailVerified').notNull(),
+  emailVerified: integer('email_verified', { mode: 'boolean' }).default(false).notNull(),
   image: text('image'),
-  createdAt: authDate('createdAt').notNull(),
-  updatedAt: authDate('updatedAt').notNull(),
+  createdAt: stamp('created_at').notNull(),
+  updatedAt: stamp('updated_at')
+    .$onUpdate(() => new Date())
+    .notNull(),
 })
 
 export const session = sqliteTable(
   'session',
   {
     id: text('id').primaryKey(),
-    expiresAt: authDate('expiresAt').notNull(),
+    expiresAt: stamp('expires_at').notNull(),
     token: text('token').notNull().unique(),
-    createdAt: authDate('createdAt').notNull(),
-    updatedAt: authDate('updatedAt').notNull(),
-    ipAddress: text('ipAddress'),
-    userAgent: text('userAgent'),
-    userId: text('userId')
+    createdAt: stamp('created_at').notNull(),
+    updatedAt: stamp('updated_at')
+      .$onUpdate(() => new Date())
+      .notNull(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
   },
@@ -51,20 +46,22 @@ export const account = sqliteTable(
   'account',
   {
     id: text('id').primaryKey(),
-    accountId: text('accountId').notNull(),
-    providerId: text('providerId').notNull(),
-    userId: text('userId')
+    accountId: text('account_id').notNull(),
+    providerId: text('provider_id').notNull(),
+    userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    accessToken: text('accessToken'),
-    refreshToken: text('refreshToken'),
-    idToken: text('idToken'),
-    accessTokenExpiresAt: authDate('accessTokenExpiresAt'),
-    refreshTokenExpiresAt: authDate('refreshTokenExpiresAt'),
+    accessToken: text('access_token'),
+    refreshToken: text('refresh_token'),
+    idToken: text('id_token'),
+    accessTokenExpiresAt: stamp('access_token_expires_at'),
+    refreshTokenExpiresAt: stamp('refresh_token_expires_at'),
     scope: text('scope'),
     password: text('password'),
-    createdAt: authDate('createdAt').notNull(),
-    updatedAt: authDate('updatedAt').notNull(),
+    createdAt: stamp('created_at').notNull(),
+    updatedAt: stamp('updated_at')
+      .$onUpdate(() => new Date())
+      .notNull(),
   },
   (t) => [index('account_userId_idx').on(t.userId)],
 )
@@ -75,19 +72,25 @@ export const verification = sqliteTable(
     id: text('id').primaryKey(),
     identifier: text('identifier').notNull(),
     value: text('value').notNull(),
-    expiresAt: authDate('expiresAt').notNull(),
-    createdAt: authDate('createdAt').notNull(),
-    updatedAt: authDate('updatedAt').notNull(),
+    expiresAt: stamp('expires_at').notNull(),
+    createdAt: stamp('created_at').notNull(),
+    updatedAt: stamp('updated_at')
+      .$onUpdate(() => new Date())
+      .notNull(),
   },
   (t) => [index('verification_identifier_idx').on(t.identifier)],
 )
 
-export const rateLimit = sqliteTable('rateLimit', {
+/** better-auth's own limiter for its endpoints (sign-in codes); Tela's are `action_limits`. */
+export const rateLimit = sqliteTable('rate_limit', {
   id: text('id').primaryKey(),
   key: text('key').notNull().unique(),
   count: integer('count').notNull(),
-  lastRequest: bigint('lastRequest').notNull(),
+  lastRequest: integer('last_request').notNull(),
 })
+
+/** What the auth adapter is given: better-auth's models, by the names it looks them up by. */
+export const authTables = { user, session, account, verification, rateLimit }
 
 /**
  * One per member, created with the account by the invite command (there is no trigger on a user

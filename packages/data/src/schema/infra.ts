@@ -63,9 +63,12 @@ export const deadLetters = sqliteTable(
   (t) => [index('dead_letters_at_idx').on(t.at)],
 )
 
-/** Fixed-window counters per action and member (no memory survives between isolates). */
-export const rateLimits = sqliteTable(
-  'rate_limits',
+/**
+ * Fixed-window counters per action and member (no memory survives between isolates). Not
+ * better-auth's `rate_limit`, which only limits its own endpoints.
+ */
+export const actionLimits = sqliteTable(
+  'action_limits',
   {
     key: text().notNull(),
     windowStart: ms().notNull(),

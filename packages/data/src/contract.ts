@@ -95,7 +95,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       )
       expect(badListing === null).toBe(false)
       await db.run(
-        sql`insert into user (id, name, email, emailVerified, createdAt, updatedAt) values ('u1', 'u', 'u@x.y', 0, '', '')`,
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 0, 0, 0)`,
       )
       const badHandle = await caught(() =>
         db.run(

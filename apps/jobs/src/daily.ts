@@ -36,7 +36,7 @@ export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
       where status = 'dead' and last_fetched_at < ${now - 7 * DAY}
       returning id
     `),
-    db.all(sql`delete from rate_limits where window_start < ${now - DAY} returning key`),
+    db.all(sql`delete from action_limits where window_start < ${now - DAY} returning key`),
     db.all(sql`
       delete from applied_mutations where applied_at < ${now - APPLIED_MUTATIONS_KEEP_DAYS * DAY}
       returning mid

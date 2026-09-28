@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { claimDue, first, type Lease, type TelaDb } from '@tela/data'
-import { createTestDb } from '@tela/data/testing'
+import { addTestUser, createTestDb } from '@tela/data/testing'
 import { fakeClock, memoryBlobs } from '@tela/platform/portable'
 import { sql } from 'drizzle-orm'
 import { createHttpClient } from '../src/http'
@@ -78,10 +78,7 @@ function serveHtml(path: string, html: string) {
 }
 
 async function addUser(id: string, handle: string) {
-  await db.run(sql`
-    insert into user (id, name, email, emailVerified, createdAt, updatedAt)
-    values (${id}, ${id}, ${`${id}@x.test`}, 1, '', '')
-  `)
+  await addTestUser(db, id)
   await db.run(
     sql`insert into profiles (user_id, handle, created_at, updated_at) values (${id}, ${handle}, 1, 1)`,
   )

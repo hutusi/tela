@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { objectKeys } from '@tela/content'
 import { claimDue, first, type Lease, subscribe, type TelaDb } from '@tela/data'
-import { createTestDb } from '@tela/data/testing'
+import { addTestUser, createTestDb } from '@tela/data/testing'
 import { fakeClock, memoryBlobs } from '@tela/platform/portable'
 import { sql } from 'drizzle-orm'
 import { createHttpClient } from '../src/http'
@@ -82,10 +82,7 @@ async function fetchOnce(feedId: number, extra: Partial<IngestContext> = {}) {
 }
 
 async function addUser(id: string) {
-  await db.run(sql`
-    insert into user (id, name, email, emailVerified, createdAt, updatedAt)
-    values (${id}, ${id}, ${`${id}@x.test`}, 1, '', '')
-  `)
+  await addTestUser(db, id)
 }
 
 const row = <T>(q: ReturnType<typeof sql>) => first<T>(db, q)

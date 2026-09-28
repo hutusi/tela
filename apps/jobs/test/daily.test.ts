@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { first } from '@tela/data'
-import { createTestDb } from '@tela/data/testing'
+import { addTestUser, createTestDb } from '@tela/data/testing'
 import { sql } from 'drizzle-orm'
 import { daily } from '../src/daily'
 
@@ -21,9 +21,7 @@ describe('daily', () => {
         (1, 'https://a.example/dead-old', 'a.example', 0, 1, 1, 'global', null, 'dead', ${NOW - 8 * DAY}, 30),
         (1, 'https://a.example/dead-new', 'a.example', 0, 1, 1, 'global', null, 'dead', ${NOW - DAY}, 30)
     `)
-    await db.run(
-      sql`insert into user (id, name, email, emailVerified, createdAt, updatedAt) values ('u', 'u', 'u@x', 1, '', '')`,
-    )
+    await addTestUser(db, 'u')
     await db.run(sql`
       insert into articles (feed_id, dedup_key, fetched_at, sort_at) values
         (1, 'g:1', 1, 1), (1, 'g:2', 1, 1), (1, 'g:3', 1, 1)
@@ -36,7 +34,7 @@ describe('daily', () => {
         ('u', 1, 5, null), ('u', 2, 5, 9), ('u', 3, 5, null)
     `)
     await db.run(
-      sql`insert into rate_limits (key, window_start, count) values ('old', ${NOW - 2 * DAY}, 1), ('new', ${NOW}, 1)`,
+      sql`insert into action_limits (key, window_start, count) values ('old', ${NOW - 2 * DAY}, 1), ('new', ${NOW}, 1)`,
     )
     await db.run(
       sql`insert into applied_mutations (user_id, mid, applied_at) values ('u', 'old', ${NOW - 40 * DAY}), ('u', 'new', ${NOW})`,
@@ -67,6 +65,6 @@ describe('daily', () => {
       sql`select article_id from user_article_states order by article_id`,
     )
     expect(states.map((s) => s.article_id)).toEqual([2, 3])
-    expect(await first(db, sql`select 1 as x from rate_limits where key = 'old'`)).toBeUndefined()
+    expect(await first(db, sql`select 1 as x from action_limits where key = 'old'`)).toBeUndefined()
   })
 })
