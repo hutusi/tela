@@ -5,6 +5,7 @@
  * exit path calls them from a timer (`runPortable`).
  */
 import {
+  bumpSeq,
   type Claimed,
   claimDue,
   deadLetter,
@@ -50,6 +51,8 @@ async function dispatch(
     const error = `the last attempt died or overran its lease (${c.attempts} started, none finished)`
     await ctx.db.batch([
       fence(ctx.db, lease, now),
+      // The exhausted statements mark synced rows (a claim or a translation failed).
+      bumpSeq(ctx.db),
       ...deadLetter(ctx.db, lease, c.attempts, error, now),
       ...spec.exhausted(ctx.db, c.key, now),
     ] as unknown as Batch)
@@ -151,6 +154,7 @@ export async function runJob(ctx: JobsContext, message: JobMessage): Promise<Run
   if (!failed) return { status: 'lost' }
   if (!failed.exhausted) return { status: 'retrying', attempts: failed.attempts, error }
   await ctx.db.batch([
+    bumpSeq(ctx.db),
     ...deadLetter(ctx.db, lease, failed.attempts, error, now),
     ...spec.exhausted(ctx.db, lease.key, now),
   ] as unknown as Batch)

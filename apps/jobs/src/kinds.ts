@@ -5,6 +5,7 @@
  */
 import {
   type Backoff,
+  currentSeq,
   dueBodies,
   dueExtractions,
   dueFeeds,
@@ -54,7 +55,10 @@ export type KindSpec = {
     ctx: WorkContext,
     lease: { kind: LeaseKind; key: string; owner: string },
   ) => Promise<StepResult>
-  /** Statements that stop an exhausted item being due again (beside its dead letter). */
+  /**
+   * Statements that stop an exhausted item being due again (beside its dead letter). The batch
+   * bumps the sync sequence, so a statement that writes a synced row stamps `seq: currentSeq`.
+   */
   exhausted: (db: TelaDb, key: string, now: number) => ReturnType<TelaDb['run']>[]
 }
 
@@ -72,7 +76,7 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     // A fetch that keeps throwing is a bug, not a dead blog: try again tomorrow, visibly.
     exhausted: (db, key, now) => [
       db.run(
-        sql`update feeds set next_fetch_at = ${now + 24 * 60 * MIN} where id = ${Number(key)}`,
+        sql`update feeds set next_fetch_at = ${now + 24 * 60 * MIN}, seq = ${currentSeq} where id = ${Number(key)}`,
       ),
     ],
   },
@@ -96,7 +100,9 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     run: siteAssetsJob,
     // Looked for often enough: stamp it so it stops being due.
     exhausted: (db, key, now) => [
-      db.run(sql`update sites set assets_checked_at = ${now} where id = ${Number(key)}`),
+      db.run(
+        sql`update sites set assets_checked_at = ${now}, seq = ${currentSeq} where id = ${Number(key)}`,
+      ),
     ],
   },
   'site.claim': {
@@ -110,7 +116,7 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     exhausted: (db, key, now) => [
       db.run(sql`
         update site_claims set status = 'failed', error = 'verification kept failing; try again',
-          last_checked_at = ${now}
+          last_checked_at = ${now}, seq = ${currentSeq}
         where id = ${Number(key)} and status = 'pending'
       `),
     ],
@@ -141,11 +147,12 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     // The provider kept failing on it: record the failure so the sweep stops until the title changes.
     exhausted: (db, key, now) => [
       db.run(sql`
-        insert into article_titles (article_id, lang, feed_id, status, source_hash, updated_at)
-        select a.id, l.value, a.feed_id, 'failed', a.title_hash, ${now}
+        insert into article_titles (article_id, lang, feed_id, status, source_hash, updated_at, seq)
+        select a.id, l.value, a.feed_id, 'failed', a.title_hash, ${now}, ${currentSeq}
         from articles a, json_each(${JSON.stringify(READING_LANGUAGES)}) as l
         where a.id = ${Number(key)} and a.title_hash is not null and l.value <> coalesce(a.source_lang, '')
-        on conflict (article_id, lang) do update set status = 'failed', source_hash = excluded.source_hash
+        on conflict (article_id, lang) do update set status = 'failed', source_hash = excluded.source_hash,
+          seq = excluded.seq
       `),
     ],
   },
@@ -163,7 +170,7 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
       const split = key.lastIndexOf(':')
       return [
         db.run(sql`
-          update body_translations set state = 'failed', updated_at = ${now}
+          update body_translations set state = 'failed', updated_at = ${now}, seq = ${currentSeq}
           where content_key = ${key.slice(0, split)} and lang = ${key.slice(split + 1)}
         `),
       ]

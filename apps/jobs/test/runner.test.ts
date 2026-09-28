@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { first, startLease, type TelaDb } from '@tela/data'
+import { first, headSeq, startLease, type TelaDb } from '@tela/data'
 import { createTestDb } from '@tela/data/testing'
 import { createHttpClient } from '@tela/ingest'
 import { registerFeed } from '@tela/ingest/pipeline'
@@ -143,6 +143,7 @@ describe('tick and runJob', () => {
     )
     await registerFeed(db, { feedUrl: server.url('/feed.xml'), now: clock.now() })
     await cycle(ctx)
+    const before = await headSeq(db)
     // Every extraction attempt blows up inside the step.
     const broken: PortableContext = {
       ...ctx,
@@ -166,11 +167,14 @@ describe('tick and runJob', () => {
       sql`select kind, key, error from dead_letters`,
     )
     expect(dead).toMatchObject({ kind: 'article.extract', error: 'TypeError: boom' })
-    const retired = await first<{ extract_state: string }>(
+    const retired = await first<{ extract_state: string; seq: number }>(
       db,
-      sql`select extract_state from articles where id = ${Number(dead?.key)}`,
+      sql`select extract_state, seq from articles where id = ${Number(dead?.key)}`,
     )
     expect(retired?.extract_state).toBe('failed')
+    // Stamped past every cursor that saw it due, or readers would never learn it failed.
+    expect(retired?.seq).toBeGreaterThan(before)
+    expect(retired?.seq).toBe(await headSeq(db))
   })
 
   test('a message whose claim was superseded does nothing', async () => {
