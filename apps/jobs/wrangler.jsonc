@@ -71,5 +71,68 @@
     "FETCH_TIMEOUT_MS": "20000",
     "WEBSUB_ENABLED": "0",
     "PUBLIC_URL": "https://tela.ainaive.com"
+  },
+  "env": {
+    // Gate G2 (throwaway): the same Worker against the 40 production feeds beside the Fly
+    // worker, on its own database, bucket and queues. No ASSETS binding, so favicons are off and
+    // the public bucket stays untouched. Deploy with `wrangler deploy --env shadow`; delete after.
+    "shadow": {
+      "name": "tela-jobs-shadow",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "tela-shadow",
+          "database_id": "0f6f0869-b132-4369-8a9e-1490611c438b",
+          "migrations_dir": "../../packages/data/migrations"
+        }
+      ],
+      "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content-shadow" }],
+      "services": [{ "binding": "SELF", "service": "tela-jobs-shadow" }],
+      "queues": {
+        "producers": [
+          { "binding": "FETCH_QUEUE", "queue": "tela-shadow-fetch" },
+          { "binding": "EXTRACT_QUEUE", "queue": "tela-shadow-extract" },
+          { "binding": "TRANSLATE_QUEUE", "queue": "tela-shadow-translate" },
+          { "binding": "MISC_QUEUE", "queue": "tela-shadow-misc" }
+        ],
+        "consumers": [
+          {
+            "queue": "tela-shadow-fetch",
+            "max_batch_size": 5,
+            "max_concurrency": 10,
+            "max_retries": 2,
+            "dead_letter_queue": "tela-shadow-dlq"
+          },
+          {
+            "queue": "tela-shadow-extract",
+            "max_batch_size": 3,
+            "max_concurrency": 5,
+            "max_retries": 2,
+            "dead_letter_queue": "tela-shadow-dlq"
+          },
+          {
+            "queue": "tela-shadow-translate",
+            "max_batch_size": 1,
+            "max_concurrency": 4,
+            "max_retries": 2,
+            "dead_letter_queue": "tela-shadow-dlq"
+          },
+          {
+            "queue": "tela-shadow-misc",
+            "max_batch_size": 5,
+            "max_concurrency": 4,
+            "max_retries": 2,
+            "dead_letter_queue": "tela-shadow-dlq"
+          }
+        ]
+      },
+      "triggers": { "crons": ["* * * * *", "17 3 * * *"] },
+      "vars": {
+        "WORKER_USER_AGENT": "Tela/0.1 (+https://tela.ainaive.com; feed reader)",
+        "FETCH_TIMEOUT_MS": "20000",
+        "WEBSUB_ENABLED": "0",
+        "PUBLIC_URL": "https://tela.ainaive.com"
+      }
+    }
   }
 }
