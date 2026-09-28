@@ -73,6 +73,24 @@ What the Postgres stack's sign-in did, from surveying `apps/web`:
 - It is pinned to `aws:ap-southeast-1` beside the D1 primary and has no public route. tela-web
   forwards `/api/*` to it over a service binding.
 
+**Asking for a body translation** (`POST /api/v1/translations`, ADR 0023's reservation) is an RPC,
+because the reader needs the answer.
+- It checks in this order:
+  1. the blog's translation opt-out, **before** anything is counted or reserved (the Postgres app
+     spent the member's limit and allowance first);
+  2. whether a translation already exists or is running;
+  3. the member's hourly limit.
+- Then one batch writes the `requested` row and its reservation, both conditional. The row is
+  written only while the day's `used + reserved` leaves room under 400k tokens and no
+  translation is running. The reservation is written only for that row.
+- The estimate leans high (1.5× the body's source tokens, plus 500), because the reservation is
+  also the job's ceiling. A low guess would cut the translation short, while a high one is given
+  back when the job reconciles what it spent.
+- The route claims the work and queues it at once, so the first chunk does not wait for the next
+  sweep.
+- `GET /api/v1/translations/:contentKey/:lang` is what the reader polls while chunks stream in.
+  It never says who asked or what it cost.
+
 ## Consequences
 
 - **Signing out is not instant everywhere.** The signed session cache stays valid for up to five

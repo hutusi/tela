@@ -57,7 +57,7 @@ that way (AGENTS.md).
   and only the rest backs off.
 - **Budgets live in `usage_daily`**, one row per subject and UTC day:
   - A member's subject is their user id. The API reserves an estimate against it when the reader
-    asks; ADR 0024 will say how.
+    asks; ADR 0024 says how.
   - The translation replaces that reservation with what it actually spent when it concludes,
     charged to the day of the reservation.
   - Background work (titles) charges subject `'*'`. The title sweep claims nothing once the

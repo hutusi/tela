@@ -206,6 +206,12 @@ export function upsertArticleTitle(
  * Body translations to run: requested, or running with no live lease (an execution that
  * stopped at its deadline, or one that died). The key is `<contentKey>:<lang>`.
  */
+/**
+ * How long a body translation's claim holds before its first chunk; each chunk's batch extends it.
+ * tela-jobs' kind table and tela-api (which claims a reader's request at once) both use it.
+ */
+export const TRANSLATE_BODY_TTL_MS = 4 * 60_000
+
 export const dueBodies = (): SQL =>
   sql`select content_key || ':' || lang as key, null as host, updated_at as ord
       from body_translations where state in ('requested', 'running')`
@@ -220,6 +226,9 @@ export type BodyTranslationRow = {
   reservedDay: string | null
   usedTokens: number
   chunkKeys: string[]
+  /** The finished translation object, once done or partial. */
+  objectKey: string | null
+  failedLeaves: string[]
 }
 
 export async function loadBodyTranslation(
@@ -237,6 +246,8 @@ export async function loadBodyTranslation(
     reserved_day: string | null
     used_tokens: number
     chunk_keys: string
+    object_key: string | null
+    failed_leaves: string
   }>(sql`select * from body_translations where content_key = ${contentKey} and lang = ${lang}`)
   const r = rows[0]
   if (!r) return null
@@ -250,5 +261,7 @@ export async function loadBodyTranslation(
     reservedDay: r.reserved_day,
     usedTokens: r.used_tokens,
     chunkKeys: JSON.parse(r.chunk_keys) as string[],
+    objectKey: r.object_key,
+    failedLeaves: JSON.parse(r.failed_leaves) as string[],
   }
 }

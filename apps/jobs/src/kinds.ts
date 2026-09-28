@@ -15,6 +15,7 @@ import {
   type QueueName,
   settleExtraction,
   type TelaDb,
+  TRANSLATE_BODY_TTL_MS,
 } from '@tela/data'
 import {
   dueAssets,
@@ -150,7 +151,7 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     // Bodies have the translate queue to themselves: a reader is waiting on every one.
     queue: 'translate',
     // Held for the first chunk; each chunk's batch extends it for the next.
-    ttlMs: 4 * MIN,
+    ttlMs: TRANSLATE_BODY_TTL_MS,
     limit: 20,
     backoff: { baseMs: MIN, maxMs: 30 * MIN, maxAttempts: 3 },
     due: () => dueBodies(),
