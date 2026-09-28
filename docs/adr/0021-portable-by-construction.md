@@ -39,7 +39,9 @@ binding. The test suite runs on the portable column; production runs on the Clou
   share exactly this subset. The `Db` type has no `transaction` method, so the compiler refuses
   it, and the portable libSQL client throws if anything reaches the driver's own.
 - The portable `Db` enforces D1's other limits on every statement, so a test fails where
-  production would: at most 100 bound parameters and 100 KB of SQL.
+  production would: at most 100 bound parameters, 100 KB of SQL, and five terms in a compound
+  SELECT (measured 2026-09-28; SQLite's default is 500, and a multi-row `VALUES` is not a
+  compound).
 - Bulk reads and writes pass one JSON parameter through `json_each(?1)` instead of N×columns
   parameters.
 

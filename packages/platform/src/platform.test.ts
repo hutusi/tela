@@ -13,6 +13,31 @@ describe('D1 limits', () => {
   it('refuses a statement over 100 KB', () => {
     expect(() => checkD1Limits(`select '${'x'.repeat(100_000)}'`, 0)).toThrow(D1LimitError)
   })
+
+  const chain = (n: number) =>
+    Array.from({ length: n }, (_, i) => `select ${i}`).join(' union all ')
+
+  it('allows a compound SELECT of 5 terms and refuses 6, wherever it sits', () => {
+    expect(() => checkD1Limits(chain(5), 0)).not.toThrow()
+    expect(() => checkD1Limits(chain(6), 0)).toThrow(D1LimitError)
+    expect(() => checkD1Limits(`select * from (${chain(6)}) as t`, 0)).toThrow(D1LimitError)
+  })
+
+  it('counts each chain on its own, and ignores keywords in literals and comments', () => {
+    expect(() =>
+      checkD1Limits(`select * from (${chain(4)}) a, (${chain(4)}) b where 1 in (${chain(3)})`, 0),
+    ).not.toThrow()
+    const words = Array.from({ length: 6 }, () => `'union'`).join(', ')
+    expect(() => checkD1Limits(`select ${words} -- union union union union union`, 0)).not.toThrow()
+    expect(() =>
+      checkD1Limits('select 1 /* except intersect union union union */', 0),
+    ).not.toThrow()
+  })
+
+  it('does not count a multi-row VALUES as a compound', () => {
+    const rows = Array.from({ length: 50 }, (_, i) => `(${i})`).join(', ')
+    expect(() => checkD1Limits(`insert into t (k) values ${rows}`, 0)).not.toThrow()
+  })
 })
 
 describe('libsqlDb holds libSQL to what D1 can do', () => {

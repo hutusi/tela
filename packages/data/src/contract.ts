@@ -108,6 +108,20 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
     })
   })
 
+  describe("D1's statement limits", () => {
+    // libSQL allows 500 terms; the portable guard holds it to D1's 5, and this runs on both.
+    const chain = (n: number) =>
+      sql.raw(Array.from({ length: n }, (_, i) => `select ${i} as k`).join(' union all '))
+
+    it('refuses a compound SELECT over five terms, and takes many rows through VALUES', async () => {
+      const db = await makeDb()
+      expect(await db.all(chain(5))).toHaveLength(5)
+      expect((await caught(() => db.all(chain(6)))) === null).toBe(false)
+      const rows = sql.raw(Array.from({ length: 50 }, (_, i) => `(${i})`).join(', '))
+      expect(await db.all(sql`select * from (values ${rows})`)).toHaveLength(50)
+    })
+  })
+
   describe('the sync sequence', () => {
     it('stamps every row a batch writes with one seq, and moves forward per batch', async () => {
       const db = await makeDb()
