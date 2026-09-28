@@ -3,12 +3,13 @@ import { first, startLease, type TelaDb } from '@tela/data'
 import { createTestDb } from '@tela/data/testing'
 import { createHttpClient } from '@tela/ingest'
 import { registerFeed } from '@tela/ingest/pipeline'
+import type { JobMessage } from '@tela/platform'
 import { fakeClock, memoryBlobs, memoryJobs } from '@tela/platform/portable'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, longHtml, rss } from '../../../packages/ingest/test/fixture-server'
 import { type JobQueues, KINDS } from '../src/kinds'
 import { cycle, drain, type PortableContext } from '../src/portable'
-import { runJob, tick } from '../src/runner'
+import { runJob, SAME_HOST_GAP_SECONDS, tick } from '../src/runner'
 
 const NOW = Date.UTC(2026, 8, 4, 10)
 const MIN = 60_000
@@ -89,7 +90,7 @@ describe('tick and runJob', () => {
     expect(beat?.at).toBe(NOW + MIN)
   })
 
-  test('summary articles are extracted, one per host per cycle', async () => {
+  test("a host's summary articles are extracted one after another, a gap apart, not one a tick", async () => {
     server.text('/feed.xml', summaries())
     for (const n of [1, 2, 3]) {
       server.set(`/posts/${n}`, (_req, res) => {
@@ -101,18 +102,27 @@ describe('tick and runJob', () => {
     }
     await registerFeed(db, { feedUrl: server.url('/feed.xml'), now: clock.now() })
     await cycle(ctx) // fetch
-    const extracted = async () =>
-      (
-        await first<{ n: number }>(
-          db,
-          sql`select count(*) as n from articles where extract_state = 'done'`,
-        )
-      )?.n ?? 0
-    for (const expected of [1, 2, 3]) {
-      clock.advance(MIN)
-      await cycle(ctx)
-      expect(await extracted()).toBe(expected)
-    }
+    // take() hands messages out and forgets them, so note each extraction's delay as it is sent.
+    const delays: number[] = []
+    const sendBatch = ctx.jobs.sendBatch.bind(ctx.jobs)
+    ctx.jobs.sendBatch = (async (
+      queue: keyof JobQueues & string,
+      messages: JobMessage<unknown>[],
+    ) => {
+      if (queue === 'extract') delays.push(...messages.map((m) => m.delaySeconds ?? 0))
+      return sendBatch(queue, messages as never)
+    }) as typeof ctx.jobs.sendBatch
+    clock.advance(MIN)
+    const { tick: claimed } = await cycle(ctx)
+    // The tick takes one per host; each success claims the next on that host.
+    expect(claimed['article.extract']).toBe(1)
+    const done = await first<{ n: number }>(
+      db,
+      sql`select count(*) as n from articles where extract_state = 'done'`,
+    )
+    expect(done?.n).toBe(3)
+    expect(delays).toEqual([0, SAME_HOST_GAP_SECONDS, SAME_HOST_GAP_SECONDS])
+    expect(await count('leases')).toBe(0)
   })
 
   test('a step that keeps throwing backs off, then becomes a dead letter that retires its row', async () => {
@@ -190,7 +200,7 @@ describe('tick and runJob', () => {
       const [message] = ctx.jobs.take('fetch')
       // runJob starts the attempt, then the invocation is killed (CPU, memory, eviction): no
       // result, no failLease, only a lease that expires.
-      expect(await startLease(db, message!, clock.now(), spec.ttlMs)).toBe(attempt)
+      expect((await startLease(db, message!, clock.now(), spec.ttlMs))?.attempts).toBe(attempt)
       clock.advance(spec.ttlMs + MIN)
     }
     expect((await tick(ctx))['feed.fetch']).toBe(0)

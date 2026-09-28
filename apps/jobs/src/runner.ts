@@ -5,6 +5,7 @@
  * exit path calls them from a timer (`runPortable`).
  */
 import {
+  type Claimed,
   claimDue,
   deadLetter,
   failLease,
@@ -27,6 +28,45 @@ function ownerFor(kind: LeaseKind, now: number): string {
 
 type Batch = Parameters<JobsContext['db']['batch']>[0]
 
+/** How long after finishing an item the next one on the same host is sent: politeness's gap. */
+export const SAME_HOST_GAP_SECONDS = 2
+
+/**
+ * Send what a claim took. An item claimed with every attempt spent is one whose last holder died
+ * without reporting (a reported failure is dead-lettered by runJob itself): it is retired, not
+ * sent again. Returns how many were sent.
+ */
+async function dispatch(
+  ctx: JobsContext,
+  kind: LeaseKind,
+  spec: KindSpec,
+  owner: string,
+  claimed: Claimed[],
+  now: number,
+  delaySeconds?: number,
+): Promise<number> {
+  for (const c of claimed.filter((c) => c.attempts >= spec.backoff.maxAttempts)) {
+    const lease: Lease = { kind, key: c.key, owner }
+    const error = `the last attempt died or overran its lease (${c.attempts} started, none finished)`
+    await ctx.db.batch([
+      fence(ctx.db, lease, now),
+      ...deadLetter(ctx.db, lease, c.attempts, error, now),
+      ...spec.exhausted(ctx.db, c.key, now),
+    ] as unknown as Batch)
+  }
+  const send = claimed.filter((c) => c.attempts < spec.backoff.maxAttempts)
+  if (send.length > 0) {
+    await ctx.jobs.sendBatch(
+      spec.queue,
+      send.map((c) => ({
+        body: { kind, key: c.key, owner },
+        ...(delaySeconds ? { delaySeconds } : {}),
+      })),
+    )
+  }
+  return send.length
+}
+
 /** Claim every kind's due work and send it on; record that the tick ran. */
 export async function tick(ctx: JobsContext): Promise<TickReport> {
   const report: TickReport = {}
@@ -42,32 +82,33 @@ export async function tick(ctx: JobsContext): Promise<TickReport> {
       limit: spec.limit,
       due: spec.due(now, ctx),
     })
-    // An item re-claimed with every attempt spent is one whose last holder died without
-    // reporting (a reported failure is dead-lettered by runJob itself): retire it, don't resend.
-    const spent = claimed.filter((c) => c.attempts >= spec.backoff.maxAttempts)
-    for (const c of spent) {
-      const lease: Lease = { kind, key: c.key, owner }
-      const error = `the last attempt died or overran its lease (${c.attempts} started, none finished)`
-      await ctx.db.batch([
-        fence(ctx.db, lease, now),
-        ...deadLetter(ctx.db, lease, c.attempts, error, now),
-        ...spec.exhausted(ctx.db, c.key, now),
-      ] as unknown as Batch)
-    }
-    const send = claimed.filter((c) => c.attempts < spec.backoff.maxAttempts)
-    if (send.length > 0) {
-      await ctx.jobs.sendBatch(
-        spec.queue,
-        send.map((c) => ({ body: { kind, key: c.key, owner } })),
-      )
-    }
-    report[kind] = send.length
+    report[kind] = await dispatch(ctx, kind, spec, owner, claimed, now)
   }
   await ctx.db.run(sql`
     insert into ops_heartbeats (name, at, info) values ('tick', ${ctx.clock.now()}, ${JSON.stringify(report)})
     on conflict (name) do update set at = excluded.at, info = excluded.info
   `)
   return report
+}
+
+/**
+ * Claim the next due item of this kind on the host just finished, and send it a moment later.
+ * A tick takes one item per host, so without this a summary feed's 30 new posts would take half
+ * an hour to extract. The finished item's lease is gone, so this claim is what keeps the host to
+ * one request at a time, and a tick in between finds the host busy.
+ */
+async function continueOnHost(ctx: JobsContext, kind: LeaseKind, spec: KindSpec, host: string) {
+  const now = ctx.clock.now()
+  const owner = ownerFor(kind, now)
+  const claimed = await claimDue(ctx.db, {
+    kind,
+    owner,
+    now,
+    ttlMs: spec.ttlMs,
+    limit: 1,
+    due: sql`select * from (${spec.due(now, ctx)}) where host = ${host}`,
+  })
+  await dispatch(ctx, kind, spec, owner, claimed, now, SAME_HOST_GAP_SECONDS)
 }
 
 export type RunOutcome =
@@ -87,14 +128,20 @@ export async function runJob(ctx: JobsContext, message: JobMessage): Promise<Run
   // past the lease is dropped here, before it spends a model call the fence would then throw
   // away; the lease counts from when the work starts; and an attempt that dies without reporting
   // has still been counted, so it cannot retry for ever.
-  if ((await startLease(ctx.db, lease, ctx.clock.now(), spec.ttlMs)) === null) {
-    return { status: 'lost' }
-  }
+  const started = await startLease(ctx.db, lease, ctx.clock.now(), spec.ttlMs)
+  if (started === null) return { status: 'lost' }
   let error: string
   try {
     const result = await spec.run(ctx, lease)
     if (result.status === 'lost') return { status: 'lost' }
-    if (result.status !== 'retry') return { status: 'done', result }
+    if (result.status !== 'retry') {
+      // Only after a success: a host that just failed is left to the backoff. Best effort: the
+      // work is done and released, and the next tick finds whatever this misses.
+      if (started.host !== null) {
+        await continueOnHost(ctx, message.kind, spec, started.host).catch(() => undefined)
+      }
+      return { status: 'done', result }
+    }
     error = result.error ?? 'retry'
   } catch (err) {
     error = err instanceof Error ? `${err.name}: ${err.message}` : String(err)

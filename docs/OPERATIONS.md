@@ -223,7 +223,9 @@ and only call `SELF.fetch()`. The Worker has no public route.
   `exceededCpu`, `exceededMemory` or a wall-clock limit on `/jobs/run` for that key
   (`wrangler tail tela-jobs --format json`, or the dashboard's observability tab).
 - **Is the tick alive:** `select * from ops_heartbeats`. `tick.at` moves every minute, and
-  `info` holds what it claimed per kind.
+  `info` holds what it claimed per kind. It counts only the tick's own claims: after each success
+  a job claims the next due item on its host itself, so a backlog on one host drains in a chain
+  that `info` never shows.
 - **Fetch a feed now:** `update feeds set next_fetch_at = 0 where id = …`. The next tick claims
   it; a live lease is never stolen.
 - Queue messages are only accelerators. Purging a queue loses no work, because the next tick

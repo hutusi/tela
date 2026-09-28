@@ -70,22 +70,22 @@ export async function claimDue(
  * is what catches a holder that dies without reporting (over its CPU or memory limit, evicted,
  * past its wall clock): its lease only expires, and an attempt counted at failure would never be
  * counted, so the item would be retried every TTL for ever. A message that waited in its queue
- * past the lease never starts, so queue lag costs no attempt. Returns the attempt number, or null
- * when the claim was already lost.
+ * past the lease never starts, so queue lag costs no attempt. Returns the attempt number and the
+ * host the lease holds, or null when the claim was already lost.
  */
 export async function startLease(
   db: TelaDb,
   lease: Lease,
   now: number,
   ttlMs: number,
-): Promise<number | null> {
-  const rows = await db.all<{ attempts: number }>(sql`
+): Promise<{ attempts: number; host: string | null } | null> {
+  const rows = await db.all<{ attempts: number; host: string | null }>(sql`
     update leases set until = ${now + ttlMs}, attempts = attempts + 1
     where kind = ${lease.kind} and key = ${lease.key} and owner = ${lease.owner}
       and until >= ${now}
-    returning attempts
+    returning attempts, host
   `)
-  return rows[0]?.attempts ?? null
+  return rows[0] ?? null
 }
 
 /** Hold a lease longer. Returns false when it was lost (expired, or taken by another owner). */

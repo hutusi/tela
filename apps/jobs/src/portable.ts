@@ -9,7 +9,11 @@ import { type JobsContext, type RunOutcome, runJob, type TickReport, tick } from
 
 export type PortableContext = JobsContext & { jobs: ReturnType<typeof memoryJobs<JobQueues>> }
 
-/** Run every queued message, including work those messages lead to, until the queues are empty. */
+/**
+ * Run every queued message, including work those messages lead to, until the queues are empty.
+ * A message's `delaySeconds` is not waited out here, so the same-host gap is gone: whatever runs
+ * this against real hosts gives its HTTP client a `politenessMs` of its own.
+ */
 export async function drain(ctx: PortableContext): Promise<RunOutcome[]> {
   const outcomes: RunOutcome[] = []
   for (;;) {

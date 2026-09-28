@@ -422,7 +422,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         limit: 1,
         due: dueFeeds(T0),
       })
-      expect(await startLease(db, lease('1', 'a'), T0, MIN)).toBe(1)
+      expect(await startLease(db, lease('1', 'a'), T0, MIN)).toEqual({ attempts: 1, host: 'h1' })
       expect(await failLease(db, lease('1', 'a'), T0 + 1, backoff, 'HTTP 503')).toEqual({
         attempts: 1,
         exhausted: false,
@@ -445,7 +445,10 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         due: dueFeeds(T0),
       })
       expect(retry.map((c) => [c.owner, c.attempts])).toEqual([['b', 1]])
-      expect(await startLease(db, lease('1', 'b'), T0 + MIN + 2, MIN)).toBe(2)
+      expect(await startLease(db, lease('1', 'b'), T0 + MIN + 2, MIN)).toEqual({
+        attempts: 2,
+        host: 'h1',
+      })
       expect(await failLease(db, lease('1', 'b'), T0 + MIN + 3, backoff, 'HTTP 503')).toEqual({
         attempts: 2,
         exhausted: true,
@@ -465,7 +468,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         claimDue(db, { kind: 'feed.fetch', owner, now, ttlMs: MIN, limit: 2, due: dueFeeds(now) })
       await claim('a', T0)
       // Feed 1 starts and its holder dies; feed 2's message waited in its queue and never started.
-      expect(await startLease(db, lease('1', 'a'), T0, MIN)).toBe(1)
+      expect(await startLease(db, lease('1', 'a'), T0, MIN)).toEqual({ attempts: 1, host: 'h1' })
       const again = await claim('b', T0 + 2 * MIN)
       expect(again.map((c) => [c.key, c.attempts])).toEqual([
         ['1', 1],

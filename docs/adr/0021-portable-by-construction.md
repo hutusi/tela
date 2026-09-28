@@ -52,6 +52,10 @@ binding. The test suite runs on the portable column; production runs on the Clou
   - It takes only rows whose lease has expired and whose backoff has passed.
   - It skips hosts that already hold a live lease (politeness).
   - It returns what it took.
+- **continue.** After a success, the runner claims the next due item of that kind on the same
+  host and sends it two seconds later. A tick takes one item per host, so without this a summary
+  feed's 30 new posts took half an hour to extract; with it a host's backlog drains at request
+  speed, still one request at a time.
 - **extend.** Extending is a conditional update on the owner.
 - **Fenced batch.** Work decided in JavaScript commits as a *fenced batch*:
   - Its first statement is `INSERT INTO lease_fence(x) SELECT NULL WHERE NOT EXISTS (my live
