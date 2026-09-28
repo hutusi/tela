@@ -5,6 +5,7 @@
  */
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from './db'
+import { first } from './first'
 import {
   claimDue,
   deadLetter,
@@ -15,6 +16,13 @@ import {
   type Lease,
   release,
 } from './leases'
+import {
+  existingArticles,
+  fillSiteMetadata,
+  insertArticles,
+  insertVersions,
+  updateArticles,
+} from './queries/ingest'
 import { feeds, sites } from './schema'
 import { bumpSeq, currentSeq, headSeq } from './seq'
 
@@ -139,6 +147,88 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
     })
   })
 
+  describe('ingest statements', () => {
+    it('insert, version, update-from and read back through json_each, in one batch', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['h1'])
+      const article = (n: number) => ({
+        dedupKey: `g:${n}`,
+        url: `https://h1/p/${n}`,
+        urlHost: 'h1',
+        title: `Post ${n}`,
+        author: null,
+        publishedAt: T0 - n * MIN,
+        sourceLang: 'en',
+        excerpt: `Excerpt ${n}`,
+        contentKey: `key-${n}`,
+        wordCount: 100,
+        readingMinutes: 1,
+        extractState: 'none' as const,
+        titleHash: `th-${n}`,
+      })
+      const version = (n: number, v: number) => ({
+        dedupKey: `g:${n}`,
+        version: v,
+        provenance: 'feed' as const,
+        contentKey: `key-${n}-v${v}`,
+        rawKey: null,
+        bodyChars: 500 + v,
+        excerpt: `Excerpt ${n} v${v}`,
+        wordCount: 100,
+        readingMinutes: 1,
+        lang: 'en',
+        sourceUrl: null,
+      })
+      const results = await db.batch([
+        bumpSeq(db),
+        insertArticles(db, 1, [article(1), article(2)], T0),
+        insertVersions(db, 1, [version(1, 1), version(2, 1)], T0),
+        fillSiteMetadata(db, 1, { title: 'Blog', description: null, declaredLang: 'en' }, T0),
+      ])
+      const inserted = results[1] as unknown as { id: number; dedup_key: string }[]
+      expect(inserted.map((r) => r.dedup_key).sort()).toEqual(['g:1', 'g:2'])
+      await db.batch([
+        bumpSeq(db),
+        insertVersions(db, 1, [version(1, 2)], T0),
+        updateArticles(db, [
+          {
+            id: inserted.find((r) => r.dedup_key === 'g:1')?.id ?? 0,
+            url: 'https://h1/p/1',
+            urlHost: 'h1',
+            title: 'Post 1, edited',
+            author: null,
+            publishedAt: null,
+            sourceLang: 'en',
+            excerpt: 'Excerpt 1 v2',
+            currentVersion: 2,
+            contentKey: 'key-1-v2',
+            wordCount: 120,
+            readingMinutes: 1,
+            extractState: 'none',
+            titleHash: 'th-1b',
+          },
+        ]),
+      ])
+      const existing = await existingArticles(db, 1, ['g:1', 'g:2', 'g:3'])
+      expect([...existing.keys()].sort()).toEqual(['g:1', 'g:2'])
+      const one = existing.get('g:1')
+      expect(one?.currentVersion).toBe(2)
+      expect(one?.contentKey).toBe('key-1-v2')
+      expect(one?.versions.map((v) => v.version).sort()).toEqual([1, 2])
+      const row = await first<{ title: string; sort_at: number; seq: number }>(
+        db,
+        sql`select title, sort_at, seq from articles where dedup_key = 'g:1'`,
+      )
+      // sort_at falls back to fetched_at once the edit drops the date.
+      expect(row).toEqual({ title: 'Post 1, edited', sort_at: T0, seq: 2 })
+      const site = await first<{ title: string; primary_lang: string }>(
+        db,
+        sql`select title, primary_lang from sites where id = 1`,
+      )
+      expect(site).toEqual({ title: 'Blog', primary_lang: 'en' })
+    })
+  })
+
   describe('leases', () => {
     it('claims due items in order, one per host, up to the limit', async () => {
       const db = await makeDb()
@@ -217,6 +307,20 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       expect(extract).toHaveLength(0)
     })
 
+    it('keys a claim the same whether the due query yields an integer or a bound number', async () => {
+      const db = await makeDb()
+      const got = await claimDue(db, {
+        kind: 'feed.fetch',
+        owner: 'a',
+        now: T0,
+        ttlMs: MIN,
+        limit: 1,
+        due: sql`select ${7} as key, null as host, 0 as ord`,
+      })
+      expect(got.map((c) => c.key)).toEqual(['7'])
+      expect(await extendLease(db, lease('7', 'a'), T0 + 1, MIN)).toBe(true)
+    })
+
     it('extends only for its owner, and only while the lease is live', async () => {
       const db = await makeDb()
       await seedFeeds(db, ['h1'])
@@ -249,7 +353,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         db.run(sql`update feeds set title = 'fetched by a' where id = 1`),
         release(db, lease('1', 'a')),
       ])
-      const row = await db.get<{ title: string }>(sql`select title from feeds where id = 1`)
+      const row = await first<{ title: string }>(db, sql`select title from feeds where id = 1`)
       expect(row?.title).toBe('fetched by a')
       expect(await db.all(sql`select * from leases`)).toHaveLength(0)
     })
@@ -282,7 +386,10 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         ]),
       )
       expect(isFenceRefusal(err)).toBe(true)
-      const row = await db.get<{ title: string | null }>(sql`select title from feeds where id = 1`)
+      const row = await first<{ title: string | null }>(
+        db,
+        sql`select title from feeds where id = 1`,
+      )
       expect(row?.title ?? null).toBe(null)
       const held = await db.all<{ owner: string }>(sql`select owner from leases`)
       expect(held.map((h) => h.owner)).toEqual(['b'])
@@ -364,7 +471,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         limit: 1,
         due: dueFeeds(T0),
       })
-      const row = await db.get<{ attempts: number }>(sql`select attempts from leases`)
+      const row = await first<{ attempts: number }>(db, sql`select attempts from leases`)
       expect(row?.attempts).toBe(0)
     })
   })

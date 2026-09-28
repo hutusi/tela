@@ -37,9 +37,16 @@ export async function claimDue(
     insert into leases (kind, key, owner, until, attempts, not_before, host)
     select ${kind}, d.key, ${owner}, ${now + ttlMs}, 0, 0, d.host
     from (
-      select cast(key as text) as key, host, ord,
-        row_number() over (partition by coalesce(host, cast(key as text)) order by ord) as per_host
-      from (${due})
+      select k as key, host, ord,
+        row_number() over (partition by coalesce(host, k) order by ord) as per_host
+      from (
+        -- Keys compare as text. A bound JS number arrives as REAL on some drivers, and
+        -- cast(1.0 as text) is '1.0', which would never match the lease key '1'.
+        select case when typeof(key) = 'real' and key = cast(key as integer)
+                    then cast(cast(key as integer) as text) else cast(key as text) end as k,
+               host, ord
+        from (${due})
+      )
     ) as d
     where d.per_host = 1
       and d.key not in (

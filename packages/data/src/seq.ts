@@ -5,6 +5,7 @@
  */
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from './db'
+import { first } from './first'
 
 /** The first statement of any batch that writes synced rows. */
 export function bumpSeq(db: TelaDb) {
@@ -18,6 +19,6 @@ export const currentSeq = sql<number>`(select v from counters where k = 'seq')`
 
 /** The newest seq committed, for a reader starting from scratch. */
 export async function headSeq(db: TelaDb): Promise<number> {
-  const row = await db.get<{ v: number } | undefined>(sql`select v from counters where k = 'seq'`)
+  const row = await first<{ v: number }>(db, sql`select v from counters where k = 'seq'`)
   return row?.v ?? 0
 }

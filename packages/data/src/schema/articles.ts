@@ -31,6 +31,8 @@ export const articles = sqliteTable(
       .references(() => feeds.id, { onDelete: 'cascade' }),
     dedupKey: text().notNull(),
     url: text(),
+    /** Host of `url`, for per-host politeness when the extraction sweep fetches the page. */
+    urlHost: text(),
     title: text().notNull().default(''),
     author: text(),
     publishedAt: ms(),
@@ -45,6 +47,11 @@ export const articles = sqliteTable(
     wordCount: integer().notNull().default(0),
     readingMinutes: integer().notNull().default(0),
     extractState: text({ enum: EXTRACT_STATES }).notNull().default('none'),
+    /**
+     * Hash of the title and excerpt readers see now. A title translation made from another hash is
+     * stale, which is how the title sweep finds work without a queue (ADR 0021).
+     */
+    titleHash: text(),
     likeCount: integer().notNull().default(0),
     recommendCount: integer().notNull().default(0),
     seq: seq(),
@@ -56,7 +63,7 @@ export const articles = sqliteTable(
     index('articles_feed_sort_idx').on(t.feedId, t.sortAt, t.id),
     index('articles_content_key_idx').on(t.contentKey),
     index('articles_fetched_at_idx').on(t.fetchedAt),
-    index('articles_extract_state_idx').on(t.extractState),
+    index('articles_extract_state_idx').on(t.extractState, t.fetchedAt),
   ],
 )
 
@@ -78,6 +85,10 @@ export const articleVersions = sqliteTable(
     rawKey: text(),
     normVersion: integer().notNull(),
     bodyChars: integer().notNull(),
+    /** What the article shows when this version is current. */
+    excerpt: text(),
+    wordCount: integer().notNull().default(0),
+    readingMinutes: integer().notNull().default(0),
     lang: text(),
     sourceUrl: text(),
     createdAt: ms().notNull(),
@@ -102,6 +113,8 @@ export const articleTitles = sqliteTable(
     title: text(),
     excerpt: text(),
     status: text({ enum: TITLE_STATUSES }).notNull(),
+    /** The article's title_hash this was translated from; a different current hash means stale. */
+    sourceHash: text().notNull(),
     model: text(),
     updatedAt: ms().notNull(),
     seq: seq(),

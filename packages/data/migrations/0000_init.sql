@@ -5,6 +5,7 @@ CREATE TABLE `article_titles` (
 	`title` text,
 	`excerpt` text,
 	`status` text NOT NULL,
+	`source_hash` text NOT NULL,
 	`model` text,
 	`updated_at` integer NOT NULL,
 	`seq` integer DEFAULT 0 NOT NULL,
@@ -22,6 +23,9 @@ CREATE TABLE `article_versions` (
 	`raw_key` text,
 	`norm_version` integer NOT NULL,
 	`body_chars` integer NOT NULL,
+	`excerpt` text,
+	`word_count` integer DEFAULT 0 NOT NULL,
+	`reading_minutes` integer DEFAULT 0 NOT NULL,
 	`lang` text,
 	`source_url` text,
 	`created_at` integer NOT NULL,
@@ -36,6 +40,7 @@ CREATE TABLE `articles` (
 	`feed_id` integer NOT NULL,
 	`dedup_key` text NOT NULL,
 	`url` text,
+	`url_host` text,
 	`title` text DEFAULT '' NOT NULL,
 	`author` text,
 	`published_at` integer,
@@ -48,6 +53,7 @@ CREATE TABLE `articles` (
 	`word_count` integer DEFAULT 0 NOT NULL,
 	`reading_minutes` integer DEFAULT 0 NOT NULL,
 	`extract_state` text DEFAULT 'none' NOT NULL,
+	`title_hash` text,
 	`like_count` integer DEFAULT 0 NOT NULL,
 	`recommend_count` integer DEFAULT 0 NOT NULL,
 	`seq` integer DEFAULT 0 NOT NULL,
@@ -60,7 +66,7 @@ CREATE INDEX `articles_feed_seq_idx` ON `articles` (`feed_id`,`seq`);--> stateme
 CREATE INDEX `articles_feed_sort_idx` ON `articles` (`feed_id`,`sort_at`,`id`);--> statement-breakpoint
 CREATE INDEX `articles_content_key_idx` ON `articles` (`content_key`);--> statement-breakpoint
 CREATE INDEX `articles_fetched_at_idx` ON `articles` (`fetched_at`);--> statement-breakpoint
-CREATE INDEX `articles_extract_state_idx` ON `articles` (`extract_state`);--> statement-breakpoint
+CREATE INDEX `articles_extract_state_idx` ON `articles` (`extract_state`,`fetched_at`);--> statement-breakpoint
 CREATE TABLE `block_translations` (
 	`source_hash` text NOT NULL,
 	`target_lang` text NOT NULL,
@@ -349,7 +355,7 @@ CREATE TABLE `feeds` (
 	`hub_url` text,
 	`added_by` text,
 	`served_origin` text,
-	`refetch_requested` integer DEFAULT false NOT NULL,
+	`refetch_requested_at` integer,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
 	`seq` integer DEFAULT 0 NOT NULL,

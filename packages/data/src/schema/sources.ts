@@ -93,8 +93,11 @@ export const feeds = sqliteTable(
     hubUrl: text(),
     addedBy: text().references(() => user.id, { onDelete: 'set null' }),
     servedOrigin: text(),
-    /** A WebSub ping arrived while a fetch held the lease: fetch again as soon as it finishes. */
-    refetchRequested: flag(),
+    /**
+     * The latest WebSub ping. The feed is due while this is set; a fetch clears it only when the
+     * ping came before the fetch started, so a ping arriving mid-fetch is not lost.
+     */
+    refetchRequestedAt: ms(),
     createdAt: ms().notNull(),
     updatedAt: ms().notNull(),
     seq: seq(),

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f86bbe24-d02d-488d-90fc-b8425722081b",
+  "id": "9b98fa93-e3f3-4403-92ae-f0d5607ad9aa",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "article_titles": {
@@ -44,6 +44,13 @@
         },
         "status": {
           "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_hash": {
+          "name": "source_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -166,6 +173,29 @@
           "notNull": true,
           "autoincrement": false
         },
+        "excerpt": {
+          "name": "excerpt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "word_count": {
+          "name": "word_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "reading_minutes": {
+          "name": "reading_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
         "lang": {
           "name": "lang",
           "type": "text",
@@ -260,6 +290,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "url_host": {
+          "name": "url_host",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "title": {
           "name": "title",
           "type": "text",
@@ -348,6 +385,13 @@
           "autoincrement": false,
           "default": "'none'"
         },
+        "title_hash": {
+          "name": "title_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "like_count": {
           "name": "like_count",
           "type": "integer",
@@ -416,7 +460,8 @@
         "articles_extract_state_idx": {
           "name": "articles_extract_state_idx",
           "columns": [
-            "extract_state"
+            "extract_state",
+            "fetched_at"
           ],
           "isUnique": false
         }
@@ -2347,13 +2392,12 @@
           "notNull": false,
           "autoincrement": false
         },
-        "refetch_requested": {
-          "name": "refetch_requested",
+        "refetch_requested_at": {
+          "name": "refetch_requested_at",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
