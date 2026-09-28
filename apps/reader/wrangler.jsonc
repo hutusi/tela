@@ -1,0 +1,16 @@
+{
+  // tela-web (ADR 0020, 0024): the one public Worker, at the reader's edge, unpinned. The Next.js
+  // app deployed as tela-web today keeps the name until cutover (phase 8); this config is not
+  // deployed before then. Phase 6 adds the SPA's static assets.
+  "name": "tela-web",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // The custom domain is the only public origin: workers.dev is blocked in mainland China.
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content" }],
+  "services": [{ "binding": "API", "service": "tela-api" }],
+  "vars": { "TELA_PRIVATE_BETA": "1" }
+  // Secrets (wrangler secret put): AUTH_SECRET, the same value as tela-api's.
+}

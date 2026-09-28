@@ -184,6 +184,19 @@ fly deploy --config fly.worker.toml --remote-only --ha=false   # from the reposi
   translations), so a forgotten secret shows up as a crash loop, not as garbled titles.
 - Logs: `fly logs --app tela-worker`; the JSON lines are the same as locally.
 
+### Cloudflare: tela-web, the new edge Worker (`refactor/local-first`, deployed at cutover)
+
+`apps/reader/wrangler.jsonc`. The Next.js app holds the name `tela-web` until phase 8 replaces it.
+It has no D1 binding: `BLOBS` is `tela-content` (read-only here) and `API` is tela-api.
+
+- **Secret:** `AUTH_SECRET`, the **same value** as tela-api's. It verifies the signed session
+  cache; a different value means every content request falls back to a session read.
+- **Var:** `TELA_PRIVATE_BETA=1` serves `Disallow: /` and adds `X-Robots-Tag: noindex, nofollow`
+  to everything (ADR 0015).
+- **Images:** `/img/<contentKey>/<i>` fetches only what a content object names, over
+  `global_fetch_strictly_public`. A broken image is the origin's answer, which the Worker logs
+  show; nothing is signed, so there is no secret to rotate.
+
 ### Cloudflare: tela-api (`refactor/local-first`, not deployed yet)
 
 Sign-in, sync, mutations and every reader RPC (ADR 0024). The config is `apps/api/wrangler.jsonc`.

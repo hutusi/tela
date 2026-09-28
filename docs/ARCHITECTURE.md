@@ -356,6 +356,14 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, /o/* content objects, /
   - Public JSON under `/api/v1/public/*` (listed and featured blogs only, edge-cacheable).
   - The WebSub callback at `/api/websub/:feedId`. A signed ping sets `refetch_requested_at` and
     claims the fetch at once.
+- **Edge** (`apps/reader/worker`, tela-web): the only public Worker, unpinned, with no D1.
+  - `/api/*` goes to tela-api.
+  - `/o/c|t|tc/…` and `/o/bundle` serve immutable objects from R2 to members, cached per colo
+    after the session check. Raw HTML (`r/`) is never served.
+  - `/img/<contentKey>/<i>` proxies the image the content object names, replacing HMAC-signed
+    URLs: the object is the allowlist. Raster types only, no SVG, 10 MB, cached for seven days.
+  - Sessions are read from the signed cookie cache; when it has lapsed, tela-api's get-session
+    is asked and its fresh cookie passed on.
 - **Sync** (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025):
   - `GET /api/v1/sync?cursor=` reads a member's rows in one batch: a horizon snapshot at cursor 0,
     and deltas by seq in pages that end on a seq boundary.
