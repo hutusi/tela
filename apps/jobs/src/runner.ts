@@ -7,10 +7,11 @@
 import {
   claimDue,
   deadLetter,
-  extendLease,
   failLease,
+  fence,
   type Lease,
   type LeaseKind,
+  startLease,
 } from '@tela/data'
 import type { Jobs } from '@tela/platform'
 import { sql } from 'drizzle-orm'
@@ -23,6 +24,8 @@ export type TickReport = Partial<Record<LeaseKind, number>>
 function ownerFor(kind: LeaseKind, now: number): string {
   return `${kind}:${now.toString(36)}:${Math.random().toString(36).slice(2, 8)}`
 }
+
+type Batch = Parameters<JobsContext['db']['batch']>[0]
 
 /** Claim every kind's due work and send it on; record that the tick ran. */
 export async function tick(ctx: JobsContext): Promise<TickReport> {
@@ -39,13 +42,26 @@ export async function tick(ctx: JobsContext): Promise<TickReport> {
       limit: spec.limit,
       due: spec.due(now, ctx),
     })
-    if (claimed.length > 0) {
+    // An item re-claimed with every attempt spent is one whose last holder died without
+    // reporting (a reported failure is dead-lettered by runJob itself): retire it, don't resend.
+    const spent = claimed.filter((c) => c.attempts >= spec.backoff.maxAttempts)
+    for (const c of spent) {
+      const lease: Lease = { kind, key: c.key, owner }
+      const error = `the last attempt died or overran its lease (${c.attempts} started, none finished)`
+      await ctx.db.batch([
+        fence(ctx.db, lease, now),
+        ...deadLetter(ctx.db, lease, c.attempts, error, now),
+        ...spec.exhausted(ctx.db, c.key, now),
+      ] as unknown as Batch)
+    }
+    const send = claimed.filter((c) => c.attempts < spec.backoff.maxAttempts)
+    if (send.length > 0) {
       await ctx.jobs.sendBatch(
         spec.queue,
-        claimed.map((c) => ({ body: { kind, key: c.key, owner } })),
+        send.map((c) => ({ body: { kind, key: c.key, owner } })),
       )
     }
-    report[kind] = claimed.length
+    report[kind] = send.length
   }
   await ctx.db.run(sql`
     insert into ops_heartbeats (name, at, info) values ('tick', ${ctx.clock.now()}, ${JSON.stringify(report)})
@@ -67,10 +83,13 @@ export async function runJob(ctx: JobsContext, message: JobMessage): Promise<Run
   const spec = KINDS[message.kind]
   if (!spec) return { status: 'unknown-kind' }
   const lease: Lease = { kind: message.kind, key: message.key, owner: message.owner }
-  // Renew the claim before any work. A message that waited in its queue past the lease is
-  // dropped here, before it spends a model call the fence would then throw away; and the lease
-  // counts from when the work starts, not from when the tick claimed it.
-  if (!(await extendLease(ctx.db, lease, ctx.clock.now(), spec.ttlMs))) return { status: 'lost' }
+  // Renew the claim and count the attempt before any work. A message that waited in its queue
+  // past the lease is dropped here, before it spends a model call the fence would then throw
+  // away; the lease counts from when the work starts; and an attempt that dies without reporting
+  // has still been counted, so it cannot retry for ever.
+  if ((await startLease(ctx.db, lease, ctx.clock.now(), spec.ttlMs)) === null) {
+    return { status: 'lost' }
+  }
   let error: string
   try {
     const result = await spec.run(ctx, lease)
@@ -87,6 +106,6 @@ export async function runJob(ctx: JobsContext, message: JobMessage): Promise<Run
   await ctx.db.batch([
     ...deadLetter(ctx.db, lease, failed.attempts, error, now),
     ...spec.exhausted(ctx.db, lease.key, now),
-  ] as unknown as Parameters<JobsContext['db']['batch']>[0])
+  ] as unknown as Batch)
   return { status: 'dead', attempts: failed.attempts, error }
 }

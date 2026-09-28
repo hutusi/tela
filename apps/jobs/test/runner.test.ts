@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { first, type TelaDb } from '@tela/data'
+import { first, startLease, type TelaDb } from '@tela/data'
 import { createTestDb } from '@tela/data/testing'
 import { createHttpClient } from '@tela/ingest'
 import { registerFeed } from '@tela/ingest/pipeline'
@@ -172,8 +172,37 @@ describe('tick and runJob', () => {
     clock.advance(KINDS['feed.fetch']!.ttlMs + MIN)
     await tick(ctx)
     expect(await runJob(ctx, message!)).toEqual({ status: 'lost' })
+    // It never started, so waiting in the queue cost it no attempt.
+    expect(await first<{ attempts: number }>(db, sql`select attempts from leases`)).toEqual({
+      attempts: 0,
+    })
     expect(await count('articles')).toBe(0)
     await drain(ctx)
     expect(await count('articles')).toBe(3)
+  })
+
+  test('a job that dies without reporting is counted, then retired rather than retried for ever', async () => {
+    server.text('/feed.xml', summaries())
+    await registerFeed(db, { feedUrl: server.url('/feed.xml'), now: clock.now() })
+    const spec = KINDS['feed.fetch']!
+    for (let attempt = 1; attempt <= spec.backoff.maxAttempts; attempt++) {
+      expect((await tick(ctx))['feed.fetch']).toBe(1)
+      const [message] = ctx.jobs.take('fetch')
+      // runJob starts the attempt, then the invocation is killed (CPU, memory, eviction): no
+      // result, no failLease, only a lease that expires.
+      expect(await startLease(db, message!, clock.now(), spec.ttlMs)).toBe(attempt)
+      clock.advance(spec.ttlMs + MIN)
+    }
+    expect((await tick(ctx))['feed.fetch']).toBe(0)
+    expect(ctx.jobs.take('fetch')).toEqual([])
+    const dead = await first<{ attempts: number; error: string }>(
+      db,
+      sql`select attempts, error from dead_letters where kind = 'feed.fetch'`,
+    )
+    expect(dead?.attempts).toBe(spec.backoff.maxAttempts)
+    expect(dead?.error).toMatch(/died or overran its lease/)
+    expect(await count('leases')).toBe(0)
+    const feed = await first<{ next_fetch_at: number }>(db, sql`select next_fetch_at from feeds`)
+    expect(feed?.next_fetch_at).toBe(clock.now() + 24 * 60 * MIN)
   })
 })

@@ -15,6 +15,7 @@ import {
   isFenceRefusal,
   type Lease,
   release,
+  startLease,
 } from './leases'
 import {
   existingArticles,
@@ -296,7 +297,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         limit: 1,
         due: dueFeeds(T0),
       })
-      expect(late).toEqual([{ key: '1', host: 'h1', owner: 'b' }])
+      expect(late).toEqual([{ key: '1', host: 'h1', owner: 'b', attempts: 0 }])
     })
 
     it('keeps a host busy across kinds, so extraction waits behind a fetch of the same site', async () => {
@@ -421,6 +422,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         limit: 1,
         due: dueFeeds(T0),
       })
+      expect(await startLease(db, lease('1', 'a'), T0, MIN)).toBe(1)
       expect(await failLease(db, lease('1', 'a'), T0 + 1, backoff, 'HTTP 503')).toEqual({
         attempts: 1,
         exhausted: false,
@@ -442,7 +444,8 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         limit: 1,
         due: dueFeeds(T0),
       })
-      expect(retry.map((c) => c.owner)).toEqual(['b'])
+      expect(retry.map((c) => [c.owner, c.attempts])).toEqual([['b', 1]])
+      expect(await startLease(db, lease('1', 'b'), T0 + MIN + 2, MIN)).toBe(2)
       expect(await failLease(db, lease('1', 'b'), T0 + MIN + 3, backoff, 'HTTP 503')).toEqual({
         attempts: 2,
         exhausted: true,
@@ -453,6 +456,23 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       )
       expect(dead).toEqual([{ kind: 'feed.fetch', key: '1', attempts: 2 }])
       expect(await db.all(sql`select * from leases`)).toHaveLength(0)
+    })
+
+    it('counts an attempt when work starts, so a holder that dies without reporting uses one up', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['h1', 'h2'])
+      const claim = (owner: string, now: number) =>
+        claimDue(db, { kind: 'feed.fetch', owner, now, ttlMs: MIN, limit: 2, due: dueFeeds(now) })
+      await claim('a', T0)
+      // Feed 1 starts and its holder dies; feed 2's message waited in its queue and never started.
+      expect(await startLease(db, lease('1', 'a'), T0, MIN)).toBe(1)
+      const again = await claim('b', T0 + 2 * MIN)
+      expect(again.map((c) => [c.key, c.attempts])).toEqual([
+        ['1', 1],
+        ['2', 0],
+      ])
+      // A start on a claim that was lost counts nothing.
+      expect(await startLease(db, lease('1', 'a'), T0 + 2 * MIN, MIN)).toBe(null)
     })
 
     it('forgets the attempt count once the work succeeds', async () => {
@@ -467,6 +487,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         limit: 1,
         due: dueFeeds(T0),
       })
+      await startLease(db, lease('1', 'a'), T0, MIN)
       await failLease(db, lease('1', 'a'), T0 + 1, backoff, 'boom')
       await claimDue(db, {
         kind: 'feed.fetch',
@@ -476,6 +497,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         limit: 1,
         due: dueFeeds(T0),
       })
+      await startLease(db, lease('1', 'b'), T0 + 2 * MIN, MIN)
       await db.batch([fence(db, lease('1', 'b'), T0 + 2 * MIN + 1), release(db, lease('1', 'b'))])
       await claimDue(db, {
         kind: 'feed.fetch',

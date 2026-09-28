@@ -59,8 +59,14 @@ binding. The test suite runs on the portable column; production runs on the Clou
   - `lease_fence.x` is `NOT NULL`, so a lost lease aborts the whole batch, on D1 and libSQL
     alike.
   - The batch ends by releasing the lease.
-- **fail.** A failure raises `attempts` and sets `not_before` with exponential backoff; at the
-  maximum, the item becomes a dead letter.
+- **start and fail.** Starting work renews the lease and raises `attempts`; a reported failure
+  sets `not_before` with exponential backoff, and at the maximum the item becomes a dead letter.
+  The count is taken at the start, not at the failure (2026-09-28, found in the Gate G2 shadow
+  run): a holder that dies over its CPU or memory limit reports nothing, and its lease only
+  expires. Counted at failure, that item would be claimed again every TTL for ever, at the price
+  of a model call each time for a translation. Counted at the start, the claim that finds it
+  already spent retires it as a dead letter instead of sending it. A message that waited in its
+  queue past the lease never starts, so queue lag costs no attempt.
 - **Holders.** Only a lease holder may write columns that jobs own. The API holds no leases, so
   it writes single conditional statements.
 

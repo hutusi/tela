@@ -217,6 +217,11 @@ and only call `SELF.fetch()`. The Worker has no public route.
   dead letter. Fix the cause, then make the domain row due again. Examples:
   - a feed: `update feeds set next_fetch_at = 0 where id = …`;
   - an article to re-extract: `update articles set extract_state = 'due' where id = …`.
+
+  A dead letter whose error reads "died or overran its lease" never reported back: every attempt
+  was killed or outran its TTL. The cause is in the Worker's logs, not the table: look for
+  `exceededCpu`, `exceededMemory` or a wall-clock limit on `/jobs/run` for that key
+  (`wrangler tail tela-jobs --format json`, or the dashboard's observability tab).
 - **Is the tick alive:** `select * from ops_heartbeats`. `tick.at` moves every minute, and
   `info` holds what it claimed per kind.
 - **Fetch a feed now:** `update feeds set next_fetch_at = 0 where id = …`. The next tick claims

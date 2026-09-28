@@ -12,7 +12,8 @@ import type { LeaseKind } from './schema/values'
 
 export type Lease = { kind: LeaseKind; key: string; owner: string }
 
-export type Claimed = { key: string; host: string | null; owner: string }
+/** `attempts` counts starts that did not succeed, including ones that died without reporting. */
+export type Claimed = { key: string; host: string | null; owner: string; attempts: number }
 
 /**
  * Claim up to `limit` due items for `owner`, in `ord` order, one per host, skipping items that are
@@ -60,8 +61,31 @@ export async function claimDue(
     on conflict (kind, key) do update set
       owner = excluded.owner, until = excluded.until, host = excluded.host
     where leases.until < ${now} and leases.not_before <= ${now}
-    returning key, host, owner
+    returning key, host, owner, attempts
   `)
+}
+
+/**
+ * Begin work under a claim: renew it and count the attempt. Counting here rather than on failure
+ * is what catches a holder that dies without reporting (over its CPU or memory limit, evicted,
+ * past its wall clock): its lease only expires, and an attempt counted at failure would never be
+ * counted, so the item would be retried every TTL for ever. A message that waited in its queue
+ * past the lease never starts, so queue lag costs no attempt. Returns the attempt number, or null
+ * when the claim was already lost.
+ */
+export async function startLease(
+  db: TelaDb,
+  lease: Lease,
+  now: number,
+  ttlMs: number,
+): Promise<number | null> {
+  const rows = await db.all<{ attempts: number }>(sql`
+    update leases set until = ${now + ttlMs}, attempts = attempts + 1
+    where kind = ${lease.kind} and key = ${lease.key} and owner = ${lease.owner}
+      and until >= ${now}
+    returning attempts
+  `)
+  return rows[0]?.attempts ?? null
 }
 
 /** Hold a lease longer. Returns false when it was lost (expired, or taken by another owner). */
@@ -106,9 +130,10 @@ export function isFenceRefusal(err: unknown): boolean {
 export type Backoff = { baseMs: number; maxMs: number; maxAttempts: number }
 
 /**
- * Give an item back after a failure: it is not claimed again before `now + base·2^attempts`
- * (capped). Returns the attempt count, or null when the lease was already lost. At
- * `maxAttempts` the caller dead-letters the item and marks its domain row so it stops being due.
+ * Give an item back after a failed attempt (counted by `startLease`): it is not claimed again
+ * before `now + base·2^(attempts-1)` (capped). Returns the attempt count, or null when the lease
+ * was already lost. At `maxAttempts` the caller dead-letters the item and marks its domain row so
+ * it stops being due.
  */
 export async function failLease(
   db: TelaDb,
@@ -120,8 +145,7 @@ export async function failLease(
   const rows = await db.all<{ attempts: number }>(sql`
     update leases set
       until = 0,
-      attempts = attempts + 1,
-      not_before = ${now} + min(${backoff.maxMs}, ${backoff.baseMs} * (1 << min(attempts, 30))),
+      not_before = ${now} + min(${backoff.maxMs}, ${backoff.baseMs} * (1 << max(0, min(attempts - 1, 30)))),
       last_error = ${error.slice(0, 500)}
     where kind = ${lease.kind} and key = ${lease.key} and owner = ${lease.owner}
     returning attempts
