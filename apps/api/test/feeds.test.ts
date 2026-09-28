@@ -69,6 +69,17 @@ describe('discovery', () => {
 
 describe('adding a feed', () => {
   test('registers it once parsed, subscribes the member, and fetches it at once', async () => {
+    // Time passes while tela-jobs fetches the feed, as it does over a real RPC.
+    const body = rss({
+      title: 'Fixture Blog',
+      link: server.url('/'),
+      items: [{ guid: 'a', title: 'A' }],
+    })
+    server.set('/feed.xml', (_req, res) => {
+      api.clock.advance(250)
+      res.writeHead(200, { 'content-type': 'application/xml' })
+      res.end(body)
+    })
     const res = await post('/api/v1/feeds', { feedUrl: server.url('/feed.xml') })
     expect(res.status).toBe(200)
     const { feedId } = (await res.json()) as { feedId: number }

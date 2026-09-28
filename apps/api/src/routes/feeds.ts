@@ -80,7 +80,11 @@ export function feedRoutes(deps: ApiDeps) {
       db,
       sql`select last_fetched_at from feeds where id = ${added.feedId}`,
     )
-    if (feed && feed.last_fetched_at === null) await fetchSoon(db, deps.jobs, added.feedId, now)
+    // Now, not the time before the RPC: tela-jobs stamped the new feed due at its own clock,
+    // which the RPC's own duration has moved past `now`.
+    if (feed && feed.last_fetched_at === null) {
+      await fetchSoon(db, deps.jobs, added.feedId, deps.clock.now())
+    }
     return c.json({ feedId: added.feedId, siteId: added.siteId })
   })
 
