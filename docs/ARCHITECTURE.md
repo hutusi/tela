@@ -280,3 +280,62 @@ The deploy-side checks that gated the merge have passed: Cloudflare through Hype
 Bailian translation run, and the China smoke test from the relay box. What is still open is
 tracked in `docs/OPERATIONS.md` under "Later" — the custom auth domain, and the two switches that
 open signup. `CHANGELOG.md` records what shipped.
+
+## The local-first stack (`refactor/local-first`, in progress)
+
+What replaces everything above at cutover (ADRs 0020–0022). It is built beside the Postgres stack
+so every commit on the branch stays green. This section grows phase by phase and becomes the whole
+document when the old one is deleted.
+
+```
+Browser ──▶ tela-web (edge, unpinned): static SPA, /o/* content objects, /img/*, public pages
+              │ service binding
+              ▼
+            tela-api  (pinned aws:ap-southeast-1) ──┐
+            tela-jobs (pinned aws:ap-southeast-1) ──┼──▶ D1 (primary in Singapore, 6–10 ms)
+              ▲ cron * * * * * / 17 3 * * *         └──▶ R2: tela-content (members), tela-assets (public)
+              │ queues tela-fetch/extract/translate/misc
+              └── cron and queue handlers only call SELF.fetch(): placement pins fetch handlers
+   apps/relay (Node, HK box) ◀── signed POST /fetch for feeds unreachable from Cloudflare
+```
+
+- **`packages/platform`** — `Db` (Drizzle SQLite, atomic batches, no `transaction()`), `Blobs`,
+  `Jobs`, `Clock`, `Mail`. `./cloudflare` holds the bindings (D1, R2, Queues). `./portable` holds
+  libSQL held to D1's limits, S3, memory: the tests and the exit path run on it (ADR 0021).
+- **`packages/data`** — the SQLite schema in one migration, which better-auth's tables share:
+  - **Lease primitive.** `claimDue` claims due items in order, one per host, skipping anything
+    held or backing off. A fenced batch aborts entirely once its lease is lost. `failLease`
+    backs an item off; `deadLetter` retires it.
+  - **Sync sequence.** `bumpSeq` / `currentSeq`.
+  - **`chooseCurrent`**, and the ingest queries that move a whole fetch through one read and one
+    batch via `json_each`.
+  - **Contract suite.** It runs on libSQL (`bun test`) and on D1 in workerd
+    (`bun run test:workers`).
+- **Bodies are versions** (`article_versions`, ADR 0022). Each version's body is an immutable
+  content object at `c/<key>.json` in `tela-content`:
+  - it is already split into top-level blocks carrying their leaf ids;
+  - its images point at `/img/<key>/<index>`;
+  - the raw item HTML sits at `r/<sha>.html` for renormalization.
+  - `articles.current_version` and `content_key` say what readers see.
+- **Ingest** (`packages/ingest/src/pipeline`):
+  - `ingestFeed` runs fetch-feed's behaviour under the feed's lease: conditional GET, relay
+    flip, alias detection, provenance, declared-home adoption, 200-item cap, content-mode
+    learning, scheduling. Everything commits in one fenced batch.
+  - `extractArticleJob` runs Readability eagerly on summary articles, per article host.
+  - `siteAssetsJob` stores raster favicons into `tela-assets`.
+  - `verifyClaimJob` runs the meta or `rel="me"` check, claims the site if nobody holds it, and
+    moves off feeds it doesn't vouch for.
+  - `websubSubscribeJob` sends hub requests; the callback lands on the web app.
+  - `registerFeed` handles discovery, the add-feed RPC and the seed.
+  - **Follow-up work is state, not messages.** A title hash is what title translations are
+    checked against. `extract_state = 'due'`, `assets_checked_at is null` and a pending WebSub
+    row mark the rest.
+- **Jobs** (`apps/jobs`):
+  - `src/kinds.ts` is the one table of background work: due query, lease length, backoff,
+    queue, handler, retirement, whether it is enabled.
+  - `tick` claims each kind's due work and sends it to its queue.
+  - `runJob` does one item and never throws: a failure backs the lease off, and exhaustion
+    dead-letters it and stops the row being due.
+  - `daily` is one batch: relay re-probes, dead-feed revival, pruning, and compacting read-only
+    state under a watermark.
+  - `src/portable.ts` runs the same thing on a timer.

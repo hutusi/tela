@@ -184,6 +184,50 @@ fly deploy --config fly.worker.toml --remote-only --ha=false   # from the reposi
   translations), so a forgotten secret shows up as a crash loop, not as garbled titles.
 - Logs: `fly logs --app tela-worker`; the JSON lines are the same as locally.
 
+### Cloudflare: tela-jobs (`refactor/local-first`, not deployed yet)
+
+The background Worker that replaces the Fly worker at cutover (ADR 0020). The config is
+`apps/jobs/wrangler.jsonc`.
+
+**Resources, once per account:**
+
+- `wrangler d1 create tela --location apac`. The primary lands in Singapore; put its id into
+  `apps/jobs/wrangler.jsonc`.
+- `wrangler r2 bucket create tela-content` for members-only content objects. `tela-assets`
+  already exists (public favicons, behind `assets.<domain>`).
+- `wrangler queues create tela-fetch`, and the same for `tela-extract`, `tela-translate`,
+  `tela-misc` and the alarm-only DLQ `tela-dlq`.
+- Schema: `cd apps/jobs && wrangler d1 migrations apply tela --remote`. The files are
+  `packages/data/migrations`, the same SQL the tests apply on libSQL. Until the first deploy,
+  `0000_init` is regenerated in place rather than stacked.
+- Secrets: `wrangler secret put RELAY_SECRET` (with `RELAY_URL` as a var) once the relay box
+  runs.
+- Vars: `WORKER_USER_AGENT`, `FETCH_TIMEOUT_MS`, `WEBSUB_ENABLED`, `PUBLIC_URL`, as in the
+  environment table.
+
+**Where it runs.** `placement.region = aws:ap-southeast-1` pins the fetch handler beside the D1
+primary. The cron (`* * * * *` tick, `17 3 * * *` daily) and the queue consumers run elsewhere
+and only call `SELF.fetch()`. The Worker has no public route.
+
+**Day 2, all plain SQL** (`wrangler d1 execute tela --remote --command "…"`):
+
+- **What is held right now:** `select kind, key, owner, until, attempts, last_error from leases`.
+  A row with `until = 0` is backing off until `not_before`.
+- **What gave up:** `select * from dead_letters order by at desc limit 20`. Nothing retries a
+  dead letter. Fix the cause, then make the domain row due again. Examples:
+  - a feed: `update feeds set next_fetch_at = 0 where id = …`;
+  - an article to re-extract: `update articles set extract_state = 'due' where id = …`.
+- **Is the tick alive:** `select * from ops_heartbeats`. `tick.at` moves every minute, and
+  `info` holds what it claimed per kind.
+- **Fetch a feed now:** `update feeds set next_fetch_at = 0 where id = …`. The next tick claims
+  it; a live lease is never stolen.
+- Queue messages are only accelerators. Purging a queue loses no work, because the next tick
+  finds everything still due.
+
+**The relay** is its own image: `docker build -f apps/relay/Dockerfile -t tela-relay .`. Run it
+with `RELAY_SECRET` (and `RELAY_SECRET_PREVIOUS` while rotating) behind the TLS proxy described
+in the relay runbook.
+
 ## End-to-end tests
 
 `bun run e2e` (`apps/web/e2e/run.sh`) starts a throwaway Postgres (or uses `E2E_DATABASE_URL`),
