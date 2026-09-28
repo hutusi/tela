@@ -296,7 +296,7 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, /o/* content objects, /
               ▲ cron * * * * * / 17 3 * * *         └──▶ R2: tela-content (members), tela-assets (public)
               │ queues tela-fetch/extract/translate/misc
               └── cron and queue handlers only call SELF.fetch(): placement pins fetch handlers
-   apps/relay (Node, HK box) ◀── signed POST /fetch for feeds unreachable from Cloudflare
+   apps/relay (Node, HK box, not provisioned until a feed needs it) ◀── signed POST /fetch
 ```
 
 - **`packages/platform`** — `Db` (Drizzle SQLite, atomic batches, no `transaction()`), `Blobs`,

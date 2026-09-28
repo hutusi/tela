@@ -2,7 +2,7 @@
 
 Status: accepted (2026-09-27). Supersedes 0002 (Next.js on Cloudflare via OpenNext), 0003
 (Supabase, Drizzle and Hyperdrive) and 0004 (pg-boss). Amends 0001: Node remains the runtime
-only for the relay.
+only for the relay, which is not provisioned until a feed needs it (2026-09-28).
 
 ## Context
 
@@ -55,7 +55,11 @@ Workers can carry:
 - **One provider for runtime and data:** Workers Paid ($5 a month) with D1, R2, Queues and Cron
   Triggers.
   - Supabase (database and Auth), Fly, Hyperdrive, pg-boss, Next.js and OpenNext are removed.
-  - Resend (email), Bailian (the LLM) and the relay box for mainland feeds (ADR 0008) stay.
+  - Resend (email) and Bailian (the LLM) stay. The relay for mainland feeds (ADR 0008) stays in
+    the code but runs on no box until a feed needs it (owner, 2026-09-28). All 40 production
+    feeds, the Chinese blogs among them, fetch from Cloudflare (spike S2 and the Gate G2 shadow
+    run), and a box would be the one server left to patch. Without `RELAY_URL` a feed never
+    changes region; its `timeout_streak` still counts, which is the signal to provision one.
 - **Three Workers.**
   - `tela-web` is the only public one and runs at the reader's edge. It serves the static app,
     immutable content objects and images through the per-colo Cache API. It checks sessions
@@ -77,7 +81,8 @@ Workers can carry:
 
 ## Consequences
 
-- **Cost.** Recurring cost is $5 a month plus LLM tokens, the relay box and the domain. The Paid
+- **Cost.** Recurring cost is $5 a month plus LLM tokens and the domain, and about $4 more for a
+  relay box if one is ever needed. The Paid
   plan includes 10M requests, 30M CPU-ms, 5 GB of D1 and 1M queue operations a month, far above
   what Tela uses.
 - **Nothing to restart.** No machine and no connection pool are left to look after, and no free

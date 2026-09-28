@@ -10,7 +10,7 @@ How Tela is provisioned and deployed. Everything below is live unless marked *la
 | Web | Cloudflare Workers via OpenNext (`apps/web`) | Custom domain only; never share `workers.dev` URLs (blocked in mainland China) |
 | Database + Auth | Supabase, region Tokyo (`ap-northeast-1`) | session pooler as the connection path (the IPv4 add-on is optional, see Provisioning); custom SMTP (Resend); custom auth domain *later* |
 | Worker | Fly.io app `tela-worker`, region `nrt` (`apps/worker`) | Docker image, Node 24; roles via `WORKER_ROLES` |
-| Relay | HK or CN box running the same image with `WORKER_ROLES=relay` | Signed fetch endpoint only, no `DATABASE_URL`; runbook below |
+| Relay | *Not provisioned*: an HK or CN box running `WORKER_ROLES=relay` when a feed needs it | Signed fetch endpoint only, no `DATABASE_URL`; runbook below. Every production feed fetches directly, so none runs (2026-09-28) |
 | Assets | Cloudflare R2 bucket behind `assets.<domain>` | favicons and covers |
 
 ## Environment variables
@@ -200,8 +200,8 @@ The background Worker that replaces the Fly worker at cutover (ADR 0020). The co
 - Schema: `cd apps/jobs && wrangler d1 migrations apply tela --remote`. The files are
   `packages/data/migrations`, the same SQL the tests apply on libSQL. Until the first deploy,
   `0000_init` is regenerated in place rather than stacked.
-- Secrets: `wrangler secret put RELAY_SECRET` (with `RELAY_URL` as a var) once the relay box
-  runs.
+- Secrets: none for the relay. `RELAY_SECRET` (with `RELAY_URL` as a var) is set only if a relay
+  box is ever provisioned; see *When to provision the relay* below.
 - Vars: `WORKER_USER_AGENT`, `FETCH_TIMEOUT_MS`, `WEBSUB_ENABLED`, `PUBLIC_URL`, as in the
   environment table.
 - Translation: `wrangler secret put BAILIAN_API_KEY`. The key is a mainland one, so leave
@@ -246,6 +246,14 @@ and only call `SELF.fetch()`. The Worker has no public route.
 **The relay** is its own image: `docker build -f apps/relay/Dockerfile -t tela-relay .`. Run it
 with `RELAY_SECRET` (and `RELAY_SECRET_PREVIOUS` while rotating) behind the TLS proxy described
 in the relay runbook.
+
+**When to provision the relay.** Not until a feed needs it. Without `RELAY_URL` nothing ever
+moves to the relay, but each feed still counts consecutive timeouts:
+`select id, feed_url, timeout_streak, last_error from feeds where timeout_streak >= 3`. A feed
+that stays in that list while the rest of the web answers (a mainland host Cloudflare cannot
+reach) is the reason to run the box. Build the image, deploy it on an HK box as the relay
+runbook says, and set `RELAY_URL` and the `RELAY_SECRET` secret on `tela-jobs`. The next
+timeouts move those feeds over on their own.
 
 ## End-to-end tests
 
