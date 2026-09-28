@@ -101,6 +101,14 @@ binding: discovery, adding a feed by URL, starting a claim, and reading OPML.
 - An OPML import registers up to 500 feeds in three statements without fetching, under
   placeholder sites keyed by origin. The sweeps fetch them, per host, within the minute.
 
+**Public reads** (`/api/v1/public/discover`, `/sites/:id`, `/profiles/:handle`) need no
+session. They are JSON with `s-maxage=300` and a day of stale-while-revalidate; tela-web renders
+them into pages with the reader's own components (Phase 6).
+- They show listed and featured blogs only. The Postgres app rendered a private or rejected
+  site's page for anyone who knew its id, which on a cached public page would be a leak.
+- A profile's subscriptions appear only when the member turned that on. Private blogs among them
+  are named, since the member chose to show them, but get no page link.
+
 **Claims** derive their token rather than store it: an HMAC of the site and member under the auth
 secret.
 - It is stable across devices, and nothing exists until the member asks for the check.

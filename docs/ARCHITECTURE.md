@@ -348,6 +348,14 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, /o/* content objects, /
   - Translation requests reserve against the member's day and are claimed and queued at once.
   - Claims derive their token as an HMAC, so a claim row exists only once the member asks for
     the check.
+  - The rest of the member surface:
+    - the profile (the handle is unique, checked in the update itself);
+    - owner-only blog topics and translation opt-out;
+    - the author dashboard;
+    - search past the device's horizon (`LIKE`, ranked in the app).
+  - Public JSON under `/api/v1/public/*` (listed and featured blogs only, edge-cacheable).
+  - The WebSub callback at `/api/websub/:feedId`. A signed ping sets `refetch_requested_at` and
+    claims the fetch at once.
 - **Sync** (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025):
   - `GET /api/v1/sync?cursor=` reads a member's rows in one batch: a horizon snapshot at cursor 0,
     and deltas by seq in pages that end on a seq boundary.

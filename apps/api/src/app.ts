@@ -10,7 +10,10 @@ import { type Auth, createAuth } from './auth'
 import type { ApiDeps } from './deps'
 import { claimRoutes } from './routes/claims'
 import { feedRoutes } from './routes/feeds'
+import { memberRoutes } from './routes/members'
+import { publicRoutes } from './routes/public'
 import { translationRoutes } from './routes/translations'
+import { websubRoutes } from './routes/websub'
 import { answerPull } from './sync/pull'
 import { applyPush } from './sync/push'
 
@@ -80,7 +83,13 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     })
   }
 
+  // Anyone may read these; tela-web caches them at the edge.
+  app.route('/api/v1/public', publicRoutes(deps))
+  // Hubs, not members, call this; the signature is the authorization.
+  app.route('/api/websub', websubRoutes(deps))
+
   app.use('/api/v1/*', async (c, next) => {
+    if (c.req.path.startsWith('/api/v1/public/')) return next()
     const session = await auth.api.getSession({ headers: c.req.raw.headers })
     if (!session) return c.json({ error: 'unauthorized' }, 401)
     c.set('member', { id: session.user.id, email: session.user.email })
@@ -127,6 +136,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1/translations', translationRoutes(deps))
   app.route('/api/v1/feeds', feedRoutes(deps))
   app.route('/api/v1/claims', claimRoutes(deps))
+  app.route('/api/v1', memberRoutes(deps))
 
   return { app, auth }
 }

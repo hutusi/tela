@@ -12,7 +12,8 @@
     "./pipeline": "./src/pipeline/index.ts",
     "./relay": "./src/relay.ts",
     "./schedule": "./src/schedule.ts",
-    "./region-policy": "./src/region-policy.ts"
+    "./region-policy": "./src/region-policy.ts",
+    "./websub": "./src/websub.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
