@@ -23,6 +23,7 @@ and the way in is an admin invite.
 | `packages/shared` | Constants and small helpers shared by web and worker |
 | `packages/config` | Shared tsconfig bases |
 | `packages/platform` | Platform seams (Db, Blobs, Jobs, Clock, Mail) with Cloudflare and portable adapters; being built on `refactor/local-first` (ADRs 0020, 0021) |
+| `packages/data` | SQLite data model for D1 and libSQL (schema, migrations, leases, sync sequence); replaces `packages/db` at cutover |
 | `docs/` | [Architecture](docs/ARCHITECTURE.md), [Operations](docs/OPERATIONS.md), [ADRs](docs/adr/) |
 
 ## Quick start

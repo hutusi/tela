@@ -1,0 +1,24 @@
+{
+  "name": "@tela/data",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Tela's SQLite data model for D1 and libSQL: schema, migrations, leases, the sync sequence, and query helpers",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10"
+  },
+  "dependencies": {
+    "@tela/platform": "workspace:*",
+    "@tela/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  }
+}
