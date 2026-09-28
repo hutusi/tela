@@ -8,14 +8,17 @@
     ".": "./src/index.ts",
     "./extract": "./src/extract-article.ts",
     "./http": "./src/http.ts",
-    "./net": "./src/net.ts"
+    "./net": "./src/net.ts",
+    "./pipeline": "./src/pipeline/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@tela/content": "workspace:*",
+    "@tela/data": "workspace:*",
     "@tela/db": "workspace:*",
+    "@tela/platform": "workspace:*",
     "@tela/shared": "workspace:*",
     "drizzle-orm": "^0.45.2"
   }

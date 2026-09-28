@@ -121,7 +121,9 @@
       "version": "0.0.0",
       "dependencies": {
         "@tela/content": "workspace:*",
+        "@tela/data": "workspace:*",
         "@tela/db": "workspace:*",
+        "@tela/platform": "workspace:*",
         "@tela/shared": "workspace:*",
         "drizzle-orm": "^0.45.2",
       },
