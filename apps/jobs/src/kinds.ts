@@ -10,6 +10,7 @@ import {
   dueExtractions,
   dueFeeds,
   dueTitles,
+  FEED_FETCH_TTL_MS,
   failDueTitles,
   type LeaseKind,
   type QueueName,
@@ -64,8 +65,7 @@ const MIN = 60_000
 export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
   'feed.fetch': {
     queue: 'fetch',
-    // A fetch is a 20 s request plus parsing; the lease outlives both with room to spare.
-    ttlMs: 3 * MIN,
+    ttlMs: FEED_FETCH_TTL_MS,
     limit: 500,
     backoff: { baseMs: MIN, maxMs: 6 * 60 * MIN, maxAttempts: 5 },
     due: dueFeeds,

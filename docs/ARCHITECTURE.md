@@ -343,6 +343,11 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, /o/* content objects, /
   - Sign-in is better-auth with email codes, through its Drizzle adapter over `TelaDb`.
   - Invites go through `/api/admin/invite`.
   - Every `/api/v1/*` route needs a session, read from the five-minute signed cookie cache.
+  - Work that fetches goes to tela-jobs' `Ingest` RPC (`packages/ingest/src/pipeline/rpc.ts`):
+    discovery, adding a feed, starting a claim, reading OPML.
+  - Translation requests reserve against the member's day and are claimed and queued at once.
+  - Claims derive their token as an HMAC, so a claim row exists only once the member asks for
+    the check.
 - **Sync** (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025):
   - `GET /api/v1/sync?cursor=` reads a member's rows in one batch: a horizon snapshot at cursor 0,
     and deltas by seq in pages that end on a seq boundary.

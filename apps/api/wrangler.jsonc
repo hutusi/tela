@@ -19,6 +19,9 @@
     }
   ],
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content" }],
+  // Work that fetches on a member's behalf runs in tela-jobs, over RPC: the parsers and the
+  // DNS-pinned client stay out of this bundle.
+  "services": [{ "binding": "JOBS", "service": "tela-jobs", "entrypoint": "Ingest" }],
   "queues": {
     // Producers only: work a reader triggers is claimed here and sent on; tela-jobs consumes.
     "producers": [

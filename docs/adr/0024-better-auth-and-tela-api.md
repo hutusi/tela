@@ -91,6 +91,22 @@ because the reader needs the answer.
 - `GET /api/v1/translations/:contentKey/:lang` is what the reader polls while chunks stream in.
   It never says who asked or what it cost.
 
+**Work that fetches runs in tela-jobs**, behind its `Ingest` entrypoint on the `JOBS` service
+binding: discovery, adding a feed by URL, starting a claim, and reading OPML.
+- tela-api never bundles linkedom, the feed parsers or the DNS-pinned client. Parsing OPML in
+  tela-api cost 154 KB gzipped for feedsmith alone.
+- A feed added by URL is fetched and parsed before it becomes a row. The Postgres app took any
+  http(s) URL a hidden form field carried.
+- A new feed is claimed and queued at once, so its first posts arrive in seconds.
+- An OPML import registers up to 500 feeds in three statements without fetching, under
+  placeholder sites keyed by origin. The sweeps fetch them, per host, within the minute.
+
+**Claims** derive their token rather than store it: an HMAC of the site and member under the auth
+secret.
+- It is stable across devices, and nothing exists until the member asks for the check.
+- A row made when the member started would be `pending`, which is what the verify sweep claims,
+  so it would be checked before the token could be on the page.
+
 ## Consequences
 
 - **Signing out is not instant everywhere.** The signed session cache stays valid for up to five

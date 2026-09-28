@@ -199,6 +199,9 @@ jobs queues.
     code fails loudly rather than pretending.
 - **Vars:** `PUBLIC_URL` (the one public origin, better-auth's base URL and trusted origin) and
   `MAIL_FROM`.
+- **Deploy order:** tela-jobs first. tela-api's `JOBS` service binding names its `Ingest`
+  entrypoint, which carries discovery, adding a feed, starting a claim and reading OPML; the
+  binding fails to resolve until tela-jobs exports it.
 - **Invite a member:** `ADMIN_TOKEN=… bun run admin invite reader@example.com`. It creates the
   account and its profile, and mails a code; inviting an existing address only mails a fresh
   code. Registration is otherwise closed (ADR 0015's policy).

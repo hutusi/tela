@@ -41,6 +41,9 @@ export async function loadFeedForFetch(db: TelaDb, feedId: number): Promise<Feed
   }
 }
 
+/** How long a feed fetch's claim holds: a 20 s request plus parsing, with room to spare. */
+export const FEED_FETCH_TTL_MS = 3 * 60_000
+
 /** Feeds due for a fetch, for `claimDue`: one per host, oldest due first. */
 export const dueFeeds = (now: number): SQL =>
   sql`select id as key, host, next_fetch_at as ord from feeds

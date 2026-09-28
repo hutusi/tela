@@ -1,5 +1,6 @@
 import type { D1Database, Queue, R2Bucket } from '@cloudflare/workers-types'
 import type { JobMessage } from '@tela/data'
+import type { Ingest } from '@tela/ingest/pipeline'
 
 /** tela-api's bindings, vars and secrets (wrangler.jsonc; secrets via `wrangler secret put`). */
 export type Env = {
@@ -9,6 +10,8 @@ export type Env = {
   EXTRACT_QUEUE: Queue<JobMessage>
   TRANSLATE_QUEUE: Queue<JobMessage>
   MISC_QUEUE: Queue<JobMessage>
+  /** tela-jobs' `Ingest` entrypoint: discovery, adding a feed, starting a claim. */
+  JOBS: Ingest
   /** The public origin, e.g. https://tela.ainaive.com. */
   PUBLIC_URL: string
   MAIL_FROM: string

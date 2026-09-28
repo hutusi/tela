@@ -9,7 +9,10 @@
     "./images": "./src/images.ts",
     "./split": "./src/split.ts",
     "./tagged": "./src/tagged.ts",
-    "./extract": "./src/extract.ts"
+    "./extract": "./src/extract.ts",
+    "./opml": "./src/opml.ts",
+    "./tokens": "./src/tokens.ts",
+    "./url": "./src/url.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

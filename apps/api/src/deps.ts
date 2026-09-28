@@ -3,6 +3,7 @@
  * value, so the same app runs in the Cloudflare Worker and in the bun test suite on libSQL.
  */
 import type { JobQueues, TelaDb } from '@tela/data'
+import type { Ingest } from '@tela/ingest/pipeline'
 import type { Blobs, Clock, Jobs, Mail } from '@tela/platform'
 
 export type ApiConfig = {
@@ -24,5 +25,7 @@ export type ApiDeps = {
   jobs: Jobs<JobQueues>
   clock: Clock
   mail: Mail
+  /** Work that fetches on a member's behalf: tela-jobs' `Ingest` entrypoint in production. */
+  ingest: Ingest
   config: ApiConfig
 }

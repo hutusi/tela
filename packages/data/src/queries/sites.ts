@@ -157,3 +157,46 @@ export async function declaredHomeHonoured(
   const claimedBy = rows[0]?.claimedBy ?? null
   return claimedBy === null || claimedBy === actorId
 }
+
+/**
+ * Register many feed URLs at once (an OPML import): each under a placeholder site keyed by its own
+ * origin, due at once. Three statements whatever the count, so 500 feeds stay far inside D1's
+ * per-invocation query limit; the first fetch moves each feed to the site it declares. Returns
+ * the feed ids, new and existing alike. Nothing is fetched here, so nothing is verified: a URL
+ * that is not a feed fails its first fetch and dies like any other dead feed.
+ */
+export async function importFeedUrls(
+  db: TelaDb,
+  feeds: { feedUrl: string; host: string; origin: string }[],
+  actorId: string,
+  now: number,
+): Promise<number[]> {
+  if (feeds.length === 0) return []
+  const rows = JSON.stringify(feeds.map((f) => [f.feedUrl, f.host, f.origin]))
+  const results = await db.batch([
+    bumpSeq(db),
+    db.run(sql`
+      insert into sites (home_url, created_at, updated_at, seq)
+      select distinct value->>2, ${now}, ${now}, ${currentSeq} from json_each(${rows}) where true
+      on conflict (home_url) do nothing
+    `),
+    db.run(sql`
+      insert into feeds (site_id, feed_url, host, next_fetch_at, added_by, created_at, updated_at, seq)
+      select s.id, value->>0, value->>1, ${now}, ${actorId}, ${now}, ${now}, ${currentSeq}
+      from json_each(${rows}) join sites s on s.home_url = value->>2
+      where true
+      on conflict (feed_url) do nothing
+    `),
+    db.all(sql`
+      select f.id from feeds f
+      where f.feed_url in (select value->>0 from json_each(${rows}))
+    `),
+  ] as never)
+  return ((results as unknown[])[3] as { id: number }[]).map((r) => r.id)
+}
+
+/** Claims a member asked to verify. Leased by the site's host, so one claim per site at a time. */
+export const dueClaims = (): SQL =>
+  sql`select c.id as key, substr(s.home_url, instr(s.home_url, '://') + 3) as host,
+        c.created_at as ord
+      from site_claims c join sites s on s.id = c.site_id where c.status = 'pending'`

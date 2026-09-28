@@ -8,6 +8,8 @@ import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type Auth, createAuth } from './auth'
 import type { ApiDeps } from './deps'
+import { claimRoutes } from './routes/claims'
+import { feedRoutes } from './routes/feeds'
 import { translationRoutes } from './routes/translations'
 import { answerPull } from './sync/pull'
 import { applyPush } from './sync/push'
@@ -123,6 +125,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   })
 
   app.route('/api/v1/translations', translationRoutes(deps))
+  app.route('/api/v1/feeds', feedRoutes(deps))
+  app.route('/api/v1/claims', claimRoutes(deps))
 
   return { app, auth }
 }

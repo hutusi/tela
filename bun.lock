@@ -17,6 +17,7 @@
       "dependencies": {
         "@tela/content": "workspace:*",
         "@tela/data": "workspace:*",
+        "@tela/ingest": "workspace:*",
         "@tela/platform": "workspace:*",
         "@tela/shared": "workspace:*",
         "@tela/sync": "workspace:*",

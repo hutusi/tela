@@ -1,6 +1,8 @@
 /** A tela-api on the portable path: libSQL, memory mail, blobs and queues. */
 import type { JobQueues, TelaDb } from '@tela/data'
 import { createTestDb } from '@tela/data/testing'
+import { createHttpClient } from '@tela/ingest/http'
+import { createIngest } from '@tela/ingest/pipeline'
 import { fakeClock, memoryBlobs, memoryJobs, memoryMail } from '@tela/platform/portable'
 import { createApp } from '../src/app'
 import type { ApiConfig } from '../src/deps'
@@ -26,12 +28,21 @@ export async function createTestApi(overrides: ConfigOverrides = {}) {
   const jobs = memoryJobs<JobQueues>()
   const blobs = memoryBlobs()
   const clock = fakeClock(Date.UTC(2026, 8, 28, 12))
+  // The real ingest, in-process, allowed to reach the local fixture server.
+  const http = createHttpClient({
+    userAgent: 'TelaTest/1.0',
+    politenessMs: 0,
+    allowPrivateHosts: true,
+    timeoutMs: 2000,
+  })
+  const ingest = createIngest({ db, http, now: () => clock.now() })
   const { app, auth } = createApp({
     db,
     blobs,
     jobs,
     clock,
     mail,
+    ingest,
     config: config as ApiConfig,
   })
   /** A request as the browser sends it through tela-web: same origin, JSON, cookies. */

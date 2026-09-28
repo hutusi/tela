@@ -4,6 +4,8 @@
  * the spikes), so they only dispatch to that handler over the SELF binding (ADR 0020). The
  * handler has no public route: it is reachable through service bindings alone.
  */
+
+import { WorkerEntrypoint } from 'cloudflare:workers'
 import type {
   Request as CfRequest,
   ExecutionContext,
@@ -13,6 +15,7 @@ import type {
 import * as schema from '@tela/data/schema'
 // Subpaths only: the package root still re-exports the Postgres-era fetch code (until cutover).
 import { createHttpClient } from '@tela/ingest/http'
+import { createIngest, type Ingest as IngestApi } from '@tela/ingest/pipeline'
 import { createRelayClient } from '@tela/ingest/relay'
 import { configFromEnv, createTranslator, isAccidentalMock, type Translator } from '@tela/llm'
 import { systemClock } from '@tela/platform'
@@ -83,6 +86,30 @@ function context(env: Env): JobsContext {
           },
         }
       : {}),
+  }
+}
+
+/**
+ * What tela-api asks of this Worker over its `JOBS` service binding: the work that fetches on a
+ * member's behalf (discovery, adding a feed, starting a claim), so tela-api never bundles the
+ * parsers or the DNS-pinned client (ADR 0024). Runs pinned beside D1 like the fetch handler.
+ */
+export class Ingest extends WorkerEntrypoint<Env> implements IngestApi {
+  private ingest(): IngestApi {
+    const ctx = context(this.env)
+    return createIngest({ db: ctx.db, http: ctx.http, now: () => Date.now() })
+  }
+  discover(input: Parameters<IngestApi['discover']>[0]) {
+    return this.ingest().discover(input)
+  }
+  addFeed(input: Parameters<IngestApi['addFeed']>[0]) {
+    return this.ingest().addFeed(input)
+  }
+  startClaim(input: Parameters<IngestApi['startClaim']>[0]) {
+    return this.ingest().startClaim(input)
+  }
+  readOpml(input: Parameters<IngestApi['readOpml']>[0]) {
+    return this.ingest().readOpml(input)
   }
 }
 

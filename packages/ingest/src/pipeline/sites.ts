@@ -173,10 +173,8 @@ export async function resolveDeclaredFeeds(
   return [...out]
 }
 
-/** Claims a member asked to verify. Leased by the site's host, so one claim per site at a time. */
-export const dueClaims = (): SQL =>
-  sql`select c.id as key, ${siteHost(sql`s.home_url`)} as host, c.created_at as ord
-      from site_claims c join sites s on s.id = c.site_id where c.status = 'pending'`
+/** Claims a member asked to verify (in `@tela/data`, so tela-api can claim one at once). */
+export { dueClaims } from '@tela/data'
 
 export type ClaimOutcome =
   | { status: 'verified'; method: 'meta' | 'rel_me'; detached: number }

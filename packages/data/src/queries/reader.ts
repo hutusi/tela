@@ -32,3 +32,34 @@ export async function unsubscribe(db: TelaDb, userId: string, feedId: number, no
     ...recountReaders(db, siteOfFeed(feedId), now),
   ])
 }
+
+/**
+ * Subscribe to many feeds at once (an OPML import), in one batch. Returns how many subscriptions
+ * are new or revived; ones already active are left as they are.
+ */
+export async function subscribeMany(
+  db: TelaDb,
+  userId: string,
+  feedIds: number[],
+  now: number,
+): Promise<number> {
+  if (feedIds.length === 0) return 0
+  const ids = JSON.stringify(feedIds)
+  const results = await db.batch([
+    bumpSeq(db),
+    db.all(sql`
+      insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at, seq)
+      select ${userId}, value, 0, ${now}, ${now}, ${currentSeq} from json_each(${ids}) where true
+      on conflict (user_id, feed_id) do update set
+        deleted_at = null, updated_at = excluded.updated_at, seq = excluded.seq
+      where subscriptions.deleted_at is not null
+      returning feed_id
+    `),
+    ...recountReaders(
+      db,
+      sql`select distinct site_id from feeds where id in (select value from json_each(${ids}))`,
+      now,
+    ),
+  ] as never)
+  return ((results as unknown[])[1] as unknown[]).length
+}

@@ -38,6 +38,7 @@ function appFor(env: Env) {
     }),
     clock: systemClock,
     mail: mailFor(env),
+    ingest: env.JOBS,
     config: {
       publicUrl: env.PUBLIC_URL,
       authSecret: env.AUTH_SECRET,
