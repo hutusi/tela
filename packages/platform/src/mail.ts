@@ -41,3 +41,14 @@ export function resendMail(options: { apiKey: string; from: string; fetch?: type
     },
   }
 }
+
+/** Mail that goes nowhere; tests and a Worker's test mode read the outbox. */
+export function memoryMail(): Mail & { readonly outbox: MailMessage[] } {
+  const outbox: MailMessage[] = []
+  return {
+    outbox,
+    async send(message) {
+      outbox.push(message)
+    },
+  }
+}

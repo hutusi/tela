@@ -12,6 +12,7 @@ import {
   dueTitles,
   failDueTitles,
   type LeaseKind,
+  type QueueName,
   settleExtraction,
   type TelaDb,
 } from '@tela/data'
@@ -29,12 +30,7 @@ import { type SQL, sql } from 'drizzle-orm'
 import { translateBodyJob } from './translation/body'
 import { TITLE_TTL_MS, type TranslationContext, translateTitlesJob } from './translation/titles'
 
-export const QUEUES = ['fetch', 'extract', 'translate', 'misc'] as const
-export type QueueName = (typeof QUEUES)[number]
-
-/** What a queue message carries: exactly enough to fence the work to its claim. */
-export type JobMessage = { kind: LeaseKind; key: string; owner: string }
-export type JobQueues = { [Q in QueueName]: JobMessage }
+export { type JobMessage, type JobQueues, QUEUES, type QueueName } from '@tela/data'
 
 /** What a step reports. `retry` asks the runner to back the lease off. */
 export type StepResult = { status: string; error?: string }

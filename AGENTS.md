@@ -30,6 +30,7 @@ Decisions that look odd but are deliberate:
 | `apps/web` | Next.js 16 App Router, Tailwind v4, next-intl (no i18n routing), Drizzle server-side; Cloudflare Workers via OpenNext |
 | `apps/worker` | Node 24 process bundled by Bun: `src/roles.ts`, `src/queues.ts`, `src/jobs/` |
 | `apps/jobs` | *(refactor/local-first)* The `tela-jobs` Worker. `src/kinds.ts` is every kind of background work (due query, lease, backoff, queue, handler). `src/runner.ts` holds `tick` and `runJob`, both portable. `src/worker.ts` is the Cloudflare entry: its cron and queue handlers only dispatch to the Singapore-pinned fetch handler over `SELF`. `src/portable.ts` runs the same work on a timer. Replaces `apps/worker` at cutover |
+| `apps/api` | *(refactor/local-first)* The `tela-api` Worker (ADR 0024): Hono, pinned beside D1, no public route. `src/app.ts` builds every route from portable deps (`createApp`), so the bun suite runs it on libSQL; `src/auth.ts` is better-auth (email codes, Drizzle adapter over `TelaDb`); `src/worker.ts` is the Cloudflare entry; `scripts/admin.ts` is `bun run admin`. Replaces `apps/web`'s server side at cutover |
 | `apps/relay` | *(refactor/local-first)* The China fetch relay (ADR 0008) as its own Node app: `src/server.ts` over `node:http`, `src/safe-fetch.ts` (DNS-pinned undici), `src/config.ts`, and a Dockerfile. It is the only Node process Tela would run, and no box runs it until a feed times out from Cloudflare (OPERATIONS.md); it replaces the `relay` role at cutover |
 
 ## Commands
@@ -51,6 +52,7 @@ bun run db:prepare                   # the same setup applied to an existing dat
 bun run worker:once fetch <feedUrl>  # run one job by hand (DATABASE_URL=…)
 bun run worker:once repair-titles    # requeue missing eager title translations in batches
 bun run worker:once seed-discover    # fetch the curated blogs and feature them in Discover
+bun run admin invite <email>         # invite a member through tela-api (ADMIN_TOKEN=…, TELA_URL optional)
 cd apps/web && bun run preview       # OpenNext build + local Workers runtime
 cd apps/web && bun run icons         # redraw icon.svg, favicon.ico, apple-icon.png from the mark
 ```
@@ -154,7 +156,8 @@ Defects that already cost time here, not hypotheticals.
 - **Never store a jittered value back into the field the jitter is computed from.** `fetch_interval_sec` fed its own ±10% back in as the next input, so the spread compounded per backoff step and the column climbed past the clamp. Jitter the derived timestamp, not the stored interval.
 - **drizzle 0.45's D1 `batch` crashes on raw statements with parameters** ("cannot read properties of undefined (reading 'bind')"). It binds through a prepared `stmt` that `db.run(sql…)` items do not have, and every fenced or seq-stamped batch has such items. `d1Db` in `packages/platform/src/cloudflare.ts` rebuilds `batch` from each item's `getQuery()`. libSQL never had the bug, which is why the contract suite runs on D1 too (`bun run test:workers`); keep it green across drizzle upgrades.
 - **SQLite's `INSERT … SELECT … ON CONFLICT` needs a `WHERE` on the SELECT**, or the upsert clause parses as a join constraint. `WHERE true` is enough; `claimDue` is the example.
-- **better-auth validates its schema at runtime by default**, which costs about three D1 round trips on every new instance (560–590 ms from the reader's edge, spike S4). Production sets `advanced.database.validateSchema: false` and CI runs the check. Behind Cloudflare it must also key IPs on `cf-connecting-ip`, or every visitor shares one rate-limit bucket.
+- **better-auth's schema validation costs depend on the adapter.** Through its native D1 driver it introspects the database, about three round trips on every new instance (560–590 ms from the reader's edge, spike S4). Tela uses the Drizzle adapter, where it only inspects the schema object, so it stays on (ADR 0024). Behind Cloudflare it must key IPs on `cf-connecting-ip`, or every visitor shares one rate-limit bucket.
+- **better-auth rate-limits its own endpoints per address**: three sign-in tries a minute. A test that makes a fourth try from one address is testing the rate limit, whatever it is named. That is how a three-attempts test passed with the rule loosened to ten. Send each try from its own `cf-connecting-ip`, and test the limit on its own.
 - **A lease attempt is counted when the work starts, not when it fails.** A Worker killed over its CPU or memory limit reports nothing, and its lease simply expires; counted at failure, that item was re-claimed every TTL for ever, and for a body translation every re-claim repeats a paid model call. `runJob` calls `startLease` before any work, and `tick` retires a re-claimed item that has spent its attempts instead of sending it. Anything else that runs leased work must start it the same way.
 - **Cron and queue handlers run far from D1** (Paris and Los Angeles in the spikes, 160–250 ms per round trip), and placement never moves them. Only a fetch handler pinned with `placement.region = aws:ap-southeast-1` sits beside the Singapore primary (6–10 ms). That is why every job body runs behind `SELF.fetch()`.
 

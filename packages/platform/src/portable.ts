@@ -9,7 +9,6 @@ import type { BlobObject, BlobPutOptions, Blobs } from './blobs'
 import type { Clock } from './clock'
 import { checkD1Limits, type Db } from './db'
 import type { JobMessage, Jobs, QueueMap } from './jobs'
-import type { Mail, MailMessage } from './mail'
 
 function parameterCount(args: InArgs | undefined): number {
   if (!args) return 0
@@ -247,13 +246,5 @@ export function memoryJobs<Q extends QueueMap>(): Jobs<Q> & {
   }
 }
 
-/** Mail that goes nowhere; tests read the outbox. */
-export function memoryMail(): Mail & { readonly outbox: MailMessage[] } {
-  const outbox: MailMessage[] = []
-  return {
-    outbox,
-    async send(message) {
-      outbox.push(message)
-    },
-  }
-}
+/** Mail that goes nowhere (in `./mail`, so a Worker's test mode can use it without libSQL). */
+export { memoryMail } from './mail'

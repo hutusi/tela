@@ -184,6 +184,34 @@ fly deploy --config fly.worker.toml --remote-only --ha=false   # from the reposi
   translations), so a forgotten secret shows up as a crash loop, not as garbled titles.
 - Logs: `fly logs --app tela-worker`; the JSON lines are the same as locally.
 
+### Cloudflare: tela-api (`refactor/local-first`, not deployed yet)
+
+Sign-in, sync, mutations and every reader RPC (ADR 0024). The config is `apps/api/wrangler.jsonc`.
+It uses the same D1 database and `tela-content` bucket as tela-jobs, and only produces to the
+jobs queues.
+
+- **Secrets** (`cd apps/api && wrangler secret put …`):
+  - `AUTH_SECRET`: 32+ random bytes, e.g. `openssl rand -base64 48`. It signs sessions and the
+    five-minute cookie cache, and tela-web must hold the same value to read that cache.
+    Rotating it signs everyone out.
+  - `ADMIN_TOKEN`: the bearer token for `/api/admin/*`. Unset, those routes answer 403.
+  - `RESEND_API_KEY`: a sending-only Resend key for the verified domain. Without it, sending a
+    code fails loudly rather than pretending.
+- **Vars:** `PUBLIC_URL` (the one public origin, better-auth's base URL and trusted origin) and
+  `MAIL_FROM`.
+- **Invite a member:** `ADMIN_TOKEN=… bun run admin invite reader@example.com`. It creates the
+  account and its profile, and mails a code; inviting an existing address only mails a fresh
+  code. Registration is otherwise closed (ADR 0015's policy).
+- **Sign-in trouble:**
+  - Codes last an hour and allow three attempts. The sign-in endpoint allows three tries a
+    minute per address.
+  - `select key, count, last_request from rate_limit` shows better-auth's windows. Tela's own
+    action limits are `action_limits`.
+  - A code that never arrives: check Resend's log for the address first, then the Worker's logs
+    for the send error.
+- **Sessions** last 60 days. A signed copy is trusted for five minutes, so a signed-out session
+  can linger that long on a device that kept the cookie.
+
 ### Cloudflare: tela-jobs (`refactor/local-first`, not deployed yet)
 
 The background Worker that replaces the Fly worker at cutover (ADR 0020). The config is

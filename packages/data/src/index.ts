@@ -1,5 +1,6 @@
 export * from './db'
 export * from './first'
+export * from './jobs'
 export * from './leases'
 export * from './queries/ingest'
 export * from './queries/provenance'

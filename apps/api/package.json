@@ -1,0 +1,24 @@
+{
+  "name": "@tela/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The tela-api Worker: sync, mutations, sign-in and every reader RPC, pinned beside D1; reached only through tela-web",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "@tela/content": "workspace:*",
+    "@tela/data": "workspace:*",
+    "@tela/platform": "workspace:*",
+    "@tela/shared": "workspace:*",
+    "better-auth": "1.7.6",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.10"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260927.1",
+    "wrangler": "^4.129.0"
+  }
+}

@@ -25,6 +25,7 @@
     "db:local": "bun run --filter @tela/db local-db",
     "worker:once": "bun run --filter @tela/worker once",
     "e2e": "apps/web/e2e/run.sh",
+    "admin": "bun apps/api/scripts/admin.ts",
     "db:prepare": "bun run --filter @tela/db prepare-db"
   },
   "devDependencies": {
