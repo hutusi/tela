@@ -282,3 +282,101 @@ export function noteHub(
     .values({ feedId: feed.id, hubUrl, topicUrl: feed.feedUrl, secret, updatedAt: now })
     .onConflictDoNothing({ target: websubSubscriptions.feedId })
 }
+
+/** What extraction needs about one article: where to fetch, and the versions it has. */
+export type ArticleForExtraction = {
+  id: number
+  feedId: number
+  url: string | null
+  title: string
+  author: string | null
+  sourceLang: string | null
+  extractState: ExtractState
+  fetchRegion: 'global' | 'cn'
+  contentMode: 'unknown' | 'full' | 'summary'
+  versions: StoredVersion[]
+}
+
+export async function loadArticleForExtraction(
+  db: TelaDb,
+  articleId: number,
+): Promise<ArticleForExtraction | null> {
+  const row = await first<{
+    id: number
+    feed_id: number
+    url: string | null
+    title: string
+    author: string | null
+    source_lang: string | null
+    extract_state: ExtractState
+    fetch_region: 'global' | 'cn'
+    content_mode: 'unknown' | 'full' | 'summary'
+    versions: string
+  }>(
+    db,
+    sql`
+      select a.id, a.feed_id, a.url, a.title, a.author, a.source_lang, a.extract_state,
+        f.fetch_region, f.content_mode,
+        coalesce((
+          select json_group_array(json_object(
+            'version', v.version, 'provenance', v.provenance,
+            'contentKey', v.content_key, 'bodyChars', v.body_chars, 'excerpt', v.excerpt,
+            'wordCount', v.word_count, 'readingMinutes', v.reading_minutes, 'lang', v.lang))
+          from article_versions v where v.article_id = a.id
+        ), '[]') as versions
+      from articles a join feeds f on f.id = a.feed_id
+      where a.id = ${articleId}
+    `,
+  )
+  if (!row) return null
+  return {
+    id: row.id,
+    feedId: row.feed_id,
+    url: row.url,
+    title: row.title,
+    author: row.author,
+    sourceLang: row.source_lang,
+    extractState: row.extract_state,
+    fetchRegion: row.fetch_region,
+    contentMode: row.content_mode,
+    versions: JSON.parse(row.versions) as StoredVersion[],
+  }
+}
+
+/** Settle an article's extraction without a new version (not longer, no content, or given up). */
+export function settleExtraction(db: TelaDb, articleId: number, state: 'done' | 'failed') {
+  return db.run(sql`
+    update articles set extract_state = ${state}, seq = ${currentSeq}
+    where id = ${articleId} and extract_state = 'due'
+  `)
+}
+
+/** Add an extracted version and point the article at whatever is current now. */
+export function adoptExtractedVersion(
+  db: TelaDb,
+  article: { id: number; feedId: number },
+  version: Omit<NewVersion, 'dedupKey'>,
+  current: StoredVersion,
+  titleHash: string,
+  now: number,
+) {
+  return [
+    db.run(sql`
+      insert into article_versions (article_id, version, provenance, content_key, raw_key,
+        norm_version, body_chars, excerpt, word_count, reading_minutes, lang, source_url, created_at)
+      values (${article.id}, ${version.version}, ${version.provenance}, ${version.contentKey},
+        ${version.rawKey}, ${NORM_VERSION}, ${version.bodyChars}, ${version.excerpt},
+        ${version.wordCount}, ${version.readingMinutes}, ${version.lang}, ${version.sourceUrl}, ${now})
+      on conflict (article_id, version) do nothing
+    `),
+    db.run(sql`
+      update articles set
+        current_version = ${current.version}, content_key = ${current.contentKey},
+        excerpt = ${current.excerpt}, word_count = ${current.wordCount},
+        reading_minutes = ${current.readingMinutes},
+        source_lang = coalesce(${current.lang}, source_lang),
+        title_hash = ${titleHash}, extract_state = 'done', seq = ${currentSeq}
+      where id = ${article.id}
+    `),
+  ] as const
+}

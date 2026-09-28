@@ -1,3 +1,4 @@
 export * from './context'
+export * from './extract'
 export * from './feed'
 export * from './register'
