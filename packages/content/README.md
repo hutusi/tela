@@ -105,6 +105,26 @@ letters (`\p{L}`), which covers image-only paragraphs, dates, and separators.
   `candidateFeedUrls` gives the well-known paths to probe.
 - `dedupKey`: `g:<guid>` → `u:<normalized link>` → `h:<sha256(title|published_at)>`.
 
+## 7. Content objects (`object.ts`, ADR 0022)
+
+What a reader receives, built once at ingest and stored immutably at `c/<key>.json`:
+
+- `key` is the first 32 hex of `contentHash`, the SHA-256 of the annotated HTML with its
+  *original* image URLs. The key never depends on how images are served.
+- `blocks` are the top-level children (the pairing unit of ADR 0019). Each holds its HTML and
+  the leaf `data-tb` ids inside it, in document order. Every leaf appears in exactly one block.
+- `leaves` maps each leaf id to `{hash, chars, skip?}`: the full block hash the translation
+  cache is keyed by, and the length that budgets use.
+- `images` lists the original URLs. Each `<img src>` in `blocks` is rewritten to
+  `/img/<key>/<index>`, one index per distinct URL, and gains `data-origin`. The proxy resolves
+  an index against the object, so it can only fetch URLs that stored content contains.
+- `format` is `OBJECT_FORMAT` and `norm` is the `NORM_VERSION` the leaves were annotated under.
+
+Image `src` is an attribute, and attributes never enter tagged text (§3). So rewriting images
+changes no block hash, and the object format is not a `NORM_VERSION` matter. Changing *what* the
+object contains is: bump `OBJECT_FORMAT` and keep readers able to render the previous format
+until every live article has a new version.
+
 ## Fixtures
 
 `fixtures/feeds/` holds real captures listed in `fixtures/SOURCE.md` and
