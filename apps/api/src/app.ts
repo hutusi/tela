@@ -3,10 +3,13 @@
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
 import { schema } from '@tela/data'
+import { CLIENT_HEADER, MIN_CLIENT, pushSchema } from '@tela/sync'
 import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type Auth, createAuth } from './auth'
 import type { ApiDeps } from './deps'
+import { answerPull } from './sync/pull'
+import { applyPush } from './sync/push'
 
 export type Member = { id: string; email: string }
 export type ApiEnv = { Variables: { member: Member } }
@@ -89,6 +92,33 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
       .where(eq(schema.profiles.userId, member.id))
       .limit(1)
     return c.json({ id: member.id, email: member.email, profile: profile ?? null })
+  })
+
+  /** A client older than the protocol it speaks is told to reload, not left misreading rows. */
+  const tooOld = (version: string | undefined) => {
+    const n = Number(version ?? '0')
+    return !Number.isInteger(n) || n < MIN_CLIENT
+  }
+
+  app.get('/api/v1/sync', async (c) => {
+    if (tooOld(c.req.header(CLIENT_HEADER))) return c.json({ error: 'upgrade' }, 409)
+    const cursor = Number(c.req.query('cursor') ?? '0')
+    if (!Number.isInteger(cursor) || cursor < 0) return c.json({ error: 'invalid_cursor' }, 400)
+    const pull = await answerPull(deps.db, c.get('member').id, cursor, deps.clock.now())
+    return c.json(pull, 200, { 'cache-control': 'no-store' })
+  })
+
+  app.post('/api/v1/mutations', async (c) => {
+    if (tooOld(c.req.header(CLIENT_HEADER))) return c.json({ error: 'upgrade' }, 409)
+    const body = pushSchema.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) return c.json({ error: 'invalid_push' }, 400)
+    const result = await applyPush(
+      deps.db,
+      c.get('member').id,
+      body.data.mutations,
+      deps.clock.now(),
+    )
+    return c.json(result, 200, { 'cache-control': 'no-store' })
   })
 
   return { app, auth }

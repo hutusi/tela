@@ -13,6 +13,7 @@
     "@tela/data": "workspace:*",
     "@tela/platform": "workspace:*",
     "@tela/shared": "workspace:*",
+    "@tela/sync": "workspace:*",
     "better-auth": "1.7.6",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.10"

@@ -339,6 +339,14 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, /o/* content objects, /
   - `daily` is one batch: relay re-probes, dead-feed revival, pruning, and compacting read-only
     state under a watermark.
   - `src/portable.ts` runs the same thing on a timer.
+- **API** (`apps/api`, ADR 0024): tela-api is Hono, built from portable dependencies.
+  - Sign-in is better-auth with email codes, through its Drizzle adapter over `TelaDb`.
+  - Invites go through `/api/admin/invite`.
+  - Every `/api/v1/*` route needs a session, read from the five-minute signed cookie cache.
+- **Sync** (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025):
+  - `GET /api/v1/sync?cursor=` reads a member's rows in one batch: a horizon snapshot at cursor 0,
+    and deltas by seq in pages that end on a seq boundary.
+  - `POST /api/v1/mutations` applies up to 50 idempotent, last-writer-wins mutations in one batch.
 - **Translation** (`apps/jobs/src/translation`, ADR 0023):
   - `translate.title` is keyed by feed. The sweep finds feeds with articles whose current
     `title_hash` has no `article_titles` row in some launch language. A job takes up to 20 of a

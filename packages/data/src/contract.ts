@@ -24,6 +24,7 @@ import {
   insertVersions,
   updateArticles,
 } from './queries/ingest'
+import { readPull } from './queries/sync'
 import { feeds, sites } from './schema'
 import { bumpSeq, currentSeq, headSeq } from './seq'
 
@@ -159,6 +160,76 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       )
       expect(err === null).toBe(false)
       expect(await headSeq(db)).toBe(1)
+    })
+  })
+
+  describe('sync pull pages', () => {
+    const member = 'm1'
+    async function setup(db: TelaDb) {
+      await seedFeeds(db, ['h1'])
+      await db.batch([
+        bumpSeq(db),
+        db.run(
+          sql`insert into user (id, name, email, email_verified, created_at, updated_at) values (${member}, 'm', 'm@x.y', 1, 0, 0)`,
+        ),
+        db.run(
+          sql`insert into subscriptions (user_id, feed_id, created_at, updated_at, seq) values (${member}, 1, 0, 0, ${currentSeq})`,
+        ),
+      ])
+      return headSeq(db)
+    }
+    let n = 0
+    /** One batch writing `count` articles, so they share one seq. */
+    async function articlesInOneBatch(db: TelaDb, count: number) {
+      const rows = Array.from({ length: count }, () => ++n)
+      await db.batch([
+        bumpSeq(db),
+        db.run(sql`
+          insert into articles (id, feed_id, dedup_key, fetched_at, sort_at, seq)
+          select value, 1, 'k' || value, ${T0}, ${T0}, ${currentSeq}
+          from json_each(${JSON.stringify(rows)}) where true
+        `),
+      ])
+    }
+    const page = (db: TelaDb, cursor: number, limit: number) =>
+      readPull(db, { userId: member, cursor, horizon: T0 - 1, limit })
+    const ids = (read: Awaited<ReturnType<typeof page>>) =>
+      read.rows.articles.map((a) => Number(a.id)).sort((x, y) => x - y)
+
+    it('pages a delta in seq order, each page ending where the next begins', async () => {
+      const db = await makeDb()
+      n = 0
+      const start = await setup(db)
+      for (let i = 0; i < 5; i++) await articlesInOneBatch(db, 1)
+      const first1 = await page(db, start, 2)
+      expect(ids(first1)).toEqual([1, 2])
+      expect(first1.pageEnd === null).toBe(false)
+      const second = await page(db, first1.pageEnd as number, 2)
+      expect(ids(second)).toEqual([3, 4])
+      const last = await page(db, second.pageEnd as number, 2)
+      expect(ids(last)).toEqual([5])
+      expect(last.pageEnd).toBe(null)
+    })
+
+    it('never splits the rows one batch wrote across pages', async () => {
+      const db = await makeDb()
+      n = 0
+      const start = await setup(db)
+      await articlesInOneBatch(db, 2)
+      await articlesInOneBatch(db, 2)
+      const first1 = await page(db, start, 3)
+      expect(ids(first1)).toEqual([1, 2])
+      expect(ids(await page(db, first1.pageEnd as number, 3))).toEqual([3, 4])
+    })
+
+    it('sends a batch larger than a page whole rather than stalling', async () => {
+      const db = await makeDb()
+      n = 0
+      const start = await setup(db)
+      await articlesInOneBatch(db, 3)
+      const read = await page(db, start, 2)
+      expect(ids(read)).toEqual([1, 2, 3])
+      expect(read.pageEnd).toBe(null)
     })
   })
 

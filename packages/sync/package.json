@@ -1,0 +1,17 @@
+{
+  "name": "@tela/sync",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The sync protocol between the local-first reader and tela-api: row shapes, the pull response, and the mutations a reader pushes (ADR 0025)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tela/shared": "workspace:*",
+    "zod": "^4.5.4"
+  }
+}

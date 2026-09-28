@@ -19,6 +19,7 @@
         "@tela/data": "workspace:*",
         "@tela/platform": "workspace:*",
         "@tela/shared": "workspace:*",
+        "@tela/sync": "workspace:*",
         "better-auth": "1.7.6",
         "drizzle-orm": "^0.45.2",
         "hono": "^4.13.10",
@@ -200,6 +201,14 @@
     "packages/shared": {
       "name": "@tela/shared",
       "version": "0.0.0",
+    },
+    "packages/sync": {
+      "name": "@tela/sync",
+      "version": "0.0.0",
+      "dependencies": {
+        "@tela/shared": "workspace:*",
+        "zod": "^4.5.4",
+      },
     },
   },
   "trustedDependencies": [
@@ -847,6 +856,8 @@
     "@tela/relay": ["@tela/relay@workspace:apps/relay"],
 
     "@tela/shared": ["@tela/shared@workspace:packages/shared"],
+
+    "@tela/sync": ["@tela/sync@workspace:packages/sync"],
 
     "@tela/web": ["@tela/web@workspace:apps/web"],
 
