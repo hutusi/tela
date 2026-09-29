@@ -6,7 +6,7 @@
  * Only listed and featured blogs appear. The Postgres app rendered a private or rejected site's
  * page for anyone with its id, which on a cached public page would be a leak.
  */
-import { first } from '@tela/data'
+import { ARTICLE_COLUMNS, first } from '@tela/data'
 import { isTopic } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -101,9 +101,9 @@ export function publicRoutes(deps: ApiDeps) {
         join sites s on s.id = f.site_id
         where f.site_id = ${siteId} and s.listing in ${PUBLIC_LISTING} order by f.id
       `),
+      // Posts as the reader holds them, so a member can open one from here.
       db.all(sql`
-        select a.id, a.title, a.url, a.published_at as "publishedAt", a.excerpt,
-          a.source_lang as "sourceLang"
+        select ${ARTICLE_COLUMNS}
         from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         where f.site_id = ${siteId} and s.listing in ${PUBLIC_LISTING}
         order by a.sort_at desc, a.id desc limit 20
@@ -136,8 +136,8 @@ export function publicRoutes(deps: ApiDeps) {
         where claimed_by = ${profile.user_id} and listing in ${PUBLIC_LISTING} order by title
       `),
       db.all(sql`
-        select r.note, r.created_at as "createdAt", a.id as "articleId", a.title, a.url,
-          s.title as "siteTitle", s.home_url as "homeUrl"
+        select r.note, r.created_at as "createdAt", s.id as "siteId", s.title as "siteTitle",
+          s.home_url as "homeUrl", ${ARTICLE_COLUMNS}
         from recommendations r join articles a on a.id = r.article_id
         join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         where r.user_id = ${profile.user_id} and r.deleted_at is null
@@ -145,7 +145,7 @@ export function publicRoutes(deps: ApiDeps) {
       `),
       profile.public_subscriptions
         ? db.all(sql`
-            select distinct s.id, s.title, s.home_url as "homeUrl",
+            select distinct s.id, s.title, s.home_url as "homeUrl", s.favicon_key as "faviconKey",
               (s.listing in ${PUBLIC_LISTING}) as listed
             from subscriptions sub join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id
             where sub.user_id = ${profile.user_id} and sub.deleted_at is null order by s.title
@@ -161,7 +161,11 @@ export function publicRoutes(deps: ApiDeps) {
           memberSince: profile.created_at,
         },
         blogs,
-        recommendations,
+        // The post as the reader holds one, beside the note and the blog it came from.
+        recommendations: (recommendations ?? []).map((r) => {
+          const { note, createdAt, siteId, siteTitle, homeUrl, ...article } = r
+          return { note, createdAt, siteId, siteTitle, homeUrl, article }
+        }),
         // The member chose to show what they read; a private blog shows no link to its page.
         subscriptions: profile.public_subscriptions
           ? (subscriptions ?? []).map((s) => ({ ...s, listed: s.listed === 1 }))

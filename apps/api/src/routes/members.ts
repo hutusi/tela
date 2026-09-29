@@ -3,8 +3,8 @@
  * handle must be unique, so the answer matters), their blogs' settings, their author dashboard,
  * and search past what their device holds.
  */
-import { bumpSeq, currentSeq, first } from '@tela/data'
-import { isTopic } from '@tela/shared'
+import { ARTICLE_COLUMNS, bumpSeq, currentSeq, first } from '@tela/data'
+import { isReadingLanguage, isTopic } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
@@ -157,7 +157,7 @@ export function memberRoutes(deps: ApiDeps) {
       `),
       db.all(sql`
         select r.note, r.created_at as "createdAt", a.id as "articleId", a.title as "articleTitle",
-          p.handle, p.display_name as "displayName"
+          a.url as "articleUrl", p.handle, p.display_name as "displayName"
         from recommendations r join articles a on a.id = r.article_id
         join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         join profiles p on p.user_id = r.user_id
@@ -181,12 +181,17 @@ export function memberRoutes(deps: ApiDeps) {
 
   /**
    * Search past the horizon the device holds: articles of the member's feeds by title in either
-   * language, and blogs anyone can find plus the member's own private ones.
+   * language, and blogs anyone can find plus the member's own private ones. The device searches
+   * what it holds first; this fills in the rest.
    */
   routes.get('/search', async (c) => {
     const member = c.get('member')
     const pattern = likePattern(c.req.query('q') ?? '')
     if (!pattern) return c.json({ sites: [], articles: [] })
+    // A hit may match its translation, so it comes with the title the member reads it under
+    // (AGENTS.md: showing the original would render a hit with none of the words typed).
+    const asked = c.req.query('lang')
+    const lang = isReadingLanguage(asked) ? asked : null
     const [sites, articles] = (await db.batch([
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
@@ -202,8 +207,9 @@ export function memberRoutes(deps: ApiDeps) {
         limit 50
       `),
       db.all(sql`
-        select a.id, a.feed_id as "feedId", a.title, a.url, a.published_at as "publishedAt",
-          a.excerpt, a.source_lang as "sourceLang", a.content_key as "contentKey"
+        select ${ARTICLE_COLUMNS},
+          (select t.title from article_titles t where t.article_id = a.id and t.lang = ${lang})
+            as "translatedTitle"
         from articles a
         where a.feed_id in (select feed_id from subscriptions where user_id = ${member.id} and deleted_at is null)
           and (a.title like ${pattern} escape '\\' or exists (

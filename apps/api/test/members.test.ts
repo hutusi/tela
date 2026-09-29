@@ -119,6 +119,25 @@ describe('search', () => {
     expect(posts.articles.map((a) => a.feedId)).toEqual([2])
   })
 
+  test('a hit that matched its translation comes with it, in the language asked for', async () => {
+    await blog(1, 'listed')
+    await db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at)
+      values (${reader.userId}, 1, 0, 0)`)
+    const article = await first<{ id: number }>(db, sql`select id from articles where feed_id = 1`)
+    await db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status, source_hash, updated_at)
+      values (${article?.id}, 'zh-Hans', 1, '花园笔记', 'done', 'h', 0)`)
+    const search = async (q: string) =>
+      (await (
+        await api.request(`/api/v1/search?q=${encodeURIComponent(q)}&lang=zh-Hans`, {
+          cookie: reader.cookie,
+        })
+      ).json()) as { articles: { title: string; translatedTitle: string | null }[] }
+    expect((await search('花园')).articles).toMatchObject([
+      { title: 'Post on blog 1', translatedTitle: '花园笔记' },
+    ])
+    expect((await search('Post on')).articles[0]?.translatedTitle).toBe('花园笔记')
+  })
+
   test('treats LIKE wildcards as text', () => {
     expect(likePattern('  100%  _off ')).toBe('%100\\% \\_off%')
     expect(likePattern('   ')).toBeNull()
@@ -167,7 +186,7 @@ describe('public', () => {
       subscriptions: { id: number; listed: boolean }[]
     }
     expect(shown.subscriptions).toEqual([
-      { id: 1, title: 'Blog 1', homeUrl: 'https://blog1.example', listed: true },
+      { id: 1, title: 'Blog 1', homeUrl: 'https://blog1.example', faviconKey: null, listed: true },
     ] as never)
     expect((await get('/api/v1/public/profiles/nobody')).status).toBe(404)
     expect(JSON.stringify(shown)).not.toContain('@x.test')

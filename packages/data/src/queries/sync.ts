@@ -49,7 +49,8 @@ const SUBSCRIPTION = sql.raw(`feed_id as "feedId", watermark_id as "watermarkId"
   created_at as "createdAt", deleted_at as "deletedAt", seq`)
 const FEED = sql.raw(`f.id, f.site_id as "siteId", f.feed_url as "feedUrl", f.title, f.status,
   f.last_fetched_at as "lastFetchedAt", f.last_error as "lastError", f.seq`)
-const ARTICLE = sql.raw(`a.id, a.feed_id as "feedId", a.url, a.title, a.author,
+/** An article as the reader holds one (`ArticleRow`), from a table aliased `a`. */
+export const ARTICLE_COLUMNS = sql.raw(`a.id, a.feed_id as "feedId", a.url, a.title, a.author,
   a.published_at as "publishedAt", a.fetched_at as "fetchedAt", a.sort_at as "sortAt",
   a.source_lang as "sourceLang", a.excerpt, a.content_key as "contentKey",
   a.word_count as "wordCount", a.reading_minutes as "readingMinutes",
@@ -146,11 +147,11 @@ export async function readPull(
       ? sql`select 1 where false`
       : sql`select ${FEED} from feeds f where f.id in (${activeFeeds}) and f.seq > ${cursor}
           order by f.seq limit ${over}`,
-    freshArticles: sql`select ${ARTICLE} from articles a where a.id in (${freshArticles})`,
+    freshArticles: sql`select ${ARTICLE_COLUMNS} from articles a where a.id in (${freshArticles})`,
     articles: snapshot
       ? sql`select 1 where false`
       : // Kept articles change too (others like them), whichever feed they are in.
-        sql`select ${ARTICLE} from articles a where a.seq > ${cursor}
+        sql`select ${ARTICLE_COLUMNS} from articles a where a.seq > ${cursor}
           and (a.feed_id in (${activeFeeds}) or a.id in (${kept}))
           order by a.seq limit ${over}`,
     newlyKept: snapshot
