@@ -401,3 +401,62 @@ test.describe('the mail link on a new device while /me misses', () => {
     await expect(page).toHaveURL(/\/reading$/, { timeout: 20_000 })
   })
 })
+
+test.describe('the mail link while the device refuses the claim once', () => {
+  test.use(visitor(10))
+  test('for another account, in a signed-in tab: still a fresh page as them', async ({
+    page,
+    context,
+    request,
+  }) => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    await signInRequest(context.request, `first-${stamp}@e2e.test`)
+    await addFeed(context.request, `${FIXTURES}/jnito.xml`)
+    await cycle(context.request)
+    await page.goto('/reading')
+    await expect(page.getByTestId('subscription')).toHaveCount(1)
+
+    // Syncing is held, so the old account's engine cannot be refused and leave: only the way
+    // the session settles the retry can load a fresh page.
+    await page.route(
+      (url) => url.pathname === '/api/v1/sync',
+      () => {},
+    )
+    // The device refuses the next write over its whole copy, which is the claim.
+    await page.evaluate(() => {
+      const open = IDBDatabase.prototype.transaction
+      let armed = true
+      IDBDatabase.prototype.transaction = function (
+        this: IDBDatabase,
+        names: string | string[],
+        mode?: IDBTransactionMode,
+        options?: IDBTransactionOptions,
+      ) {
+        const tx = open.call(this, names, mode, options)
+        if (armed && this.name === 'tela-2' && mode === 'readwrite' && names.length === 4) {
+          armed = false
+          sessionStorage.setItem('refused', '1')
+          tx.abort()
+        }
+        return tx
+      }
+    })
+    const second = `second-${stamp}@e2e.test`
+    const code = await inviteAndReadCode(request, second)
+    await page.evaluate(
+      ({ email, otp }) => {
+        ;(window as { stale?: number }).stale = 1
+        history.pushState({}, '', `/login?email=${encodeURIComponent(email)}&otp=${otp}`)
+        dispatchEvent(new PopStateEvent('popstate'))
+      },
+      { email: second, otp: code },
+    )
+    // Found in review: the refused claim had already moved the store to the second account, so
+    // the retry's claim compared it with itself, and pulled instead of loading a fresh page.
+    await expect
+      .poll(() => page.evaluate(() => (window as { stale?: number }).stale), { timeout: 15_000 })
+      .toBeUndefined()
+    await expect(page).toHaveURL(/\/reading$/)
+    expect(await page.evaluate(() => sessionStorage.getItem('refused'))).toBe('1')
+  })
+})

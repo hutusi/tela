@@ -222,6 +222,10 @@ export function SessionProvider({
   // The status as last rendered, for what an answer does whenever it arrives.
   const shown = useRef(status)
   shown.current = status
+  // The account whose rows this page has shown, what an answer is compared with to know whether
+  // the page must be loaded afresh. Not the store's account: a claim the device refused has
+  // already moved that on to the new one, while the page still holds the old one's.
+  const displayed = useRef(status === 'member' ? store.userId : null)
   // While /me cannot be reached: the next question's place in a row of misses. Its own state,
   // not a status, since the question outlives the switch to the public side; and a new object
   // for every miss, so each one sets the next question even when the count is the same.
@@ -254,6 +258,7 @@ export function SessionProvider({
       setRetry(null)
       after.current = null
       if (learned === 'guest') {
+        displayed.current = null
         setStatus('guest')
         return 'guest'
       }
@@ -261,6 +266,7 @@ export function SessionProvider({
         window.location.assign(next)
         return 'reloading'
       }
+      displayed.current = store.userId
       // Already a member here, so the engine runs and nothing starts it again: catch up at once,
       // in case the claim had to wipe a copy taken from under this tab.
       if (shown.current === 'member') void engine.pull()
@@ -269,10 +275,11 @@ export function SessionProvider({
     },
     [store, engine],
   )
-  const showing = useCallback(() => (shown.current === 'member' ? store.userId : null), [store])
+  const showing = useCallback(() => (shown.current === 'member' ? displayed.current : null), [])
 
   useEffect(() => {
     sessionEvents.signedOut = () => {
+      displayed.current = null
       void forgetOnSignOut(store).finally(() => setStatus('guest'))
     }
   }, [store])
