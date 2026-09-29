@@ -3,7 +3,7 @@
  * There is no dev-auth: a code is sent, read back from tela-api's test outbox, and entered.
  */
 import { resolve } from 'node:path'
-import { type APIRequestContext, type Page, request } from '@playwright/test'
+import { type APIRequestContext, expect, type Page, request } from '@playwright/test'
 
 export const BASE = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:8811'
 export const FIXTURES = process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'
@@ -93,6 +93,21 @@ export function keepCycling(page: Page, everyMs = 1000): () => void {
 /** Wait until the page's first sync has landed: the sidebar lists the subscriptions. */
 export async function synced(page: Page): Promise<void> {
   await page.getByTestId('subscription').first().waitFor()
+}
+
+/**
+ * Read the open article side by side, whatever the last spec left. The layout is a synced pref
+ * every spec shares, and a spec's last change is lost when its page closes before the push goes
+ * out: CI's slower runners left the next spec reading "Original". A spec that needs a layout
+ * sets it rather than trusting another spec to put it back.
+ */
+export async function sideBySide(page: Page): Promise<void> {
+  const reader = page.getByTestId('reader')
+  await reader.waitFor()
+  if ((await reader.getAttribute('data-mode')) !== 'side') {
+    await page.getByTestId('mode-side').click()
+  }
+  await expect(reader).toHaveAttribute('data-mode', 'side')
 }
 
 /**

@@ -4,7 +4,16 @@
  * gone when the passage is.
  */
 import { expect, type Page, test } from '@playwright/test'
-import { BASE, cycle, ensureFeeds, FIXTURES, painted, selectText, synced } from './helpers'
+import {
+  BASE,
+  cycle,
+  ensureFeeds,
+  FIXTURES,
+  painted,
+  selectText,
+  sideBySide,
+  synced,
+} from './helpers'
 
 const PASSAGE = 'garden teaches patience'
 
@@ -108,6 +117,7 @@ test('a highlight on the translation belongs to that side and that language', as
   await page.goto('/reading')
   await synced(page)
   await page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first().click()
+  await sideBySide(page)
   await expect(page.getByTestId('translation-bar')).toHaveAttribute('data-state', /done|partial/, {
     timeout: 30_000,
   })

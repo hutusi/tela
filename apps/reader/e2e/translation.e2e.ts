@@ -4,7 +4,7 @@
  * [[drop]], which is how a provider omitting an entry looks.
  */
 import { expect, test } from '@playwright/test'
-import { ensureFeeds, FIXTURES, keepCycling, synced } from './helpers'
+import { ensureFeeds, FIXTURES, keepCycling, sideBySide, synced } from './helpers'
 
 test.beforeAll(async () => {
   // A Japanese blog, whose titles the setup's sweeps have not seen yet.
@@ -22,6 +22,7 @@ test.describe('translation', () => {
     await expect(row.locator('h2')).toContainText('en:')
 
     await row.click()
+    await sideBySide(page)
     const bar = page.getByTestId('translation-bar')
     await expect(bar).toBeVisible()
     await expect(bar).toContainText('Written in Japanese')
@@ -60,6 +61,7 @@ test.describe('translation', () => {
     await synced(page)
     const row = page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first()
     await row.click()
+    await sideBySide(page)
     await expect(page.getByTestId('translation-bar')).toHaveAttribute(
       'data-state',
       /done|partial/,
@@ -113,6 +115,7 @@ test.describe('translation', () => {
       const row = page.getByTestId('article-row').first()
       await expect(row).toBeVisible({ timeout: 45_000 })
       await row.click()
+      await sideBySide(page)
       const bar = page.getByTestId('translation-bar')
       await expect(bar).toHaveAttribute('data-state', 'partial', { timeout: 30_000 })
       await expect(bar).toContainText('1 paragraph could not be translated')

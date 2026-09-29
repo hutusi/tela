@@ -1,5 +1,5 @@
 import { expect, type Locator, test } from '@playwright/test'
-import { ensureFeeds, synced } from './helpers'
+import { ensureFeeds, sideBySide, synced } from './helpers'
 
 /**
  * What the class strings claim, checked against what the browser computes.
@@ -136,6 +136,7 @@ test.describe('stylesheet', () => {
       await synced(page)
       const row = page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first()
       await row.click()
+      await sideBySide(page)
       await expect(page.getByTestId('translation-bar')).toHaveAttribute(
         'data-state',
         /done|partial/,
@@ -166,8 +167,8 @@ test.describe('stylesheet', () => {
       expect(m.paired).toBe(m.count)
       expect(m.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)
 
-      const sideBySide = Math.abs(m.t0.top - m.o0.top) < 4
-      if (sideBySide) {
+      const twoColumns = Math.abs(m.t0.top - m.o0.top) < 4
+      if (twoColumns) {
         // The original leads, as every facing-page edition does, and as the stacked order does.
         expect(m.o0.left, 'the original is not the left-hand column').toBeLessThan(m.t0.left)
         // Two columns only when each can hold a line. 348px is the number this test exists for.
@@ -212,6 +213,7 @@ test.describe('stylesheet', () => {
     await page.goto('/reading')
     await synced(page)
     await page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first().click()
+    await sideBySide(page)
     await expect(page.getByTestId('translation-bar')).toHaveAttribute(
       'data-state',
       /done|partial/,
