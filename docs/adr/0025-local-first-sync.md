@@ -63,7 +63,10 @@ commits meanwhile.
   - The device's stored copy has one owner. Every write to it reads that owner inside the same
     IndexedDB transaction and writes nothing on a mismatch; readwrite transactions over the same
     store run one at a time across every tab, so a check made in a separate transaction first
-    would be a race.
+    would be a race. The copy lives in a database of its own (`tela-2`): an earlier build's tab,
+    still open or brought back by a rollback, checks nothing, and must never reach it.
+  - Signing out names the member too, in the request that ends the session, so a stale tab
+    cannot end the session another tab started.
   - A tab that loses either check stops, forgets what it holds, and starts again from `/` as
     whoever is signed in. Its unsent changes go with it: applying them to the other account is
     the thing prevented.

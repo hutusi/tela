@@ -240,8 +240,9 @@ A Vite + React SPA that renders from the device.
   `at`, clamped to the server's clock.
 - Every member call names the account the device's rows belong to (`x-tela-member`, protocol 2).
   tela-api answers `409 account_changed` when it is missing or not the session's member, and the
-  device's stored copy has one owner that every write checks inside its own IndexedDB
-  transaction. So a tab that another tab signed out of neither mixes two accounts, nor applies
+  device's stored copy (IndexedDB `tela-2`, apart from earlier builds' `tela`) has one owner
+  that every write checks inside its own IndexedDB transaction; signing out is checked the same
+  way. So a tab that another tab signed out of neither mixes two accounts, nor applies
   one's changes to the other, nor writes one's rows into the other's copy (ADR 0025).
 - The device's reducer (`packages/sync/src/client.ts`) is the same code in the browser and in the
   convergence test that runs it against the real tela-api.
