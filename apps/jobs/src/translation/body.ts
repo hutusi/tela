@@ -21,15 +21,13 @@ import {
   taggedTextsOf,
 } from '@tela/content'
 import {
-  BACKGROUND,
   cachedTranslations,
-  chargeUsage,
   currentSeq,
   type Lease,
   loadBodyTranslation,
   recordLlmCall,
+  settleBodyUsage,
   storeBlockTranslations,
-  utcDay,
 } from '@tela/data'
 import { commit, type Statement } from '@tela/ingest/pipeline'
 import { estimateTokens, type TranslationBlock, translateBlocks } from '@tela/llm'
@@ -290,23 +288,16 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
     cacheControl: 'public, max-age=31536000, immutable',
   })
   const now = ctx.clock.now()
-  const day = row.reservedDay ?? utcDay(now)
   const committed = await commit(ctx, lease, [
+    // The reservation made when the reader asked is replaced by what was actually spent: the
+    // stored running count, which every chunk's batch has already brought up to `usedTokens`.
+    settleBodyUsage(db, contentKey, lang, now),
     db.run(sql`
       update body_translations set state = ${status}, object_key = ${finalKey},
         failed_leaves = ${JSON.stringify([...failed])}, model = ${translator.model},
-        used_tokens = ${usedTokens}, updated_at = ${now}, seq = ${currentSeq}
-      where content_key = ${contentKey} and lang = ${lang}
+        used_tokens = ${usedTokens}, reserved_tokens = 0, updated_at = ${now}, seq = ${currentSeq}
+      where content_key = ${contentKey} and lang = ${lang} and state in ('requested', 'running')
     `),
-    // The reservation made when the reader asked is replaced by what was actually spent.
-    row.requestedBy
-      ? db.run(sql`
-          insert into usage_daily (subject, day, reserved, used)
-          values (${row.requestedBy}, ${day}, 0, ${usedTokens})
-          on conflict (subject, day) do update set
-            reserved = max(0, reserved - ${row.reservedTokens}), used = used + ${usedTokens}
-        `)
-      : chargeUsage(db, BACKGROUND, day, usedTokens),
   ])
   return committed.ok ? { status, chunks: chunkNumber } : { status: 'lost' }
 }
@@ -320,10 +311,12 @@ async function settleFailed(
 ): Promise<BodyResult> {
   const now = ctx.clock.now()
   const committed = await commit(ctx, lease, [
+    // Nothing was translated, but the reservation still goes back.
+    settleBodyUsage(ctx.db, contentKey, lang, now),
     ctx.db.run(sql`
       update body_translations set state = 'failed', failed_leaves = ${JSON.stringify([reason])},
-        updated_at = ${now}, seq = ${currentSeq}
-      where content_key = ${contentKey} and lang = ${lang}
+        reserved_tokens = 0, updated_at = ${now}, seq = ${currentSeq}
+      where content_key = ${contentKey} and lang = ${lang} and state in ('requested', 'running')
     `),
   ])
   return committed.ok ? { status: 'failed', chunks: 0 } : { status: 'lost' }

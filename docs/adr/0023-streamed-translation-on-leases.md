@@ -60,6 +60,12 @@ that way (AGENTS.md).
     asks; ADR 0024 says how.
   - The translation replaces that reservation with what it actually spent when it concludes,
     charged to the day of the reservation.
+  - A failure concludes it too, reported (the content object is missing) or by exhaustion (the
+    provider kept failing, or every start died): the reservation goes back and what the chunks
+    spent is charged, in the batch that marks the row failed. Until 2026-09-29 a failed request
+    held its reservation for the rest of the day and was never charged, and asking again
+    reserved a second time beside it. One statement, `settleBodyUsage`, settles every ending,
+    and it matches only a row still `requested` or `running`, so a request is settled once.
   - Background work (titles) charges subject `'*'`. The title sweep claims nothing once the
     day's budget is spent.
 - **A claim is taken over before any work.** `runJob` first moves the lease from the claim's

@@ -368,7 +368,8 @@ subscribers on an unclaimed site.
   them again. A title that is its own translation is recorded as `echo` and not retried.
 - **A stuck body:** `select * from body_translations where state in ('requested', 'running')`. A
   row stays `running` between executions of one request and needs nothing; one that exhausted its
-  attempts is `failed`, with its dead letter beside it. The block cache keeps what was
+  attempts is `failed`, with its dead letter beside it, and its reservation is back on the
+  member's `usage_daily` row with what it spent charged. The block cache keeps what was
   translated, so a retry pays only for the rest.
 - **Switch provider:** change `LLM_PROVIDER`, `LLM_MODEL` and the key, and deploy tela-jobs.
   Cached blocks keep their `model`, so old and new output can be compared.

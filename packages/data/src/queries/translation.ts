@@ -265,3 +265,28 @@ export async function loadBodyTranslation(
     failedLeaves: JSON.parse(r.failed_leaves) as string[],
   }
 }
+
+/**
+ * Conclude a body translation's spend on the ledger: give back the reservation made when the
+ * reader asked and charge what the translation actually spent, to the member (or `'*'` when no
+ * one asked) on the day of the reservation. Every ending uses it, success or failure, reported or
+ * by exhaustion, placed before the statement that moves the row out of `requested`/`running` in
+ * the same batch. The state filter makes it settle a request once: after the flip it matches
+ * nothing. The reservation comes off through a subquery rather than a negative
+ * `excluded.reserved`, so a ledger row this inserts never holds a negative reservation.
+ */
+export function settleBodyUsage(db: TelaDb, contentKey: string, lang: string, now: number) {
+  return db.run(sql`
+    insert into usage_daily (subject, day, reserved, used)
+    select coalesce(b.requested_by, ${BACKGROUND}), coalesce(b.reserved_day, ${utcDay(now)}), 0,
+      b.used_tokens
+    from body_translations b
+    where b.content_key = ${contentKey} and b.lang = ${lang} and b.state in ('requested', 'running')
+    on conflict (subject, day) do update set
+      reserved = max(0, usage_daily.reserved - (
+        select reserved_tokens from body_translations
+        where content_key = ${contentKey} and lang = ${lang}
+      )),
+      used = usage_daily.used + excluded.used
+  `)
+}

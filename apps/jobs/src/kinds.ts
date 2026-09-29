@@ -14,6 +14,7 @@ import {
   failDueTitles,
   type LeaseKind,
   type QueueName,
+  settleBodyUsage,
   settleExtraction,
   type TelaDb,
   TRANSLATE_BODY_TTL_MS,
@@ -156,12 +157,18 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     backoff: { baseMs: MIN, maxMs: 30 * MIN, maxAttempts: 3 },
     due: () => dueBodies(),
     run: translateBodyJob,
+    // Also what retires a body whose every start died. The reservation goes back and what the
+    // chunks spent is charged, before the flip that the settle's state filter reads.
     exhausted: (db, key, now) => {
       const split = key.lastIndexOf(':')
+      const contentKey = key.slice(0, split)
+      const lang = key.slice(split + 1)
       return [
+        settleBodyUsage(db, contentKey, lang, now),
         db.run(sql`
-          update body_translations set state = 'failed', updated_at = ${now}, seq = ${currentSeq}
-          where content_key = ${key.slice(0, split)} and lang = ${key.slice(split + 1)}
+          update body_translations set state = 'failed', reserved_tokens = 0, updated_at = ${now},
+            seq = ${currentSeq}
+          where content_key = ${contentKey} and lang = ${lang} and state in ('requested', 'running')
         `),
       ]
     },

@@ -27,6 +27,7 @@ import {
   updateArticles,
 } from './queries/ingest'
 import { readPull } from './queries/sync'
+import { settleBodyUsage, utcDay } from './queries/translation'
 import { feeds, sites } from './schema'
 import { bumpSeq, currentSeq, headSeq } from './seq'
 
@@ -687,6 +688,49 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       })
       const row = await first<{ attempts: number }>(db, sql`select attempts from leases`)
       expect(row?.attempts).toBe(0)
+    })
+  })
+
+  describe('the usage ledger', () => {
+    it('settles a body translation once: the reservation back, the spend charged, and the ledger never below zero', async () => {
+      const db = await makeDb()
+      const day = '2026-09-26'
+      await db.batch([
+        db.run(
+          sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 1, 0, 0)`,
+        ),
+        db.run(
+          sql`insert into usage_daily (subject, day, reserved, used) values ('u1', ${day}, 25000, 100)`,
+        ),
+        db.run(sql`
+          insert into body_translations (content_key, lang, state, requested_by, reserved_tokens,
+            reserved_day, used_tokens, updated_at)
+          values ('c1', 'en', 'running', 'u1', 20000, ${day}, 700, 0),
+            ('c2', 'en', 'requested', null, 5000, null, 300, 0),
+            ('c3', 'en', 'done', 'u1', 20000, ${day}, 900, 0)
+        `),
+      ])
+      // As every ending does it: the settle, then the flip out of requested/running.
+      const conclude = (key: string) =>
+        db.batch([
+          settleBodyUsage(db, key, 'en', T0),
+          db.run(sql`
+            update body_translations set state = 'failed', reserved_tokens = 0
+            where content_key = ${key} and lang = 'en' and state in ('requested', 'running')
+          `),
+        ])
+      await conclude('c1')
+      // Concluded already: a second settle matches nothing, and neither does a finished row.
+      await conclude('c1')
+      await conclude('c3')
+      // No member, and no ledger row yet: charged to '*' on today, with nothing reserved.
+      await conclude('c2')
+      expect(
+        await db.all(sql`select subject, day, reserved, used from usage_daily order by subject`),
+      ).toEqual([
+        { subject: '*', day: utcDay(T0), reserved: 0, used: 300 },
+        { subject: 'u1', day, reserved: 5000, used: 800 },
+      ])
     })
   })
 

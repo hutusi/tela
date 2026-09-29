@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { first, headSeq, type TelaDb, TITLES_PER_JOB, utcDay } from '@tela/data'
+import { first, headSeq, startLease, type TelaDb, TITLES_PER_JOB, utcDay } from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
 import { createHttpClient } from '@tela/ingest/http'
 import { registerFeed } from '@tela/ingest/pipeline'
@@ -12,7 +12,7 @@ import {
 import { fakeClock, memoryBlobs, memoryJobs } from '@tela/platform/portable'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, longHtml, rss } from '../../../packages/ingest/test/fixture-server'
-import type { JobQueues } from '../src/kinds'
+import { type JobQueues, KINDS } from '../src/kinds'
 import { cycle, type PortableContext } from '../src/portable'
 import {
   FIRST_CHUNK_TOKENS,
@@ -88,7 +88,10 @@ async function addReader(id = 'reader') {
   await addTestUser(db, id)
 }
 
-/** What the API will do when a reader asks: a requested row and a reservation. */
+/**
+ * What the API will do when a reader asks: a requested row and a reservation. Asking again after
+ * a failure resets the row, as the API's upsert does.
+ */
 async function request(articleId: number, lang: string, reserved = 20_000, userId = 'reader') {
   const article = await first<{ content_key: string }>(
     db,
@@ -99,6 +102,12 @@ async function request(articleId: number, lang: string, reserved = 20_000, userI
     db.run(sql`
       insert into body_translations (content_key, lang, state, request_id, requested_by, reserved_tokens, reserved_day, updated_at)
       values (${article?.content_key}, ${lang}, 'requested', 'r1', ${userId}, ${reserved}, ${day}, ${clock.now()})
+      on conflict (content_key, lang) do update set
+        state = 'requested', request_id = 'r2', requested_by = excluded.requested_by,
+        reserved_tokens = excluded.reserved_tokens, reserved_day = excluded.reserved_day,
+        used_tokens = 0, chunk_keys = '[]', object_key = null, failed_leaves = '[]',
+        updated_at = excluded.updated_at
+      where body_translations.state in ('failed', 'skipped')
     `),
     db.run(sql`
       insert into usage_daily (subject, day, reserved, used) values (${userId}, ${day}, ${reserved}, 0)
@@ -107,6 +116,12 @@ async function request(articleId: number, lang: string, reserved = 20_000, userI
   ])
   return article!.content_key
 }
+
+const ledger = (subject = 'reader') =>
+  first<{ reserved: number; used: number }>(
+    db,
+    sql`select reserved, used from usage_daily where subject = ${subject}`,
+  )
 
 const bodyRow = (key: string, lang = 'zh-Hans') =>
   first<{
@@ -411,6 +426,73 @@ describe('bodies', () => {
     expect(new Set(sent).size).toBe(sent.length)
     const chunks = JSON.parse(row!.chunk_keys) as string[]
     expect(new Set(chunks).size).toBe(chunks.length)
+  })
+})
+
+describe('a body translation that fails', () => {
+  test('by exhaustion gives its reservation back and charges what its chunks spent', async () => {
+    // The opening chunk translates; every later body call fails, until the attempts run out.
+    let bodyCalls = 0
+    const mock = createMockTranslator({ calls })
+    const failing: Translator = {
+      model: mock.model,
+      async translate(request) {
+        const body = request.blocks.some((b) => b.text.includes('Paragraph'))
+        if (body && ++bodyCalls > 1) throw new Error('HTTP 503')
+        return mock.translate(request)
+      },
+    }
+    const ctx = context({ translator: failing })
+    await addReader()
+    await ingest(ctx, feed(['A long post'], 20))
+    const key = await request(1, 'zh-Hans', 20_000)
+    for (let i = 0; i < 3; i++) {
+      await cycle(ctx)
+      clock.advance(5 * MIN)
+    }
+    const row = await bodyRow(key)
+    expect(row?.state).toBe('failed')
+    expect(row!.used_tokens).toBeGreaterThan(0)
+    expect(await db.all(sql`select kind from dead_letters`)).toEqual([{ kind: 'translate.body' }])
+    expect(await ledger()).toEqual({ reserved: 0, used: row!.used_tokens })
+
+    // The reader asks again: only the new reservation is held, not the old one beside it.
+    await request(1, 'zh-Hans', 20_000)
+    expect(await ledger()).toEqual({ reserved: 20_000, used: row!.used_tokens })
+  })
+
+  test('reported, as a missing content object, gives its reservation back', async () => {
+    const ctx = context()
+    await addReader()
+    await ingest(ctx, feed(['Post'], 4))
+    const key = await request(1, 'zh-Hans', 20_000)
+    await blobs.delete(`c/${key}.json`)
+    await cycle(ctx)
+    expect((await bodyRow(key))?.state).toBe('failed')
+    expect(await ledger()).toEqual({ reserved: 0, used: 0 })
+  })
+
+  test('by starts that all died gives its reservation back when the tick retires it', async () => {
+    const ctx = context()
+    await addReader()
+    await ingest(ctx, feed(['Post'], 4))
+    const key = await request(1, 'zh-Hans', 20_000)
+    const { tick } = await import('../src/runner')
+    const spec = KINDS['translate.body']!
+    for (let attempt = 1; attempt <= spec.backoff.maxAttempts; attempt++) {
+      await tick(ctx)
+      const [message] = ctx.jobs.take('translate')
+      // runJob starts the attempt, then the invocation is killed: no result, no failLease.
+      const runOwner = `${message!.owner}>killed`
+      expect((await startLease(db, message!, runOwner, clock.now(), spec.ttlMs))?.attempts).toBe(
+        attempt,
+      )
+      clock.advance(spec.ttlMs + MIN)
+    }
+    await tick(ctx)
+    expect(ctx.jobs.take('translate')).toEqual([])
+    expect((await bodyRow(key))?.state).toBe('failed')
+    expect(await ledger()).toEqual({ reserved: 0, used: 0 })
   })
 })
 
