@@ -32,6 +32,29 @@ export function useSession(): Session {
 /** The engine reports a lost session through this; the provider decides what it means. */
 export const sessionEvents = { signedOut: () => {} }
 
+/** This tab's record of an account it left but could not forget (main.tsx), for one boot. */
+const DISTRUSTED = 'tela.distrusted'
+
+/** Do not trust `owner`'s stored copy on this tab's next boot: ask who is signed in first. */
+export function distrust(owner: string): void {
+  try {
+    sessionStorage.setItem(DISTRUSTED, owner)
+  } catch {
+    // No sessionStorage: the next boot trusts the copy, and is refused again at its first call.
+  }
+}
+
+/** Whether this tab left `owner` without forgetting it; asking also forgets the record. */
+export function distrusted(owner: string | null): boolean {
+  try {
+    const left = sessionStorage.getItem(DISTRUSTED)
+    sessionStorage.removeItem(DISTRUSTED)
+    return left !== null && left === owner
+  } catch {
+    return false
+  }
+}
+
 async function whoAmI(): Promise<string | null> {
   try {
     const res = await api('/api/v1/me')
@@ -58,9 +81,10 @@ export function SessionProvider({
   engine: SyncEngine
   children: React.ReactNode
 }) {
-  // Rows alone are not enough: whose they are is what every call names.
-  const [status, setStatus] = useState<SessionStatus>(
-    store.hasData && store.userId !== null ? 'member' : 'unknown',
+  // Rows alone are not enough: whose they are is what every call names. A copy this tab has
+  // just left without forgetting is not trusted either; the claim after /me replaces it.
+  const [status, setStatus] = useState<SessionStatus>(() =>
+    store.hasData && store.userId !== null && !distrusted(store.userId) ? 'member' : 'unknown',
   )
 
   useEffect(() => {

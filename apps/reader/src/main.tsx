@@ -5,7 +5,7 @@
 import './styles.css'
 import { createRoot } from 'react-dom/client'
 import { App } from './app'
-import { sessionEvents } from './session'
+import { distrust, sessionEvents } from './session'
 import { registerShell } from './shell'
 import { bindApi } from './store/api'
 import { forgetEarlierDatabases, indexedDbPersistence, memoryPersistence } from './store/db'
@@ -32,9 +32,12 @@ async function boot() {
     if (leaving) return
     leaving = true
     engine.stop()
+    const stale = store.userId
     void store
       .forgetAccount()
-      .catch(() => undefined)
+      // Not forgotten (storage failed): the next boot must not trust that copy again, or it would
+      // show the stale account, be refused, and come back here for ever.
+      .catch(() => stale !== null && distrust(stale))
       .then(() => window.location.assign('/'))
   }
   // This app is older than the protocol: fetch the new shell rather than misread rows.
