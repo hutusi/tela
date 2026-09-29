@@ -88,7 +88,7 @@ export function renderPublicPage(input: {
   const store = new LocalStore(memoryPersistence())
   const handle = {
     store,
-    engine: new SyncEngine(store, { onSignedOut() {}, onUpgrade() {} }),
+    engine: new SyncEngine(store, { onSignedOut() {}, onUpgrade() {}, onAccountChanged() {} }),
     objects: new Objects(memoryPersistence()),
   }
   const view =

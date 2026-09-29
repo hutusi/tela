@@ -439,3 +439,27 @@ describe('a feed merged into another (ADR 0028)', () => {
     expect(await following()).toEqual([])
   })
 })
+
+describe('a device holding another account (another tab switched)', () => {
+  test('a pull or a push naming someone else is refused, and the push applies nothing', async () => {
+    const other = { ...client, 'x-tela-member': 'u_someone_else' }
+    const res = await api.request('/api/v1/sync?cursor=0', {
+      cookie: reader.cookie,
+      headers: other,
+    })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'account_changed' })
+    const pushed = await api.request('/api/v1/mutations', {
+      body: { mutations: [{ mid: 'mid-other-account', at: now, type: 'subscribe', feedId: 1 }] },
+      cookie: reader.cookie,
+      headers: other,
+    })
+    expect(pushed.status).toBe(409)
+    expect(await db.all(sql`select 1 from subscriptions`)).toEqual([])
+
+    const own = { ...client, 'x-tela-member': reader.userId }
+    expect(
+      (await api.request('/api/v1/sync?cursor=0', { cookie: reader.cookie, headers: own })).status,
+    ).toBe(200)
+  })
+})

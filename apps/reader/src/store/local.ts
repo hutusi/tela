@@ -173,6 +173,20 @@ export class LocalStore {
     await this.persistence.saveMeta({ userId })
   }
 
+  /**
+   * Another tab signed in as someone else: nothing this tab holds is theirs. The stored copy goes
+   * too while it is still the old account's; the new account's tab may have replaced it already,
+   * and that one is left alone.
+   */
+  async forgetAccount(): Promise<void> {
+    const stale = this.userId
+    if ((await this.persistence.storedUserId()) === stale) await this.persistence.clear()
+    this.confirmed = { cursor: 0, tables: emptyTables() }
+    this.pending = []
+    this.userId = null
+    this.recompute()
+  }
+
   /** Forget everything: signing out. */
   async clear(): Promise<void> {
     this.confirmed = { cursor: 0, tables: emptyTables() }

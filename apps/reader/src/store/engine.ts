@@ -8,15 +8,18 @@
  *   at once when the tab is hidden or closed, so the last change before leaving is not left
  *   waiting for the next visit; offline, it keeps retrying with backoff and loses nothing
  *   (pending mutations are stored).
- * - A 401 means the session is gone; a 409 means this app is older than the protocol.
+ * - A 401 means the session is gone; a 409 means this app is older than the protocol, or that
+ *   another tab signed in as someone else. Each sync call names whose rows the device holds.
  */
 import type { PullResponse, PushResponse } from '@tela/sync'
-import { api, SignedOut, UpgradeRequired } from './api'
+import { AccountChanged, api, SignedOut, UpgradeRequired } from './api'
 import type { LocalStore } from './local'
 
 export type EngineEvents = {
   onSignedOut(): void
   onUpgrade(): void
+  /** The session is another account's than the rows this device holds. */
+  onAccountChanged(): void
 }
 
 const PULL_EVERY_MS = 60_000
@@ -88,6 +91,11 @@ export class SyncEngine {
       this.events.onUpgrade()
       return true
     }
+    if (err instanceof AccountChanged) {
+      this.stop()
+      this.events.onAccountChanged()
+      return true
+    }
     return false
   }
 
@@ -103,7 +111,9 @@ export class SyncEngine {
         do {
           this.pullAgain = false
           for (;;) {
-            const res = await api(`/api/v1/sync?cursor=${this.store.cursor}`)
+            const res = await api(`/api/v1/sync?cursor=${this.store.cursor}`, {
+              member: this.store.userId,
+            })
             if (!res.ok) throw new Error(`pull ${res.status}`)
             const body = (await res.json()) as PullResponse
             await this.store.applyPull(body)
@@ -135,6 +145,7 @@ export class SyncEngine {
     try {
       const res = await api('/api/v1/mutations', {
         body: { mutations: batch },
+        member: this.store.userId,
         ...(options.keepalive ? { keepalive: true } : {}),
       })
       if (!res.ok) throw new Error(`push ${res.status}`)

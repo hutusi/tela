@@ -1,9 +1,10 @@
 /**
- * Talking to tela-api (through tela-web's `/api/*` forward, same origin). Two answers change what
- * the app does rather than what it shows, so they become errors of their own: 401 means the
- * session is gone, 409 `upgrade` means this cached app is older than the protocol.
+ * Talking to tela-api (through tela-web's `/api/*` forward, same origin). Three answers change
+ * what the app does rather than what it shows, so they become errors of their own: 401 means the
+ * session is gone, 409 `upgrade` means this cached app is older than the protocol, and 409
+ * `account_changed` means another tab signed in as someone else.
  */
-import { CLIENT_HEADER, MIN_CLIENT } from '@tela/sync'
+import { CLIENT_HEADER, MEMBER_HEADER, MIN_CLIENT } from '@tela/sync'
 
 /** The protocol version this build speaks (ADR 0025); tela-api refuses older ones with 409. */
 export const CLIENT_VERSION = MIN_CLIENT
@@ -14,6 +15,9 @@ export class SignedOut extends Error {
 export class UpgradeRequired extends Error {
   override name = 'UpgradeRequired'
 }
+export class AccountChanged extends Error {
+  override name = 'AccountChanged'
+}
 
 export type ApiInit = {
   method?: string
@@ -23,11 +27,14 @@ export type ApiInit = {
   signal?: AbortSignal
   /** Outlive the page: a push sent as the tab goes away still arrives. */
   keepalive?: boolean
+  /** The account whose rows the device holds, for the calls that sync them. */
+  member?: string | null
 }
 
 export async function api(path: string, init: ApiInit = {}): Promise<Response> {
   const headers: Record<string, string> = { [CLIENT_HEADER]: String(CLIENT_VERSION) }
   if (init.body !== undefined) headers['content-type'] = 'application/json'
+  if (init.member) headers[MEMBER_HEADER] = init.member
   const res = await fetch(path, {
     method: init.method ?? (init.body === undefined && init.raw === undefined ? 'GET' : 'POST'),
     headers,
@@ -45,6 +52,7 @@ export async function api(path: string, init: ApiInit = {}): Promise<Response> {
       .json()
       .catch(() => null)) as { error?: string } | null
     if (body?.error === 'upgrade') throw new UpgradeRequired()
+    if (body?.error === 'account_changed') throw new AccountChanged()
   }
   return res
 }

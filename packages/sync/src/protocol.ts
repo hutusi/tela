@@ -24,6 +24,14 @@ export const PAGE_ROWS = 1000
 export const MIN_CLIENT = 1
 /** The request header a client names its protocol version in. */
 export const CLIENT_HEADER = 'x-tela-client'
+/**
+ * The request header a client names the account its device store belongs to in. Tabs of one
+ * browser share the session cookie, so after another tab signs in as someone else this tab's
+ * rows, cursor and unsent changes are still the first account's. tela-api answers 409
+ * `account_changed` instead of mixing the second account's rows into them (a pull) or applying
+ * the first account's changes to the second (a push).
+ */
+export const MEMBER_HEADER = 'x-tela-member'
 
 export type PullResponse = {
   /** Pull from here next. */

@@ -3,7 +3,7 @@
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
 import { schema } from '@tela/data'
-import { CLIENT_HEADER, MIN_CLIENT, pushSchema } from '@tela/sync'
+import { CLIENT_HEADER, MEMBER_HEADER, MIN_CLIENT, pushSchema } from '@tela/sync'
 import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type Auth, createAuth } from './auth'
@@ -135,8 +135,15 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     return !Number.isInteger(n) || n < MIN_CLIENT
   }
 
+  /** The device holds another account's rows than the session's: another tab switched. */
+  const otherAccount = (held: string | undefined, memberId: string) =>
+    held !== undefined && held !== memberId
+
   app.get('/api/v1/sync', async (c) => {
     if (tooOld(c.req.header(CLIENT_HEADER))) return c.json({ error: 'upgrade' }, 409)
+    if (otherAccount(c.req.header(MEMBER_HEADER), c.get('member').id)) {
+      return c.json({ error: 'account_changed' }, 409)
+    }
     const cursor = Number(c.req.query('cursor') ?? '0')
     if (!Number.isInteger(cursor) || cursor < 0) return c.json({ error: 'invalid_cursor' }, 400)
     const pull = await answerPull(deps.db, c.get('member').id, cursor, deps.clock.now())
@@ -145,6 +152,9 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
 
   app.post('/api/v1/mutations', async (c) => {
     if (tooOld(c.req.header(CLIENT_HEADER))) return c.json({ error: 'upgrade' }, 409)
+    if (otherAccount(c.req.header(MEMBER_HEADER), c.get('member').id)) {
+      return c.json({ error: 'account_changed' }, 409)
+    }
     const body = pushSchema.safeParse(await c.req.json().catch(() => null))
     if (!body.success) return c.json({ error: 'invalid_push' }, 400)
     const result = await applyPush(

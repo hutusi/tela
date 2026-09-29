@@ -53,6 +53,11 @@ commits meanwhile.
 - A **cursor ahead of the database** (restored from a backup) gets a snapshot.
 - A **client older than `MIN_CLIENT`** (header `x-tela-client`) gets `409 upgrade`, so a cached
   app shell that has fallen behind reloads rather than misreading rows.
+- A **device holding another account's rows** (header `x-tela-member`) gets `409 account_changed`
+  on a pull or a push. Tabs of one browser share the session cookie, so a tab can still hold the
+  account another tab signed out of. That tab forgets the old account, including the stored copy
+  while it is still that account's, and reloads. Its unsent changes go with it: applying them to
+  the new account would be worse. (Added on 2026-09-29, after a review found the mix.)
 - Pulls read the D1 primary from the pinned Worker (6–10 ms). There is no read replication, so no
   Sessions bookmark and no read-your-writes gap to handle.
 
@@ -97,7 +102,8 @@ and the URL.
   60 s while it is, and after each push. A push goes a quarter-second after the last change, so a
   burst of reads is one request, and at once with `keepalive` when the tab is hidden or closed, so
   the last change before leaving is not left waiting for the next visit. 401 ends the session and
-  wipes the device; 409 reloads a newer shell.
+  wipes the device; 409 `upgrade` reloads a newer shell, and 409 `account_changed` starts over
+  as whoever is signed in now.
 - **Bodies and translations** (`src/store/objects.ts`) come from memory, then IndexedDB, then the
   edge. While the reader is idle (1.5 s after the list settles) it prefetches unread bodies, the
   list on screen first, 25 to a `/o/bundle` request and two requests at a time, and then finished

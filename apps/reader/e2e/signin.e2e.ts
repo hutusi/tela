@@ -3,7 +3,7 @@
  * form, and the mail's link opened on another device. There is no other way in.
  */
 import { expect, test } from '@playwright/test'
-import { inviteAndReadCode, latestCode } from './helpers'
+import { addFeed, cycle, FIXTURES, inviteAndReadCode, latestCode, signInRequest } from './helpers'
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
@@ -58,5 +58,39 @@ test.describe('by link', () => {
     await expect(page).toHaveURL(/\/settings$/)
     await expect(page.getByTestId('settings-form')).toBeVisible()
     expect(page.url()).not.toContain('otp=')
+  })
+})
+
+test.describe('two accounts in one browser', () => {
+  test.use(visitor(3))
+  test('a tab still holding one account starts over when another tab signs in as someone else', async ({
+    page,
+    context,
+  }) => {
+    const first = `first-${Date.now()}@e2e.test`
+    const second = `second-${Date.now()}@e2e.test`
+    await signInRequest(context.request, first)
+    await addFeed(context.request, `${FIXTURES}/jnito.xml`)
+    await cycle(context.request)
+    await page.goto('/reading')
+    await expect(page.getByTestId('subscription')).toHaveCount(1)
+
+    // Another tab signs in as someone else; the cookie is the whole browser's.
+    const other = await context.newPage()
+    await signInRequest(context.request, second)
+    await other.goto('/reading')
+    await expect(other.getByTestId('empty-state')).toBeVisible()
+
+    // The first tab still shows the first account. Opening a post reads it, and that change
+    // would have been pushed with the second account's cookie.
+    await page.bringToFront()
+    await page.getByTestId('article-row').first().click()
+    // It is refused instead, and the tab starts over as the second account, who follows nothing.
+    await expect(page.getByTestId('subscription')).toHaveCount(0)
+    const pulled = await (
+      await context.request.get('/api/v1/sync?cursor=0', { headers: { 'x-tela-client': '1' } })
+    ).json()
+    expect(pulled.rows.states).toEqual([])
+    expect(pulled.rows.subscriptions).toEqual([])
   })
 })

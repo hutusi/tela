@@ -22,6 +22,8 @@ async function boot() {
     onSignedOut: () => sessionEvents.signedOut(),
     // This app is older than the protocol: fetch the new shell rather than misread rows.
     onUpgrade: () => void registerShell.upgrade(),
+    // Another tab signed in as someone else: start again as whoever the session is now.
+    onAccountChanged: () => void store.forgetAccount().then(() => window.location.reload()),
   })
   const root = document.getElementById('root')
   if (!root) throw new Error('no #root')

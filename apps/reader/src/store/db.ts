@@ -32,6 +32,8 @@ export type Persisted = {
 /** What the store needs from storage; IndexedDB in the browser, memory in tests. */
 export interface Persistence {
   load(): Promise<Persisted>
+  /** Whose rows are stored now: another tab may have signed in as someone else since `load`. */
+  storedUserId(): Promise<string | null>
   saveTables(rows: Partial<TableRows>): Promise<void>
   saveMeta(meta: { cursor?: number; pending?: Pending[]; userId?: string | null }): Promise<void>
   clear(): Promise<void>
@@ -96,6 +98,9 @@ export async function indexedDbPersistence(name = 'tela'): Promise<Persistence> 
         rows,
         pending: (pending as Pending[] | undefined) ?? [],
       }
+    },
+    async storedUserId() {
+      return ((await db.get('meta', 'userId')) as string | undefined) ?? null
     },
     async saveTables(rows) {
       const tx = db.transaction('tables', 'readwrite')
@@ -167,6 +172,7 @@ export function memoryPersistence(): Persistence {
       const complete = TABLES.every((t) => t in tables)
       return { ...meta, rows: complete ? (tables as TableRows) : null }
     },
+    storedUserId: async () => meta.userId,
     async saveTables(rows) {
       tables = { ...tables, ...rows }
     },
