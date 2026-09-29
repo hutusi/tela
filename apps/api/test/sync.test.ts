@@ -130,6 +130,27 @@ describe('pull', () => {
     expect(snap.rows.states).toMatchObject([{ articleId: liked, likedAt: now }])
   })
 
+  test('a kept article from a feed no longer followed still gets its translations as they land', async () => {
+    await push([{ type: 'subscribe', feedId: 2 }])
+    const liked = await addArticle(2)
+    await push([{ type: 'setLiked', articleId: liked, liked: true }])
+    await push([{ type: 'unsubscribe', feedId: 2 }])
+    const before = await pull(0)
+    // Its title and its body are translated after the device last pulled.
+    await write(
+      db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status, source_hash,
+          updated_at, seq)
+        values (${liked}, 'zh-Hans', 2, '译题', 'done', 'h', ${now}, ${currentSeq})`),
+      db.run(sql`insert into body_translations (content_key, lang, state, updated_at, seq)
+        values (${`c${liked}`}, 'zh-Hans', 'done', ${now}, ${currentSeq})`),
+    )
+    const delta = await pull(before.cursor)
+    expect(delta.rows.titles.map((t) => [t.articleId, t.lang])).toEqual([[liked, 'zh-Hans']])
+    expect(delta.rows.translations.map((t) => [t.contentKey, t.lang])).toEqual([
+      [`c${liked}`, 'zh-Hans'],
+    ])
+  })
+
   test("never another member's rows", async () => {
     const other = await signedIn(api, 'other@x.test')
     await push([{ type: 'subscribe', feedId: 1 }], other.cookie)

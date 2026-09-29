@@ -176,16 +176,20 @@ export async function readPull(
       ? sql`select 1 where false`
       : sql`select ${STATE} from user_article_states
           where user_id = ${userId} and article_id in (${freshArticles})`,
+    // Titles and body translations follow the articles: those of the feeds followed, and those
+    // the member keeps from anywhere, or a kept post never hears of its later translations.
     titles: snapshot
       ? sql`select 1 where false`
-      : sql`select ${TITLE} from article_titles t where t.feed_id in (${activeFeeds}) and t.seq > ${cursor}
+      : sql`select ${TITLE} from article_titles t where t.seq > ${cursor}
+          and (t.feed_id in (${activeFeeds}) or t.article_id in (${kept}))
           order by t.seq limit ${over}`,
     freshTranslations: sql`select ${TRANSLATION} from body_translations b
       where b.content_key in (select content_key from articles where id in (${freshArticles}))`,
     translations: snapshot
       ? sql`select 1 where false`
       : sql`select ${TRANSLATION} from body_translations b where b.seq > ${cursor}
-          and b.content_key in (select content_key from articles where feed_id in (${activeFeeds}))
+          and b.content_key in (select content_key from articles
+            where feed_id in (${activeFeeds}) or id in (${kept}))
           order by b.seq limit ${over}`,
     // A site comes with any feed sent (a feed can move to a site the client has never seen),
     // changed sites of subscribed feeds, and sites the member claimed.
