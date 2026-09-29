@@ -7,7 +7,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 READER="$ROOT/apps/reader"
 LOGS="${E2E_LOG_DIR:-$ROOT/.e2e-logs}/reader"
+mkdir -p "$LOGS"
+# Absolute: the steps below run from other directories.
+LOGS="$(cd "$LOGS" && pwd)"
 STATE="$LOGS/state"
+rm -rf "$STATE"
 FIXTURE_PORT="${E2E_FIXTURE_PORT:-4790}"
 PORT="${E2E_READER_PORT:-8811}"
 INSPECTOR_PORT="${E2E_INSPECTOR_PORT:-9311}"
@@ -15,8 +19,6 @@ WRANGLER="$READER/node_modules/.bin/wrangler"
 export E2E_FIXTURE_URL="http://127.0.0.1:${FIXTURE_PORT}"
 export E2E_BASE_URL="http://127.0.0.1:${PORT}"
 export E2E_STATE_FILE="$LOGS/member.json"
-rm -rf "$STATE"
-mkdir -p "$LOGS"
 # A stack left running would answer the health check and every spec would test it instead.
 for port in "$PORT" "$FIXTURE_PORT"; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
