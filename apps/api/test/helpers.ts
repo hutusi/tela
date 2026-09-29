@@ -13,7 +13,10 @@ export const ADMIN_TOKEN = 'admin-token-for-tests'
 /** Overrides; an explicit `undefined` removes a setting (no admin token, say). */
 type ConfigOverrides = { [K in keyof ApiConfig]?: ApiConfig[K] | undefined }
 
-export async function createTestApi(overrides: ConfigOverrides = {}) {
+export async function createTestApi(
+  overrides: ConfigOverrides = {},
+  options: { db?: TelaDb } = {},
+) {
   const config: Record<string, unknown> = {
     publicUrl: ORIGIN,
     authSecret: 'a-test-secret-that-is-long-enough-for-hmac',
@@ -23,7 +26,7 @@ export async function createTestApi(overrides: ConfigOverrides = {}) {
     ...overrides,
   }
   for (const key of Object.keys(config)) if (config[key] === undefined) delete config[key]
-  const { db } = await createTestDb()
+  const db = options.db ?? (await createTestDb()).db
   const mail = memoryMail()
   const jobs = memoryJobs<JobQueues>()
   const blobs = memoryBlobs()

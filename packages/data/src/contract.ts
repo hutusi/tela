@@ -4,6 +4,7 @@
  * the two is a bug in the portable adapter, which is exactly what this suite exists to catch.
  */
 import { sql } from 'drizzle-orm'
+import { exportDatabase, verifyExport } from './backup'
 import type { TelaDb } from './db'
 import { first } from './first'
 import {
@@ -583,6 +584,55 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       })
       const row = await first<{ attempts: number }>(db, sql`select attempts from leases`)
       expect(row?.attempts).toBe(0)
+    })
+  })
+
+  describe('the nightly export', () => {
+    it('reads every table a page at a time and verifies against its manifest', async () => {
+      const db = await makeDb()
+      await db.batch([
+        bumpSeq(db),
+        db.run(sql`insert into sites (id, home_url, created_at, updated_at, seq)
+          values (1, 'https://b.example', 0, 0, ${currentSeq})`),
+        db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at, updated_at, seq)
+          values (1, 1, 'https://b.example/feed', 'b.example', 0, 0, 0, ${currentSeq})`),
+        db.run(sql`
+          insert into articles (feed_id, dedup_key, title, fetched_at, sort_at, seq)
+          select 1, 'k' || value, 'Post ' || value, 0, value, ${currentSeq} from json_each(${JSON.stringify(
+            Array.from({ length: 1234 }, (_, i) => i),
+          )}) where true
+        `),
+      ])
+      const store = new Map<string, string>()
+      const blobs = {
+        async get(key: string) {
+          const text = store.get(key)
+          return text === undefined
+            ? null
+            : {
+                key,
+                size: text.length,
+                contentType: null,
+                text: async () => text,
+                arrayBuffer: async () => new ArrayBuffer(0),
+              }
+        },
+        async head() {
+          return null
+        },
+        async put(key: string, body: string | Uint8Array | ArrayBuffer) {
+          store.set(key, typeof body === 'string' ? body : new TextDecoder().decode(body))
+        },
+        async delete(key: string) {
+          store.delete(key)
+        },
+        async list() {
+          return { keys: [...store.keys()], cursor: null }
+        },
+      }
+      const manifest = await exportDatabase(db, blobs, { date: '2026-09-28', now: () => T0 })
+      expect(manifest.tables.find((t) => t.name === 'articles')?.rows).toBe(1234)
+      expect((await verifyExport(blobs, '2026-09-28')).ok).toBe(true)
     })
   })
 }
