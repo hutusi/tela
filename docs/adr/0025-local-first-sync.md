@@ -42,6 +42,9 @@ commits meanwhile.
   - **Kept articles** (liked or recommended) belong to no feed the member need follow.
     - Their changes flow whatever the member subscribes to (others' likes move their counts).
     - An article that becomes kept arrives whole, with its feed and site.
+    - One from a feed the member left also brings that feed's subscription row, deleted, in a
+      snapshot and in the delta where it becomes kept, whatever the row's seq: once compaction
+      has dropped the post's read state, the watermark is all that says it was read.
     - The device holds an article only while its feed is subscribed or the member keeps it, and
       prunes the rest after every pull.
   - Hard deletes would travel as tombstones. None of Tela's writers hard-delete a synced row

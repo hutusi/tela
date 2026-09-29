@@ -7,7 +7,9 @@
  *   claims;
  * - the shared rows of the feeds they subscribe to: feeds, sites, articles, titles, and the body
  *   translations of those articles;
- * - articles they liked, recommended or highlighted, wherever those came from.
+ * - articles they liked, recommended or highlighted, wherever those came from, with the
+ *   subscription row of a feed since left: its watermark is what says such a post was read once
+ *   compaction has dropped its read state.
  *
  * A snapshot (cursor 0) sends all of it within the horizon. A delta sends rows whose seq is above
  * the cursor, plus a horizon snapshot of any feed subscribed since: its articles were written
@@ -136,8 +138,17 @@ export async function readPull(
     prefs: sql`select ${PREF} from user_prefs where user_id = ${userId}
       ${snapshot ? sql`` : sql`and seq > ${cursor} ${bySeq}`}`,
     subscriptions: snapshot
-      ? sql`select ${SUBSCRIPTION} from subscriptions where user_id = ${userId} and deleted_at is null`
+      ? sql`select ${SUBSCRIPTION} from subscriptions where user_id = ${userId}
+          and (deleted_at is null or feed_id in (select feed_id from articles where id in (${kept})))`
       : sql`select ${SUBSCRIPTION} from subscriptions where user_id = ${userId} and seq > ${cursor} ${bySeq}`,
+    // The feed left of a post the member began to keep, whatever its seq: the device may never
+    // have held that row (it took a snapshot after the leave), and without the watermark a post
+    // whose read state was compacted shows unread.
+    leftSubscriptions: snapshot
+      ? sql`select 1 where false`
+      : sql`select ${SUBSCRIPTION} from subscriptions where user_id = ${userId}
+          and deleted_at is not null
+          and feed_id in (select feed_id from articles where id in (${newlyKept}))`,
     states: snapshot
       ? sql`select ${STATE} from user_article_states where user_id = ${userId}
           and article_id in (${freshArticles})`
@@ -275,7 +286,7 @@ export async function readPull(
     rows: {
       profile: got.profile,
       prefs: within(got.prefs),
-      subscriptions,
+      subscriptions: merge(got.leftSubscriptions, got.subscriptions, (r) => String(r.feedId)),
       states: merge(
         got.freshStates.filter((r) => freshArticleIds.has(Number(r.articleId))),
         got.states,

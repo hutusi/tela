@@ -9,13 +9,16 @@ import {
   type TelaDb,
 } from '@tela/data'
 import {
+  type ArticleRow,
   applyPull,
+  type Confirmed,
   emptyTables,
   MEMBER_HEADER,
   type PullResponse,
   type PushResponse,
 } from '@tela/sync'
 import { sql } from 'drizzle-orm'
+import { isRead } from '../../reader/src/store/selectors'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -140,6 +143,53 @@ describe('pull', () => {
     expect(snap.rows.feeds.map((f) => f.id)).toEqual([2])
     expect(snap.rows.sites.map((s) => s.id)).toEqual([2])
     expect(snap.rows.states).toMatchObject([{ articleId: liked, likedAt: now }])
+  })
+
+  describe('a kept post of a feed left, whose read state was compacted', () => {
+    /** A post of feed 2 read by its watermark, then the feed left and its read state compacted. */
+    async function readThenLeft() {
+      await push([{ type: 'subscribe', feedId: 2 }])
+      const a = await addArticle(2)
+      await push([
+        { type: 'markRead', articleId: a },
+        { type: 'markAllRead', feedId: 2, upTo: a },
+      ])
+      await push([{ type: 'unsubscribe', feedId: 2 }])
+      return a
+    }
+    const shownRead = (pulls: PullResponse[], a: number) => {
+      let device: Confirmed = { cursor: 0, tables: emptyTables() }
+      for (const p of pulls) device = applyPull(device, p)
+      const article = device.tables.articles.get(a)
+      expect(article).toBeDefined()
+      return isRead(device.tables, article as ArticleRow, now)
+    }
+
+    test("a snapshot sends the left feed's subscription, and the device shows the post read", async () => {
+      const a = await readThenLeft()
+      await push([{ type: 'recommend', articleId: a, note: null }])
+      await compactReadStates(db)
+      const snap = await pull(0)
+      expect(snap.rows.states).toEqual([])
+      expect(snap.rows.subscriptions).toMatchObject([
+        { feedId: 2, deletedAt: expect.any(Number), watermarkId: a },
+      ])
+      expect(shownRead([snap], a)).toBe(true)
+    })
+
+    test('a delta sends it with a post kept since, to a device that never held it', async () => {
+      const a = await readThenLeft()
+      await compactReadStates(db)
+      const snap = await pull(0)
+      expect(snap.rows.subscriptions).toEqual([])
+      await push([{ type: 'recommend', articleId: a, note: null }])
+      const delta = await pull(snap.cursor)
+      expect(delta.rows.articles.map((x) => x.id)).toEqual([a])
+      expect(delta.rows.subscriptions).toMatchObject([
+        { feedId: 2, deletedAt: expect.any(Number), watermarkId: a },
+      ])
+      expect(shownRead([snap, delta], a)).toBe(true)
+    })
   })
 
   test('a kept article from a feed no longer followed still gets its translations as they land', async () => {
