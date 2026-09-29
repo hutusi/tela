@@ -1,8 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import 'fake-indexeddb/auto'
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { leaver } from '../src/leave'
-import { distrust, distrustAfterEarlierBuild, distrusted, initialStatus } from '../src/session'
-import { memoryPersistence, type Persistence } from '../src/store/db'
+import { distrust, distrusted, forgetOnSignOut, initialStatus, openStore } from '../src/session'
+import { indexedDbPersistence, memoryPersistence, type Persistence } from '../src/store/db'
 import { LocalStore } from '../src/store/local'
+import { noEarlierBuild, seedEarlierBuild, signOutEarlierBuild } from './earlier-build'
 import { NOW, profile, pull, sub } from './rows'
 
 const saved = globalThis.sessionStorage
@@ -74,15 +76,56 @@ describe('leaving an account', () => {
     expect(next.hasData).toBe(false)
     expect(initialStatus(next)).toBe('unknown')
   })
+})
 
-  test('an earlier build having run on this device makes this boot ask first', async () => {
-    const storage = memoryPersistence()
+describe('booting after an earlier build ran on this device', () => {
+  // The earlier build's database has one name on every device; start each case without it.
+  beforeEach(() => noEarlierBuild('tela'))
+  const copy = async () => {
+    const storage = await indexedDbPersistence(`tela-test-${crypto.randomUUID()}`)
     await held(storage)
-    const next = await reopened(storage)
-    await distrustAfterEarlierBuild(next, async () => false)
-    expect(initialStatus(next)).toBe('member')
-    const after = await reopened(storage)
-    await distrustAfterEarlierBuild(after, async () => true)
-    expect(initialStatus(after)).toBe('unknown')
+    return storage
+  }
+  const earlierSignsIn = () =>
+    seedEarlierBuild('tela', pull(5, { profile: [profile], subscriptions: [sub(9)] }, true), {
+      userId: 'b',
+    })
+
+  test('an earlier build that wrote its copy makes every tab and every boot ask first, until a claim', async () => {
+    const storage = await copy()
+    await earlierSignsIn()
+    const first = await openStore(storage)
+    expect(initialStatus(first)).toBe('unknown')
+    // Another tab, or the next boot, before /me has answered: still not trusted.
+    expect(initialStatus(await openStore(storage))).toBe('unknown')
+    // /me answered, and its claim confirms whose the copy is.
+    await first.setUser('a')
+    expect(initialStatus(await openStore(storage))).toBe('member')
+  })
+
+  test("an earlier build's sign-out, which empties its copy, is seen too", async () => {
+    const storage = await copy()
+    await earlierSignsIn()
+    const seen = await openStore(storage)
+    await seen.setUser('a')
+    // Nothing since: trusted again.
+    expect(initialStatus(await openStore(storage))).toBe('member')
+    // Then the member signs out in a tab of the earlier build: it clears its copy.
+    await signOutEarlierBuild('tela')
+    expect(initialStatus(await openStore(storage))).toBe('unknown')
+  })
+
+  test('a device where no earlier build ran boots on its copy at once', async () => {
+    expect(initialStatus(await openStore(await copy()))).toBe('member')
+  })
+})
+
+describe('the session ending', () => {
+  test('a copy the tab could not forget is not trusted at the next boot', async () => {
+    const inner = memoryPersistence()
+    const refusing: Persistence = { ...inner, release: () => Promise.reject(new Error('disk')) }
+    const store = await held(refusing)
+    await forgetOnSignOut(store)
+    expect(initialStatus(await reopened(refusing))).toBe('unknown')
   })
 })

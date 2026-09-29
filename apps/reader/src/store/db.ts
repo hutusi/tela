@@ -51,6 +51,11 @@ interface TelaDB extends DBSchema {
 export type Persisted = {
   /** Whose rows these are. Null means nobody's, and then nothing is stored. */
   owner: string | null
+  /**
+   * Whether an earlier build has run on this device since the copy was last claimed: a sign-out
+   * or sign-in there never reached it, so no tab trusts it until a claim after /me.
+   */
+  unverified: boolean
   cursor: number
   rows: TableRows | null
   pending: Pending[]
@@ -83,8 +88,13 @@ export interface Persistence {
    * (every earlier build's, which recorded `userId` instead) is nobody's to trust: it is wiped.
    */
   load(): Promise<Persisted>
-  /** Make the copy `owner`'s. Anyone else's, or nobody's, is wiped first; says whether it was. */
+  /**
+   * Make the copy `owner`'s. Anyone else's, or nobody's, is wiped first; says whether it was.
+   * Either way the claim is what confirms the owner, so the copy is no longer unverified.
+   */
   claim(owner: string): Promise<boolean>
+  /** Mark the copy unverified, whoever owns it (`Persisted.unverified`). */
+  distrust(): Promise<void>
   /** Wipe the copy while it is still `owner`'s; another account's is left alone. Says which. */
   release(owner: string): Promise<boolean>
   /**
@@ -129,13 +139,16 @@ const TABLES: (keyof TableRows)[] = [
 export const DATABASE = 'tela-2'
 const EARLIER = 'tela'
 
+/** Left in the earlier build's emptied copy, where that build never reads; its clear() takes it. */
+const SEEN = 'tela-2:seen'
+
 /**
- * Whether an earlier build has written its copy since this build last looked; it is emptied
- * either way. Found written, an earlier build ran on this device since (a tab left open across
- * the deploy, or a rollback), and a sign-out or another account's sign-in there never reached
- * this build's copy, so the caller should not trust that copy for this boot. Emptied, not
- * deleted: a deletion waits for every tab of that build to close, and one of them reloading
- * meanwhile would wait behind it on a blank page.
+ * Whether an earlier build has touched its copy since this build last looked; it is emptied
+ * either way, and marked as seen. Touched means written, or cleared (its sign-out, which takes
+ * the mark with everything else): an earlier build ran on this device since (a tab left open
+ * across the deploy, or a rollback), and a sign-out or another account's sign-in there never
+ * reached this build's copy. Emptied, not deleted: a deletion waits for every tab of that build
+ * to close, and one of them reloading meanwhile would wait behind it on a blank page.
  */
 export async function earlierBuildRan(): Promise<boolean> {
   try {
@@ -144,12 +157,18 @@ export async function earlierBuildRan(): Promise<boolean> {
     const earlier = await openDB(EARLIER)
     try {
       const names = Array.from(earlier.objectStoreNames)
-      if (names.length === 0) return false
+      if (!names.includes('meta')) return false
       const tx = earlier.transaction(names, 'readwrite')
-      const counts = await Promise.all(names.map((n) => tx.objectStore(n).count()))
+      const meta = tx.objectStore('meta')
+      const [keys, ...counts] = await Promise.all([
+        meta.getAllKeys(),
+        ...names.filter((n) => n !== 'meta').map((n) => tx.objectStore(n).count()),
+      ])
+      const touched = !keys.includes(SEEN) || keys.length > 1 || counts.some((n) => n > 0)
       await Promise.all(names.map((n) => tx.objectStore(n).clear()))
+      await meta.put(true, SEEN)
       await tx.done
-      return counts.some((n) => n > 0)
+      return touched
     } finally {
       earlier.close()
     }
@@ -161,6 +180,7 @@ export async function earlierBuildRan(): Promise<boolean> {
 
 const OWNER = 'owner'
 const CURSOR = 'cursor'
+const UNVERIFIED = 'unverified'
 /** Earlier builds' keys: the owner, and the whole pending list in one record. Never read. */
 const LEGACY = ['userId', 'pending']
 const PENDING = 'pending:'
@@ -226,11 +246,12 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
         const owner = await ownerOf(tx)
         if (owner === null) {
           await wipe(tx)
-          return { owner: null, cursor: 0, rows: null, pending: [] }
+          return { owner: null, unverified: false, cursor: 0, rows: null, pending: [] }
         }
         const meta = tx.objectStore('meta')
-        const [cursor, keys, records, values] = await Promise.all([
+        const [cursor, unverified, keys, records, values] = await Promise.all([
           meta.get(CURSOR),
+          meta.get(UNVERIFIED),
           meta.getAllKeys(pendingRange()),
           meta.getAll(pendingRange()) as Promise<StoredPending[]>,
           Promise.all(TABLES.map((t) => tx.objectStore('tables').get(t))),
@@ -247,6 +268,7 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
         const complete = values.every((v) => v !== undefined)
         return {
           owner,
+          unverified: unverified === true,
           cursor: complete ? Number(cursor ?? 0) : 0,
           rows: complete
             ? (Object.fromEntries(TABLES.map((t, i) => [t, values[i]])) as TableRows)
@@ -256,10 +278,17 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
       }),
     claim: (owner) =>
       write(STORES, async (tx) => {
-        if ((await ownerOf(tx)) === owner) return false
+        if ((await ownerOf(tx)) === owner) {
+          await tx.objectStore('meta').delete(UNVERIFIED)
+          return false
+        }
         await wipe(tx)
         await tx.objectStore('meta').put(owner, OWNER)
         return true
+      }),
+    distrust: () =>
+      write(['meta'], async (tx) => {
+        await tx.objectStore('meta').put(true, UNVERIFIED)
       }),
     release: (owner) =>
       write(STORES, async (tx) => {
@@ -334,6 +363,7 @@ function untag(record: StoredPending): Pending {
 /** Storage that forgets everything: tests, and browsers that refuse IndexedDB. */
 export function memoryPersistence(): Persistence {
   let owner: string | null = null
+  let unverified = false
   let cursor = 0
   let tables: Partial<TableRows> = {}
   // Only the owner's: a claim wipes them with everything else, and every write checks.
@@ -341,6 +371,7 @@ export function memoryPersistence(): Persistence {
   const bodies = new Map<string, StoredBody>()
   const objects = new Map<string, StoredObject>()
   const wipe = () => {
+    unverified = false
     cursor = 0
     tables = {}
     pending.clear()
@@ -351,21 +382,28 @@ export function memoryPersistence(): Persistence {
     async load() {
       if (owner === null) {
         wipe()
-        return { owner: null, cursor: 0, rows: null, pending: [] }
+        return { owner: null, unverified: false, cursor: 0, rows: null, pending: [] }
       }
       const complete = TABLES.every((t) => t in tables)
       return {
         owner,
+        unverified,
         cursor: complete ? cursor : 0,
         rows: complete ? (tables as TableRows) : null,
         pending: inOrder(pending.values()),
       }
     },
     async claim(o) {
-      if (owner === o) return false
+      if (owner === o) {
+        unverified = false
+        return false
+      }
       wipe()
       owner = o
       return true
+    },
+    async distrust() {
+      unverified = true
     },
     async release(o) {
       if (owner !== o) return false

@@ -60,6 +60,8 @@ export class LocalStore {
   onLost: (() => void) | null = null
   /** The account this tab holds: every write is made for it, and every request names it. */
   userId: string | null = null
+  /** An earlier build ran here since the copy was claimed: no boot trusts it before /me. */
+  unverified = false
   /**
    * Moves on whenever the tab stops holding what it held: another account, or none. An answer to
    * a request sent before is for rows the tab no longer has, so it is dropped (`applyPull` and
@@ -102,6 +104,7 @@ export class LocalStore {
   async open(): Promise<void> {
     const saved = await this.persistence.load()
     this.userId = saved.owner
+    this.unverified = saved.unverified
     this.confirmed = {
       cursor: saved.cursor,
       tables: saved.rows ? tablesFromRows(saved.rows) : emptyTables(),
@@ -244,6 +247,7 @@ export class LocalStore {
     // Before the claim, so an answer already on its way for `previous` finds the epoch moved.
     if (previous !== userId) this.reset(userId)
     const wiped = await this.persistence.claim(userId)
+    this.unverified = false
     // The copy stopped being this account's after the tab loaded it: what it holds is gone there.
     if (wiped && previous === userId) this.reset(userId)
     return previous !== null && previous !== userId
@@ -259,6 +263,12 @@ export class LocalStore {
     // First, so nothing still on its way for the old account lands after this.
     this.reset(null)
     if (owner !== null) await this.persistence.release(owner)
+  }
+
+  /** An earlier build ran on this device: no tab trusts this copy until a claim after /me. */
+  async distrust(): Promise<void> {
+    this.unverified = true
+    await this.persistence.distrust()
   }
 
   /** Signing out: forget this account, and only this account's copy, as `forgetAccount`. */

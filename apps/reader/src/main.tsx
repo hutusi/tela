@@ -6,20 +6,17 @@ import './styles.css'
 import { createRoot } from 'react-dom/client'
 import { App } from './app'
 import { leaver } from './leave'
-import { distrustAfterEarlierBuild, sessionEvents } from './session'
+import { openStore, sessionEvents } from './session'
 import { registerShell } from './shell'
 import { bindApi } from './store/api'
 import { indexedDbPersistence, memoryPersistence } from './store/db'
 import { SyncEngine } from './store/engine'
-import { LocalStore } from './store/local'
 import { Objects } from './store/objects'
 
 async function boot() {
   // A browser that refuses IndexedDB (some private modes) still reads, just without a memory.
   const persistence = await indexedDbPersistence().catch(() => memoryPersistence())
-  const store = new LocalStore(persistence)
-  await store.open()
-  await distrustAfterEarlierBuild(store)
+  const store = await openStore(persistence)
   const objects = new Objects(persistence)
 
   const leave = leaver({

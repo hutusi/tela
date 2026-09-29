@@ -6,9 +6,9 @@
  */
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { AccountChanged, api, SignedOut, UpgradeRequired } from './store/api'
-import { earlierBuildRan } from './store/db'
+import { earlierBuildRan, type Persistence } from './store/db'
 import type { SyncEngine } from './store/engine'
-import type { LocalStore } from './store/local'
+import { LocalStore } from './store/local'
 
 export type SessionStatus = 'unknown' | 'member' | 'guest'
 
@@ -57,20 +57,37 @@ export function distrusted(owner: string | null): boolean {
 }
 
 /** How a tab boots: as its stored copy's member, unless it holds no one, or no one to trust. */
-export function initialStatus(store: Pick<LocalStore, 'hasData' | 'userId'>): SessionStatus {
-  return store.hasData && store.userId !== null && !distrusted(store.userId) ? 'member' : 'unknown'
+export function initialStatus(
+  store: Pick<LocalStore, 'hasData' | 'userId' | 'unverified'>,
+): SessionStatus {
+  const trusted = store.hasData && store.userId !== null && !store.unverified
+  return trusted && !distrusted(store.userId) ? 'member' : 'unknown'
 }
 
 /**
- * An earlier build ran on this device since this one last looked (a tab left open across the
- * deploy, a rollback): a sign-out or sign-in it saw never reached this build's copy, so this boot
- * asks who is signed in before trusting it.
+ * Open the device's store for this boot. An earlier build having run on this device since (a tab
+ * left open across the deploy, a rollback) marks the copy unverified in storage, so no tab and
+ * no later boot trusts it until a claim after /me: a sign-out or sign-in there never reached it.
  */
-export async function distrustAfterEarlierBuild(
-  store: Pick<LocalStore, 'userId'>,
+export async function openStore(
+  persistence: Persistence,
   ran: () => Promise<boolean> = earlierBuildRan,
-): Promise<void> {
-  if ((await ran()) && store.userId !== null) distrust(store.userId)
+): Promise<LocalStore> {
+  const store = new LocalStore(persistence)
+  await store.open()
+  if (await ran()) await store.distrust()
+  return store
+}
+
+/**
+ * The session ended (a 401): forget this tab's account. A copy that could not be forgotten is
+ * not trusted at the next boot, as when leaving.
+ */
+export async function forgetOnSignOut(store: Pick<LocalStore, 'userId' | 'forgetAccount'>) {
+  const owner = store.userId
+  await store.forgetAccount().catch(() => {
+    if (owner !== null) distrust(owner)
+  })
 }
 
 async function whoAmI(): Promise<string | null> {
@@ -105,14 +122,7 @@ export function SessionProvider({
 
   useEffect(() => {
     sessionEvents.signedOut = () => {
-      const owner = store.userId
-      void store
-        .forgetAccount()
-        // As when leaving: a copy that could not be forgotten is not trusted at the next boot.
-        .catch(() => {
-          if (owner !== null) distrust(owner)
-        })
-        .finally(() => setStatus('guest'))
+      void forgetOnSignOut(store).finally(() => setStatus('guest'))
     }
   }, [store])
 
@@ -123,18 +133,29 @@ export function SessionProvider({
     }
     if (status === 'unknown') {
       let cancelled = false
+      const again = () => setStatus('unknown')
       whoAmI()
         .then(async (id) => {
           if (cancelled) return
           if (id) {
             await store.setUser(id)
             setStatus('member')
-          } else setStatus('guest')
+          } else {
+            // Nobody is signed in: a copy this tab still holds is no one's to show.
+            await forgetOnSignOut(store)
+            setStatus('guest')
+          }
         })
-        // Offline with nothing on the device: there is nothing to read, so show the public side.
-        .catch(() => !cancelled && setStatus('guest'))
+        // Offline, with nothing on the device it can trust: the public side, until the network
+        // is back and /me can say who this is.
+        .catch(() => {
+          if (cancelled) return
+          setStatus('guest')
+          window.addEventListener('online', again, { once: true })
+        })
       return () => {
         cancelled = true
+        window.removeEventListener('online', again)
       }
     }
     return undefined

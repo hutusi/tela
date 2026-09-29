@@ -79,7 +79,7 @@ describe('the device database', () => {
     })
     const now = await indexedDbPersistence(name)
     const loaded = await now.load()
-    expect(loaded).toEqual({ owner: null, cursor: 0, rows: null, pending: [] })
+    expect(loaded).toEqual({ owner: null, unverified: false, cursor: 0, rows: null, pending: [] })
     // Nothing of it is left to be read back later, under anyone.
     expect(await metaKeys(name)).toEqual([])
     expect(await now.bodyKeys()).toEqual([])
@@ -90,7 +90,13 @@ describe('the device database', () => {
     await seedEarlierBuild(name, pull(5, { profile: [profile] }, true), { userId: 'a' })
     const one = await indexedDbPersistence(name)
     expect(await one.claim('a')).toBe(true)
-    expect(await one.load()).toEqual({ owner: 'a', cursor: 0, rows: null, pending: [] })
+    expect(await one.load()).toEqual({
+      owner: 'a',
+      unverified: false,
+      cursor: 0,
+      rows: null,
+      pending: [],
+    })
     expect(await metaKeys(name)).toEqual(['owner'])
     // Claiming it again as the same member keeps it.
     await one.commit('a', { from: 0, cursor: 3 })
@@ -163,7 +169,13 @@ describe('the device database', () => {
       const write = () =>
         one.commit('a', { tables: alice, cursor: 9, put: [change(`m-${i}-0001`, 1, 7)] })
       await Promise.all(i % 2 ? [write(), two.claim('b')] : [two.claim('b'), write()])
-      expect(await two.load()).toEqual({ owner: 'b', cursor: 0, rows: null, pending: [] })
+      expect(await two.load()).toEqual({
+        owner: 'b',
+        unverified: false,
+        cursor: 0,
+        rows: null,
+        pending: [],
+      })
       expect(await metaKeys(name)).toEqual(['owner'])
     }
   })
@@ -211,13 +223,20 @@ describe('the device database', () => {
       })
     await seed()
     const now = await indexedDbPersistence()
-    expect(await now.load()).toEqual({ owner: null, cursor: 0, rows: null, pending: [] })
+    expect(await now.load()).toEqual({
+      owner: null,
+      unverified: false,
+      cursor: 0,
+      rows: null,
+      pending: [],
+    })
     await now.claim('b')
 
     // It ran: its sign-out or sign-in never reached this copy. Its copy is emptied, not deleted
     // (a deletion would wait on its open tabs, and hang one of them reloading).
     expect(await earlierBuildRan()).toBe(true)
-    expect(await metaKeys('tela')).toEqual([])
+    // Emptied, and marked as seen where that build never reads: its sign-out takes the mark.
+    expect(await metaKeys('tela')).toEqual(['tela-2:seen'])
     expect((await indexedDB.databases()).map((d) => d.name)).toContain('tela')
     // Nothing new since: nothing to distrust. And this build's own copy is untouched.
     expect(await earlierBuildRan()).toBe(false)
@@ -252,4 +271,5 @@ describe('the device database', () => {
     expect(stored.rows?.subscriptions.map((x) => x.feedId)).toEqual([1])
     // Consistent at 100: the next pull from there brings the second subscription back.
   })
+
 })

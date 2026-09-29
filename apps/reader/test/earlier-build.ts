@@ -55,3 +55,25 @@ export async function metaKeys(name: string): Promise<string[]> {
     db.close()
   }
 }
+
+/** An earlier build's sign-out, as cb096cb's store.clear() does it: every store emptied. */
+export async function signOutEarlierBuild(name: string): Promise<void> {
+  const db = await openDB(name, 1)
+  try {
+    const names = Array.from(db.objectStoreNames)
+    const tx = db.transaction(names, 'readwrite')
+    await Promise.all(names.map((n) => tx.objectStore(n).clear()))
+    await tx.done
+  } finally {
+    db.close()
+  }
+}
+
+/** No earlier build has ever run on this device. */
+export function noEarlierBuild(name: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(name)
+    req.onsuccess = () => resolve()
+    req.onerror = () => reject(req.error)
+  })
+}
