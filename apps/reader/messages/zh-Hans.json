@@ -232,7 +232,8 @@
     "errors": {
       "invalid_handle": "用户名需为 3–30 个小写字母、数字或下划线，且不能使用保留词。",
       "handle_taken": "该用户名已被占用。"
-    }
+    },
+    "appearance": "外观"
   },
   "search": {
     "title": "搜索",
@@ -248,5 +249,21 @@
     "title": "这里什么也没有",
     "intro": "这个页面不存在，或者没有公开。",
     "home": "回到首页"
+  },
+  "typography": {
+    "label": "文字与主题",
+    "size": "字号",
+    "measure": "行宽",
+    "theme": "主题",
+    "measures": {
+      "narrow": "窄",
+      "normal": "适中",
+      "wide": "宽"
+    },
+    "themes": {
+      "system": "跟随系统",
+      "light": "浅色",
+      "dark": "深色"
+    }
   }
 }

@@ -78,7 +78,7 @@ export function AppHeader() {
         to="/search"
         aria-label={t('search')}
         data-testid="search-link"
-        className="hidden size-[34px] shrink-0 items-center justify-center rounded-full border border-line bg-white text-[15px] text-muted hover:border-muted hover:text-ink hover:no-underline sm:flex xl:hidden"
+        className="hidden size-[34px] shrink-0 items-center justify-center rounded-full border border-line bg-surface text-[15px] text-muted hover:border-muted hover:text-ink hover:no-underline sm:flex xl:hidden"
       >
         <span aria-hidden="true">⌕</span>
       </Link>
@@ -86,7 +86,7 @@ export function AppHeader() {
         key={query}
         query={query}
         testId="search-input"
-        className="hidden w-60 min-w-0 items-center gap-2 rounded-full border border-line bg-white px-3.5 py-1.5 text-[13px] text-muted focus-within:border-muted xl:flex"
+        className="hidden w-60 min-w-0 items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] text-muted focus-within:border-muted xl:flex"
       />
       {member ? <ReadInMenu readingLang={readingLang} /> : null}
       <LocaleSwitcher />

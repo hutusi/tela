@@ -232,7 +232,8 @@
     "errors": {
       "invalid_handle": "Handles are 3–30 lowercase letters, digits, or underscores, and some words are reserved.",
       "handle_taken": "That handle is already taken."
-    }
+    },
+    "appearance": "Appearance"
   },
   "search": {
     "title": "Search",
@@ -248,5 +249,21 @@
     "title": "Nothing here",
     "intro": "That page does not exist, or it is not public.",
     "home": "Go to the front page"
+  },
+  "typography": {
+    "label": "Text and theme",
+    "size": "Size",
+    "measure": "Width",
+    "theme": "Theme",
+    "measures": {
+      "narrow": "Narrow",
+      "normal": "Normal",
+      "wide": "Wide"
+    },
+    "themes": {
+      "system": "Auto",
+      "light": "Light",
+      "dark": "Dark"
+    }
   }
 }

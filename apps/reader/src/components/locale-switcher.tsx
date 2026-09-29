@@ -9,7 +9,7 @@ export function LocaleSwitcher() {
   return (
     <div
       data-testid="locale-switcher"
-      className="flex rounded-full border border-line bg-white p-0.5 text-[12px] font-medium sm:shrink-0"
+      className="flex rounded-full border border-line bg-surface p-0.5 text-[12px] font-medium sm:shrink-0"
     >
       {UI_LOCALES.map((code) => (
         <button

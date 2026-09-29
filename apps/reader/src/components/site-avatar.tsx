@@ -21,7 +21,7 @@ export function SiteAvatar({
         alt=""
         width={size}
         height={size}
-        className="shrink-0 rounded-[10px] bg-white object-cover"
+        className="shrink-0 rounded-[10px] bg-surface object-cover"
         style={{ width: size, height: size }}
       />
     )

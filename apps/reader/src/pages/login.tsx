@@ -142,7 +142,7 @@ export function LoginPage() {
                 onChange={(e) => setValue(e.target.value)}
                 placeholder={t('codePlaceholder')}
                 data-testid="login-code"
-                className="rounded-lg border border-line bg-white px-3 py-2.5 font-mono text-lg tracking-widest outline-none focus:border-muted"
+                className="rounded-lg border border-line bg-surface px-3 py-2.5 font-mono text-lg tracking-widest outline-none focus:border-muted"
               />
             </>
           ) : (
@@ -156,12 +156,10 @@ export function LoginPage() {
               onChange={(e) => setValue(e.target.value)}
               placeholder={t('emailPlaceholder')}
               data-testid="login-email"
-              className="rounded-lg border border-line bg-white px-3 py-2.5 outline-none focus:border-muted"
+              className="rounded-lg border border-line bg-surface px-3 py-2.5 outline-none focus:border-muted"
             />
           )}
-          {error ? (
-            <p className="text-sm text-[oklch(0.5_0.15_25)]">{t(`errors.${error}`)}</p>
-          ) : null}
+          {error ? <p className="text-sm text-danger">{t(`errors.${error}`)}</p> : null}
           <button
             type="submit"
             disabled={busy}

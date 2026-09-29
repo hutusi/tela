@@ -31,6 +31,9 @@
   --color-source: color-mix(in oklab, var(--color-hover) 55%, var(--color-paper));
   --color-accent: oklch(0.5 0.1 150);
   --color-accent-strong: oklch(0.4 0.1 150);
+  /* Cards, popovers and inputs: white on paper, lifted a step on a dark ground. */
+  --color-surface: #fff;
+  --color-danger: oklch(0.5 0.15 25);
 
   --font-serif: "EB Garamond", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
   --font-sans: "Figtree", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
@@ -46,6 +49,49 @@
       transform: none;
     }
   }
+}
+
+/*
+ * Dark mode (ADR 0026, DESIGN.md): the same tokens on a warm near-black ground, so every utility
+ * that names one follows without a `dark:` variant. `data-theme` on <html> is the member's choice
+ * (synced, and cached in localStorage so the first paint is right); without one, the system's.
+ * The block is written twice because a media query cannot share a selector list with an
+ * attribute: keep the two identical.
+ */
+:root {
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-paper: #16140f;
+    --color-surface: #1f1c17;
+    --color-ink: #ede7db;
+    --color-body: #ddd6c8;
+    --color-ink-2: #b1a999;
+    --color-muted: #8c8476;
+    --color-line: #34302a;
+    --color-hover: #29251f;
+    --color-thumb: #454038;
+    --color-accent: oklch(0.68 0.14 150);
+    --color-accent-strong: oklch(0.78 0.12 150);
+    --color-danger: oklch(0.72 0.15 25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-paper: #16140f;
+  --color-surface: #1f1c17;
+  --color-ink: #ede7db;
+  --color-body: #ddd6c8;
+  --color-ink-2: #b1a999;
+  --color-muted: #8c8476;
+  --color-line: #34302a;
+  --color-hover: #29251f;
+  --color-thumb: #454038;
+  --color-accent: oklch(0.68 0.14 150);
+  --color-accent-strong: oklch(0.78 0.12 150);
+  --color-danger: oklch(0.72 0.15 25);
 }
 
 /*
@@ -122,10 +168,19 @@
   opacity: 1;
 }
 
+/*
+ * The reader's typography (ADR 0026): `--reader-scale` and `--reader-measure` are set on the
+ * reader pane from the member's synced prefs. The paired body keeps its own two-column measure.
+ */
+[data-testid="reader"] {
+  --reader-scale: 1;
+  --reader-measure: 640px;
+}
+
 /* Article bodies: sanitized HTML from @tela/content, one leaf block per data-tb id. */
 .article-body {
   font-family: var(--font-serif);
-  font-size: 19.5px;
+  font-size: calc(19.5px * var(--reader-scale, 1));
   line-height: 1.55;
   color: var(--color-body);
   overflow-wrap: anywhere;
@@ -168,7 +223,7 @@
   font-size: 0.8em;
 }
 .article-body pre {
-  background: #fff;
+  background: var(--color-surface);
   border: 1px solid var(--color-line);
   border-radius: 8px;
   padding: 14px 16px;
@@ -226,7 +281,7 @@
 .article-body:lang(zh),
 .article-body:lang(ja),
 .article-body:lang(ko) {
-  font-size: 18px;
+  font-size: calc(18px * var(--reader-scale, 1));
   line-height: 1.8;
 }
 

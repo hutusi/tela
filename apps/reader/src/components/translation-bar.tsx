@@ -44,7 +44,7 @@ export function TranslationBar({
   const ready = view.available
   return (
     <div
-      className="mb-7 flex flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-[10px] border border-line bg-white px-3.5 py-2.5 text-[13px]"
+      className="mb-7 flex flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-[13px]"
       data-testid="translation-bar"
       data-state={view.state}
     >
@@ -82,7 +82,7 @@ export function TranslationBar({
               data-testid={`mode-${m}`}
               className={`rounded-md px-2.5 py-[5px] text-[12.5px] ${
                 active
-                  ? 'bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]'
+                  ? 'bg-surface text-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]'
                   : 'text-muted hover:text-ink'
               } ${disabled ? 'pointer-events-none opacity-50' : ''}`}
             >

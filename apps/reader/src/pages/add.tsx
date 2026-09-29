@@ -25,7 +25,7 @@ export function addError(code: string | undefined): AddError {
   return 'fetch_failed'
 }
 
-const ERROR = 'text-sm text-[oklch(0.5_0.15_25)]'
+const ERROR = 'text-sm text-danger'
 
 export function AddPage() {
   const t = useTranslations('add')
@@ -110,7 +110,7 @@ function AddFeedForm() {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder={t('placeholder')}
-          className="min-w-0 flex-1 rounded-lg border border-line bg-white px-3 py-2.5 outline-none focus:border-muted"
+          className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2.5 outline-none focus:border-muted"
           data-testid="feed-url"
         />
         <button
@@ -135,7 +135,7 @@ function AddFeedForm() {
           {candidates.map((c) => (
             <li
               key={c.url}
-              className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3"
+              className="flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3"
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{c.title ?? c.url}</div>

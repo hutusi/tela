@@ -66,7 +66,7 @@ function TopicsForm({ siteId, topics }: { siteId: number; topics: string[] }) {
   return (
     <form
       onSubmit={(e) => void save(e)}
-      className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-white p-4"
+      className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface p-4"
       data-testid="topics-form"
     >
       <span className="mr-2 text-[13px] font-medium">{t('yourTopics')}</span>

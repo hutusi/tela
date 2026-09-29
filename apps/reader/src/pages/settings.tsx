@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { ReadInMenu } from '../components/read-in-menu'
+import { TypographyControls } from '../components/typography-menu'
 import { useTitle } from '../lib/title'
 import { apiJson } from '../store/api'
 import { useReadingLang, useStore, useTables } from '../store/hooks'
@@ -59,6 +60,10 @@ export function SettingsPage() {
           <ReadInMenu readingLang={readingLang} />
         </div>
       </section>
+      <section className="flex max-w-sm flex-col gap-4 border-t border-line pt-8">
+        <h2 className="font-serif text-[22px] font-medium">{t('appearance')}</h2>
+        <TypographyControls />
+      </section>
       <section className="flex flex-col gap-3 border-t border-line pt-8">
         <h2 className="font-serif text-[22px] font-medium">{t('data')}</h2>
         <p className="text-[14px] text-ink-2">{t('opmlHint')}</p>
@@ -97,7 +102,7 @@ function SettingsForm({
   const [publicSubscriptions, setPublic] = useState(profile.publicSubscriptions)
   const [busy, setBusy] = useState(false)
   const field =
-    'w-full rounded-lg border border-line bg-white px-3 py-2.5 outline-none focus:border-muted'
+    'w-full rounded-lg border border-line bg-surface px-3 py-2.5 outline-none focus:border-muted'
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -187,7 +192,7 @@ function SettingsForm({
           </span>
         ) : null}
         {state.error ? (
-          <span className="text-[13px] text-[oklch(0.5_0.15_25)]" data-testid="settings-error">
+          <span className="text-[13px] text-danger" data-testid="settings-error">
             {t(`errors.${state.error}`)}
           </span>
         ) : null}

@@ -287,4 +287,64 @@ test.describe('stylesheet', () => {
     await expect(page.getByTestId('search-input')).toBeVisible()
     await expect(page.getByTestId('search-link')).toBeHidden()
   })
+
+  /**
+   * Dark mode is the same tokens on another ground, so it is only as good as the computed colours
+   * say: a utility with a literal colour (`bg-white` was on 31 elements) would stay light.
+   */
+  test("the theme follows the system, and a member's choice overrides it", async ({ page }) => {
+    const paper = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+    const ink = () => page.evaluate(() => getComputedStyle(document.body).color)
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await page.goto('/settings')
+    await page.getByTestId('theme-system').click()
+    expect(await paper()).toBe('rgb(22, 20, 15)')
+    expect(await ink()).toBe('rgb(237, 231, 219)')
+
+    await page.getByTestId('theme-light').click()
+    expect(await paper()).toBe('rgb(246, 242, 234)')
+
+    await page.emulateMedia({ colorScheme: 'light' })
+    const pushed = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+    await page.getByTestId('theme-dark').click()
+    expect(await paper()).toBe('rgb(22, 20, 15)')
+    await pushed
+    // The next visit is dark from the first paint: the inline script, before any app code.
+    await page.reload({ waitUntil: 'commit' })
+    await page.waitForFunction(() => document.body !== null)
+    expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark')
+
+    await page.getByTestId('theme-system').click()
+    expect(await paper()).toBe('rgb(246, 242, 234)')
+  })
+
+  test("text size and line length are the member's, and reach the article", async ({ page }) => {
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).first().click()
+    await page.getByTestId('article-row').first().click()
+    const body = page.locator('[data-testid="body-original"]').first()
+    await expect(body).toBeVisible()
+    const size = () => body.evaluate((el) => getComputedStyle(el).fontSize)
+    const measure = () =>
+      body.evaluate((el) => (el.parentElement ? getComputedStyle(el.parentElement).maxWidth : ''))
+    expect(await size()).toBe('19.5px')
+    expect(await measure()).toBe('640px')
+
+    await page.getByTestId('typography-button').click()
+    await page.getByTestId('size-xl').click()
+    await page.getByTestId('measure-wide').click()
+    expect(Number.parseFloat(await size())).toBeCloseTo(19.5 * 1.27, 1)
+    expect(await measure()).toBe('760px')
+
+    // Synced prefs: a reload (and every other device) reads the same way.
+    await page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+    await page.reload()
+    await expect(body).toBeVisible()
+    expect(await measure()).toBe('760px')
+    await page.getByTestId('typography-button').click()
+    await page.getByTestId('size-m').click()
+    await page.getByTestId('measure-normal').click()
+    expect(await size()).toBe('19.5px')
+  })
 })

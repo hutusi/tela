@@ -30,7 +30,7 @@ export function claimError(code: string | undefined): StartError {
 
 const POLL_MS = 2500
 const POLL_FOR_MS = 120_000
-const ERROR = 'text-sm text-[oklch(0.5_0.15_25)]'
+const ERROR = 'text-sm text-danger'
 
 export function ClaimPage() {
   const t = useTranslations('claim')
@@ -74,7 +74,7 @@ export function ClaimPage() {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://your.blog"
-            className="min-w-0 flex-1 rounded-lg border border-line bg-white px-3 py-2.5 outline-none focus:border-muted"
+            className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2.5 outline-none focus:border-muted"
             data-testid="claim-url"
           />
           <button
@@ -153,12 +153,12 @@ export function ClaimSitePage() {
       </div>
 
       {standing.status === 'claimed_by_other' ? (
-        <p className="rounded-xl border border-line bg-white p-5 text-ink-2">
+        <p className="rounded-xl border border-line bg-surface p-5 text-ink-2">
           {t('claimedByOther')}
         </p>
       ) : standing.status === 'verified' ? (
         <div
-          className="rounded-xl border border-accent/40 bg-white p-5"
+          className="rounded-xl border border-accent/40 bg-surface p-5"
           data-testid="claim-verified"
         >
           <div className="font-medium text-accent">✓ {t('verified')}</div>
@@ -176,7 +176,7 @@ export function ClaimSitePage() {
             <h2 className="font-serif text-[22px] font-medium">{t('optionMeta')}</h2>
             <p className="text-[14px] text-ink-2">{t('optionMetaHint')}</p>
             <pre
-              className="overflow-x-auto rounded-lg border border-line bg-white px-4 py-3 text-[13px]"
+              className="overflow-x-auto rounded-lg border border-line bg-surface px-4 py-3 text-[13px]"
               data-testid="meta-snippet"
             >
               {standing.proofs.meta}
@@ -185,7 +185,7 @@ export function ClaimSitePage() {
           <section className="flex flex-col gap-3">
             <h2 className="font-serif text-[22px] font-medium">{t('optionRelMe')}</h2>
             <p className="text-[14px] text-ink-2">{t('optionRelMeHint')}</p>
-            <pre className="overflow-x-auto rounded-lg border border-line bg-white px-4 py-3 text-[13px]">
+            <pre className="overflow-x-auto rounded-lg border border-line bg-surface px-4 py-3 text-[13px]">
               {standing.proofs.relMe}
             </pre>
           </section>
@@ -201,7 +201,7 @@ export function ClaimSitePage() {
             </button>
             {pending ? <span className="text-[13px] text-muted">{t('checking')}</span> : null}
             {standing.status === 'failed' && standing.error ? (
-              <span className="text-[13px] text-[oklch(0.5_0.15_25)]" data-testid="claim-error">
+              <span className="text-[13px] text-danger" data-testid="claim-error">
                 {t('failed')} {standing.error}
               </span>
             ) : null}

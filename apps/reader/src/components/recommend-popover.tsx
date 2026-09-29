@@ -53,7 +53,7 @@ export function RecommendPopover({ articleId, recommended, note, recommendCount 
       </button>
       {open ? (
         <div
-          className="absolute right-0 top-[calc(100%+8px)] z-[6] flex w-80 flex-col gap-2.5 rounded-xl border border-line bg-white p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.10)] animate-fade"
+          className="absolute right-0 top-[calc(100%+8px)] z-[6] flex w-80 flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.10)] animate-fade"
           data-testid="recommend-popover"
         >
           <div className="font-medium">{t('recommendTitle')}</div>

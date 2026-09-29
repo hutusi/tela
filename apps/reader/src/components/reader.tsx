@@ -9,6 +9,7 @@ import { useLocale, useTranslations } from 'use-intl'
 import { pairBlocks, readerBlocks, runsOf } from '../lib/block-pairs'
 import { relativeTime } from '../lib/format'
 import type { ReadingMode } from '../lib/href'
+import { readerStyle, typographyOf } from '../lib/typography'
 import { useArticleTranslation } from '../lib/use-translation'
 import { useNow, useStore, useTables } from '../store/hooks'
 import type { ContentObject } from '../store/objects'
@@ -19,6 +20,7 @@ import { RecommendPopover } from './recommend-popover'
 import { ReaderPaneSkeleton } from './skeletons'
 import { Swatch } from './swatch'
 import { TranslationBar } from './translation-bar'
+import { TypographyMenu } from './typography-menu'
 import { Untranslated } from './untranslated'
 
 function Body({
@@ -99,6 +101,8 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
 
   if (!loaded) return <ReaderPaneSkeleton />
 
+  const { size, measure } = typographyOf(tables)
+
   const view = translation.view
   const shown: ReadingMode = view?.available ? mode : 'orig'
   const showTrans = shown !== 'orig'
@@ -118,6 +122,9 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
       className="min-w-0 overflow-hidden px-5 pb-20 pt-6 outline-none animate-fade md:px-8"
       data-testid="reader"
       data-mode={shown}
+      data-size={size}
+      data-measure={measure}
+      style={readerStyle(size, measure)}
       tabIndex={-1}
     >
       {extracting ? (
@@ -136,6 +143,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
           {t('close')}
         </button>
         <div className="flex flex-wrap items-center gap-2">
+          <TypographyMenu />
           <LikeButton
             articleId={article.id}
             liked={isLiked(tables, article.id)}
@@ -195,7 +203,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
             sourceLang={sourceLang}
           />
         ) : (
-          <div className="max-w-[640px]">
+          <div className="max-w-(--reader-measure)">
             <h1
               className="mb-6 font-serif text-[40px] font-medium leading-[1.12] tracking-tight"
               style={{ textWrap: 'pretty' }}
@@ -225,7 +233,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
           </div>
         )}
 
-        <div className="mt-10 flex max-w-[640px] items-center gap-4 border-t border-line pt-6">
+        <div className="mt-10 flex max-w-(--reader-measure) items-center gap-4 border-t border-line pt-6">
           <Swatch id={article.feedId} title={name} size={44} round />
           <div className="flex-1">
             <div className="font-medium">{site?.title ?? name}</div>
@@ -256,7 +264,7 @@ function RetryTranslation({ onRetry }: { onRetry: () => void }) {
     <button
       type="button"
       data-testid="translation-retry"
-      className="mb-7 rounded-full border border-line bg-white px-3.5 py-1.5 text-[13px] hover:border-muted"
+      className="mb-7 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] hover:border-muted"
       onClick={onRetry}
     >
       {t('retry')}

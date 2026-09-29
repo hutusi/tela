@@ -73,7 +73,7 @@ export function SearchPage() {
         key={query}
         query={query}
         testId="search-page-input"
-        className="mb-8 flex w-full max-w-[520px] items-center gap-2 rounded-full border border-line bg-white px-4 py-2.5 text-[15px] text-muted focus-within:border-muted xl:hidden"
+        className="mb-8 flex w-full max-w-[520px] items-center gap-2 rounded-full border border-line bg-surface px-4 py-2.5 text-[15px] text-muted focus-within:border-muted xl:hidden"
       />
 
       {nothing ? (

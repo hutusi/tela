@@ -55,7 +55,7 @@ export function ProfileView({
               <li key={site.id}>
                 <Link
                   to={`/s/${site.id}`}
-                  className="flex items-center gap-2.5 rounded-xl border border-line bg-white px-3.5 py-2.5 text-ink hover:border-ink hover:no-underline"
+                  className="flex items-center gap-2.5 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-ink hover:border-ink hover:no-underline"
                 >
                   <SiteAvatar
                     id={site.id}
@@ -79,7 +79,7 @@ export function ProfileView({
         {data.recommendations.map((r) => {
           const source = r.siteTitle ?? displayHost(r.homeUrl)
           return (
-            <article key={r.article.id} className="rounded-xl border border-line bg-white p-4">
+            <article key={r.article.id} className="rounded-xl border border-line bg-surface p-4">
               <PostLink
                 article={r.article}
                 source={source}
@@ -112,7 +112,7 @@ export function ProfileView({
                 </>
               )
               const cls =
-                'flex items-center gap-2 rounded-full border border-line bg-white py-1 pl-1 pr-3 text-[13px] text-ink'
+                'flex items-center gap-2 rounded-full border border-line bg-surface py-1 pl-1 pr-3 text-[13px] text-ink'
               return (
                 <li key={s.id}>
                   {/* A private blog has no public page to link to. */}

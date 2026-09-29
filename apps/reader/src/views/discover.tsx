@@ -59,7 +59,7 @@ export function DiscoverView({
         {/* A <details>, so the menu works in the edge-rendered page before any script runs. */}
         <details className="relative" data-testid="language-menu">
           <summary
-            className={`flex cursor-pointer list-none items-center gap-1.5 whitespace-nowrap rounded-full border bg-white px-3 py-1.5 text-[13px] font-medium hover:border-muted ${
+            className={`flex cursor-pointer list-none items-center gap-1.5 whitespace-nowrap rounded-full border bg-surface px-3 py-1.5 text-[13px] font-medium hover:border-muted ${
               params.lang ? 'border-ink' : 'border-line'
             }`}
           >
@@ -67,7 +67,7 @@ export function DiscoverView({
             {langLabel}
             <span className="text-[10px] text-muted">▾</span>
           </summary>
-          <div className="absolute right-0 top-[calc(100%+6px)] z-[4] flex min-w-[180px] flex-col rounded-[10px] border border-line bg-white p-1.5 shadow-[0_8px_24px_rgba(0,0,0,.08)] animate-fade">
+          <div className="absolute right-0 top-[calc(100%+6px)] z-[4] flex min-w-[180px] flex-col rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,.08)] animate-fade">
             <Link
               to={discoverHref({ topic: params.topic })}
               className={menuItem(params.lang === null)}
@@ -99,7 +99,7 @@ export function DiscoverView({
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="h-[190px] animate-pulse rounded-xl border border-line bg-white"
+              className="h-[190px] animate-pulse rounded-xl border border-line bg-surface"
             />
           ))}
         </div>

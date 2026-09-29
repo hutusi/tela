@@ -27,7 +27,7 @@ export function SiteCard({
   const subscribed = site.feedId !== null && member?.isSubscribed(site.feedId) === true
   return (
     <div
-      className="flex flex-col gap-3 rounded-xl border border-line bg-white p-5 animate-fade"
+      className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-5 animate-fade"
       data-testid="site-card"
       data-site-id={site.id}
     >

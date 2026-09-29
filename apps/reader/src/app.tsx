@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { AppHeader } from './components/app-header'
 import { detectLocale, I18n, localeCookie } from './i18n'
+import { applyTheme, typographyOf } from './lib/typography'
 import { AddPage } from './pages/add'
 import { ClaimPage, ClaimSitePage } from './pages/claim'
 import { DashboardPage } from './pages/dashboard'
@@ -18,7 +19,7 @@ import { SettingsPage } from './pages/settings'
 import { SitePage } from './pages/site'
 import { SessionProvider, useSession } from './session'
 import type { SyncEngine } from './store/engine'
-import { StoreProvider, useStore } from './store/hooks'
+import { StoreProvider, useStore, useTables } from './store/hooks'
 import type { LocalStore } from './store/local'
 import type { Objects } from './store/objects'
 import { UiContext } from './ui'
@@ -64,6 +65,13 @@ function Routed() {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
+  // A member's theme is a synced pref; a visitor keeps whatever this browser last had.
+  const tables = useTables()
+  const theme = typographyOf(tables).theme
+  const synced = tables.profile !== null
+  useEffect(() => {
+    if (synced) applyTheme(theme)
+  }, [synced, theme])
   const ui = useMemo(() => ({ locale, setLocale }), [locale, setLocale])
   return (
     <UiContext.Provider value={ui}>

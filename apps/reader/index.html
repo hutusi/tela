@@ -3,6 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- The member's theme before anything paints (src/lib/typography.ts keeps it current). -->
+    <script>
+      try {
+        const theme = localStorage.getItem('tela.theme')
+        if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme
+      } catch {}
+    </script>
     <title>Tela</title>
     <meta name="description" content="Independent blogs, in any language." />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />

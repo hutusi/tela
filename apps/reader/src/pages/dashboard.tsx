@@ -96,7 +96,7 @@ export function DashboardPage() {
       </div>
 
       {dash && dash.sites.length === 0 ? (
-        <div className="rounded-xl border border-line bg-white p-6">
+        <div className="rounded-xl border border-line bg-surface p-6">
           <p className="mb-3 text-ink-2">{t('noSites')}</p>
           <Link
             to="/claim"
@@ -177,7 +177,7 @@ export function DashboardPage() {
           {dash.notes.map((n) => (
             <blockquote
               key={`${n.handle}:${n.articleId}`}
-              className="m-0 rounded-xl border border-line bg-white p-4"
+              className="m-0 rounded-xl border border-line bg-surface p-4"
             >
               <p className="m-0 font-serif text-[17px] leading-[1.45] text-body">{n.note}</p>
               <footer className="mt-2 text-[12.5px] text-muted">
