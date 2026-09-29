@@ -24,6 +24,8 @@
  * cached earlier shell still open in another tab, or one a rollback brings back, writes its own
  * copy without checking any owner; sharing one database let it write its rows into a copy this
  * build had given to another account, and let this build erase the key that earlier build checks.
+ * What that build does is still seen: `earlierBuildRan` empties its copy at each boot, and finding
+ * it written again means this build's copy may not know of a sign-out or a sign-in since.
  *
  * Everything here can be rebuilt from the server, so a browser that clears it loses nothing.
  */
@@ -125,17 +127,35 @@ const TABLES: (keyof TableRows)[] = [
 
 /** This layout's database. Earlier builds used 'tela', with no owner and no checks. */
 export const DATABASE = 'tela-2'
-const EARLIER_DATABASES = ['tela']
+const EARLIER = 'tela'
 
 /**
- * Give back the space an earlier build's copy held, best effort. While a tab of that build is
- * still open the deletion waits for it to close; nothing of this build waits on it.
+ * Whether an earlier build has written its copy since this build last looked; it is emptied
+ * either way. Found written, an earlier build ran on this device since (a tab left open across
+ * the deploy, or a rollback), and a sign-out or another account's sign-in there never reached
+ * this build's copy, so the caller should not trust that copy for this boot. Emptied, not
+ * deleted: a deletion waits for every tab of that build to close, and one of them reloading
+ * meanwhile would wait behind it on a blank page.
  */
-export function forgetEarlierDatabases(): void {
+export async function earlierBuildRan(): Promise<boolean> {
   try {
-    for (const name of EARLIER_DATABASES) indexedDB.deleteDatabase(name)
+    const listed = await indexedDB.databases?.()
+    if (!listed?.some((d) => d.name === EARLIER)) return false
+    const earlier = await openDB(EARLIER)
+    try {
+      const names = Array.from(earlier.objectStoreNames)
+      if (names.length === 0) return false
+      const tx = earlier.transaction(names, 'readwrite')
+      const counts = await Promise.all(names.map((n) => tx.objectStore(n).count()))
+      await Promise.all(names.map((n) => tx.objectStore(n).clear()))
+      await tx.done
+      return counts.some((n) => n > 0)
+    } finally {
+      earlier.close()
+    }
   } catch {
-    // No IndexedDB, or it refuses: nothing to give back.
+    // No IndexedDB, or it refuses: nothing an earlier build left can be read here either.
+    return false
   }
 }
 

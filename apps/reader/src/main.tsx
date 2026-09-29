@@ -5,10 +5,11 @@
 import './styles.css'
 import { createRoot } from 'react-dom/client'
 import { App } from './app'
-import { distrust, sessionEvents } from './session'
+import { leaver } from './leave'
+import { distrustAfterEarlierBuild, sessionEvents } from './session'
 import { registerShell } from './shell'
 import { bindApi } from './store/api'
-import { forgetEarlierDatabases, indexedDbPersistence, memoryPersistence } from './store/db'
+import { indexedDbPersistence, memoryPersistence } from './store/db'
 import { SyncEngine } from './store/engine'
 import { LocalStore } from './store/local'
 import { Objects } from './store/objects'
@@ -16,30 +17,16 @@ import { Objects } from './store/objects'
 async function boot() {
   // A browser that refuses IndexedDB (some private modes) still reads, just without a memory.
   const persistence = await indexedDbPersistence().catch(() => memoryPersistence())
-  forgetEarlierDatabases()
   const store = new LocalStore(persistence)
   await store.open()
+  await distrustAfterEarlierBuild(store)
   const objects = new Objects(persistence)
 
-  /**
-   * This tab holds another account than the browser's session (another tab signed in as someone
-   * else), or its stored copy has been taken: forget what it holds and start again as whoever is
-   * signed in now. At '/', not a reload, so nothing of the old account's (an open article, a
-   * search) carries over; and whether or not the forgetting worked.
-   */
-  let leaving = false
-  const leave = () => {
-    if (leaving) return
-    leaving = true
-    engine.stop()
-    const stale = store.userId
-    void store
-      .forgetAccount()
-      // Not forgotten (storage failed): the next boot must not trust that copy again, or it would
-      // show the stale account, be refused, and come back here for ever.
-      .catch(() => stale !== null && distrust(stale))
-      .then(() => window.location.assign('/'))
-  }
+  const leave = leaver({
+    stop: () => engine.stop(),
+    store,
+    go: (path) => window.location.assign(path),
+  })
   // This app is older than the protocol: fetch the new shell rather than misread rows.
   const upgrade = () => void registerShell.upgrade()
 

@@ -13,7 +13,7 @@ import {
   type TableRows,
 } from '@tela/sync'
 import { openDB } from 'idb'
-import { DATABASE, forgetEarlierDatabases, indexedDbPersistence } from '../src/store/db'
+import { DATABASE, earlierBuildRan, indexedDbPersistence } from '../src/store/db'
 import { metaKeys, seedEarlierBuild } from './earlier-build'
 import { profile, pull, sub } from './rows'
 
@@ -201,23 +201,30 @@ describe('the device database', () => {
     expect(restored.rows?.subscriptions.map((x) => x.feedId)).toEqual([4])
   })
 
-  test("this build keeps its own database, and never reads an earlier build's", async () => {
+  test('this build keeps its own database, and sees when an earlier build has written its own', async () => {
     // An earlier build's tab left open writes 'tela' without checking anyone; this build's copy
     // is elsewhere, so nothing it writes can land in this build's.
     expect(DATABASE).not.toBe('tela')
-    await seedEarlierBuild('tela', pull(5, { profile: [profile], subscriptions: [sub(1)] }, true), {
-      userId: 'a',
-    })
+    const seed = () =>
+      seedEarlierBuild('tela', pull(5, { profile: [profile], subscriptions: [sub(1)] }, true), {
+        userId: 'a',
+      })
+    await seed()
     const now = await indexedDbPersistence()
     expect(await now.load()).toEqual({ owner: null, cursor: 0, rows: null, pending: [] })
     await now.claim('b')
-    expect(await metaKeys('tela')).toEqual(['cursor', 'userId'])
-    // Its space is given back; the earlier build finds nothing and starts over if it comes back.
-    forgetEarlierDatabases()
-    await new Promise((r) => setTimeout(r, 20))
-    const names = (await indexedDB.databases()).map((d) => d.name)
-    expect(names).not.toContain('tela')
-    expect(names).toContain(DATABASE)
+
+    // It ran: its sign-out or sign-in never reached this copy. Its copy is emptied, not deleted
+    // (a deletion would wait on its open tabs, and hang one of them reloading).
+    expect(await earlierBuildRan()).toBe(true)
+    expect(await metaKeys('tela')).toEqual([])
+    expect((await indexedDB.databases()).map((d) => d.name)).toContain('tela')
+    // Nothing new since: nothing to distrust. And this build's own copy is untouched.
+    expect(await earlierBuildRan()).toBe(false)
+    expect((await now.load()).owner).toBe('b')
+    // It runs again, and is seen again.
+    await seed()
+    expect(await earlierBuildRan()).toBe(true)
   })
 
   test('a pull that starts past the stored cursor does not land, so no rows go missing between', async () => {

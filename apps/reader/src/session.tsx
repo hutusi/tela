@@ -6,6 +6,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { AccountChanged, api, SignedOut, UpgradeRequired } from './store/api'
+import { earlierBuildRan } from './store/db'
 import type { SyncEngine } from './store/engine'
 import type { LocalStore } from './store/local'
 
@@ -55,6 +56,23 @@ export function distrusted(owner: string | null): boolean {
   }
 }
 
+/** How a tab boots: as its stored copy's member, unless it holds no one, or no one to trust. */
+export function initialStatus(store: Pick<LocalStore, 'hasData' | 'userId'>): SessionStatus {
+  return store.hasData && store.userId !== null && !distrusted(store.userId) ? 'member' : 'unknown'
+}
+
+/**
+ * An earlier build ran on this device since this one last looked (a tab left open across the
+ * deploy, a rollback): a sign-out or sign-in it saw never reached this build's copy, so this boot
+ * asks who is signed in before trusting it.
+ */
+export async function distrustAfterEarlierBuild(
+  store: Pick<LocalStore, 'userId'>,
+  ran: () => Promise<boolean> = earlierBuildRan,
+): Promise<void> {
+  if ((await ran()) && store.userId !== null) distrust(store.userId)
+}
+
 async function whoAmI(): Promise<string | null> {
   try {
     const res = await api('/api/v1/me')
@@ -83,13 +101,18 @@ export function SessionProvider({
 }) {
   // Rows alone are not enough: whose they are is what every call names. A copy this tab has
   // just left without forgetting is not trusted either; the claim after /me replaces it.
-  const [status, setStatus] = useState<SessionStatus>(() =>
-    store.hasData && store.userId !== null && !distrusted(store.userId) ? 'member' : 'unknown',
-  )
+  const [status, setStatus] = useState<SessionStatus>(() => initialStatus(store))
 
   useEffect(() => {
     sessionEvents.signedOut = () => {
-      void store.forgetAccount().then(() => setStatus('guest'))
+      const owner = store.userId
+      void store
+        .forgetAccount()
+        // As when leaving: a copy that could not be forgotten is not trusted at the next boot.
+        .catch(() => {
+          if (owner !== null) distrust(owner)
+        })
+        .finally(() => setStatus('guest'))
     }
   }, [store])
 
