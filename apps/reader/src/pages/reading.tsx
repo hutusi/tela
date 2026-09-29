@@ -83,7 +83,10 @@ export function ReadingPage() {
     [store, location.search, navigate],
   )
 
+  /** The article a close came from, read from the URL as it closes (see the focus effect below). */
+  const closedFrom = useRef<number | null>(null)
   const close = useCallback(() => {
+    closedFrom.current = parseReadingParams(new URLSearchParams(window.location.search)).articleId
     const target = canonicalReadingHref(location.search, { articleId: null, mode: null })
     if (target !== canonicalReadingHref(location.search)) navigate(target)
   }, [location.search, navigate])
@@ -131,7 +134,10 @@ export function ReadingPage() {
   useEffect(() => {
     const row = (id: number) =>
       document.querySelector<HTMLElement>(`[data-testid="article-row"][data-article-id="${id}"]`)
-    const previous = lastOpen.current
+    // A close says what it closed: renders can batch a j and an Esc into one, so the last
+    // article rendered may not be the one closed. Back has no close, and falls back to it.
+    const previous = closedFrom.current ?? lastOpen.current
+    closedFrom.current = null
     lastOpen.current = params.articleId
     if (params.articleId !== null) row(params.articleId)?.scrollIntoView({ block: 'nearest' })
     else if (previous !== null) row(previous)?.focus()
