@@ -27,6 +27,7 @@
     "codeSent": "We sent a code to {email}. Enter it here, or open the link in the same email.",
     "codePlaceholder": "6-digit code",
     "verify": "Continue",
+    "connecting": "You are signed in. Connecting to Tela…",
     "or": "or",
     "errors": {
       "invalid_email": "That does not look like an email address.",

@@ -284,21 +284,25 @@ test.describe('a boot that cannot reach /me', () => {
     await expect.poll(() => pendingKeys(page)).toHaveLength(1)
 
     // An earlier build ran since, so this boot asks /me before trusting the copy, and /me
-    // answers as tela-api does mid-deploy. That says nothing about the session.
+    // answers as tela-api does mid-deploy, to the boot and to the first retry. That says
+    // nothing about the session.
     await earlierBuildWrites(page)
-    await page.route('**/api/v1/me', (route) => route.fulfill({ status: 503, body: 'deploying' }))
+    let asked = 0
+    await page.route('**/api/v1/me', (route) =>
+      ++asked <= 2 ? route.fulfill({ status: 503, body: 'deploying' }) : route.continue(),
+    )
     await page.reload()
     await expect(page).toHaveURL(/\/login\?next=%2Freading/)
     expect(await pendingKeys(page)).toHaveLength(1)
 
-    // tela-api is back. Nothing but the tab's own retry asks again, and it carries on as the
-    // member, sending the change it kept.
+    // tela-api is back. Nothing but the tab's own retries ask again, and the one after a second
+    // miss carries on as the member, sending the change it kept.
     const pushed = page.waitForResponse(
       (r) => new URL(r.url()).pathname === '/api/v1/mutations' && r.ok(),
     )
     await page.unroute('**/api/v1/mutations')
-    await page.unroute('**/api/v1/me')
     await expect(page).toHaveURL(/\/reading(\?|$)/, { timeout: 20_000 })
+    expect(asked).toBe(3)
     await pushed
     const pulled = await (
       await context.request.get('/api/v1/sync?cursor=0', {
@@ -306,5 +310,94 @@ test.describe('a boot that cannot reach /me', () => {
       })
     ).json()
     expect(pulled.rows.states).toHaveLength(1)
+  })
+})
+
+test.describe('the mail link while /me misses', () => {
+  test.use(visitor(8))
+  test('for another account, in a signed-in tab: a fresh page as them, once /me answers', async ({
+    page,
+    context,
+    request,
+  }) => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    await signInRequest(context.request, `first-${stamp}@e2e.test`)
+    await addFeed(context.request, `${FIXTURES}/jnito.xml`)
+    await cycle(context.request)
+    await page.goto('/reading')
+    await expect(page.getByTestId('subscription')).toHaveCount(1)
+
+    // The link signs in as the second account, and the /me after it misses once: the retry
+    // is what learns who is signed in.
+    let asked = 0
+    await page.route('**/api/v1/me', (route) =>
+      ++asked === 1 ? route.fulfill({ status: 503, body: 'deploying' }) : route.continue(),
+    )
+    const second = `second-${stamp}@e2e.test`
+    const code = await inviteAndReadCode(request, second)
+    await page.evaluate(
+      ({ email, otp }) => {
+        ;(window as { stale?: number }).stale = 1
+        history.pushState({}, '', `/login?email=${encodeURIComponent(email)}&otp=${otp}`)
+        dispatchEvent(new PopStateEvent('popstate'))
+      },
+      { email: second, otp: code },
+    )
+    // Found in review: the retry claimed the second account on the first account's page, with
+    // no fresh page and no pull, so an empty reader showed until the next minute's sync.
+    await expect(page).toHaveURL(/\/reading$/, { timeout: 15_000 })
+    await showsSessionAccount(page, context)
+    await expect(page.getByTestId('subscription')).toHaveCount(0)
+    expect(await page.evaluate(() => (window as { stale?: number }).stale)).toBeUndefined()
+    expect(asked).toBeGreaterThanOrEqual(2)
+  })
+})
+
+test.describe('the mail link on a new device while /me misses', () => {
+  test.use(visitor(9))
+  test('says it is connecting, shows the public side meanwhile, and carries on', async ({
+    page,
+    request,
+  }) => {
+    const email = `connecting-${Date.now()}@e2e.test`
+    const code = await inviteAndReadCode(request, email)
+    // The boot's /me is held until the sign-in's own /me has missed, so the boot's answer comes
+    // last and is dropped; after that /me misses until tela-api is back.
+    let asked = 0
+    let back = false
+    let signInMissed = () => {}
+    const missed = new Promise<void>((r) => {
+      signInMissed = r
+    })
+    await page.route('**/api/v1/me', async (route) => {
+      const n = ++asked
+      if (n === 1) {
+        await missed
+        return route.continue()
+      }
+      if (n === 2) {
+        await route.fulfill({ status: 503, body: 'deploying' })
+        return signInMissed()
+      }
+      return back ? route.continue() : route.fulfill({ status: 503, body: 'deploying' })
+    })
+    const bootAnswered = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === '/api/v1/me' && r.status() !== 503,
+    )
+    await page.goto(`/login?email=${encodeURIComponent(email)}&otp=${code}&next=%2Fsettings`)
+
+    // The code is spent: the form says why nothing moves, and cannot send it again.
+    await expect(page.getByTestId('login-connecting')).toBeVisible()
+    await expect(page.getByTestId('login-submit')).toBeDisabled()
+    await bootAnswered
+
+    // Found in review: with the boot's answer dropped, a miss left the tab 'unknown', where the
+    // home page and the header render nothing. It is a guest meanwhile.
+    await page.getByRole('link', { name: 'Tela' }).first().click()
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible()
+
+    back = true
+    await expect(page).toHaveURL(/\/reading$/, { timeout: 20_000 })
   })
 })

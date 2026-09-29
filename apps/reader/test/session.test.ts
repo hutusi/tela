@@ -240,7 +240,8 @@ describe('asking /me who is signed in', () => {
     const answers: [string, () => Response | Promise<Response>][] = [
       ['a 503 mid-deploy', () => new Response('deploying', { status: 503 })],
       ['a WAF challenge', () => new Response('<html>', { status: 403 })],
-      ['a captive portal', () => new Response('<html>sign in to the wifi</html>')],
+      ['a captive portal', () => new Response('<html>sign in to the wifi</html>', { status: 511 })],
+      ['a page that is not /me', () => new Response('<html>sign in to the wifi</html>')],
       ['no network', () => Promise.reject(new TypeError('Failed to fetch'))],
       ['no one named', () => Response.json({})],
     ]

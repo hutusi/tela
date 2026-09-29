@@ -12,14 +12,19 @@ import { LocalStore } from './store/local'
 
 export type SessionStatus = 'unknown' | 'member' | 'guest'
 
+/**
+ * What a sign-in made of the tab. `reloading`: it held another account, and the page is being
+ * loaded afresh at `next`. `waiting`: /me could not say as whom yet, and the session turns member
+ * once it can. Otherwise the caller goes on to `next` itself.
+ */
+export type SignedIn = 'member' | 'guest' | 'waiting' | 'reloading'
+
 type Session = {
   status: SessionStatus
-  /**
-   * After a sign-in: learn who, and start syncing. True when the caller has nothing left to do:
-   * the tab held another account, and the page is being loaded afresh at `next`; or /me could not
-   * be reached, and the session turns member when it can, which sends the login page on to `next`.
-   */
-  signedIn(next: string): Promise<boolean>
+  /** Whether /me could not be reached, and the tab is asking again. */
+  retrying: boolean
+  /** After a sign-in: learn who, and start syncing. */
+  signedIn(next: string): Promise<SignedIn>
   signOut(): Promise<void>
 }
 
@@ -185,7 +190,12 @@ export function whenReachable(again: () => void, delay: number): () => void {
 
 /** A signed-out session that never changes: the edge renders public pages for guests with it. */
 export function GuestSession({ children }: { children: React.ReactNode }) {
-  const guest: Session = { status: 'guest', signedIn: async () => false, signOut: async () => {} }
+  const guest: Session = {
+    status: 'guest',
+    retrying: false,
+    signedIn: async () => 'guest',
+    signOut: async () => {},
+  }
   return <SessionContext.Provider value={guest}>{children}</SessionContext.Provider>
 }
 
@@ -201,9 +211,15 @@ export function SessionProvider({
   // Rows alone are not enough: whose they are is what every call names. A copy this tab has
   // just left without forgetting is not trusted either; the claim after /me replaces it.
   const [status, setStatus] = useState<SessionStatus>(() => initialStatus(store))
-  // How many times /me could not be reached in a row: while any, the tab is a guest that asks
-  // again. Its own state, not a status: the question outlives the switch to the public side.
-  const [misses, setMisses] = useState(0)
+  // The status as last rendered, for what an answer does whenever it arrives.
+  const shown = useRef(status)
+  shown.current = status
+  // While /me cannot be reached: the next question's place in a row of misses. Its own state,
+  // not a status, since the question outlives the switch to the public side; and a new object
+  // for every miss, so each one sets the next question even when the count is the same.
+  const [retry, setRetry] = useState<{ attempt: number } | null>(null)
+  // Where a sign-in that could not learn its account yet goes once a retry has.
+  const after = useRef<string | null>(null)
   // The boot, each retry and each sign-in ask /me; only the latest question acts on its answer,
   // so an answer that left before a sign-in cannot forget the copy that sign-in has claimed.
   const asked = useRef(0)
@@ -211,6 +227,41 @@ export function SessionProvider({
     const turn = ++asked.current
     return learnWho(store, () => asked.current === turn)
   }, [store])
+
+  /**
+   * Act on what a question made of the tab, the same whichever asked it. `showing` is the account
+   * whose rows the page showed when it asked (a member's, or nobody's); a claim for anyone else
+   * loads a fresh page at `next`, so nothing that account's page held in memory is shown as the
+   * new one's.
+   */
+  const settle = useCallback(
+    (learned: Learned, showing: string | null, next: string): SignedIn => {
+      if (learned === null) return 'waiting'
+      if (learned === 'unreachable') {
+        // The public side while it asks again, whichever question missed: a tab left 'unknown'
+        // renders nothing at all.
+        setStatus((s) => (s === 'unknown' ? 'guest' : s))
+        return 'waiting'
+      }
+      setRetry(null)
+      after.current = null
+      if (learned === 'guest') {
+        setStatus('guest')
+        return 'guest'
+      }
+      if (showing !== null && showing !== store.userId) {
+        window.location.assign(next)
+        return 'reloading'
+      }
+      // Already a member here, so the engine runs and nothing starts it again: catch up at once,
+      // in case the claim had to wipe a copy taken from under this tab.
+      if (shown.current === 'member') void engine.pull()
+      setStatus('member')
+      return 'member'
+    },
+    [store, engine],
+  )
+  const showing = useCallback(() => (shown.current === 'member' ? store.userId : null), [store])
 
   useEffect(() => {
     sessionEvents.signedOut = () => {
@@ -225,60 +276,38 @@ export function SessionProvider({
     }
     if (status === 'unknown') {
       void ask().then((learned) => {
-        if (learned === null) return
-        // Unreachable, with nothing on the device it can trust: the public side, while it asks
-        // again below.
-        if (learned === 'unreachable') setMisses((n) => n + 1)
-        setStatus(learned === 'member' ? 'member' : 'guest')
+        if (learned === 'unreachable') setRetry((r) => ({ attempt: (r?.attempt ?? 0) + 1 }))
+        // Nothing was shown before this answer: whoever it names, the page need not reload.
+        settle(learned, null, '/')
       })
     }
     return undefined
-  }, [status, engine, ask])
+  }, [status, engine, ask, settle])
 
   useEffect(() => {
-    if (misses === 0) return undefined
+    if (retry === null) return undefined
     return whenReachable(() => {
+      const was = showing()
       void ask().then((learned) => {
-        if (learned === null) return
-        if (learned === 'unreachable') {
-          setMisses((n) => n + 1)
-          return
-        }
-        setMisses(0)
-        setStatus(learned)
+        if (learned === 'unreachable') setRetry({ attempt: retry.attempt + 1 })
+        settle(learned, was, after.current ?? location.pathname + location.search)
       })
-    }, retryDelay(misses))
-  }, [misses, ask])
+    }, retryDelay(retry.attempt))
+  }, [retry, ask, settle, showing])
 
   const signedIn = useCallback(
     async (next: string) => {
-      const held = store.userId
+      const was = showing()
       const learned = await ask()
-      if (learned === null) return true
       if (learned === 'unreachable') {
-        // Signed in, but not yet told as whom: asked again as after a boot that could not reach
-        // /me, and the session turns member then.
-        setMisses((n) => n + 1)
-        return true
+        // Signed in, but not yet told as whom: ask again soon, from the first delay, and go on
+        // to `next` then.
+        after.current = next
+        setRetry({ attempt: 1 })
       }
-      setMisses(0)
-      if (learned === 'guest') {
-        setStatus('guest')
-        return false
-      }
-      if (held !== null && held !== store.userId) {
-        // This tab held someone else (their mail's link opened here): a fresh page, so nothing
-        // the old account's page held in memory is shown as the new one's.
-        window.location.assign(next)
-        return true
-      }
-      // Already a member here, so the engine runs and nothing starts it again: catch up at once,
-      // in case the claim had to wipe a copy taken from under this tab.
-      if (status === 'member') void engine.pull()
-      setStatus('member')
-      return false
+      return settle(learned, was, next)
     },
-    [store, engine, status, ask],
+    [ask, settle, showing],
   )
 
   const signOut = useCallback(async () => {
@@ -300,7 +329,7 @@ export function SessionProvider({
   }, [engine, store])
 
   return (
-    <SessionContext.Provider value={{ status, signedIn, signOut }}>
+    <SessionContext.Provider value={{ status, retrying: retry !== null, signedIn, signOut }}>
       {children}
     </SessionContext.Provider>
   )

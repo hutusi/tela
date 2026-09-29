@@ -30,13 +30,16 @@ const post = (path: string, body: unknown) =>
 
 export function LoginPage() {
   const t = useTranslations('login')
-  const { status, signedIn } = useSession()
+  const { status, retrying, signedIn } = useSession()
   const navigate = useNavigate()
   const [search] = useSearchParams()
   const next = safeNext(search.get('next'))
   const [step, setStep] = useState<Step>({ kind: 'email' })
   const [error, setError] = useState<LoginError | null>(null)
   const [busy, setBusy] = useState(false)
+  // Signed in, and waiting for /me to say as whom: the code is spent, so the form stays shut.
+  const [signedInWaiting, setSignedInWaiting] = useState(false)
+  const connecting = signedInWaiting && retrying
   const [value, setValue] = useState('')
   const linked = useRef(false)
 
@@ -51,8 +54,9 @@ export function LoginPage() {
         setError(res.status === 429 ? 'rate_limited' : 'bad_code')
         return
       }
-      if (await signedIn(next)) return
-      navigate(next, { replace: true })
+      const outcome = await signedIn(next)
+      if (outcome === 'waiting') setSignedInWaiting(true)
+      else if (outcome !== 'reloading') navigate(next, { replace: true })
     } finally {
       setBusy(false)
     }
@@ -159,10 +163,16 @@ export function LoginPage() {
               className="rounded-lg border border-line bg-surface px-3 py-2.5 outline-none focus:border-muted"
             />
           )}
-          {error ? <p className="text-sm text-danger">{t(`errors.${error}`)}</p> : null}
+          {connecting ? (
+            <p className="text-sm text-ink-2" data-testid="login-connecting">
+              {t('connecting')}
+            </p>
+          ) : error ? (
+            <p className="text-sm text-danger">{t(`errors.${error}`)}</p>
+          ) : null}
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || connecting}
             data-testid="login-submit"
             className="rounded-full bg-ink px-4 py-2.5 font-medium text-paper hover:brightness-125 disabled:opacity-60"
           >

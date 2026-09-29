@@ -27,6 +27,7 @@
     "codeSent": "验证码已发送到 {email}。输入验证码，或直接打开邮件中的链接。",
     "codePlaceholder": "6 位验证码",
     "verify": "继续",
+    "connecting": "已登录，正在连接 Tela…",
     "or": "或",
     "errors": {
       "invalid_email": "这不像是一个邮箱地址。",
