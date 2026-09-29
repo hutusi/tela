@@ -3,7 +3,7 @@
  * There is no dev-auth: a code is sent, read back from tela-api's test outbox, and entered.
  */
 import { resolve } from 'node:path'
-import { type APIRequestContext, expect, type Page, request } from '@playwright/test'
+import { type APIRequestContext, type Page, request } from '@playwright/test'
 
 export const BASE = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:8811'
 export const FIXTURES = process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'
@@ -96,18 +96,28 @@ export async function synced(page: Page): Promise<void> {
 }
 
 /**
- * Read the open article side by side, whatever the last spec left. The layout is a synced pref
- * every spec shares, and a spec's last change is lost when its page closes before the push goes
- * out: CI's slower runners left the next spec reading "Original". A spec that needs a layout
- * sets it rather than trusting another spec to put it back.
+ * Put the member's synced reading state back to its defaults: English, side by side, the default
+ * text, line length and theme. Every spec signs in as the same member, and a spec's last change
+ * is lost when its page closes before the push goes out, so a spec that depends on this state
+ * resets it first instead of trusting the last spec to have put it back.
  */
-export async function sideBySide(page: Page): Promise<void> {
-  const reader = page.getByTestId('reader')
-  await reader.waitFor()
-  if ((await reader.getAttribute('data-mode')) !== 'side') {
-    await page.getByTestId('mode-side').click()
-  }
-  await expect(reader).toHaveAttribute('data-mode', 'side')
+export async function resetReading(api: APIRequestContext): Promise<void> {
+  const at = Date.now()
+  const change = (m: Record<string, unknown>) => ({ mid: crypto.randomUUID(), at, ...m })
+  const res = await api.post(`${BASE}/api/v1/mutations`, {
+    // x-tela-client carries MIN_CLIENT (packages/sync/src/protocol.ts), as the app's pushes do.
+    headers: { ...ORIGIN, 'x-tela-client': '1' },
+    data: {
+      mutations: [
+        change({ type: 'setProfile', readingLang: 'en' }),
+        change({ type: 'setPref', key: 'reader.mode', value: 'side' }),
+        change({ type: 'setPref', key: 'reader.size', value: 'm' }),
+        change({ type: 'setPref', key: 'reader.measure', value: 'normal' }),
+        change({ type: 'setPref', key: 'ui.theme', value: 'system' }),
+      ],
+    },
+  })
+  if (!res.ok()) throw new Error(`reset failed: ${res.status()} ${await res.text()}`)
 }
 
 /**

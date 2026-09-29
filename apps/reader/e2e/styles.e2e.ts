@@ -1,5 +1,5 @@
 import { expect, type Locator, test } from '@playwright/test'
-import { ensureFeeds, sideBySide, synced } from './helpers'
+import { ensureFeeds, resetReading, synced } from './helpers'
 
 /**
  * What the class strings claim, checked against what the browser computes.
@@ -19,6 +19,11 @@ const decoration = (l: Locator) => l.evaluate((el) => getComputedStyle(el).textD
 // The bilingual measurements need a Japanese blog; adding one the member follows is a no-op.
 test.beforeAll(async () => {
   await ensureFeeds(['/jnito.xml'])
+})
+
+// Every spec here reads in English, side by side, at the default size and theme.
+test.beforeEach(async ({ page }) => {
+  await resetReading(page.request)
 })
 
 test.describe('stylesheet', () => {
@@ -136,7 +141,6 @@ test.describe('stylesheet', () => {
       await synced(page)
       const row = page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first()
       await row.click()
-      await sideBySide(page)
       await expect(page.getByTestId('translation-bar')).toHaveAttribute(
         'data-state',
         /done|partial/,
@@ -213,7 +217,6 @@ test.describe('stylesheet', () => {
     await page.goto('/reading')
     await synced(page)
     await page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first().click()
-    await sideBySide(page)
     await expect(page.getByTestId('translation-bar')).toHaveAttribute(
       'data-state',
       /done|partial/,

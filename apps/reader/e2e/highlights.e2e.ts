@@ -10,8 +10,8 @@ import {
   ensureFeeds,
   FIXTURES,
   painted,
+  resetReading,
   selectText,
-  sideBySide,
   synced,
 } from './helpers'
 
@@ -31,6 +31,11 @@ async function openChanging(page: Page) {
   await page.getByTestId('article-row').filter({ hasText: 'A post that changes' }).click()
   await expect(page.getByTestId('body-original').first()).toBeVisible()
 }
+
+// Every spec here reads in English, side by side, at the default size and theme.
+test.beforeEach(async ({ page }) => {
+  await resetReading(page.request)
+})
 
 test('a selection becomes a highlight with a note, and both survive a reload', async ({ page }) => {
   await openChanging(page)
@@ -117,7 +122,6 @@ test('a highlight on the translation belongs to that side and that language', as
   await page.goto('/reading')
   await synced(page)
   await page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first().click()
-  await sideBySide(page)
   await expect(page.getByTestId('translation-bar')).toHaveAttribute('data-state', /done|partial/, {
     timeout: 30_000,
   })
