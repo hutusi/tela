@@ -214,7 +214,7 @@ export function memberRoutes(deps: ApiDeps) {
         where a.feed_id in (select feed_id from subscriptions where user_id = ${member.id} and deleted_at is null)
           and (a.title like ${pattern} escape '\\' or exists (
             select 1 from article_titles t where t.article_id = a.id and t.title like ${pattern} escape '\\'))
-        order by a.id desc limit 30
+        order by a.sort_at desc, a.id desc limit 30
       `),
     ] as never)) as unknown as [Record<string, unknown>[], Record<string, unknown>[]]
     const q = (c.req.query('q') ?? '').trim().toLowerCase()

@@ -10,6 +10,13 @@ export type ArticleHit = { article: ArticleRow; translatedTitle: string | null }
 
 const fold = (s: string) => s.toLocaleLowerCase().replace(/\s+/g, ' ')
 
+/**
+ * Newest first, as the lists are: by when it was published, not by id. A feed's first fetch
+ * stores its posts newest first, so there the newest post has the lowest id.
+ */
+const newestFirst = (x: ArticleHit, y: ArticleHit) =>
+  y.article.sortAt - x.article.sortAt || y.article.id - x.article.id
+
 /** The query as it is matched: trimmed, whitespace collapsed, capped like the server's. */
 export function normalizeQuery(raw: string | null): string {
   return (raw ?? '').trim().replace(/\s+/g, ' ').slice(0, 100)
@@ -31,13 +38,13 @@ export function searchLocal(
       hits.push({ article: a, translatedTitle: translated })
     }
   }
-  return hits.sort((x, y) => y.article.id - x.article.id).slice(0, limit)
+  return hits.sort(newestFirst).slice(0, limit)
 }
 
 /** The device's hits, then the server's that it did not have, newest first. */
 export function mergeHits(local: ArticleHit[], remote: ArticleHit[], limit = 30): ArticleHit[] {
   const seen = new Set(local.map((h) => h.article.id))
   return [...local, ...remote.filter((h) => !seen.has(h.article.id))]
-    .sort((x, y) => y.article.id - x.article.id)
+    .sort(newestFirst)
     .slice(0, limit)
 }

@@ -43,13 +43,36 @@ describe('search on the device', () => {
     expect(searchLocal(t, '', 'en')).toEqual([])
   })
 
-  test("adds the server's hits the device did not have, once each", () => {
+  test('newest first means newest published: a first fetch gives the newest post the lowest id', () => {
+    const fetched = view(
+      applyPull(
+        { cursor: 0, tables: emptyTables() },
+        pull(
+          1,
+          {
+            subscriptions: [sub(1)],
+            articles: [
+              article(1, { title: 'Some news', sortAt: 300 }),
+              article(2, { title: 'Why pipes sometimes stick', sortAt: 200 }),
+              article(3, { title: 'Something older', sortAt: 100 }),
+            ],
+          },
+          true,
+        ),
+      ),
+      [],
+    )
+    expect(searchLocal(fetched, 'some', 'en').map((h) => h.article.id)).toEqual([1, 2, 3])
+  })
+
+  test("adds the server's hits the device did not have, once each, in order", () => {
     const local = searchLocal(t, 'garden', 'en')
+    // The server's extra is older than the device's horizon.
     const remote = [
       { article: article(1), translatedTitle: null },
-      { article: article(9, { title: 'An old garden' }), translatedTitle: null },
+      { article: article(9, { title: 'An old garden', sortAt: -1 }), translatedTitle: null },
     ]
-    expect(mergeHits(local, remote).map((h) => h.article.id)).toEqual([9, 2, 1])
+    expect(mergeHits(local, remote).map((h) => h.article.id)).toEqual([2, 1, 9])
   })
 
   test('a query is trimmed, collapsed and capped as the server takes it', () => {
