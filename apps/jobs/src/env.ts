@@ -40,4 +40,14 @@ export type Env = {
    * not fire in local dev.
    */
   ENV?: string
+  /**
+   * Secret: the dead-man's switch (a healthchecks.io ping URL). Pinged every five minutes while
+   * the sweeps are healthy, and at `/fail` with the problems when they are not. Unset, no pings.
+   */
+  DEADMAN_URL?: string
+  /** Secret: Resend's API key, for the weekly digest. */
+  RESEND_API_KEY?: string
+  /** Who the weekly digest goes to (the owner); unset, it is built but not sent. */
+  DIGEST_TO?: string
+  MAIL_FROM?: string
 }

@@ -12,24 +12,31 @@ import type {
   MessageBatch,
   ScheduledController,
 } from '@cloudflare/workers-types'
+import { backUp, pruneBackups } from '@tela/data'
 import * as schema from '@tela/data/schema'
 // Subpaths only: the package root still re-exports the Postgres-era fetch code (until cutover).
 import { createHttpClient } from '@tela/ingest/http'
 import { createIngest, type Ingest as IngestApi } from '@tela/ingest/pipeline'
 import { createRelayClient } from '@tela/ingest/relay'
 import { configFromEnv, createTranslator, isAccidentalMock, type Translator } from '@tela/llm'
-import { memoryJobs, systemClock } from '@tela/platform'
+import { memoryJobs, resendMail, systemClock } from '@tela/platform'
 import { d1Db, queueJobs, r2Blobs } from '@tela/platform/cloudflare'
 import { sql } from 'drizzle-orm'
 import { daily } from './daily'
 import type { Env } from './env'
 import type { JobMessage, JobQueues } from './kinds'
+import { digest, health, pingDeadman } from './ops'
 import { settle } from './portable'
 import { type JobsContext, runJob, tick } from './runner'
 
 const INTERNAL = 'https://tela-jobs.internal'
-/** Must match the second cron in wrangler.jsonc. */
+/** Must match the crons in wrangler.jsonc. */
 const DAILY_CRON = '17 3 * * *'
+const DIGEST_CRON = '0 8 * * 1'
+/** Exports kept (ADR 0027); D1's Time Travel covers the last 30 days point in time as well. */
+const BACKUP_KEEP_DAYS = 30
+/** How often the dead-man's switch hears from the tick. Its grace period allows a few misses. */
+const DEADMAN_EVERY_MINUTES = 5
 
 /**
  * The translator, or none. A missing key falls back to the mock, and the mock's placeholder output
@@ -136,10 +143,39 @@ export default {
   async fetch(request: CfRequest, env: Env): Promise<Response> {
     const url = new URL(request.url)
     if (request.method === 'POST' && url.pathname === '/jobs/tick') {
-      return Response.json(await tick(context(env)))
+      const ctx = context(env)
+      const report = await tick(ctx)
+      const now = Date.now()
+      if (Math.floor(now / 60_000) % DEADMAN_EVERY_MINUTES !== 0) return Response.json({ report })
+      const h = await health(ctx.db, ctx.blobs, now)
+      await pingDeadman(env.DEADMAN_URL, h)
+      return Response.json({ report, health: h })
     }
     if (request.method === 'POST' && url.pathname === '/jobs/daily') {
-      return Response.json(await daily(context(env).db, Date.now()))
+      const ctx = context(env)
+      const now = Date.now()
+      const report = await daily(ctx.db, now)
+      const date = new Date(now).toISOString().slice(0, 10)
+      // A failed export leaves latest.json as it was; the health check flags it once stale.
+      const backup = await backUp(ctx.db, ctx.blobs, { date, now: () => Date.now() }).catch(
+        (err: unknown) => ({ error: String(err) }),
+      )
+      const pruned = await pruneBackups(ctx.blobs, date, BACKUP_KEEP_DAYS)
+      return Response.json({ report, backup, pruned })
+    }
+    if (request.method === 'POST' && url.pathname === '/jobs/digest') {
+      const ctx = context(env)
+      const mail = await digest(ctx.db, ctx.blobs, Date.now())
+      if (env.DIGEST_TO && env.RESEND_API_KEY) {
+        await resendMail({
+          apiKey: env.RESEND_API_KEY,
+          from: env.MAIL_FROM ?? 'Tela <noreply@ainaive.com>',
+        }).send({
+          to: env.DIGEST_TO,
+          ...mail,
+        })
+      }
+      return Response.json({ sent: Boolean(env.DIGEST_TO && env.RESEND_API_KEY), ...mail })
     }
     if (request.method === 'POST' && url.pathname === '/jobs/run') {
       const message = (await request.json()) as JobMessage
@@ -149,7 +185,12 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    const path = controller.cron === DAILY_CRON ? '/jobs/daily' : '/jobs/tick'
+    const path =
+      controller.cron === DAILY_CRON
+        ? '/jobs/daily'
+        : controller.cron === DIGEST_CRON
+          ? '/jobs/digest'
+          : '/jobs/tick'
     ctx.waitUntil(env.SELF.fetch(`${INTERNAL}${path}`, { method: 'POST' }).then(() => undefined))
   },
 
