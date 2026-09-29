@@ -13,6 +13,7 @@ import {
   chargeUsage,
   type DueTitle,
   dueTitlesOfFeed,
+  extendLease,
   first,
   type Lease,
   recordLlmCall,
@@ -41,10 +42,19 @@ export type TitleResult =
   | { status: 'retry'; error: string }
   | { status: 'lost' }
 
-/** How long a title job holds its lease: a call per language for up to 20 titles, and retries. */
+/**
+ * How long a title job holds its lease at a time. Every call and every group's commit extends it
+ * by this much, so it has to cover one call, not the feed: a feed in several source languages
+ * makes a group, and at least one call, for each (target, source) pair.
+ */
 export const TITLE_TTL_MS = 5 * 60_000
 
 type Block = { id: string; text: string; hash: string }
+
+/** Thrown out of `translateBlocks` between two calls whose lease has gone. */
+class LeaseLost extends Error {
+  override name = 'LeaseLost'
+}
 
 /** An article's title and excerpt as blocks, ids unique across the batch. */
 async function blocksOf(article: DueTitle): Promise<Block[]> {
@@ -56,8 +66,9 @@ async function blocksOf(article: DueTitle): Promise<Block[]> {
 /**
  * Translate a feed's due titles and excerpts into every launch language each is not written in.
  * The key is the feed id. Work is grouped by (target language, source language), one
- * `translateBlocks` call a group. A group the provider refuses leaves the rest standing: what
- * succeeded is committed and the lease backs off, so paid work is never thrown away.
+ * `translateBlocks` call a group, and each group commits in its own fenced batch as it lands. A
+ * group the provider refuses leaves the rest standing, and a lease lost midway keeps the groups
+ * committed before it: paid work is never thrown away.
  */
 export async function translateTitlesJob(
   ctx: TranslationContext,
@@ -109,10 +120,7 @@ export async function translateTitlesJob(
     }
   }
 
-  const now = ctx.clock.now()
-  const statements: Statement[] = []
   const translatedCount = new Map<string, number>()
-  let spent = 0
   let providerError: string | null = null
   for (const { lang, sourceLang, articles: members } of groups.values()) {
     const all = members.flatMap((a) => blocks.get(a.id) as Block[])
@@ -129,9 +137,8 @@ export async function translateTitlesJob(
       if (hit !== undefined) result.set(b.id, hit)
       else missing.push(b)
     }
-    const echoed = new Set<string>()
+    let outcome: Awaited<ReturnType<typeof translateBlocks>> | null = null
     if (missing.length > 0) {
-      let outcome: Awaited<ReturnType<typeof translateBlocks>>
       try {
         outcome = await translateBlocks(translator, {
           blocks: missing.map(({ id, text }) => ({ id, text })),
@@ -141,12 +148,26 @@ export async function translateTitlesJob(
           // A title may be a name that reads the same in every language; excerpts keep the
           // echo guard.
           allowIdenticalBlockIds: missing.filter((b) => b.id.startsWith('t')).map((b) => b.id),
+          // A group can take several calls (chunks, the strict retry). Each one extends the
+          // lease, and a lease lost between them stops the group before it pays for another.
+          onChunk: async () => {
+            if (!(await extendLease(db, lease, ctx.clock.now(), TITLE_TTL_MS))) {
+              throw new LeaseLost()
+            }
+          },
         })
       } catch (err) {
+        if (err instanceof LeaseLost) return { status: 'lost' }
         // The provider is down or refusing: keep what other groups made, back off for the rest.
         providerError = err instanceof Error ? err.message : String(err)
         continue
       }
+    }
+    const now = ctx.clock.now()
+    const statements: Statement[] = []
+    const echoed = new Set<string>()
+    let spent = 0
+    if (outcome) {
       for (const usage of outcome.usage) {
         spent += usage.inputTokens + usage.outputTokens
         statements.push(
@@ -210,19 +231,17 @@ export async function translateTitlesJob(
         ),
       )
     }
+    if (spent > 0) statements.push(chargeUsage(db, BACKGROUND, utcDay(now), spent))
+    // Each group commits the moment it lands and holds the lease for the next, so a feed's calls
+    // need not all fit in one lease, and a lease lost later keeps what was paid for here.
+    const committed = await commit(ctx, lease, statements, { hold: { ttlMs: TITLE_TTL_MS } })
+    if (!committed.ok) return { status: 'lost' }
     translatedCount.set(lang, (translatedCount.get(lang) ?? 0) + members.length)
   }
-  if (spent > 0) statements.push(chargeUsage(db, BACKGROUND, utcDay(now), spent))
-  if (providerError !== null) {
-    // Keep the lease so runJob can back it off; what succeeded is written now.
-    if (statements.length > 0) {
-      const kept = await commit(ctx, lease, statements, { hold: { ttlMs: TITLE_TTL_MS } })
-      if (!kept.ok) return { status: 'lost' }
-    }
-    return { status: 'retry', error: providerError }
-  }
-  const committed = await commit(ctx, lease, statements)
-  return committed.ok
+  // What succeeded is written; the lease is still held, so runJob can back it off.
+  if (providerError !== null) return { status: 'retry', error: providerError }
+  const released = await commit(ctx, lease, [])
+  return released.ok
     ? { status: 'done', articles: articles.length, languages: Object.fromEntries(translatedCount) }
     : { status: 'lost' }
 }

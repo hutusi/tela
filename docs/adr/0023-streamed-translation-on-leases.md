@@ -53,8 +53,12 @@ that way (AGENTS.md).
   20 of its due titles and excerpts in one call per language, with the site's name as context.
   Titles were 81% of production's model spend (937k of 1.16M tokens over 1,961 calls), and a
   call averaged 393 input tokens to carry about 90 of title and excerpt: the prompt was paid
-  once an article. If the provider fails for one language, what the others made is committed
-  and only the rest backs off.
+  once an article. Work is grouped by target and source language, and each group commits in its
+  own fenced batch as it lands, holding the lease for the next; every call extends it too. A
+  feed in two source languages makes four calls. When those committed together at the end, four
+  80-second calls outlived the five-minute lease and the fence threw all four away. If
+  the provider fails for one group, or the lease is lost midway, the groups already committed
+  stay and only the rest is asked for again.
 - **Budgets live in `usage_daily`**, one row per subject and UTC day:
   - A member's subject is their user id. The API reserves an estimate against it when the reader
     asks; ADR 0024 says how.

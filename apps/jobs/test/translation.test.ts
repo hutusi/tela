@@ -271,6 +271,90 @@ describe('titles, batched by feed', () => {
     ])
   })
 
+  /** Four posts in two source languages: four (target, source) groups, a call each. */
+  async function twoSourceLanguages(ctx: PortableContext) {
+    await ingest(ctx, manyPosts(4))
+    await db.run(
+      sql`update articles set source_lang = case when id % 2 = 1 then 'ja' else 'fr' end`,
+    )
+  }
+
+  test('a feed whose calls outlast one lease commits each group as it lands', async () => {
+    // Every model call takes 80 s of the fake clock: the four groups take 320 s, past the
+    // 5-minute lease the whole feed once had to fit in.
+    const slow: Translator = {
+      model: 'slow-mock',
+      async translate(request) {
+        clock.advance(80_000)
+        return createMockTranslator({ calls }).translate(request)
+      },
+    }
+    const ctx = context({ translator: slow })
+    await twoSourceLanguages(ctx)
+    const { outcomes } = await cycle(ctx)
+    expect(outcomes).toMatchObject([{ status: 'done' }])
+    expect(calls).toHaveLength(4)
+    const rows = await db.all<{ status: string; n: number }>(
+      sql`select status, count(*) as n from article_titles group by status`,
+    )
+    expect(rows).toEqual([{ status: 'done', n: 8 }])
+    expect(await db.all(sql`select key from leases where kind = 'translate.title'`)).toEqual([])
+  })
+
+  test('a lease lost between groups keeps the groups committed before it', async () => {
+    // Groups run zh-Hans←ja, en←ja, zh-Hans←fr, en←fr. During the third call the lease lapses
+    // and another holder could take it: nothing more is written, and what the first two groups
+    // paid for stays.
+    const mock = createMockTranslator({ calls })
+    const takenOver: Translator = {
+      model: mock.model,
+      async translate(request) {
+        if (calls.length === 2) {
+          await db.run(sql`update leases set until = 0 where kind = 'translate.title'`)
+        }
+        return mock.translate(request)
+      },
+    }
+    const ctx = context({ translator: takenOver })
+    await twoSourceLanguages(ctx)
+    const { outcomes } = await cycle(ctx)
+    expect(outcomes).toMatchObject([{ status: 'lost' }])
+    expect(calls).toHaveLength(3)
+    const kept = await db.all<{ source_lang: string; n: number }>(sql`
+      select a.source_lang, count(*) as n from article_titles t
+      join articles a on a.id = t.article_id where t.status = 'done' group by a.source_lang
+    `)
+    expect(kept).toEqual([{ source_lang: 'ja', n: 4 }])
+    // The next holder asks only for what was not committed.
+    calls.length = 0
+    clock.advance(MIN)
+    await cycle(ctx)
+    expect(calls.map((c) => `${c.targetLang}←${c.sourceLang}`)).toEqual(['zh-Hans←fr', 'en←fr'])
+    const all = await first<{ n: number }>(
+      db,
+      sql`select count(*) as n from article_titles where status = 'done'`,
+    )
+    expect(all?.n).toBe(8)
+  })
+
+  test('a lease lost between the calls of one group pays for no more of them', async () => {
+    // The reply leaves out the title, so the group makes a strict retry call after its first;
+    // the lease lapses during that first call.
+    const mock = createMockTranslator({ calls, dropIds: new Set(['t1']) })
+    const takenOver: Translator = {
+      model: mock.model,
+      async translate(request) {
+        await db.run(sql`update leases set until = 0 where kind = 'translate.title'`)
+        return mock.translate(request)
+      },
+    }
+    const ctx = context({ translator: takenOver })
+    await ingest(ctx, manyPosts(1))
+    const { outcomes } = await cycle(ctx)
+    expect(outcomes).toContainEqual({ status: 'lost' })
+    expect(calls).toHaveLength(1)
+  })
+
   test('a batch that keeps failing is recorded failed, stamped for sync, and asked for no more', async () => {
     const ctx = context({ translator: createMockTranslator({ calls, fail: true }) })
     await ingest(ctx, manyPosts(2))

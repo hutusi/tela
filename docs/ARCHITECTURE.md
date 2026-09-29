@@ -153,7 +153,8 @@ and hashes as the `NORM_VERSION` contract.
   non-identity) and retries failures once in strict mode.
 - **Titles, eager** (`translate.title`, keyed by feed): the sweep finds feeds with articles whose
   current title hash has no row in some launch language; a job translates up to 20 titles and
-  excerpts of one feed per call per language. The background budget (`usage_daily` subject `'*'`)
+  excerpts of one feed per call per language, and commits each (language, source) group in its
+  own fenced batch as it lands. The background budget (`usage_daily` subject `'*'`)
   stops the sweep for the day once spent.
 - **Bodies, lazy and streamed** (`translate.body`, ADR 0023): opening a foreign post reserves
   against the member's day and claims the work at once. Groups follow top-level block boundaries,
