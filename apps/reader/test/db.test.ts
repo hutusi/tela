@@ -13,7 +13,13 @@ import {
   type TableRows,
 } from '@tela/sync'
 import { openDB } from 'idb'
-import { DATABASE, earlierBuildRan, indexedDbPersistence } from '../src/store/db'
+import {
+  DATABASE,
+  earlierBuild,
+  indexedDbPersistence,
+  memoryPersistence,
+  type Persistence,
+} from '../src/store/db'
 import { metaKeys, seedEarlierBuild } from './earlier-build'
 import { profile, pull, sub } from './rows'
 
@@ -79,7 +85,7 @@ describe('the device database', () => {
     })
     const now = await indexedDbPersistence(name)
     const loaded = await now.load()
-    expect(loaded).toEqual({ owner: null, unverified: false, cursor: 0, rows: null, pending: [] })
+    expect(loaded).toEqual({ owner: null, unverified: null, cursor: 0, rows: null, pending: [] })
     // Nothing of it is left to be read back later, under anyone.
     expect(await metaKeys(name)).toEqual([])
     expect(await now.bodyKeys()).toEqual([])
@@ -92,7 +98,7 @@ describe('the device database', () => {
     expect(await one.claim('a')).toBe(true)
     expect(await one.load()).toEqual({
       owner: 'a',
-      unverified: false,
+      unverified: null,
       cursor: 0,
       rows: null,
       pending: [],
@@ -171,7 +177,7 @@ describe('the device database', () => {
       await Promise.all(i % 2 ? [write(), two.claim('b')] : [two.claim('b'), write()])
       expect(await two.load()).toEqual({
         owner: 'b',
-        unverified: false,
+        unverified: null,
         cursor: 0,
         rows: null,
         pending: [],
@@ -225,25 +231,28 @@ describe('the device database', () => {
     const now = await indexedDbPersistence()
     expect(await now.load()).toEqual({
       owner: null,
-      unverified: false,
+      unverified: null,
       cursor: 0,
       rows: null,
       pending: [],
     })
     await now.claim('b')
 
-    // It ran: its sign-out or sign-in never reached this copy. Its copy is emptied, not deleted
-    // (a deletion would wait on its open tabs, and hang one of them reloading).
-    expect(await earlierBuildRan()).toBe(true)
-    // Emptied, and marked as seen where that build never reads: its sign-out takes the mark.
+    // It ran: its sign-out or sign-in never reached this copy. Looking changes nothing.
+    expect(await earlierBuild.wrote()).toBe(true)
+    expect(await earlierBuild.wrote()).toBe(true)
+    // Its copy is emptied, not deleted (a deletion would wait on its open tabs, and hang one of
+    // them reloading), and marked as seen where that build never reads: its sign-out takes it.
+    expect(await earlierBuild.empty()).toBe(true)
     expect(await metaKeys('tela')).toEqual(['tela-2:seen'])
     expect((await indexedDB.databases()).map((d) => d.name)).toContain('tela')
     // Nothing new since: nothing to distrust. And this build's own copy is untouched.
-    expect(await earlierBuildRan()).toBe(false)
+    expect(await earlierBuild.wrote()).toBe(false)
+    expect(await earlierBuild.empty()).toBe(false)
     expect((await now.load()).owner).toBe('b')
     // It runs again, and is seen again.
     await seed()
-    expect(await earlierBuildRan()).toBe(true)
+    expect(await earlierBuild.wrote()).toBe(true)
   })
 
   test('a pull that starts past the stored cursor does not land, so no rows go missing between', async () => {
@@ -306,4 +315,56 @@ describe('the device database', () => {
     })
     expect((await ahead.load()).cursor).toBe(102)
   })
+})
+
+describe('the mark an earlier build having run leaves', () => {
+  const kinds: [string, () => Promise<[Persistence, Persistence]>][] = [
+    [
+      'IndexedDB',
+      async () => {
+        const name = fresh()
+        return [await indexedDbPersistence(name), await indexedDbPersistence(name)]
+      },
+    ],
+    [
+      'memory',
+      async () => {
+        const one = memoryPersistence()
+        return [one, one]
+      },
+    ],
+  ]
+  for (const [kind, tabs] of kinds) {
+    test(`is cleared only by a claim from a tab that loaded it, and outlives a wipe (${kind})`, async () => {
+      const [one, two] = await tabs()
+      await one.claim('a')
+      await one.distrust()
+      const loaded = (await one.load()).unverified
+      expect(loaded).not.toBeNull()
+      // Another tab marks the copy again after this one loaded it: this tab's /me may have
+      // answered before whatever that mark is about, so its claim leaves the newer one.
+      await two.distrust()
+      expect(await one.claim('a', loaded)).toBe(false)
+      const newer = (await one.load()).unverified
+      expect(newer).not.toBeNull()
+      expect(newer).not.toBe(loaded)
+      // A claim that loaded no mark clears none.
+      await one.claim('a')
+      expect((await one.load()).unverified).toBe(newer)
+      // Wiped, by a release or by someone else's claim, the next copy is no better known.
+      expect(await one.release('a')).toBe(true)
+      expect(await one.load()).toEqual({
+        owner: null,
+        unverified: newer,
+        cursor: 0,
+        rows: null,
+        pending: [],
+      })
+      expect(await one.claim('b', loaded)).toBe(true)
+      expect((await one.load()).unverified).toBe(newer)
+      // The claim of a tab that loaded it clears it.
+      expect(await one.claim('b', newer)).toBe(false)
+      expect((await one.load()).unverified).toBeNull()
+    })
+  }
 })

@@ -6,7 +6,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { AccountChanged, api, SignedOut, UpgradeRequired } from './store/api'
-import { earlierBuildRan, type Persistence } from './store/db'
+import { type EarlierBuild, earlierBuild, type Persistence } from './store/db'
 import type { SyncEngine } from './store/engine'
 import { LocalStore } from './store/local'
 
@@ -60,7 +60,7 @@ export function distrusted(owner: string | null): boolean {
 export function initialStatus(
   store: Pick<LocalStore, 'hasData' | 'userId' | 'unverified'>,
 ): SessionStatus {
-  const trusted = store.hasData && store.userId !== null && !store.unverified
+  const trusted = store.hasData && store.userId !== null && store.unverified === null
   return trusted && !distrusted(store.userId) ? 'member' : 'unknown'
 }
 
@@ -68,14 +68,23 @@ export function initialStatus(
  * Open the device's store for this boot. An earlier build having run on this device since (a tab
  * left open across the deploy, a rollback) marks the copy unverified in storage, so no tab and
  * no later boot trusts it until a claim after /me: a sign-out or sign-in there never reached it.
+ *
+ * Tabs boot side by side, so the order is what makes it hold. The mark is down before the
+ * earlier build's copy is emptied, and the copy is loaded after both: a tab that finds it already
+ * emptied by another loads after that tab's mark. It is marked again once emptied, since a
+ * sign-out there between the look and the emptying is known then only to this tab, and a claim
+ * another tab makes meanwhile, on a /me asked before that sign-out, clears only the first mark.
  */
 export async function openStore(
   persistence: Persistence,
-  ran: () => Promise<boolean> = earlierBuildRan,
+  earlier: EarlierBuild = earlierBuild,
 ): Promise<LocalStore> {
+  if (await earlier.wrote()) {
+    await persistence.distrust()
+    if (await earlier.empty()) await persistence.distrust()
+  }
   const store = new LocalStore(persistence)
   await store.open()
-  if (await ran()) await store.distrust()
   return store
 }
 

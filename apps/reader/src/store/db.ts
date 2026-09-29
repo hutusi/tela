@@ -24,7 +24,7 @@
  * cached earlier shell still open in another tab, or one a rollback brings back, writes its own
  * copy without checking any owner; sharing one database let it write its rows into a copy this
  * build had given to another account, and let this build erase the key that earlier build checks.
- * What that build does is still seen: `earlierBuildRan` empties its copy at each boot, and finding
+ * What that build does is still seen: `earlierBuild` looks at its copy at each boot, and finding
  * it written again means this build's copy may not know of a sign-out or a sign-in since.
  *
  * Everything here can be rebuilt from the server, so a browser that clears it loses nothing.
@@ -52,10 +52,11 @@ export type Persisted = {
   /** Whose rows these are. Null means nobody's, and then nothing is stored. */
   owner: string | null
   /**
-   * Whether an earlier build has run on this device since the copy was last claimed: a sign-out
-   * or sign-in there never reached it, so no tab trusts it until a claim after /me.
+   * The mark an earlier build having run on this device leaves (`distrust`), or null: a sign-out
+   * or sign-in there never reached the copy, so no tab trusts it until a claim after /me. Each
+   * mark is new, so a claim can tell the one its tab loaded from one set since.
    */
-  unverified: boolean
+  unverified: string | null
   cursor: number
   rows: TableRows | null
   pending: Pending[]
@@ -96,10 +97,14 @@ export interface Persistence {
   load(): Promise<Persisted>
   /**
    * Make the copy `owner`'s. Anyone else's, or nobody's, is wiped first; says whether it was.
-   * Either way the claim is what confirms the owner, so the copy is no longer unverified.
+   * The claim acts on a /me asked after its tab loaded, so it clears the mark that tab loaded
+   * (`seen`). A mark set since stays: /me may have answered before whatever set it.
    */
-  claim(owner: string): Promise<boolean>
-  /** Mark the copy unverified, whoever owns it (`Persisted.unverified`). */
+  claim(owner: string, seen?: string | null): Promise<boolean>
+  /**
+   * Mark the copy unverified, whoever owns it or if nobody does (`Persisted.unverified`). Only a
+   * claim clears the mark; wiping the copy keeps it.
+   */
   distrust(): Promise<void>
   /** Wipe the copy while it is still `owner`'s; another account's is left alone. Says which. */
   release(owner: string): Promise<boolean>
@@ -148,40 +153,78 @@ const EARLIER = 'tela'
 /** Left in the earlier build's emptied copy, where that build never reads; its clear() takes it. */
 const SEEN = 'tela-2:seen'
 
+/** What an earlier build does on this device, as each boot finds it (`openStore`). */
+export type EarlierBuild = {
+  /**
+   * Whether it has touched its copy since this build last emptied it: written, or cleared (its
+   * sign-out, which takes the seen mark with everything else). It ran on this device since (a
+   * tab left open across the deploy, or a rollback), and a sign-out or another account's sign-in
+   * there never reached this build's copy. Only looks.
+   */
+  wrote(): Promise<boolean>
+  /**
+   * Empty its copy and mark it seen; says whether it had been touched, looked at again in the
+   * same transaction. Emptied, not deleted: a deletion waits for every tab of that build to
+   * close, and one of them reloading meanwhile would wait behind it on a blank page.
+   */
+  empty(): Promise<boolean>
+}
+
+/** Whether the earlier build's copy says it ran since `SEEN` was left. */
+function touched(keys: IDBValidKey[], counts: number[]): boolean {
+  return !keys.includes(SEEN) || keys.length > 1 || counts.some((n) => n > 0)
+}
+
 /**
- * Whether an earlier build has touched its copy since this build last looked; it is emptied
- * either way, and marked as seen. Touched means written, or cleared (its sign-out, which takes
- * the mark with everything else): an earlier build ran on this device since (a tab left open
- * across the deploy, or a rollback), and a sign-out or another account's sign-in there never
- * reached this build's copy. Emptied, not deleted: a deletion waits for every tab of that build
- * to close, and one of them reloading meanwhile would wait behind it on a blank page.
+ * Run `body` over the earlier build's database, if there is one with a `meta` store; false when
+ * there is none, or IndexedDB refuses: then nothing an earlier build left can be read here either.
  */
-export async function earlierBuildRan(): Promise<boolean> {
+async function withEarlier(
+  body: (db: IDBPDatabase, names: string[]) => Promise<boolean>,
+): Promise<boolean> {
   try {
+    // Opening a name that does not exist would create it: only one that is listed is opened.
     const listed = await indexedDB.databases?.()
     if (!listed?.some((d) => d.name === EARLIER)) return false
-    const earlier = await openDB(EARLIER)
+    const db = await openDB(EARLIER)
     try {
-      const names = Array.from(earlier.objectStoreNames)
-      if (!names.includes('meta')) return false
-      const tx = earlier.transaction(names, 'readwrite')
-      const meta = tx.objectStore('meta')
-      const [keys, ...counts] = await Promise.all([
-        meta.getAllKeys(),
-        ...names.filter((n) => n !== 'meta').map((n) => tx.objectStore(n).count()),
-      ])
-      const touched = !keys.includes(SEEN) || keys.length > 1 || counts.some((n) => n > 0)
-      await Promise.all(names.map((n) => tx.objectStore(n).clear()))
-      await meta.put(true, SEEN)
-      await tx.done
-      return touched
+      const names = Array.from(db.objectStoreNames)
+      return names.includes('meta') ? await body(db, names) : false
     } finally {
-      earlier.close()
+      db.close()
     }
   } catch {
-    // No IndexedDB, or it refuses: nothing an earlier build left can be read here either.
     return false
   }
+}
+
+/** Every store's count but `meta`'s, and `meta`'s keys, in `tx`. */
+function contents<Mode extends IDBTransactionMode>(
+  tx: IDBPTransaction<unknown, string[], Mode>,
+  names: string[],
+) {
+  return Promise.all([
+    tx.objectStore('meta').getAllKeys(),
+    Promise.all(names.filter((n) => n !== 'meta').map((n) => tx.objectStore(n).count())),
+  ])
+}
+
+export const earlierBuild: EarlierBuild = {
+  wrote: () =>
+    withEarlier(async (db, names) => {
+      const tx = db.transaction(names, 'readonly')
+      const [[keys, counts]] = await Promise.all([contents(tx, names), tx.done])
+      return touched(keys, counts)
+    }),
+  empty: () =>
+    withEarlier(async (db, names) => {
+      const tx = db.transaction(names, 'readwrite')
+      const [keys, counts] = await contents(tx, names)
+      await Promise.all(names.map((n) => tx.objectStore(n).clear()))
+      await tx.objectStore('meta').put(true, SEEN)
+      await tx.done
+      return touched(keys, counts)
+    }),
 }
 
 const OWNER = 'owner'
@@ -252,7 +295,17 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
   const ownerOf = async (tx: Tx) =>
     ((await tx.objectStore('meta').get(OWNER)) as string | undefined) ?? null
 
-  const wipe = (tx: Tx) => Promise.all(STORES.map((s) => tx.objectStore(s).clear()))
+  const markOf = async (tx: Tx) => {
+    const mark = await tx.objectStore('meta').get(UNVERIFIED)
+    return typeof mark === 'string' ? mark : null
+  }
+
+  /** Everything goes but the mark, which only a claim clears (`distrust`). */
+  const wipe = async (tx: Tx) => {
+    const mark = await markOf(tx)
+    await Promise.all(STORES.map((s) => tx.objectStore(s).clear()))
+    if (mark !== null) await tx.objectStore('meta').put(mark, UNVERIFIED)
+  }
 
   return {
     load: () =>
@@ -260,12 +313,12 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
         const owner = await ownerOf(tx)
         if (owner === null) {
           await wipe(tx)
-          return { owner: null, unverified: false, cursor: 0, rows: null, pending: [] }
+          return { owner: null, unverified: await markOf(tx), cursor: 0, rows: null, pending: [] }
         }
         const meta = tx.objectStore('meta')
         const [cursor, unverified, keys, records, values] = await Promise.all([
           meta.get(CURSOR),
-          meta.get(UNVERIFIED),
+          markOf(tx),
           meta.getAllKeys(pendingRange()),
           meta.getAll(pendingRange()) as Promise<StoredPending[]>,
           Promise.all(TABLES.map((t) => tx.objectStore('tables').get(t))),
@@ -282,7 +335,7 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
         const complete = values.every((v) => v !== undefined)
         return {
           owner,
-          unverified: unverified === true,
+          unverified,
           cursor: complete ? Number(cursor ?? 0) : 0,
           rows: complete
             ? (Object.fromEntries(TABLES.map((t, i) => [t, values[i]])) as TableRows)
@@ -290,19 +343,20 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
           pending: inOrder(pending),
         }
       }),
-    claim: (owner) =>
+    claim: (owner, seen = null) =>
       write(STORES, async (tx) => {
-        if ((await ownerOf(tx)) === owner) {
-          await tx.objectStore('meta').delete(UNVERIFIED)
-          return false
+        const [stored, mark] = await Promise.all([ownerOf(tx), markOf(tx)])
+        const wiped = stored !== owner
+        if (wiped) {
+          await wipe(tx)
+          await tx.objectStore('meta').put(owner, OWNER)
         }
-        await wipe(tx)
-        await tx.objectStore('meta').put(owner, OWNER)
-        return true
+        if (mark !== null && mark === seen) await tx.objectStore('meta').delete(UNVERIFIED)
+        return wiped
       }),
     distrust: () =>
       write(['meta'], async (tx) => {
-        await tx.objectStore('meta').put(true, UNVERIFIED)
+        await tx.objectStore('meta').put(crypto.randomUUID(), UNVERIFIED)
       }),
     release: (owner) =>
       write(STORES, async (tx) => {
@@ -375,15 +429,15 @@ function untag(record: StoredPending): Pending {
 /** Storage that forgets everything: tests, and browsers that refuse IndexedDB. */
 export function memoryPersistence(): Persistence {
   let owner: string | null = null
-  let unverified = false
+  let unverified: string | null = null
   let cursor = 0
   let tables: Partial<TableRows> = {}
   // Only the owner's: a claim wipes them with everything else, and every write checks.
   const pending = new Map<string, Pending>()
   const bodies = new Map<string, StoredBody>()
   const objects = new Map<string, StoredObject>()
+  // Everything but the mark, as in IndexedDB.
   const wipe = () => {
-    unverified = false
     cursor = 0
     tables = {}
     pending.clear()
@@ -394,7 +448,7 @@ export function memoryPersistence(): Persistence {
     async load() {
       if (owner === null) {
         wipe()
-        return { owner: null, unverified: false, cursor: 0, rows: null, pending: [] }
+        return { owner: null, unverified, cursor: 0, rows: null, pending: [] }
       }
       const complete = TABLES.every((t) => t in tables)
       return {
@@ -405,17 +459,17 @@ export function memoryPersistence(): Persistence {
         pending: inOrder(pending.values()),
       }
     },
-    async claim(o) {
-      if (owner === o) {
-        unverified = false
-        return false
+    async claim(o, seen = null) {
+      const wiped = owner !== o
+      if (wiped) {
+        wipe()
+        owner = o
       }
-      wipe()
-      owner = o
-      return true
+      if (unverified !== null && unverified === seen) unverified = null
+      return wiped
     },
     async distrust() {
-      unverified = true
+      unverified = crypto.randomUUID()
     },
     async release(o) {
       if (owner !== o) return false

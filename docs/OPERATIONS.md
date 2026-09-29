@@ -103,9 +103,9 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
      forward again the newer shell sees that an earlier build touched `tela` (wrote to it, or
      cleared it on a sign-out, which takes the mark) and marks its own copy unverified: every tab
-     asks who is signed in before trusting it, until the claim after that answer. Browsers
-     without `indexedDB.databases()` (Firefox before 126) cannot see this, and trust their copy
-     until its first request is refused.
+     asks who is signed in before trusting it, tabs booting together included, until the claim
+     after that answer. Browsers without `indexedDB.databases()` (Firefox before 126) cannot see
+     this, and trust their copy until its first request is refused.
 
    Protocol 2 also starts every device over once, at its first boot on the new shell: it waits
    on the network that one time, and any unsent change the old shell left behind is dropped. Its

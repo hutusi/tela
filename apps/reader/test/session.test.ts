@@ -2,7 +2,12 @@ import 'fake-indexeddb/auto'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { leaver } from '../src/leave'
 import { distrust, distrusted, forgetOnSignOut, initialStatus, openStore } from '../src/session'
-import { indexedDbPersistence, memoryPersistence, type Persistence } from '../src/store/db'
+import {
+  type EarlierBuild,
+  indexedDbPersistence,
+  memoryPersistence,
+  type Persistence,
+} from '../src/store/db'
 import { LocalStore } from '../src/store/local'
 import { noEarlierBuild, seedEarlierBuild, signOutEarlierBuild } from './earlier-build'
 import { NOW, profile, pull, sub } from './rows'
@@ -47,6 +52,8 @@ const reopened = async (storage: Persistence) => {
   await store.open()
   return store
 }
+/** A device where no earlier build has run. */
+const none: EarlierBuild = { wrote: async () => false, empty: async () => false }
 
 describe('leaving an account', () => {
   test('a tab whose storage will not forget boots asking who is signed in, and only once', async () => {
@@ -117,6 +124,66 @@ describe('booting after an earlier build ran on this device', () => {
 
   test('a device where no earlier build ran boots on its copy at once', async () => {
     expect(initialStatus(await openStore(await copy()))).toBe('member')
+  })
+
+  test('tabs booting together all ask first, the ones that find its copy already emptied too', async () => {
+    // Found in review: a tab that loaded before another's mark, and looked after that one had
+    // emptied the earlier build's copy, trusted the copy.
+    for (const tabs of [2, 3]) {
+      const name = `tela-test-${crypto.randomUUID()}`
+      await held(await indexedDbPersistence(name))
+      await earlierSignsIn()
+      const booted = await Promise.all(
+        Array.from({ length: tabs }, async () => openStore(await indexedDbPersistence(name))),
+      )
+      expect(booted.map(initialStatus)).toEqual(Array(tabs).fill('unknown'))
+    }
+  })
+
+  test("a tab that finds the earlier build's copy emptied by another loads after that tab's mark", async () => {
+    const name = `tela-test-${crypto.randomUUID()}`
+    await held(await indexedDbPersistence(name))
+    // One earlier build's copy, which every tab looks at: written, until a tab empties it.
+    let written = true
+    const tabs: LocalStore[] = []
+    const shared: EarlierBuild = {
+      wrote: async () => written,
+      empty: async () => {
+        const was = written
+        written = false
+        // Another tab boots the moment the evidence is gone, before this one does anything more.
+        tabs.push(await openStore(await indexedDbPersistence(name), shared))
+        return was
+      },
+    }
+    tabs.unshift(await openStore(await indexedDbPersistence(name), shared))
+    expect(tabs.map(initialStatus)).toEqual(['unknown', 'unknown'])
+  })
+
+  test("a claim made while this tab empties the earlier build's copy leaves it asking first", async () => {
+    const name = `tela-test-${crypto.randomUUID()}`
+    await held(await indexedDbPersistence(name))
+    const tab = () => indexedDbPersistence(name)
+    const others: LocalStore[] = []
+    // Between this tab's look and its emptying, another tab loads the marked copy and claims it
+    // on a /me asked before whatever the emptying is about to erase (a sign-out there).
+    const earlier: EarlierBuild = {
+      wrote: async () => true,
+      empty: async () => {
+        const other = await openStore(await tab(), none)
+        others.push(other)
+        await other.setUser('a')
+        return true
+      },
+    }
+    const booted = await openStore(await tab(), earlier)
+    expect(initialStatus(booted)).toBe('unknown')
+    // The other tab's claim acted on the mark it loaded, not the one this tab put down since.
+    for (const other of others) await other.setUser('a')
+    expect(initialStatus(await openStore(await tab(), none))).toBe('unknown')
+    // This tab's own claim, after its /me, is what confirms the copy.
+    await booted.setUser('a')
+    expect(initialStatus(await openStore(await tab(), none))).toBe('member')
   })
 })
 
