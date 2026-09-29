@@ -63,14 +63,9 @@ export function ReadingPage() {
     store.mutate({ type: 'markRead', articleId: article.id })
   }, [articleId])
 
-  // A new article opens at its top, and focus moves into it once it is there.
+  // A new article opens at its top (the Reader moves focus into it once its body is there).
   useEffect(() => {
-    if (params.articleId === null) return
-    window.scrollTo({ top: 0 })
-    const id = requestAnimationFrame(() =>
-      document.querySelector<HTMLElement>('[data-testid="reader"]')?.focus({ preventScroll: true }),
-    )
-    return () => cancelAnimationFrame(id)
+    if (params.articleId !== null) window.scrollTo({ top: 0 })
   }, [params.articleId])
 
   const onMode = useCallback(

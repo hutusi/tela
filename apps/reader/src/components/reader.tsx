@@ -4,7 +4,7 @@
  * tela-api at all (ADR 0025).
  */
 import type { ArticleRow } from '@tela/sync'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 import { pairBlocks, readerBlocks, runsOf } from '../lib/block-pairs'
 import { relativeTime } from '../lib/format'
@@ -83,6 +83,12 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
 
   const object = content?.key === key ? content.object : null
   const loaded = !key || content?.key === key
+  // Focus moves in once the article is on screen, not while its skeleton is: focusing the pane
+  // before that focused nothing, and a keyboard reader was left in the list.
+  const pane = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (loaded) pane.current?.focus({ preventScroll: true })
+  }, [loaded])
   const translation = useArticleTranslation(article, object, readingLang)
   const original = useMemo(() => (object ? readerBlocks(object) : []), [object])
   const pairs = useMemo(
@@ -108,6 +114,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
 
   return (
     <main
+      ref={pane}
       className="min-w-0 overflow-hidden px-5 pb-20 pt-6 outline-none animate-fade md:px-8"
       data-testid="reader"
       data-mode={shown}
