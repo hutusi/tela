@@ -1,7 +1,7 @@
 {
   // tela-web (ADR 0020, 0024): the one public Worker, at the reader's edge, unpinned. The Next.js
   // app deployed as tela-web today keeps the name until cutover (phase 8); this config is not
-  // deployed before then. Phase 6 adds the SPA's static assets.
+  // deployed before then. Built with `vite build`, which bundles the SPA and this Worker together.
   "name": "tela-web",
   "main": "worker/index.ts",
   "compatibility_date": "2026-06-01",
@@ -9,6 +9,13 @@
   // The custom domain is the only public origin: workers.dev is blocked in mainland China.
   "workers_dev": false,
   "observability": { "enabled": true },
+  // The SPA's static assets answer every other path for free, without running the Worker; a
+  // path with no asset is the app itself. The Worker runs first only where it has work to do.
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/o/*", "/img/*", "/robots.txt", "/discover", "/s/*", "/@*"]
+  },
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content" }],
   "services": [{ "binding": "API", "service": "tela-api" }],
   "vars": { "TELA_PRIVATE_BETA": "1" }

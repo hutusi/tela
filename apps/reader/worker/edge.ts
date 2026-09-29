@@ -9,6 +9,11 @@
  *   replacing the HMAC-signed `/img?u=` of the Postgres app: the object is the allowlist.
  * - Sessions are read from better-auth's signed five-minute cookie cache with the shared secret.
  *   Only when that has lapsed does it ask tela-api, and passes on the refreshed cookie.
+ * - `/discover`, `/s/:id` and `/@handle` are rendered here from tela-api's public JSON, poured into
+ *   the SPA's index.html and cached per colo, locale and deploy for five minutes. Every other path
+ *   is the SPA's static assets, which answer without running this Worker at all.
+ * - A write to `/api/*` must come from this origin: cookies are `SameSite=Lax`, and this closes
+ *   what Lax leaves open to a sibling subdomain.
  *
  * Portable: built from interfaces, so the bun suite runs it with memory blobs and a fake cache.
  */
@@ -29,6 +34,10 @@ export type EdgeDeps = {
   cache: EdgeCache
   /** Outbound fetch for the image proxy. */
   fetchImage: (url: string, init: RequestInit) => Promise<Response>
+  /** The SPA's built static assets (the `ASSETS` binding). */
+  assets: { fetch(request: Request): Promise<Response> }
+  /** Public pages: which URLs are one, and how to render one (`src/ssr.tsx`). */
+  pages: PublicPages
   config: {
     /** The secret tela-api signs sessions with; the same value on both Workers. */
     authSecret: string
@@ -38,6 +47,15 @@ export type EdgeDeps = {
 }
 
 type Waiter = { waitUntil(promise: Promise<unknown>): void }
+
+export type PublicPages<R extends { api: string } = { api: string }> = {
+  /** The page a URL names, with the tela-api endpoint its data comes from. */
+  route(url: URL): R | null
+  /** The UI language to render in, from the locale cookie and Accept-Language. */
+  locale(request: Request): string
+  /** `data` null: the endpoint said there is no such page. */
+  render(input: { route: R; url: URL; data: unknown; locale: string; template: string }): string
+}
 
 const OBJECT_KEY =
   /^(?:c\/[0-9a-f]{32}\.json|t\/[0-9a-f]{32}\/[A-Za-z-]{2,16}\/[0-9a-f]{8,64}\.json|tc\/[0-9a-f]{32}\/[A-Za-z-]{2,16}\/[A-Za-z0-9-]{1,64}\/\d{1,4}\.json)$/
@@ -50,6 +68,12 @@ const OBJECT_CACHE = 'private, max-age=31536000, immutable'
 const IMAGE_CACHE = 'private, max-age=604800, immutable'
 /** The cache's own namespace: keys are never a URL a reader can request directly. */
 const CACHE_ORIGIN = 'https://tela-edge.cache'
+/** A rendered public page, at the edge. The browser always asks again: the page is the shell too. */
+const PAGE_EDGE_CACHE = 'public, s-maxage=300'
+const PAGE_CACHE = 'public, max-age=0, must-revalidate'
+const WRITES = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+/** Called by hubs and by the admin script, with their own authorization and no browser. */
+const CROSS_ORIGIN_WRITERS = /^\/api\/(websub|admin)\//
 
 const text = (body: string, status: number, headers: Record<string, string> = {}) =>
   new Response(body, {
@@ -58,7 +82,7 @@ const text = (body: string, status: number, headers: Record<string, string> = {}
   })
 
 export function createEdge(deps: EdgeDeps) {
-  const { blobs, api, cache, config } = deps
+  const { blobs, api, cache, config, assets, pages } = deps
 
   /** A member's session: from the signed cookie cache, else from tela-api (one D1 read). */
   async function session(request: Request): Promise<{ setCookies: string[] } | null> {
@@ -206,6 +230,46 @@ export function createEdge(deps: EdgeDeps) {
     return withCookies(new Response(bytes, { headers }), member.setCookies)
   }
 
+  async function servePublic(request: Request, waiter?: Waiter): Promise<Response> {
+    const url = new URL(request.url)
+    const route = request.method === 'GET' ? pages.route(url) : null
+    // Not a public page after all (`/s/x/y`): the SPA's index.html, which says so itself.
+    if (!route) return assets.fetch(request)
+    const shell = await assets.fetch(new Request(new URL('/', url).toString()))
+    const template = await shell.text()
+    const locale = pages.locale(request)
+    // The deploy is part of the key: a page cached before it names scripts that are gone.
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(template))
+    const build = [...new Uint8Array(digest).slice(0, 6)]
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+    const cacheKey = new Request(`${CACHE_ORIGIN}/page/${build}/${locale}${route.api}`)
+    const hit = await cache.match(cacheKey)
+    if (hit) {
+      const cached = new Response(hit.body, hit)
+      cached.headers.set('cache-control', PAGE_CACHE)
+      return cached
+    }
+    const res = await api.fetch(new Request(new URL(route.api, url).toString()))
+    // tela-api is down or slow: the plain shell, which asks again from the browser.
+    if (res.status !== 200 && res.status !== 404) {
+      return new Response(template, {
+        headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': PAGE_CACHE },
+      })
+    }
+    const data = res.status === 404 ? null : ((await res.json()) as unknown)
+    const html = pages.render({ route, url, data, locale, template })
+    const headers = { 'content-type': 'text/html; charset=utf-8', 'content-language': locale }
+    const status = data === null ? 404 : 200
+    const put = cache.put(
+      cacheKey,
+      new Response(html, { status, headers: { ...headers, 'cache-control': PAGE_EDGE_CACHE } }),
+    )
+    if (waiter) waiter.waitUntil(put)
+    else await put
+    return new Response(html, { status, headers: { ...headers, 'cache-control': PAGE_CACHE } })
+  }
+
   return {
     async fetch(request: Request, waiter?: Waiter): Promise<Response> {
       const url = new URL(request.url)
@@ -221,7 +285,11 @@ export function createEdge(deps: EdgeDeps) {
       }
       let response: Response
       if (path.startsWith('/api/')) {
-        response = await api.fetch(request)
+        const foreign = request.headers.get('origin') !== url.origin
+        response =
+          WRITES.has(request.method) && foreign && !CROSS_ORIGIN_WRITERS.test(path)
+            ? text('cross-origin write refused', 403)
+            : await api.fetch(request)
       } else if (path === '/o/bundle') {
         response = await serveBundle(request, waiter)
       } else if (path.startsWith('/o/')) {
@@ -234,8 +302,8 @@ export function createEdge(deps: EdgeDeps) {
             ? await serveImage(request, key, i, waiter)
             : text('not found', 404)
       } else {
-        // Phase 6: the SPA's static assets answer everything else before this Worker runs.
-        response = text('not found', 404)
+        // `run_worker_first` sends only the public pages here besides the above.
+        response = await servePublic(request, waiter)
       }
       if (config.privateBeta && !response.headers.has('x-robots-tag')) {
         response = new Response(response.body, response)

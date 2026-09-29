@@ -4,8 +4,30 @@
  */
 import type { Request as CfRequest, ExecutionContext } from '@cloudflare/workers-types'
 import { r2Blobs } from '@tela/platform/cloudflare'
-import { createEdge } from './edge'
+import { detectLocale, isUiLocale } from '../src/i18n'
+import { type PublicRoute, publicRoute, renderPublicPage } from '../src/ssr'
+import { createEdge, type PublicPages } from './edge'
 import type { Env } from './env'
+
+const pages: PublicPages<PublicRoute> = {
+  route: publicRoute,
+  locale: (request) =>
+    detectLocale(
+      request.headers.get('cookie') ?? '',
+      (request.headers.get('accept-language') ?? '')
+        .split(',')
+        .map((l) => l.split(';')[0]?.trim() ?? ''),
+    ),
+  render: ({ route, url, data, locale, template }) =>
+    renderPublicPage({
+      route,
+      url,
+      data,
+      locale: isUiLocale(locale) ? locale : 'en',
+      now: Date.now(),
+      template,
+    }),
+}
 
 let cached: { env: Env; edge: ReturnType<typeof createEdge> } | undefined
 
@@ -16,6 +38,10 @@ function edgeFor(env: Env) {
     api: { fetch: (request) => env.API.fetch(request as never) as unknown as Promise<Response> },
     cache: (caches as unknown as { default: Cache }).default as unknown as never,
     fetchImage: (url, init) => fetch(url, init),
+    assets: {
+      fetch: (request) => env.ASSETS.fetch(request as never) as unknown as Promise<Response>,
+    },
+    pages: pages as unknown as PublicPages,
     config: { authSecret: env.AUTH_SECRET, privateBeta: env.TELA_PRIVATE_BETA === '1' },
   })
   cached = { env, edge }
