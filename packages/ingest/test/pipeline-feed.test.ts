@@ -558,3 +558,35 @@ describe('sites', () => {
     expect(site?.primary_lang).toBe('zh-Hans')
   })
 })
+
+describe('the language of a post', () => {
+  // The line Malay and English score within 8% on, from a summary-only feed that declares nothing.
+  const line = '16 conversations in super-multicultural Malaysia, Kuala Lumpur'
+  const feed = () =>
+    rss({
+      link: server.url('/'),
+      language: null,
+      items: [{ guid: 'kl', link: server.url('/kl'), title: line, description: `<p>${line}</p>` }],
+    })
+
+  test("follows the blog's language where the text alone cannot decide", async () => {
+    server.text('/feed.xml', feed())
+    const { feedId, siteId } = await addFeed('/feed.xml')
+    await db.run(sql`update sites set primary_lang = 'en' where id = ${siteId}`)
+    await fetchOnce(feedId)
+    const article = await row<{ source_lang: string }>(
+      sql`select source_lang from articles where feed_id = ${feedId}`,
+    )
+    expect(article?.source_lang).toBe('en')
+  })
+
+  test('is the best guess for a blog with no language yet', async () => {
+    server.text('/feed.xml', feed())
+    const { feedId } = await addFeed('/feed.xml')
+    await fetchOnce(feedId)
+    const article = await row<{ source_lang: string }>(
+      sql`select source_lang from articles where feed_id = ${feedId}`,
+    )
+    expect(article?.source_lang).toBe('ms')
+  })
+})

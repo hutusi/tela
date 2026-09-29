@@ -238,7 +238,9 @@ async function processItem(item: ParsedItem, feed: FeedForFetch, parsed: ParsedF
   const processed = await processArticleHtml({
     html,
     baseUrl: item.url ?? feed.feedUrl,
-    langHint: item.language ?? parsed.language,
+    // The blog's own majority before the feed's declared tag, which is sometimes a template's
+    // default (a Chinese blog declaring `en-US`). A hint only breaks near ties.
+    langHint: item.language ?? feed.site.primaryLang ?? parsed.language,
     title: item.title,
   })
   return {

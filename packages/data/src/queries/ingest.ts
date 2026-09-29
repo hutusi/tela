@@ -16,7 +16,14 @@ import type { VersionSummary } from '../versions'
 type FeedRow = typeof feeds.$inferSelect
 
 export type FeedForFetch = FeedRow & {
-  site: { id: number; homeUrl: string; claimedBy: string | null; declaredFeedUrls: string[] }
+  site: {
+    id: number
+    homeUrl: string
+    claimedBy: string | null
+    declaredFeedUrls: string[]
+    /** The language most of the blog's posts were detected in (`fillSiteMetadata`). */
+    primaryLang: string | null
+  }
 }
 
 export async function loadFeedForFetch(db: TelaDb, feedId: number): Promise<FeedForFetch | null> {
@@ -28,6 +35,7 @@ export async function loadFeedForFetch(db: TelaDb, feedId: number): Promise<Feed
         homeUrl: sites.homeUrl,
         claimedBy: sites.claimedBy,
         declaredFeedUrls: sites.declaredFeedUrls,
+        primaryLang: sites.primaryLang,
       },
     })
     .from(feeds)

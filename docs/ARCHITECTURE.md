@@ -88,7 +88,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 5. Tagged text (`toTaggedText` / `fromTaggedText` / `checkPlaceholders`): inline markup becomes
    `<gN>…</gN>` and `<xN/>` placeholders; rehydration re-escapes model output.
 6. Skip `pre` and blocks with no letters or under two characters (`data-tb-skip`).
-7. `detectLanguage` (script ratios, then tinyld), `makeExcerpt`, `readingMinutes`.
+7. `detectLanguage` (script ratios, then eld, with the blog's language breaking near ties), `makeExcerpt`, `readingMinutes`.
 8. **The content object** (`object.ts`, ADR 0022): the annotated body split into top-level blocks
    with their leaf ids, images indexed so `/img/<key>/<i>` can serve them, keyed by the hash of
    the annotated HTML. Immutable, so it is cached forever everywhere. `extractArticle` (Readability
