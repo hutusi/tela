@@ -250,6 +250,18 @@
     "intro": "That page does not exist, or it is not public.",
     "home": "Go to the front page"
   },
+  "highlights": {
+    "title": "{n, plural, one {# highlight} other {# highlights}}",
+    "highlight": "Highlight",
+    "addNote": "Add a note",
+    "noteLabel": "Note on a highlight",
+    "notePlaceholder": "Your note. Only you can see it.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "remove": "Remove highlight",
+    "detached": "This passage is no longer in the post.",
+    "elsewhere": "In another layout or language: switch to see it."
+  },
   "typography": {
     "label": "Text and theme",
     "size": "Size",
@@ -266,16 +278,13 @@
       "dark": "Dark"
     }
   },
-  "highlights": {
-    "title": "{n, plural, one {# highlight} other {# highlights}}",
-    "highlight": "Highlight",
-    "addNote": "Add a note",
-    "noteLabel": "Note on a highlight",
-    "notePlaceholder": "Your note. Only you can see it.",
-    "save": "Save",
-    "cancel": "Cancel",
-    "remove": "Remove highlight",
-    "detached": "This passage is no longer in the post.",
-    "elsewhere": "In another layout or language: switch to see it."
+  "keys": {
+    "title": "Keyboard shortcuts",
+    "next": "Next article",
+    "previous": "Previous article",
+    "close": "Close the article",
+    "highlight": "Highlight the selection",
+    "help": "Show or hide this list",
+    "dismiss": "Close"
   }
 }

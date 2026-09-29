@@ -14,8 +14,11 @@ test('after sync, five opens, a filter change and Back make no request to /api o
   // An English feed while the reading language is EN: nothing here asks for a translation, so
   // any request is one a render waited on.
   await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
-  const rows = page.getByTestId('article-row')
-  await expect(rows.nth(5)).toBeVisible()
+  await expect(page.getByTestId('article-row').first()).toContainText('Julia Evans')
+  // Unread ones: prefetch fetches the bodies of what is unread, and specs before this read some.
+  const unread = page.getByTestId('article-row').filter({ has: page.getByTestId('unread-dot') })
+  await expect(unread.nth(4)).toBeVisible()
+  const hrefs = await Promise.all([0, 1, 2, 3, 4].map((i) => unread.nth(i).getAttribute('href')))
   // Let the idle prefetch of bodies finish: it is what makes the opens free.
   await page.waitForLoadState('networkidle')
   await page.waitForTimeout(2500)
@@ -30,8 +33,8 @@ test('after sync, five opens, a filter change and Back make no request to /api o
     if (path.startsWith('/api/') || path.startsWith('/o/')) requests.push(`${r.method()} ${path}`)
   })
 
-  for (let i = 0; i < 5; i++) {
-    await rows.nth(i).click()
+  for (const href of hrefs) {
+    await page.locator(`[data-testid="article-row"][href="${href}"]`).click()
     await expect(page.getByTestId('reader')).toBeVisible()
     await expect(page.locator('.article-body').first()).toBeVisible()
   }

@@ -4,19 +4,21 @@
  * filter change or Back is a render, not a request (ADR 0025).
  */
 import { translationKey } from '@tela/sync'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { ArticleList } from '../components/article-list'
 import { EmptyState } from '../components/empty-state'
 import { MobileNav } from '../components/mobile-nav'
 import { Reader } from '../components/reader'
+import { Shortcuts } from '../components/shortcuts'
 import { Sidebar } from '../components/sidebar'
 import { ReaderPaneSkeleton } from '../components/skeletons'
 import {
   canonicalReadingHref,
   parseReadingParams,
   type ReadingMode,
+  readingHref,
   readingModeParam,
 } from '../lib/href'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
@@ -86,6 +88,55 @@ export function ReadingPage() {
     if (target !== canonicalReadingHref(location.search)) navigate(target)
   }, [location.search, navigate])
 
+  // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
+  // article, ? lists the keys. Typing in a field is never a shortcut, and a popover that handles
+  // Esc itself marks the event so the article stays open.
+  const [help, setHelp] = useState(false)
+  // Read when a key is pressed, not when the listener was bound: a second `j` can come before
+  // React has rendered the first one's navigation, and the URL is already right by then.
+  const keys = useRef({ items, close, help })
+  keys.current = { items, close, help }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target as HTMLElement | null
+      if (target?.closest('input, textarea, select, [contenteditable]')) return
+      const { items, close, help } = keys.current
+      const now = parseReadingParams(new URLSearchParams(window.location.search))
+      if (e.key === 'j' || e.key === 'k') {
+        const at = items.findIndex((a) => a.id === now.articleId)
+        const step = e.key === 'j' ? 1 : -1
+        const next = items[at === -1 ? (step === 1 ? 0 : items.length - 1) : at + step]
+        if (!next) return
+        e.preventDefault()
+        // The row's own href: no mode, so the remembered one applies (as a click does).
+        navigate(readingHref({ filter: now.filter, feedId: now.feedId, articleId: next.id }))
+      } else if (e.key === 'Escape') {
+        if (help) setHelp(false)
+        else if (now.articleId !== null) close()
+        else return
+        e.preventDefault()
+      } else if (e.key === '?') {
+        e.preventDefault()
+        setHelp((shown) => !shown)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [navigate])
+
+  // The row of the open article stays in view as j and k move; closing puts focus back on it, so
+  // the keyboard carries on from where the reader was.
+  const lastOpen = useRef<number | null>(null)
+  useEffect(() => {
+    const row = (id: number) =>
+      document.querySelector<HTMLElement>(`[data-testid="article-row"][data-article-id="${id}"]`)
+    const previous = lastOpen.current
+    lastOpen.current = params.articleId
+    if (params.articleId !== null) row(params.articleId)?.scrollIntoView({ block: 'nearest' })
+    else if (previous !== null) row(previous)?.focus()
+  }, [params.articleId])
+
   // A feed that has never been fetched: pull quickly until its first posts arrive.
   useEffect(() => {
     if (!pendingFetch) return
@@ -142,6 +193,7 @@ export function ReadingPage() {
         now={now}
         pendingFetch={pendingFetch}
       />
+      {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}
       {article ? (
         <Reader
           key={article.id}

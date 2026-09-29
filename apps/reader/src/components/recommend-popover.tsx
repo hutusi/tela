@@ -53,8 +53,17 @@ export function RecommendPopover({ articleId, recommended, note, recommendCount 
       </button>
       {open ? (
         <div
+          role="dialog"
+          aria-label={t('recommendTitle')}
           className="absolute right-0 top-[calc(100%+8px)] z-[6] flex w-80 flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.10)] animate-fade"
           data-testid="recommend-popover"
+          onKeyDown={(e) => {
+            // Esc closes the popover, and only the popover: the reader's own Esc closes the article.
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              setOpen(false)
+            }
+          }}
         >
           <div className="font-medium">{t('recommendTitle')}</div>
           <textarea

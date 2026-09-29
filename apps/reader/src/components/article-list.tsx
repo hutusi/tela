@@ -112,6 +112,7 @@ export function ArticleList({
               }}
               className="relative flex flex-col gap-1.5 rounded-lg border-t border-line px-2.5 py-3.5 text-ink hover:bg-hover hover:no-underline data-[active=1]:bg-surface"
               data-testid="article-row"
+              data-article-id={a.id}
               data-read={read ? '1' : '0'}
               data-active={active ? '1' : undefined}
             >
