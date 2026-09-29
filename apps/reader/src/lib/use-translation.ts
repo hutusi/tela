@@ -28,7 +28,7 @@ export type ArticleTranslation = {
   retry(): void
 }
 
-type Live = Pick<TranslationRow, 'state' | 'chunkKeys' | 'objectKey' | 'failedLeaves'>
+export type Live = Pick<TranslationRow, 'state' | 'chunkKeys' | 'objectKey' | 'failedLeaves'>
 
 const POLL_MS = 1500
 const RANK: Record<string, number> = {
@@ -38,6 +38,21 @@ const RANK: Record<string, number> = {
   done: 3,
   failed: 3,
   skipped: 3,
+}
+
+/**
+ * The more advanced of what sync says and what polling has seen. A later state wins. Between two
+ * still running, the one naming more chunks is the newer, since a request's chunks only ever
+ * append; otherwise a synced row, refreshed by a pull about once a minute, would hold back the
+ * chunks polling sees every 1.5 s.
+ */
+export function moreAdvanced(row: Live | undefined, live: Live | null): Live | null {
+  if (!row) return live
+  if (!live) return row
+  const byState = (RANK[live.state] ?? 0) - (RANK[row.state] ?? 0)
+  if (byState !== 0) return byState > 0 ? live : row
+  const going = live.state === 'requested' || live.state === 'running'
+  return going && live.chunkKeys.length > row.chunkKeys.length ? live : row
 }
 
 const NOTICE: Record<string, TranslationNotice> = {
@@ -79,12 +94,7 @@ export function useArticleTranslation(
     setFinal(null)
   }, [contentKey, readingLang])
 
-  /** The more advanced of what sync says and what polling has seen. */
-  const current: Live | null = useMemo(() => {
-    if (!row) return live
-    if (!live) return row
-    return (RANK[live.state] ?? 0) > (RANK[row.state] ?? 0) ? live : row
-  }, [row, live])
+  const current = useMemo(() => moreAdvanced(row, live), [row, live])
 
   const request = useCallback(async () => {
     if (!article) return
