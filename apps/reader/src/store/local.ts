@@ -178,6 +178,7 @@ export class LocalStore {
     const owner = this.userId
     if (owner === null || epoch !== this.epoch) return
     const before = this.confirmed.tables
+    const from = this.confirmed.cursor
     const held = this.pending
     this.confirmed = applyPull(this.confirmed, pull)
     this.pending = settle(this.confirmed, this.pending)
@@ -199,6 +200,7 @@ export class LocalStore {
     await this.write(owner, epoch, {
       tables: changed,
       cursor: this.confirmed.cursor,
+      from,
       drop: gone(held, this.pending),
     })
   }

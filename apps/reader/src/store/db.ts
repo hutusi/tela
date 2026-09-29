@@ -55,14 +55,19 @@ export type Persisted = {
 }
 
 /**
- * One write of an owner's rows: whatever it names lands together, or none of it does. Tables and
- * cursor are written only if the cursor does not move back, unless the change writes every table
- * (a snapshot, which may lower it after a restore): another tab of the same account may already
- * have stored newer tables, and a lower cursor over them would never pull what they lack.
+ * One write of an owner's rows: whatever it names lands together, or none of it does. A pull's
+ * tables and cursor are written only when the pull covers everything after the stored cursor
+ * (`from` at or below it) and moves it forward: then the tables it did not touch are as current
+ * as the ones it did. Another tab of the same account may have stored a newer copy, or one a
+ * snapshot set back; a write that fits neither is left out (its pending records still land), and
+ * the stored copy stays consistent at its own cursor. A snapshot writes every table and may lower
+ * the cursor, after a restore from a backup.
  */
 export type Change = {
   tables?: Partial<TableRows>
   cursor?: number
+  /** The cursor the pull these tables come from started at. */
+  from?: number
   /** Unsent changes to record, one record each, so no tab writes over another's. */
   put?: readonly Pending[]
   /** Changes to forget: answered and caught up with, or refused. */
@@ -155,9 +160,15 @@ function inOrder(entries: Iterable<Pending>): Pending[] {
 }
 
 /** Whether writing `change`'s tables and cursor over a copy at `stored` keeps it consistent. */
-function movesForward(change: Change, stored: number): boolean {
-  if (change.cursor === undefined || change.cursor >= stored) return true
-  return TABLES.every((t) => change.tables !== undefined && t in change.tables)
+function fits(change: Change, stored: number): boolean {
+  const tables = change.tables ?? {}
+  // A snapshot: every table, consistent whatever was stored.
+  if (TABLES.every((t) => t in tables)) return true
+  // No cursor to place, so no tables either (a change of pending records only).
+  if (change.cursor === undefined) return Object.keys(tables).length === 0
+  // Some tables, or none, at a new cursor: only a pull that says where it started can show it
+  // covers everything after the stored cursor.
+  return change.from !== undefined && change.from <= stored && stored <= change.cursor
 }
 
 const STORES = ['meta', 'tables', 'bodies', 'objects'] as const
@@ -244,7 +255,7 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
         const [stored, storedCursor] = await Promise.all([ownerOf(tx), meta.get(CURSOR)])
         if (stored !== owner) return false
         const tables = tx.objectStore('tables')
-        const rows = movesForward(change, Number(storedCursor ?? 0))
+        const rows = fits(change, Number(storedCursor ?? 0))
         await Promise.all([
           ...(rows
             ? Object.entries(change.tables ?? {}).map(([t, value]) =>
@@ -344,7 +355,7 @@ export function memoryPersistence(): Persistence {
     },
     async commit(o, change) {
       if (owner !== o) return false
-      if (movesForward(change, cursor)) {
+      if (fits(change, cursor)) {
         tables = { ...tables, ...change.tables }
         if (change.cursor !== undefined) cursor = change.cursor
       }

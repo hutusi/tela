@@ -93,7 +93,7 @@ describe('the device database', () => {
     expect(await one.load()).toEqual({ owner: 'a', cursor: 0, rows: null, pending: [] })
     expect(await metaKeys(name)).toEqual(['owner'])
     // Claiming it again as the same member keeps it.
-    await one.commit('a', { cursor: 3 })
+    await one.commit('a', { from: 0, cursor: 3 })
     expect(await one.claim('a')).toBe(false)
     expect(await metaKeys(name)).toEqual(['cursor', 'owner'])
   })
@@ -139,11 +139,11 @@ describe('the device database', () => {
       const one = await indexedDbPersistence(name)
       const two = await indexedDbPersistence(name)
       await one.claim('a')
-      await one.commit('a', { cursor: 5 })
+      await one.commit('a', { from: 0, cursor: 5 })
       await Promise.all(
         i % 2 ? [one.release('a'), two.claim('b')] : [two.claim('b'), one.release('a')],
       )
-      expect(await two.commit('b', { cursor: 6 })).toBe(true)
+      expect(await two.commit('b', { from: 0, cursor: 6 })).toBe(true)
       expect(await metaKeys(name)).toEqual(['cursor', 'owner'])
       expect((await two.load()).owner).toBe('b')
     }
@@ -177,10 +177,15 @@ describe('the device database', () => {
       tablesOf(pull(n, { profile: [profile], subscriptions: [sub(feed)] }, true))
     await one.commit('a', { tables: at(5, 1), cursor: 5 })
     // One tab of a stores newer subscriptions at cursor 10.
-    await one.commit('a', { tables: { subscriptions: at(10, 2).subscriptions }, cursor: 10 })
+    await one.commit('a', {
+      tables: { subscriptions: at(10, 2).subscriptions },
+      from: 5,
+      cursor: 10,
+    })
     // Another tab of a, behind, writes older subscriptions at cursor 8, and a change of its own.
     const behind = await two.commit('a', {
       tables: { subscriptions: at(8, 3).subscriptions },
+      from: 5,
       cursor: 8,
       put: [change('mid-two-0001', 1, 7)],
     })
@@ -213,5 +218,31 @@ describe('the device database', () => {
     const names = (await indexedDB.databases()).map((d) => d.name)
     expect(names).not.toContain('tela')
     expect(names).toContain(DATABASE)
+  })
+
+  test('a pull that starts past the stored cursor does not land, so no rows go missing between', async () => {
+    // Found in review: a tab behind sets the copy back with its snapshot, then a tab ahead
+    // writes a newer delta; the copy would claim a cursor past rows it never stored.
+    const name = fresh()
+    const ahead = await indexedDbPersistence(name)
+    const behind = await indexedDbPersistence(name)
+    await ahead.claim('a')
+    const snap = (n: number, feeds: number[]) =>
+      tablesOf(pull(n, { profile: [profile], subscriptions: feeds.map((f) => sub(f)) }, true))
+    await ahead.commit('a', { tables: snap(100, [1]), cursor: 100 })
+    // The tab ahead pulls 100..101: a second subscription.
+    await ahead.commit('a', {
+      tables: { subscriptions: snap(101, [1, 2]).subscriptions },
+      from: 100,
+      cursor: 101,
+    })
+    // The tab behind lands its slower snapshot at 100, which sets the copy back.
+    await behind.commit('a', { tables: snap(100, [1]), cursor: 100 })
+    // The tab ahead pulls 101..102 and touches only articles: it cannot show it covers 100..101.
+    await ahead.commit('a', { tables: { articles: [] }, from: 101, cursor: 102 })
+    const stored = await behind.load()
+    expect(stored.cursor).toBe(100)
+    expect(stored.rows?.subscriptions.map((x) => x.feedId)).toEqual([1])
+    // Consistent at 100: the next pull from there brings the second subscription back.
   })
 })
