@@ -1,5 +1,7 @@
 import 'fake-indexeddb/auto'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { leaver } from '../src/leave'
 import {
   distrust,
@@ -278,6 +280,14 @@ describe('booting after an earlier build ran on this device', () => {
     } finally {
       Object.defineProperty(crypto, 'randomUUID', { value: uuid, configurable: true })
     }
+    // Found in review: the highlight button still called it, and threw there. Every id the
+    // reader makes comes from lib/id.ts.
+    const src = join(import.meta.dir, '../src')
+    const callers = readdirSync(src, { recursive: true })
+      .map(String)
+      .filter((f) => /\.tsx?$/.test(f) && f !== join('lib', 'id.ts'))
+      .filter((f) => readFileSync(join(src, f), 'utf8').includes('crypto.randomUUID'))
+    expect(callers).toEqual([])
   })
 
   test("a claim made while this tab empties the earlier build's copy leaves it asking first", async () => {

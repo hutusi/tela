@@ -11,6 +11,7 @@ import { pairBlocks, readerBlocks, runsOf } from '../lib/block-pairs'
 import { relativeTime } from '../lib/format'
 import { pointAt, type Side } from '../lib/highlight-dom'
 import type { ReadingMode } from '../lib/href'
+import { newId } from '../lib/id'
 import { readerStyle, typographyOf } from '../lib/typography'
 import { useHighlights } from '../lib/use-highlights'
 import { useArticleTranslation } from '../lib/use-translation'
@@ -126,7 +127,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
   const highlight = useCallback(
     (side: Side, withNote: boolean) => {
       if (!selectable || !article.contentKey) return
-      const id = crypto.randomUUID()
+      const id = newId()
       store.mutate({
         type: 'putHighlight',
         id,
