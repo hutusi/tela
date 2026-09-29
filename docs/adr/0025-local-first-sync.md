@@ -53,11 +53,24 @@ commits meanwhile.
 - A **cursor ahead of the database** (restored from a backup) gets a snapshot.
 - A **client older than `MIN_CLIENT`** (header `x-tela-client`) gets `409 upgrade`, so a cached
   app shell that has fallen behind reloads rather than misreading rows.
-- A **device holding another account's rows** (header `x-tela-member`) gets `409 account_changed`
-  on a pull or a push. Tabs of one browser share the session cookie, so a tab can still hold the
-  account another tab signed out of. That tab forgets the old account, including the stored copy
-  while it is still that account's, and reloads. Its unsent changes go with it: applying them to
-  the new account would be worse. (Added on 2026-09-29, after a review found the mix.)
+- **Every member call names the member** (header `x-tela-member`, protocol 2). Tabs of one browser
+  share the session cookie, so a tab can still hold the account another tab signed out of. The
+  rule is that nothing a tab does for account A is applied to, stored in, or shown from account
+  B, and it is checked where each effect happens:
+  - tela-api refuses any `/api/v1` member call whose header is not the session's member, a
+    missing header included, with `409 account_changed`, and runs nothing. `/api/v1/me` is the
+    exception: it is how a tab learns who is signed in.
+  - The device's stored copy has one owner. Every write to it reads that owner inside the same
+    IndexedDB transaction and writes nothing on a mismatch; readwrite transactions over the same
+    store run one at a time across every tab, so a check made in a separate transaction first
+    would be a race.
+  - A tab that loses either check stops, forgets what it holds, and starts again from `/` as
+    whoever is signed in. Its unsent changes go with it: applying them to the other account is
+    the thing prevented.
+  - A shell older than protocol 2 is told `409 upgrade` first, so cached shells from before the
+    rule reload into one that follows it.
+  (Amended on 2026-09-29, after two review rounds found the mixes: first for sync, then for
+  every other member call and every stored write.)
 - Pulls read the D1 primary from the pinned Worker (6–10 ms). There is no read replication, so no
   Sessions bookmark and no read-your-writes gap to handle.
 
@@ -98,16 +111,17 @@ and the URL.
   memory, renders their combination through `useSyncExternalStore`, and writes every change
   through to IndexedDB (`idb`). A pull rewrites only the tables it touched, where pruning counts
   as touching: an unsubscribe shrinks the articles table though no pulled row named them. Each
-  pending mutation is a record of its own (`pending:<mid>` in `meta`), not one list: tabs share
-  the database and each holds only its own list in memory, so one record let a tab's save erase
-  another tab's unsent changes. (Changed on 2026-09-29, after a review found it; an older
-  device's list moves into records on first load.)
+  pending mutation is a record of its own (`pending:<mid>` in `meta`), tagged with its owner, not
+  one list: tabs share the database and each holds only its own list in memory, so one record let
+  a tab's save erase another tab's unsent changes. A copy written before the stored copy had an
+  owner is not trusted and starts over, unsent changes included. (Changed on 2026-09-29, after a
+  review found it.)
 - **When it talks** (`src/store/engine.ts`): a pull at boot, when the tab becomes visible, every
   60 s while it is, and after each push. A push goes a quarter-second after the last change, so a
   burst of reads is one request, and at once with `keepalive` when the tab is hidden or closed, so
   the last change before leaving is not left waiting for the next visit. 401 ends the session and
-  wipes the device; 409 `upgrade` reloads a newer shell, and 409 `account_changed` starts over
-  as whoever is signed in now.
+  wipes the device's copy while it is still this tab's; 409 `upgrade` reloads a newer shell, and
+  409 `account_changed` (from any call) starts over from `/` as whoever is signed in now.
 - **Bodies and translations** (`src/store/objects.ts`) come from memory, then IndexedDB, then the
   edge. While the reader is idle (1.5 s after the list settles) it prefetches unread bodies, the
   list on screen first, 25 to a `/o/bundle` request and two requests at a time, and then finished

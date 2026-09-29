@@ -238,9 +238,11 @@ A Vite + React SPA that renders from the device.
   articles they keep (liked, recommended, highlighted), in one batch.
 - The push is guarded per mutation by `applied_mutations` and resolves conflicts by the later
   `at`, clamped to the server's clock.
-- Every pull and push names the account the device's rows belong to (`x-tela-member`); tela-api
-  answers `409 account_changed` when the session is someone else's, so a tab that another tab
-  signed out of neither mixes two accounts nor applies one's changes to the other.
+- Every member call names the account the device's rows belong to (`x-tela-member`, protocol 2).
+  tela-api answers `409 account_changed` when it is missing or not the session's member, and the
+  device's stored copy has one owner that every write checks inside its own IndexedDB
+  transaction. So a tab that another tab signed out of neither mixes two accounts, nor applies
+  one's changes to the other, nor writes one's rows into the other's copy (ADR 0025).
 - The device's reducer (`packages/sync/src/client.ts`) is the same code in the browser and in the
   convergence test that runs it against the real tela-api.
 

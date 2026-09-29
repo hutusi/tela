@@ -87,6 +87,12 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
       custom domain is the `routes` entry in `apps/reader/wrangler.jsonc`, so the deploy claims
       tela.ainaive.com itself.
 
+   **A release that bumps `MIN_CLIENT` reverses the last two:** tela-web first, then tela-api
+   within minutes. A shell on the new protocol still works against the old tela-api, but the new
+   tela-api tells every older shell to upgrade, and one whose reload finds no newer shell to load
+   stalls until it is navigated. So the newer shell must already be live. Roll back in the same
+   spirit: tela-api may go back alone; tela-web may not go back while the new tela-api is live.
+
 ## Cutover from the Postgres app
 
 One time. Production holds test data only, so nothing is migrated: the owner's subscriptions

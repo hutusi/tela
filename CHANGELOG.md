@@ -237,6 +237,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Security
 
+- **One browser, one account at a time.** Every tab shares the session cookie and the device's
+  database, so a tab still showing one account could act for the one another tab signed into:
+  apply its unsent changes, write its rows into that account's copy, subscribe, save a profile,
+  or verify a blog claim. Every member call now names the member and tela-api refuses a
+  mismatch; every write to the device's copy checks its owner in the same transaction; a stale
+  tab starts over. Protocol 2: older cached shells are told to upgrade (ADR 0025).
 - **Outbound fetches are pinned to vetted addresses.** The worker resolves every host itself and
   refuses names that resolve into a private range, DNS-pinned through undici so the address that
   passed the check is the address that is dialled. Byte caps are enforced while bytes arrive, not
