@@ -102,7 +102,10 @@ export function SessionProvider({
       credentials: 'same-origin',
     }).catch(() => undefined)
     await store.clear()
-    setStatus('guest')
+    // A fresh page rather than a state change: the page a member leaves from may be one only
+    // members see, whose gate would send them to sign in again, and nothing this visit held in
+    // memory should outlive the session.
+    window.location.assign('/')
   }, [engine, store])
 
   return (

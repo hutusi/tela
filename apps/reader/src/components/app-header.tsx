@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { useSession } from '../session'
 import { useReadingLang, useTables } from '../store/hooks'
@@ -44,7 +44,6 @@ export function AppHeader() {
   const { locale } = useUi()
   const readingLang = useReadingLang(locale)
   const location = useLocation()
-  const navigate = useNavigate()
   const member = status === 'member'
   const active = ACTIVE.find(([, re]) => re.test(location.pathname))?.[0]
   const query =
@@ -98,7 +97,7 @@ export function AppHeader() {
             type="button"
             className="text-[13px] text-muted hover:text-ink"
             data-testid="sign-out"
-            onClick={() => void signOut().then(() => navigate('/'))}
+            onClick={() => void signOut()}
           >
             {t('signOut')}
           </button>
