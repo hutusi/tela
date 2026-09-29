@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { first, headSeq, startLease, type TelaDb } from '@tela/data'
 import { createTestDb } from '@tela/data/testing'
-import { createHttpClient } from '@tela/ingest'
+import { createHttpClient } from '@tela/ingest/http'
 import { registerFeed } from '@tela/ingest/pipeline'
 import type { JobMessage } from '@tela/platform'
 import { fakeClock, memoryBlobs, memoryJobs } from '@tela/platform/portable'

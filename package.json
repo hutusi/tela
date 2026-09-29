@@ -12,23 +12,16 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "bun run --filter @tela/web dev",
-    "dev:worker": "bun run --filter @tela/worker dev",
-    "dev:reader": "bun run --filter @tela/reader dev",
+    "dev": "bun run --filter @tela/reader dev",
     "build": "bun run --filter '@tela/*' build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "bun run --filter '@tela/*' typecheck",
     "test": "bun test --timeout 120000",
     "test:workers": "bun run --filter '@tela/*' test:workers",
-    "db:generate": "bun run --filter @tela/db generate",
-    "db:migrate": "bun run --filter @tela/db migrate",
-    "db:local": "bun run --filter @tela/db local-db",
-    "worker:once": "bun run --filter @tela/worker once",
-    "e2e": "apps/web/e2e/run.sh && apps/reader/e2e/run.sh",
-    "e2e:reader": "apps/reader/e2e/run.sh",
-    "admin": "bun apps/api/scripts/admin.ts",
-    "db:prepare": "bun run --filter @tela/db prepare-db"
+    "e2e": "apps/reader/e2e/run.sh",
+    "db:generate": "bun run --filter @tela/data generate",
+    "admin": "bun apps/api/scripts/admin.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
@@ -37,7 +30,6 @@
     "@types/bun": "^1.4.1"
   },
   "trustedDependencies": [
-    "sharp",
     "unrs-resolver"
   ]
 }

@@ -14,7 +14,7 @@ import type {
 } from '@cloudflare/workers-types'
 import { backUp, pruneBackups } from '@tela/data'
 import * as schema from '@tela/data/schema'
-// Subpaths only: the package root still re-exports the Postgres-era fetch code (until cutover).
+// Subpaths, so this bundle takes only what it runs.
 import { createHttpClient } from '@tela/ingest/http'
 import { createIngest, type Ingest as IngestApi } from '@tela/ingest/pipeline'
 import { createRelayClient } from '@tela/ingest/relay'

@@ -1,69 +1,76 @@
 # Tela architecture
 
-Tela is a multi-user, multilingual RSS reader whose identity is "every feed here has a human behind
-it". This document is the living map of the system; decisions and their reasons are in `adr/`.
-Everything described here is built and deployed.
+Tela is a multi-user, multilingual reader for independent blogs whose identity is "every feed here
+has a human behind it". This document is the living map of the system; decisions and their reasons
+are in `adr/`. It describes the local-first stack (ADRs 0020–0027), which replaces the Postgres app
+at the cutover in `docs/OPERATIONS.md`.
 
 ## Topology
 
 ```
-Browser ──HTTPS──▶ Cloudflare Worker (Next.js via OpenNext)
-                     ├─ Hyperdrive ──▶ Supabase Postgres (Tokyo, session pooler) ◀── worker(s)
-                     ├─ /img signed image proxy (Cache API) ──▶ origin images
-                     └─ Supabase Auth (browser: @supabase/ssr)
-Worker image (Node 24, Fly.io nrt), WORKER_ROLES selects subscriptions:
-   scheduler | fetch | extract | translate | assets | claim ──▶ Postgres (pg-boss + data)
-   fetch ──(fetch_region=cn)──▶ relay role on a HK/CN box (HMAC-signed fetch endpoint)
-   translate ──▶ Aliyun Bailian (GLM) or other providers through one adapter
-   assets ──▶ R2 (S3 API), served from assets.<domain>
+Browser ──▶ tela-web (edge, unpinned): static SPA, public pages, /o/* objects, /img/*, /api/* forward
+              │ service binding
+              ▼
+            tela-api  (pinned aws:ap-southeast-1) ──┐
+            tela-jobs (pinned aws:ap-southeast-1) ──┼──▶ D1 (primary in Singapore, 6–10 ms)
+              ▲ crons: sweeps · upkeep+backup · digest └──▶ R2: tela-content (members, backups),
+              │ queues tela-fetch/extract/translate/misc       tela-assets (public favicons)
+              └── cron and queue handlers only call SELF.fetch(): placement pins fetch handlers
+   tela-jobs ──▶ Bailian (translation) · Resend (mail) · healthchecks.io (dead-man's switch)
+   apps/relay (Node, HK box, not provisioned until a feed needs it) ◀── signed POST /fetch
 ```
+
+The reader never waits on that picture: every screen renders from the rows the device holds,
+and a sync keeps them current behind it (ADR 0025).
 
 ## Monorepo
 
 ```
-apps/web            Next.js 16 App Router, Tailwind v4, next-intl (no i18n routing), Drizzle server-side
-apps/worker         Node 24 process bundled by Bun; src/roles.ts, src/config.ts, src/index.ts
-packages/db         Drizzle schema (src/schema/*.ts), migrations/, client.ts, queue.ts, test/ harness
-packages/content    pure TS content pipeline (sanitize, blocks, tagged text, hashing)
-packages/ingest     ingestion library: http, discovery, fetch, extract, region, websub
-packages/llm        translation adapter
-packages/shared     constants (languages, topics, NORM_VERSION, enums), helpers
-packages/config     shared tsconfig bases
+apps/reader       tela-web: the Vite + React SPA (src/) and the edge Worker (worker/)
+apps/api          tela-api: Hono, better-auth, sync, every reader RPC
+apps/jobs         tela-jobs: the sweeps, queue consumers, the Ingest RPC, upkeep, backups, digest
+apps/relay        the China fetch relay, the one Node process (ADR 0008)
+packages/platform the seams: Db, Blobs, Jobs, Clock, Mail; ./cloudflare and ./portable adapters
+packages/data     the SQLite schema, migrations, leases, the sync sequence, queries, backups
+packages/sync     the sync protocol: row types, pull response, mutation schemas, the reducer
+packages/content  the content contract: sanitize, blocks, tagged text, hashing, objects
+packages/ingest   fetching: HTTP client, discovery, the ingest pipeline, WebSub, relay client
+packages/llm      translation adapter, prompts, output validation
+packages/shared   constants: languages, topics, NORM_VERSION, limits
+packages/config   shared tsconfig bases
 ```
 
-Bun is the package manager, script runner, and test runner. Node 24 LTS is the production runtime
-for the worker (ADR 0001). The web app is deployed to Cloudflare Workers through OpenNext and kept
-free of Cloudflare bindings outside `apps/web/src/lib/platform/` (ADR 0002).
+Bun is the package manager, script runner and test runner; the Workers run on workerd and the
+relay on Node 24 (ADR 0001). Only `packages/platform/src/cloudflare.ts` touches a binding, so
+every app is built from interfaces and the suite runs it on libSQL, memory blobs and an in-process
+queue (ADR 0021).
 
 ## Data model
 
-Tables live in `packages/db/src/schema/`. bigint identity ids on high-volume tables; uuid for users.
+One SQLite schema (`packages/data/src/schema/`), one migration history
+(`packages/data/migrations`), applied to D1 by wrangler and to libSQL by the tests. Timestamps are
+epoch milliseconds; arrays read whole are JSON text; every row a device syncs carries `seq`.
 
 | Table | Role |
 |---|---|
-| `profiles` | One per auth user, created by the `on_auth_user_created` trigger. `handle`, `ui_locale`, `reading_lang`. |
-| `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `topics[]`, `reader_count`. `listing` is written by a verified claim, by the editorial seed, and by the community threshold (ADR 0018). |
-| `feeds` | The fetch unit: `feed_url`, validators (`etag`, `last_modified`, `last_body_hash`), scheduling (`next_fetch_at`, `fetch_interval_sec`), `fetch_region`, `status`, `content_mode`. |
-| `articles` | Metadata: `dedup_key` (unique per feed), `source_lang`, `content_hash`, counters. `id` order is ingest order. |
-| `article_contents` | Sanitized `html` with `data-tb` block ids, `blocks` summary. |
-| `translations` | Content-addressed cache keyed by `(source_hash, target_lang)`; stores tagged text. |
-| `article_translations` | Per article and target language: status, translated title/excerpt, materialized `html`, `failed_block_ids`. |
-| `subscriptions` | `(user_id, feed_id)` with `watermark_id`: everything at or below it is read. |
-| `user_article_states` | `read_at`, `liked_at` per user and article. |
-| `recommendations` | Public recommendation with an optional note (≤ 500 chars). |
-| `site_claims` | Claim attempts: method (meta / rel_me / dns), token, status. |
-| `llm_usage` | One row per LLM call for budget and cost visibility. Service-only. |
-| `rate_limits` | Fixed-window counters per action and member (`consumeRateLimit`). Service-only. |
-| `websub_subscriptions` | One per feed with a hub: topic, shared secret, status (pending/active/failed), lease. Service-only. |
-
-Row-level security is enabled on every table and every policy is a `select`: members read all
-content tables, anonymous callers only the rows of `listed`/`featured` sites, and user tables are
-owner-readable via `(select auth.uid())`. No policy grants a write, so the Supabase Data API can
-never bypass the counters, rate limits, and handle rules that live in application code; all
-writes go through the service connection, which is the authority (ADR 0003).
-
-Unread count per feed = `articles.id > watermark_id AND fetched_at > now() - 30 days AND NOT EXISTS
-read row`. "Mark all read" moves the watermark and compacts read rows below it.
+| `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024) |
+| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, `public_subscriptions` |
+| `user_prefs` | Synced preferences: reading mode, text size, measure, theme |
+| `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out` |
+| `site_topics`, `site_claims` | A blog's topics; claim attempts (meta or `rel="me"`) |
+| `feeds` | The fetch unit: validators, schedule (`next_fetch_at`, `fetch_interval_sec`), `fetch_region`, `timeout_streak`, `status`, `content_mode`, `hub_url` |
+| `articles` | `dedup_key` unique per feed, `sort_at`, `source_lang`, `current_version`, `content_key`, `extract_state`, counts. `AUTOINCREMENT` ids, so the unread watermark never meets a reused id |
+| `article_versions` | Every body an article has had: provenance (feed or readability), `content_key`, `raw_key` (ADR 0022) |
+| `article_titles` | Eager title and excerpt per launch language: `done`, `echo` or `failed` against the title hash |
+| `block_translations` | The content-addressed block cache: source hash × target language × `NORM_VERSION` |
+| `body_translations` | A body per content version and language: state, reservation, streamed `chunk_keys`, the finished object (ADR 0023) |
+| `subscriptions` | `(user_id, feed_id)` with `watermark_id`: everything at or below it is read (ADR 0009) |
+| `user_article_states`, `recommendations`, `highlights` | The member's read and like state, public recommendations with notes, private highlights with notes (ADR 0026) |
+| `websub_subscriptions` | One per feed with a hub: topic, secret, status, lease |
+| `leases`, `lease_fence` | Who holds which piece of background work, and the fence that aborts a stale holder's batch |
+| `dead_letters`, `ops_heartbeats` | Work that gave up; the tick's last run |
+| `llm_calls`, `usage_daily` | Every model call; reserved and used tokens per member and day (`'*'` is background) |
+| `action_limits`, `applied_mutations`, `tombstones`, `counters` | Reader action limits; pushed mutation ids (replays change nothing); hard deletes for sync; the `seq` counter |
 
 ## Content pipeline
 
@@ -77,333 +84,175 @@ read row`. "Mark all read" moves the watermark and compacts read rows below it.
    attributes folded into `src`; tracking pixels dropped.
 4. Normalize + annotate (`annotateBlocks`): wrappers unwrapped, inline runs wrapped, every
    text-bearing element a leaf with a `data-tb` id = first 10 hex of
-   `sha256(normalized tagged text + NORM_VERSION)`.
+   `sha256(normalized tagged text + NORM_VERSION)`, duplicates suffixed by position.
 5. Tagged text (`toTaggedText` / `fromTaggedText` / `checkPlaceholders`): inline markup becomes
    `<gN>…</gN>` and `<xN/>` placeholders; rehydration re-escapes model output.
 6. Skip `pre` and blocks with no letters or under two characters (`data-tb-skip`).
-7. `detectLanguage` (script ratios, then tinyld), `makeExcerpt`, `readingMinutes`, `contentHash`.
-8. Images stay original in storage; `rewriteImages` + `signImageUrl` produce `/img` proxy URLs at
-   render time. `extractArticle` (`@tela/content/extract`, Readability on linkedom) recovers full
-   text for summary-only feeds.
+7. `detectLanguage` (script ratios, then tinyld), `makeExcerpt`, `readingMinutes`.
+8. **The content object** (`object.ts`, ADR 0022): the annotated body split into top-level blocks
+   with their leaf ids, images indexed so `/img/<key>/<i>` can serve them, keyed by the hash of
+   the annotated HTML. Immutable, so it is cached forever everywhere. `extractArticle` (Readability
+   on linkedom) recovers full text for summary-only feeds.
 
 Fixtures: 21 captured real feeds in `packages/content/fixtures/`; snapshot tests pin block ids
-and hashes for three articles as the `NORM_VERSION` contract.
+and hashes as the `NORM_VERSION` contract.
 
-## Ingestion (`packages/ingest` + `apps/worker`)
-
-`packages/ingest` is the library (HTTP client, discovery, feed fetch, extraction) and is
-runtime-agnostic so the web app can reuse discovery; `apps/worker` only wires it to pg-boss.
+## Ingestion (`packages/ingest`, run by tela-jobs)
 
 - `createHttpClient`: conditional headers, manual redirects with permanent-redirect detection,
-  5 MB cap, charset-aware decoding, 2 s per-host spacing, private-network blocking, and a relay
-  hook for `fetch_region = cn`.
-- `createRelayHandler` / `createRelayClient` (`relay.ts`): the China fetch relay. The handler is
-  Web-API only (served by Node `http` in the `relay` role); the client signs each hop with
-  HMAC-SHA256 over a timestamp and the JSON body and rebuilds a `Response`. See ADR 0008.
-- `region.ts`: a feed flips to the relay on its third consecutive timeout when the control URL
-  still answers, and is re-probed from the global region after seven days (`maintenance.daily`).
-- `websub.ts`: WebSub subscriber side. Feeds that advertise a hub (`rel="hub"`, JSON Feed
-  `hubs`) get a subscription request with a per-feed secret; the web callback
-  (`/api/websub/[feedId]`) answers the hub's intent check and, for signed content pings, enqueues
-  a normal `feed.fetch` rather than trusting the pushed body. Leases (10 days) renew from the
-  daily maintenance job two days before they end. Polling continues regardless, so a hub outage
-  only costs freshness.
-- `discoverFeeds(http, url)`: the URL itself, then feeds declared by the page, then well-known
-  paths; every result is fetched and parsed before being returned.
-- `ensureFeed` / `ensureSite`: feed rows keyed by `feed_url`, sites keyed by normalized origin;
-  new feeds are due immediately, so the next scheduler tick fetches them.
-- `fetchFeed(db, http, feedId)`: conditional GET → body-hash short-circuit → parse → keep the newest
-  200 items → upsert articles by dedup key (new rows, or `content_version + 1` when the content hash changed) → fill
-  site metadata → learn `content_mode` from three samples → reschedule. Interval = half the
-  average gap between posts over 7 days, clamped to 30 min…24 h, ×1.5 when unchanged, raised to the
-  publisher's `ttl`/`max-age` floor; that clamped interval is what `fetch_interval_sec` stores, and
-  ±10% jitter is applied only to the `next_fetch_at` derived from it, so it cannot compound. Errors back off `interval × 2^n` capped at 7 days;
-  429/503 honor `Retry-After`; 410 or 30 consecutive errors mark the feed dead; only
-  timeouts/resets bump `timeout_streak` (the future cn-flip signal). Permanent redirects
-  rewrite `feed_url`.
-- `extractArticleContent` (`@tela/ingest/extract`): fetches the article page, runs Readability,
-  and replaces the stored content only when the result is clearly longer.
+  a 5 MB cap, charset-aware decoding, private-network refusal, and the relay hook for
+  `fetch_region = 'cn'`. One abort signal per request, not per redirect hop.
+- `ingestFeed` (`pipeline/feed.ts`) runs a whole fetch under the feed's lease: conditional GET,
+  relay flip, alias detection, provenance and declared-home adoption, the 200-item cap,
+  content-mode learning, scheduling. Everything commits in one fenced batch, so two fetches of one
+  feed cannot interleave (the lease is the per-feed serialization).
+- Scheduling: interval = half the average gap between posts over 7 days, clamped to 30 min…24 h,
+  ×1.5 when unchanged, raised to the publisher's `ttl`/`max-age`; ±10% jitter on the derived
+  `next_fetch_at` only. Errors back off `interval × 2^n` up to 7 days; 429/503 honour
+  `Retry-After`; 410 or 30 consecutive errors mark a feed dead, and the nightly upkeep revives it
+  after a week.
+- Versions: `chooseCurrent` decides which body readers see. A summary feed's current version is
+  its latest Readability extraction, so a changed summary asks for a new extraction instead of
+  replacing the full text.
+- `extractArticleJob`, `siteAssetsJob` (raster favicons to `tela-assets`), `verifyClaimJob`
+  (meta or `rel="me"`, then provenance), `websubSubscribeJob`.
+- `createIngest` (`pipeline/rpc.ts`) is what tela-api reaches over the `Ingest` RPC: discovery,
+  adding a feed, starting a claim, reading OPML. The parsers never enter tela-api's bundle.
+- `relay.ts` is the relay client (HMAC-SHA256 over a timestamp and the body); `region-policy.ts`
+  flips a feed to the relay on its third consecutive timeout while the control URL answers.
 
-Tests run against an in-process fixture HTTP server and the DB harness
-(`packages/ingest/test/`).
+## Background work (`apps/jobs`)
 
-## Translation (`packages/llm` + `apps/worker/src/translation`)
+- `src/kinds.ts` is the one table of background work: for each kind, the due query over a domain
+  row, the lease length, backoff, queue, handler, what exhaustion writes, and whether it is enabled.
+- `tick` (every minute) claims each kind's due work under a lease and sends it to its queue;
+  `runJob` renews the lease (counting the attempt before any work), does the item, and never
+  throws: a failure backs the lease off, and exhaustion dead-letters it. After a success it claims
+  the next due item on the same host, two seconds later, so a backlog drains without waiting for
+  ticks while each host still sees one request at a time.
+- The cron and queue handlers only call `SELF.fetch()`, whose handler placement pins beside D1.
+- Nightly (`17 3 * * *`): upkeep in one batch (relay re-probes, dead-feed revival, pruning,
+  compacting read state under watermarks), then the export and its verification (`backUp`).
+- Mondays (`0 8 * * 1`): the digest. Every five minutes after the tick: the health check and the
+  dead-man's ping (`src/ops.ts`).
+- `src/portable.ts` runs the same tick and jobs on a timer with an in-process queue: the exit path,
+  and what the test-mode `cycle()` uses.
 
-ADR 0006. `packages/llm` is the provider adapter: a `Translator` interface with Bailian
-(OpenAI-compatible, GLM), Anthropic, and a deterministic mock behind `createTranslator` /
-`configFromEnv`; `translateBlocks` chunks to ~3k source tokens, validates every block
-(placeholder multiset, length ratio, non-identity), retries failures once in strict mode, and
-carries the previous chunk's tail as context.
+## Translation (`packages/llm`, `apps/jobs/src/translation`)
 
-- **Eager titles**: after each fetch the worker sends `translate.title` for new and changed
-  articles into every reading language ≠ source; `translateArticleTitle` stores the result on
-  `article_translations.title/excerpt` with `status = 'pending'` (body untouched).
-- **Lazy bodies**: opening a foreign article calls `requestTranslationAction`, which upserts
-  `status = 'requested'` (or notices a fresh `done`/`partial` row) and sends `translate.body` at
-  priority 10; the reader polls every 2 s. `translateArticleBody` reads `taggedTextsOf(html)`,
-  looks up the `translations` cache by block hash, translates only the misses, stores them, and
-  materializes the rehydrated HTML. Same-language, opted-out, and budget-exhausted cases are
-  recorded as `done`/`failed`/skipped explicitly.
-- **Reader**: `TranslationBar` (written in X, translated by Tela, status) with Side by side /
-  Translation / Original modes (`?mode=`); the list shows translated titles and excerpts and an
-  `XX → YY` badge. "Read in" in the header sets `profiles.reading_lang`. Side by side is one grid
-  with a row per top-level block: `buildReaderData` sends both bodies already split
-  (`renderArticleBlocks`), `pairBlocks` zips them by index and refuses to zip when they disagree,
-  and a container query turns the pane into two 640px columns or leaves the pairs interleaved
-  (ADR 0019).
-- **Cost**: `llm_usage` per call, written as each chunk lands (a retried or expired job resumes
-  from the cache); `LLM_DAILY_BUDGET_TOKENS` gates background work (title jobs defer to the next
-  day on a cache miss once it is spent); reader requests carry `onDemand: true` in the job payload,
-  are rate-limited per member (`translate`, 30 per hour) and reserved against
-  `USER_DAILY_TRANSLATION_TOKENS` a day when requested (`article_translations.reserved_tokens`,
-  reconciled against `llm_usage.user_id` when the attempt concludes), and every body is capped at
-  `LLM_MAX_ARTICLE_TOKENS` source tokens (default 40,000), the rest rendering as source.
+- `packages/llm` is the adapter: a `Translator` interface over Bailian (GLM), Anthropic and a
+  deterministic mock. `translateBlocks` validates every block (placeholder multiset, length ratio,
+  non-identity) and retries failures once in strict mode.
+- **Titles, eager** (`translate.title`, keyed by feed): the sweep finds feeds with articles whose
+  current title hash has no row in some launch language; a job translates up to 20 titles and
+  excerpts of one feed per call per language. The background budget (`usage_daily` subject `'*'`)
+  stops the sweep for the day once spent.
+- **Bodies, lazy and streamed** (`translate.body`, ADR 0023): opening a foreign post reserves
+  against the member's day and claims the work at once. Groups follow top-level block boundaries,
+  about 400 source tokens first and then about 3k; each lands as a chunk object
+  `tc/<key>/<lang>/<request>/<n>.json`, committed in a fenced batch with its cache rows and call
+  log, and the reader lays it over the original by block index. The finished object is
+  `t/<key>/<lang>/<sha>.json`.
+- The block cache is content-addressed and shared by titles and bodies; a title echo never enters
+  it.
 
-## Queue
+## API (`apps/api`, ADR 0024)
 
-pg-boss v12 on the same Postgres, schema `pgboss` (ADR 0004). `apps/worker/src/queues.ts`
-declares every queue with its policy, retries, expiry, and a `<name>.dead` dead-letter queue:
+tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 
-| Queue | Producer | Role | Notes |
-|---|---|---|---|
-| `scheduler.tick` | cron `* * * * *` | scheduler | enqueues `feed.fetch` for due feeds (singleton per feed) |
-| `maintenance.daily` | cron `17 3 * * *` | scheduler | revives dead feeds once a week, re-probes relay-routed feeds, prunes rate-limit windows |
-| `health.check` | cron `*/5 * * * *` (and at startup) | scheduler | logs queue depth, dead letters, failures in the last hour, and overdue feeds; `warn` level when something needs a look |
-| `feed.fetch` | scheduler, web (add feed) | fetch | `short` policy, 3 retries with backoff, 120 s expiry |
-| `article.extract` | web (opening a summary-only article, or a summary-sized one from a feed too small to classify; at most one job per article per 10 minutes via `extract_requested_at`; `extract_checked_at` records a final outcome, transient failures retry) | extract | lazy full-text extraction; the reader polls and shows a hint until it lands |
-| `translate.title` | fetch (in the article's own transaction; at most 100 articles per fetch) | translate | batches of 5, 4 in flight; every reading language the article is not in; deferred to the next day when the budget is spent |
-| `translate.body` | web (open, same transaction as the `requested` row), scheduler (re-sends rows stuck `requested` for 5 min or `running` without a heartbeat for 15 min, at most twice, then gives up) | translate | priority 10 with `onDemand: true`; singleton per article and language |
-| `websub.subscribe` | fetch (feed advertises a hub), maintenance (renewals) | fetch | asks the hub to push to `/api/websub/<feedId>`; only when `WEBSUB_ENABLED=1` |
-| `site.assets` | fetch | assets | favicons and covers to R2 |
-| `site.claim.verify` | web | claim | claim verification |
+| Route | Purpose |
+|---|---|
+| `/api/auth/*` | better-auth: email codes only, registration closed, codes hashed, three tries |
+| `POST /api/admin/invite`, `POST /api/admin/curate` | Bearer `ADMIN_TOKEN`: invite a member; add and feature a curated blog |
+| `GET /api/v1/sync?cursor=` | The pull: a horizon snapshot at cursor 0, deltas by seq in pages ending on a seq boundary |
+| `POST /api/v1/mutations` | The push: up to 50 idempotent, last-writer-wins mutations in one batch |
+| `/api/v1/translations` | Request a body translation; poll its streamed state |
+| `/api/v1/feeds` | Discover feeds at a URL, add one, import and export OPML |
+| `/api/v1/claims` | Start a claim, see its proofs, ask for the check |
+| `/api/v1/profile`, `/api/v1/sites/:id/*`, `/api/v1/dashboard`, `/api/v1/search` | Handle and profile, owner-only topics and opt-out, the author dashboard, search past the device's horizon |
+| `/api/v1/public/*` | Discover, a blog's page, a profile: listed and featured blogs only, edge-cacheable |
+| `/api/websub/:feedId` | The hub callback: intent checks, and signed pings that make the feed due |
+| `/api/health` | Liveness and D1 latency |
 
-One process; `WORKER_ROLES` filters which `boss.work()` subscriptions start. Feed discovery runs
-in the request path (web) or the CLI rather than through a queue. `bun run worker:once
-<discover|fetch|extract> <arg>` runs any step directly against `DATABASE_URL`;
-`worker:once repair-titles [limit]` queues a bounded repair batch for missing eager titles;
-`worker:once seed-discover [--dry-run] [--limit N] [--skip N] [--only <match>]` applies the editorial list in
-`apps/worker/src/seed/curated-sites.ts` (ADR 0018).
+Every `/api/v1/*` route but the public ones needs a session, read from the signed five-minute
+cookie cache. Reader actions are rate-limited per member (`action_limits`).
 
-## Web app
+## The edge (`apps/reader/worker`, tela-web)
 
-- Data access: Drizzle + postgres.js on the server. `lib/platform/db.ts` reads the Hyperdrive
-  binding on Cloudflare (one client per request) and `DATABASE_URL` elsewhere.
-- i18n: next-intl without routing; locale from cookie → `Accept-Language` (ADR 0010).
-  `reading_lang` is separate from the UI locale.
-- Design tokens from `Tela.dc.html` live in `apps/web/src/app/globals.css` (`@theme`). Fonts
-  (EB Garamond, Figtree) are self-hosted by `next/font`. See `docs/DESIGN.md`.
-- Auth: `lib/auth.ts` (Supabase SSR cookies, `getClaims()`, dev-auth mode; ADR 0012). Pages call
-  `requireUser()`. `src/middleware.ts` runs before every non-static request and refreshes an expiring
-  session, forwarding the rotated cookies to both the render and the browser: Server Components
-  cannot write cookies, and with refresh-token rotation a dropped refresh logs the reader out.
-- Reader queries live in `packages/db/src/queries/reader.ts` (`listSubscriptions`, `countTotals`,
-  `listArticles` with keyset paging, `getArticle`, `markRead`, `markAllRead`, `toggleLike`,
-  `subscribe`) and are tested in `packages/db/test/reader.test.ts`.
-- **Latency budget: one database wave per render, and no render for an article click** (ADRs 0016,
-  0017). The Worker runs at the reader's edge and the database is in Tokyo, so a *sequential* query
-  is an ocean crossing and a React server render is too much CPU for the Workers Free budget.
-  `/reading` starts every query in one flight and server-renders direct links. After hydration,
-  `ReadingShell` keeps the sidebar and list mounted, writes the selected article to browser history,
-  and fetches only `/api/reading/article`. A tab waiting on translation or full-text extraction
-  polls `/api/reading/state` for one row and re-fetches that pane only when its revision changes.
-  `apps/web/e2e/reader.e2e.ts` asserts that both opening an article and observing its translation
-  perform zero `/reading` GETs.
-- The reading language lives in a `tela_reading_lang` cookie (`lib/reading-lang-cookie.ts`) so the
-  page does not have to read `profiles` before it knows which translations to join. The row stays
-  the source of truth and the fallback. Every sign-in path seeds the cookie; an existing session
-  that lacks it pays the profile lookup once and repairs the cache after hydration. The cookie
-  carries the member id so one left in a shared browser is ignored.
-- The display mode lives in a `tela_reading_mode` cookie (`lib/reading-mode-cookie.ts`), written
-  in the browser so a mode change still costs no render. It supplies the default only where the
-  URL says nothing, which is every URL with no article open — `readingHref` drops `mode` there —
-  so the URL stays authoritative per view (ADR 0017) while closing an article stops forgetting
-  how the reader reads. No member id: unlike the reading language it mirrors no row.
-- Known and deliberately unfixed: `articles.fetched_at` has no index, and `listArticles` sorts on
-  the unindexed expression `coalesce(published_at, fetched_at)`. Both cost nothing at present
-  volumes (17 ms on 142 articles) and will matter later.
-- Enqueueing from the web: `createJobSender(db)` (`@tela/db/queue`) inserts into `pgboss.job`
-  with plain SQL that mirrors pg-boss's own insert plan (queue defaults from `pgboss.queue`,
-  `ON CONFLICT DO NOTHING` for singleton dedup). The web app never imports pg-boss, whose `pg`
-  dependency does not bundle for Workers; `packages/db/test/queue.test.ts` fetches those rows with
-  a real pg-boss instance so a schema change in pg-boss fails there first. "Add a feed" sends
-  `feed.fetch`, and the reading view auto-refreshes until the first fetch lands.
+The only public Worker, unpinned, with no D1.
 
-| Route | Status | Purpose |
-|---|---|---|
-| `/` | ✓ | landing for anonymous users; signed-in users go to `/reading` |
-| `/login`, `/auth/callback` | ✓ | email code, GitHub, Google; dev-auth button locally |
-| `/reading?filter=&feed=&article=` | ✓ | three-column reader; URL carries the selection |
-| `/api/reading/article?article=&lang=` | ✓ | authenticated JSON for a client-opened reader pane (ADR 0017) |
-| `/api/reading/state?article=&lang=` | ✓ | one row: what an open article is still waiting on, so a tab polls instead of re-rendering (ADR 0016) |
-| `/add` | ✓ | discover feeds from any URL, subscribe, OPML import |
-| `/img` | ✓ | signed image proxy (ADR 0007) |
-| `/discover?topic=&lang=` | ✓ | listed and featured sites with topic chips, language menu, subscribe toggles, claim banner. Three doors in (ADR 0018): the editorial seed (`featured`), a verified claim, and three distinct subscribers on an unclaimed site |
-| `/s/[siteId]` | ✓ | public site page: avatar, description, readers, claimed badge, topics (owner-editable), latest posts |
-| `/claim`, `/sites/[id]/claim` | ✓ | find the feed, then verify by meta tag or rel=me (ADR 0011) |
-| `/@[handle]` | ✓ | public profile: sites written, recommendations with notes, subscriptions when public (root `[handle]` segment, only `@…` matches) |
-| `/dashboard` | ✓ | author view: claimed sites, readers, per-post likes and recommendations, notes, translation opt-out |
-| `/settings`, `/settings/opml` | ✓ | handle, display name, bio, public subscriptions, reading language, OPML export |
-| `/search?q=` | ✓ | header search: listed sites (plus the member's private ones) by name, host, or description, and posts in the member's subscriptions by original or translated title |
+- `/api/*` goes to tela-api; a write must carry this origin (hubs and the admin script exempt).
+- `/o/c|t|tc/…` and `/o/bundle` serve immutable objects from R2 to members, cached per colo after
+  the session check; raw HTML (`r/`) and backups are never served.
+- `/img/<contentKey>/<i>` proxies the image the content object names: the object is the
+  allowlist. Raster types only, no SVG, 10 MB, cached for seven days.
+- Sessions come from the signed cookie cache; when it has lapsed, tela-api's get-session is asked
+  and its fresh cookie passed on.
+- `/discover`, `/s/:id` and `/@handle` are rendered here (`src/ssr.tsx`) with the SPA's own views,
+  from tela-api's public JSON, into the built `index.html`, cached per colo, locale and deploy for
+  five minutes, with the data handed to the SPA in `#tela-data`.
+- Everything else is the SPA's static assets, which answer without running the Worker.
 
-### Safeguards
+## The reader (`apps/reader/src`, ADRs 0025, 0026)
 
-- **Abuse limits** (`rate_limits`, `consumeRateLimit` in `@tela/db/queries`): fixed hourly
-  windows per member for feed discovery (30), subscribing (120), OPML import (5), claim start (10)
-  and claim verification (30). Counters live in Postgres because the web app runs as stateless
-  isolates; the worker's daily maintenance job prunes closed windows. Actions answer with a
-  `rate_limited` message rather than an error page.
-- **Search** uses `pg_trgm` GIN indexes on `sites.title`, `sites.home_url` and `articles.title`
-  (migration 0007) so `ILIKE '%term%'` stays an index scan and site matches rank by
-  `similarity()`. Trigrams handle CJK substrings without a tokenizer; PGroonga is the upgrade
-  path when full-text ranking is needed.
-- **Outbound fetches** from the web app (discovery, claim start) use the same HTTP client as the
-  worker: private ranges refused, 10 s timeout, 5 MB cap. The worker additionally pins every
-  connection to the addresses it resolved and refuses names that resolve to a private address
-  (`apps/worker/src/net/safe-fetch.ts`); on Cloudflare the `global_fetch_strictly_public` flag
-  plays that role, and the image proxy checks the host name as well.
+A Vite + React SPA that renders from the device.
 
-## Milestone 1, as built
+- `store/local.ts` holds confirmed rows and pending mutations, written through to IndexedDB.
+- `store/engine.ts` pulls at boot, on focus, every minute and after a push. It pushes a
+  quarter-second after a change, and at once (`keepalive`) when the tab hides.
+- `store/objects.ts` serves bodies and translations from memory, then IndexedDB, then `/o/*`. It
+  prefetches unread bodies while idle and evicts read ones after seven days or 50 MB.
+- `store/selectors.ts` answers the reading view: unread, lists, counts, the title to show.
+- The URL alone says which article is open (ADR 0017's rule, kept): a click, a filter change or
+  Back is a render, not a request.
+- `views/` are Discover, a blog's page and a profile as pure components the edge renders too.
+- Highlights: `lib/anchor.ts` finds a highlight again by leaf, quote and context;
+  `lib/use-highlights.ts` paints them over the rendered text with the CSS Custom Highlight API and
+  writes back an anchor the post moved. Typography and theme are synced prefs
+  (`lib/typography.ts`). `j`/`k`/`Esc`/`h`/`?` work on `/reading`.
+- `public/sw.js` caches the app shell only; `shell/kill-sw.js` replaces it in an emergency.
 
-The eight phases milestone 1 was planned in, all shipped and deployed:
+| Route | Purpose |
+|---|---|
+| `/` | Landing for visitors; members go to `/reading` |
+| `/login` | Email code, and the mail's link that submits the same code |
+| `/reading?filter=&feed=&article=&mode=` | Sidebar, list and the open article |
+| `/discover?topic=&lang=`, `/s/:id`, `/@handle` | Public pages, rendered at the edge too |
+| `/search?q=` | The device first, then blogs and older posts from the server |
+| `/add`, `/claim`, `/sites/:id/claim` | Add feeds and OPML; claim a blog |
+| `/settings`, `/dashboard` | Profile, reading language, appearance, OPML export; the author's view |
 
-1. Scaffold + infra
-2. Content package
-3. Ingestion worker (site assets to R2 landed in phase 6, where Discover first shows favicons)
-4. Reader web
-5. Translation
-6. Discover + sites + claim
-7. Recommendations + profiles + dashboard
-8. Hardening (China fetch relay with automatic region routing, rate limits, search, health
-   checks, WebSub, mobile fallback)
+## Sync (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025)
 
-The deploy-side checks that gated the merge have passed: Cloudflare through Hyperdrive, a real
-Bailian translation run, and the China smoke test from the relay box. What is still open is
-tracked in `docs/OPERATIONS.md` under "Later" — the custom auth domain, and the two switches that
-open signup. `CHANGELOG.md` records what shipped.
+- One `seq` counter: every batch that writes a synced row bumps it and stamps its rows, so a
+  device's cursor is simply the last seq it saw, and the server keeps nothing per device.
+- The pull reads a member's own rows and the shared rows of the feeds they follow, plus the
+  articles they keep (liked, recommended, highlighted), in one batch.
+- The push is guarded per mutation by `applied_mutations` and resolves conflicts by the later
+  `at`, clamped to the server's clock.
+- The device's reducer (`packages/sync/src/client.ts`) is the same code in the browser and in the
+  convergence test that runs it against the real tela-api.
 
-## The local-first stack (`refactor/local-first`, in progress)
+## Safeguards
 
-What replaces everything above at cutover (ADRs 0020–0022). It is built beside the Postgres stack
-so every commit on the branch stays green. This section grows phase by phase and becomes the whole
-document when the old one is deleted.
+- **Batch-only SQL, fenced by leases:** anything decided in JavaScript commits as a batch whose
+  first statement aborts it if the lease was lost, so a stale holder writes nothing.
+- **D1's limits held everywhere:** 100 bound parameters, 100 KB of SQL, five compound terms. The
+  portable client enforces them, so a test trips them before D1 does.
+- **Outbound fetches** refuse private ranges by name and address; on Cloudflare
+  `global_fetch_strictly_public` refuses them at the socket too.
+- **Model output is never trusted as HTML:** placeholders must match, text is re-escaped.
+- **Knowing it runs:** the dead-man's switch, the Monday digest, a verified nightly export, and
+  D1's Time Travel (`docs/OPERATIONS.md`).
 
-```
-Browser ──▶ tela-web (edge, unpinned): static SPA, /o/* content objects, /img/*, public pages
-              │ service binding
-              ▼
-            tela-api  (pinned aws:ap-southeast-1) ──┐
-            tela-jobs (pinned aws:ap-southeast-1) ──┼──▶ D1 (primary in Singapore, 6–10 ms)
-              ▲ cron * * * * * / 17 3 * * *         └──▶ R2: tela-content (members), tela-assets (public)
-              │ queues tela-fetch/extract/translate/misc
-              └── cron and queue handlers only call SELF.fetch(): placement pins fetch handlers
-   apps/relay (Node, HK box, not provisioned until a feed needs it) ◀── signed POST /fetch
-```
+## Tests
 
-- **`packages/platform`** — `Db` (Drizzle SQLite, atomic batches, no `transaction()`), `Blobs`,
-  `Jobs`, `Clock`, `Mail`. `./cloudflare` holds the bindings (D1, R2, Queues). `./portable` holds
-  libSQL held to D1's limits, S3, memory: the tests and the exit path run on it (ADR 0021).
-- **`packages/data`** — the SQLite schema in one migration, which better-auth's tables share:
-  - **Lease primitive.** `claimDue` claims due items in order, one per host, skipping anything
-    held or backing off. A fenced batch aborts entirely once its lease is lost. `failLease`
-    backs an item off; `deadLetter` retires it.
-  - **Sync sequence.** `bumpSeq` / `currentSeq`.
-  - **`chooseCurrent`**, and the ingest queries that move a whole fetch through one read and one
-    batch via `json_each`.
-  - **Contract suite.** It runs on libSQL (`bun test`) and on D1 in workerd
-    (`bun run test:workers`).
-- **Bodies are versions** (`article_versions`, ADR 0022). Each version's body is an immutable
-  content object at `c/<key>.json` in `tela-content`:
-  - it is already split into top-level blocks carrying their leaf ids;
-  - its images point at `/img/<key>/<index>`;
-  - the raw item HTML sits at `r/<sha>.html` for renormalization.
-  - `articles.current_version` and `content_key` say what readers see.
-- **Ingest** (`packages/ingest/src/pipeline`):
-  - `ingestFeed` runs fetch-feed's behaviour under the feed's lease: conditional GET, relay
-    flip, alias detection, provenance, declared-home adoption, 200-item cap, content-mode
-    learning, scheduling. Everything commits in one fenced batch.
-  - `extractArticleJob` runs Readability eagerly on summary articles, per article host.
-  - `siteAssetsJob` stores raster favicons into `tela-assets`.
-  - `verifyClaimJob` runs the meta or `rel="me"` check, claims the site if nobody holds it, and
-    moves off feeds it doesn't vouch for.
-  - `websubSubscribeJob` sends hub requests; the callback lands on the web app.
-  - `registerFeed` handles discovery, the add-feed RPC and the seed.
-  - **Follow-up work is state, not messages.** A title hash is what title translations are
-    checked against. `extract_state = 'due'`, `assets_checked_at is null` and a pending WebSub
-    row mark the rest.
-- **Jobs** (`apps/jobs`):
-  - `src/kinds.ts` is the one table of background work: due query, lease length, backoff,
-    queue, handler, retirement, whether it is enabled.
-  - `tick` claims each kind's due work and sends it to its queue.
-  - `runJob` does one item and never throws: a failure backs the lease off, and exhaustion
-    dead-letters it and stops the row being due.
-  - `daily` is one batch: relay re-probes, dead-feed revival, pruning, and compacting read-only
-    state under a watermark.
-  - `src/portable.ts` runs the same thing on a timer.
-- **API** (`apps/api`, ADR 0024): tela-api is Hono, built from portable dependencies.
-  - Sign-in is better-auth with email codes, through its Drizzle adapter over `TelaDb`.
-  - Invites go through `/api/admin/invite`.
-  - Every `/api/v1/*` route needs a session, read from the five-minute signed cookie cache.
-  - Work that fetches goes to tela-jobs' `Ingest` RPC (`packages/ingest/src/pipeline/rpc.ts`):
-    discovery, adding a feed, starting a claim, reading OPML.
-  - Translation requests reserve against the member's day and are claimed and queued at once.
-  - Claims derive their token as an HMAC, so a claim row exists only once the member asks for
-    the check.
-  - The rest of the member surface:
-    - the profile (the handle is unique, checked in the update itself);
-    - owner-only blog topics and translation opt-out;
-    - the author dashboard;
-    - search past the device's horizon (`LIKE`, ranked in the app).
-  - Public JSON under `/api/v1/public/*` (listed and featured blogs only, edge-cacheable).
-  - The WebSub callback at `/api/websub/:feedId`. A signed ping sets `refetch_requested_at` and
-    claims the fetch at once.
-- **Edge** (`apps/reader/worker`, tela-web): the only public Worker, unpinned, with no D1.
-  - `/api/*` goes to tela-api.
-  - `/o/c|t|tc/…` and `/o/bundle` serve immutable objects from R2 to members, cached per colo
-    after the session check. Raw HTML (`r/`) is never served.
-  - `/img/<contentKey>/<i>` proxies the image the content object names, replacing HMAC-signed
-    URLs: the object is the allowlist. Raster types only, no SVG, 10 MB, cached for seven days.
-  - Sessions are read from the signed cookie cache; when it has lapsed, tela-api's get-session
-    is asked and its fresh cookie passed on.
-  - `/discover`, `/s/:id` and `/@handle` are rendered here (`src/ssr.tsx`) with the SPA's views,
-    from tela-api's public JSON, into the built `index.html`. They are cached per colo, locale and
-    deploy for five minutes, and the page's data rides along in `#tela-data`.
-  - A write to `/api/*` must carry this origin; hubs (`/api/websub/*`) and the admin script are
-    exempt.
-  - Everything else is the SPA's static assets, which answer without running the Worker.
-- **Reader** (`apps/reader/src`, ADR 0025): a Vite + React SPA that renders from the device.
-  - `store/local.ts` holds confirmed rows and pending mutations, written through to IndexedDB.
-  - `store/engine.ts` pulls at boot, on focus, every minute and after a push. It pushes a
-    quarter-second after a change, and at once (`keepalive`) when the tab hides.
-  - `store/objects.ts` serves bodies and translations from memory, then IndexedDB, then `/o/*`. It
-    prefetches unread bodies while idle and evicts read ones after seven days or 50 MB.
-  - `store/selectors.ts` answers the reading view: unread, lists, counts, the shown title.
-  - `views/` are Discover, a blog's page and a profile as pure components the edge renders too.
-  - Highlights (ADR 0026): `lib/anchor.ts` finds a highlight again by leaf, quote and context;
-    `lib/use-highlights.ts` paints them over the rendered text with the CSS Custom Highlight API
-    and writes back an anchor the post moved. Typography and theme are synced prefs
-    (`lib/typography.ts`); `j`/`k`/`Esc`/`h`/`?` are on `/reading`.
-  - `public/sw.js` caches the app shell only; `shell/kill-sw.js` replaces it in an emergency.
-- **Sync** (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025):
-  - `GET /api/v1/sync?cursor=` reads a member's rows in one batch: a horizon snapshot at cursor 0,
-    and deltas by seq in pages that end on a seq boundary.
-  - `POST /api/v1/mutations` applies up to 50 idempotent, last-writer-wins mutations in one batch.
-  - The device's reducer (`packages/sync/src/client.ts`) is the same code in the browser and in
-    the convergence test that runs it against the real tela-api.
-- **End-to-end** (`apps/reader/e2e`): the built reader, tela-api and tela-jobs in one
-  `wrangler dev` on fresh local D1, R2 and queues, against the fixture feed server. Test mode
-  (`ENV=test`) adds the sign-in outbox and `POST /api/test/cycle`, which runs tela-jobs' sweeps to
-  completion, because local dev fires no crons; `?refetch=1` makes every feed due first.
-- **Translation** (`apps/jobs/src/translation`, ADR 0023):
-  - `translate.title` is keyed by feed. The sweep finds feeds with articles whose current
-    `title_hash` has no `article_titles` row in some launch language. A job takes up to 20 of a
-    feed's due titles and excerpts, one call per language, so the prompt is paid once, not once
-    an article. Echoes and failures are recorded against the hash, and the day's background
-    budget (`usage_daily`, subject `'*'`) stops the sweep once spent.
-  - `translate.body` runs what a reader requested (`body_translations`, keyed by content version
-    and language). It streams: groups along top-level block boundaries, about 400 source tokens
-    first and then about 3k, each a chunk object `tc/<key>/<lang>/<request>/<n>.json` committed
-    in a fenced batch with its cache rows, call log and token count. The finished object is
-    `t/<key>/<lang>/<sha>.json`. An execution stops starting groups after ten minutes and the
-    next tick continues it from the cache.
-  - The block cache (`block_translations`) is content-addressed by block hash and
-    `NORM_VERSION`, and shared by titles and bodies; a title echo never enters it.
+- `bun run test`: every package and app on the portable adapters (libSQL in memory, memory blobs
+  and queues), including the convergence property test, the backup round trip that restores and
+  serves from a fresh database, and the edge Worker with a fake cache.
+- `bun run test:workers`: the data contract and tela-api's sign-in, push and pull on real D1 in
+  workerd.
+- `bun run e2e` (`apps/reader/e2e`): the built reader, tela-api and tela-jobs in one `wrangler dev`
+  on fresh local D1, R2 and queues, against the fixture feed server. Test mode (`ENV=test`) adds
+  the sign-in outbox and `POST /api/test/cycle`, which runs tela-jobs' sweeps to completion,
+  because local dev fires no crons.

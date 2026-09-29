@@ -1,7 +1,7 @@
 {
-  // tela-web (ADR 0020, 0024): the one public Worker, at the reader's edge, unpinned. The Next.js
-  // app deployed as tela-web today keeps the name until cutover (phase 8); this config is not
-  // deployed before then. Built with `vite build`, which bundles the SPA and this Worker together.
+  // tela-web (ADR 0020, 0024): the one public Worker, at the reader's edge, unpinned. The first
+  // deploy replaces the Next.js app that holds the name today: that is the cutover
+  // (docs/OPERATIONS.md). Built with `vite build`, which bundles the SPA and this Worker together.
   "name": "tela-web",
   "main": "worker/index.ts",
   "compatibility_date": "2026-06-01",

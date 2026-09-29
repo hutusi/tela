@@ -30,9 +30,9 @@ const exists = (rel: string) => {
 }
 /**
  * A path a doc names is fine if git tracks it, or if git deliberately ignores it — the runbook
- * legitimately names files you create (`apps/web/.env`) and files a run generates
- * (`apps/web/test-results`). What it must not name is a path that is neither: that is a typo or a
- * file that moved.
+ * legitimately names files you create (`apps/api/.dev.vars`) and files a run generates
+ * (`apps/reader/test-results`). What it must not name is a path that is neither: that is a typo or
+ * a file that moved.
  *
  * Asking the filesystem instead is what let this pass locally and fail in CI, because those two
  * exist on a machine that has run the app and not on a clean checkout.
@@ -75,8 +75,14 @@ const AGENTS = read('AGENTS.md')
 const README = read('README.md')
 const OPERATIONS = read('docs/OPERATIONS.md')
 
-/** Every workspace in the monorepo. */
-const WORKSPACES = [...dirsIn('apps'), ...dirsIn('packages')].sort()
+/**
+ * Every workspace in the monorepo: a directory with a tracked package.json. A checkout also holds
+ * directories git no longer tracks (a deleted app's local `.env`, its build output), and those are
+ * not workspaces.
+ */
+const WORKSPACES = [...dirsIn('apps'), ...dirsIn('packages')]
+  .filter((ws) => TRACKED_SET.has(`${ws}/package.json`))
+  .sort()
 
 describe('workspace coverage', () => {
   it('finds every workspace on disk', () => {
@@ -97,7 +103,7 @@ describe('workspace coverage', () => {
  * Paths the docs name in backticks or markdown links. Only prefixes that are unambiguously
  * repo-relative are checked; a bare `client.ts` in prose is not a claim about a location.
  */
-const PATH_PREFIXES = ['apps/', 'packages/', 'docs/', 'supabase/', '.github/', 'test/']
+const PATH_PREFIXES = ['apps/', 'packages/', 'docs/', '.github/', 'test/']
 const DOC_FILES = [
   'AGENTS.md',
   'README.md',
@@ -109,13 +115,13 @@ const DOC_FILES = [
 
 function referencedPaths(source: string): string[] {
   const found = new Set<string>()
-  // `packages/db/src/schema/*.ts` in code spans, and [text](docs/adr/) in links.
+  // `packages/data/src/schema/*.ts` in code spans, and [text](docs/adr/) in links.
   const spans = source.match(/`[^`\n]+`/g) ?? []
   const links = (source.match(/\]\(([^)\s]+)\)/g) ?? []).map((m) => m.slice(2, -1))
   for (const raw of [...spans.map((s) => s.slice(1, -1)), ...links]) {
     const candidate = raw.trim().replace(/[.,;:]+$/, '')
     if (!PATH_PREFIXES.some((p) => candidate.startsWith(p))) continue
-    // Skip globs and placeholders: `packages/db/src/schema/*.ts`, `apps/<name>/.env`.
+    // Skip globs and placeholders: `packages/data/src/schema/*.ts`, `apps/<name>/.dev.vars`.
     if (/[*<>{}|\s]/.test(candidate)) continue
     found.add(candidate.replace(/\/$/, ''))
   }
@@ -135,22 +141,20 @@ describe('path references resolve', () => {
   })
 })
 
-describe('worker roles are documented', () => {
-  const roles = [...read('apps/worker/src/roles.ts').matchAll(/^\s{2}'([a-z]+)',$/gm)].map(
+describe('background work is documented', () => {
+  // Every kind of work tela-jobs runs (`src/kinds.ts`) is something an operator may have to find
+  // in the leases or dead letters, so the runbook names each one.
+  const kinds = [...read('apps/jobs/src/kinds.ts').matchAll(/^ {2}'([a-z]+\.[a-z]+)': \{$/gm)].map(
     (m) => m[1] as string,
   )
 
-  it('reads the role list', () => {
-    expect(roles).toContain('relay')
-    expect(roles.length).toBeGreaterThanOrEqual(7)
+  it('reads the kind list', () => {
+    expect(kinds).toContain('feed.fetch')
+    expect(kinds.length).toBeGreaterThanOrEqual(7)
   })
 
-  it.each(roles)('%s is named in the README', (role) => {
-    expect(README).toContain(role)
-  })
-
-  it.each(roles)('%s is named in the operations runbook', (role) => {
-    expect(OPERATIONS).toContain(role)
+  it.each(kinds)('%s is named in the operations runbook', (kind) => {
+    expect(OPERATIONS).toContain(`\`${kind}\``)
   })
 })
 
@@ -188,37 +192,45 @@ describe('ADRs are well formed', () => {
 
 describe('environment variables are documented', () => {
   /** Read by the runtime but not Tela's own configuration. */
-  const ALLOWED = new Set(['NODE_ENV', 'CI', 'NEXTJS_ENV'])
-
-  const sources = [...dirsIn('apps'), ...dirsIn('packages')].map((ws) => `${ws}/src`).filter(exists)
+  const ALLOWED = new Set(['NODE_ENV', 'CI', 'DEV'])
 
   function tsFiles(dir: string): string[] {
+    if (!exists(dir)) return []
     return readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((e) => {
       const rel = `${dir}/${e.name}`
       if (e.isDirectory()) return tsFiles(rel)
       return e.name.endsWith('.ts') || e.name.endsWith('.tsx') ? [rel] : []
     })
   }
+  const files = WORKSPACES.flatMap((ws) => [
+    ...tsFiles(`${ws}/src`),
+    ...tsFiles(`${ws}/worker`),
+    ...tsFiles(`${ws}/scripts`),
+  ])
 
+  // A Worker's configuration is its Env type: string fields are vars and secrets, the rest are
+  // bindings (D1, R2, queues, services), which wrangler.jsonc documents instead.
   const names = new Set<string>()
-  for (const dir of sources) {
-    for (const file of tsFiles(dir)) {
-      for (const m of read(file).matchAll(/process\.env\.([A-Z][A-Z0-9_]*)/g)) {
-        names.add(m[1] as string)
-      }
+  const bindings = new Set<string>()
+  for (const file of files.filter((f) => f.endsWith('/env.ts'))) {
+    for (const m of read(file).matchAll(/^\s+([A-Z][A-Z0-9_]*)\??: ([^\n]+)$/gm)) {
+      ;((m[2] as string).trim().startsWith('string') ? names : bindings).add(m[1] as string)
     }
   }
-  // The worker validates its environment through a zod schema rather than reading process.env
-  // per key, so its names live in the schema object.
-  const schema = read('apps/worker/src/config.ts')
-  const schemaBody = schema.slice(schema.indexOf('const envSchema'), schema.indexOf('\n})'))
-  for (const m of schemaBody.matchAll(/^ {2}([A-Z][A-Z0-9_]*):/gm)) names.add(m[1] as string)
-
-  const documented = [...names].filter((n) => !ALLOWED.has(n)).sort()
+  // Everything else reads process.env, a Worker's env, or a config object named env.
+  for (const file of files) {
+    for (const m of read(file).matchAll(
+      /\b(?:process\.env|env|import\.meta\.env\??)\.([A-Z][A-Z0-9_]*)/g,
+    )) {
+      names.add(m[1] as string)
+    }
+  }
+  const documented = [...names].filter((n) => !ALLOWED.has(n) && !bindings.has(n)).sort()
 
   it('finds the environment variables the code reads', () => {
-    expect(documented).toContain('DATABASE_URL')
-    expect(documented).toContain('WORKER_ROLES')
+    expect(documented).toContain('AUTH_SECRET')
+    expect(documented).toContain('BAILIAN_API_KEY')
+    expect(documented).toContain('RELAY_SECRET')
     expect(documented.length).toBeGreaterThan(20)
   })
 
@@ -229,14 +241,15 @@ describe('environment variables are documented', () => {
 
 describe('the Node runtime is pinned consistently', () => {
   /**
-   * AGENTS.md states that @types/node tracks the worker's runtime major. Types ahead of the
-   * runtime are the dangerous direction: tsc accepts an API the deployed Node does not have, and
-   * the failure lands in production. This is how it drifted once — @types/node ^26 against a
-   * Node 22 runtime — so the pins are checked against each other rather than trusted.
+   * AGENTS.md states that @types/node tracks the relay's runtime major, the one Node process Tela
+   * runs. Types ahead of the runtime are the dangerous direction: tsc accepts an API the deployed
+   * Node does not have, and the failure lands in production. This is how it drifted once —
+   * @types/node ^26 against a Node 22 runtime — so the pins are checked against each other rather
+   * than trusted.
    */
   const nodeVersion = read('.node-version').trim()
   const engines = (JSON.parse(read('package.json')) as { engines: { node: string } }).engines.node
-  const dockerfile = read('apps/worker/Dockerfile')
+  const dockerfile = read('apps/relay/Dockerfile')
   const workflow = read('.github/workflows/ci.yml')
 
   const major = Number(nodeVersion.split('.')[0])
@@ -251,7 +264,7 @@ describe('the Node runtime is pinned consistently', () => {
     expect(engines).toBe(`>=${major}`)
   })
 
-  it("agrees with the worker image's runtime stage", () => {
+  it("agrees with the relay image's runtime stage", () => {
     expect(dockerfile).toMatch(new RegExp(`FROM node:${major}[.\\-]`))
   })
 
@@ -268,7 +281,7 @@ describe('the Node runtime is pinned consistently', () => {
    * A line that deliberately names another version — the runbook's dated plan to move after Node
    * 26 reaches LTS — opts out with a `node-pin:planned` marker, so the exemption is visible where
    * it applies rather than built into the rule. A constraint quoted from someone else
-   * ("Node >= 22.12" for pg-boss) never matches: the regex needs a digit straight after "Node".
+   * ("Node >= 22.12") never matches: the regex needs a digit straight after "Node".
    *
    * CHANGELOG.md and the ADRs are excluded outright, being dated records whose job is to say what
    * was true then.
@@ -285,7 +298,7 @@ describe('the Node runtime is pinned consistently', () => {
   })
 
   it.each(
-    [...dirsIn('apps'), ...dirsIn('packages'), '.']
+    [...WORKSPACES, '.']
       .map((ws) => (ws === '.' ? 'package.json' : `${ws}/package.json`))
       .filter(exists)
       .flatMap((p) => {

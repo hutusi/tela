@@ -12,7 +12,8 @@
     "../src/**/*.ts",
     "../src/**/*.tsx",
     "../e2e/**/*.ts",
-    "../playwright.config.ts"
+    "../playwright.config.ts",
+    "../scripts/**/*.ts"
   ],
   "exclude": ["../worker/index.ts"]
 }

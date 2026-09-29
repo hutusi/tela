@@ -1,1 +1,0 @@
-ALTER TABLE "articles" ADD COLUMN "extract_checked_at" timestamp with time zone;

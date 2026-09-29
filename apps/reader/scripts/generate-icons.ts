@@ -8,10 +8,10 @@
  * the raster sizes are drawn separately rather than scaled from one image.
  *
  * There is no SVG rasteriser on a stock macOS, so the PNGs come from the Chromium that Playwright
- * already installs for `bun run e2e`. Run `bun run icons` after changing the geometry and commit
+ * already installs for `bun run e2e`. Run `cd apps/reader && bun run icons` after changing the geometry and commit
  * what it writes; nothing calls this at build time.
  *
- * Output, all under src/app/ where Next's file conventions pick them up without any metadata:
+ * Output, all under public/, served as static assets and named by index.html:
  *   icon.svg        the tile at the 32px weight — what a browser that accepts an SVG icon uses,
  *                   and 32 device px is what a 16px tab slot asks for on a 2x display
  *   favicon.ico     16 and 32, each at its own weight, for everything that does not
@@ -29,7 +29,7 @@ const PAPER = '#f6f2ea'
 /** oklch(0.68 0.14 150) — the accent lifted for a dark ground, as the design file specifies. */
 const ACCENT_ON_DARK = '#4eb068'
 
-const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'app')
+const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public')
 
 function tile({ size, stroke, radius }: { size: number; stroke: number; radius: number }) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="${size}" height="${size}">

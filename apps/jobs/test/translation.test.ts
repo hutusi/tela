@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { first, headSeq, type TelaDb, TITLES_PER_JOB, utcDay } from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
-import { createHttpClient } from '@tela/ingest'
+import { createHttpClient } from '@tela/ingest/http'
 import { registerFeed } from '@tela/ingest/pipeline'
 import {
   createMockTranslator,

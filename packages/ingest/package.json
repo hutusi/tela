@@ -6,7 +6,6 @@
   "description": "Ingestion library: HTTP client, feed discovery, feed fetching, article extraction (no queue, no runtime-specific APIs)",
   "exports": {
     ".": "./src/index.ts",
-    "./extract": "./src/extract-article.ts",
     "./http": "./src/http.ts",
     "./net": "./src/net.ts",
     "./pipeline": "./src/pipeline/index.ts",
@@ -21,7 +20,6 @@
   "dependencies": {
     "@tela/content": "workspace:*",
     "@tela/data": "workspace:*",
-    "@tela/db": "workspace:*",
     "@tela/platform": "workspace:*",
     "@tela/shared": "workspace:*",
     "domutils": "^3.2.2",

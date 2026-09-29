@@ -11,25 +11,9 @@ concurrency:
 
 jobs:
   check:
-    name: Lint, typecheck, unit and DB tests
+    name: Lint, typecheck, unit tests, and D1 in workerd
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      # Tests use the service container instead of downloading embedded Postgres.
-      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
@@ -46,26 +30,10 @@ jobs:
       - name: Tests on D1 (workerd)
         run: bun run test:workers
 
-  build-web:
-    name: Build web (Next.js + OpenNext)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.2
-      - name: Install
-        run: bun install --frozen-lockfile
-      - name: Next build
-        run: bun run --filter @tela/web build
-      - name: OpenNext build
-        run: cd apps/web && bunx opennextjs-cloudflare build
-
   build-workers:
-    # The local-first stack's three Workers, bundled as a deploy would (no credentials needed):
-    # a Node-only import or a missing entrypoint fails here, not on deploy day.
-    name: Build tela-web, tela-api and tela-jobs (dry run)
+    # The three Workers, bundled as a deploy would (no credentials needed): a Node-only import or
+    # a missing entrypoint fails here, not on deploy day.
+    name: Build tela-web, tela-api and tela-jobs (dry run), and the relay image
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -75,7 +43,7 @@ jobs:
           bun-version: 1.4.2
       - name: Install
         run: bun install --frozen-lockfile
-      - name: Bundle each Worker
+      - name: Bundle tela-jobs and tela-api
         run: |
           for app in jobs api; do
             (cd "apps/$app" && ../jobs/node_modules/.bin/wrangler deploy --dry-run --outdir "$RUNNER_TEMP/$app")
@@ -92,54 +60,24 @@ jobs:
           push: false
           tags: tela-relay:ci
 
-  build-worker:
-    name: Build worker image
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
-      - name: Docker build
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/worker/Dockerfile
-          push: false
-          tags: tela-worker:ci
-
   e2e:
+    # The built reader, tela-api and tela-jobs in one `wrangler dev` on local D1, R2 and queues.
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      E2E_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      # wrangler is a Node CLI.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Install
         run: bun install --frozen-lockfile
       - name: Install Chromium
-        run: cd apps/web && bunx playwright install --with-deps chromium
-      # Both stacks until cutover: the Postgres app, then the local-first one (three Workers in one
-      # `wrangler dev` on local D1, R2 and queues).
+        run: cd apps/reader && bunx playwright install --with-deps chromium
       - name: Run e2e
         run: bun run e2e
       - name: Upload traces on failure
@@ -148,6 +86,5 @@ jobs:
         with:
           name: playwright-results
           path: |
-            apps/web/test-results
             apps/reader/test-results
             .e2e-logs
