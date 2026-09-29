@@ -243,15 +243,25 @@ export class LocalStore {
   }
 
   /**
-   * The session is `userId`'s: make the stored copy theirs. Anyone else's copy, or one nobody
-   * owns, is wiped first, and so is what this tab holds of it. Says whether the tab was holding
-   * another account, whose rows its page may still be showing.
+   * The mark on the stored copy as it stands (`Persisted.unverified`). Read just before asking
+   * /me: a mark already down is about something /me's answer reflects, so the claim after that
+   * answer may clear it, whenever this tab loaded the copy.
    */
-  async setUser(userId: string): Promise<boolean> {
+  mark(): Promise<string | null> {
+    return this.persistence.mark()
+  }
+
+  /**
+   * The session is `userId`'s: make the stored copy theirs. Anyone else's copy, or one nobody
+   * owns, is wiped first, and so is what this tab holds of it. The mark is cleared if it is still
+   * `seen`: the one this tab loaded, unless it read the mark again before asking /me. Says
+   * whether the tab was holding another account, whose rows its page may still be showing.
+   */
+  async setUser(userId: string, seen: string | null = this.unverified): Promise<boolean> {
     const previous = this.userId
     // Before the claim, so an answer already on its way for `previous` finds the epoch moved.
     if (previous !== userId) this.reset(userId)
-    const wiped = await this.persistence.claim(userId, this.unverified)
+    const wiped = await this.persistence.claim(userId, seen)
     this.unverified = null
     // The copy stopped being this account's after the tab loaded it: what it holds is gone there.
     if (wiped && previous === userId) this.reset(userId)

@@ -269,6 +269,28 @@ describe('asking /me who is signed in', () => {
     expect((await storage.load()).pending).toHaveLength(1)
   })
 
+  test('a claim clears a mark put down before its question left, and not one put down while it was out', async () => {
+    // Found in review: a tab that loaded before any mark (a login tab left open) signed in, and
+    // its claim left the mark another tab had put down since, so the next boot waited on /me.
+    const storage = memoryPersistence()
+    const store = await held(storage)
+    await storage.distrust()
+    let meanwhile = async () => {}
+    me(async () => {
+      await meanwhile()
+      return Response.json({ id: 'a' })
+    })
+    expect(await learnWho(store, () => true)).toBe('member')
+    expect(initialStatus(await reopened(storage))).toBe('member')
+    // Another tab marks the copy while this question is out: its answer may predate whatever
+    // that mark is about.
+    await storage.distrust()
+    meanwhile = () => storage.distrust()
+    const later = await reopened(storage)
+    expect(await learnWho(later, () => true)).toBe('member')
+    expect(initialStatus(await reopened(storage))).toBe('unknown')
+  })
+
   test('a claim the device refuses is asked again, not left hanging', async () => {
     const inner = memoryPersistence()
     const refusing: Persistence = { ...inner, claim: () => Promise.reject(new Error('disk')) }

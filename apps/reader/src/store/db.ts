@@ -106,6 +106,8 @@ export interface Persistence {
    * claim clears the mark; wiping the copy keeps it.
    */
   distrust(): Promise<void>
+  /** The mark as it stands, or null. */
+  mark(): Promise<string | null>
   /** Wipe the copy while it is still `owner`'s; another account's is left alone. Says which. */
   release(owner: string): Promise<boolean>
   /**
@@ -358,6 +360,10 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
       write(['meta'], async (tx) => {
         await tx.objectStore('meta').put(crypto.randomUUID(), UNVERIFIED)
       }),
+    async mark() {
+      const mark = await db.get('meta', UNVERIFIED)
+      return typeof mark === 'string' ? mark : null
+    },
     release: (owner) =>
       write(STORES, async (tx) => {
         // Nothing of `owner`'s is in a copy that is someone else's: the claim that made it
@@ -471,6 +477,7 @@ export function memoryPersistence(): Persistence {
     async distrust() {
       unverified = crypto.randomUUID()
     },
+    mark: async () => unverified,
     async release(o) {
       if (owner !== o) return false
       wipe()

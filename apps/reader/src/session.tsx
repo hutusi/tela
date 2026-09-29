@@ -135,10 +135,12 @@ export type Learned = 'member' | 'guest' | 'unreachable' | null
  * since, and its answer is the newer one.
  */
 export async function learnWho(
-  store: Pick<LocalStore, 'userId' | 'setUser' | 'forgetAccount'>,
+  store: Pick<LocalStore, 'userId' | 'unverified' | 'mark' | 'setUser' | 'forgetAccount'>,
   current: () => boolean,
   ask: () => Promise<string | null> = whoAmI,
 ): Promise<Learned> {
+  // The mark as the question leaves: the answer reflects whatever that mark is about.
+  const seen = await store.mark().catch(() => store.unverified)
   let id: string | null
   try {
     id = await ask()
@@ -152,7 +154,7 @@ export async function learnWho(
     return 'guest'
   }
   try {
-    await store.setUser(id)
+    await store.setUser(id, seen)
   } catch {
     return 'unreachable'
   }
