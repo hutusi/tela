@@ -18,11 +18,12 @@ import { createHttpClient } from '@tela/ingest/http'
 import { createIngest, type Ingest as IngestApi } from '@tela/ingest/pipeline'
 import { createRelayClient } from '@tela/ingest/relay'
 import { configFromEnv, createTranslator, isAccidentalMock, type Translator } from '@tela/llm'
-import { systemClock } from '@tela/platform'
+import { memoryJobs, systemClock } from '@tela/platform'
 import { d1Db, queueJobs, r2Blobs } from '@tela/platform/cloudflare'
 import { daily } from './daily'
 import type { Env } from './env'
 import type { JobMessage, JobQueues } from './kinds'
+import { settle } from './portable'
 import { type JobsContext, runJob, tick } from './runner'
 
 const INTERNAL = 'https://tela-jobs.internal'
@@ -63,6 +64,8 @@ function context(env: Env): JobsContext {
       timeoutMs: Number(env.FETCH_TIMEOUT_MS ?? 20_000),
       // Politeness is the lease table's job now: one live lease per host, across every kind.
       politenessMs: 0,
+      // The local e2e stack's fixture server is on 127.0.0.1. Nothing deployed sets ENV.
+      ...(env.ENV === 'test' ? { allowPrivateHosts: true } : {}),
       ...(relay ? { relay } : {}),
     }),
     websub: env.WEBSUB_ENABLED === '1',
@@ -110,6 +113,14 @@ export class Ingest extends WorkerEntrypoint<Env> implements IngestApi {
   }
   readOpml(input: Parameters<IngestApi['readOpml']>[0]) {
     return this.ingest().readOpml(input)
+  }
+  /**
+   * Test mode only: run the sweeps now, and everything they lead to, until nothing is due. Local
+   * dev fires no crons, and the local queues' batch timeout would make every e2e step wait.
+   */
+  async cycle() {
+    if (this.env.ENV !== 'test') throw new Error('cycle() is for the e2e stack only')
+    return settle({ ...context(this.env), jobs: memoryJobs<JobQueues>() })
   }
 }
 

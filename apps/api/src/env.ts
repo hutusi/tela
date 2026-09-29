@@ -11,7 +11,10 @@ export type Env = {
   TRANSLATE_QUEUE: Queue<JobMessage>
   MISC_QUEUE: Queue<JobMessage>
   /** tela-jobs' `Ingest` entrypoint: discovery, adding a feed, starting a claim. */
-  JOBS: Ingest
+  JOBS: Ingest & {
+    /** Test mode only (tela-jobs refuses otherwise): run its sweeps to completion now. */
+    cycle(): Promise<unknown>
+  }
   /** The public origin, e.g. https://tela.ainaive.com. */
   PUBLIC_URL: string
   MAIL_FROM: string
@@ -21,6 +24,6 @@ export type Env = {
   ADMIN_TOKEN?: string
   /** Secret: Resend's API key for sign-in mail. */
   RESEND_API_KEY?: string
-  /** `test` for local e2e: mail goes to an outbox route instead of Resend. */
+  /** `test` for local e2e: mail goes to an outbox route instead of Resend, and the test routes exist. */
   ENV?: string
 }

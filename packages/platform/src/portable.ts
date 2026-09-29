@@ -8,7 +8,6 @@ import { drizzle } from 'drizzle-orm/libsql'
 import type { BlobObject, BlobPutOptions, Blobs } from './blobs'
 import type { Clock } from './clock'
 import { checkD1Limits, type Db } from './db'
-import type { JobMessage, Jobs, QueueMap } from './jobs'
 
 function parameterCount(args: InArgs | undefined): number {
   if (!args) return 0
@@ -209,42 +208,8 @@ export function fakeClock(start = Date.UTC(2026, 8, 27)): Clock & {
   }
 }
 
-export type SentJob<Q extends QueueMap> = {
-  [K in keyof Q & string]: { queue: K; body: Q[K]; delaySeconds: number }
-}[keyof Q & string]
-
-/**
- * An in-process queue. Tests inspect `sent` and hand messages to their handlers themselves; the
- * exit path's runner drains it on a timer beside the sweeps.
- */
-export function memoryJobs<Q extends QueueMap>(): Jobs<Q> & {
-  readonly sent: SentJob<Q>[]
-  take<K extends keyof Q & string>(queue: K): Q[K][]
-} {
-  const sent: SentJob<Q>[] = []
-  return {
-    sent,
-    async send(queue, body, options) {
-      sent.push({ queue, body, delaySeconds: options?.delaySeconds ?? 0 } as SentJob<Q>)
-    },
-    async sendBatch(queue, messages: JobMessage<Q[typeof queue]>[]) {
-      for (const m of messages) {
-        sent.push({ queue, body: m.body, delaySeconds: m.delaySeconds ?? 0 } as SentJob<Q>)
-      }
-    },
-    take(queue) {
-      const out: Q[typeof queue][] = []
-      for (let i = sent.length - 1; i >= 0; i--) {
-        const job = sent[i]
-        if (job?.queue === queue) {
-          out.unshift(job.body as Q[typeof queue])
-          sent.splice(i, 1)
-        }
-      }
-      return out
-    },
-  }
-}
+/** In `./jobs`, so a Worker's test mode can drain work in-process without libSQL. */
+export { memoryJobs, type SentJob } from './jobs'
 
 /** Mail that goes nowhere (in `./mail`, so a Worker's test mode can use it without libSQL). */
 export { memoryMail } from './mail'

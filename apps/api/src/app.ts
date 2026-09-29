@@ -81,6 +81,11 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
       const email = c.req.query('email')
       return c.json(outbox.filter((m) => !email || m.to === email))
     })
+    // …and run tela-jobs' sweeps when a step needs their work done.
+    app.post('/api/test/cycle', async (c) => {
+      if (!deps.cycle) return c.json({ error: 'no_jobs' }, 404)
+      return c.json(await deps.cycle())
+    })
   }
 
   // Anyone may read these; tela-web caches them at the edge.

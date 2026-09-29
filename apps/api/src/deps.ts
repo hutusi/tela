@@ -27,5 +27,7 @@ export type ApiDeps = {
   mail: Mail
   /** Work that fetches on a member's behalf: tela-jobs' `Ingest` entrypoint in production. */
   ingest: Ingest
+  /** Test mode only: tela-jobs' sweeps, run to completion now (the e2e stack fires no crons). */
+  cycle?: () => Promise<unknown>
   config: ApiConfig
 }

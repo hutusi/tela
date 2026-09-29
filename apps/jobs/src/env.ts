@@ -34,4 +34,10 @@ export type Env = {
   LLM_DAILY_BUDGET_TOKENS?: string
   /** Source tokens translated per article body before the rest renders as source. */
   LLM_MAX_ARTICLE_TOKENS?: string
+  /**
+   * `test` in the local e2e stack only (never deployed): fetches may reach the fixture server on
+   * 127.0.0.1, and the `Ingest` entrypoint's `cycle()` runs the sweeps on demand, since crons do
+   * not fire in local dev.
+   */
+  ENV?: string
 }
