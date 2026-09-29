@@ -74,9 +74,13 @@ test.describe('translation', () => {
     )
     await page.getByTestId('close-article').click()
 
+    // Opening a post fetches its body and translation one object at a time; only the idle
+    // prefetcher asks for bundles, and on a slow runner it may still be filling the device with
+    // other posts. Opening this one must fetch nothing itself.
     const asked: string[] = []
     page.on('request', (r) => {
       const path = new URL(r.url()).pathname
+      if (path === '/o/bundle') return
       if (path.startsWith('/api/v1/translations') || path.startsWith('/o/')) asked.push(path)
     })
     await row.click()
