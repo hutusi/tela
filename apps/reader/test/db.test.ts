@@ -243,14 +243,27 @@ describe('the device database', () => {
     expect(await earlierBuild.wrote()).toBe(true)
     expect(await earlierBuild.wrote()).toBe(true)
     // Its copy is emptied, not deleted (a deletion would wait on its open tabs, and hang one of
-    // them reloading), and marked as seen where that build never reads: its sign-out takes it.
-    expect(await earlierBuild.empty()).toBe(true)
+    // them reloading), and marked where that build never reads: its sign-out takes the mark.
+    const emptied = await earlierBuild.empty()
+    expect(emptied).not.toBeNull()
     expect(await metaKeys('tela')).toEqual(['tela-2:seen'])
     expect((await indexedDB.databases()).map((d) => d.name)).toContain('tela')
+    // Being emptied still reads as touched, until the tab that emptied it says it is seen: a tab
+    // that looks meanwhile, or after that tab died, marks its own copy first.
+    expect(await earlierBuild.wrote()).toBe(true)
+    await earlierBuild.seen('another tab’s')
+    expect(await earlierBuild.wrote()).toBe(true)
+    await earlierBuild.seen(emptied as string)
     // Nothing new since: nothing to distrust. And this build's own copy is untouched.
     expect(await earlierBuild.wrote()).toBe(false)
-    expect(await earlierBuild.empty()).toBe(false)
+    expect(await earlierBuild.empty()).toBeNull()
     expect((await now.load()).owner).toBe('b')
+    // Written again between the emptying and the seen mark: it stays touched.
+    await seed()
+    const again = await earlierBuild.empty()
+    await seed()
+    await earlierBuild.seen(again as string)
+    expect(await earlierBuild.wrote()).toBe(true)
     // It runs again, and is seen again.
     await seed()
     expect(await earlierBuild.wrote()).toBe(true)

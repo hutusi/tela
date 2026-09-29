@@ -13,6 +13,7 @@ import {
 } from '../src/session'
 import {
   type EarlierBuild,
+  earlierBuild,
   indexedDbPersistence,
   memoryPersistence,
   type Persistence,
@@ -67,7 +68,11 @@ const reopened = async (storage: Persistence) => {
   return store
 }
 /** A device where no earlier build has run. */
-const none: EarlierBuild = { wrote: async () => false, empty: async () => false }
+const none: EarlierBuild = {
+  wrote: async () => false,
+  empty: async () => null,
+  seen: async () => {},
+}
 
 describe('leaving an account', () => {
   test('a tab whose storage will not forget boots asking who is signed in, and only once', async () => {
@@ -167,11 +172,94 @@ describe('booting after an earlier build ran on this device', () => {
         written = false
         // Another tab boots the moment the evidence is gone, before this one does anything more.
         tabs.push(await openStore(await indexedDbPersistence(name), shared))
-        return was
+        return was ? 'emptied' : null
       },
+      seen: async () => {},
     }
     tabs.unshift(await openStore(await indexedDbPersistence(name), shared))
     expect(tabs.map(initialStatus)).toEqual(['unknown', 'unknown'])
+  })
+
+  test('a tab that started booting before the marks loads after them, though its look finds nothing', async () => {
+    // Found in review: the concurrent boots above never have a tab whose look ends after another
+    // tab emptied the copy, so loading first, then looking, passed them all.
+    const name = `tela-test-${crypto.randomUUID()}`
+    await held(await indexedDbPersistence(name))
+    let written = true
+    let emptied = () => {}
+    const gone = new Promise<void>((r) => {
+      emptied = r
+    })
+    const first: EarlierBuild = {
+      wrote: async () => written,
+      empty: async () => {
+        const was = written
+        written = false
+        emptied()
+        return was ? 'emptied' : null
+      },
+      seen: async () => {},
+    }
+    // This tab starts first, and its look answers only once the other tab has emptied the copy.
+    const late: EarlierBuild = { ...first, wrote: () => gone.then(() => written) }
+    const booting = openStore(await indexedDbPersistence(name), late)
+    await new Promise((r) => setTimeout(r, 20))
+    const other = await openStore(await indexedDbPersistence(name), first)
+    expect([initialStatus(await booting), initialStatus(other)]).toEqual(['unknown', 'unknown'])
+  })
+
+  test("a tab that looks between another's emptying and its seen mark marks the copy itself", async () => {
+    // Found in review: the emptied copy read as seen before the second mark was down. Another
+    // tab's claim, on a /me answered before the sign-in the emptying erased, had cleared the
+    // current mark meanwhile, so a tab booting in between trusted the copy.
+    for (const stall of ['after emptying', 'after the seen mark'] as const) {
+      const name = `tela-test-${crypto.randomUUID()}`
+      const tab = () => indexedDbPersistence(name)
+      await held(await tab())
+      await earlierSignsIn()
+      const between: LocalStore[] = []
+      let claim = async () => {}
+      const meanwhile = async () => {
+        await claim()
+        between.push(await openStore(await tab()))
+      }
+      const stalls: EarlierBuild = {
+        ...earlierBuild,
+        empty: async () => {
+          // Before this tab empties: another tab boots all the way and asks /me, which says a;
+          // then the earlier build signs in as someone else.
+          const claimer = await openStore(await tab())
+          const seen = await claimer.mark()
+          claim = async () => void (await claimer.setUser('a', seen))
+          await earlierSignsIn()
+          const token = await earlierBuild.empty()
+          if (stall === 'after emptying') await meanwhile()
+          return token
+        },
+        seen: async (token) => {
+          await earlierBuild.seen(token)
+          if (stall === 'after the seen mark') await meanwhile()
+        },
+      }
+      const booted = await openStore(await tab(), stalls)
+      expect([stall, ...between.map(initialStatus)]).toEqual([stall, 'unknown'])
+      expect(initialStatus(booted)).toBe('unknown')
+    }
+  })
+
+  test('a tab that dies between emptying the copy and its second mark leaves it touched', async () => {
+    const name = `tela-test-${crypto.randomUUID()}`
+    await held(await indexedDbPersistence(name))
+    await earlierSignsIn()
+    const dies: EarlierBuild = { ...earlierBuild, seen: async () => {} }
+    await openStore(await indexedDbPersistence(name), dies)
+    expect(await earlierBuild.wrote()).toBe(true)
+    const next = await openStore(await indexedDbPersistence(name))
+    expect(initialStatus(next)).toBe('unknown')
+    await next.setUser('a')
+    // Its claim cleared the marks; the copy it emptied, never seen, is looked at again.
+    expect(await earlierBuild.wrote()).toBe(false)
+    expect(initialStatus(await openStore(await indexedDbPersistence(name)))).toBe('member')
   })
 
   test('a browser without crypto.randomUUID (plain http) still boots, and asks first', async () => {
@@ -204,8 +292,9 @@ describe('booting after an earlier build ran on this device', () => {
         const other = await openStore(await tab(), none)
         others.push(other)
         await other.setUser('a')
-        return true
+        return 'emptied'
       },
+      seen: async () => {},
     }
     const booted = await openStore(await tab(), earlier)
     expect(initialStatus(booted)).toBe('unknown')

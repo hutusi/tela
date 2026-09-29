@@ -80,6 +80,8 @@ export function initialStatus(
  * emptied by another loads after that tab's mark. It is marked again once emptied, since a
  * sign-out there between the look and the emptying is known then only to this tab, and a claim
  * another tab makes meanwhile, on a /me asked before that sign-out, clears only the first mark.
+ * Until that second mark is down, the emptied copy still reads as touched, so a tab that looks
+ * in between marks the copy itself; and one that dies in between leaves it touched.
  */
 export async function openStore(
   persistence: Persistence,
@@ -87,7 +89,11 @@ export async function openStore(
 ): Promise<LocalStore> {
   if (await earlier.wrote()) {
     await persistence.distrust()
-    if (await earlier.empty()) await persistence.distrust()
+    const emptied = await earlier.empty()
+    if (emptied !== null) {
+      await persistence.distrust()
+      await earlier.seen(emptied)
+    }
   }
   const store = new LocalStore(persistence)
   await store.open()

@@ -159,54 +159,64 @@ const SEEN = 'tela-2:seen'
 /** What an earlier build does on this device, as each boot finds it (`openStore`). */
 export type EarlierBuild = {
   /**
-   * Whether it has touched its copy since this build last emptied it: written, or cleared (its
+   * Whether it has touched its copy since this build last saw it: written, or cleared (its
    * sign-out, which takes the seen mark with everything else). It ran on this device since (a
    * tab left open across the deploy, or a rollback), and a sign-out or another account's sign-in
-   * there never reached this build's copy. Only looks.
+   * there never reached this build's copy. A copy another tab of this build is still emptying
+   * counts as touched too. Only looks.
    */
   wrote(): Promise<boolean>
   /**
-   * Empty its copy and mark it seen; says whether it had been touched, looked at again in the
-   * same transaction. Emptied, not deleted: a deletion waits for every tab of that build to
+   * Empty its copy if it was touched, looked at again in the same transaction, and leave it
+   * being emptied, which still reads as touched; says by which token, or null when there was
+   * nothing to empty. Emptied, not deleted: a deletion waits for every tab of that build to
    * close, and one of them reloading meanwhile would wait behind it on a blank page.
    */
-  empty(): Promise<boolean>
+  empty(): Promise<string | null>
+  /**
+   * Mark it seen, once this tab's copy is marked unverified again: only if it still holds
+   * `token`. A sign-out since took the token with everything else, and anything written since is
+   * still there to be seen, so either stays touched for the next look.
+   */
+  seen(token: string): Promise<void>
 }
 
-/** Whether the earlier build's copy says it ran since `SEEN` was left. */
-function touched(keys: IDBValidKey[], counts: number[]): boolean {
-  return !keys.includes(SEEN) || keys.length > 1 || counts.some((n) => n > 0)
+/** Whether the earlier build's copy says it ran, or is being emptied, since it was last seen. */
+function touched(seen: unknown, keys: IDBValidKey[], counts: number[]): boolean {
+  return seen !== true || keys.length > 1 || counts.some((n) => n > 0)
 }
 
 /**
- * Run `body` over the earlier build's database, if there is one with a `meta` store; false when
+ * Run `body` over the earlier build's database, if there is one with a `meta` store; `none` when
  * there is none, or IndexedDB refuses: then nothing an earlier build left can be read here either.
  */
-async function withEarlier(
-  body: (db: IDBPDatabase, names: string[]) => Promise<boolean>,
-): Promise<boolean> {
+async function withEarlier<T>(
+  none: T,
+  body: (db: IDBPDatabase, names: string[]) => Promise<T>,
+): Promise<T> {
   try {
     // Opening a name that does not exist would create it: only one that is listed is opened.
     const listed = await indexedDB.databases?.()
-    if (!listed?.some((d) => d.name === EARLIER)) return false
+    if (!listed?.some((d) => d.name === EARLIER)) return none
     const db = await openDB(EARLIER)
     try {
       const names = Array.from(db.objectStoreNames)
-      return names.includes('meta') ? await body(db, names) : false
+      return names.includes('meta') ? await body(db, names) : none
     } finally {
       db.close()
     }
   } catch {
-    return false
+    return none
   }
 }
 
-/** Every store's count but `meta`'s, and `meta`'s keys, in `tx`. */
+/** The seen mark, `meta`'s keys, and every other store's count, in `tx`. */
 function contents<Mode extends IDBTransactionMode>(
   tx: IDBPTransaction<unknown, string[], Mode>,
   names: string[],
 ) {
   return Promise.all([
+    tx.objectStore('meta').get(SEEN),
     tx.objectStore('meta').getAllKeys(),
     Promise.all(names.filter((n) => n !== 'meta').map((n) => tx.objectStore(n).count())),
   ])
@@ -214,19 +224,30 @@ function contents<Mode extends IDBTransactionMode>(
 
 export const earlierBuild: EarlierBuild = {
   wrote: () =>
-    withEarlier(async (db, names) => {
+    withEarlier(false, async (db, names) => {
       const tx = db.transaction(names, 'readonly')
-      const [[keys, counts]] = await Promise.all([contents(tx, names), tx.done])
-      return touched(keys, counts)
+      const [[seen, keys, counts]] = await Promise.all([contents(tx, names), tx.done])
+      return touched(seen, keys, counts)
     }),
   empty: () =>
-    withEarlier(async (db, names) => {
+    withEarlier<string | null>(null, async (db, names) => {
       const tx = db.transaction(names, 'readwrite')
-      const [keys, counts] = await contents(tx, names)
+      const [seen, keys, counts] = await contents(tx, names)
+      if (!touched(seen, keys, counts)) {
+        await tx.done
+        return null
+      }
+      const token = `emptying:${newId()}`
       await Promise.all(names.map((n) => tx.objectStore(n).clear()))
-      await tx.objectStore('meta').put(true, SEEN)
+      await tx.objectStore('meta').put(token, SEEN)
       await tx.done
-      return touched(keys, counts)
+      return token
+    }),
+  seen: (token) =>
+    withEarlier(undefined, async (db) => {
+      const tx = db.transaction('meta', 'readwrite')
+      if ((await tx.store.get(SEEN)) === token) await tx.store.put(true, SEEN)
+      await tx.done
     }),
 }
 

@@ -67,9 +67,10 @@ commits meanwhile.
     still open or brought back by a rollback, checks nothing, and must never reach it. When one
     has run on the device since, the copy is unverified until the next claim, because a sign-out
     or sign-in there never reached it. Tabs boot side by side, so the mark goes down before the
-    earlier build's copy is emptied and again after, and a copy is loaded only after both. Each
-    mark is new, and a claim clears only the one that stood when its /me was asked: a mark set
-    since may be about a sign-out that answer came before.
+    earlier build's copy is emptied and again after, and a copy is loaded only after both; the
+    emptied copy reads as seen only once the second mark is down, so a tab that looks in between
+    marks the copy itself. Each mark is new, and a claim clears only the one that stood when its
+    /me was asked: a mark set since may be about a sign-out that answer came before.
   - Only a 401 says nobody is signed in. A 5xx mid-deploy, a captive portal's page, a WAF's
     challenge or no network says nothing about the session: the tab shows the public side, keeps
     its copy and unsent changes, and asks /me again (after 2 s, doubling to 2 min, and at once
