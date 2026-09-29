@@ -58,8 +58,9 @@ export class LocalStore {
   userId: string | null = null
   /**
    * The mark on the copy as this tab loaded it (`Persisted.unverified`): an earlier build ran
-   * here since the copy was claimed, and no boot trusts it before /me. This tab's claim clears
-   * that mark, and only that one.
+   * here since the copy was claimed, and no boot trusts it before /me. A claim clears the mark
+   * that stood when its /me was asked (`mark()`, read just before), and this one when it is given
+   * none.
    */
   unverified: string | null = null
   /**

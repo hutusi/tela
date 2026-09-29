@@ -55,7 +55,8 @@ export type Persisted = {
   /**
    * The mark an earlier build having run on this device leaves (`distrust`), or null: a sign-out
    * or sign-in there never reached the copy, so no tab trusts it until a claim after /me. Each
-   * mark is new, so a claim can tell the one its tab loaded from one set since.
+   * mark is new, so a claim can tell the one that stood when its /me was asked from one set
+   * since.
    */
   unverified: string | null
   cursor: number
@@ -98,8 +99,8 @@ export interface Persistence {
   load(): Promise<Persisted>
   /**
    * Make the copy `owner`'s. Anyone else's, or nobody's, is wiped first; says whether it was.
-   * The claim acts on a /me asked after its tab loaded, so it clears the mark that tab loaded
-   * (`seen`). A mark set since stays: /me may have answered before whatever set it.
+   * It clears the mark if it is still `seen`, the one that stood when the claim's /me was asked.
+   * A mark set since stays: /me may have answered before whatever set it.
    */
   claim(owner: string, seen?: string | null): Promise<boolean>
   /**
