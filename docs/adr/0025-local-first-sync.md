@@ -72,11 +72,11 @@ commits meanwhile.
     marks the copy itself. Each mark is new, and a claim clears only the one that stood when its
     /me was asked: a mark set since may be about a sign-out that answer came before.
   - Only a 401 says nobody is signed in. A 5xx mid-deploy, a captive portal's page, a WAF's
-    challenge or no network says nothing about the session: the tab shows the public side, keeps
-    its copy and unsent changes, and asks /me again (after 2 s, doubling to 2 min, and at once
-    when the browser comes back online or the tab into view). Every answer is acted on the same
-    way, whichever question it answers (the boot, a retry or a sign-in): one that names another
-    account than the page was showing loads a fresh page.
+    challenge, no network or no answer within 15 s says nothing about the session: the tab
+    shows the public side, keeps its copy and unsent changes, and asks /me again (after 2 s,
+    doubling to 2 min, and at once when the browser comes back online or the tab into view).
+    Every answer is acted on the same way, whichever question it answers (the boot, a retry or
+    a sign-in): one that names another account than the page was showing loads a fresh page.
   - Signing out names the member too, in the request that ends the session, so a stale tab
     cannot end the session another tab started.
   - A tab that loses either check stops, forgets what it holds, and starts again from `/` as

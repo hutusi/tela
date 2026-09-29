@@ -112,14 +112,20 @@ export async function forgetOnSignOut(store: Pick<LocalStore, 'userId' | 'forget
 }
 
 /**
+ * How long /me may take before the question counts as a miss. One that never settles (a request
+ * held at the edge, a half-open connection) would otherwise leave nothing asking again.
+ */
+export const ME_DEADLINE = 15_000
+
+/**
  * Who the session is: an id, or null when nobody is signed in, which only a 401 says. Any other
  * answer rejects, since it says nothing about the session: a 5xx mid-deploy, a captive portal's
- * page, a WAF challenge, or no network at all.
+ * page, a WAF challenge, no network at all, or no answer within `deadline`.
  */
-export async function whoAmI(): Promise<string | null> {
+export async function whoAmI(deadline = ME_DEADLINE): Promise<string | null> {
   let res: Response
   try {
-    res = await api('/api/v1/me')
+    res = await api('/api/v1/me', { signal: AbortSignal.timeout(deadline) })
   } catch (err) {
     if (err instanceof SignedOut) return null
     throw err

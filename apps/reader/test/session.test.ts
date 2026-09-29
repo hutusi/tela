@@ -10,6 +10,7 @@ import {
   openStore,
   retryDelay,
   whenReachable,
+  whoAmI,
 } from '../src/session'
 import {
   type EarlierBuild,
@@ -395,6 +396,23 @@ describe('asking /me who is signed in', () => {
     const later = await reopened(storage)
     expect(await learnWho(later, () => true)).toBe('member')
     expect(initialStatus(await reopened(storage))).toBe('unknown')
+  })
+
+  test('a /me that never answers counts as a miss once its deadline passes', async () => {
+    // Found in review: a question held open for ever left nothing asking again.
+    const { storage, store } = await doubted()
+    globalThis.fetch = ((_: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+      })) as unknown as typeof fetch
+    expect(
+      await learnWho(
+        store,
+        () => true,
+        () => whoAmI(20),
+      ),
+    ).toBe('unreachable')
+    await kept(storage)
   })
 
   test('a claim the device refuses is asked again, not left hanging', async () => {
