@@ -45,6 +45,11 @@ own lease:
 - it is paused with `merged_into` set, so no sweep fetches it again;
 - its readers follow the canonical feed, keeping the higher watermark;
 - its posts the canonical feed lacks move across;
+- their titles, translations and read states go with them. A pull finds titles by feed and
+  every change by seq, so each is restamped and a title is refiled under the canonical feed.
+  Without that, a device following the canonical feed got the moved post but not its title,
+  its translation, or the fact that it was read. A title written after the merge takes its feed
+  from the post, so a title job still leased on the alias files it in the right place too;
 - a read on a duplicate carries over to the canonical copy.
 
 The duplicates stay on the paused alias, where no list shows them. Nothing is deleted, so no

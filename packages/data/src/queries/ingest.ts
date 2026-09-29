@@ -116,8 +116,9 @@ export async function siteFeedPosts(db: TelaDb, siteId: number): Promise<SiteFee
  * Merge a feed into the one it turned out to be another address for (ADR 0028), as statements
  * for a fenced batch under the alias's lease. The alias stops being fetched; its readers follow
  * the target, keeping the higher watermark; `move` are its posts the target lacks, which go
- * across; `carry` pairs each duplicate with the target's copy, so what a reader read stays read.
- * The duplicates stay behind on the paused alias, where no list shows them.
+ * across, with their titles, translations and read states restamped so the target's readers are
+ * sent them; `carry` pairs each duplicate with the target's copy, so what a reader read stays
+ * read. The duplicates stay behind on the paused alias, where no list shows them.
  */
 export function mergeFeed(
   db: TelaDb,
@@ -148,6 +149,23 @@ export function mergeFeed(
     db.run(sql`
       update articles set feed_id = ${target}, seq = ${currentSeq}
       where feed_id = ${alias} and id in (select value from json_each(${move}))
+    `),
+    // What hangs off a moved post goes with it. A pull finds titles by feed and every delta by
+    // seq, so a device following the target would get the post and never its title, its body's
+    // translations, or what its reader had read there.
+    db.run(sql`
+      update article_titles set feed_id = ${target}, seq = ${currentSeq}
+      where article_id in (select value from json_each(${move}))
+    `),
+    db.run(sql`
+      update body_translations set seq = ${currentSeq}
+      where content_key in (
+        select content_key from articles where id in (select value from json_each(${move}))
+      )
+    `),
+    db.run(sql`
+      update user_article_states set seq = ${currentSeq}
+      where article_id in (select value from json_each(${move}))
     `),
     db.run(sql`
       insert into user_article_states (user_id, article_id, read_at, seq)

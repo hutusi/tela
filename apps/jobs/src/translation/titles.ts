@@ -218,7 +218,6 @@ export async function translateTitlesJob(
           {
             articleId: article.id,
             lang,
-            feedId,
             title: title === undefined ? null : plainText(title),
             excerpt: excerpt === undefined ? null : plainText(excerpt),
             // Failed and echoed titles are recorded too, so the sweep stops asking until the

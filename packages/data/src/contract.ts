@@ -27,7 +27,7 @@ import {
   updateArticles,
 } from './queries/ingest'
 import { readPull } from './queries/sync'
-import { settleBodyUsage, utcDay } from './queries/translation'
+import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
 import { feeds, sites } from './schema'
 import { bumpSeq, currentSeq, headSeq } from './seq'
 
@@ -366,6 +366,82 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
           sql`select read_at as "readAt" from user_article_states where article_id = 1`,
         ),
       ).toEqual({ readAt: 5 })
+    })
+
+    it("carries a moved post's title, translation and read state to the target's readers", async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['blog.example', 'mirror.example'])
+      await db.run(
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 1, 0, 0)`,
+      )
+      await db.run(sql`
+        insert into articles (id, feed_id, dedup_key, url, fetched_at, sort_at, content_key, title_hash)
+        values (3, 2, 'mirror-b', 'https://blog.example/b', 2, 2, 'key-b', 'th-b')
+      `)
+      await db.batch([
+        bumpSeq(db),
+        db.run(sql`
+          insert into article_titles (article_id, lang, feed_id, title, status, source_hash,
+            updated_at, seq)
+          values (3, 'zh-Hans', 2, '译题', 'done', 'th-b', 0, ${currentSeq})
+        `),
+        db.run(sql`
+          insert into body_translations (content_key, lang, state, updated_at, seq)
+          values ('key-b', 'zh-Hans', 'done', 0, ${currentSeq})
+        `),
+        db.run(sql`
+          insert into user_article_states (user_id, article_id, read_at, seq)
+          values ('u1', 3, 5, ${currentSeq})
+        `),
+      ] as never)
+      await db.batch([
+        bumpSeq(db),
+        ...mergeFeed(db, { alias: 2, target: 1, move: [3], carry: [] }, T0),
+      ] as never)
+      const head = await headSeq(db)
+      // A pull finds titles by feed and everything by seq: all three must say so.
+      expect(await first(db, sql`select feed_id as "feedId", seq from article_titles`)).toEqual({
+        feedId: 1,
+        seq: head,
+      })
+      expect(await first(db, sql`select seq from body_translations`)).toEqual({ seq: head })
+      expect(await first(db, sql`select seq from user_article_states`)).toEqual({ seq: head })
+
+      // A title job that read the post before the merge writes the post's feed, not its own key.
+      await db.batch([
+        bumpSeq(db),
+        upsertArticleTitle(
+          db,
+          {
+            articleId: 3,
+            lang: 'en',
+            title: 'Title',
+            excerpt: null,
+            status: 'done',
+            sourceHash: 'th-b',
+            model: 'm',
+          },
+          T0,
+        ),
+      ] as never)
+      expect(
+        await db.all(sql`select lang, feed_id as "feedId" from article_titles order by lang`),
+      ).toEqual([
+        { lang: 'en', feedId: 1 },
+        { lang: 'zh-Hans', feedId: 1 },
+      ])
+
+      // So does giving up on them: a row still filed under the alias is refiled as it fails.
+      await db.run(sql`update articles set title = 'B', title_hash = 'th-c' where id = 3`)
+      await db.run(sql`update article_titles set feed_id = 2 where lang = 'zh-Hans'`)
+      await db.batch([bumpSeq(db), failDueTitles(db, 1, T0)] as never)
+      expect(
+        await db.all(sql`
+          select lang, feed_id as "feedId", status from article_titles order by lang`),
+      ).toEqual([
+        { lang: 'en', feedId: 1, status: 'failed' },
+        { lang: 'zh-Hans', feedId: 1, status: 'failed' },
+      ])
     })
   })
 

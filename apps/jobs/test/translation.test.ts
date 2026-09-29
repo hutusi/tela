@@ -1,5 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { first, headSeq, startLease, type TelaDb, TITLES_PER_JOB, utcDay } from '@tela/data'
+import {
+  bumpSeq,
+  first,
+  headSeq,
+  mergeFeed,
+  startLease,
+  type TelaDb,
+  TITLES_PER_JOB,
+  utcDay,
+} from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
 import { createHttpClient } from '@tela/ingest/http'
 import { registerFeed } from '@tela/ingest/pipeline'
@@ -174,6 +183,37 @@ describe('titles', () => {
       sql`select title from article_titles where article_id = 1`,
     )
     expect(title?.title).toBe('zh-Hans:Post one, revised')
+  })
+
+  test('a job still holding a feed that merged away files its titles under the feed the posts joined', async () => {
+    // The job is leased on feed 1's key; while its call is out, feed 1 merges into feed 2 and the
+    // post moves across (ADR 0028). Feed 2's readers find titles by feed_id.
+    const mock = createMockTranslator({ calls })
+    let merged = false
+    const merging: Translator = {
+      model: mock.model,
+      async translate(request) {
+        if (!merged) {
+          merged = true
+          await db.batch([
+            bumpSeq(db),
+            ...mergeFeed(db, { alias: 1, target: 2, move: [1], carry: [] }, clock.now()),
+          ] as never)
+        }
+        return mock.translate(request)
+      },
+    }
+    const ctx = context({ translator: merging })
+    await ingest(ctx, feed(['Post one']))
+    await db.run(sql`
+      insert into feeds (site_id, feed_url, host, next_fetch_at, created_at, updated_at)
+      values (1, ${server.url('/other.xml')}, 'other.example', ${NOW + 60 * MIN}, 0, 0)
+    `)
+    await cycle(ctx)
+    expect(merged).toBe(true)
+    expect(await db.all(sql`select feed_id as "feedId", status from article_titles`)).toEqual([
+      { feedId: 2, status: 'done' },
+    ])
   })
 
   test('stop once the background budget for the day is spent', async () => {

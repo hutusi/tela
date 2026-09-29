@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { bumpSeq, currentSeq, first, headSeq, type TelaDb } from '@tela/data'
-import { MEMBER_HEADER, type PullResponse, type PushResponse } from '@tela/sync'
+import { bumpSeq, currentSeq, first, headSeq, mergeFeed, type TelaDb } from '@tela/data'
+import {
+  applyPull,
+  emptyTables,
+  MEMBER_HEADER,
+  type PullResponse,
+  type PushResponse,
+} from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
@@ -451,6 +457,39 @@ describe('a feed merged into another (ADR 0028)', () => {
     expect(await following()).toEqual([{ feed_id: 1 }])
     await push([{ type: 'unsubscribe', feedId: 2 }])
     expect(await following()).toEqual([])
+  })
+
+  test("a post that moves across arrives with its title, its translation and the reader's state", async () => {
+    // The reader followed feed 2 once, read X there, and left; now they follow feed 1.
+    await push([{ type: 'subscribe', feedId: 2 }])
+    const x = await addArticle(2)
+    await push([{ type: 'markRead', articleId: x }])
+    await push([{ type: 'unsubscribe', feedId: 2 }])
+    await push([{ type: 'subscribe', feedId: 1 }])
+    await write(
+      db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status, source_hash,
+          updated_at, seq)
+        values (${x}, 'zh-Hans', 2, '译题', 'done', 'h', ${now}, ${currentSeq})`),
+      db.run(sql`insert into body_translations (content_key, lang, state, updated_at, seq)
+        values (${`c${x}`}, 'zh-Hans', 'done', ${now}, ${currentSeq})`),
+    )
+    const empty = { cursor: 0, tables: emptyTables() }
+    const before = applyPull(empty, await pull(0))
+    expect(before.tables.articles.has(x)).toBe(false)
+
+    // Feed 2 turns out to be another address for feed 1, and X is the post only it had.
+    await write(...mergeFeed(db, { alias: 2, target: 1, move: [x], carry: [] }, now))
+    const synced = applyPull(before, await pull(before.cursor))
+    const fresh = applyPull(empty, await pull(0))
+    expect(synced.tables.articles.get(x)?.feedId).toBe(1)
+    expect(fresh.tables.titles.size).toBe(1)
+    expect(fresh.tables.translations.size).toBe(1)
+    expect(fresh.tables.states.get(x)?.readAt).toBe(now)
+    expect([...synced.tables.titles.values()]).toEqual([...fresh.tables.titles.values()])
+    expect([...synced.tables.translations.values()]).toEqual([
+      ...fresh.tables.translations.values(),
+    ])
+    expect(synced.tables.states.get(x)).toEqual(fresh.tables.states.get(x))
   })
 })
 

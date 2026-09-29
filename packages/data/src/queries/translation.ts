@@ -170,18 +170,21 @@ export function failDueTitles(db: TelaDb, feedId: number, now: number) {
         where t.article_id = d.id and t.lang = l.value and t.source_hash = d.title_hash
       )
     on conflict (article_id, lang) do update set
-      status = 'failed', source_hash = excluded.source_hash, updated_at = excluded.updated_at,
-      seq = excluded.seq
+      feed_id = excluded.feed_id, status = 'failed', source_hash = excluded.source_hash,
+      updated_at = excluded.updated_at, seq = excluded.seq
   `)
 }
 
-/** A title translation, stored whatever the outcome so the sweep stops asking (echo, failed). */
+/**
+ * A title translation, stored whatever the outcome so the sweep stops asking (echo, failed). Its
+ * feed is read from the article as the batch commits, not passed in: a job leased on a feed that
+ * has since merged into another would otherwise file the title under the paused alias (ADR 0028).
+ */
 export function upsertArticleTitle(
   db: TelaDb,
   row: {
     articleId: number
     lang: string
-    feedId: number
     title: string | null
     excerpt: string | null
     status: 'done' | 'echo' | 'failed'
@@ -193,11 +196,12 @@ export function upsertArticleTitle(
   return db.run(sql`
     insert into article_titles (article_id, lang, feed_id, title, excerpt, status, source_hash,
       model, updated_at, seq)
-    values (${row.articleId}, ${row.lang}, ${row.feedId}, ${row.title}, ${row.excerpt},
-      ${row.status}, ${row.sourceHash}, ${row.model}, ${now}, ${currentSeq})
+    select a.id, ${row.lang}, a.feed_id, ${row.title}, ${row.excerpt}, ${row.status},
+      ${row.sourceHash}, ${row.model}, ${now}, ${currentSeq}
+    from articles a where a.id = ${row.articleId}
     on conflict (article_id, lang) do update set
-      title = excluded.title, excerpt = excluded.excerpt, status = excluded.status,
-      source_hash = excluded.source_hash, model = excluded.model,
+      feed_id = excluded.feed_id, title = excluded.title, excerpt = excluded.excerpt,
+      status = excluded.status, source_hash = excluded.source_hash, model = excluded.model,
       updated_at = excluded.updated_at, seq = excluded.seq
   `)
 }

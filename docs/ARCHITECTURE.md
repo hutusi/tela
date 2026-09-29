@@ -111,8 +111,9 @@ and hashes as the `NORM_VERSION` contract.
 - One blog, one feed (`pipeline/merge.ts`, ADR 0028): before fetching, a feed whose blog has
   other active feeds checks whether it holds the same post URLs as one of them over the time
   both cover. If it does and the other is canonical (on the blog's own host, else older), it
-  pauses itself with `merged_into`, moves its readers, the posts only it had and their read state
-  across, and stops. Adding, importing or subscribing to a merged feed lands on its target.
+  pauses itself with `merged_into`, moves its readers, the posts only it had and their titles,
+  translations and read states across, and stops. Adding, importing or subscribing to a merged
+  feed lands on its target.
 - Scheduling: interval = half the average gap between posts over 7 days, clamped to 30 min…24 h,
   ×1.5 when unchanged, raised to the publisher's `ttl`/`max-age`; ±10% jitter on the derived
   `next_fetch_at` only. Errors back off `interval × 2^n` up to 7 days; 429/503 honour
