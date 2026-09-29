@@ -20,6 +20,11 @@
  * Bodies and objects are public and content-addressed, the same for every account, so writing
  * them checks nothing; a change of owner clears them with everything else.
  *
+ * This layout has a database of its own (`DATABASE`), never the name earlier builds used. A
+ * cached earlier shell still open in another tab, or one a rollback brings back, writes its own
+ * copy without checking any owner; sharing one database let it write its rows into a copy this
+ * build had given to another account, and let this build erase the key that earlier build checks.
+ *
  * Everything here can be rebuilt from the server, so a browser that clears it loses nothing.
  */
 import type { Pending, TableRows } from '@tela/sync'
@@ -108,6 +113,22 @@ const TABLES: (keyof TableRows)[] = [
   'translations',
 ]
 
+/** This layout's database. Earlier builds used 'tela', with no owner and no checks. */
+export const DATABASE = 'tela-2'
+const EARLIER_DATABASES = ['tela']
+
+/**
+ * Give back the space an earlier build's copy held, best effort. While a tab of that build is
+ * still open the deletion waits for it to close; nothing of this build waits on it.
+ */
+export function forgetEarlierDatabases(): void {
+  try {
+    for (const name of EARLIER_DATABASES) indexedDB.deleteDatabase(name)
+  } catch {
+    // No IndexedDB, or it refuses: nothing to give back.
+  }
+}
+
 const OWNER = 'owner'
 const CURSOR = 'cursor'
 /** Earlier builds' keys: the owner, and the whole pending list in one record. Never read. */
@@ -132,7 +153,7 @@ const STORES = ['meta', 'tables', 'bodies', 'objects'] as const
 type Store = StoreNames<TelaDB>
 type Tx = IDBPTransaction<TelaDB, Store[], 'readwrite'>
 
-export async function indexedDbPersistence(name = 'tela'): Promise<Persistence> {
+export async function indexedDbPersistence(name = DATABASE): Promise<Persistence> {
   const db: IDBPDatabase<TelaDB> = await openDB<TelaDB>(name, 1, {
     upgrade(d) {
       d.createObjectStore('meta')

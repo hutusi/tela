@@ -8,7 +8,7 @@ import { App } from './app'
 import { sessionEvents } from './session'
 import { registerShell } from './shell'
 import { bindApi } from './store/api'
-import { indexedDbPersistence, memoryPersistence } from './store/db'
+import { forgetEarlierDatabases, indexedDbPersistence, memoryPersistence } from './store/db'
 import { SyncEngine } from './store/engine'
 import { LocalStore } from './store/local'
 import { Objects } from './store/objects'
@@ -16,6 +16,7 @@ import { Objects } from './store/objects'
 async function boot() {
   // A browser that refuses IndexedDB (some private modes) still reads, just without a memory.
   const persistence = await indexedDbPersistence().catch(() => memoryPersistence())
+  forgetEarlierDatabases()
   const store = new LocalStore(persistence)
   await store.open()
   const objects = new Objects(persistence)

@@ -13,7 +13,7 @@ import {
   type TableRows,
 } from '@tela/sync'
 import { openDB } from 'idb'
-import { indexedDbPersistence } from '../src/store/db'
+import { DATABASE, forgetEarlierDatabases, indexedDbPersistence } from '../src/store/db'
 import { metaKeys, seedEarlierBuild } from './earlier-build'
 import { profile, pull, sub } from './rows'
 
@@ -147,5 +147,24 @@ describe('the device database', () => {
       expect(await metaKeys(name)).toEqual(['cursor', 'owner'])
       expect((await two.load()).owner).toBe('b')
     }
+  })
+
+  test("this build keeps its own database, and never reads an earlier build's", async () => {
+    // An earlier build's tab left open writes 'tela' without checking anyone; this build's copy
+    // is elsewhere, so nothing it writes can land in this build's.
+    expect(DATABASE).not.toBe('tela')
+    await seedEarlierBuild('tela', pull(5, { profile: [profile], subscriptions: [sub(1)] }, true), {
+      userId: 'a',
+    })
+    const now = await indexedDbPersistence()
+    expect(await now.load()).toEqual({ owner: null, cursor: 0, rows: null, pending: [] })
+    await now.claim('b')
+    expect(await metaKeys('tela')).toEqual(['cursor', 'userId'])
+    // Its space is given back; the earlier build finds nothing and starts over if it comes back.
+    forgetEarlierDatabases()
+    await new Promise((r) => setTimeout(r, 20))
+    const names = (await indexedDB.databases()).map((d) => d.name)
+    expect(names).not.toContain('tela')
+    expect(names).toContain(DATABASE)
   })
 })
