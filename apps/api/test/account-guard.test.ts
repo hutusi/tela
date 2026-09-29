@@ -303,3 +303,33 @@ describe('every member route', () => {
     })
   }
 })
+
+describe('signing out', () => {
+  // Whether the member still has a session: the row, since a signed cookie cache answers for a
+  // few minutes to a cookie a browser would have dropped on the sign-out's Set-Cookie.
+  const sessions = async (who: SignedIn) =>
+    (
+      await db.all<{ n: number }>(
+        sql`select count(*) as n from session where user_id = ${who.userId}`,
+      )
+    )[0]?.n
+  const signOut = (headers: Record<string, string | undefined>) =>
+    api.request('/api/auth/sign-out', { cookie: b.cookie, headers, body: {} })
+
+  test("a stale tab naming the account it still holds does not end the other account's session", async () => {
+    const res = await signOut({ [CLIENT_HEADER]: '2', [MEMBER_HEADER]: a.userId })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'account_changed' })
+    expect(await sessions(b)).toBe(1)
+  })
+
+  test('naming the member it is signs out, in the same request that checked', async () => {
+    expect((await signOut({ [CLIENT_HEADER]: '2', [MEMBER_HEADER]: b.userId })).status).toBe(200)
+    expect(await sessions(b)).toBe(0)
+  })
+
+  test('a shell before protocol 2 names no one, and signs out as it always did', async () => {
+    expect((await signOut(oldShell)).status).toBe(200)
+    expect(await sessions(b)).toBe(0)
+  })
+})

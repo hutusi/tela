@@ -42,6 +42,18 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   const auth = createAuth(deps)
   const app = new Hono<ApiEnv>()
 
+  // Signing out names the member too, when the client says whom (protocol 2 always does), and in
+  // the same request that ends the session: a tab still holding the account another tab signed
+  // out of must not end the session that tab started. Shells before protocol 2 name no one and
+  // sign out as they always did; refusing them would leave a member signed in who asked not to be.
+  app.post('/api/auth/sign-out', async (c) => {
+    const held = c.req.header(MEMBER_HEADER)
+    if (held !== undefined) {
+      const session = await auth.api.getSession({ headers: c.req.raw.headers })
+      if (session && session.user.id !== held) return c.json({ error: 'account_changed' }, 409)
+    }
+    return auth.handler(c.req.raw)
+  })
   app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
   app.get('/api/health', async (c) => {

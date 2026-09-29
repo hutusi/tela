@@ -5,7 +5,7 @@
  * member's.
  */
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { api, SignedOut } from './store/api'
+import { AccountChanged, api, SignedOut, UpgradeRequired } from './store/api'
 import type { SyncEngine } from './store/engine'
 import type { LocalStore } from './store/local'
 
@@ -114,16 +114,14 @@ export function SessionProvider({
 
   const signOut = useCallback(async () => {
     engine.stop()
-    // Another tab may have signed in as someone else since this one loaded: signing out here
-    // would end their session. This tab only forgets its own account, and starts again as them.
-    const session = await whoAmI().catch(() => undefined)
-    if (session === undefined || session === null || session === store.userId) {
-      await fetch('/api/auth/sign-out', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: '{}',
-        credentials: 'same-origin',
-      }).catch(() => undefined)
+    // One request names this tab's account and ends the session, so tela-api can refuse it when
+    // another tab has since signed in as someone else: a stale tab must not end their session.
+    // Refused, api() has already sent this tab to start again as them; there is nothing to add.
+    try {
+      await api('/api/auth/sign-out', { method: 'POST', body: {} })
+    } catch (err) {
+      if (err instanceof AccountChanged || err instanceof UpgradeRequired) return
+      // Offline, or signed out already: this tab forgets its account either way.
     }
     await store.clear()
     // A fresh page rather than a state change: the page a member leaves from may be one only
