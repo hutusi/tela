@@ -272,4 +272,38 @@ describe('the device database', () => {
     // Consistent at 100: the next pull from there brings the second subscription back.
   })
 
+  test('a tab ahead of a copy another tab set back writes its whole copy, and keeps it current', async () => {
+    const name = fresh()
+    const ahead = await indexedDbPersistence(name)
+    const behind = await indexedDbPersistence(name)
+    await ahead.claim('a')
+    const snap = (n: number, feeds: number[]) =>
+      tablesOf(pull(n, { profile: [profile], subscriptions: feeds.map((f) => sub(f)) }, true))
+    await ahead.commit('a', { tables: snap(100, [1]), cursor: 100 })
+    await ahead.commit('a', {
+      tables: { subscriptions: snap(101, [1, 2]).subscriptions },
+      from: 100,
+      cursor: 101,
+    })
+    await behind.commit('a', { tables: snap(100, [1]), cursor: 100 })
+    // The tab ahead pulls 101..102; its delta cannot land on the copy at 100, its whole copy can.
+    const landed = await ahead.commit('a', {
+      tables: { articles: [] },
+      whole: snap(102, [1, 2]),
+      from: 101,
+      cursor: 102,
+    })
+    expect(landed).toBe(true)
+    const stored = await behind.load()
+    expect(stored.cursor).toBe(102)
+    expect(stored.rows?.subscriptions.map((x) => x.feedId)).toEqual([1, 2])
+    // A tab behind the copy still writes nothing over it, whole or not.
+    await behind.commit('a', {
+      tables: { articles: [] },
+      whole: snap(90, [7]),
+      from: 80,
+      cursor: 90,
+    })
+    expect((await ahead.load()).cursor).toBe(102)
+  })
 })

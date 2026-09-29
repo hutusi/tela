@@ -204,6 +204,7 @@ export class LocalStore {
       tables: changed,
       cursor: this.confirmed.cursor,
       from,
+      whole: rows,
       drop: gone(held, this.pending),
     })
   }
