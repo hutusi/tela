@@ -18,7 +18,7 @@ export function safeNext(next: string | null, fallback = '/reading'): string {
 }
 
 type Step = { kind: 'email' } | { kind: 'code'; email: string }
-type LoginError = 'invalid_email' | 'send_failed' | 'bad_code'
+type LoginError = 'invalid_email' | 'send_failed' | 'bad_code' | 'rate_limited'
 
 const post = (path: string, body: unknown) =>
   fetch(path, {
@@ -47,7 +47,8 @@ export function LoginPage() {
       const res = await post('/api/auth/sign-in/email-otp', { email, otp })
       if (!res.ok) {
         setStep({ kind: 'code', email })
-        setError('bad_code')
+        // Too many tries is not a wrong code: saying so would send the member hunting for typos.
+        setError(res.status === 429 ? 'rate_limited' : 'bad_code')
         return
       }
       await signedIn()
@@ -92,7 +93,7 @@ export function LoginPage() {
         type: 'sign-in',
       })
       if (!res.ok) {
-        setError('send_failed')
+        setError(res.status === 429 ? 'rate_limited' : 'send_failed')
         return
       }
       setStep({ kind: 'code', email })

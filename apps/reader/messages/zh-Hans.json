@@ -34,7 +34,8 @@
       "send_failed": "验证码发送失败，请稍后再试。",
       "bad_code": "验证码错误或已过期。",
       "link_failed": "登录链接无效或已过期，请重新获取验证码。",
-      "not_invited": "Tela 正在内测中，该邮箱还没有账号。"
+      "not_invited": "Tela 正在内测中，该邮箱还没有账号。",
+      "rate_limited": "尝试次数过多。请稍等一分钟再试。"
     }
   },
   "sidebar": {

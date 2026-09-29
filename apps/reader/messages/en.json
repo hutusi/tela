@@ -34,7 +34,8 @@
       "send_failed": "We could not send the code. Try again in a minute.",
       "bad_code": "That code is wrong or has expired.",
       "link_failed": "That sign-in link is invalid or has expired. Ask for a new code.",
-      "not_invited": "Tela is in private testing. This address does not have an account yet."
+      "not_invited": "Tela is in private testing. This address does not have an account yet.",
+      "rate_limited": "Too many tries. Wait a minute, then try again."
     }
   },
   "sidebar": {
