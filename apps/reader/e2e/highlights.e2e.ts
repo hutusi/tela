@@ -9,6 +9,7 @@ import {
   cycle,
   ensureFeeds,
   FIXTURES,
+  memberHeaders,
   painted,
   resetReading,
   selectText,
@@ -82,10 +83,11 @@ test('when the post changes, the highlight is found again and written back to th
   await expect.poll(() => painted(page)).toEqual([PASSAGE])
 
   // Every device will find it where this one did: the stored anchor now names the new version.
+  const headers = await memberHeaders(request)
   await expect
     .poll(async () => {
       const sync = (await (
-        await request.get(`${BASE}/api/v1/sync?cursor=0`, { headers: { 'x-tela-client': '1' } })
+        await request.get(`${BASE}/api/v1/sync?cursor=0`, { headers })
       ).json()) as {
         rows: {
           articles: { id: number; contentKey: string }[]

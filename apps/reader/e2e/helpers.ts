@@ -51,12 +51,28 @@ export async function signInRequest(request: APIRequestContext, email: string): 
   if (!res.ok()) throw new Error(`sign-in failed: ${res.status()} ${await res.text()}`)
 }
 
+/**
+ * What the app sends on every member call: the protocol it speaks and the account it holds, which
+ * tela-api must find to be the session's (409 `account_changed` otherwise). The account is asked
+ * of `/api/v1/me` each time, since a spec may sign the same context in as someone else.
+ */
+export async function memberHeaders(request: APIRequestContext): Promise<Record<string, string>> {
+  const me = await request.get(`${BASE}/api/v1/me`)
+  if (!me.ok()) throw new Error(`who am I failed: ${me.status()} ${await me.text()}`)
+  const { id } = (await me.json()) as { id: string }
+  // x-tela-client carries MIN_CLIENT (packages/sync/src/protocol.ts), as the app's calls do.
+  return { 'x-tela-client': '2', 'x-tela-member': id }
+}
+
 /** Subscribe the signed-in context to a feed URL, as the add page does. */
 export async function addFeed(
   request: APIRequestContext,
   feedUrl: string,
 ): Promise<{ feedId: number }> {
-  const res = await request.post(`${BASE}/api/v1/feeds`, { headers: ORIGIN, data: { feedUrl } })
+  const res = await request.post(`${BASE}/api/v1/feeds`, {
+    headers: { ...ORIGIN, ...(await memberHeaders(request)) },
+    data: { feedUrl },
+  })
   if (!res.ok()) throw new Error(`add feed failed: ${res.status()} ${await res.text()}`)
   return (await res.json()) as { feedId: number }
 }
@@ -105,8 +121,7 @@ export async function resetReading(api: APIRequestContext): Promise<void> {
   const at = Date.now()
   const change = (m: Record<string, unknown>) => ({ mid: crypto.randomUUID(), at, ...m })
   const res = await api.post(`${BASE}/api/v1/mutations`, {
-    // x-tela-client carries MIN_CLIENT (packages/sync/src/protocol.ts), as the app's pushes do.
-    headers: { ...ORIGIN, 'x-tela-client': '1' },
+    headers: { ...ORIGIN, ...(await memberHeaders(api)) },
     data: {
       mutations: [
         change({ type: 'setProfile', readingLang: 'en' }),

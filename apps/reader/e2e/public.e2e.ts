@@ -4,7 +4,7 @@
  * rendered at the edge, so a visitor without JavaScript sees them too.
  */
 import { expect, test } from '@playwright/test'
-import { BASE, FIXTURES, keepCycling, synced } from './helpers'
+import { BASE, FIXTURES, keepCycling, memberHeaders, synced } from './helpers'
 
 test.describe('for a visitor', () => {
   test.use({ storageState: { cookies: [], origins: [] }, javaScriptEnabled: false })
@@ -164,7 +164,10 @@ test.describe('recommendations, profile, dashboard, settings', () => {
   })
 
   test('OPML export lists the subscriptions', async ({ request }) => {
-    const res = await request.get(`${BASE}/api/v1/feeds/opml`)
+    // A member call like any other: it names the account, as the Settings button's fetch does.
+    const res = await request.get(`${BASE}/api/v1/feeds/opml`, {
+      headers: await memberHeaders(request),
+    })
     expect(res.status()).toBe(200)
     expect(res.headers()['content-type']).toContain('opml')
     const body = await res.text()
