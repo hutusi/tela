@@ -13,7 +13,7 @@ export type Env = {
   /** tela-jobs' `Ingest` entrypoint: discovery, adding a feed, starting a claim. */
   JOBS: Ingest & {
     /** Test mode only (tela-jobs refuses otherwise): run its sweeps to completion now. */
-    cycle(): Promise<unknown>
+    cycle(options?: { refetch?: boolean }): Promise<unknown>
   }
   /** The public origin, e.g. https://tela.ainaive.com. */
   PUBLIC_URL: string

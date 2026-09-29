@@ -265,5 +265,17 @@
       "light": "Light",
       "dark": "Dark"
     }
+  },
+  "highlights": {
+    "title": "{n, plural, one {# highlight} other {# highlights}}",
+    "highlight": "Highlight",
+    "addNote": "Add a note",
+    "noteLabel": "Note on a highlight",
+    "notePlaceholder": "Your note. Only you can see it.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "remove": "Remove highlight",
+    "detached": "This passage is no longer in the post.",
+    "elsewhere": "In another layout or language: switch to see it."
   }
 }

@@ -7,7 +7,13 @@
  * Adding a feed by URL and asking for a translation are RPCs, not mutations: the reader needs the
  * answer.
  */
-import { READING_LANGUAGES, UI_LOCALES } from '@tela/shared'
+import {
+  HIGHLIGHT_CONTEXT,
+  HIGHLIGHT_NOTE_MAX,
+  HIGHLIGHT_QUOTE_MAX,
+  READING_LANGUAGES,
+  UI_LOCALES,
+} from '@tela/shared'
 import { z } from 'zod'
 
 const id = z.number().int().positive()
@@ -17,11 +23,6 @@ export const PREF_KEY = /^[a-z][a-z0-9_.]{0,39}$/
 /** A preference value is small JSON: theme, typography, display mode. */
 export const PREF_MAX_BYTES = 2048
 export const RECOMMENDATION_NOTE_MAX = 500
-/** A highlight is a passage, not a page: past this it is a copy of the post. */
-export const HIGHLIGHT_QUOTE_MAX = 2000
-/** Context kept either side of a highlight, to find it again in a changed post (ADR 0026). */
-export const HIGHLIGHT_CONTEXT = 32
-export const HIGHLIGHT_NOTE_MAX = 2000
 
 /** Client-minted, like `mid`, so a replayed push cannot make a second highlight. */
 const highlightId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)

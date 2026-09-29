@@ -34,6 +34,9 @@
   /* Cards, popovers and inputs: white on paper, lifted a step on a dark ground. */
   --color-surface: #fff;
   --color-danger: oklch(0.5 0.15 25);
+  /* A highlight is a marker's stroke over the text, never a box around it. */
+  --color-highlight: oklch(0.91 0.1 95);
+  --color-highlight-strong: oklch(0.8 0.14 90);
 
   --font-serif: "EB Garamond", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
   --font-sans: "Figtree", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
@@ -76,6 +79,8 @@
     --color-accent: oklch(0.68 0.14 150);
     --color-accent-strong: oklch(0.78 0.12 150);
     --color-danger: oklch(0.72 0.15 25);
+    --color-highlight: oklch(0.5 0.09 90 / 0.55);
+    --color-highlight-strong: oklch(0.7 0.12 90);
   }
 }
 :root[data-theme="dark"] {
@@ -92,6 +97,8 @@
   --color-accent: oklch(0.68 0.14 150);
   --color-accent-strong: oklch(0.78 0.12 150);
   --color-danger: oklch(0.72 0.15 25);
+  --color-highlight: oklch(0.5 0.09 90 / 0.55);
+  --color-highlight-strong: oklch(0.7 0.12 90);
 }
 
 /*
@@ -175,6 +182,14 @@
 [data-testid="reader"] {
   --reader-scale: 1;
   --reader-measure: 640px;
+}
+
+/* Highlights, painted over the rendered text by the CSS Custom Highlight API. */
+::highlight(tela-highlight) {
+  background-color: var(--color-highlight);
+}
+::highlight(tela-highlight-active) {
+  background-color: var(--color-highlight-strong);
 }
 
 /* Article bodies: sanitized HTML from @tela/content, one leaf block per data-tb id. */

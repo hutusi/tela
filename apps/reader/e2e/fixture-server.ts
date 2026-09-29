@@ -20,6 +20,31 @@ const PNG = Buffer.from(
 let claimToken = ''
 
 /**
+ * A full-content feed whose one post the highlight spec edits (POST /__changing?v=…): v1 is the
+ * post as first read, v2 adds a paragraph before and words around the highlighted passage, v3
+ * rewrites it so the passage is gone.
+ */
+let changing = 1
+const CHANGING: Record<number, string[]> = {
+  1: [
+    'The first paragraph sets the scene for everything that follows.',
+    'Tending a garden teaches patience more than any book about patience ever could.',
+    'The last paragraph says goodbye.',
+  ],
+  2: [
+    'An update, added later, now opens the post.',
+    'The first paragraph sets the scene for everything that follows.',
+    'In short: tending a garden teaches patience more than any book about patience ever could, as it turns out.',
+    'The last paragraph says goodbye.',
+  ],
+  3: [
+    'The first paragraph sets the scene.',
+    'Something else entirely now.',
+    'The last paragraph says goodbye.',
+  ],
+}
+
+/**
  * Captured feeds declare their real home; served from here, that would make the worker move
  * their site to the real origin and point claim verification at it. Declare this server as
  * the home instead, so every fixture feed belongs to one site on this origin.
@@ -142,6 +167,15 @@ const routes: Record<string, () => { body: Buffer | string; type: string }> = {
     type: 'application/rss+xml; charset=utf-8',
   }),
 
+  '/changing.xml': () => ({
+    body: `<?xml version="1.0"?><rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+      <channel><title>Changing Fixture</title><link>http://127.0.0.1:${port}/changing</link><language>en</language>
+      <item><guid>changing-1</guid><link>http://127.0.0.1:${port}/changing/posts/1</link>
+        <title>A post that changes</title><pubDate>Mon, 07 Sep 2026 08:00:00 GMT</pubDate>
+        <content:encoded><![CDATA[${(CHANGING[changing] ?? []).map((p) => `<p>${p}</p>`).join('')}]]></content:encoded>
+      </item></channel></rss>`,
+    type: 'application/rss+xml; charset=utf-8',
+  }),
   '/summary.xml': () => ({
     body: `<?xml version="1.0"?><rss version="2.0"><channel><title>Summary Fixture</title>
       <link>http://127.0.0.1:${port}/summary</link><language>en</language>
@@ -182,6 +216,12 @@ const routes: Record<string, () => { body: Buffer | string; type: string }> = {
 createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://x')
   const path = url.pathname
+  if (req.method === 'POST' && path === '/__changing') {
+    changing = Number(url.searchParams.get('v') ?? 1)
+    res.writeHead(204)
+    res.end()
+    return
+  }
   if (req.method === 'POST' && path === '/__claim-token') {
     claimToken = url.searchParams.get('token') ?? ''
     res.writeHead(204)

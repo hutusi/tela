@@ -265,5 +265,17 @@
       "light": "浅色",
       "dark": "深色"
     }
+  },
+  "highlights": {
+    "title": "{n} 处划线",
+    "highlight": "划线",
+    "addNote": "写笔记",
+    "noteLabel": "划线笔记",
+    "notePlaceholder": "你的笔记，只有你能看到。",
+    "save": "保存",
+    "cancel": "取消",
+    "remove": "删除划线",
+    "detached": "文章里已经没有这段文字了。",
+    "elsewhere": "在另一种版式或语言中，切换即可看到。"
   }
 }

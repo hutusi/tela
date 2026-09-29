@@ -39,7 +39,7 @@ function appFor(env: Env) {
     clock: systemClock,
     mail: mailFor(env),
     ingest: env.JOBS,
-    ...(env.ENV === 'test' ? { cycle: () => env.JOBS.cycle() } : {}),
+    ...(env.ENV === 'test' ? { cycle: (options) => env.JOBS.cycle(options) } : {}),
     config: {
       publicUrl: env.PUBLIC_URL,
       authSecret: env.AUTH_SECRET,

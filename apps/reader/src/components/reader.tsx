@@ -1,19 +1,23 @@
 /**
  * The article itself. Everything comes from the device: the row from the local store, the body
  * from IndexedDB (prefetched, usually) or the edge. Opening one therefore costs no request to
- * tela-api at all (ADR 0025).
+ * tela-api at all (ADR 0025). Highlights, notes and typography are the member's synced rows and
+ * prefs (ADR 0026).
  */
 import type { ArticleRow } from '@tela/sync'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 import { pairBlocks, readerBlocks, runsOf } from '../lib/block-pairs'
 import { relativeTime } from '../lib/format'
+import { pointAt, type Side } from '../lib/highlight-dom'
 import type { ReadingMode } from '../lib/href'
 import { readerStyle, typographyOf } from '../lib/typography'
+import { useHighlights } from '../lib/use-highlights'
 import { useArticleTranslation } from '../lib/use-translation'
 import { useNow, useStore, useTables } from '../store/hooks'
 import type { ContentObject } from '../store/objects'
 import { feedTitle, isLiked, isRecommended, shownTitle, siteOfFeed } from '../store/selectors'
+import { HighlightList, HighlightNote, HighlightToolbar, useSelectedAnchor } from './highlights'
 import { LikeButton } from './like-button'
 import { PairedBody } from './paired-body'
 import { RecommendPopover } from './recommend-popover'
@@ -99,12 +103,73 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
     [translation.blocks, original, translation.untranslated],
   )
 
+  const view = translation.view
+  const shown: ReadingMode = view?.available ? mode : 'orig'
+
+  // Highlights: painted over what is rendered, found again after the post changes (ADR 0026).
+  const body = useRef<HTMLDivElement>(null)
+  const [note, setNote] = useState<{ id: string; x: number; y: number } | null>(null)
+  const translationSettled = view?.state === 'done' || view?.state === 'partial'
+  const rendered = useMemo(() => ({ shown, object, pairs }), [shown, object, pairs])
+  const highlights = useHighlights({
+    article,
+    root: body,
+    readingLang,
+    rendered,
+    translationSettled,
+    activeId: note?.id ?? null,
+  })
+  const selected = useSelectedAnchor(body)
+  // A streaming translation's text is still changing: highlight it once it has settled.
+  const selectable =
+    selected && (selected.side === 'original' || translationSettled) ? selected : null
+  const highlight = useCallback(
+    (side: Side, withNote: boolean) => {
+      if (!selectable || !article.contentKey) return
+      const id = crypto.randomUUID()
+      store.mutate({
+        type: 'putHighlight',
+        id,
+        articleId: article.id,
+        contentKey: article.contentKey,
+        side,
+        lang: side === 'translation' ? readingLang : null,
+        ...selectable.anchor,
+        note: null,
+      })
+      window.getSelection()?.removeAllRanges()
+      if (withNote) {
+        const { rect } = selectable
+        setNote({ id, x: rect.left + rect.width / 2, y: rect.bottom })
+      }
+    },
+    [selectable, article.id, article.contentKey, readingLang, store],
+  )
+  // `h` highlights the selection: the keyboard's way to the toolbar.
+  useEffect(() => {
+    if (!selectable) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'h' || e.metaKey || e.ctrlKey || e.altKey) return
+      e.preventDefault()
+      highlight(selectable.side, false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectable, highlight])
+  const noteRow = note ? tables.highlights.get(note.id) : undefined
+  const closeNote = useCallback(() => setNote(null), [])
+
   if (!loaded) return <ReaderPaneSkeleton />
 
   const { size, measure } = typographyOf(tables)
-
-  const view = translation.view
-  const shown: ReadingMode = view?.available ? mode : 'orig'
+  // A click on painted text opens that highlight's note; a click on a link inside it still follows
+  // the link. The list below the article is the keyboard's way to the same popover.
+  const onBodyClick = (e: React.MouseEvent) => {
+    if ((e.target as Element).closest('a') || !window.getSelection()?.isCollapsed) return
+    const point = pointAt(e.clientX, e.clientY)
+    const row = point ? highlights.at(point.side, point.leafId, point.offset) : undefined
+    if (row) setNote({ id: row.id, x: e.clientX, y: e.clientY })
+  }
   const showTrans = shown !== 'orig'
   const twoCols = shown === 'side'
   const sourceLang = article.sourceLang ?? undefined
@@ -194,44 +259,60 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
           <RetryTranslation onRetry={translation.retry} />
         ) : null}
 
-        {twoCols ? (
-          <PairedBody
-            pairs={pairs}
-            title={titles.title}
-            originalTitle={article.title}
-            targetLang={readingLang}
-            sourceLang={sourceLang}
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: a pointer shortcut to a highlight's note; the list below reaches the same popover by keyboard */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: as above */}
+        <div ref={body} onClick={onBodyClick}>
+          {twoCols ? (
+            <PairedBody
+              pairs={pairs}
+              title={titles.title}
+              originalTitle={article.title}
+              targetLang={readingLang}
+              sourceLang={sourceLang}
+            />
+          ) : (
+            <div className="max-w-(--reader-measure)">
+              <h1
+                className="mb-6 font-serif text-[40px] font-medium leading-[1.12] tracking-tight"
+                style={{ textWrap: 'pretty' }}
+                data-testid="article-title"
+              >
+                {title}
+              </h1>
+              {object && original.length > 0 ? (
+                runs.map((run) =>
+                  run.untranslated ? (
+                    <Untranslated key={run.id} pending={run.pending}>
+                      <Body html={run.html} lang={sourceLang} dir="auto" testId="body-translated" />
+                    </Untranslated>
+                  ) : (
+                    <Body
+                      key={run.id}
+                      html={run.html}
+                      lang={showTrans ? readingLang : sourceLang}
+                      dir={showTrans ? undefined : 'auto'}
+                      testId={showTrans ? 'body-translated' : 'body-original'}
+                    />
+                  ),
+                )
+              ) : (
+                <p className="text-muted">{t('noContent')}</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <HighlightList
+          items={highlights.items}
+          onOpen={(item, at) => setNote({ id: item.row.id, x: at.x, y: at.y })}
+        />
+        {selectable ? (
+          <HighlightToolbar
+            selected={selectable}
+            onHighlight={(withNote) => highlight(selectable.side, withNote)}
           />
-        ) : (
-          <div className="max-w-(--reader-measure)">
-            <h1
-              className="mb-6 font-serif text-[40px] font-medium leading-[1.12] tracking-tight"
-              style={{ textWrap: 'pretty' }}
-              data-testid="article-title"
-            >
-              {title}
-            </h1>
-            {object && original.length > 0 ? (
-              runs.map((run) =>
-                run.untranslated ? (
-                  <Untranslated key={run.id} pending={run.pending}>
-                    <Body html={run.html} lang={sourceLang} dir="auto" testId="body-translated" />
-                  </Untranslated>
-                ) : (
-                  <Body
-                    key={run.id}
-                    html={run.html}
-                    lang={showTrans ? readingLang : sourceLang}
-                    dir={showTrans ? undefined : 'auto'}
-                    testId={showTrans ? 'body-translated' : 'body-original'}
-                  />
-                ),
-              )
-            ) : (
-              <p className="text-muted">{t('noContent')}</p>
-            )}
-          </div>
-        )}
+        ) : null}
+        {noteRow && note ? <HighlightNote row={noteRow} at={note} onClose={closeNote} /> : null}
 
         <div className="mt-10 flex max-w-(--reader-measure) items-center gap-4 border-t border-line pt-6">
           <Swatch id={article.feedId} title={name} size={44} round />

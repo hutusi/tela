@@ -82,9 +82,10 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
       return c.json(outbox.filter((m) => !email || m.to === email))
     })
     // …and run tela-jobs' sweeps when a step needs their work done.
+    // `?refetch=1` makes every feed due first, for a spec that changed a fixture feed.
     app.post('/api/test/cycle', async (c) => {
       if (!deps.cycle) return c.json({ error: 'no_jobs' }, 404)
-      return c.json(await deps.cycle())
+      return c.json(await deps.cycle({ refetch: c.req.query('refetch') === '1' }))
     })
   }
 

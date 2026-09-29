@@ -47,10 +47,11 @@ test('after sync, five opens, a filter change and Back make no request to /api o
 test('a reload renders the list from the device before any sync answers', async ({ page }) => {
   await page.goto('/reading')
   await synced(page)
+  const subscriptions = await page.getByTestId('subscription').count()
   // Hold every sync call: what shows now can only come from IndexedDB.
   await page.route('**/api/v1/sync**', () => new Promise(() => {}))
   await page.route('**/api/v1/me', () => new Promise(() => {}))
   await page.reload()
   await expect(page.getByTestId('article-row').first()).toBeVisible()
-  await expect(page.getByTestId('subscription')).toHaveCount(2)
+  await expect(page.getByTestId('subscription')).toHaveCount(subscriptions)
 })

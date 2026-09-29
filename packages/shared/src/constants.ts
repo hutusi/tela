@@ -66,5 +66,11 @@ export type ClaimStatus = (typeof CLAIM_STATUSES)[number]
 /** Max length of a recommendation note, enforced in app code and by a DB check. */
 export const RECOMMENDATION_NOTE_MAX = 500
 
+/** A highlight is a passage, not a page: past this it is a copy of the post (ADR 0026). */
+export const HIGHLIGHT_QUOTE_MAX = 2000
+/** Context kept either side of a highlight, to find it again in a changed post. */
+export const HIGHLIGHT_CONTEXT = 32
+export const HIGHLIGHT_NOTE_MAX = 2000
+
 /** Unread horizon: articles older than this never count as unread. */
 export const UNREAD_HORIZON_DAYS = 30

@@ -65,8 +65,13 @@ export async function addFeed(
  * Run tela-jobs' sweeps until nothing is due: fetches, extraction, titles, bodies, claims. Local
  * dev fires no crons; production's minute tick does this.
  */
-export async function cycle(request: APIRequestContext): Promise<void> {
-  const res = await request.post(`${BASE}/api/test/cycle`, { headers: ORIGIN })
+export async function cycle(
+  request: APIRequestContext,
+  options: { refetch?: boolean } = {},
+): Promise<void> {
+  const res = await request.post(`${BASE}/api/test/cycle${options.refetch ? '?refetch=1' : ''}`, {
+    headers: ORIGIN,
+  })
   if (!res.ok()) throw new Error(`cycle failed: ${res.status()} ${await res.text()}`)
 }
 
@@ -103,3 +108,46 @@ export async function ensureFeeds(paths: string[]): Promise<void> {
     await context.dispose()
   }
 }
+
+/** Select `needle` inside the first leaf of a body column that contains it, as a reader's drag would. */
+export async function selectText(
+  page: Page,
+  needle: string,
+  column = 'body-original',
+): Promise<void> {
+  await page.evaluate(
+    ({ needle, column }) => {
+      const leaf = [...document.querySelectorAll(`[data-testid="${column}"] [data-tb]`)].find(
+        (el) => el.textContent?.includes(needle),
+      )
+      if (!leaf) throw new Error(`no leaf holds ${needle}`)
+      const start = (leaf.textContent ?? '').indexOf(needle)
+      const walker = document.createTreeWalker(leaf, NodeFilter.SHOW_TEXT)
+      const range = document.createRange()
+      let at = 0
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const length = (node as Text).data.length
+        if (start >= at && start < at + length) range.setStart(node, start - at)
+        if (start + needle.length <= at + length) {
+          range.setEnd(node, start + needle.length - at)
+          break
+        }
+        at += length
+      }
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+    },
+    { needle, column },
+  )
+}
+
+/** The text of every highlight painted on the page (CSS Custom Highlight API). */
+export const painted = (page: Page) =>
+  page.evaluate(() => {
+    const registry = (CSS as unknown as { highlights?: Map<string, Set<Range>> }).highlights
+    return [
+      ...(registry?.get('tela-highlight') ?? []),
+      ...(registry?.get('tela-highlight-active') ?? []),
+    ].map((range) => range.toString())
+  })

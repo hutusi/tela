@@ -186,8 +186,12 @@ export function useArticleTranslation(
     })
   }, [content, final, chunks])
 
-  const failedLeaves = final?.failedLeaves ?? current?.failedLeaves ?? []
-  const untranslated = content ? blocksContaining(content, failedLeaves) : []
+  // Memoized: the pairs, and the highlights painted over them, are rebuilt when this changes.
+  const failed = (final?.failedLeaves ?? current?.failedLeaves ?? []).join('|')
+  const untranslated = useMemo(
+    () => (content ? blocksContaining(content, failed ? failed.split('|') : []) : []),
+    [content, failed],
+  )
   const state: ReaderTranslationState = current
     ? ((current.state === 'skipped' ? 'failed' : current.state) as ReaderTranslationState)
     : 'none'

@@ -20,6 +20,7 @@ import { createRelayClient } from '@tela/ingest/relay'
 import { configFromEnv, createTranslator, isAccidentalMock, type Translator } from '@tela/llm'
 import { memoryJobs, systemClock } from '@tela/platform'
 import { d1Db, queueJobs, r2Blobs } from '@tela/platform/cloudflare'
+import { sql } from 'drizzle-orm'
 import { daily } from './daily'
 import type { Env } from './env'
 import type { JobMessage, JobQueues } from './kinds'
@@ -120,9 +121,14 @@ export class Ingest extends WorkerEntrypoint<Env> implements IngestApi {
    * Test mode only: run the sweeps now, and everything they lead to, until nothing is due. Local
    * dev fires no crons, and the local queues' batch timeout would make every e2e step wait.
    */
-  async cycle() {
+  async cycle(options: { refetch?: boolean } = {}) {
     if (this.env.ENV !== 'test') throw new Error('cycle() is for the e2e stack only')
-    return settle({ ...context(this.env), jobs: memoryJobs<JobQueues>() })
+    const ctx = { ...context(this.env), jobs: memoryJobs<JobQueues>() }
+    // A spec that changed a fixture feed needs it fetched again now, not at its next interval.
+    if (options.refetch) {
+      await ctx.db.run(sql`update feeds set next_fetch_at = 0 where status = 'active'`)
+    }
+    return settle(ctx)
   }
 }
 
