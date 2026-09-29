@@ -20,8 +20,9 @@ import {
   memoryPersistence,
   type Persistence,
 } from '../src/store/db'
+import { LocalStore } from '../src/store/local'
 import { metaKeys, seedEarlierBuild } from './earlier-build'
-import { profile, pull, sub } from './rows'
+import { NOW, profile, pull, sub } from './rows'
 
 const change = (mid: string, at: number, articleId: number) =>
   ({ mutation: { mid, at, type: 'markRead', articleId } }) as Pending
@@ -314,6 +315,33 @@ describe('the device database', () => {
       cursor: 90,
     })
     expect((await ahead.load()).cursor).toBe(102)
+  })
+
+  test('a tab ahead of the copy passes its whole copy with each pull, so the copy catches up', async () => {
+    const name = fresh()
+    const tab = async () => {
+      const store = new LocalStore(await indexedDbPersistence(name), () => NOW)
+      await store.open()
+      return store
+    }
+    const ahead = await tab()
+    await ahead.setUser('a')
+    await ahead.applyPull(
+      pull(100, { profile: [profile], subscriptions: [sub(1)] }, true),
+      ahead.epoch,
+    )
+    await ahead.applyPull(pull(101, { subscriptions: [sub(2)] }), ahead.epoch)
+    // Another tab of a lands its slower snapshot at 100, which sets the copy back.
+    const behind = await tab()
+    await behind.applyPull(
+      pull(100, { profile: [profile], subscriptions: [sub(1)] }, true),
+      behind.epoch,
+    )
+    // The tab ahead pulls 101..102, which touches nothing: its whole copy lands instead.
+    await ahead.applyPull(pull(102, {}), ahead.epoch)
+    const stored = await (await indexedDbPersistence(name)).load()
+    expect(stored.cursor).toBe(102)
+    expect(stored.rows?.subscriptions.map((x) => x.feedId)).toEqual([1, 2])
   })
 })
 
