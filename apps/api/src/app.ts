@@ -9,6 +9,7 @@ import { Hono } from 'hono'
 import { type Auth, createAuth } from './auth'
 import type { ApiDeps } from './deps'
 import { claimRoutes } from './routes/claims'
+import { curate } from './routes/curate'
 import { feedRoutes } from './routes/feeds'
 import { memberRoutes } from './routes/members'
 import { publicRoutes } from './routes/public'
@@ -72,6 +73,22 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
       ))
     await auth.api.sendVerificationOTP({ body: { email, type: 'sign-in' } })
     return c.json({ userId: user.id, created: !existing })
+  })
+
+  /** Add a curated blog's feed and feature it in Discover (`bun run admin curate`). */
+  app.post('/api/admin/curate', async (c) => {
+    const token = deps.config.adminToken
+    const given = c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
+    if (!token || !sameSecret(given, token)) return c.json({ error: 'forbidden' }, 403)
+    const body = await c.req
+      .json<{ feedUrl?: unknown; topics?: unknown }>()
+      .catch(() => ({}) as { feedUrl?: unknown; topics?: unknown })
+    if (typeof body.feedUrl !== 'string') return c.json({ error: 'invalid_url' }, 400)
+    const topics = Array.isArray(body.topics)
+      ? body.topics.filter((t): t is string => typeof t === 'string')
+      : []
+    const result = await curate(deps, body.feedUrl, topics)
+    return 'error' in result ? c.json(result, 422) : c.json(result)
   })
 
   if (deps.config.testMode) {

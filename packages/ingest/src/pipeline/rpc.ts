@@ -30,7 +30,7 @@ export interface Ingest {
    * Register a feed a member chose. A URL Tela already follows is taken as is; a new one is
    * fetched and parsed first, so nothing that is not a feed becomes a feed row.
    */
-  addFeed(input: { feedUrl: string; actorId: string }): Promise<AddFeedResult>
+  addFeed(input: { feedUrl: string; actorId: string | null }): Promise<AddFeedResult>
   /** Find the blog behind a URL a member says is theirs, and file its feed under that home. */
   startClaim(input: { url: string; actorId: string }): Promise<StartClaimResult>
   /** The feed URLs of an OPML document. Parsing only: the feed parsers stay in tela-jobs. */
