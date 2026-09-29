@@ -4,7 +4,9 @@
  * `useSyncExternalStore`; the snapshot changes identity exactly when the view does.
  *
  * Every change is written through to storage, so a reload, a crash or a day offline loses
- * nothing the member did.
+ * nothing the member did. Every write names the account it is for, and storage refuses it once
+ * the copy is no longer that account's (another tab signed in as someone else, or out): the tab
+ * then hears `onLost` and leaves, rather than write one account's rows into another's.
  */
 import {
   type ArticleRow,
@@ -22,7 +24,7 @@ import {
   tablesFromRows,
   view,
 } from '@tela/sync'
-import type { Persistence } from './db'
+import type { Change, Persistence } from './db'
 
 /** A mutation as the UI states it: the store adds the id and the time. */
 export type MutationInput = Mutation extends infer M
@@ -51,7 +53,21 @@ export class LocalStore {
   private listeners = new Set<() => void>()
   /** Called after every local mutation, so the sync engine can push. */
   onMutation: (() => void) | null = null
+  /**
+   * Called once when storage refuses a write because the copy is no longer this tab's account:
+   * nothing this tab holds belongs to whoever has it now.
+   */
+  onLost: (() => void) | null = null
+  /** The account this tab holds: every write is made for it, and every request names it. */
   userId: string | null = null
+  /**
+   * Moves on whenever the tab stops holding what it held: another account, or none. An answer to
+   * a request sent before is for rows the tab no longer has, so it is dropped (`applyPull` and
+   * `acknowledge` take the epoch their request was sent in).
+   */
+  epoch = 0
+  /** The epoch `onLost` was last called in: once is enough. */
+  private lostIn = -1
   /**
    * Articles the member reached outside what the device syncs (a search hit older than the
    * horizon): held for this visit only, so the reader can open them like any other.
@@ -85,7 +101,7 @@ export class LocalStore {
   /** Load what the device kept from its last visit. */
   async open(): Promise<void> {
     const saved = await this.persistence.load()
-    this.userId = saved.userId
+    this.userId = saved.owner
     this.confirmed = {
       cursor: saved.cursor,
       tables: saved.rows ? tablesFromRows(saved.rows) : emptyTables(),
@@ -119,18 +135,47 @@ export class LocalStore {
     for (const listener of this.listeners) listener()
   }
 
+  /** Hold `owner` from now on, and nothing yet: whatever was held is not theirs. */
+  private reset(owner: string | null) {
+    this.epoch++
+    this.userId = owner
+    this.confirmed = { cursor: 0, tables: emptyTables() }
+    this.pending = []
+    this.transient = new Map()
+    this.transientNames = new Map()
+    this.recompute()
+  }
+
+  /** Write through as `owner`. A refusal means the copy is someone else's now. */
+  private async write(owner: string, epoch: number, change: Change): Promise<void> {
+    if (await this.persistence.commit(owner, change)) return
+    // Refused after the tab itself moved on (a sign-in here, or a forget): nothing it holds is lost.
+    if (epoch !== this.epoch || this.lostIn === epoch) return
+    this.lostIn = epoch
+    this.onLost?.()
+  }
+
   /** Make a change now, on this device, and queue it for the server. */
   mutate(input: MutationInput): void {
+    const owner = this.userId
+    // Nobody's rows are held: the change would be no one's, and could go to anyone.
+    if (owner === null) return
     const mutation = { ...input, mid: newMid(), at: this.now() } as Mutation
     const entry: Pending = { mutation }
     this.pending = [...this.pending, entry]
     this.recompute()
-    void this.persistence.savePending([entry])
+    void this.write(owner, this.epoch, { put: [entry] })
     this.onMutation?.()
   }
 
-  /** Fold a pull in. Only the tables it touched are rewritten. */
-  async applyPull(pull: PullResponse): Promise<void> {
+  /**
+   * Fold in a pull asked for in `epoch`, unless the tab has stopped holding those rows since. Only
+   * the tables it touched are rewritten, in one write with the cursor, so a cursor never lands
+   * on tables another tab wrote.
+   */
+  async applyPull(pull: PullResponse, epoch: number): Promise<void> {
+    const owner = this.userId
+    if (owner === null || epoch !== this.epoch) return
     const before = this.confirmed.tables
     const held = this.pending
     this.confirmed = applyPull(this.confirmed, pull)
@@ -139,7 +184,7 @@ export class LocalStore {
     const rows = rowsOf(this.confirmed.tables)
     const changed: Partial<TableRows> = {}
     for (const name of Object.keys(rows) as (keyof TableRows)[]) {
-      const held = before[name as keyof Tables]
+      const was = before[name as keyof Tables]
       const now = this.confirmed.tables[name as keyof Tables]
       const touched =
         pull.reset ||
@@ -147,12 +192,14 @@ export class LocalStore {
         // Pruning after a pull can drop articles, states and titles no row of theirs named; it
         // only ever removes, so a changed size is how to tell. (Every map is a fresh copy after
         // a pull, so identity says nothing.)
-        (held instanceof Map && now instanceof Map && held.size !== now.size)
+        (was instanceof Map && now instanceof Map && was.size !== now.size)
       if (touched) (changed as Record<string, unknown>)[name] = rows[name]
     }
-    await this.persistence.saveTables(changed)
-    await this.persistence.saveMeta({ cursor: this.confirmed.cursor })
-    await this.persistence.dropPending(gone(held, this.pending))
+    await this.write(owner, epoch, {
+      tables: changed,
+      cursor: this.confirmed.cursor,
+      drop: gone(held, this.pending),
+    })
   }
 
   /** What to push next: mutations the server has not answered for, oldest first. */
@@ -163,8 +210,13 @@ export class LocalStore {
       .map((p) => p.mutation)
   }
 
-  /** Record a push's answer: acknowledged ones wait for a pull; refused ones are undone. */
-  async acknowledge(res: PushResponse): Promise<void> {
+  /**
+   * Record the answer to a push sent in `epoch`, unless the tab has stopped holding those rows
+   * since: acknowledged ones wait for a pull; refused ones are undone.
+   */
+  async acknowledge(res: PushResponse, epoch: number): Promise<void> {
+    const owner = this.userId
+    if (owner === null || epoch !== this.epoch) return
     const applied = new Set(res.applied)
     const refused = new Set(res.rejected.map((r) => r.mid))
     const held = this.pending
@@ -173,37 +225,41 @@ export class LocalStore {
       .map((p) => (applied.has(p.mutation.mid) ? { ...p, ackedAt: res.seq } : p))
     this.pending = settle(this.confirmed, this.pending)
     this.recompute()
-    await this.persistence.savePending(this.pending.filter((p) => applied.has(p.mutation.mid)))
-    await this.persistence.dropPending(gone(held, this.pending))
-  }
-
-  /** Whose rows these are; a different member signing in on this browser starts from nothing. */
-  async setUser(userId: string): Promise<void> {
-    if (this.userId !== null && this.userId !== userId) await this.clear()
-    this.userId = userId
-    await this.persistence.saveMeta({ userId })
+    await this.write(owner, epoch, {
+      put: this.pending.filter((p) => applied.has(p.mutation.mid)),
+      drop: gone(held, this.pending),
+    })
   }
 
   /**
-   * Another tab signed in as someone else: nothing this tab holds is theirs. The stored copy goes
-   * too while it is still the old account's; the new account's tab may have replaced it already,
-   * and that one is left alone.
+   * The session is `userId`'s: make the stored copy theirs. Anyone else's copy, or one nobody
+   * owns, is wiped first, and so is what this tab holds of it. Says whether the tab was holding
+   * another account, whose rows its page may still be showing.
    */
-  async forgetAccount(): Promise<void> {
-    const stale = this.userId
-    if ((await this.persistence.storedUserId()) === stale) await this.persistence.clear()
-    this.confirmed = { cursor: 0, tables: emptyTables() }
-    this.pending = []
-    this.userId = null
-    this.recompute()
+  async setUser(userId: string): Promise<boolean> {
+    const previous = this.userId
+    // Before the claim, so an answer already on its way for `previous` finds the epoch moved.
+    if (previous !== userId) this.reset(userId)
+    const wiped = await this.persistence.claim(userId)
+    // The copy stopped being this account's after the tab loaded it: what it holds is gone there.
+    if (wiped && previous === userId) this.reset(userId)
+    return previous !== null && previous !== userId
   }
 
-  /** Forget everything: signing out. */
-  async clear(): Promise<void> {
-    this.confirmed = { cursor: 0, tables: emptyTables() }
-    this.pending = []
-    this.userId = null
-    await this.persistence.clear()
-    this.recompute()
+  /**
+   * Nothing this tab holds is the session's any more: another tab signed in as someone else, or
+   * the session ended. The stored copy goes too while it is still this tab's account's; if the
+   * new account's tab has claimed it already, that one is left alone.
+   */
+  async forgetAccount(): Promise<void> {
+    const owner = this.userId
+    // First, so nothing still on its way for the old account lands after this.
+    this.reset(null)
+    if (owner !== null) await this.persistence.release(owner)
+  }
+
+  /** Signing out: forget this account, and only this account's copy, as `forgetAccount`. */
+  clear(): Promise<void> {
+    return this.forgetAccount()
   }
 }

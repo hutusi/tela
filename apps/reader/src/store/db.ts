@@ -2,17 +2,34 @@
  * What the device keeps between visits, in IndexedDB (`idb`: a thin wrapper over the web
  * standard, chosen so there is almost nothing between Tela and the browser to age):
  *
- * - `meta`: the cursor, who the rows belong to, and the pending mutations, one record each
- *   (`pending:<mid>`). Tabs share this database, and each holds only its own pending list in
- *   memory: one record for the whole list let a tab's save erase another tab's unsent changes.
+ * - `meta`: whose rows these are (`owner`), the cursor, and the pending mutations, one record
+ *   each (`pending:<mid>`, tagged with the owner that queued it). Tabs share this database, and
+ *   each holds only its own pending list in memory: one record for the whole list let a tab's
+ *   save erase another tab's unsent changes.
  * - `tables`: one record per synced table (a few thousand rows at most; written whole).
  * - `bodies`: content objects by content key, with when each was last opened, for eviction.
  * - `objects`: translation and chunk objects by their R2 key. Immutable, like bodies.
  *
+ * One copy, one owner. Tabs share the copy, and a tab may still hold an account another tab has
+ * signed out of, so no write of a member's rows trusts what its tab remembers: each is one
+ * readwrite transaction that reads `owner` first and writes nothing unless it is the writer's.
+ * IndexedDB runs readwrite transactions whose scopes overlap one at a time, across every
+ * connection, so no other tab can come between the check and the write. Between them nothing but
+ * IndexedDB requests is awaited: a transaction left idle commits, and the check with it.
+ *
+ * Bodies and objects are public and content-addressed, the same for every account, so writing
+ * them checks nothing; a change of owner clears them with everything else.
+ *
  * Everything here can be rebuilt from the server, so a browser that clears it loses nothing.
  */
 import type { Pending, TableRows } from '@tela/sync'
-import { type DBSchema, type IDBPDatabase, openDB } from 'idb'
+import {
+  type DBSchema,
+  type IDBPDatabase,
+  type IDBPTransaction,
+  openDB,
+  type StoreNames,
+} from 'idb'
 
 export type StoredBody = { key: string; object: unknown; bytes: number; lastOpened: number }
 export type StoredObject = { key: string; object: unknown; at: number }
@@ -25,24 +42,39 @@ interface TelaDB extends DBSchema {
 }
 
 export type Persisted = {
-  userId: string | null
+  /** Whose rows these are. Null means nobody's, and then nothing is stored. */
+  owner: string | null
   cursor: number
   rows: TableRows | null
   pending: Pending[]
 }
 
+/** One write of an owner's rows: whatever it names lands together, or none of it does. */
+export type Change = {
+  tables?: Partial<TableRows>
+  cursor?: number
+  /** Unsent changes to record, one record each, so no tab writes over another's. */
+  put?: readonly Pending[]
+  /** Changes to forget: answered and caught up with, or refused. */
+  drop?: readonly string[]
+}
+
 /** What the store needs from storage; IndexedDB in the browser, memory in tests. */
 export interface Persistence {
+  /**
+   * The copy and its owner, and only the pending changes that owner queued. A copy with no owner
+   * (every earlier build's, which recorded `userId` instead) is nobody's to trust: it is wiped.
+   */
   load(): Promise<Persisted>
-  /** Whose rows are stored now: another tab may have signed in as someone else since `load`. */
-  storedUserId(): Promise<string | null>
-  saveTables(rows: Partial<TableRows>): Promise<void>
-  saveMeta(meta: { cursor?: number; userId?: string | null }): Promise<void>
-  /** Record these unsent changes, one record each, so no tab writes over another's. */
-  savePending(entries: readonly Pending[]): Promise<void>
-  /** Forget these changes: answered and caught up with, or refused. */
-  dropPending(mids: readonly string[]): Promise<void>
-  clear(): Promise<void>
+  /** Make the copy `owner`'s. Anyone else's, or nobody's, is wiped first; says whether it was. */
+  claim(owner: string): Promise<boolean>
+  /** Wipe the copy while it is still `owner`'s; another account's is left alone. Says which. */
+  release(owner: string): Promise<boolean>
+  /**
+   * Write `change` if the copy is still `owner`'s. False, having written nothing, when it is not;
+   * an IndexedDB failure (a full disk, an abort) rejects instead, so it never looks like one.
+   */
+  commit(owner: string, change: Change): Promise<boolean>
   getBody(key: string): Promise<StoredBody | undefined>
   putBody(body: StoredBody): Promise<void>
   touchBody(key: string, at: number): Promise<void>
@@ -76,8 +108,16 @@ const TABLES: (keyof TableRows)[] = [
   'translations',
 ]
 
+const OWNER = 'owner'
+const CURSOR = 'cursor'
+/** Earlier builds' keys: the owner, and the whole pending list in one record. Never read. */
+const LEGACY = ['userId', 'pending']
 const PENDING = 'pending:'
 const pendingKey = (mid: string) => `${PENDING}${mid}`
+const pendingRange = () => IDBKeyRange.bound(PENDING, `${PENDING}\uffff`)
+
+/** A pending change as stored: tagged with the account that queued it. */
+type StoredPending = Pending & { owner: string }
 
 /** Oldest first, as they were made; `mid` only orders two made in the same millisecond. */
 function inOrder(entries: Iterable<Pending>): Pending[] {
@@ -88,6 +128,10 @@ function inOrder(entries: Iterable<Pending>): Pending[] {
   )
 }
 
+const STORES = ['meta', 'tables', 'bodies', 'objects'] as const
+type Store = StoreNames<TelaDB>
+type Tx = IDBPTransaction<TelaDB, Store[], 'readwrite'>
+
 export async function indexedDbPersistence(name = 'tela'): Promise<Persistence> {
   const db: IDBPDatabase<TelaDB> = await openDB<TelaDB>(name, 1, {
     upgrade(d) {
@@ -97,74 +141,88 @@ export async function indexedDbPersistence(name = 'tela'): Promise<Persistence> 
       d.createObjectStore('objects', { keyPath: 'key' })
     },
   })
+
+  /**
+   * One readwrite transaction over `scope`, settled once it has committed. `body` may await only
+   * the transaction's own requests.
+   */
+  async function write<T>(scope: readonly Store[], body: (tx: Tx) => Promise<T>): Promise<T> {
+    const tx = db.transaction([...scope], 'readwrite')
+    const [result] = await Promise.all([body(tx), tx.done])
+    return result
+  }
+
+  const ownerOf = async (tx: Tx) =>
+    ((await tx.objectStore('meta').get(OWNER)) as string | undefined) ?? null
+
+  const wipe = (tx: Tx) => Promise.all(STORES.map((s) => tx.objectStore(s).clear()))
+
   return {
-    async load() {
-      const tx = db.transaction(['meta', 'tables'])
-      const meta = tx.objectStore('meta')
-      const [userId, cursor, legacy, keyed] = await Promise.all([
-        meta.get('userId'),
-        meta.get('cursor'),
-        meta.get('pending'),
-        meta.getAll(IDBKeyRange.bound(PENDING, `${PENDING}\uffff`)),
-      ])
-      const values = await Promise.all(TABLES.map((t) => tx.objectStore('tables').get(t)))
-      const complete = values.every((v) => v !== undefined)
-      const rows = complete
-        ? (Object.fromEntries(TABLES.map((t, i) => [t, values[i]])) as TableRows)
-        : null
-      // An earlier build kept the whole list in one record: move it into records of its own.
-      const old = (legacy as Pending[] | undefined) ?? []
-      if (legacy !== undefined) {
-        const move = db.transaction('meta', 'readwrite')
-        for (const e of old) await move.store.put(e, pendingKey(e.mutation.mid))
-        await move.store.delete('pending')
-        await move.done
-      }
-      return {
-        userId: (userId as string | undefined) ?? null,
-        cursor: rows ? Number(cursor ?? 0) : 0,
-        rows,
-        pending: inOrder([...old, ...(keyed as Pending[])]),
-      }
-    },
-    async storedUserId() {
-      return ((await db.get('meta', 'userId')) as string | undefined) ?? null
-    },
-    async saveTables(rows) {
-      const tx = db.transaction('tables', 'readwrite')
-      for (const [name, value] of Object.entries(rows)) {
-        await tx.store.put(value, name as keyof TableRows)
-      }
-      await tx.done
-    },
-    async saveMeta(meta) {
-      const tx = db.transaction('meta', 'readwrite')
-      if (meta.cursor !== undefined) await tx.store.put(meta.cursor, 'cursor')
-      if (meta.userId !== undefined) await tx.store.put(meta.userId, 'userId')
-      await tx.done
-    },
-    async savePending(entries) {
-      if (entries.length === 0) return
-      const tx = db.transaction('meta', 'readwrite')
-      for (const e of entries) await tx.store.put(e, pendingKey(e.mutation.mid))
-      await tx.done
-    },
-    async dropPending(mids) {
-      if (mids.length === 0) return
-      const tx = db.transaction('meta', 'readwrite')
-      for (const mid of mids) await tx.store.delete(pendingKey(mid))
-      await tx.done
-    },
-    async clear() {
-      const tx = db.transaction(['meta', 'tables', 'bodies', 'objects'], 'readwrite')
-      await Promise.all([
-        tx.objectStore('meta').clear(),
-        tx.objectStore('tables').clear(),
-        tx.objectStore('bodies').clear(),
-        tx.objectStore('objects').clear(),
-      ])
-      await tx.done
-    },
+    load: () =>
+      write(STORES, async (tx) => {
+        const owner = await ownerOf(tx)
+        if (owner === null) {
+          await wipe(tx)
+          return { owner: null, cursor: 0, rows: null, pending: [] }
+        }
+        const meta = tx.objectStore('meta')
+        const [cursor, keys, records, values] = await Promise.all([
+          meta.get(CURSOR),
+          meta.getAllKeys(pendingRange()),
+          meta.getAll(pendingRange()) as Promise<StoredPending[]>,
+          Promise.all(TABLES.map((t) => tx.objectStore('tables').get(t))),
+        ])
+        // Changes queued for anyone else (or no one) are not this owner's to send.
+        const pending: Pending[] = []
+        const stray: Promise<void>[] = LEGACY.map((k) => meta.delete(k))
+        records.forEach((record, i) => {
+          const key = keys[i]
+          if (record.owner === owner) pending.push(untag(record))
+          else if (key !== undefined) stray.push(meta.delete(key))
+        })
+        await Promise.all(stray)
+        const complete = values.every((v) => v !== undefined)
+        return {
+          owner,
+          cursor: complete ? Number(cursor ?? 0) : 0,
+          rows: complete
+            ? (Object.fromEntries(TABLES.map((t, i) => [t, values[i]])) as TableRows)
+            : null,
+          pending: inOrder(pending),
+        }
+      }),
+    claim: (owner) =>
+      write(STORES, async (tx) => {
+        if ((await ownerOf(tx)) === owner) return false
+        await wipe(tx)
+        await tx.objectStore('meta').put(owner, OWNER)
+        return true
+      }),
+    release: (owner) =>
+      write(STORES, async (tx) => {
+        // Nothing of `owner`'s is in a copy that is someone else's: the claim that made it
+        // theirs wiped it, and every write since checked the owner.
+        if ((await ownerOf(tx)) !== owner) return false
+        await wipe(tx)
+        return true
+      }),
+    commit: (owner, change) =>
+      write(['meta', 'tables'], async (tx) => {
+        if ((await ownerOf(tx)) !== owner) return false
+        const meta = tx.objectStore('meta')
+        const tables = tx.objectStore('tables')
+        await Promise.all([
+          ...Object.entries(change.tables ?? {}).map(([t, rows]) =>
+            tables.put(rows, t as keyof TableRows),
+          ),
+          ...(change.cursor === undefined ? [] : [meta.put(change.cursor, CURSOR)]),
+          ...(change.put ?? []).map((e) =>
+            meta.put({ ...e, owner } satisfies StoredPending, pendingKey(e.mutation.mid)),
+          ),
+          ...(change.drop ?? []).map((mid) => meta.delete(pendingKey(mid))),
+        ])
+        return true
+      }),
     getBody: (key) => db.get('bodies', key),
     async putBody(body) {
       await db.put('bodies', body)
@@ -200,45 +258,61 @@ export async function indexedDbPersistence(name = 'tela'): Promise<Persistence> 
   }
 }
 
+/** A stored pending record as the store holds it: without the tag. */
+function untag(record: StoredPending): Pending {
+  const { mutation, ackedAt } = record
+  return ackedAt === undefined ? { mutation } : { mutation, ackedAt }
+}
+
 /** Storage that forgets everything: tests, and browsers that refuse IndexedDB. */
 export function memoryPersistence(): Persistence {
-  let meta: Omit<Persisted, 'rows' | 'pending'> = { userId: null, cursor: 0 }
-  const pending = new Map<string, Pending>()
+  let owner: string | null = null
+  let cursor = 0
   let tables: Partial<TableRows> = {}
+  // Only the owner's: a claim wipes them with everything else, and every write checks.
+  const pending = new Map<string, Pending>()
   const bodies = new Map<string, StoredBody>()
   const objects = new Map<string, StoredObject>()
+  const wipe = () => {
+    cursor = 0
+    tables = {}
+    pending.clear()
+    bodies.clear()
+    objects.clear()
+  }
   return {
     async load() {
+      if (owner === null) {
+        wipe()
+        return { owner: null, cursor: 0, rows: null, pending: [] }
+      }
       const complete = TABLES.every((t) => t in tables)
       return {
-        ...meta,
+        owner,
+        cursor: complete ? cursor : 0,
         rows: complete ? (tables as TableRows) : null,
         pending: inOrder(pending.values()),
       }
     },
-    storedUserId: async () => meta.userId,
-    async saveTables(rows) {
-      tables = { ...tables, ...rows }
+    async claim(o) {
+      if (owner === o) return false
+      wipe()
+      owner = o
+      return true
     },
-    async saveMeta(m) {
-      meta = {
-        ...meta,
-        ...(m.cursor !== undefined ? { cursor: m.cursor } : {}),
-        ...(m.userId !== undefined ? { userId: m.userId } : {}),
-      }
+    async release(o) {
+      if (owner !== o) return false
+      wipe()
+      owner = null
+      return true
     },
-    async savePending(entries) {
-      for (const e of entries) pending.set(e.mutation.mid, e)
-    },
-    async dropPending(mids) {
-      for (const mid of mids) pending.delete(mid)
-    },
-    async clear() {
-      meta = { userId: null, cursor: 0 }
-      pending.clear()
-      tables = {}
-      bodies.clear()
-      objects.clear()
+    async commit(o, change) {
+      if (owner !== o) return false
+      tables = { ...tables, ...change.tables }
+      if (change.cursor !== undefined) cursor = change.cursor
+      for (const e of change.put ?? []) pending.set(e.mutation.mid, e)
+      for (const mid of change.drop ?? []) pending.delete(mid)
+      return true
     },
     getBody: async (key) => bodies.get(key),
     putBody: async (b) => void bodies.set(b.key, b),
