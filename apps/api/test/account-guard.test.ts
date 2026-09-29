@@ -328,6 +328,12 @@ describe('signing out', () => {
     expect(await sessions(b)).toBe(0)
   })
 
+  test('a current client naming no one is refused like one naming someone else', async () => {
+    const res = await signOut({ [CLIENT_HEADER]: '2', [MEMBER_HEADER]: undefined })
+    expect(res.status).toBe(409)
+    expect(await sessions(b)).toBe(1)
+  })
+
   test('a shell before protocol 2 names no one, and signs out as it always did', async () => {
     expect((await signOut(oldShell)).status).toBe(200)
     expect(await sessions(b)).toBe(0)
