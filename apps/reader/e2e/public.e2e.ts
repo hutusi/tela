@@ -15,12 +15,19 @@ test.describe('for a visitor', () => {
   }) => {
     const res = await page.goto('/discover')
     expect(res?.headers()['x-robots-tag']).toBe('noindex, nofollow')
+    await expect(page.locator('meta[name="robots"]')).toHaveCount(0)
     await expect(page).toHaveTitle('Discover · Tela')
     await expect(page.getByTestId('topic-chips')).toBeVisible()
     await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible()
 
     const robots = await request.get('/robots.txt')
     expect(await robots.text()).toBe('User-agent: *\nDisallow: /\n')
+    // The app's own pages are static assets, served without the Worker: the shell says it itself.
+    await page.goto('/login')
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+      'content',
+      'noindex, nofollow',
+    )
     const missing = await page.goto('/s/999999')
     expect(missing?.status()).toBe(404)
     await expect(page.getByTestId('not-found')).toBeVisible()

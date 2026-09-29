@@ -12,6 +12,9 @@
     </script>
     <title>Tela</title>
     <meta name="description" content="Independent blogs, in any language." />
+    <!-- The shell is the app, with nothing of its own to index, and is served without the Worker,
+         so no header can say so. Public pages drop this and follow TELA_PRIVATE_BETA instead. -->
+    <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-icon.png" />

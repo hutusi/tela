@@ -30,7 +30,7 @@ directory.
 | `RESEND_API_KEY` | tela-api, tela-jobs (secret) | Sending-only Resend key for the verified domain: sign-in codes (api) and the weekly digest (jobs). Without it, api fails a code loudly and jobs skips the digest |
 | `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@ainaive.com>` |
 | `PUBLIC_URL` | tela-api, tela-jobs | The one public origin: better-auth's base URL and trusted origin, claim `rel="me"` targets, the WebSub callback |
-| `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response carries `X-Robots-Tag: noindex, nofollow` (ADR 0015) |
+| `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var |
 | `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, and fetches to private addresses. Never deployed |
 | `WORKER_USER_AGENT` | tela-jobs | Sent on every fetch; keep a contact URL in it |
 | `FETCH_TIMEOUT_MS` | tela-jobs, the relay | Per-request timeout, default 20000 |

@@ -136,6 +136,8 @@ export function renderPublicPage(input: {
     template
       // The page's own description replaces the site's, before the page's is put in.
       .replace(/\s*<meta name="description"[^>]*>/, description ? '' : '$&')
+      // The shell's noindex is for the app; whether a public page is indexed is the edge's header.
+      .replace(/\s*<meta name="robots"[^>]*>/, '')
       // Functions, not strings: a `$&` in a blog's title is text, not a replacement pattern.
       .replace(/<html lang="[^"]*"/, () => `<html lang="${locale}"`)
       .replace(/<title>[^<]*<\/title>/, () => meta)

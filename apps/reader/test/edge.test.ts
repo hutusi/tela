@@ -49,6 +49,7 @@ const TEMPLATE = `<!doctype html>
   <head>
     <title>Tela</title>
     <meta name="description" content="Independent blogs, in any language." />
+    <meta name="robots" content="noindex, nofollow" />
     <script type="module" crossorigin src="/assets/index-abc123.js"></script>
   </head>
   <body>
@@ -236,6 +237,8 @@ describe('public pages', () => {
     expect(html).toContain('<title>Discover · Tela</title>')
     expect(html).toMatch(/<div id="root">.*Garden Notes.*<\/div><script id="tela-data"/s)
     expect(html).toContain('/assets/index-abc123.js')
+    // The shell's own noindex is for the app; a public page is indexed as the edge's header says.
+    expect(html).not.toContain('name="robots"')
     const handed = JSON.parse(
       html.match(/<script id="tela-data" type="application\/json">(.*?)<\/script>/s)?.[1] ?? '',
     )
