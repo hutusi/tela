@@ -3,7 +3,13 @@ import { bumpSeq, currentSeq, type JobQueues, schema } from '@tela/data'
 import type { Ingest } from '@tela/ingest/pipeline'
 import { type Blobs, type Jobs, memoryMail } from '@tela/platform'
 import { d1Db } from '@tela/platform/cloudflare'
-import { CLIENT_HEADER, MIN_CLIENT, type PullResponse, type PushResponse } from '@tela/sync'
+import {
+  CLIENT_HEADER,
+  MEMBER_HEADER,
+  MIN_CLIENT,
+  type PullResponse,
+  type PushResponse,
+} from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { expect, it } from 'vitest'
 import { createApp } from '../../src/app'
@@ -74,9 +80,12 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     .map((c) => c.split(';')[0])
     .join('; ')
   const me = (await (await call('/api/v1/me', { cookie })).json()) as {
+    id: string
     profile: { handle: string }
   }
   expect(me.profile.handle).toMatch(/^u_[0-9a-f]{10}$/)
+  // Every other member call names the member, as the reader does from what /me told it.
+  const member = { cookie, headers: { [MEMBER_HEADER]: me.id } }
 
   // A feed with an article, written the way every writer of synced rows writes.
   const now = Date.now()
@@ -118,11 +127,11 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     ],
   }
   const pushed = (await (
-    await call('/api/v1/mutations', { body: push, cookie })
+    await call('/api/v1/mutations', { body: push, ...member })
   ).json()) as PushResponse
   expect(pushed.applied).toHaveLength(4)
   const again = (await (
-    await call('/api/v1/mutations', { body: push, cookie })
+    await call('/api/v1/mutations', { body: push, ...member })
   ).json()) as PushResponse
   expect(again.applied).toHaveLength(4)
   const likes = await db.all<{ like_count: number }>(
@@ -131,13 +140,13 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   expect(likes).toEqual([{ like_count: 1 }])
 
   // A snapshot pull, then an empty delta.
-  const snap = (await (await call('/api/v1/sync?cursor=0', { cookie })).json()) as PullResponse
+  const snap = (await (await call('/api/v1/sync?cursor=0', member)).json()) as PullResponse
   expect(snap.rows.articles.map((a) => a.id)).toEqual([1])
   expect(snap.rows.states).toMatchObject([{ articleId: 1, likedAt: now }])
   expect(snap.rows.subscriptions).toMatchObject([{ feedId: 1 }])
   expect(snap.rows.highlights).toMatchObject([{ id: 'workers-hl-1', end: 4, note: 'on D1' }])
   const delta = (await (
-    await call(`/api/v1/sync?cursor=${snap.cursor}`, { cookie })
+    await call(`/api/v1/sync?cursor=${snap.cursor}`, member)
   ).json()) as PullResponse
   expect(delta.rows.articles).toEqual([])
   expect(delta.more).toBe(false)

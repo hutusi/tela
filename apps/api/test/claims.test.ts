@@ -2,11 +2,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { first } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
-import { createTestApi, signedIn, type TestApi } from './helpers'
+import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 let server: FixtureServer
 let api: TestApi
-let reader: { cookie: string; userId: string }
+let reader: SignedIn
 
 beforeAll(async () => {
   server = await FixtureServer.start()
@@ -35,9 +35,9 @@ type Standing = {
   status: string
   proofs?: { meta: string; relMe: string }
 }
-const start = async (cookie = reader.cookie) =>
+const start = async (as = reader) =>
   (await (
-    await api.request('/api/v1/claims', { body: { url: server.url('/') }, cookie })
+    await api.request('/api/v1/claims', { body: { url: server.url('/') }, as })
   ).json()) as Standing
 
 describe('claiming a blog', () => {
@@ -55,15 +55,12 @@ describe('claiming a blog', () => {
     const mine = await start()
     expect((await start()).proofs?.meta).toBe(mine.proofs?.meta)
     const other = await signedIn(api, 'other@x.test')
-    expect((await start(other.cookie)).proofs?.meta).not.toBe(mine.proofs?.meta)
+    expect((await start(other)).proofs?.meta).not.toBe(mine.proofs?.meta)
   })
 
   test('asking for the check makes a pending claim and sends it to be verified', async () => {
     const { siteId } = await start()
-    const res = await api.request(`/api/v1/claims/${siteId}/verify`, {
-      body: {},
-      cookie: reader.cookie,
-    })
+    const res = await api.request(`/api/v1/claims/${siteId}/verify`, { body: {}, as: reader })
     expect(((await res.json()) as Standing).status).toBe('pending')
     const claim = await first<{ id: number; status: string; token: string; seq: number }>(
       api.db,
@@ -81,10 +78,7 @@ describe('claiming a blog', () => {
     const owner = await signedIn(api, 'owner@x.test')
     await api.db.run(sql`update sites set claimed_by = ${owner.userId} where id = ${siteId}`)
     expect((await start()).status).toBe('claimed_by_other')
-    const verify = await api.request(`/api/v1/claims/${siteId}/verify`, {
-      body: {},
-      cookie: reader.cookie,
-    })
+    const verify = await api.request(`/api/v1/claims/${siteId}/verify`, { body: {}, as: reader })
     expect(((await verify.json()) as Standing).status).toBe('claimed_by_other')
     expect(await first(api.db, sql`select 1 as x from site_claims`)).toBeUndefined()
   })
@@ -98,10 +92,7 @@ describe('claiming a blog', () => {
       res.writeHead(404)
       res.end()
     })
-    const res = await api.request('/api/v1/claims', {
-      body: { url: server.url('/') },
-      cookie: reader.cookie,
-    })
+    const res = await api.request('/api/v1/claims', { body: { url: server.url('/') }, as: reader })
     expect(res.status).toBe(422)
   })
 })

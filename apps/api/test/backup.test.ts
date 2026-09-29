@@ -18,11 +18,9 @@ import {
 } from '@tela/data'
 import { createTestDb } from '@tela/data/testing'
 import { memoryBlobs } from '@tela/platform/portable'
-import { CLIENT_HEADER, MIN_CLIENT, type PullResponse } from '@tela/sync'
+import type { PullResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { createTestApi, signedIn } from './helpers'
-
-const client = { [CLIENT_HEADER]: String(MIN_CLIENT) }
 
 /** A member with a feed, posts, a like and a highlight, all written the way the app writes them. */
 async function seeded() {
@@ -43,10 +41,9 @@ async function seeded() {
         values (${id}, 1, ${`k${id}`}, ${`Post ${id}`}, ${now}, ${now}, ${'a'.repeat(32)}, ${currentSeq})`),
     ] as never)
   }
-  const { cookie } = await signedIn(api, 'reader@x.test')
+  const reader = await signedIn(api, 'reader@x.test')
   const push = await api.request('/api/v1/mutations', {
-    cookie,
-    headers: client,
+    as: reader,
     body: {
       mutations: [
         { mid: 'backup-sub-001', at: now, type: 'subscribe', feedId: 1 },
@@ -126,9 +123,9 @@ describe('the nightly export', () => {
 
     // The exit path: the same app on the restored data. Sessions were not kept, so sign in again.
     const again = await createTestApi({}, { db: fresh })
-    const { cookie } = await signedIn(again, 'reader@x.test')
+    const reader = await signedIn(again, 'reader@x.test')
     const pull = (await (
-      await again.request('/api/v1/sync?cursor=0', { cookie, headers: client })
+      await again.request('/api/v1/sync?cursor=0', { as: reader })
     ).json()) as PullResponse
     expect(pull.rows.subscriptions.map((s) => s.feedId)).toEqual([1])
     expect(pull.rows.articles).toHaveLength(7)

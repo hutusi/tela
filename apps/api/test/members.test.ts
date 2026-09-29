@@ -3,11 +3,11 @@ import { bumpSeq, currentSeq, first, type TelaDb } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { likePattern } from '../src/routes/members'
 import { PUBLIC_CACHE } from '../src/routes/public'
-import { createTestApi, signedIn, type TestApi } from './helpers'
+import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 let api: TestApi
 let db: TelaDb
-let reader: { cookie: string; userId: string }
+let reader: SignedIn
 
 async function blog(
   id: number,
@@ -32,8 +32,8 @@ beforeEach(async () => {
   reader = await signedIn(api)
 })
 
-const put = (path: string, body: unknown, cookie = reader.cookie) =>
-  api.request(path, { method: 'PUT', body, cookie })
+const put = (path: string, body: unknown, as = reader) =>
+  api.request(path, { method: 'PUT', body, as })
 
 describe('profile', () => {
   test('sets a handle, name and bio, and refuses bad or taken handles', async () => {
@@ -51,7 +51,7 @@ describe('profile', () => {
     expect((await put('/api/v1/profile', { handle: 'ab' })).status).toBe(400)
     expect((await put('/api/v1/profile', { handle: 'admin' })).status).toBe(400)
     const other = await signedIn(api, 'other@x.test')
-    const taken = await put('/api/v1/profile', { handle: 'reader_1' }, other.cookie)
+    const taken = await put('/api/v1/profile', { handle: 'reader_1' }, other)
     expect(taken.status).toBe(409)
     expect(await taken.json()).toEqual({ error: 'handle_taken' })
   })
@@ -61,9 +61,7 @@ describe("a blog's own settings", () => {
   test('only the member who claimed it may change them, and they sync', async () => {
     await blog(1, 'listed', reader.userId)
     const other = await signedIn(api, 'other@x.test')
-    expect((await put('/api/v1/sites/1/translation', { optOut: true }, other.cookie)).status).toBe(
-      403,
-    )
+    expect((await put('/api/v1/sites/1/translation', { optOut: true }, other)).status).toBe(403)
     const before =
       (await first<{ seq: number }>(db, sql`select seq from sites where id = 1`))?.seq ?? 0
     expect(await (await put('/api/v1/sites/1/translation', { optOut: true })).json()).toEqual({
@@ -90,9 +88,7 @@ describe('dashboard', () => {
     const fan = await signedIn(api, 'fan@x.test')
     await db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at)
       values (${fan.userId}, 1, 'lovely', 5, 5)`)
-    const res = (await (
-      await api.request('/api/v1/dashboard', { cookie: reader.cookie })
-    ).json()) as {
+    const res = (await (await api.request('/api/v1/dashboard', { as: reader })).json()) as {
       sites: { id: number; posts: { title: string }[] }[]
       notes: { note: string; handle: string }[]
     }
@@ -109,12 +105,13 @@ describe('search', () => {
     await blog(3, 'private', null, 'Gardeners Hidden')
     await db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at)
       values (${reader.userId}, 2, 0, 0)`)
-    const res = (await (
-      await api.request('/api/v1/search?q=garden', { cookie: reader.cookie })
-    ).json()) as { sites: { id: number }[]; articles: { feedId: number }[] }
+    const res = (await (await api.request('/api/v1/search?q=garden', { as: reader })).json()) as {
+      sites: { id: number }[]
+      articles: { feedId: number }[]
+    }
     expect(res.sites.map((s) => s.id).sort()).toEqual([1, 2])
     const posts = (await (
-      await api.request('/api/v1/search?q=post%20on', { cookie: reader.cookie })
+      await api.request('/api/v1/search?q=post%20on', { as: reader })
     ).json()) as { articles: { feedId: number }[] }
     expect(posts.articles.map((a) => a.feedId)).toEqual([2])
   })
@@ -128,9 +125,7 @@ describe('search', () => {
       values (${article?.id}, 'zh-Hans', 1, '花园笔记', 'done', 'h', 0)`)
     const search = async (q: string) =>
       (await (
-        await api.request(`/api/v1/search?q=${encodeURIComponent(q)}&lang=zh-Hans`, {
-          cookie: reader.cookie,
-        })
+        await api.request(`/api/v1/search?q=${encodeURIComponent(q)}&lang=zh-Hans`, { as: reader })
       ).json()) as { articles: { title: string; translatedTitle: string | null }[] }
     expect((await search('花园')).articles).toMatchObject([
       { title: 'Post on blog 1', translatedTitle: '花园笔记' },

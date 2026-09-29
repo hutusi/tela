@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { ACTION_LIMITS, bumpSeq, currentSeq, first, type TelaDb, utcDay } from '@tela/data'
 import { USER_DAILY_TRANSLATION_TOKENS } from '@tela/shared'
-import { CLIENT_HEADER, MIN_CLIENT, type PullResponse } from '@tela/sync'
+import type { PullResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { reservationFor } from '../src/routes/translations'
-import { createTestApi, signedIn, type TestApi } from './helpers'
+import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 let api: TestApi
 let db: TelaDb
-let reader: { cookie: string; userId: string }
+let reader: SignedIn
 
 async function article(options: { optOut?: boolean; lang?: string; chars?: number } = {}) {
   await db.batch([
@@ -27,7 +27,7 @@ async function article(options: { optOut?: boolean; lang?: string; chars?: numbe
 }
 
 const ask = (body: Record<string, unknown> = { articleId: 1, lang: 'zh-Hans' }) =>
-  api.request('/api/v1/translations', { body, cookie: reader.cookie })
+  api.request('/api/v1/translations', { body, as: reader })
 const askJson = async (body?: Record<string, unknown>) => {
   const res = await ask(body)
   return { code: res.status, ...((await res.json()) as { status: string; translation: unknown }) }
@@ -132,14 +132,11 @@ describe('asking for a translation', () => {
     await article()
     await db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at, seq)
       values (${reader.userId}, 1, 0, 0, 0)`)
-    const client = { [CLIENT_HEADER]: String(MIN_CLIENT) }
     const snap = (await (
-      await api.request('/api/v1/sync?cursor=0', { cookie: reader.cookie, headers: client })
+      await api.request('/api/v1/sync?cursor=0', { as: reader })
     ).json()) as PullResponse
     await askJson()
-    const status = await api.request('/api/v1/translations/ckey1/zh-Hans', {
-      cookie: reader.cookie,
-    })
+    const status = await api.request('/api/v1/translations/ckey1/zh-Hans', { as: reader })
     expect(status.headers.get('cache-control')).toBe('no-store')
     expect(await status.json()).toEqual({
       contentKey: 'ckey1',
@@ -150,10 +147,7 @@ describe('asking for a translation', () => {
       failedLeaves: [],
     })
     const delta = (await (
-      await api.request(`/api/v1/sync?cursor=${snap.cursor}`, {
-        cookie: reader.cookie,
-        headers: client,
-      })
+      await api.request(`/api/v1/sync?cursor=${snap.cursor}`, { as: reader })
     ).json()) as PullResponse
     expect(delta.rows.translations).toMatchObject([{ contentKey: 'ckey1', state: 'requested' }])
   })

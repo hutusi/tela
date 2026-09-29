@@ -4,6 +4,7 @@ import { createTestDb } from '@tela/data/testing'
 import { createHttpClient } from '@tela/ingest/http'
 import { createIngest } from '@tela/ingest/pipeline'
 import { fakeClock, memoryBlobs, memoryJobs, memoryMail } from '@tela/platform/portable'
+import { CLIENT_HEADER, MEMBER_HEADER, MIN_CLIENT } from '@tela/sync'
 import { createApp } from '../src/app'
 import type { ApiConfig } from '../src/deps'
 
@@ -48,26 +49,41 @@ export async function createTestApi(
     ingest,
     config: config as ApiConfig,
   })
-  /** A request as the browser sends it through tela-web: same origin, JSON, cookies. */
+  /**
+   * A request as the browser sends it through tela-web: same origin, JSON, cookies. `as` is a
+   * member's current client: their cookie, and the protocol version and member id every member
+   * route requires. `cookie` alone is a client that names nothing, as an old shell does.
+   * `headers` go last, over both, and one given as `undefined` is left out.
+   */
   const request = (
     path: string,
     init: {
       method?: string
       body?: unknown
+      /** Sent as the body verbatim (OPML), instead of JSON. */
+      raw?: string
+      as?: SignedIn
       cookie?: string
-      headers?: Record<string, string>
+      headers?: Record<string, string | undefined>
     } = {},
-  ) =>
-    app.request(`${ORIGIN}${path}`, {
-      method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
-      headers: {
-        origin: ORIGIN,
-        ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...(init.cookie ? { cookie: init.cookie } : {}),
-        ...init.headers,
-      },
-      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+  ) => {
+    const given: Record<string, string | undefined> = {
+      origin: ORIGIN,
+      ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...(init.as ? { cookie: init.as.cookie, ...init.as.headers } : {}),
+      ...(init.cookie ? { cookie: init.cookie } : {}),
+      ...init.headers,
+    }
+    const headers: Record<string, string> = {}
+    for (const [name, value] of Object.entries(given))
+      if (value !== undefined) headers[name] = value
+    const body = init.body === undefined ? init.raw : JSON.stringify(init.body)
+    return app.request(`${ORIGIN}${path}`, {
+      method: init.method ?? (body === undefined ? 'GET' : 'POST'),
+      headers,
+      ...(body === undefined ? {} : { body }),
     })
+  }
   return { app, auth, db, mail, jobs, blobs, clock, request }
 }
 
@@ -89,8 +105,17 @@ export function codeFor(api: TestApi, email: string): string {
   return code
 }
 
-/** Invite a member and sign them in; returns their session cookie and user id. */
-export async function signedIn(api: TestApi, email = 'reader@x.test') {
+/** What a current client sends on every member call: its protocol, and whose rows it holds. */
+export const memberHeaders = (userId: string): Record<string, string> => ({
+  [CLIENT_HEADER]: String(MIN_CLIENT),
+  [MEMBER_HEADER]: userId,
+})
+
+/** A signed-in member: their session cookie, their id, and what their client names itself with. */
+export type SignedIn = { cookie: string; userId: string; headers: Record<string, string> }
+
+/** Invite a member and sign them in. Pass the result as a request's `as` to call as them. */
+export async function signedIn(api: TestApi, email = 'reader@x.test'): Promise<SignedIn> {
   const invited = await api.request('/api/admin/invite', {
     body: { email },
     headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
@@ -100,7 +125,7 @@ export async function signedIn(api: TestApi, email = 'reader@x.test') {
     body: { email, otp: codeFor(api, email) },
   })
   if (res.status !== 200) throw new Error(`sign-in failed: ${res.status} ${await res.text()}`)
-  return { cookie: cookiesOf(res), userId }
+  return { cookie: cookiesOf(res), userId, headers: memberHeaders(userId) }
 }
 
 export type { TelaDb }

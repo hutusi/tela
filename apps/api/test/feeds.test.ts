@@ -2,11 +2,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { ACTION_LIMITS, first } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
-import { createTestApi, signedIn, type TestApi } from './helpers'
+import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 let server: FixtureServer
 let api: TestApi
-let reader: { cookie: string; userId: string }
+let reader: SignedIn
 
 beforeAll(async () => {
   server = await FixtureServer.start()
@@ -34,7 +34,7 @@ beforeEach(async () => {
   })
 })
 
-const post = (path: string, body: unknown) => api.request(path, { body, cookie: reader.cookie })
+const post = (path: string, body: unknown) => api.request(path, { body, as: reader })
 /** Discovery also tries well-known paths on the origin, so "no feed" means none anywhere. */
 const noFeedAnywhere = () =>
   server.set('/feed.xml', (_req, res) => {
@@ -109,10 +109,7 @@ describe('adding a feed', () => {
 
   test('a feed Tela already follows is not fetched again to be added', async () => {
     const other = await signedIn(api, 'other@x.test')
-    await api.request('/api/v1/feeds', {
-      body: { feedUrl: server.url('/feed.xml') },
-      cookie: other.cookie,
-    })
+    await api.request('/api/v1/feeds', { body: { feedUrl: server.url('/feed.xml') }, as: other })
     const before = server.requestsFor('/feed.xml').length
     expect((await post('/api/v1/feeds', { feedUrl: server.url('/feed.xml') })).status).toBe(200)
     expect(server.requestsFor('/feed.xml').length).toBe(before)
@@ -134,10 +131,10 @@ describe('OPML', () => {
       .map((u) => `<outline text="x" xmlUrl="${u}"/>`)
       .join('')}</body></opml>`
   const importOpml = (text: string) =>
-    api.app.request(`${'http://tela.test'}/api/v1/feeds/opml`, {
-      method: 'POST',
-      headers: { origin: 'http://tela.test', cookie: reader.cookie, 'content-type': 'text/x-opml' },
-      body: text,
+    api.request('/api/v1/feeds/opml', {
+      raw: text,
+      as: reader,
+      headers: { 'content-type': 'text/x-opml' },
     })
 
   test('imports every feed without fetching, subscribes the member, and leaves them due', async () => {
@@ -176,7 +173,7 @@ describe('OPML', () => {
     await api.db.run(
       sql`update subscriptions set deleted_at = 1 where feed_id = ${b?.id} and user_id = ${reader.userId}`,
     )
-    const res = await api.request('/api/v1/feeds/opml', { cookie: reader.cookie })
+    const res = await api.request('/api/v1/feeds/opml', { as: reader })
     expect(res.headers.get('content-type')).toContain('text/x-opml')
     const text = await res.text()
     expect(text).toContain('xmlUrl="https://a.example/feed"')

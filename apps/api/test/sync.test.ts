@@ -1,16 +1,15 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { bumpSeq, currentSeq, first, headSeq, type TelaDb } from '@tela/data'
-import { CLIENT_HEADER, MIN_CLIENT, type PullResponse, type PushResponse } from '@tela/sync'
+import { MEMBER_HEADER, type PullResponse, type PushResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
-import { createTestApi, signedIn, type TestApi } from './helpers'
+import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 const DAY = 24 * 60 * 60 * 1000
-const client = { [CLIENT_HEADER]: String(MIN_CLIENT) }
 
 let api: TestApi
 let db: TelaDb
 let now: number
-let reader: { cookie: string; userId: string }
+let reader: SignedIn
 
 /** Write in one batch that bumps the sync sequence, as every writer of synced rows does. */
 async function write(...statements: ReturnType<TelaDb['run']>[]) {
@@ -36,20 +35,19 @@ async function addArticle(feedId: number, fetchedAt = now) {
   return id
 }
 
-const pull = async (cursor: number, cookie = reader.cookie) => {
-  const res = await api.request(`/api/v1/sync?cursor=${cursor}`, { cookie, headers: client })
+const pull = async (cursor: number, as = reader) => {
+  const res = await api.request(`/api/v1/sync?cursor=${cursor}`, { as })
   expect(res.status).toBe(200)
   return (await res.json()) as PullResponse
 }
 
 let mids = 0
-const push = async (mutations: Record<string, unknown>[], cookie = reader.cookie) => {
+const push = async (mutations: Record<string, unknown>[], as = reader) => {
   const res = await api.request('/api/v1/mutations', {
     body: {
       mutations: mutations.map((m) => ({ mid: `mid-${++mids}-padding`, at: now, ...m })),
     },
-    cookie,
-    headers: client,
+    as,
   })
   expect(res.status).toBe(200)
   return (await res.json()) as PushResponse
@@ -153,9 +151,9 @@ describe('pull', () => {
 
   test("never another member's rows", async () => {
     const other = await signedIn(api, 'other@x.test')
-    await push([{ type: 'subscribe', feedId: 1 }], other.cookie)
+    await push([{ type: 'subscribe', feedId: 1 }], other)
     const a = await addArticle(1)
-    await push([{ type: 'setLiked', articleId: a, liked: true }], other.cookie)
+    await push([{ type: 'setLiked', articleId: a, liked: true }], other)
     const mine = await pull(0)
     expect(mine.rows.subscriptions).toEqual([])
     expect(mine.rows.articles).toEqual([])
@@ -167,10 +165,7 @@ describe('pull', () => {
     const res = await api.request('/api/v1/sync?cursor=0', { cookie: reader.cookie })
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'upgrade' })
-    const bad = await api.request('/api/v1/sync?cursor=-1', {
-      cookie: reader.cookie,
-      headers: client,
-    })
+    const bad = await api.request('/api/v1/sync?cursor=-1', { as: reader })
     expect(bad.status).toBe(400)
   })
 
@@ -215,8 +210,7 @@ describe('push', () => {
     const body = {
       mutations: [{ mid: 'replayed-mid-1', at: now, type: 'setLiked', articleId: a, liked: true }],
     }
-    const send = () =>
-      api.request('/api/v1/mutations', { body, cookie: reader.cookie, headers: client })
+    const send = () => api.request('/api/v1/mutations', { body, as: reader })
     await send()
     const before = await state(a)
     const again = (await (await send()).json()) as PushResponse
@@ -229,11 +223,7 @@ describe('push', () => {
     // setProfile has no timestamp to compare; only the applied-mutation guard stops the revert.
     const older = { mid: 'profile-older-mid', at: now, type: 'setProfile', readingLang: 'en' }
     const send = (m: Record<string, unknown>) =>
-      api.request('/api/v1/mutations', {
-        body: { mutations: [m] },
-        cookie: reader.cookie,
-        headers: client,
-      })
+      api.request('/api/v1/mutations', { body: { mutations: [m] }, as: reader })
     await send(older)
     await send({ mid: 'profile-newer-mid', at: now, type: 'setProfile', readingLang: 'zh-Hans' })
     await send(older) // the response to the first was lost; the client sends it again
@@ -336,7 +326,10 @@ describe('push', () => {
   })
 
   test('without a session, nothing', async () => {
-    const res = await api.request('/api/v1/mutations', { body: { mutations: [] }, headers: client })
+    const res = await api.request('/api/v1/mutations', {
+      body: { mutations: [] },
+      headers: reader.headers,
+    })
     expect(res.status).toBe(401)
   })
 })
@@ -411,14 +404,14 @@ describe('highlights', () => {
     await push([highlight('hl-mine-001', a, { note: 'mine' })])
     const other = await signedIn(api, 'other@x.test')
     now += 10
-    await push([highlight('hl-mine-001', a, { note: 'theirs' })], other.cookie)
-    await push([{ type: 'deleteHighlight', id: 'hl-mine-001' }], other.cookie)
+    await push([highlight('hl-mine-001', a, { note: 'theirs' })], other)
+    await push([{ type: 'deleteHighlight', id: 'hl-mine-001' }], other)
     const row = await first<{ user_id: string; note: string; deleted_at: number | null }>(
       db,
       sql`select user_id, note, deleted_at from highlights where id = 'hl-mine-001'`,
     )
     expect(row).toEqual({ user_id: reader.userId, note: 'mine', deleted_at: null })
-    expect((await pull(0, other.cookie)).rows.highlights).toEqual([])
+    expect((await pull(0, other)).rows.highlights).toEqual([])
   })
 
   test('an empty range, or a quote that is not the range, is refused', async () => {
@@ -463,24 +456,18 @@ describe('a feed merged into another (ADR 0028)', () => {
 
 describe('a device holding another account (another tab switched)', () => {
   test('a pull or a push naming someone else is refused, and the push applies nothing', async () => {
-    const other = { ...client, 'x-tela-member': 'u_someone_else' }
-    const res = await api.request('/api/v1/sync?cursor=0', {
-      cookie: reader.cookie,
-      headers: other,
-    })
+    const other = { [MEMBER_HEADER]: 'u_someone_else' }
+    const res = await api.request('/api/v1/sync?cursor=0', { as: reader, headers: other })
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'account_changed' })
     const pushed = await api.request('/api/v1/mutations', {
       body: { mutations: [{ mid: 'mid-other-account', at: now, type: 'subscribe', feedId: 1 }] },
-      cookie: reader.cookie,
+      as: reader,
       headers: other,
     })
     expect(pushed.status).toBe(409)
     expect(await db.all(sql`select 1 from subscriptions`)).toEqual([])
 
-    const own = { ...client, 'x-tela-member': reader.userId }
-    expect(
-      (await api.request('/api/v1/sync?cursor=0', { cookie: reader.cookie, headers: own })).status,
-    ).toBe(200)
+    expect((await api.request('/api/v1/sync?cursor=0', { as: reader })).status).toBe(200)
   })
 })

@@ -10,10 +10,8 @@ import { describe, expect, test } from 'bun:test'
 import { bumpSeq, currentSeq } from '@tela/data'
 import {
   applyPull,
-  CLIENT_HEADER,
   type Confirmed,
   emptyTables,
-  MIN_CLIENT,
   type Mutation,
   type Pending,
   type PullResponse,
@@ -73,8 +71,7 @@ async function scenario(seed: number, steps: number) {
   const random = rng(seed)
   const pick = <T>(xs: readonly T[]): T | undefined => xs[Math.floor(random() * xs.length)]
   const api: TestApi = await createTestApi()
-  const { cookie } = await signedIn(api)
-  const headers = { [CLIENT_HEADER]: String(MIN_CLIENT) }
+  const member = await signedIn(api)
   let nextArticle = 1
   const write = (...s: ReturnType<typeof api.db.run>[]) =>
     api.db.batch([bumpSeq(api.db), ...s] as never)
@@ -102,7 +99,7 @@ async function scenario(seed: number, steps: number) {
 
   const pull = async () => {
     for (;;) {
-      const res = await api.request(`/api/v1/sync?cursor=${confirmed.cursor}`, { cookie, headers })
+      const res = await api.request(`/api/v1/sync?cursor=${confirmed.cursor}`, { as: member })
       const body = (await res.json()) as PullResponse
       confirmed = applyPull(confirmed, body)
       pending = settle(confirmed, pending)
@@ -114,8 +111,7 @@ async function scenario(seed: number, steps: number) {
     if (batch.length === 0) return
     const res = await api.request('/api/v1/mutations', {
       body: { mutations: batch.map((p) => p.mutation) },
-      cookie,
-      headers,
+      as: member,
     })
     if (loseResponse) return // applied on the server; the device never hears, and sends again
     const body = (await res.json()) as PushResponse
@@ -200,9 +196,7 @@ async function scenario(seed: number, steps: number) {
   expect(pending).toEqual([])
   const snapshot = applyPull(
     { cursor: 0, tables: emptyTables() },
-    (await (
-      await api.request('/api/v1/sync?cursor=0', { cookie, headers })
-    ).json()) as PullResponse,
+    (await (await api.request('/api/v1/sync?cursor=0', { as: member })).json()) as PullResponse,
   )
   expect(live(view(confirmed, pending))).toEqual(live(snapshot.tables))
 }
