@@ -250,7 +250,7 @@ export function createEdge(deps: EdgeDeps) {
 async function readAtMost(
   body: ReadableStream<Uint8Array>,
   max: number,
-): Promise<Uint8Array | null> {
+): Promise<Uint8Array<ArrayBuffer> | null> {
   const reader = body.getReader()
   const chunks: Uint8Array[] = []
   let total = 0

@@ -26,6 +26,6 @@
     "@vitest/runner": "^4.1.0",
     "@vitest/snapshot": "^4.1.0",
     "vitest": "^4.1.0",
-    "wrangler": "^4.129.0"
+    "wrangler": "^4.143.0"
   }
 }

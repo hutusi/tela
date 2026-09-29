@@ -294,3 +294,22 @@ export function rowsOf(tables: Tables) {
 }
 
 export type { ArticleRow, ClaimRow, FeedRow, SiteRow, SubscriptionRow, TitleRow, TranslationRow }
+
+export type TableRows = ReturnType<typeof rowsOf>
+
+/** The inverse of `rowsOf`: tables back from what was persisted. */
+export function tablesFromRows(rows: TableRows): Tables {
+  return {
+    profile: rows.profile,
+    prefs: new Map(rows.prefs.map((r) => [r.key, r])),
+    subscriptions: new Map(rows.subscriptions.map((r) => [r.feedId, r])),
+    feeds: new Map(rows.feeds.map((r) => [r.id, r])),
+    sites: new Map(rows.sites.map((r) => [r.id, r])),
+    articles: new Map(rows.articles.map((r) => [r.id, r])),
+    titles: new Map(rows.titles.map((r) => [titleKey(r.articleId, r.lang), r])),
+    states: new Map(rows.states.map((r) => [r.articleId, r])),
+    recommendations: new Map(rows.recommendations.map((r) => [r.articleId, r])),
+    claims: new Map(rows.claims.map((r) => [r.id, r])),
+    translations: new Map(rows.translations.map((r) => [translationKey(r.contentKey, r.lang), r])),
+  }
+}

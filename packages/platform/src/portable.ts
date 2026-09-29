@@ -65,9 +65,13 @@ export function libsqlDb<TSchema extends Record<string, unknown>>(options: {
   return { db: db as unknown as Db<TSchema>, client }
 }
 
-function toBytes(body: string | Uint8Array | ArrayBuffer): Uint8Array {
+function toBytes(body: string | Uint8Array | ArrayBuffer): Uint8Array<ArrayBuffer> {
   if (typeof body === 'string') return new TextEncoder().encode(body)
-  return body instanceof Uint8Array ? body : new Uint8Array(body)
+  if (body instanceof ArrayBuffer) return new Uint8Array(body)
+  // A view over a shared buffer cannot be a fetch body: copy it out.
+  return body.buffer instanceof ArrayBuffer
+    ? (body as Uint8Array<ArrayBuffer>)
+    : new Uint8Array(body)
 }
 
 function blobObject(key: string, bytes: Uint8Array, contentType: string | null): BlobObject {
