@@ -63,8 +63,15 @@ binding. The test suite runs on the portable column; production runs on the Clou
   - `lease_fence.x` is `NOT NULL`, so a lost lease aborts the whole batch, on D1 and libSQL
     alike.
   - The batch ends by releasing the lease.
-- **start and fail.** Starting work renews the lease and raises `attempts`; a reported failure
-  sets `not_before` with exponential backoff, and at the maximum the item becomes a dead letter.
+- **start and fail.** Starting work takes the claim over under a fresh owner, renews the lease
+  and raises `attempts`, in one statement; a reported failure sets `not_before` with exponential
+  backoff, and at the maximum the item becomes a dead letter.
+  The takeover is what makes a claim start once (2026-09-29). Queues deliver at least once, and
+  a start that only renewed the claim let two deliveries of one message both start, run side by
+  side and both pass the fence, since both held the claim's owner: a body translation paid for
+  every block twice. Taken over, the claim's owner no longer holds anything, so the second
+  delivery starts nothing and is dropped as `lost`. The run's owner is `<claim>><random>`:
+  random, because it names one execution, and two deliveries of a message are two.
   The count is taken at the start, not at the failure (2026-09-28, found in the Gate G2 shadow
   run): a holder that dies over its CPU or memory limit reports nothing, and its lease only
   expires. Counted at failure, that item would be claimed again every TTL for ever, at the price

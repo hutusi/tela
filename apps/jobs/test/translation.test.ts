@@ -391,6 +391,27 @@ describe('bodies', () => {
     expect(await runJob(ctx, stale!)).toEqual({ status: 'lost' })
     expect((await bodyRow(key))?.chunk_keys).toBe('[]')
   })
+
+  test('a message delivered twice at once starts once: every leaf is paid for once', async () => {
+    const ctx = context()
+    await addReader()
+    await ingest(ctx, feed(['Post'], 12))
+    const key = await request(1, 'zh-Hans')
+    const { tick, runJob } = await import('../src/runner')
+    await tick(ctx)
+    const [message] = ctx.jobs.take('translate')
+    calls.length = 0
+    // Queues deliver at least once: two consumers run the same message side by side.
+    const outcomes = await Promise.all([runJob(ctx, message!), runJob(ctx, message!)])
+    expect(outcomes.map((o) => o.status).sort()).toEqual(['done', 'lost'])
+    const row = await bodyRow(key)
+    expect(row?.state).toBe('done')
+    const sent = calls.flatMap((c) => c.blocks.map((b) => b.id))
+    expect(sent.length).toBeGreaterThan(0)
+    expect(new Set(sent).size).toBe(sent.length)
+    const chunks = JSON.parse(row!.chunk_keys) as string[]
+    expect(new Set(chunks).size).toBe(chunks.length)
+  })
 })
 
 async function contentKeyOf(articleId: number) {

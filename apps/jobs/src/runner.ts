@@ -126,13 +126,18 @@ export type RunOutcome =
 export async function runJob(ctx: JobsContext, message: JobMessage): Promise<RunOutcome> {
   const spec = KINDS[message.kind]
   if (!spec) return { status: 'unknown-kind' }
-  const lease: Lease = { kind: message.kind, key: message.key, owner: message.owner }
-  // Renew the claim and count the attempt before any work. A message that waited in its queue
-  // past the lease is dropped here, before it spends a model call the fence would then throw
-  // away; the lease counts from when the work starts; and an attempt that dies without reporting
-  // has still been counted, so it cannot retry for ever.
-  const started = await startLease(ctx.db, lease, ctx.clock.now(), spec.ttlMs)
+  const claim: Lease = { kind: message.kind, key: message.key, owner: message.owner }
+  // Take the claim over, renew it and count the attempt before any work. Queues deliver at least
+  // once, and a second delivery of this message finds the claim already taken over and is
+  // dropped here, as is a message that waited in its queue past the lease: neither spends a model
+  // call. The lease counts from when the work starts, and an attempt that dies without reporting
+  // has still been counted, so it cannot retry for ever. The run's owner is random, not derived
+  // from the message: it names this execution, and two deliveries of one message are two
+  // executions that nothing else may confuse.
+  const runOwner = `${message.owner}>${Math.random().toString(36).slice(2, 10)}`
+  const started = await startLease(ctx.db, claim, runOwner, ctx.clock.now(), spec.ttlMs)
   if (started === null) return { status: 'lost' }
+  const lease = started.lease
   let error: string
   try {
     const result = await spec.run(ctx, lease)

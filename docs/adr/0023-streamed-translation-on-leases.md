@@ -62,9 +62,12 @@ that way (AGENTS.md).
     charged to the day of the reservation.
   - Background work (titles) charges subject `'*'`. The title sweep claims nothing once the
     day's budget is spent.
-- **A claim is renewed before any work.** `runJob` extends the lease first and drops a message
-  whose claim lapsed while it waited in its queue. Without this, a stale message spent a model
-  call that the fence then threw away; the translation tests caught it.
+- **A claim is taken over before any work.** `runJob` first moves the lease from the claim's
+  owner to one of its own, renewing it, and drops a message whose claim lapsed while it waited in
+  its queue. Without this, a stale message spent a model call that the fence then threw away;
+  the translation tests caught it. Taking the claim over, rather than only renewing it, also
+  drops a second delivery of the same message: the queue delivers at least once, and two runs
+  under one owner both passed the fence and sent every block to the model twice (ADR 0021).
 - **No accidental mock.** A deployment whose provider falls back to the mock (no key) has no
   translator, and the translation kinds are disabled (AGENTS.md).
 

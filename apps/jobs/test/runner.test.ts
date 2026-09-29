@@ -204,7 +204,10 @@ describe('tick and runJob', () => {
       const [message] = ctx.jobs.take('fetch')
       // runJob starts the attempt, then the invocation is killed (CPU, memory, eviction): no
       // result, no failLease, only a lease that expires.
-      expect((await startLease(db, message!, clock.now(), spec.ttlMs))?.attempts).toBe(attempt)
+      const runOwner = `${message!.owner}>killed`
+      expect((await startLease(db, message!, runOwner, clock.now(), spec.ttlMs))?.attempts).toBe(
+        attempt,
+      )
       clock.advance(spec.ttlMs + MIN)
     }
     expect((await tick(ctx))['feed.fetch']).toBe(0)

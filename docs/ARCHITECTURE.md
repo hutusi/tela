@@ -133,7 +133,8 @@ and hashes as the `NORM_VERSION` contract.
 - `src/kinds.ts` is the one table of background work: for each kind, the due query over a domain
   row, the lease length, backoff, queue, handler, what exhaustion writes, and whether it is enabled.
 - `tick` (every minute) claims each kind's due work under a lease and sends it to its queue;
-  `runJob` renews the lease (counting the attempt before any work), does the item, and never
+  `runJob` takes the claim over under its own owner (counting the attempt before any work, and
+  leaving nothing for a second delivery of the message to start), does the item, and never
   throws: a failure backs the lease off, and exhaustion dead-letters it. After a success it claims
   the next due item on the same host, two seconds later, so a backlog drains without waiting for
   ticks while each host still sees one request at a time.

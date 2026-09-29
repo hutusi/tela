@@ -269,7 +269,10 @@ says who holds it:
 **Day 2, all plain SQL** (`wrangler d1 execute tela --remote --command "…"`):
 
 - **What is held right now:** `select kind, key, owner, until, attempts, last_error from leases`.
-  A row with `until = 0` is backing off until `not_before`.
+  A row with `until = 0` is backing off until `not_before`. An owner of the form
+  `<claim>><run>` (`translate.body:mumisiw0:ji73sz>n4wdspj4`) is a run that started; a bare claim
+  owner is still waiting in its queue. A `lost` outcome for a key that finished is a duplicate
+  delivery: queues deliver at least once, and the second copy found the claim already started.
 - **What gave up:** `select * from dead_letters order by at desc limit 20`. Nothing retries a
   dead letter. Fix the cause, then make the domain row due again:
   - a feed: `update feeds set next_fetch_at = 0 where id = …`;

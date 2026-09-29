@@ -66,26 +66,32 @@ export async function claimDue(
 }
 
 /**
- * Begin work under a claim: renew it and count the attempt. Counting here rather than on failure
- * is what catches a holder that dies without reporting (over its CPU or memory limit, evicted,
- * past its wall clock): its lease only expires, and an attempt counted at failure would never be
- * counted, so the item would be retried every TTL for ever. A message that waited in its queue
- * past the lease never starts, so queue lag costs no attempt. Returns the attempt number and the
- * host the lease holds, or null when the claim was already lost.
+ * Begin work under a claim: take it over under `runOwner`, renew it and count the attempt, in one
+ * statement. The run holds the lease under its own owner from here on, so a second delivery of
+ * the same message (queues deliver at least once) finds no lease under the claim's owner and
+ * starts nothing: one claim, one start. Counting here rather than on failure is what catches a
+ * holder that dies without reporting (over its CPU or memory limit, evicted, past its wall
+ * clock): its lease only expires, and an attempt counted at failure would never be counted, so
+ * the item would be retried every TTL for ever. A message that waited in its queue past the lease
+ * never starts, so queue lag costs no attempt. Returns the lease the run now holds, the attempt
+ * number and the host, or null when the claim was already lost or already started.
  */
 export async function startLease(
   db: TelaDb,
-  lease: Lease,
+  claim: Lease,
+  runOwner: string,
   now: number,
   ttlMs: number,
-): Promise<{ attempts: number; host: string | null } | null> {
+): Promise<{ lease: Lease; attempts: number; host: string | null } | null> {
   const rows = await db.all<{ attempts: number; host: string | null }>(sql`
-    update leases set until = ${now + ttlMs}, attempts = attempts + 1
-    where kind = ${lease.kind} and key = ${lease.key} and owner = ${lease.owner}
+    update leases set owner = ${runOwner}, until = ${now + ttlMs}, attempts = attempts + 1
+    where kind = ${claim.kind} and key = ${claim.key} and owner = ${claim.owner}
       and until >= ${now}
     returning attempts, host
   `)
-  return rows[0] ?? null
+  const row = rows[0]
+  if (!row) return null
+  return { lease: { ...claim, owner: runOwner }, attempts: row.attempts, host: row.host }
 }
 
 /** Hold a lease longer. Returns false when it was lost (expired, or taken by another owner). */
