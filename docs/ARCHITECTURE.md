@@ -204,7 +204,8 @@ The only public Worker, unpinned, with no D1.
 
 A Vite + React SPA that renders from the device.
 
-- `store/local.ts` holds confirmed rows and pending mutations, written through to IndexedDB.
+- `store/local.ts` holds confirmed rows and pending mutations, written through to IndexedDB, one
+  record per pending mutation so that tabs sharing the database never erase each other's.
 - `store/engine.ts` pulls at boot, on focus, every minute and after a push. It pushes a
   quarter-second after a change, and at once (`keepalive`) when the tab hides.
 - `store/objects.ts` serves bodies and translations from memory, then IndexedDB, then `/o/*`. It

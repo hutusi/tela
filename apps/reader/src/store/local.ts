@@ -31,6 +31,12 @@ export type MutationInput = Mutation extends infer M
     : never
   : never
 
+/** The changes in `before` that `after` no longer holds. */
+const gone = (before: readonly Pending[], after: readonly Pending[]): string[] => {
+  const kept = new Set(after.map((p) => p.mutation.mid))
+  return before.filter((p) => !kept.has(p.mutation.mid)).map((p) => p.mutation.mid)
+}
+
 export type Snapshot = { version: number; tables: Tables; pendingCount: number }
 
 const newMid = () =>
@@ -116,15 +122,17 @@ export class LocalStore {
   /** Make a change now, on this device, and queue it for the server. */
   mutate(input: MutationInput): void {
     const mutation = { ...input, mid: newMid(), at: this.now() } as Mutation
-    this.pending = [...this.pending, { mutation }]
+    const entry: Pending = { mutation }
+    this.pending = [...this.pending, entry]
     this.recompute()
-    void this.persistence.saveMeta({ pending: this.pending })
+    void this.persistence.savePending([entry])
     this.onMutation?.()
   }
 
   /** Fold a pull in. Only the tables it touched are rewritten. */
   async applyPull(pull: PullResponse): Promise<void> {
     const before = this.confirmed.tables
+    const held = this.pending
     this.confirmed = applyPull(this.confirmed, pull)
     this.pending = settle(this.confirmed, this.pending)
     this.recompute()
@@ -143,7 +151,8 @@ export class LocalStore {
       if (touched) (changed as Record<string, unknown>)[name] = rows[name]
     }
     await this.persistence.saveTables(changed)
-    await this.persistence.saveMeta({ cursor: this.confirmed.cursor, pending: this.pending })
+    await this.persistence.saveMeta({ cursor: this.confirmed.cursor })
+    await this.persistence.dropPending(gone(held, this.pending))
   }
 
   /** What to push next: mutations the server has not answered for, oldest first. */
@@ -158,12 +167,14 @@ export class LocalStore {
   async acknowledge(res: PushResponse): Promise<void> {
     const applied = new Set(res.applied)
     const refused = new Set(res.rejected.map((r) => r.mid))
+    const held = this.pending
     this.pending = this.pending
       .filter((p) => !refused.has(p.mutation.mid))
       .map((p) => (applied.has(p.mutation.mid) ? { ...p, ackedAt: res.seq } : p))
     this.pending = settle(this.confirmed, this.pending)
     this.recompute()
-    await this.persistence.saveMeta({ pending: this.pending })
+    await this.persistence.savePending(this.pending.filter((p) => applied.has(p.mutation.mid)))
+    await this.persistence.dropPending(gone(held, this.pending))
   }
 
   /** Whose rows these are; a different member signing in on this browser starts from nothing. */

@@ -97,7 +97,11 @@ and the URL.
 - **The store** (`src/store/local.ts`) holds the confirmed tables and the pending mutations in
   memory, renders their combination through `useSyncExternalStore`, and writes every change
   through to IndexedDB (`idb`). A pull rewrites only the tables it touched, where pruning counts
-  as touching: an unsubscribe shrinks the articles table though no pulled row named them.
+  as touching: an unsubscribe shrinks the articles table though no pulled row named them. Each
+  pending mutation is a record of its own (`pending:<mid>` in `meta`), not one list: tabs share
+  the database and each holds only its own list in memory, so one record let a tab's save erase
+  another tab's unsent changes. (Changed on 2026-09-29, after a review found it; an older
+  device's list moves into records on first load.)
 - **When it talks** (`src/store/engine.ts`): a pull at boot, when the tab becomes visible, every
   60 s while it is, and after each push. A push goes a quarter-second after the last change, so a
   burst of reads is one request, and at once with `keepalive` when the tab is hidden or closed, so

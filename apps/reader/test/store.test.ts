@@ -93,6 +93,28 @@ describe('the device store', () => {
     expect(again.unsent()).toHaveLength(1)
   })
 
+  test('two tabs each queue a change, and the device keeps both', async () => {
+    // Two tabs share one storage; each holds only its own pending list in memory.
+    const storage = memoryPersistence()
+    const one = new LocalStore(storage, () => NOW)
+    const two = new LocalStore(storage, () => NOW + 1)
+    await one.applyPull(snapshot)
+    await two.open()
+    one.mutate({ type: 'markRead', articleId: 7 })
+    two.mutate({ type: 'markRead', articleId: 8 })
+    await new Promise((r) => setTimeout(r, 0))
+    const reopened = new LocalStore(storage, () => NOW)
+    await reopened.open()
+    expect(reopened.unsent().map((m) => m.type === 'markRead' && m.articleId)).toEqual([7, 8])
+
+    // Each tab settles only its own; the other's stays until it is sent and caught up with.
+    await one.acknowledge({ applied: one.unsent().map((m) => m.mid), rejected: [], seq: 6 })
+    await one.applyPull(pull(6, {}))
+    const later = new LocalStore(storage, () => NOW)
+    await later.open()
+    expect(later.unsent().map((m) => m.type === 'markRead' && m.articleId)).toEqual([8])
+  })
+
   test('another member signing in on this browser starts from nothing', async () => {
     const store = new LocalStore(memoryPersistence(), () => NOW)
     await store.setUser('a')

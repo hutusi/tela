@@ -35,6 +35,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "drizzle-orm": "^0.45.2",
+    "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4.3.3",
     "vite": "^8.3.1",
     "wrangler": "^4.143.0"
