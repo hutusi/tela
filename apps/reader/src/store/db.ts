@@ -48,6 +48,11 @@ export interface Persistence {
   bodyKeys(): Promise<string[]>
 }
 
+/**
+ * Every table the device holds. One missing from storage means it was written by a build that
+ * did not know it, so the device starts over from a snapshot rather than trust a cursor that has
+ * passed rows it never kept (highlights, added after the first devices synced).
+ */
 const TABLES: (keyof TableRows)[] = [
   'profile',
   'prefs',
@@ -58,6 +63,7 @@ const TABLES: (keyof TableRows)[] = [
   'titles',
   'states',
   'recommendations',
+  'highlights',
   'claims',
   'translations',
 ]

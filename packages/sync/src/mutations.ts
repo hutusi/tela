@@ -17,6 +17,14 @@ export const PREF_KEY = /^[a-z][a-z0-9_.]{0,39}$/
 /** A preference value is small JSON: theme, typography, display mode. */
 export const PREF_MAX_BYTES = 2048
 export const RECOMMENDATION_NOTE_MAX = 500
+/** A highlight is a passage, not a page: past this it is a copy of the post. */
+export const HIGHLIGHT_QUOTE_MAX = 2000
+/** Context kept either side of a highlight, to find it again in a changed post (ADR 0026). */
+export const HIGHLIGHT_CONTEXT = 32
+export const HIGHLIGHT_NOTE_MAX = 2000
+
+/** Client-minted, like `mid`, so a replayed push cannot make a second highlight. */
+const highlightId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
 
 export const mutationSchema = z.discriminatedUnion('type', [
   /** Opening an article reads it. Set once: a later markRead keeps the first time. */
@@ -49,6 +57,28 @@ export const mutationSchema = z.discriminatedUnion('type', [
     note: z.string().max(RECOMMENDATION_NOTE_MAX).nullable(),
   }),
   z.object({ ...base, type: z.literal('unrecommend'), articleId: id }),
+  /**
+   * Make a highlight, or change one: its note, or its anchor once the post has changed and the
+   * device found the passage again. The later `at` wins, and a deleted highlight stays deleted.
+   */
+  z.object({
+    ...base,
+    type: z.literal('putHighlight'),
+    id: highlightId,
+    articleId: id,
+    contentKey: z.string().regex(/^[0-9a-f]{32}$/),
+    side: z.enum(['original', 'translation']),
+    lang: z.string().max(16).nullable(),
+    leafId: z.string().min(1).max(40),
+    start: z.number().int().nonnegative(),
+    end: z.number().int().positive(),
+    quote: z.string().min(1).max(HIGHLIGHT_QUOTE_MAX),
+    prefix: z.string().max(HIGHLIGHT_CONTEXT * 2),
+    suffix: z.string().max(HIGHLIGHT_CONTEXT * 2),
+    note: z.string().max(HIGHLIGHT_NOTE_MAX).nullable(),
+  }),
+  /** Delete wins: no later edit from another device brings it back. */
+  z.object({ ...base, type: z.literal('deleteHighlight'), id: highlightId }),
 ])
 
 export type Mutation = z.infer<typeof mutationSchema>

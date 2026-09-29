@@ -97,16 +97,34 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       { mid: 'workers-sub-1', at: now, type: 'subscribe', feedId: 1 },
       { mid: 'workers-like-1', at: now, type: 'setLiked', articleId: 1, liked: true },
       { mid: 'workers-missing', at: now, type: 'markRead', articleId: 999 },
+      // A highlight writes a column named `end`, which D1 takes only quoted.
+      {
+        mid: 'workers-highlight-1',
+        at: now,
+        type: 'putHighlight',
+        id: 'workers-hl-1',
+        articleId: 1,
+        contentKey: 'a'.repeat(32),
+        side: 'original',
+        lang: null,
+        leafId: 'leaf000001',
+        start: 0,
+        end: 4,
+        quote: 'Post',
+        prefix: '',
+        suffix: '',
+        note: 'on D1',
+      },
     ],
   }
   const pushed = (await (
     await call('/api/v1/mutations', { body: push, cookie })
   ).json()) as PushResponse
-  expect(pushed.applied).toHaveLength(3)
+  expect(pushed.applied).toHaveLength(4)
   const again = (await (
     await call('/api/v1/mutations', { body: push, cookie })
   ).json()) as PushResponse
-  expect(again.applied).toHaveLength(3)
+  expect(again.applied).toHaveLength(4)
   const likes = await db.all<{ like_count: number }>(
     sql`select like_count from articles where id = 1`,
   )
@@ -117,6 +135,7 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   expect(snap.rows.articles.map((a) => a.id)).toEqual([1])
   expect(snap.rows.states).toMatchObject([{ articleId: 1, likedAt: now }])
   expect(snap.rows.subscriptions).toMatchObject([{ feedId: 1 }])
+  expect(snap.rows.highlights).toMatchObject([{ id: 'workers-hl-1', end: 4, note: 'on D1' }])
   const delta = (await (
     await call(`/api/v1/sync?cursor=${snap.cursor}`, { cookie })
   ).json()) as PullResponse

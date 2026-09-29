@@ -60,6 +60,9 @@ function live(t: Tables) {
       .filter((r) => r.deletedAt === null)
       .map((r) => ({ articleId: r.articleId, note: r.note }))
       .sort((a, b) => a.articleId - b.articleId),
+    highlights: [...t.highlights.values()]
+      .map((h) => ({ id: h.id, articleId: h.articleId, leafId: h.leafId, note: h.note }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
     prefs: [...t.prefs.values()]
       .map((p) => ({ key: p.key, value: p.value }))
       .sort((a, b) => a.key.localeCompare(b.key)),
@@ -128,7 +131,7 @@ async function scenario(seed: number, steps: number) {
     const at = api.clock.now()
     api.clock.advance(1 + Math.floor(random() * 5))
     const mid = `seed${seed}-m${++mids}-pad`
-    const choice = Math.floor(random() * 9)
+    const choice = Math.floor(random() * 12)
     const article = pick(articleIds)
     const feed = pick(FEEDS) as number
     let m: Mutation | null = null
@@ -155,6 +158,28 @@ async function scenario(seed: number, steps: number) {
     if (choice === 7 && article)
       m = { mid, at, type: 'recommend', articleId: article, note: random() < 0.5 ? 'nice' : null }
     if (choice === 8 && article) m = { mid, at, type: 'unrecommend', articleId: article }
+    // Highlights: a new one, an edit of one held (a note, or a re-anchor), or a deletion.
+    const held = pick([...shown.highlights.keys()])
+    const put = (id: string, articleId: number): Mutation => ({
+      mid,
+      at,
+      type: 'putHighlight',
+      id,
+      articleId,
+      contentKey: 'a'.repeat(32),
+      side: 'original',
+      lang: null,
+      leafId: pick(['leaf000001', 'leaf000002']) as string,
+      start: 0,
+      end: 4,
+      quote: 'Post',
+      prefix: '',
+      suffix: ' 1',
+      note: random() < 0.5 ? `note ${mids}` : null,
+    })
+    if (choice === 9 && article) m = put(`seed${seed}-h${mids}`, article)
+    if (choice === 10 && held) m = put(held, shown.highlights.get(held)?.articleId ?? 1)
+    if (choice === 11 && held) m = { mid, at, type: 'deleteHighlight', id: held }
     if (m) pending.push({ mutation: m })
   }
 

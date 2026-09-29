@@ -136,13 +136,45 @@ function statementsFor(
         `),
         recount('recommend_count', m.articleId),
       ]
+    case 'putHighlight':
+      // The id is the client's, so the update is held to this member's own live highlight: an id
+      // guessed from someone else's cannot rewrite theirs, and a deleted one stays deleted.
+      return [
+        db.run(sql`
+          insert into highlights (id, user_id, article_id, content_key, side, lang, leaf_id, start,
+            "end", quote, prefix, suffix, note, created_at, updated_at, seq)
+          select ${m.id}, ${userId}, ${m.articleId}, ${m.contentKey}, ${m.side}, ${m.lang},
+            ${m.leafId}, ${m.start}, ${m.end}, ${m.quote}, ${m.prefix}, ${m.suffix},
+            ${m.note?.trim() || null}, ${at}, ${at}, ${currentSeq}
+          where ${article(m.articleId)} and ${fresh}
+          on conflict (id) do update set
+            content_key = excluded.content_key, side = excluded.side, lang = excluded.lang,
+            leaf_id = excluded.leaf_id, start = excluded.start, "end" = excluded."end",
+            quote = excluded.quote, prefix = excluded.prefix, suffix = excluded.suffix,
+            note = excluded.note, updated_at = excluded.updated_at, seq = excluded.seq
+          where highlights.user_id = excluded.user_id and highlights.deleted_at is null
+            and excluded.updated_at >= highlights.updated_at
+        `),
+      ]
+    case 'deleteHighlight':
+      return [
+        db.run(sql`
+          update highlights set deleted_at = ${at}, updated_at = ${at}, seq = ${currentSeq}
+          where id = ${m.id} and user_id = ${userId} and deleted_at is null and ${fresh}
+        `),
+      ]
   }
 }
 
-/** Refuse what the schema cannot say: a preference value too large to sync cheaply. */
+/**
+ * Refuse what the schema cannot say: a preference value too large to sync cheaply, and a highlight
+ * whose range is empty or whose quote is not as long as it.
+ */
 function refusal(m: Mutation): string | null {
   if (m.type === 'setPref' && JSON.stringify(m.value).length > PREF_MAX_BYTES)
     return 'pref_too_large'
+  if (m.type === 'putHighlight' && (m.end <= m.start || m.quote.length !== m.end - m.start))
+    return 'invalid_range'
   return null
 }
 

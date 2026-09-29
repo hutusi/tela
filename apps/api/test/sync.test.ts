@@ -319,3 +319,109 @@ describe('push', () => {
     expect(res.status).toBe(401)
   })
 })
+
+describe('highlights', () => {
+  const KEY = 'a'.repeat(32)
+  const highlight = (id: string, articleId: number, over: Record<string, unknown> = {}) => ({
+    type: 'putHighlight',
+    id,
+    articleId,
+    contentKey: KEY,
+    side: 'original',
+    lang: null,
+    leafId: 'abcdef0123',
+    start: 4,
+    end: 9,
+    quote: 'quick',
+    prefix: 'The ',
+    suffix: ' brown',
+    note: null,
+    ...over,
+  })
+
+  test('a highlight and its note round-trip, and deleting it sends the deletion', async () => {
+    await push([{ type: 'subscribe', feedId: 1 }])
+    const a = await addArticle(1)
+    const head = (await pull(0)).cursor
+    await push([highlight('hl-one-0001', a)])
+    now += 10
+    await push([highlight('hl-one-0001', a, { note: '  worth it  ' })])
+    const delta = await pull(head)
+    expect(delta.rows.highlights).toMatchObject([
+      {
+        id: 'hl-one-0001',
+        articleId: a,
+        leafId: 'abcdef0123',
+        start: 4,
+        end: 9,
+        quote: 'quick',
+        note: 'worth it',
+        deletedAt: null,
+      },
+    ])
+    expect((await pull(0)).rows.highlights).toHaveLength(1)
+    now += 10
+    await push([{ type: 'deleteHighlight', id: 'hl-one-0001' }])
+    const deleted = (await pull(delta.cursor)).rows.highlights
+    expect(deleted.map((h) => h.id)).toEqual(['hl-one-0001'])
+    expect(deleted[0]?.deletedAt).not.toBeNull()
+    expect((await pull(0)).rows.highlights).toEqual([])
+  })
+
+  test('deleting wins: a later edit from another device does not bring it back', async () => {
+    await push([{ type: 'subscribe', feedId: 1 }])
+    const a = await addArticle(1)
+    await push([highlight('hl-two-0001', a)])
+    now += 10
+    await push([{ type: 'deleteHighlight', id: 'hl-two-0001' }])
+    now += 10
+    await push([highlight('hl-two-0001', a, { note: 'edited elsewhere' })])
+    const row = await first<{ deleted_at: number | null; note: string | null }>(
+      db,
+      sql`select deleted_at, note from highlights where id = 'hl-two-0001'`,
+    )
+    expect(row).toMatchObject({ note: null })
+    expect(row?.deleted_at).not.toBeNull()
+  })
+
+  test("an id taken from another member's highlight cannot rewrite it", async () => {
+    await push([{ type: 'subscribe', feedId: 1 }])
+    const a = await addArticle(1)
+    await push([highlight('hl-mine-001', a, { note: 'mine' })])
+    const other = await signedIn(api, 'other@x.test')
+    now += 10
+    await push([highlight('hl-mine-001', a, { note: 'theirs' })], other.cookie)
+    await push([{ type: 'deleteHighlight', id: 'hl-mine-001' }], other.cookie)
+    const row = await first<{ user_id: string; note: string; deleted_at: number | null }>(
+      db,
+      sql`select user_id, note, deleted_at from highlights where id = 'hl-mine-001'`,
+    )
+    expect(row).toEqual({ user_id: reader.userId, note: 'mine', deleted_at: null })
+    expect((await pull(0, other.cookie)).rows.highlights).toEqual([])
+  })
+
+  test('an empty range, or a quote that is not the range, is refused', async () => {
+    const a = await addArticle(1)
+    const res = await push([
+      highlight('hl-bad-0001', a, { start: 5, end: 5, quote: 'x' }),
+      highlight('hl-bad-0002', a, { start: 0, end: 3, quote: 'quick' }),
+    ])
+    expect(res.rejected.map((r) => r.error)).toEqual(['invalid_range', 'invalid_range'])
+  })
+
+  test('a highlighted article stays with the reader after they unsubscribe, with its feed', async () => {
+    await push([{ type: 'subscribe', feedId: 1 }])
+    const a = await addArticle(1)
+    await addArticle(1)
+    await push([highlight('hl-kept-001', a)])
+    const head = (await pull(0)).cursor
+    await push([{ type: 'unsubscribe', feedId: 1 }])
+    expect((await pull(0)).rows.articles.map((x) => x.id)).toEqual([a])
+    // Highlighting a post of a feed never subscribed brings it whole.
+    const b = await addArticle(2)
+    await push([highlight('hl-kept-002', b)])
+    const delta = await pull(head)
+    expect(delta.rows.articles.map((x) => x.id)).toContain(b)
+    expect(delta.rows.feeds.map((f) => f.id)).toContain(2)
+  })
+})

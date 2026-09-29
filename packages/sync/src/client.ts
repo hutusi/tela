@@ -17,6 +17,7 @@ import type {
   ArticleRow,
   ClaimRow,
   FeedRow,
+  HighlightRow,
   PrefRow,
   ProfileRow,
   RecommendationRow,
@@ -41,6 +42,8 @@ export type Tables = {
   states: Map<number, StateRow>
   /** By article id: the member's own recommendations. */
   recommendations: Map<number, RecommendationRow>
+  /** By id: the member's live highlights (a deleted one is not held). */
+  highlights: Map<string, HighlightRow>
   claims: Map<number, ClaimRow>
   /** By `${contentKey}:${lang}`. */
   translations: Map<string, TranslationRow>
@@ -65,6 +68,7 @@ export const emptyTables = (): Tables => ({
   titles: new Map(),
   states: new Map(),
   recommendations: new Map(),
+  highlights: new Map(),
   claims: new Map(),
   translations: new Map(),
 })
@@ -84,6 +88,7 @@ function copy(tables: Tables): Tables {
     titles: new Map(tables.titles),
     states: new Map(tables.states),
     recommendations: new Map(tables.recommendations),
+    highlights: new Map(tables.highlights),
     claims: new Map(tables.claims),
     translations: new Map(tables.translations),
   }
@@ -92,8 +97,8 @@ function copy(tables: Tables): Tables {
 /**
  * Fold a pull into the confirmed tables. Rows replace what is held under their key. Then the
  * device keeps only what it can show: an article stays while its feed is subscribed or the
- * member keeps it (liked or recommended); the server sends a kept article back whole the moment
- * it becomes kept again.
+ * member keeps it (liked, recommended or highlighted); the server sends a kept article back whole
+ * the moment it becomes kept again.
  */
 export function applyPull(confirmed: Confirmed, pull: PullResponse): Confirmed {
   const t = pull.reset ? emptyTables() : copy(confirmed.tables)
@@ -106,6 +111,10 @@ export function applyPull(confirmed: Confirmed, pull: PullResponse): Confirmed {
   for (const row of r.titles) t.titles.set(titleKey(row.articleId, row.lang), row)
   for (const row of r.states) t.states.set(row.articleId, row)
   for (const row of r.recommendations) t.recommendations.set(row.articleId, row)
+  for (const row of r.highlights) {
+    if (row.deletedAt === null) t.highlights.set(row.id, row)
+    else t.highlights.delete(row.id)
+  }
   for (const row of r.claims) t.claims.set(row.id, row)
   for (const row of r.translations)
     t.translations.set(translationKey(row.contentKey, row.lang), row)
@@ -117,16 +126,22 @@ export function applyPull(confirmed: Confirmed, pull: PullResponse): Confirmed {
   return { cursor: pull.cursor, tables: t }
 }
 
-/** Whether the member keeps an article whatever they subscribe to: liked or recommended. */
-const isKept = (t: Tables, articleId: number) =>
-  t.states.get(articleId)?.likedAt != null || t.recommendations.get(articleId)?.deletedAt === null
+/**
+ * Whether the member keeps an article whatever they subscribe to: liked, recommended or
+ * highlighted. `highlighted` is the set of articles with a live highlight, built once per prune.
+ */
+const isKept = (t: Tables, articleId: number, highlighted: Set<number>) =>
+  t.states.get(articleId)?.likedAt != null ||
+  t.recommendations.get(articleId)?.deletedAt === null ||
+  highlighted.has(articleId)
 
 /** Forget articles of feeds the member no longer follows, except the ones they keep. */
 function prune(t: Tables, onlyFeed?: number) {
+  const highlighted = new Set([...t.highlights.values()].map((h) => h.articleId))
   for (const [id, article] of t.articles) {
     if (onlyFeed !== undefined && article.feedId !== onlyFeed) continue
     if (t.subscriptions.get(article.feedId)?.deletedAt === null) continue
-    if (isKept(t, id)) continue
+    if (isKept(t, id, highlighted)) continue
     t.articles.delete(id)
     t.states.delete(id)
     for (const key of t.titles.keys()) if (key.startsWith(`${id}:`)) t.titles.delete(key)
@@ -247,6 +262,33 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       bumpRecommend(t, m.articleId, -1)
       return t
     }
+    case 'putHighlight': {
+      const held = t.highlights.get(m.id)
+      if (held && m.at < held.updatedAt) return t
+      t.highlights.set(m.id, {
+        id: m.id,
+        articleId: held?.articleId ?? m.articleId,
+        contentKey: m.contentKey,
+        side: m.side,
+        lang: m.lang,
+        leafId: m.leafId,
+        start: m.start,
+        end: m.end,
+        quote: m.quote,
+        prefix: m.prefix,
+        suffix: m.suffix,
+        note: m.note?.trim() || null,
+        createdAt: held?.createdAt ?? m.at,
+        updatedAt: m.at,
+        deletedAt: null,
+        seq: held?.seq ?? 0,
+      })
+      return t
+    }
+    case 'deleteHighlight': {
+      t.highlights.delete(m.id)
+      return t
+    }
   }
 }
 
@@ -288,12 +330,22 @@ export function rowsOf(tables: Tables) {
     titles: [...tables.titles.values()],
     states: [...tables.states.values()],
     recommendations: [...tables.recommendations.values()],
+    highlights: [...tables.highlights.values()],
     claims: [...tables.claims.values()],
     translations: [...tables.translations.values()],
   }
 }
 
-export type { ArticleRow, ClaimRow, FeedRow, SiteRow, SubscriptionRow, TitleRow, TranslationRow }
+export type {
+  ArticleRow,
+  ClaimRow,
+  FeedRow,
+  HighlightRow,
+  SiteRow,
+  SubscriptionRow,
+  TitleRow,
+  TranslationRow,
+}
 
 export type TableRows = ReturnType<typeof rowsOf>
 
@@ -309,6 +361,7 @@ export function tablesFromRows(rows: TableRows): Tables {
     titles: new Map(rows.titles.map((r) => [titleKey(r.articleId, r.lang), r])),
     states: new Map(rows.states.map((r) => [r.articleId, r])),
     recommendations: new Map(rows.recommendations.map((r) => [r.articleId, r])),
+    highlights: new Map(rows.highlights.map((r) => [r.id, r])),
     claims: new Map(rows.claims.map((r) => [r.id, r])),
     translations: new Map(rows.translations.map((r) => [translationKey(r.contentKey, r.lang), r])),
   }

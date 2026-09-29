@@ -101,3 +101,70 @@ describe('the device view', () => {
 function readState(articleId: number, readAt: number): StateRow {
   return { articleId, readAt, likedAt: null, likedUpdatedAt: null, seq: 5 }
 }
+
+describe('highlights on the device', () => {
+  const put = (id: string, articleId: number, at: number, note: string | null = null) =>
+    ({
+      mid: `${id}-${at}-pad`,
+      at,
+      type: 'putHighlight',
+      id,
+      articleId,
+      contentKey: 'a'.repeat(32),
+      side: 'original',
+      lang: null,
+      leafId: 'leaf000001',
+      start: 0,
+      end: 4,
+      quote: 'Post',
+      prefix: '',
+      suffix: ' 7',
+      note,
+    }) as const
+
+  test('show at once, keep the later edit, and go on deletion', () => {
+    const confirmed = applyPull(start, pull(3, { subscriptions: [sub(1)], articles: [article(7)] }))
+    const shown = view(confirmed, [
+      { mutation: put('h-000001', 7, 10, 'first') },
+      { mutation: put('h-000001', 7, 5, 'older, from a slow device') },
+      { mutation: put('h-000001', 7, 12, '  kept  ') },
+    ])
+    expect(shown.highlights.get('h-000001')).toMatchObject({
+      note: 'kept',
+      createdAt: 10,
+      updatedAt: 12,
+    })
+    const gone = view(confirmed, [
+      { mutation: put('h-000001', 7, 10) },
+      { mutation: { mid: 'del-000001-pad', at: 11, type: 'deleteHighlight', id: 'h-000001' } },
+    ])
+    expect(gone.highlights.size).toBe(0)
+  })
+
+  test('a highlighted article stays after its feed is left; a deleted highlight lets it go', () => {
+    const held = applyPull(
+      start,
+      pull(3, { subscriptions: [sub(1)], articles: [article(7), article(8)] }),
+    )
+    const highlighted = applyPull(
+      held,
+      pull(4, {
+        highlights: [
+          { ...put('h-000002', 7, 1), createdAt: 1, updatedAt: 1, deletedAt: null, seq: 4 },
+        ],
+      }),
+    )
+    const left = applyPull(highlighted, pull(5, { subscriptions: [sub(1, 5)] }))
+    expect([...left.tables.articles.keys()]).toEqual([7])
+    const deleted = applyPull(
+      left,
+      pull(6, {
+        highlights: [
+          { ...put('h-000002', 7, 1), createdAt: 1, updatedAt: 6, deletedAt: 6, seq: 6 },
+        ],
+      }),
+    )
+    expect(deleted.tables.highlights.size).toBe(0)
+    expect(deleted.tables.articles.size).toBe(0)
+  })
+})

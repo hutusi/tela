@@ -3,10 +3,11 @@
  * every row comes from one snapshot of the database, whatever commits meanwhile.
  *
  * What a member holds:
- * - their own rows: profile, prefs, subscriptions, read/like states, recommendations, claims;
+ * - their own rows: profile, prefs, subscriptions, read/like states, recommendations, highlights,
+ *   claims;
  * - the shared rows of the feeds they subscribe to: feeds, sites, articles, titles, and the body
  *   translations of those articles;
- * - articles they liked or recommended, wherever those came from.
+ * - articles they liked, recommended or highlighted, wherever those came from.
  *
  * A snapshot (cursor 0) sends all of it within the horizon. A delta sends rows whose seq is above
  * the cursor, plus a horizon snapshot of any feed subscribed since: its articles were written
@@ -29,6 +30,7 @@ export type PullTables =
   | 'titles'
   | 'states'
   | 'recommendations'
+  | 'highlights'
   | 'claims'
   | 'translations'
 
@@ -61,6 +63,9 @@ const STATE = sql.raw(`article_id as "articleId", read_at as "readAt", liked_at 
   liked_updated_at as "likedUpdatedAt", seq`)
 const RECOMMENDATION = sql.raw(`article_id as "articleId", note, created_at as "createdAt",
   deleted_at as "deletedAt", seq`)
+const HIGHLIGHT = sql.raw(`id, article_id as "articleId", content_key as "contentKey", side, lang,
+  leaf_id as "leafId", start, "end", quote, prefix, suffix, note, created_at as "createdAt",
+  updated_at as "updatedAt", deleted_at as "deletedAt", seq`)
 const CLAIM = sql.raw(`id, site_id as "siteId", method, token, status, error,
   verified_at as "verifiedAt", seq`)
 const TRANSLATION = sql.raw(`b.content_key as "contentKey", b.lang, b.state,
@@ -80,9 +85,10 @@ function scope(userId: string, horizon: number, cursor: number) {
   /** Feeds subscribed (or resubscribed) since the cursor: their horizon comes whole. */
   const newFeeds = sql`select feed_id from subscriptions
     where user_id = ${userId} and deleted_at is null and seq > ${cursor}`
-  /** Articles kept whatever their feed: liked or recommended by the member. */
+  /** Articles kept whatever their feed: liked, recommended or highlighted by the member. */
   const kept = sql`select article_id from user_article_states where user_id = ${userId} and liked_at is not null
-    union select article_id from recommendations where user_id = ${userId} and deleted_at is null`
+    union select article_id from recommendations where user_id = ${userId} and deleted_at is null
+    union select article_id from highlights where user_id = ${userId} and deleted_at is null`
   /**
    * Articles the member began to keep since the cursor. They come whole, with their feed, because
    * the article may belong to no feed the member subscribes to (a liked post from a feed since
@@ -91,6 +97,8 @@ function scope(userId: string, horizon: number, cursor: number) {
   const newlyKept = sql`select article_id from user_article_states
       where user_id = ${userId} and liked_at is not null and seq > ${cursor}
     union select article_id from recommendations
+      where user_id = ${userId} and deleted_at is null and seq > ${cursor}
+    union select article_id from highlights
       where user_id = ${userId} and deleted_at is null and seq > ${cursor}`
   const horizonOf = (feeds: SQL) =>
     sql`select id from articles where feed_id in (${feeds}) and fetched_at >= ${horizon}`
@@ -137,6 +145,9 @@ export async function readPull(
     recommendations: snapshot
       ? sql`select ${RECOMMENDATION} from recommendations where user_id = ${userId} and deleted_at is null`
       : sql`select ${RECOMMENDATION} from recommendations where user_id = ${userId} and seq > ${cursor} ${bySeq}`,
+    highlights: snapshot
+      ? sql`select ${HIGHLIGHT} from highlights where user_id = ${userId} and deleted_at is null`
+      : sql`select ${HIGHLIGHT} from highlights where user_id = ${userId} and seq > ${cursor} ${bySeq}`,
     claims: sql`select ${CLAIM} from site_claims where user_id = ${userId}
       ${snapshot ? sql`` : sql`and seq > ${cursor} ${bySeq}`}`,
 
@@ -208,6 +219,7 @@ export async function readPull(
         'subscriptions',
         'states',
         'recommendations',
+        'highlights',
         'claims',
         'feeds',
         'articles',
@@ -266,6 +278,7 @@ export async function readPull(
         (r) => String(r.articleId),
       ),
       recommendations: within(got.recommendations),
+      highlights: within(got.highlights),
       claims: within(got.claims),
       feeds: merge(
         got.freshFeeds.filter((f) => isFresh(f.id) || freshArticleFeeds.has(Number(f.id))),

@@ -71,7 +71,7 @@ describe('the device store', () => {
     const storage = recording()
     const store = new LocalStore(storage, () => NOW)
     await store.applyPull(snapshot)
-    expect(storage.saved.at(-1)).toHaveLength(11) // a snapshot writes every table
+    expect(storage.saved.at(-1)).toHaveLength(12) // a snapshot writes every table
     await store.applyPull(pull(6, { articles: [article(9)] }))
     expect(storage.saved.at(-1)).toEqual(['articles'])
     // Unsubscribing prunes the feed's articles: no article row named them, yet they changed.

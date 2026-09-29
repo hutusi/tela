@@ -99,6 +99,31 @@ export type RecommendationRow = {
   seq: number
 }
 
+/**
+ * A passage the member marked in a post, with an optional note (ADR 0026). Private to them. It
+ * points into one leaf of one content version: `leafId` and offsets into that leaf's text, plus the
+ * quote and a little context either side, so it can be found again in a later version.
+ * `side` says whether it was made on the original or on the translation into `lang`.
+ */
+export type HighlightRow = {
+  id: string
+  articleId: number
+  contentKey: string
+  side: 'original' | 'translation'
+  lang: string | null
+  leafId: string
+  start: number
+  end: number
+  quote: string
+  prefix: string
+  suffix: string
+  note: string | null
+  createdAt: number
+  updatedAt: number
+  deletedAt: number | null
+  seq: number
+}
+
 export type ClaimRow = {
   id: number
   siteId: number
@@ -133,6 +158,7 @@ export type SyncRows = {
   titles: TitleRow[]
   states: StateRow[]
   recommendations: RecommendationRow[]
+  highlights: HighlightRow[]
   claims: ClaimRow[]
   translations: TranslationRow[]
 }
