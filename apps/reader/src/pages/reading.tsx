@@ -1,0 +1,180 @@
+/**
+ * `/reading`: sidebar, list, and the open article. The URL is the one owner of what is open
+ * (ADR 0017's rule, kept), and every pane is a function of it and the local store, so a click, a
+ * filter change or Back is a render, not a request (ADR 0025).
+ */
+import { translationKey } from '@tela/sync'
+import { useCallback, useEffect, useRef } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router'
+import { useTranslations } from 'use-intl'
+import { ArticleList } from '../components/article-list'
+import { EmptyState } from '../components/empty-state'
+import { MobileNav } from '../components/mobile-nav'
+import { Reader } from '../components/reader'
+import { Sidebar } from '../components/sidebar'
+import { ReaderPaneSkeleton } from '../components/skeletons'
+import {
+  canonicalReadingHref,
+  parseReadingParams,
+  type ReadingMode,
+  readingModeParam,
+} from '../lib/href'
+import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
+import { articlesFor, isRead, subscriptionItems, totals } from '../store/selectors'
+import { useUi } from '../ui'
+
+const MODE_PREF = 'reader.mode'
+/** While a new feed waits for its first fetch, pull this often so its posts appear. */
+const FIRST_FETCH_PULL_MS = 3000
+const PREFETCH_IDLE_MS = 1500
+
+export function ReadingPage() {
+  const t = useTranslations('reader')
+  const tables = useTables()
+  const now = useNow()
+  const { locale } = useUi()
+  const readingLang = useReadingLang(locale)
+  const { store, objects, engine } = useStore()
+  const [search] = useSearchParams()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const params = parseReadingParams(search)
+
+  const subs = subscriptionItems(tables, now)
+  const counts = totals(tables, now)
+  const items = articlesFor(tables, params, now)
+  const selected = params.feedId !== null ? subs.find((s) => s.feedId === params.feedId) : undefined
+  const listTitle = params.feedId !== null ? (selected?.title ?? '') : undefined
+  const pendingFetch = selected !== undefined && selected.lastFetchedAt === null
+  const article =
+    params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
+  const open = params.articleId !== null
+
+  // The mode a URL without one means: this member's last choice, synced like any other pref.
+  const remembered =
+    readingModeParam((tables.prefs.get(MODE_PREF)?.value as string | undefined) ?? null) ?? 'side'
+  const mode = params.mode ?? remembered
+
+  // Opening an article reads it.
+  const articleId = article?.id ?? null
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened
+  useEffect(() => {
+    if (!article || isRead(tables, article, Date.now())) return
+    store.mutate({ type: 'markRead', articleId: article.id })
+  }, [articleId])
+
+  // A new article opens at its top, and focus moves into it once it is there.
+  useEffect(() => {
+    if (params.articleId === null) return
+    window.scrollTo({ top: 0 })
+    const id = requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>('[data-testid="reader"]')?.focus({ preventScroll: true }),
+    )
+    return () => cancelAnimationFrame(id)
+  }, [params.articleId])
+
+  const onMode = useCallback(
+    (next: ReadingMode) => {
+      store.mutate({ type: 'setPref', key: MODE_PREF, value: next })
+      // The URL still says it, so a copied link opens the way it was being read.
+      const url = new URLSearchParams(location.search)
+      if (next === 'side') url.delete('mode')
+      else url.set('mode', next)
+      const q = url.toString()
+      navigate(`/reading${q ? `?${q}` : ''}`, { replace: true })
+    },
+    [store, location.search, navigate],
+  )
+
+  const close = useCallback(() => {
+    const target = canonicalReadingHref(location.search, { articleId: null, mode: null })
+    if (target !== canonicalReadingHref(location.search)) navigate(target)
+  }, [location.search, navigate])
+
+  // A feed that has never been fetched: pull quickly until its first posts arrive.
+  useEffect(() => {
+    if (!pendingFetch) return
+    const id = setInterval(() => void engine.pull(), FIRST_FETCH_PULL_MS)
+    return () => clearInterval(id)
+  }, [pendingFetch, engine])
+
+  // Prefetch unread bodies and finished translations while idle: the list on screen first.
+  const lastPrefetch = useRef<AbortController | null>(null)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      lastPrefetch.current?.abort()
+      const controller = new AbortController()
+      lastPrefetch.current = controller
+      const at = Date.now()
+      const unread = (list: typeof items) =>
+        list
+          .filter((a) => a.contentKey && !isRead(tables, a, at))
+          .map((a) => a.contentKey as string)
+      const everything = articlesFor(tables, { filter: 'all', feedId: null }, at)
+      void objects
+        .prefetch([...unread(items), ...unread(everything)], controller.signal)
+        .then(async () => {
+          for (const a of everything) {
+            if (controller.signal.aborted || !a.contentKey) continue
+            const row = tables.translations.get(translationKey(a.contentKey, readingLang))
+            if (row?.objectKey && (row.state === 'done' || row.state === 'partial')) {
+              await objects.object(row.objectKey, controller.signal).catch(() => null)
+            }
+          }
+        })
+    }, PREFETCH_IDLE_MS)
+    return () => clearTimeout(timer)
+  }, [tables, items, objects, readingLang])
+
+  return (
+    <div
+      className={`group grid flex-1 grid-cols-1 lg:min-h-0 ${
+        open
+          ? 'lg:grid-cols-[220px_260px_minmax(0,1fr)]'
+          : 'lg:grid-cols-[220px_minmax(280px,380px)_minmax(0,1fr)]'
+      }`}
+      data-testid="reading-layout"
+      data-open={open ? '1' : undefined}
+    >
+      {open ? null : <MobileNav subscriptions={subs} totals={counts} params={params} />}
+      <Sidebar subscriptions={subs} totals={counts} params={params} />
+      <ArticleList
+        items={items}
+        params={params}
+        title={listTitle}
+        readingLang={readingLang}
+        locale={locale}
+        now={now}
+        pendingFetch={pendingFetch}
+      />
+      {article ? (
+        <Reader
+          key={article.id}
+          article={article}
+          readingLang={readingLang}
+          mode={mode}
+          onMode={onMode}
+          onClose={close}
+        />
+      ) : open && tables.profile === null ? (
+        // The first sync has not landed yet (the profile always comes in the first snapshot):
+        // the article is on its way, not gone.
+        <ReaderPaneSkeleton />
+      ) : open ? (
+        <main
+          className="flex items-center justify-center p-10 text-muted"
+          data-testid="article-gone"
+        >
+          <div className="max-w-[280px] text-center text-[13.5px] leading-normal">
+            <p className="m-0">{t('articleGone')}</p>
+            <button type="button" onClick={close} className="mt-3 underline">
+              {t('close')}
+            </button>
+          </div>
+        </main>
+      ) : (
+        <EmptyState unread={counts.all} hasSubscriptions={subs.length > 0} />
+      )}
+    </div>
+  )
+}
