@@ -221,6 +221,9 @@ the test vars inlined: a secondary Worker reads its vars from its own directory,
 
 - **Sign-in is real.** The global setup invites a member, reads the code from the outbox, and
   signs in. The member follows two fixture feeds, which the setup fetches with one cycle.
+- **A post that changes:** the fixture server's `/changing.xml` serves the version set by `POST
+  /__changing?v=1|2|3`, and `POST /api/test/cycle?refetch=1` fetches every feed again at once.
+  The highlight spec uses both to edit a post under a highlight.
 - **Ports:** `E2E_READER_PORT` (8811), `E2E_FIXTURE_PORT` (4790), `E2E_INSPECTOR_PORT` (9311). The
   script refuses to start if one is already taken: a stack left running would answer the health
   check, and every spec would test it instead.

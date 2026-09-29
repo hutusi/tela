@@ -68,7 +68,7 @@ flickers back to its old state in between.
 **Push: `POST /api/v1/mutations`**, up to 50 in one batch, which lands whole or not at all.
 
 - The mutations: `markRead`, `setLiked`, `markAllRead`, `subscribe`, `unsubscribe`, `setPref`,
-  `setProfile`, `recommend`, `unrecommend`. Their zod schemas in `@tela/sync` are shared with the
+  `setProfile`, `recommend`, `unrecommend`, and `putHighlight` and `deleteHighlight` (ADR 0026). Their zod schemas in `@tela/sync` are shared with the
   client.
 - **A replay changes nothing.** Each carries a client-minted `mid`, every statement is guarded by
   that id not being in `applied_mutations`, and the id is recorded last. Kept 30 days.

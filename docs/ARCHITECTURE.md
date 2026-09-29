@@ -378,6 +378,10 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, /o/* content objects, /
     prefetches unread bodies while idle and evicts read ones after seven days or 50 MB.
   - `store/selectors.ts` answers the reading view: unread, lists, counts, the shown title.
   - `views/` are Discover, a blog's page and a profile as pure components the edge renders too.
+  - Highlights (ADR 0026): `lib/anchor.ts` finds a highlight again by leaf, quote and context;
+    `lib/use-highlights.ts` paints them over the rendered text with the CSS Custom Highlight API
+    and writes back an anchor the post moved. Typography and theme are synced prefs
+    (`lib/typography.ts`); `j`/`k`/`Esc`/`h`/`?` are on `/reading`.
   - `public/sw.js` caches the app shell only; `shell/kill-sw.js` replaces it in an emergency.
 - **Sync** (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025):
   - `GET /api/v1/sync?cursor=` reads a member's rows in one batch: a horizon snapshot at cursor 0,
@@ -388,7 +392,7 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, /o/* content objects, /
 - **End-to-end** (`apps/reader/e2e`): the built reader, tela-api and tela-jobs in one
   `wrangler dev` on fresh local D1, R2 and queues, against the fixture feed server. Test mode
   (`ENV=test`) adds the sign-in outbox and `POST /api/test/cycle`, which runs tela-jobs' sweeps to
-  completion, because local dev fires no crons.
+  completion, because local dev fires no crons; `?refetch=1` makes every feed due first.
 - **Translation** (`apps/jobs/src/translation`, ADR 0023):
   - `translate.title` is keyed by feed. The sweep finds feeds with articles whose current
     `title_hash` has no `article_titles` row in some launch language. A job takes up to 20 of a

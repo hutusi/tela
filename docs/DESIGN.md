@@ -160,3 +160,52 @@ The same design, ported. It becomes this whole file at cutover.
   - A sign-in message for too many tries (`login.errors.rate_limited`), which is not a wrong code.
 - **Strings:** `apps/reader/messages/*.json`, the same keys, read with use-intl (next-intl's
   framework-free core), so every ICU pattern carried over.
+
+### New tokens, and the dark ground (ADR 0026)
+
+Three tokens the Next app did not need, because it hard-coded them:
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `surface` | `#fff` | `#1f1c17` | cards, popovers, inputs (was `bg-white`) |
+| `danger` | `oklch(0.50 0.15 25)` | `oklch(0.72 0.15 25)` | error text |
+| `highlight` | `oklch(0.91 0.10 95)` | `oklch(0.50 0.09 90 / 0.55)` | a highlight's paint |
+| `highlight-strong` | `oklch(0.80 0.14 90)` | `oklch(0.70 0.12 90)` | the highlight being edited |
+
+Dark mode redefines every token on a warm near-black ground rather than adding `dark:` variants:
+
+| Token | Dark |
+|---|---|
+| `paper` | `#16140f` |
+| `ink` | `#ede7db` |
+| `body` | `#ddd6c8` |
+| `ink-2` | `#b1a999` |
+| `muted` | `#8c8476` |
+| `line` | `#34302a` |
+| `hover` | `#29251f` |
+| `thumb` | `#454038` |
+| `accent` | `oklch(0.68 0.14 150)`, the lifted green above |
+| `accent-strong` | `oklch(0.78 0.12 150)` |
+
+`data-theme="dark|light"` on `<html>` is the member's choice. Without it,
+`prefers-color-scheme` decides. The two token blocks in `styles.css` must stay identical. A
+literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the dark ground:
+`styles.e2e.ts` checks the computed page colours in both themes.
+
+### Reading controls
+
+- **"Aa"** in the reader's action row, before Like, opens a 280 px popover. It holds three
+  segmented choices, which Settings repeats under *Appearance*:
+  - **Size:** four steps, ×0.88 / ×1 / ×1.13 / ×1.27 of the 19.5 px body (18 px for CJK).
+  - **Width:** 560 / 640 / 760 px for the single column. The paired body keeps its own two-column
+    measure.
+  - **Theme:** Auto / Light / Dark.
+- **Highlights** are a marker stroke over the text, never a box: `::highlight()` paint, no
+  element around the words.
+  - A selection in the article shows a floating pill above it (*Highlight*, *Add a note*).
+  - Clicking painted text opens a 320 px note popover: the quote under a `highlight-strong` rule,
+    a three-line serif textarea, *Remove highlight*, *Cancel* and *Save*, as Recommend's does.
+  - Under the article, *N highlights* lists each quote (in a `<mark>` there, since it is a copy)
+    with its note. One the post lost says so in `muted`; one on a layout not showing says where
+    it is.
+- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `h` and `?` in `kbd` chips.
