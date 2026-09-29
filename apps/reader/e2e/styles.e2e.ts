@@ -225,7 +225,7 @@ test.describe('stylesheet', () => {
       },
     )
 
-    const paired = await page.evaluate(() => {
+    const measure = () => {
       const cells = [...document.querySelectorAll('[data-testid="body-translated"]')]
       // From index 1: a gap needs something before the heading, and this article opens with one.
       const i = cells.findIndex(
@@ -245,8 +245,13 @@ test.describe('stylesheet', () => {
         margins: px(prev, 'marginBottom') + px(cell, 'marginTop') + px(head, 'marginTop'),
         gap: head.getBoundingClientRect().top - prev.getBoundingClientRect().bottom,
       }
-    })
-    expect(paired, 'no heading to measure against').not.toBeNull()
+    }
+    // The bar can say done before the paired body has rendered its cells: a slow runner measured
+    // in between and found nothing. Wait for the pair, then measure it.
+    await expect
+      .poll(() => page.evaluate(measure), { message: 'no heading to measure against' })
+      .not.toBeNull()
+    const paired = await page.evaluate(measure)
 
     await page.getByTestId('mode-trans').click()
     await expect(page.locator('.article-body')).toHaveCount(1)
