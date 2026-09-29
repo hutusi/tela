@@ -20,6 +20,9 @@ export function SettingsPage() {
   const readingLang = useReadingLang(locale)
   const names = LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en
   const profile = tables.profile
+  // Here, not in the form: saving changes the values the form is keyed by, and the answer has to
+  // outlive the form it came from.
+  const [state, setState] = useState<SaveState>({ saved: false, error: null })
   useTitle(t('title'))
 
   return (
@@ -37,8 +40,18 @@ export function SettingsPage() {
           </p>
         ) : null}
       </div>
-      {/* Keyed by the synced row, so a change from another device resets the form to it. */}
-      {profile ? <SettingsForm key={profile.seq} profile={profile} /> : null}
+      {/* Keyed by the values it edits, so a change from another device resets it to them, and a
+          change to anything else (the reading language below) leaves an edit alone. */}
+      {profile ? (
+        <SettingsForm
+          key={[profile.handle, profile.displayName, profile.bio, profile.publicSubscriptions].join(
+            '\u0000',
+          )}
+          profile={profile}
+          state={state}
+          onState={setState}
+        />
+      ) : null}
       <section className="flex flex-col gap-3 border-t border-line pt-8">
         <h2 className="font-serif text-[22px] font-medium">{t('reading')}</h2>
         <div className="flex flex-wrap items-center gap-3 text-[14px] text-ink-2">
@@ -65,18 +78,23 @@ export function SettingsPage() {
 }
 
 type SaveError = 'invalid_handle' | 'handle_taken'
+type SaveState = { saved: boolean; error: SaveError | null }
 
-function SettingsForm({ profile }: { profile: ProfileRow }) {
+function SettingsForm({
+  profile,
+  state,
+  onState,
+}: {
+  profile: ProfileRow
+  state: SaveState
+  onState: (state: SaveState) => void
+}) {
   const t = useTranslations('settings')
   const { engine } = useStore()
   const [handle, setHandle] = useState(profile.handle)
   const [displayName, setDisplayName] = useState(profile.displayName ?? '')
   const [bio, setBio] = useState(profile.bio ?? '')
   const [publicSubscriptions, setPublic] = useState(profile.publicSubscriptions)
-  const [state, setState] = useState<{ saved: boolean; error: SaveError | null }>({
-    saved: false,
-    error: null,
-  })
   const [busy, setBusy] = useState(false)
   const field =
     'w-full rounded-lg border border-line bg-white px-3 py-2.5 outline-none focus:border-muted'
@@ -90,10 +108,10 @@ function SettingsForm({ profile }: { profile: ProfileRow }) {
         body: { handle, displayName, bio, publicSubscriptions },
       })
       if (status === 200) {
-        setState({ saved: true, error: null })
+        onState({ saved: true, error: null })
         void engine.pull()
       } else {
-        setState({
+        onState({
           saved: false,
           error: body?.error === 'handle_taken' ? 'handle_taken' : 'invalid_handle',
         })
