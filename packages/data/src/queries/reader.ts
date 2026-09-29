@@ -1,4 +1,4 @@
-/** A member's subscriptions (the API grows the rest of the reader's writes on these). */
+/** A member's subscriptions and the compaction of their read state. */
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
 import { subscriptions } from '../schema'
@@ -62,4 +62,24 @@ export async function subscribeMany(
     ),
   ] as never)
   return ((results as unknown[])[1] as unknown[]).length
+}
+
+/**
+ * Drop the read states a member's watermark already says (ADR 0009): read, at or below the
+ * watermark of the feed's subscription, and holding nothing about a like. A row with
+ * `liked_updated_at` set, liked or not, is when the last like or unlike was decided, and a like
+ * pushed later from a device that made it earlier is compared against it: dropped, an unliked
+ * post would take that older like. One statement for the nightly batch; returns the article ids
+ * it dropped.
+ */
+export function compactReadStates(db: TelaDb) {
+  return db.all<{ article_id: number }>(sql`
+    delete from user_article_states
+    where liked_at is null and liked_updated_at is null and exists (
+      select 1 from articles a join subscriptions s
+        on s.feed_id = a.feed_id and s.user_id = user_article_states.user_id
+      where a.id = user_article_states.article_id and a.id <= s.watermark_id
+    )
+    returning article_id
+  `)
 }

@@ -24,14 +24,14 @@ describe('daily', () => {
     await addTestUser(db, 'u')
     await db.run(sql`
       insert into articles (feed_id, dedup_key, fetched_at, sort_at) values
-        (1, 'g:1', 1, 1), (1, 'g:2', 1, 1), (1, 'g:3', 1, 1)
+        (1, 'g:1', 1, 1), (1, 'g:2', 1, 1), (1, 'g:3', 1, 1), (1, 'g:4', 1, 1)
     `)
     await db.run(
-      sql`insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at) values ('u', 1, 2, 1, 1)`,
+      sql`insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at) values ('u', 1, 3, 1, 1)`,
     )
     await db.run(sql`
-      insert into user_article_states (user_id, article_id, read_at, liked_at) values
-        ('u', 1, 5, null), ('u', 2, 5, 9), ('u', 3, 5, null)
+      insert into user_article_states (user_id, article_id, read_at, liked_at, liked_updated_at) values
+        ('u', 1, 5, null, null), ('u', 2, 5, 9, 9), ('u', 3, 5, null, 8), ('u', 4, 5, null, null)
     `)
     await db.run(
       sql`insert into action_limits (key, window_start, count) values ('old', ${NOW - 2 * DAY}, 1), ('new', ${NOW}, 1)`,
@@ -60,11 +60,13 @@ describe('daily', () => {
       ['global', 'dead'],
     ])
     expect(feeds[2]?.error_count).toBe(25)
-    // Article 1 is read and under the watermark: its row goes. 2 is liked; 3 is above it.
+    // Article 1 is read and under the watermark: its row goes. 2 is liked; 3 was liked and then
+    // unliked, and a like made earlier on another device is still to be compared with when that
+    // was; 4 is above the watermark.
     const states = await db.all<{ article_id: number }>(
       sql`select article_id from user_article_states order by article_id`,
     )
-    expect(states.map((s) => s.article_id)).toEqual([2, 3])
+    expect(states.map((s) => s.article_id)).toEqual([2, 3, 4])
     expect(await first(db, sql`select 1 as x from action_limits where key = 'old'`)).toBeUndefined()
   })
 })

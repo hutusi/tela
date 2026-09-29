@@ -14,7 +14,9 @@ every static-site rebuild.
 - `articles.id` (bigint identity) is the ingest order. `subscriptions.watermark_id` marks
   everything at or below it as read; unread = `id > watermark_id AND fetched_at > now() - 30 days
   AND NOT EXISTS read row`. "Mark all read" sets the watermark and lets a maintenance job
-  compact read-only rows below it.
+  compact read-only rows below it. A row that ever held a like is not read-only: it keeps when
+  the like last changed, which a like pushed late from another device is compared against, so it
+  stays (amended 2026-09-29).
 - `articles.dedup_key` comes from a ladder: `g:<guid>` when the guid is non-empty, else
   `u:<normalized link>` (https, lowercase host, no fragment, tracking parameters removed,
   parameters sorted, trailing slash trimmed), else `h:<sha256(title|published_at)>`.

@@ -2,7 +2,7 @@
  * The daily cron (03:17 UTC). Each step is one statement over domain state, so the whole thing is
  * one batch and a missed day is simply caught up by the next.
  */
-import { bumpSeq, currentSeq, type TelaDb } from '@tela/data'
+import { bumpSeq, compactReadStates, currentSeq, type TelaDb } from '@tela/data'
 import { RELAY_REPROBE_DAYS } from '@tela/ingest/region-policy'
 import { DEAD_AFTER_ERRORS } from '@tela/ingest/schedule'
 import { sql } from 'drizzle-orm'
@@ -41,16 +41,9 @@ export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
       delete from applied_mutations where applied_at < ${now - APPLIED_MUTATIONS_KEEP_DAYS * DAY}
       returning mid
     `),
-    // Read-only state under a member's watermark says nothing the watermark does not (ADR 0009).
-    db.all(sql`
-      delete from user_article_states
-      where liked_at is null and exists (
-        select 1 from articles a join subscriptions s
-          on s.feed_id = a.feed_id and s.user_id = user_article_states.user_id
-        where a.id = user_article_states.article_id and a.id <= s.watermark_id
-      )
-      returning article_id
-    `),
+    // A read state under a member's watermark that never held a like says nothing the watermark
+    // does not (ADR 0009). One that did keeps when the like last changed, so it stays.
+    compactReadStates(db),
   ])
   const n = (rows: unknown) => (rows as unknown[]).length
   return {

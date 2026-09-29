@@ -46,7 +46,9 @@ commits meanwhile.
       prunes the rest after every pull.
   - Hard deletes would travel as tombstones. None of Tela's writers hard-delete a synced row
     today: compaction drops only read states under a watermark, which the watermark already
-    implies.
+    implies. It never drops a row that holds a like or the time an unlike was decided: a like
+    pushed late from a device that made it earlier is compared against that time, and would
+    otherwise win.
 - **Pages** hold up to 1,000 rows per table and end on a seq boundary, never inside the rows one
   batch wrote. `more` says pull again at once. A batch larger than a page goes out whole rather
   than stalling; no writer produces one (the largest is a feed's 200-item cap).

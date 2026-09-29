@@ -26,6 +26,7 @@ import {
   mergeFeed,
   updateArticles,
 } from './queries/ingest'
+import { compactReadStates } from './queries/reader'
 import { readPull } from './queries/sync'
 import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
 import { feeds, sites } from './schema'
@@ -441,6 +442,43 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       ).toEqual([
         { lang: 'en', feedId: 1, status: 'failed' },
         { lang: 'zh-Hans', feedId: 1, status: 'failed' },
+      ])
+    })
+  })
+
+  describe('compacting read state (ADR 0009)', () => {
+    it('drops only read states under the watermark that never held a like', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['h1'])
+      await db.run(sql`
+        insert into user (id, name, email, email_verified, created_at, updated_at) values
+          ('u1', 'u', 'u1@x.y', 1, 0, 0), ('u2', 'v', 'u2@x.y', 1, 0, 0)
+      `)
+      await db.run(sql`
+        insert into articles (id, feed_id, dedup_key, fetched_at, sort_at) values
+          (1, 1, 'a', 1, 1), (2, 1, 'b', 1, 1), (3, 1, 'c', 1, 1), (4, 1, 'd', 1, 1)
+      `)
+      await db.run(sql`
+        insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at)
+        values ('u1', 1, 3, 0, 0)
+      `)
+      // u1: 1 read, 2 liked, 3 liked and then unliked, 4 above the watermark. u2 follows nothing.
+      await db.run(sql`
+        insert into user_article_states (user_id, article_id, read_at, liked_at, liked_updated_at)
+        values ('u1', 1, 5, null, null), ('u1', 2, 5, 6, 6), ('u1', 3, 5, null, 7),
+          ('u1', 4, 5, null, null), ('u2', 1, 5, null, null)
+      `)
+      const [dropped] = await db.batch([compactReadStates(db)])
+      expect(dropped).toEqual([{ article_id: 1 }])
+      expect(
+        await db.all(sql`
+          select user_id as "userId", article_id as "articleId" from user_article_states
+          order by user_id, article_id`),
+      ).toEqual([
+        { userId: 'u1', articleId: 2 },
+        { userId: 'u1', articleId: 3 },
+        { userId: 'u1', articleId: 4 },
+        { userId: 'u2', articleId: 1 },
       ])
     })
   })

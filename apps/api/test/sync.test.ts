@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { bumpSeq, currentSeq, first, headSeq, mergeFeed, type TelaDb } from '@tela/data'
+import {
+  bumpSeq,
+  compactReadStates,
+  currentSeq,
+  first,
+  headSeq,
+  mergeFeed,
+  type TelaDb,
+} from '@tela/data'
 import {
   applyPull,
   emptyTables,
@@ -248,6 +256,18 @@ describe('push', () => {
     await push([{ type: 'setLiked', articleId: a, liked: true, at: now }])
     expect((await state(a))?.liked_at).toBe(now)
     expect(await likes(a)).toBe(1)
+  })
+
+  test('an unlike outlives compaction, so a like made before it and pushed after still loses', async () => {
+    const a = await addArticle(1)
+    await push([{ type: 'setLiked', articleId: a, liked: true, at: now - 3000 }])
+    await push([{ type: 'setLiked', articleId: a, liked: false, at: now - 1000 }])
+    await push([{ type: 'markAllRead', feedId: 1, upTo: a }])
+    await compactReadStates(db)
+    // A device offline since before the unlike liked it too, and pushes only now.
+    await push([{ type: 'setLiked', articleId: a, liked: true, at: now - 2000 }])
+    expect((await state(a))?.liked_at).toBeNull()
+    expect(await likes(a)).toBe(0)
   })
 
   test('a device clock in the future cannot win every argument', async () => {

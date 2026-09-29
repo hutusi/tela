@@ -141,7 +141,8 @@ and hashes as the `NORM_VERSION` contract.
   ticks while each host still sees one request at a time.
 - The cron and queue handlers only call `SELF.fetch()`, whose handler placement pins beside D1.
 - Nightly (`17 3 * * *`): upkeep in one batch (relay re-probes, dead-feed revival, pruning,
-  compacting read state under watermarks), then the export and its verification (`backUp`).
+  compacting read state under watermarks, `compactReadStates`, which keeps any row that ever held
+  a like), then the export and its verification (`backUp`).
 - Mondays (`0 8 * * 1`): the digest. Every five minutes after the tick: the health check and the
   dead-man's ping (`src/ops.ts`).
 - `src/portable.ts` runs the same tick and jobs on a timer with an in-process queue: the exit path,
