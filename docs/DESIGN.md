@@ -138,3 +138,25 @@ Subscribe/Subscribed pill. Cadence is derived from posts in the last 30 days.
 
 Every user-facing string lives in `apps/web/messages/en.json` and `zh-Hans.json` under the same
 keys; components read them with next-intl. Placeholders use ICU plural syntax.
+
+## The local-first reader (`apps/reader`, `refactor/local-first`)
+
+The same design, ported. It becomes this whole file at cutover.
+
+- **Tokens and base styles:** `apps/reader/src/styles.css` is `globals.css` with the fonts from
+  `@fontsource` (EB Garamond, Figtree; latin and latin-ext) instead of `next/font`. The layer rules
+  above hold unchanged.
+- **Components:** `apps/reader/src/components`. Names and test ids are kept, so the Playwright
+  specs carried over. `MarkRead`, `RequestTranslation` and `AutoRefresh` are gone: the store marks
+  read, requests translations and follows background work itself.
+- **Discover, a blog's page and a profile** are pure views in `src/views`, rendered by the SPA and
+  by the edge alike. Anything interactive in them must work without JavaScript or degrade to a
+  link: the language menu stays a native `<details>`, and a visitor's Subscribe is a link to sign
+  in.
+- **New states:**
+  - A skeleton pane while the first sync has not landed: the article is on its way, not gone.
+  - "Older articles" under a list longer than 200.
+  - A not-found page (`notFound.*`).
+  - A sign-in message for too many tries (`login.errors.rate_limited`), which is not a wrong code.
+- **Strings:** `apps/reader/messages/*.json`, the same keys, read with use-intl (next-intl's
+  framework-free core), so every ICU pattern carried over.

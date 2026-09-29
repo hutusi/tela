@@ -19,7 +19,7 @@ and the way in is an admin invite.
 | `apps/jobs` | The `tela-jobs` Worker: cron sweeps claim due work under leases, queues fan it out, jobs run pinned beside D1 (refactor/local-first) |
 | `packages/sync` | The sync protocol between the local-first reader and tela-api (refactor/local-first) |
 | `apps/api` | The `tela-api` Worker: sign-in, sync, mutations and reader RPCs, pinned beside D1 (refactor/local-first) |
-| `apps/reader` | The reader app, `tela-web` at cutover: the edge Worker now (content objects, image proxy, `/api` forward), the local-first SPA in Phase 6 (refactor/local-first) |
+| `apps/reader` | The reader, `tela-web` at cutover: the local-first SPA (reads from the device, syncs behind) and its edge Worker (content objects, image proxy, public pages, the `/api` forward) (refactor/local-first) |
 | `apps/relay` | The China fetch relay: a signed fetch endpoint for an HK or mainland box, the one Node process Tela would run. Not provisioned until a feed needs it (refactor/local-first) |
 | `packages/db` | Drizzle schema, migrations, query helpers, the job sender |
 | `packages/content` | Pure content pipeline: feed parsing, sanitization, block ids and hashing, language detection |

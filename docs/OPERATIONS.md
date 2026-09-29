@@ -186,28 +186,46 @@ fly deploy --config fly.worker.toml --remote-only --ha=false   # from the reposi
 
 ### Running the new stack locally (`refactor/local-first`)
 
-All three Workers in one `wrangler dev`, the first config being the one served. Service bindings,
-the `Ingest` RPC, local queues, D1 and R2 all work locally, and D1 and R2 are shared because the
-configs name the same database and bucket.
+`bun run dev:reader` is Vite with the Cloudflare plugin: the SPA with hot reload, tela-web's
+Worker, and tela-api and tela-jobs beside it as auxiliary Workers, all in workerd. Service
+bindings, the `Ingest` RPC, local queues, D1 and R2 all work, and the three share one local D1 and
+bucket because their configs name the same ones.
 
 ```sh
-P=/tmp/tela-local
-cd apps/api && wrangler d1 migrations apply tela --local --persist-to $P && cd ../..
-# apps/api/.dev.vars:    AUTH_SECRET=<same as below>  ADMIN_TOKEN=local  ENV=test  PUBLIC_URL=http://localhost:8795
-# apps/reader/.dev.vars: AUTH_SECRET=<same as above>  TELA_PRIVATE_BETA=1
-# apps/jobs/.dev.vars:   LLM_PROVIDER=mock
-wrangler dev -c apps/reader/wrangler.jsonc -c apps/api/wrangler.jsonc -c apps/jobs/wrangler.jsonc \
-  --persist-to $P --port 8795
+S=$(openssl rand -hex 32)
+printf "AUTH_SECRET=$S\nADMIN_TOKEN=local\nENV=test\nPUBLIC_URL=http://localhost:5173\n" > apps/api/.dev.vars
+printf "ENV=test\nLLM_PROVIDER=mock\nPUBLIC_URL=http://localhost:5173\n" > apps/jobs/.dev.vars
+printf "AUTH_SECRET=$S\nTELA_PRIVATE_BETA=1\n" > apps/reader/.dev.vars
+apps/reader/node_modules/.bin/wrangler d1 migrations apply tela --local \
+  --persist-to apps/reader/.wrangler/state -c apps/api/wrangler.jsonc
+bun run dev:reader   # http://localhost:5173
 ```
 
 Then:
-1. Invite: `TELA_URL=http://localhost:8795 ADMIN_TOKEN=local bun run admin invite you@x.test`.
-2. Read the code from `/api/test/outbox?email=you@x.test`, and sign in with `POST
-   /api/auth/sign-in/email-otp`.
-3. Add a real feed with `POST /api/v1/feeds`. Its posts arrive in a second; the crons do not run
-   in dev.
+1. Invite: `TELA_URL=http://localhost:5173 ADMIN_TOKEN=local bun run admin invite you@x.test`.
+2. Sign in at `/login`, reading the code from `/api/test/outbox?email=you@x.test`.
+3. Add a feed on `/add`. The crons do not fire in dev: `curl -X POST -H 'origin:
+   http://localhost:5173' localhost:5173/api/test/cycle` runs the sweeps to completion (fetches,
+   extraction, titles, claims), which is what the minute tick does in production.
 
-`.dev.vars` is gitignored.
+`ENV=test` is what turns on the outbox and the cycle route, and it lets tela-jobs fetch from
+private addresses. Nothing deployed sets it. `.dev.vars` is gitignored.
+
+### End-to-end, local-first stack (`bun run e2e:reader`)
+
+`apps/reader/e2e/run.sh` builds tela-web and starts the fixture feed server. It then runs the
+built tela-web, tela-api and tela-jobs in one `wrangler dev`, on fresh local D1, R2 and queues
+under `.e2e-logs/reader/state`, and runs Playwright. `e2e/stack.ts` writes the three configs with
+the test vars inlined: a secondary Worker reads its vars from its own directory, and writing
+`.dev.vars` beside the real configs would clobber a developer's own.
+
+- **Sign-in is real.** The global setup invites a member, reads the code from the outbox, and
+  signs in. The member follows two fixture feeds, which the setup fetches with one cycle.
+- **Ports:** `E2E_READER_PORT` (8811), `E2E_FIXTURE_PORT` (4790), `E2E_INSPECTOR_PORT` (9311). The
+  script refuses to start if one is already taken: a stack left running would answer the health
+  check, and every spec would test it instead.
+- **Logs:** `.e2e-logs/reader/{build,workers,fixtures}.log`; traces in `apps/reader/test-results`.
+- `bun run e2e` runs the Postgres app's suite first, then this one. CI runs both.
 
 ### Cloudflare: tela-web, the new edge Worker (`refactor/local-first`, deployed at cutover)
 
@@ -221,6 +239,24 @@ It has no D1 binding: `BLOBS` is `tela-content` (read-only here) and `API` is te
 - **Images:** `/img/<contentKey>/<i>` fetches only what a content object names, over
   `global_fetch_strictly_public`. A broken image is the origin's answer, which the Worker logs
   show; nothing is signed, so there is no secret to rotate.
+- **Deploy:** `cd apps/reader && bunx vite build && wrangler deploy`. Vite builds the SPA and the
+  Worker together and writes the config wrangler deploys (`dist/tela_web/wrangler.json`).
+- **Public pages** (Discover, `/s/:id`, `/@handle`) are rendered here and kept in each colo's
+  cache for five minutes, keyed by locale and by the build. So a deploy never serves a page that
+  names scripts it removed, and a blog's change shows within five minutes. There is nothing to
+  purge.
+- **Writes to `/api/*` without this origin get 403** `cross-origin write refused`. Hubs
+  (`/api/websub/*`) and the admin script (`/api/admin/*`) are exempt. A browser always sends
+  `Origin` on a POST, so seeing this from the app means something is proxying it.
+- **The app shell** is cached by a service worker (`public/sw.js`), for fast repeat visits. If a
+  bad shell ships and a fix does not reach readers, because their cached shell never asks, use
+  the kill switch:
+  1. `cp apps/reader/shell/kill-sw.js apps/reader/public/sw.js`, then build and deploy.
+  2. On their next visit, browsers install it. It drops every cached shell, unregisters itself,
+     and reloads open tabs from the network.
+  3. Restore `public/sw.js` with the next deploy.
+
+  A shell older than the sync protocol clears itself anyway: tela-api answers it 409 `upgrade`.
 
 ### Cloudflare: tela-api (`refactor/local-first`, not deployed yet)
 
@@ -245,7 +281,7 @@ jobs queues.
   code. Registration is otherwise closed (ADR 0015's policy).
 - **Sign-in trouble:**
   - Codes last an hour and allow three attempts. The sign-in endpoint allows three tries a
-    minute per address.
+    minute per address; past that the login page says "Too many tries", not "wrong code".
   - `select key, count, last_request from rate_limit` shows better-auth's windows. Tela's own
     action limits are `action_limits`.
   - A code that never arrives: check Resend's log for the address first, then the Worker's logs

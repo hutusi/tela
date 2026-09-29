@@ -1,8 +1,10 @@
 # 0025 — Local-first sync: one seq cursor to pull, idempotent mutations to push
 
-Status: accepted (2026-09-28) for the server side, which tela-api implements. Phase 6 adds the
-client (store, reducer, prefetch) to this record. It will supersede 0010, 0016 and 0017 when the
-reader moves onto it, keeping 0017's rule that the URL alone says which article is open.
+Status: accepted (2026-09-28): the protocol, which tela-api implements, and the reader built on it
+(`apps/reader`). Supersedes 0016 (the render budget: nothing renders on the server per click any
+more) and 0017 (the client-owned pane), keeping 0017's rule that the URL alone says which article
+is open. Amends 0010: still no i18n routing and a locale cookie, now read by use-intl in the SPA
+and by the edge renderer.
 
 ## Context
 
@@ -82,6 +84,48 @@ flickers back to its old state in between.
 - Adding a feed by URL and requesting a translation are RPCs, not mutations: the reader needs the
   answer.
 
+## The reader (`apps/reader`, tela-web)
+
+A Vite + React SPA, served as static assets, whose every screen is a function of the local store
+and the URL.
+
+- **The store** (`src/store/local.ts`) holds the confirmed tables and the pending mutations in
+  memory, renders their combination through `useSyncExternalStore`, and writes every change
+  through to IndexedDB (`idb`). A pull rewrites only the tables it touched, where pruning counts
+  as touching: an unsubscribe shrinks the articles table though no pulled row named them.
+- **When it talks** (`src/store/engine.ts`): a pull at boot, when the tab becomes visible, every
+  60 s while it is, and after each push. A push goes a quarter-second after the last change, so a
+  burst of reads is one request, and at once with `keepalive` when the tab is hidden or closed, so
+  the last change before leaving is not left waiting for the next visit. 401 ends the session and
+  wipes the device; 409 reloads a newer shell.
+- **Bodies and translations** (`src/store/objects.ts`) come from memory, then IndexedDB, then the
+  edge. While the reader is idle (1.5 s after the list settles) it prefetches unread bodies, the
+  list on screen first, 25 to a `/o/bundle` request and two requests at a time, and then finished
+  translations in the reading language. Nothing is prefetched under Save-Data. Read bodies are
+  evicted after seven days, or once the store passes 50 MB.
+- **Streamed translation** (ADR 0023): a foreign post asks for one when it opens. While it runs,
+  the page polls its status every 1.5 s in a visible tab, fetches each chunk as the status names
+  it, and lays it over the original by block index. The finished object replaces the chunks, and
+  the synced row says so on every device.
+- **The URL owns the open article** (0017's rule). With no server cache as a second owner, the
+  settling logic 0017 needed is gone: Back, a filter change and an open are all renders.
+- **Posts from outside the synced feeds** (a blog's public page, a profile's recommendations, a
+  search hit past the horizon) arrive as full article rows and are held for the visit, so the
+  reader opens them like any other.
+- **Search** looks through the device first; the server adds older posts and blogs the member does
+  not follow.
+- **Public pages** (Discover, `/s/:id`, `/@handle`) are rendered by tela-web with the SPA's own
+  views, from tela-api's public JSON. They are cached per colo, locale and deploy for five
+  minutes, and their data is handed to the SPA in `#tela-data`.
+- **The app shell** is cached by a service worker (`public/sw.js`): navigations get the cached
+  shell at once and refresh it behind, and hashed assets are served forever. `/api`, `/o` and
+  `/img` never pass through it, so offline reading is not something it pretends to do.
+  `shell/kill-sw.js` replaces it when a bad shell has to go. A shell older than the protocol meets
+  409, clears itself and reloads, at most once a minute.
+- **Writes to `/api/*` must carry tela-web's origin.** Session cookies are `SameSite=Lax`, which
+  leaves a sibling subdomain able to post with them. Hubs and the admin script, which authorize
+  themselves, are exempt.
+
 ## Consequences
 
 - **A device needs nothing from the server but its cursor**, and the server keeps nothing per
@@ -103,3 +147,12 @@ flickers back to its old state in between.
   - the clock clamp;
   - the missing-reference no-op;
   - the page boundary. It runs on libSQL and on D1.
+- **The reader is measured, not assumed, to need no network per click.** An e2e spec runs five
+  opens, a filter change and Back after the first sync, and counts requests to `/api` and `/o`:
+  there must be none. Another holds every sync call and reloads: the list must still render, from
+  IndexedDB.
+- **The client costs 127 KB gzipped** (React, React Router and use-intl are most of it). The
+  mutation schemas stay out because `@tela/sync` is side-effect free. A repeat visit costs none
+  of it, and the first sync runs behind a list that has already rendered.
+- **Sign-in is a code or the mail's link** (ADR 0024), in the browser e2e too: there is no
+  development back door to test around it.

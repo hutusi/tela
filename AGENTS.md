@@ -32,7 +32,7 @@ Decisions that look odd but are deliberate:
 | `apps/worker` | Node 24 process bundled by Bun: `src/roles.ts`, `src/queues.ts`, `src/jobs/` |
 | `apps/jobs` | *(refactor/local-first)* The `tela-jobs` Worker. `src/kinds.ts` is every kind of background work (due query, lease, backoff, queue, handler). `src/runner.ts` holds `tick` and `runJob`, both portable. `src/worker.ts` is the Cloudflare entry: its cron and queue handlers only dispatch to the Singapore-pinned fetch handler over `SELF`. `src/portable.ts` runs the same work on a timer. Replaces `apps/worker` at cutover |
 | `apps/api` | *(refactor/local-first)* The `tela-api` Worker (ADR 0024): Hono, pinned beside D1, no public route. `src/app.ts` builds every route from portable deps (`createApp`), so the bun suite runs it on libSQL; `src/auth.ts` is better-auth (email codes, Drizzle adapter over `TelaDb`); `src/worker.ts` is the Cloudflare entry; `scripts/admin.ts` is `bun run admin`. Replaces `apps/web`'s server side at cutover |
-| `apps/reader` | *(refactor/local-first)* The reader app, deployed as `tela-web` at cutover. `worker/edge.ts` is the one public Worker, at the edge and with no D1: `/api/*` to tela-api, members-only `/o/*` content objects and `/o/bundle` from R2 through the colo cache, and the `/img/<key>/<i>` proxy. Sessions come from the signed cookie cache. Phase 6 adds the SPA |
+| `apps/reader` | *(refactor/local-first)* The reader, deployed as `tela-web` at cutover: one Vite project, one Worker. `src/` is the local-first SPA (ADR 0025): `store/` holds the device's rows in IndexedDB, syncs them and caches bodies; `views/` are the public pages, rendered by the SPA and by the edge (`src/ssr.tsx`). `worker/edge.ts` is the one public Worker, at the edge and with no D1: `/api/*` to tela-api (writes must carry its origin), `/o/*` objects and `/o/bundle` from R2 through the colo cache, the `/img/<key>/<i>` proxy, and the public pages. `e2e/` runs all three Workers in one `wrangler dev` |
 | `apps/relay` | *(refactor/local-first)* The China fetch relay (ADR 0008) as its own Node app: `src/server.ts` over `node:http`, `src/safe-fetch.ts` (DNS-pinned undici), `src/config.ts`, and a Dockerfile. It is the only Node process Tela would run, and no box runs it until a feed times out from Cloudflare (OPERATIONS.md); it replaces the `relay` role at cutover |
 
 ## Commands
@@ -43,10 +43,12 @@ bun run lint                         # Biome (format + lint); bun run lint:fix t
 bun run typecheck                    # tsc -p in every workspace (all noEmit)
 bun run test                         # bun test; DB tests need initdb on PATH, PG_BIN_DIR, or TEST_DATABASE_URL
 bun run test:workers                 # on D1 in workerd: the data contract, and tela-api's sign-in, push and pull (Vitest + @cloudflare/vitest-pool-workers)
-bun run e2e                          # Playwright against a built app, worker, and fixture feeds
+bun run e2e                          # Playwright: the Postgres app's suite, then the local-first stack's
+bun run e2e:reader                   # the local-first stack only: built tela-web + tela-api + tela-jobs in wrangler dev
 bun run build                        # every workspace that has a build script
 bun run dev                          # web (http://localhost:3000)
 bun run dev:worker                   # worker on Bun for dev; Node 24 in production
+bun run dev:reader                   # the local-first reader in Vite, tela-api and tela-jobs beside it (OPERATIONS.md)
 bun run db:generate                  # drizzle-kit generate; then commit packages/db/migrations/*
 bun run db:migrate                   # apply migrations (DATABASE_URL=…)
 bun run db:local --port 54322        # migrated Postgres with the development user, no Docker

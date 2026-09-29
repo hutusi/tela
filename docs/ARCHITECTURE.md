@@ -364,10 +364,31 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, /o/* content objects, /
     URLs: the object is the allowlist. Raster types only, no SVG, 10 MB, cached for seven days.
   - Sessions are read from the signed cookie cache; when it has lapsed, tela-api's get-session
     is asked and its fresh cookie passed on.
+  - `/discover`, `/s/:id` and `/@handle` are rendered here (`src/ssr.tsx`) with the SPA's views,
+    from tela-api's public JSON, into the built `index.html`. They are cached per colo, locale and
+    deploy for five minutes, and the page's data rides along in `#tela-data`.
+  - A write to `/api/*` must carry this origin; hubs (`/api/websub/*`) and the admin script are
+    exempt.
+  - Everything else is the SPA's static assets, which answer without running the Worker.
+- **Reader** (`apps/reader/src`, ADR 0025): a Vite + React SPA that renders from the device.
+  - `store/local.ts` holds confirmed rows and pending mutations, written through to IndexedDB.
+  - `store/engine.ts` pulls at boot, on focus, every minute and after a push. It pushes a
+    quarter-second after a change, and at once (`keepalive`) when the tab hides.
+  - `store/objects.ts` serves bodies and translations from memory, then IndexedDB, then `/o/*`. It
+    prefetches unread bodies while idle and evicts read ones after seven days or 50 MB.
+  - `store/selectors.ts` answers the reading view: unread, lists, counts, the shown title.
+  - `views/` are Discover, a blog's page and a profile as pure components the edge renders too.
+  - `public/sw.js` caches the app shell only; `shell/kill-sw.js` replaces it in an emergency.
 - **Sync** (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025):
   - `GET /api/v1/sync?cursor=` reads a member's rows in one batch: a horizon snapshot at cursor 0,
     and deltas by seq in pages that end on a seq boundary.
   - `POST /api/v1/mutations` applies up to 50 idempotent, last-writer-wins mutations in one batch.
+  - The device's reducer (`packages/sync/src/client.ts`) is the same code in the browser and in
+    the convergence test that runs it against the real tela-api.
+- **End-to-end** (`apps/reader/e2e`): the built reader, tela-api and tela-jobs in one
+  `wrangler dev` on fresh local D1, R2 and queues, against the fixture feed server. Test mode
+  (`ENV=test`) adds the sign-in outbox and `POST /api/test/cycle`, which runs tela-jobs' sweeps to
+  completion, because local dev fires no crons.
 - **Translation** (`apps/jobs/src/translation`, ADR 0023):
   - `translate.title` is keyed by feed. The sweep finds feeds with articles whose current
     `title_hash` has no `article_titles` row in some launch language. A job takes up to 20 of a
