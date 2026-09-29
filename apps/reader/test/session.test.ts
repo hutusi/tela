@@ -254,8 +254,14 @@ describe('booting after an earlier build ran on this device', () => {
     const name = `tela-test-${crypto.randomUUID()}`
     await held(await indexedDbPersistence(name))
     await earlierSignsIn()
-    const dies: EarlierBuild = { ...earlierBuild, seen: async () => {} }
-    await openStore(await indexedDbPersistence(name), dies)
+    const dies: EarlierBuild = {
+      ...earlierBuild,
+      empty: async () => {
+        await earlierBuild.empty()
+        throw new Error('the tab closed')
+      },
+    }
+    await expect(openStore(await indexedDbPersistence(name), dies)).rejects.toThrow('closed')
     expect(await earlierBuild.wrote()).toBe(true)
     const next = await openStore(await indexedDbPersistence(name))
     expect(initialStatus(next)).toBe('unknown')
@@ -361,6 +367,9 @@ describe('asking /me who is signed in', () => {
       ['a page that is not /me', () => new Response('<html>sign in to the wifi</html>')],
       ['no network', () => Promise.reject(new TypeError('Failed to fetch'))],
       ['no one named', () => Response.json({})],
+      // A /me-shaped body behind a status that is not OK (a proxy replaying a cached answer): it
+      // is the status that says nothing, whatever the body.
+      ['an old answer at 503', () => Response.json({ id: 'b' }, { status: 503 })],
     ]
     for (const [, answer] of answers) {
       const { storage, store } = await doubted()

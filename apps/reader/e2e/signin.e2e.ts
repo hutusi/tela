@@ -394,9 +394,14 @@ test.describe('the mail link on a new device while /me misses', () => {
     // Found in review: with the boot's answer dropped, a miss left the tab 'unknown', where the
     // home page and the header render nothing. It is a guest meanwhile.
     await page.getByRole('link', { name: 'Tela' }).first().click()
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      'Independent blogs, in any language.',
+    )
     await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible()
 
+    // A retry misses too before tela-api is back, and the one after it carries on.
+    await expect.poll(() => asked, { timeout: 10_000 }).toBeGreaterThanOrEqual(3)
     back = true
     await expect(page).toHaveURL(/\/reading$/, { timeout: 20_000 })
   })
