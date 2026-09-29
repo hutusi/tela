@@ -14,6 +14,7 @@
   "scripts": {
     "dev": "bun run --filter @tela/web dev",
     "dev:worker": "bun run --filter @tela/worker dev",
+    "dev:reader": "bun run --filter @tela/reader dev",
     "build": "bun run --filter '@tela/*' build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
@@ -24,7 +25,8 @@
     "db:migrate": "bun run --filter @tela/db migrate",
     "db:local": "bun run --filter @tela/db local-db",
     "worker:once": "bun run --filter @tela/worker once",
-    "e2e": "apps/web/e2e/run.sh",
+    "e2e": "apps/web/e2e/run.sh && apps/reader/e2e/run.sh",
+    "e2e:reader": "apps/reader/e2e/run.sh",
     "admin": "bun apps/api/scripts/admin.ts",
     "db:prepare": "bun run --filter @tela/db prepare-db"
   },
