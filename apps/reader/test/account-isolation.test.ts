@@ -11,6 +11,7 @@
  * also needs tela-api to refuse a call naming another member (protocol 2) says so, and runs only
  * once `MIN_CLIENT` is 2.
  */
+import { leaver } from '../src/leave'
 import 'fake-indexeddb/auto'
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { bumpSeq, currentSeq, type TelaDb } from '@tela/data'
@@ -48,13 +49,14 @@ const engineFor = (store: LocalStore, events: Partial<EngineEvents> = {}) => {
   return e
 }
 
-/** main.tsx's leave(), minus the navigation: forget the account, once. */
+/** main.tsx's leave: the real leaver, with the navigation recorded instead of made. */
 function leaving(store: LocalStore) {
-  const left: { forgotten: Promise<void> | null } = { forgotten: null }
+  const left: { forgotten: Promise<void> | null; went: string[] } = { forgotten: null, went: [] }
+  const leave = leaver({ stop() {}, store, go: (path) => void left.went.push(path) })
   return {
     left,
     onAccountChanged: () => {
-      left.forgotten ??= store.forgetAccount()
+      left.forgotten ??= leave()
     },
   }
 }

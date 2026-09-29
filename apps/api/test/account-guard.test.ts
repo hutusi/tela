@@ -331,6 +331,7 @@ describe('signing out', () => {
   test('a current client naming no one is refused like one naming someone else', async () => {
     const res = await signOut({ [CLIENT_HEADER]: '2', [MEMBER_HEADER]: undefined })
     expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'account_changed' })
     expect(await sessions(b)).toBe(1)
   })
 
