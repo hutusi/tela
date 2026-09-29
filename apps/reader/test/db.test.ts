@@ -149,6 +149,25 @@ describe('the device database', () => {
     }
   })
 
+  test("a commit and a claim started together never leave the old owner's rows under the new", async () => {
+    // Only one transaction for the owner check and the write makes this hold: checked in one and
+    // written in another, the claim lands between them and a's rows are stored under b.
+    const alice = tablesOf(
+      pull(5, { profile: [{ ...profile, handle: 'alice' }], subscriptions: [sub(1)] }, true),
+    )
+    for (let i = 0; i < 30; i++) {
+      const name = fresh()
+      const one = await indexedDbPersistence(name)
+      const two = await indexedDbPersistence(name)
+      await one.claim('a')
+      const write = () =>
+        one.commit('a', { tables: alice, cursor: 9, put: [change(`m-${i}-0001`, 1, 7)] })
+      await Promise.all(i % 2 ? [write(), two.claim('b')] : [two.claim('b'), write()])
+      expect(await two.load()).toEqual({ owner: 'b', cursor: 0, rows: null, pending: [] })
+      expect(await metaKeys(name)).toEqual(['owner'])
+    }
+  })
+
   test('the stored cursor only moves forward, unless a snapshot rewrites every table', async () => {
     const name = fresh()
     const one = await indexedDbPersistence(name)
