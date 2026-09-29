@@ -94,8 +94,20 @@ async function twoAccounts(
   await signInRequest(context.request, `second-${stamp}@e2e.test`)
   await other.goto('/reading')
   await expect(other.getByTestId('empty-state')).toBeVisible()
+  await showsSessionAccount(other, context)
   await page.bringToFront()
   return { other }
+}
+
+/**
+ * The page shows the account the session is now, not only an empty pane: the header's link to
+ * that account's own profile, which only its own synced rows can put there.
+ */
+async function showsSessionAccount(page: Page, context: BrowserContext): Promise<void> {
+  const me = (await (await context.request.get('/api/v1/me')).json()) as {
+    profile: { handle: string }
+  }
+  await expect(page.getByRole('banner').locator(`a[href="/@${me.profile.handle}"]`)).toBeVisible()
 }
 
 /** A sync the page makes from now on, answered: only a tab holding the session's account gets one. */
@@ -149,7 +161,7 @@ test.describe('a stale tab saving settings', () => {
     // Refused as a call for another account than the session's: the tab starts again from '/',
     // which sends the member signed in now to their reading.
     await expect(page).toHaveURL(/\/reading$/)
-    await expect(page.getByTestId('empty-state')).toBeVisible()
+    await showsSessionAccount(page, context)
     expect(await profileNow()).toEqual(before)
   })
 })
@@ -165,14 +177,14 @@ test.describe('a stale tab signing out', () => {
     await page.getByTestId('sign-out').click()
     // The session is the second account's: this tab forgets the first and starts over as the
     // second, rather than end a session that is not its own.
-    await expect(page.getByTestId('empty-state')).toBeVisible()
+    await showsSessionAccount(page, context)
     expect((await context.request.get('/api/v1/me')).status()).toBe(200)
     await resynced
 
     const synced = nextSync(other)
     await other.reload()
     await synced
-    await expect(other.getByTestId('empty-state')).toBeVisible()
+    await showsSessionAccount(other, context)
   })
 })
 
@@ -203,7 +215,8 @@ test.describe('the mail link for another account, opened in a signed-in tab', ()
       { email: second, otp: code },
     )
     await expect(page).toHaveURL(/\/reading$/)
-    await expect(page.getByTestId('empty-state')).toBeVisible()
+    await showsSessionAccount(page, context)
+    await expect(page.getByTestId('subscription')).toHaveCount(0)
     expect(await page.evaluate(() => (window as { stale?: number }).stale)).toBeUndefined()
   })
 })
