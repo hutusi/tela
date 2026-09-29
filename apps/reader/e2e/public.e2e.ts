@@ -3,6 +3,7 @@
  * recommendations on a profile, the author's dashboard, settings, and search. Public pages are
  * rendered at the edge, so a visitor without JavaScript sees them too.
  */
+import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import { BASE, FIXTURES, keepCycling, memberHeaders, synced } from './helpers'
 
@@ -171,6 +172,18 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     expect(res.status()).toBe(200)
     expect(res.headers()['content-type']).toContain('opml')
     const body = await res.text()
+    expect(body).toContain('<opml version="2.0">')
+    expect(body).toContain(`xmlUrl="${FIXTURES}/jvns.xml"`)
+  })
+
+  test('the Settings button saves that list as a file', async ({ page }) => {
+    // A fetch and a Blob, not a plain link: only a call can name the account (ADR 0025).
+    await page.goto('/settings')
+    const saved = page.waitForEvent('download')
+    await page.getByTestId('opml-export').click()
+    const download = await saved
+    expect(download.suggestedFilename()).toBe('tela-subscriptions.opml')
+    const body = await readFile(await download.path(), 'utf8')
     expect(body).toContain('<opml version="2.0">')
     expect(body).toContain(`xmlUrl="${FIXTURES}/jvns.xml"`)
   })

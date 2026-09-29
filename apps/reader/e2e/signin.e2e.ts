@@ -175,3 +175,35 @@ test.describe('a stale tab signing out', () => {
     await expect(other.getByTestId('empty-state')).toBeVisible()
   })
 })
+
+test.describe('the mail link for another account, opened in a signed-in tab', () => {
+  test.use(visitor(6))
+  test('loads a fresh page, so nothing the first account held in memory carries over', async ({
+    page,
+    context,
+    request,
+  }) => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    await signInRequest(context.request, `first-${stamp}@e2e.test`)
+    await addFeed(context.request, `${FIXTURES}/jnito.xml`)
+    await cycle(context.request)
+    await page.goto('/reading')
+    await expect(page.getByTestId('subscription')).toHaveCount(1)
+
+    // The second account's link, followed inside the running app (a mail client handing the link
+    // to this tab), so only the app itself can decide whether the page is loaded afresh.
+    const second = `second-${stamp}@e2e.test`
+    const code = await inviteAndReadCode(request, second)
+    await page.evaluate(
+      ({ email, otp }) => {
+        ;(window as { stale?: number }).stale = 1
+        history.pushState({}, '', `/login?email=${encodeURIComponent(email)}&otp=${otp}`)
+        dispatchEvent(new PopStateEvent('popstate'))
+      },
+      { email: second, otp: code },
+    )
+    await expect(page).toHaveURL(/\/reading$/)
+    await expect(page.getByTestId('empty-state')).toBeVisible()
+    expect(await page.evaluate(() => (window as { stale?: number }).stale)).toBeUndefined()
+  })
+})
