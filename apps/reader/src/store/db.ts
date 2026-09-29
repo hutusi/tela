@@ -37,6 +37,7 @@ import {
   openDB,
   type StoreNames,
 } from 'idb'
+import { newId } from '../lib/id'
 
 export type StoredBody = { key: string; object: unknown; bytes: number; lastOpened: number }
 export type StoredObject = { key: string; object: unknown; at: number }
@@ -358,7 +359,7 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
       }),
     distrust: () =>
       write(['meta'], async (tx) => {
-        await tx.objectStore('meta').put(crypto.randomUUID(), UNVERIFIED)
+        await tx.objectStore('meta').put(newId(), UNVERIFIED)
       }),
     async mark() {
       const mark = await db.get('meta', UNVERIFIED)
@@ -475,7 +476,7 @@ export function memoryPersistence(): Persistence {
       return wiped
     },
     async distrust() {
-      unverified = crypto.randomUUID()
+      unverified = newId()
     },
     mark: async () => unverified,
     async release(o) {

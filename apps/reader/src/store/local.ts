@@ -24,6 +24,7 @@ import {
   tablesFromRows,
   view,
 } from '@tela/sync'
+import { newId } from '../lib/id'
 import type { Change, Persistence } from './db'
 
 /** A mutation as the UI states it: the store adds the id and the time. */
@@ -40,11 +41,6 @@ const gone = (before: readonly Pending[], after: readonly Pending[]): string[] =
 }
 
 export type Snapshot = { version: number; tables: Tables; pendingCount: number }
-
-const newMid = () =>
-  typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
 
 export class LocalStore {
   private confirmed: Confirmed = { cursor: 0, tables: emptyTables() }
@@ -167,7 +163,7 @@ export class LocalStore {
     const owner = this.userId
     // Nobody's rows are held: the change would be no one's, and could go to anyone.
     if (owner === null) return
-    const mutation = { ...input, mid: newMid(), at: this.now() } as Mutation
+    const mutation = { ...input, mid: newId(), at: this.now() } as Mutation
     const entry: Pending = { mutation }
     this.pending = [...this.pending, entry]
     this.recompute()

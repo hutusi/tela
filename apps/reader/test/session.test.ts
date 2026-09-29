@@ -174,6 +174,23 @@ describe('booting after an earlier build ran on this device', () => {
     expect(tabs.map(initialStatus)).toEqual(['unknown', 'unknown'])
   })
 
+  test('a browser without crypto.randomUUID (plain http) still boots, and asks first', async () => {
+    const name = `tela-test-${crypto.randomUUID()}`
+    await held(await indexedDbPersistence(name))
+    await earlierSignsIn()
+    const uuid = crypto.randomUUID
+    Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true })
+    try {
+      const booted = await openStore(await indexedDbPersistence(name))
+      expect(initialStatus(booted)).toBe('unknown')
+      const memory = memoryPersistence()
+      await memory.distrust()
+      expect(await memory.mark()).not.toBeNull()
+    } finally {
+      Object.defineProperty(crypto, 'randomUUID', { value: uuid, configurable: true })
+    }
+  })
+
   test("a claim made while this tab empties the earlier build's copy leaves it asking first", async () => {
     const name = `tela-test-${crypto.randomUUID()}`
     await held(await indexedDbPersistence(name))
