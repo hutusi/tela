@@ -99,9 +99,13 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
    - tela-web may not go back while the new tela-api is live: every restored older shell would
      be told to upgrade and find no newer shell to load.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
-     `tela`. A tela-web rollback leaves the `tela-2` copies in place, and the older shell starts
-     over in `tela`. On the way forward again the newer shell sees that an earlier build wrote
-     `tela`, so for that boot it asks who is signed in before it trusts its own copy.
+     `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
+     leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
+     forward again the newer shell sees that an earlier build touched `tela` (wrote to it, or
+     cleared it on a sign-out, which takes the mark) and marks its own copy unverified: every tab
+     asks who is signed in before trusting it, until the claim after that answer. Browsers
+     without `indexedDB.databases()` (Firefox before 126) cannot see this, and trust their copy
+     until its first request is refused.
 
    Protocol 2 also starts every device over once, at its first boot on the new shell: it waits
    on the network that one time, and any unsent change the old shell left behind is dropped. Its

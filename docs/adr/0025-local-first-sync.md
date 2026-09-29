@@ -64,7 +64,9 @@ commits meanwhile.
     IndexedDB transaction and writes nothing on a mismatch; readwrite transactions over the same
     store run one at a time across every tab, so a check made in a separate transaction first
     would be a race. The copy lives in a database of its own (`tela-2`): an earlier build's tab,
-    still open or brought back by a rollback, checks nothing, and must never reach it.
+    still open or brought back by a rollback, checks nothing, and must never reach it. When one
+    has run on the device since, the copy is unverified until the next claim, because a sign-out
+    or sign-in there never reached it.
   - Signing out names the member too, in the request that ends the session, so a stale tab
     cannot end the session another tab started.
   - A tab that loses either check stops, forgets what it holds, and starts again from `/` as
