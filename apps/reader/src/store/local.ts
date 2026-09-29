@@ -170,8 +170,9 @@ export class LocalStore {
 
   /**
    * Fold in a pull asked for in `epoch`, unless the tab has stopped holding those rows since. Only
-   * the tables it touched are rewritten, in one write with the cursor, so a cursor never lands
-   * on tables another tab wrote.
+   * the tables it touched are rewritten, in one write with the cursor, which storage refuses
+   * when it would move the stored cursor back over newer tables another tab of this account
+   * wrote (`Change` in db.ts).
    */
   async applyPull(pull: PullResponse, epoch: number): Promise<void> {
     const owner = this.userId

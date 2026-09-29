@@ -54,7 +54,12 @@ export type Persisted = {
   pending: Pending[]
 }
 
-/** One write of an owner's rows: whatever it names lands together, or none of it does. */
+/**
+ * One write of an owner's rows: whatever it names lands together, or none of it does. Tables and
+ * cursor are written only if the cursor does not move back, unless the change writes every table
+ * (a snapshot, which may lower it after a restore): another tab of the same account may already
+ * have stored newer tables, and a lower cursor over them would never pull what they lack.
+ */
 export type Change = {
   tables?: Partial<TableRows>
   cursor?: number
@@ -149,6 +154,12 @@ function inOrder(entries: Iterable<Pending>): Pending[] {
   )
 }
 
+/** Whether writing `change`'s tables and cursor over a copy at `stored` keeps it consistent. */
+function movesForward(change: Change, stored: number): boolean {
+  if (change.cursor === undefined || change.cursor >= stored) return true
+  return TABLES.every((t) => change.tables !== undefined && t in change.tables)
+}
+
 const STORES = ['meta', 'tables', 'bodies', 'objects'] as const
 type Store = StoreNames<TelaDB>
 type Tx = IDBPTransaction<TelaDB, Store[], 'readwrite'>
@@ -229,14 +240,18 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
       }),
     commit: (owner, change) =>
       write(['meta', 'tables'], async (tx) => {
-        if ((await ownerOf(tx)) !== owner) return false
         const meta = tx.objectStore('meta')
+        const [stored, storedCursor] = await Promise.all([ownerOf(tx), meta.get(CURSOR)])
+        if (stored !== owner) return false
         const tables = tx.objectStore('tables')
+        const rows = movesForward(change, Number(storedCursor ?? 0))
         await Promise.all([
-          ...Object.entries(change.tables ?? {}).map(([t, rows]) =>
-            tables.put(rows, t as keyof TableRows),
-          ),
-          ...(change.cursor === undefined ? [] : [meta.put(change.cursor, CURSOR)]),
+          ...(rows
+            ? Object.entries(change.tables ?? {}).map(([t, value]) =>
+                tables.put(value, t as keyof TableRows),
+              )
+            : []),
+          ...(rows && change.cursor !== undefined ? [meta.put(change.cursor, CURSOR)] : []),
           ...(change.put ?? []).map((e) =>
             meta.put({ ...e, owner } satisfies StoredPending, pendingKey(e.mutation.mid)),
           ),
@@ -329,8 +344,10 @@ export function memoryPersistence(): Persistence {
     },
     async commit(o, change) {
       if (owner !== o) return false
-      tables = { ...tables, ...change.tables }
-      if (change.cursor !== undefined) cursor = change.cursor
+      if (movesForward(change, cursor)) {
+        tables = { ...tables, ...change.tables }
+        if (change.cursor !== undefined) cursor = change.cursor
+      }
       for (const e of change.put ?? []) pending.set(e.mutation.mid, e)
       for (const mid of change.drop ?? []) pending.delete(mid)
       return true

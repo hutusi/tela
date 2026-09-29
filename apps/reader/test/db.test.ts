@@ -149,6 +149,34 @@ describe('the device database', () => {
     }
   })
 
+  test('the stored cursor only moves forward, unless a snapshot rewrites every table', async () => {
+    const name = fresh()
+    const one = await indexedDbPersistence(name)
+    const two = await indexedDbPersistence(name)
+    await one.claim('a')
+    const at = (n: number, feed: number) =>
+      tablesOf(pull(n, { profile: [profile], subscriptions: [sub(feed)] }, true))
+    await one.commit('a', { tables: at(5, 1), cursor: 5 })
+    // One tab of a stores newer subscriptions at cursor 10.
+    await one.commit('a', { tables: { subscriptions: at(10, 2).subscriptions }, cursor: 10 })
+    // Another tab of a, behind, writes older subscriptions at cursor 8, and a change of its own.
+    const behind = await two.commit('a', {
+      tables: { subscriptions: at(8, 3).subscriptions },
+      cursor: 8,
+      put: [change('mid-two-0001', 1, 7)],
+    })
+    expect(behind).toBe(true)
+    const kept = await one.load()
+    expect(kept.cursor).toBe(10)
+    expect(kept.rows?.subscriptions.map((x) => x.feedId)).toEqual([2])
+    expect(mids(kept.pending)).toEqual(['mid-two-0001'])
+    // A snapshot (every table) may lower it: a restore from a backup answers one.
+    await two.commit('a', { tables: at(4, 4), cursor: 4 })
+    const restored = await one.load()
+    expect(restored.cursor).toBe(4)
+    expect(restored.rows?.subscriptions.map((x) => x.feedId)).toEqual([4])
+  })
+
   test("this build keeps its own database, and never reads an earlier build's", async () => {
     // An earlier build's tab left open writes 'tela' without checking anyone; this build's copy
     // is elsewhere, so nothing it writes can land in this build's.
