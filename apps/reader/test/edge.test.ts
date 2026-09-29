@@ -18,6 +18,8 @@ let gets: string[]
 let images: { url: string; response: () => Response }[]
 let fetched: string[]
 let cookie: string
+/** What the member's client names itself with on a member call (protocol and member id). */
+let client: Record<string, string>
 
 function memoryCache(): EdgeCache & { size: number } {
   const store = new Map<string, { body: ArrayBuffer; init: ResponseInit }>()
@@ -102,7 +104,9 @@ beforeEach(async () => {
     },
     config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
   })
-  cookie = (await signedIn(api)).cookie
+  const reader = await signedIn(api)
+  cookie = reader.cookie
+  client = reader.headers
   await blobs.put(
     `c/${KEY}.json`,
     JSON.stringify({
@@ -289,7 +293,7 @@ describe('writes to the API', () => {
     expect((await post(discover, { cookie, origin: 'https://evil.example' })).status).toBe(403)
     expect((await post(discover, { cookie })).status).toBe(403)
     // Through to tela-api, which finds no URL in the body.
-    expect((await post(discover, { cookie, origin: ORIGIN })).status).toBe(400)
+    expect((await post(discover, { cookie, origin: ORIGIN, ...client })).status).toBe(400)
     expect((await post('/api/websub/1', {})).status).not.toBe(403)
     // tela-api's own refusal (no bearer token), not the edge's.
     expect(await (await post('/api/admin/invite', {})).json()).toEqual({ error: 'forbidden' })
