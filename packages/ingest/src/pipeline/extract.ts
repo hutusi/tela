@@ -90,6 +90,14 @@ export async function extractArticleJob(ctx: IngestContext, lease: Lease): Promi
   }
 
   const object = buildContentObject(processed)
+  // A page unchanged since its last extraction is not a new version (invariant 6): re-running
+  // extraction over a blog's posts once added a duplicate to 92 of 118 of them.
+  const lastExtracted = article.versions
+    .filter((v) => v.provenance === 'readability')
+    .sort((a, b) => b.version - a.version)[0]
+  if (lastExtracted?.contentKey === object.key) {
+    return settle(ctx, lease, article.id, 'done', 'the page is unchanged since its last extraction')
+  }
   const rawSha = await sha256Hex(extracted.contentHtml)
   await Promise.all([
     ctx.blobs.put(objectKeys.content(object.key), JSON.stringify(object), {

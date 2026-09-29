@@ -152,6 +152,31 @@ describe('extractArticleJob', () => {
     expect(await article()).toMatchObject({ current_version: 4, extract_state: 'done' })
   })
 
+  test('re-extracting a page that has not changed adds no version', async () => {
+    const feedId = await summaryFeed()
+    servePage('/posts/1', page(6))
+    await extractArticleJob(ctx(), await claim('article.extract', 1))
+    // The teaser is edited, which asks for extraction again; the page itself is the same.
+    server.text('/feed.xml', teasers('An edited teaser'))
+    clock.advance(MIN)
+    await ingestFeed(ctx(), await claim('feed.fetch', feedId))
+    clock.advance(MIN)
+    expect(await extractArticleJob(ctx(), await claim('article.extract', 1))).toMatchObject({
+      status: 'settled',
+      state: 'done',
+      reason: 'the page is unchanged since its last extraction',
+    })
+    const versions = await db.all<{ version: number; provenance: string }>(
+      sql`select version, provenance from article_versions where article_id = 1 order by version`,
+    )
+    expect(versions).toEqual([
+      { version: 1, provenance: 'feed' },
+      { version: 2, provenance: 'readability' },
+      { version: 3, provenance: 'feed' },
+    ])
+    expect(await article()).toMatchObject({ current_version: 2, extract_state: 'done' })
+  })
+
   test('settles as failed when the page has no article in it, adding no version', async () => {
     await summaryFeed()
     servePage('/posts/1', '<html><body><nav>Home</nav><p>Just a teaser 1…</p></body></html>')
