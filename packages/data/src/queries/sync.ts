@@ -82,9 +82,18 @@ function scope(userId: string, horizon: number, cursor: number) {
   /** Articles kept whatever their feed: liked or recommended by the member. */
   const kept = sql`select article_id from user_article_states where user_id = ${userId} and liked_at is not null
     union select article_id from recommendations where user_id = ${userId} and deleted_at is null`
+  /**
+   * Articles the member began to keep since the cursor. They come whole, with their feed, because
+   * the article may belong to no feed the member subscribes to (a liked post from a feed since
+   * left), so its row was never sent or has been dropped.
+   */
+  const newlyKept = sql`select article_id from user_article_states
+      where user_id = ${userId} and liked_at is not null and seq > ${cursor}
+    union select article_id from recommendations
+      where user_id = ${userId} and deleted_at is null and seq > ${cursor}`
   const horizonOf = (feeds: SQL) =>
     sql`select id from articles where feed_id in (${feeds}) and fetched_at >= ${horizon}`
-  return { activeFeeds, newFeeds, kept, horizonOf }
+  return { activeFeeds, newFeeds, kept, newlyKept, horizonOf }
 }
 
 /**
@@ -96,20 +105,20 @@ export async function readPull(
   options: { userId: string; cursor: number; horizon: number; limit: number },
 ): Promise<PullRead> {
   const { userId, cursor, horizon, limit } = options
-  const { activeFeeds, newFeeds, kept, horizonOf } = scope(userId, horizon, cursor)
+  const { activeFeeds, newFeeds, kept, newlyKept, horizonOf } = scope(userId, horizon, cursor)
   const snapshot = cursor === 0
   const over = limit + 1
   const bySeq = sql.raw(`order by seq limit ${over}`)
 
   // In a snapshot every subscribed feed is new, and so are the feeds of articles kept from
-  // elsewhere (a liked post from a feed since unsubscribed still names its blog); in a delta only
-  // the feeds subscribed since the cursor.
+  // elsewhere (a liked post from a feed since unsubscribed still names its blog). In a delta:
+  // the feeds subscribed since the cursor, and those of articles the member began to keep.
   const fresh = snapshot
     ? sql`${activeFeeds} union select feed_id from articles where id in (${kept})`
-    : newFeeds
+    : sql`${newFeeds} union select feed_id from articles where id in (${newlyKept})`
   const freshArticles = snapshot
     ? sql`select id from articles where id in (${horizonOf(activeFeeds)}) or id in (${kept})`
-    : horizonOf(newFeeds)
+    : sql`select id from articles where id in (${horizonOf(newFeeds)}) or id in (${newlyKept})`
 
   const queries = {
     head: sql`select coalesce((select v from counters where k = 'seq'), 0) as head`,
@@ -140,9 +149,21 @@ export async function readPull(
     freshArticles: sql`select ${ARTICLE} from articles a where a.id in (${freshArticles})`,
     articles: snapshot
       ? sql`select 1 where false`
-      : sql`select ${ARTICLE} from articles a where a.feed_id in (${activeFeeds}) and a.seq > ${cursor}
+      : // Kept articles change too (others like them), whichever feed they are in.
+        sql`select ${ARTICLE} from articles a where a.seq > ${cursor}
+          and (a.feed_id in (${activeFeeds}) or a.id in (${kept}))
           order by a.seq limit ${over}`,
+    newlyKept: snapshot
+      ? sql`select 1 where false`
+      : sql`select article_id as id from (${newlyKept})`,
     freshTitles: sql`select ${TITLE} from article_titles t where t.article_id in (${freshArticles})`,
+    // The member's own states for a fresh feed's articles, whatever their seq: a device drops a
+    // feed's articles and their states when it unsubscribes, and a resubscription must bring
+    // back what was read, not only what was written since.
+    freshStates: snapshot
+      ? sql`select 1 where false`
+      : sql`select ${STATE} from user_article_states
+          where user_id = ${userId} and article_id in (${freshArticles})`,
     titles: snapshot
       ? sql`select 1 where false`
       : sql`select ${TITLE} from article_titles t where t.feed_id in (${activeFeeds}) and t.seq > ${cursor}
@@ -216,13 +237,17 @@ export async function readPull(
     ? null
     : new Set(subscriptions.filter((s) => s.deletedAt === null).map((s) => Number(s.feedId)))
   const isFresh = (feedId: unknown) => freshFeedIds === null || freshFeedIds.has(Number(feedId))
+  const newlyKeptIds = new Set(got.newlyKept.map((r) => Number(r.id)))
   const merge = (fresh: RawRow[], changed: RawRow[], key: (r: RawRow) => string) => {
     const out = new Map<string, RawRow>()
     for (const r of within(changed)) out.set(key(r), r)
     for (const r of fresh) out.set(key(r), r)
     return [...out.values()]
   }
-  const freshArticlesKept = got.freshArticles.filter((a) => isFresh(a.feedId))
+  const freshArticlesKept = got.freshArticles.filter(
+    (a) => isFresh(a.feedId) || newlyKeptIds.has(Number(a.id)),
+  )
+  const freshArticleFeeds = new Set(freshArticlesKept.map((a) => Number(a.feedId)))
   const freshArticleIds = new Set(freshArticlesKept.map((a) => Number(a.id)))
   const freshContentKeys = new Set(freshArticlesKept.map((a) => String(a.contentKey)))
 
@@ -234,11 +259,15 @@ export async function readPull(
       profile: got.profile,
       prefs: within(got.prefs),
       subscriptions,
-      states: within(got.states),
+      states: merge(
+        got.freshStates.filter((r) => freshArticleIds.has(Number(r.articleId))),
+        got.states,
+        (r) => String(r.articleId),
+      ),
       recommendations: within(got.recommendations),
       claims: within(got.claims),
       feeds: merge(
-        got.freshFeeds.filter((f) => isFresh(f.id)),
+        got.freshFeeds.filter((f) => isFresh(f.id) || freshArticleFeeds.has(Number(f.id))),
         got.feeds,
         (r) => String(r.id),
       ),

@@ -27,7 +27,7 @@ Decisions that look odd but are deliberate:
 | `packages/config` | Shared tsconfig bases |
 | `packages/platform` | *(refactor/local-first)* The seams to whatever runs Tela: `Db` (Drizzle SQLite, batch-only), `Blobs`, `Jobs`, `Clock`, `Mail`. `./cloudflare` is the only module that touches a binding; `./portable` (libSQL held to D1's limits, S3, memory) is what tests and the exit path run (ADR 0021) |
 | `packages/data` | *(refactor/local-first)* The SQLite data model for D1 and libSQL: schema, migrations, the lease primitive, the sync sequence, query helpers. Replaces `packages/db` at cutover |
-| `packages/sync` | *(refactor/local-first)* The sync protocol (ADR 0025): row shapes, the pull response, and the zod schemas of the mutations a reader pushes. Shared by tela-api and the Phase 6 client |
+| `packages/sync` | *(refactor/local-first)* The sync protocol (ADR 0025): row shapes, the pull response, the zod schemas of the mutations a reader pushes, and the device's pure reducer (`applyPull`, `applyMutation`, `view`, `settle`). `apps/api/test/convergence.test.ts` holds the two to each other |
 | `apps/web` | Next.js 16 App Router, Tailwind v4, next-intl (no i18n routing), Drizzle server-side; Cloudflare Workers via OpenNext |
 | `apps/worker` | Node 24 process bundled by Bun: `src/roles.ts`, `src/queues.ts`, `src/jobs/` |
 | `apps/jobs` | *(refactor/local-first)* The `tela-jobs` Worker. `src/kinds.ts` is every kind of background work (due query, lease, backoff, queue, handler). `src/runner.ts` holds `tick` and `runJob`, both portable. `src/worker.ts` is the Cloudflare entry: its cron and queue handlers only dispatch to the Singapore-pinned fetch handler over `SELF`. `src/portable.ts` runs the same work on a timer. Replaces `apps/worker` at cutover |

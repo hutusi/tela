@@ -34,7 +34,14 @@ commits meanwhile.
 - Any other cursor is a **delta**: rows with a seq above it.
   - A subscription newer than the cursor brings its feed's horizon whole, because those articles
     were written before the subscription and their seqs are below the cursor.
+  - A resubscription's horizon brings the member's own read and like states for those articles,
+    whatever their seq, because the device dropped them with the feed.
   - Unsubscribing is a subscription row with `deletedAt`; the feed stops flowing.
+  - **Kept articles** (liked or recommended) belong to no feed the member need follow.
+    - Their changes flow whatever the member subscribes to (others' likes move their counts).
+    - An article that becomes kept arrives whole, with its feed and site.
+    - The device holds an article only while its feed is subscribed or the member keeps it, and
+      prunes the rest after every pull.
   - Hard deletes would travel as tombstones. None of Tela's writers hard-delete a synced row
     today: compaction drops only read states under a watermark, which the watermark already
     implies.
@@ -46,6 +53,15 @@ commits meanwhile.
   app shell that has fallen behind reloads rather than misreading rows.
 - Pulls read the D1 primary from the pinned Worker (6–10 ms). There is no read replication, so no
   Sessions bookmark and no read-your-writes gap to handle.
+
+**The device** (`@tela/sync` client: `applyPull`, `applyMutation`, `view`, `settle`) holds two
+things.
+- **Confirmed:** tables folded from pulls.
+- **Pending:** its own mutations.
+
+It renders the confirmed tables with the pending replayed on top. A pending mutation is dropped
+only once a push acknowledged it at seq N *and* a pull reached N, so an optimistic change never
+flickers back to its old state in between.
 
 **Push: `POST /api/v1/mutations`**, up to 50 in one batch, which lands whole or not at all.
 
@@ -74,6 +90,13 @@ commits meanwhile.
   invisible to devices whose cursors have passed. The dead-letter path did exactly this; it is
   fixed and tested.
 - **The pull is one batch of about twenty reads**, all by indexed `(…, seq)` or by primary key.
+- **Convergence is tested against the real tela-api**, not a model of it. Seeded random histories
+  mix local changes, pushes (a quarter of their responses lost), pulls, and articles the server
+  writes meanwhile. After a final push and pull, the device must equal a fresh snapshot with
+  nothing pending.
+  - 12 seeds run in the suite; sweeps of 700 more with histories up to 250 steps pass.
+  - The first sweep found the two gaps above: resubscribed feeds came back unread, and kept
+    articles went stale or were never let go.
 - **The tests that guard it**, each shown to fail when its rule is removed:
   - the replay guard, where `setProfile` is the one mutation last-writer-wins cannot protect;
   - last-writer-wins on likes;
