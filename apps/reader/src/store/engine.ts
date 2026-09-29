@@ -4,8 +4,10 @@
  *
  * - Pull: at start, when the tab becomes visible, every 60 s while it is, after each push, and on
  *   demand (an open article waiting for its full text).
- * - Push: a quarter-second after the last local change, so a burst of reads goes as one push;
- *   offline, it keeps retrying with backoff and loses nothing (pending mutations are stored).
+ * - Push: a quarter-second after the last local change, so a burst of reads goes as one push, and
+ *   at once when the tab is hidden or closed, so the last change before leaving is not left
+ *   waiting for the next visit; offline, it keeps retrying with backoff and loses nothing
+ *   (pending mutations are stored).
  * - A 401 means the session is gone; a 409 means this app is older than the protocol.
  */
 import type { PullResponse, PushResponse } from '@tela/sync'
@@ -42,6 +44,7 @@ export class SyncEngine {
     void this.pull()
     if (this.store.unsent().length > 0) this.schedulePush()
     document.addEventListener('visibilitychange', this.onVisibility)
+    window.addEventListener('pagehide', this.onLeave)
     window.addEventListener('online', this.onOnline)
     this.interval = setInterval(() => {
       if (document.visibilityState === 'visible') void this.pull()
@@ -51,6 +54,7 @@ export class SyncEngine {
   stop(): void {
     this.stopped = true
     document.removeEventListener('visibilitychange', this.onVisibility)
+    window.removeEventListener('pagehide', this.onLeave)
     window.removeEventListener('online', this.onOnline)
     if (this.interval) clearInterval(this.interval)
     if (this.pushTimer) clearTimeout(this.pushTimer)
@@ -58,6 +62,14 @@ export class SyncEngine {
 
   private onVisibility = () => {
     if (document.visibilityState === 'visible') void this.pull()
+    else this.onLeave()
+  }
+
+  /** The page may not come back: send what is waiting now, in a request that outlives it. */
+  private onLeave = () => {
+    if (this.pushTimer) clearTimeout(this.pushTimer)
+    this.pushTimer = null
+    void this.push({ keepalive: true })
   }
 
   private onOnline = () => {
@@ -115,13 +127,16 @@ export class SyncEngine {
   }
 
   /** Push what is unsent, then pull so the confirmed tables catch up with it. */
-  async push(): Promise<void> {
+  async push(options: { keepalive?: boolean } = {}): Promise<void> {
     if (this.pushing || this.stopped) return
     const batch = this.store.unsent()
     if (batch.length === 0) return
     this.pushing = true
     try {
-      const res = await api('/api/v1/mutations', { body: { mutations: batch } })
+      const res = await api('/api/v1/mutations', {
+        body: { mutations: batch },
+        ...(options.keepalive ? { keepalive: true } : {}),
+      })
       if (!res.ok) throw new Error(`push ${res.status}`)
       await this.store.acknowledge((await res.json()) as PushResponse)
       this.backoff = 1000

@@ -21,6 +21,8 @@ export type ApiInit = {
   /** Sent as the body verbatim (OPML), instead of JSON. */
   raw?: string
   signal?: AbortSignal
+  /** Outlive the page: a push sent as the tab goes away still arrives. */
+  keepalive?: boolean
 }
 
 export async function api(path: string, init: ApiInit = {}): Promise<Response> {
@@ -34,6 +36,7 @@ export async function api(path: string, init: ApiInit = {}): Promise<Response> {
     ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
     ...(init.raw !== undefined ? { body: init.raw } : {}),
     ...(init.signal ? { signal: init.signal } : {}),
+    ...(init.keepalive ? { keepalive: true } : {}),
   })
   if (res.status === 401) throw new SignedOut()
   if (res.status === 409) {
