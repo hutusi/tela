@@ -14,8 +14,8 @@
     {
       "binding": "DB",
       "database_name": "tela",
-      // Set when the database is provisioned (`wrangler d1 create tela --location apac`).
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // `wrangler d1 create tela --location apac`: the primary is in Singapore.
+      "database_id": "b78974b8-403a-460d-a15d-acaaaf119952",
       "migrations_dir": "../../packages/data/migrations"
     }
   ],

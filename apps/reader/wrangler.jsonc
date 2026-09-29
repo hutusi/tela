@@ -8,6 +8,7 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   // The custom domain is the only public origin: workers.dev is blocked in mainland China.
   "workers_dev": false,
+  "routes": [{ "pattern": "tela.ainaive.com", "custom_domain": true }],
   "observability": { "enabled": true },
   // The SPA's static assets answer every other path for free, without running the Worker; a
   // path with no asset is the app itself. The Worker runs first only where it has work to do.

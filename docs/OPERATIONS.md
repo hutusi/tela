@@ -55,8 +55,14 @@ directory.
 
 The account is on Workers Paid. Run wrangler from a real terminal (`wrangler login` needs a TTY).
 
-1. **D1:** `wrangler d1 create tela --location apac`. The primary lands in Singapore. Put its id
-   into both `apps/api/wrangler.jsonc` and `apps/jobs/wrangler.jsonc` (ids are not secrets).
+1. **D1:** `wrangler d1 create tela --location apac`. Put its id into both
+   `apps/api/wrangler.jsonc` and `apps/jobs/wrangler.jsonc` (ids are not secrets). The hint says
+   Asia-Pacific, not Singapore, and tela-api and tela-jobs are pinned to Singapore, so check where
+   the primary landed before anything is written to it:
+   `wrangler d1 execute tela --remote --json --command "select 1"` reports `served_by_colo`. If it
+   is not `SIN`, delete the empty database and create it again: production's landed in NRT, then
+   HKG, then SIN, and every statement from the pinned Workers pays that distance (6–10 ms beside
+   it, about 35 from HKG, 70 from NRT).
 2. **R2:** `wrangler r2 bucket create tela-content --location apac`, and a lifecycle rule for the
    streamed-translation chunks, which are only read while a translation runs:
    `wrangler r2 bucket lifecycle add tela-content chunks tc/ --expire-days 7`. `tela-assets`
@@ -77,14 +83,15 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
       entrypoint, which does not resolve until tela-jobs exports it.
    2. `cd apps/api && wrangler deploy`.
    3. `cd apps/reader && bunx vite build && wrangler deploy`. Vite builds the SPA and the Worker
-      together and writes the config wrangler deploys (`dist/tela_web/wrangler.json`). Then the
-      custom domain under Workers & Pages → tela-web → Settings → Domains, if it is not already
-      there.
+      together and writes the config wrangler deploys (`dist/tela_web/wrangler.json`). The
+      custom domain is the `routes` entry in `apps/reader/wrangler.jsonc`, so the deploy claims
+      tela.ainaive.com itself.
 
 ## Cutover from the Postgres app
 
-One time, pending. Production holds test data only, so nothing is migrated: the owner's
-subscriptions travel as OPML, and Discover is curated again.
+One time. Production holds test data only, so nothing is migrated: the owner's subscriptions
+travel as OPML, and Discover is curated again. Steps 2–5 ran on 2026-09-29, with Gate G2's full
+compare and step 1's cleanup left to finish beside the new stack; steps 6–9 are still open.
 
 1. **Gate G2 passed:** the shadow tela-jobs matched the Fly worker's articles by dedup key. Then
    delete the shadow's Worker `tela-jobs-shadow`, D1 `tela-shadow`, bucket `tela-content-shadow`
@@ -105,9 +112,11 @@ subscriptions travel as OPML, and Discover is curated again.
 7. **The mainland check** (deferred from spike S5), before any mainland reader is invited:
    itdog.cn or boce.com against `/` and `/api/v1/sync`. If the first sync is painfully slow,
    shrink the initial pull (first page now, the rest behind); that is tuning, not architecture.
-8. **Rollback**, while the old stack still exists: from a checkout of `main`, redeploy the Next app
-   (its `bun run deploy`), which takes the tela-web name back. The Postgres stack is untouched
-   until the next step.
+8. **Rollback**, while the old stack still exists:
+   `wrangler rollback 977f3ab3-e9db-439c-a720-ba5d5e1d1a40 --name tela-web` puts the Next app's last
+   version back on the same name and domain; its Hyperdrive binding and secrets are still there.
+   Failing that, redeploy it from a checkout of `main` (its `bun run deploy`). The Postgres stack is
+   untouched until the next step.
 9. **After a quiet week, remove the old stack:**
    - the Fly app `tela-worker` (`fly apps destroy tela-worker`);
    - the Hyperdrive config `tela-db`;

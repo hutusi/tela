@@ -13,8 +13,8 @@
     {
       "binding": "DB",
       "database_name": "tela",
-      // The same database as tela-jobs; set when it is provisioned.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // The same database as tela-jobs.
+      "database_id": "b78974b8-403a-460d-a15d-acaaaf119952",
       "migrations_dir": "../../packages/data/migrations"
     }
   ],
