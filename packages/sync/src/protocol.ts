@@ -18,18 +18,24 @@ export const HORIZON_DAYS = 30
 export const PAGE_ROWS = 1000
 
 /**
- * Oldest client the API still speaks to. A pull from an older one is answered 409 `upgrade`, so a
- * stale cached app shell reloads instead of misreading rows (the shell is cached, ADR 0025).
+ * Oldest client the API still speaks to. A member call from an older one is answered 409
+ * `upgrade`, so a stale cached app shell reloads instead of misreading rows or acting for the
+ * wrong account (the shell is cached, ADR 0025).
+ *
+ * - 1: the first local-first shell.
+ * - 2: every member call names the member (`MEMBER_HEADER`).
  */
-export const MIN_CLIENT = 1
+export const MIN_CLIENT = 2
 /** The request header a client names its protocol version in. */
 export const CLIENT_HEADER = 'x-tela-client'
 /**
- * The request header a client names the account its device store belongs to in. Tabs of one
- * browser share the session cookie, so after another tab signs in as someone else this tab's
- * rows, cursor and unsent changes are still the first account's. tela-api answers 409
- * `account_changed` instead of mixing the second account's rows into them (a pull) or applying
- * the first account's changes to the second (a push).
+ * The request header a client names the account its device store belongs to in, on every member
+ * call but `/api/v1/me`. Tabs of one browser share the session cookie, so after another tab signs
+ * in as someone else this tab's screen, rows, cursor and unsent changes are still the first
+ * account's. tela-api answers 409 `account_changed`, and runs nothing, when the header is missing
+ * or names anyone but the session's member: otherwise a pull would mix the second account's rows
+ * into the first's, and a push, a profile save or a claim would act for the first account as the
+ * second. `/api/v1/me` needs no name, since it is how a tab learns who is signed in.
  */
 export const MEMBER_HEADER = 'x-tela-member'
 

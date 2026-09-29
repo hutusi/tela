@@ -32,6 +32,12 @@ function sameSecret(given: string, expected: string): boolean {
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+/** A client older than the protocol is told to reload, not left misreading rows. */
+function tooOld(version: string | undefined): boolean {
+  const n = Number(version ?? '0')
+  return !Number.isInteger(n) || n < MIN_CLIENT
+}
+
 export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   const auth = createAuth(deps)
   const app = new Hono<ApiEnv>()
@@ -111,11 +117,29 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   // Hubs, not members, call this; the signature is the authorization.
   app.route('/api/websub', websubRoutes(deps))
 
+  /**
+   * Every other /api/v1 route acts for the session's member, and runs only for a client that
+   * names that member. Tabs share the cookie, so after another tab signs in as someone else the
+   * cookie is theirs while this tab's screen, rows and unsent changes are still the first
+   * account's; answered, its pull would mix the two and its push, profile save or claim would act
+   * for the first account as the second. The checks run in this order:
+   *
+   * 1. `/api/v1/me` passes: it is how a tab learns who is signed in, and says only that.
+   * 2. A client older than `MIN_CLIENT` is told to upgrade. It names no one, and `upgrade` is the
+   *    only 409 the first shell knows: `account_changed` would have it retry for ever.
+   * 3. A client that names anyone else, or no one, is told the account changed. It forgets what
+   *    it holds and starts over as the session's member. Told to upgrade, a current client would
+   *    reload into the same state.
+   */
   app.use('/api/v1/*', async (c, next) => {
     if (c.req.path.startsWith('/api/v1/public/')) return next()
     const session = await auth.api.getSession({ headers: c.req.raw.headers })
     if (!session) return c.json({ error: 'unauthorized' }, 401)
-    c.set('member', { id: session.user.id, email: session.user.email })
+    const member = { id: session.user.id, email: session.user.email }
+    c.set('member', member)
+    if (c.req.path === '/api/v1/me') return next()
+    if (tooOld(c.req.header(CLIENT_HEADER))) return c.json({ error: 'upgrade' }, 409)
+    if (c.req.header(MEMBER_HEADER) !== member.id) return c.json({ error: 'account_changed' }, 409)
     return next()
   })
 
@@ -129,21 +153,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     return c.json({ id: member.id, email: member.email, profile: profile ?? null })
   })
 
-  /** A client older than the protocol it speaks is told to reload, not left misreading rows. */
-  const tooOld = (version: string | undefined) => {
-    const n = Number(version ?? '0')
-    return !Number.isInteger(n) || n < MIN_CLIENT
-  }
-
-  /** The device holds another account's rows than the session's: another tab switched. */
-  const otherAccount = (held: string | undefined, memberId: string) =>
-    held !== undefined && held !== memberId
-
   app.get('/api/v1/sync', async (c) => {
-    if (tooOld(c.req.header(CLIENT_HEADER))) return c.json({ error: 'upgrade' }, 409)
-    if (otherAccount(c.req.header(MEMBER_HEADER), c.get('member').id)) {
-      return c.json({ error: 'account_changed' }, 409)
-    }
     const cursor = Number(c.req.query('cursor') ?? '0')
     if (!Number.isInteger(cursor) || cursor < 0) return c.json({ error: 'invalid_cursor' }, 400)
     const pull = await answerPull(deps.db, c.get('member').id, cursor, deps.clock.now())
@@ -151,10 +161,6 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   })
 
   app.post('/api/v1/mutations', async (c) => {
-    if (tooOld(c.req.header(CLIENT_HEADER))) return c.json({ error: 'upgrade' }, 409)
-    if (otherAccount(c.req.header(MEMBER_HEADER), c.get('member').id)) {
-      return c.json({ error: 'account_changed' }, 409)
-    }
     const body = pushSchema.safeParse(await c.req.json().catch(() => null))
     if (!body.success) return c.json({ error: 'invalid_push' }, 400)
     const result = await applyPush(
