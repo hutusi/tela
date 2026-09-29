@@ -10,7 +10,7 @@ import { useTranslations } from 'use-intl'
 import { ReadInMenu } from '../components/read-in-menu'
 import { TypographyControls } from '../components/typography-menu'
 import { useTitle } from '../lib/title'
-import { apiJson } from '../store/api'
+import { api, apiJson } from '../store/api'
 import { useReadingLang, useStore, useTables } from '../store/hooks'
 import { useUi } from '../ui'
 
@@ -68,17 +68,54 @@ export function SettingsPage() {
         <h2 className="font-serif text-[22px] font-medium">{t('data')}</h2>
         <p className="text-[14px] text-ink-2">{t('opmlHint')}</p>
         <div>
-          <a
-            href="/api/v1/feeds/opml"
-            download
-            className="inline-block rounded-full border border-ink px-4 py-2 text-[13px] font-medium text-ink hover:bg-ink hover:text-paper hover:no-underline"
-            data-testid="opml-export"
-          >
-            {t('opmlExport')}
-          </a>
+          <OpmlExport />
         </div>
       </section>
     </main>
+  )
+}
+
+/**
+ * The subscriptions as OPML, saved as a file. Fetched through `api()` rather than followed as a
+ * link: a navigation cannot name the member, and a tab still holding one account must not save
+ * the list of whoever the session belongs to now.
+ */
+function OpmlExport() {
+  const t = useTranslations('settings')
+  const [busy, setBusy] = useState(false)
+  const save = async () => {
+    setBusy(true)
+    try {
+      const res = await api('/api/v1/feeds/opml')
+      if (!res.ok) return
+      const name =
+        /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ??
+        'tela-subscriptions.opml'
+      const url = URL.createObjectURL(await res.blob())
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      // Some browsers read the blob after click() returns.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      // Offline, or the tab is leaving (api() has said so already): there is nothing to save.
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void save()}
+      disabled={busy}
+      className="inline-block rounded-full border border-ink px-4 py-2 text-[13px] font-medium text-ink hover:bg-ink hover:text-paper disabled:opacity-60"
+      data-testid="opml-export"
+    >
+      {t('opmlExport')}
+    </button>
   )
 }
 

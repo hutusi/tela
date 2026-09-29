@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './app'
 import { sessionEvents } from './session'
 import { registerShell } from './shell'
+import { bindApi } from './store/api'
 import { indexedDbPersistence, memoryPersistence } from './store/db'
 import { SyncEngine } from './store/engine'
 import { LocalStore } from './store/local'
@@ -18,13 +19,35 @@ async function boot() {
   const store = new LocalStore(persistence)
   await store.open()
   const objects = new Objects(persistence)
+
+  /**
+   * This tab holds another account than the browser's session (another tab signed in as someone
+   * else), or its stored copy has been taken: forget what it holds and start again as whoever is
+   * signed in now. At '/', not a reload, so nothing of the old account's (an open article, a
+   * search) carries over; and whether or not the forgetting worked.
+   */
+  let leaving = false
+  const leave = () => {
+    if (leaving) return
+    leaving = true
+    engine.stop()
+    void store
+      .forgetAccount()
+      .catch(() => undefined)
+      .then(() => window.location.assign('/'))
+  }
+  // This app is older than the protocol: fetch the new shell rather than misread rows.
+  const upgrade = () => void registerShell.upgrade()
+
   const engine = new SyncEngine(store, {
     onSignedOut: () => sessionEvents.signedOut(),
-    // This app is older than the protocol: fetch the new shell rather than misread rows.
-    onUpgrade: () => void registerShell.upgrade(),
-    // Another tab signed in as someone else: start again as whoever the session is now.
-    onAccountChanged: () => void store.forgetAccount().then(() => window.location.reload()),
+    onUpgrade: upgrade,
+    // Also what the store's refused writes come to (the engine hears them first).
+    onAccountChanged: leave,
   })
+  // Every call names the account the tab holds, and any call can find out it is out of date.
+  bindApi({ member: () => store.userId, accountChanged: leave, upgrade })
+
   const root = document.getElementById('root')
   if (!root) throw new Error('no #root')
   createRoot(root).render(<App store={store} engine={engine} objects={objects} />)

@@ -51,7 +51,7 @@ export function LoginPage() {
         setError(res.status === 429 ? 'rate_limited' : 'bad_code')
         return
       }
-      await signedIn()
+      if (await signedIn(next)) return
       navigate(next, { replace: true })
     } finally {
       setBusy(false)

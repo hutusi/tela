@@ -1,7 +1,8 @@
 /**
- * Who is reading. A device that holds a member's rows renders them at once, before any network
- * (that is the point of the local store); the first pull confirms the session, and a 401 from any
- * sync call ends it and wipes the device's copy.
+ * Who is reading. A device that holds a member's rows, and knows whose, renders them at once,
+ * before any network (that is the point of the local store); the first pull confirms the session,
+ * and a 401 from any sync call ends it and wipes the device's copy while it is still that
+ * member's.
  */
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { api, SignedOut } from './store/api'
@@ -12,8 +13,11 @@ export type SessionStatus = 'unknown' | 'member' | 'guest'
 
 type Session = {
   status: SessionStatus
-  /** After a sign-in: learn who, and start syncing. */
-  signedIn(): Promise<void>
+  /**
+   * After a sign-in: learn who, and start syncing. True when the tab held another account, in
+   * which case the page is being loaded afresh at `next` and the caller has nothing left to do.
+   */
+  signedIn(next: string): Promise<boolean>
   signOut(): Promise<void>
 }
 
@@ -41,7 +45,7 @@ async function whoAmI(): Promise<string | null> {
 
 /** A signed-out session that never changes: the edge renders public pages for guests with it. */
 export function GuestSession({ children }: { children: React.ReactNode }) {
-  const guest: Session = { status: 'guest', signedIn: async () => {}, signOut: async () => {} }
+  const guest: Session = { status: 'guest', signedIn: async () => false, signOut: async () => {} }
   return <SessionContext.Provider value={guest}>{children}</SessionContext.Provider>
 }
 
@@ -54,11 +58,14 @@ export function SessionProvider({
   engine: SyncEngine
   children: React.ReactNode
 }) {
-  const [status, setStatus] = useState<SessionStatus>(store.hasData ? 'member' : 'unknown')
+  // Rows alone are not enough: whose they are is what every call names.
+  const [status, setStatus] = useState<SessionStatus>(
+    store.hasData && store.userId !== null ? 'member' : 'unknown',
+  )
 
   useEffect(() => {
     sessionEvents.signedOut = () => {
-      void store.clear().then(() => setStatus('guest'))
+      void store.forgetAccount().then(() => setStatus('guest'))
     }
   }, [store])
 
@@ -86,21 +93,38 @@ export function SessionProvider({
     return undefined
   }, [status, engine, store])
 
-  const signedIn = useCallback(async () => {
-    const id = await whoAmI()
-    if (!id) return
-    await store.setUser(id)
-    setStatus('member')
-  }, [store])
+  const signedIn = useCallback(
+    async (next: string) => {
+      const id = await whoAmI()
+      if (!id) return false
+      if (await store.setUser(id)) {
+        // This tab held someone else (their mail's link opened here): a fresh page, so nothing
+        // the old account's page held in memory is shown as the new one's.
+        window.location.assign(next)
+        return true
+      }
+      // Already a member here, so the engine runs and nothing starts it again: catch up at once,
+      // in case the claim had to wipe a copy taken from under this tab.
+      if (status === 'member') void engine.pull()
+      setStatus('member')
+      return false
+    },
+    [store, engine, status],
+  )
 
   const signOut = useCallback(async () => {
     engine.stop()
-    await fetch('/api/auth/sign-out', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-      credentials: 'same-origin',
-    }).catch(() => undefined)
+    // Another tab may have signed in as someone else since this one loaded: signing out here
+    // would end their session. This tab only forgets its own account, and starts again as them.
+    const session = await whoAmI().catch(() => undefined)
+    if (session === undefined || session === null || session === store.userId) {
+      await fetch('/api/auth/sign-out', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+        credentials: 'same-origin',
+      }).catch(() => undefined)
+    }
     await store.clear()
     // A fresh page rather than a state change: the page a member leaves from may be one only
     // members see, whose gate would send them to sign in again, and nothing this visit held in
