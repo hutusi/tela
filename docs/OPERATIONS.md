@@ -90,8 +90,23 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
    **A release that bumps `MIN_CLIENT` reverses the last two:** tela-web first, then tela-api
    within minutes. A shell on the new protocol still works against the old tela-api, but the new
    tela-api tells every older shell to upgrade, and one whose reload finds no newer shell to load
-   stalls until it is navigated. So the newer shell must already be live. Roll back in the same
-   spirit: tela-api may go back alone; tela-web may not go back while the new tela-api is live.
+   stalls until it is navigated. So the newer shell must already be live.
+
+   Rolling back:
+   - tela-api may go back alone, but the old API does not check which account a request is for,
+     so while it is live a stale tab can again act for the account another tab signed into.
+     Keep it short, or take tela-web back with it.
+   - tela-web may not go back while the new tela-api is live: every restored older shell would
+     be told to upgrade and find no newer shell to load.
+   - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
+     `tela`. A tela-web rollback leaves the `tela-2` copies in place, and the older shell starts
+     over in `tela`. On the way forward again the newer shell sees that an earlier build wrote
+     `tela`, so for that boot it asks who is signed in before it trusts its own copy.
+
+   Protocol 2 also starts every device over once, at its first boot on the new shell: it waits
+   on the network that one time, and any unsent change the old shell left behind is dropped. Its
+   failure signature is visible and intended: a tab jumps to `/` when another tab of the same
+   browser signs in as someone else, on its next call to tela-api.
 
 ## Cutover from the Postgres app
 
