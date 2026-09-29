@@ -69,6 +69,8 @@ function context(env: Env): JobsContext {
       ...(relay ? { relay } : {}),
     }),
     websub: env.WEBSUB_ENABLED === '1',
+    // What reaches hosts outside the HTTP client (a WebSub hub) checks this instead.
+    ...(env.ENV === 'test' ? { allowPrivateHosts: true } : {}),
     ...(() => {
       const translator = translatorFrom(env)
       return translator ? { translator } : {}
