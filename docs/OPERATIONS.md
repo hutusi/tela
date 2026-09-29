@@ -106,6 +106,10 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
      asks who is signed in before trusting it, tabs booting together included, until the claim
      after that answer. Browsers without `indexedDB.databases()` (Firefox before 126) cannot see
      this, and trust their copy until its first request is refused.
+   - While tela-api is down or deploying, a tab that has to ask who is signed in (the boot after
+     a rollback, or after a sign-in) gets no answer: it shows the public side, sends member
+     pages to `/login`, and keeps its copy and unsent changes. It asks again by itself, within
+     2 minutes of tela-api answering, and carries on where it was. Only a 401 forgets the copy.
 
    Protocol 2 also starts every device over once, at its first boot on the new shell: it waits
    on the network that one time, and any unsent change the old shell left behind is dropped. Its

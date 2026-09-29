@@ -70,6 +70,10 @@ commits meanwhile.
     earlier build's copy is emptied and again after, and a copy is loaded only after both. Each
     mark is new, and a claim clears only the one its tab loaded: a mark set since may be about a
     sign-out that tab's /me answered before.
+  - Only a 401 says nobody is signed in. A 5xx mid-deploy, a captive portal's page, a WAF's
+    challenge or no network says nothing about the session: the tab shows the public side, keeps
+    its copy and unsent changes, and asks /me again (after 2 s, doubling to 2 min, and at once
+    when the browser comes back online or the tab into view).
   - Signing out names the member too, in the request that ends the session, so a stale tab
     cannot end the session another tab started.
   - A tab that loses either check stops, forgets what it holds, and starts again from `/` as
@@ -78,7 +82,8 @@ commits meanwhile.
   - A shell older than protocol 2 is told `409 upgrade` first, so cached shells from before the
     rule reload into one that follows it.
   (Amended on 2026-09-29, after review rounds found the mixes: first for sync, then for every
-  other member call and every stored write, then for tabs booting together.)
+  other member call and every stored write, then for tabs booting together and a /me that
+  failed.)
 - Pulls read the D1 primary from the pinned Worker (6–10 ms). There is no read replication, so no
   Sessions bookmark and no read-your-writes gap to handle.
 

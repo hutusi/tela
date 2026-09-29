@@ -1,7 +1,16 @@
 import 'fake-indexeddb/auto'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { leaver } from '../src/leave'
-import { distrust, distrusted, forgetOnSignOut, initialStatus, openStore } from '../src/session'
+import {
+  distrust,
+  distrusted,
+  forgetOnSignOut,
+  initialStatus,
+  learnWho,
+  openStore,
+  retryDelay,
+  whenReachable,
+} from '../src/session'
 import {
   type EarlierBuild,
   indexedDbPersistence,
@@ -12,7 +21,12 @@ import { LocalStore } from '../src/store/local'
 import { noEarlierBuild, seedEarlierBuild, signOutEarlierBuild } from './earlier-build'
 import { NOW, profile, pull, sub } from './rows'
 
-const saved = globalThis.sessionStorage
+const saved = {
+  sessionStorage: globalThis.sessionStorage,
+  fetch: globalThis.fetch,
+  window: globalThis.window,
+  document: globalThis.document,
+}
 beforeAll(() => {
   const held = new Map<string, string>()
   Object.assign(globalThis, {
@@ -24,7 +38,7 @@ beforeAll(() => {
   })
 })
 afterAll(() => {
-  Object.assign(globalThis, { sessionStorage: saved })
+  Object.assign(globalThis, saved)
 })
 
 describe('a tab that left an account it could not forget', () => {
@@ -194,5 +208,135 @@ describe('the session ending', () => {
     const store = await held(refusing)
     await forgetOnSignOut(store)
     expect(initialStatus(await reopened(refusing))).toBe('unknown')
+  })
+})
+
+describe('asking /me who is signed in', () => {
+  /** tela-api answering /me with `answer`. */
+  const me = (answer: () => Response | Promise<Response>) => {
+    globalThis.fetch = (async () => answer()) as unknown as typeof fetch
+  }
+  /** A member's copy with one unsent change, marked as an earlier build having run. */
+  async function doubted() {
+    const storage = memoryPersistence()
+    const store = await held(storage)
+    store.mutate({ type: 'markRead', articleId: 1 })
+    await new Promise((r) => setTimeout(r, 0))
+    await storage.distrust()
+    const booted = await reopened(storage)
+    expect(initialStatus(booted)).toBe('unknown')
+    return { storage, store: booted }
+  }
+  const kept = async (storage: Persistence) => {
+    const stored = await storage.load()
+    expect(stored.owner).toBe('a')
+    expect(stored.rows).not.toBeNull()
+    expect(stored.pending).toHaveLength(1)
+    expect(stored.unverified).not.toBeNull()
+  }
+
+  test('an answer that is not a 401 is no sign-out: the copy and its unsent change stay', async () => {
+    // Found in review: a 5xx mid-deploy read as nobody wiped both, and sent the tab to /login.
+    const answers: [string, () => Response | Promise<Response>][] = [
+      ['a 503 mid-deploy', () => new Response('deploying', { status: 503 })],
+      ['a WAF challenge', () => new Response('<html>', { status: 403 })],
+      ['a captive portal', () => new Response('<html>sign in to the wifi</html>')],
+      ['no network', () => Promise.reject(new TypeError('Failed to fetch'))],
+      ['no one named', () => Response.json({})],
+    ]
+    for (const [, answer] of answers) {
+      const { storage, store } = await doubted()
+      me(answer)
+      expect(await learnWho(store, () => true)).toBe('unreachable')
+      expect(store.userId).toBe('a')
+      await kept(storage)
+    }
+  })
+
+  test('a 401 says nobody: the copy is forgotten', async () => {
+    const { storage, store } = await doubted()
+    me(() => Response.json({ error: 'unauthorized' }, { status: 401 }))
+    expect(await learnWho(store, () => true)).toBe('guest')
+    expect((await storage.load()).owner).toBeNull()
+  })
+
+  test("the member's id claims the copy, and the claim clears the mark", async () => {
+    const { storage, store } = await doubted()
+    me(() => Response.json({ id: 'a' }))
+    expect(await learnWho(store, () => true)).toBe('member')
+    expect(initialStatus(await reopened(storage))).toBe('member')
+    expect((await storage.load()).pending).toHaveLength(1)
+  })
+
+  test('a claim the device refuses is asked again, not left hanging', async () => {
+    const inner = memoryPersistence()
+    const refusing: Persistence = { ...inner, claim: () => Promise.reject(new Error('disk')) }
+    const store = await reopened(refusing)
+    me(() => Response.json({ id: 'a' }))
+    expect(await learnWho(store, () => true)).toBe('unreachable')
+  })
+
+  test('an answer a later question has overtaken changes nothing', async () => {
+    const { storage, store } = await doubted()
+    me(() => Response.json({ error: 'unauthorized' }, { status: 401 }))
+    expect(await learnWho(store, () => false)).toBeNull()
+    await kept(storage)
+    me(() => new Response('deploying', { status: 503 }))
+    expect(await learnWho(store, () => false)).toBeNull()
+  })
+})
+
+describe('asking again once /me may answer', () => {
+  /** The window and document a tab has, as far as the retry listens. */
+  function tab() {
+    const win = new EventTarget()
+    const doc = Object.assign(new EventTarget(), { visibilityState: 'visible' })
+    Object.assign(globalThis, { window: win, document: doc })
+    return { win, doc }
+  }
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+  test('waits longer after each miss, up to two minutes', () => {
+    expect([1, 2, 3, 4].map(retryDelay)).toEqual([2000, 4000, 8000, 16_000])
+    expect(retryDelay(20)).toBe(120_000)
+  })
+
+  test('asks once, when the time is up', async () => {
+    tab()
+    let asked = 0
+    whenReachable(() => void asked++, 5)
+    await wait(20)
+    expect(asked).toBe(1)
+  })
+
+  test('asks at once when the browser comes back online, and only once', async () => {
+    const { win } = tab()
+    let asked = 0
+    whenReachable(() => void asked++, 60_000)
+    win.dispatchEvent(new Event('online'))
+    win.dispatchEvent(new Event('online'))
+    expect(asked).toBe(1)
+  })
+
+  test('asks when the tab comes into view, not when it goes out of it', () => {
+    const { doc } = tab()
+    let asked = 0
+    whenReachable(() => void asked++, 60_000)
+    doc.visibilityState = 'hidden'
+    doc.dispatchEvent(new Event('visibilitychange'))
+    expect(asked).toBe(0)
+    doc.visibilityState = 'visible'
+    doc.dispatchEvent(new Event('visibilitychange'))
+    expect(asked).toBe(1)
+  })
+
+  test('cancelled, it never asks', async () => {
+    const { win } = tab()
+    let asked = 0
+    const stop = whenReachable(() => void asked++, 5)
+    stop()
+    win.dispatchEvent(new Event('online'))
+    await wait(20)
+    expect(asked).toBe(0)
   })
 })

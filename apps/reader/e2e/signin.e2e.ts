@@ -220,3 +220,91 @@ test.describe('the mail link for another account, opened in a signed-in tab', ()
     expect(await page.evaluate(() => (window as { stale?: number }).stale)).toBeUndefined()
   })
 })
+
+/** The keys of this build's device copy that hold unsent changes. */
+const pendingKeys = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<string[]>((resolve, reject) => {
+        const open = indexedDB.open('tela-2')
+        open.onerror = () => reject(open.error)
+        open.onsuccess = () => {
+          const db = open.result
+          const keys = db.transaction('meta').objectStore('meta').getAllKeys()
+          keys.onerror = () => reject(keys.error)
+          keys.onsuccess = () => {
+            db.close()
+            resolve(keys.result.map(String).filter((k) => k.startsWith('pending:')))
+          }
+        }
+      }),
+  )
+
+/** An earlier build's tab writes its own copy, as one left open across a deploy does. */
+const earlierBuildWrites = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open('tela', 1)
+        open.onupgradeneeded = () => {
+          for (const store of ['meta', 'tables', 'bodies', 'objects']) {
+            open.result.createObjectStore(store)
+          }
+        }
+        open.onerror = () => reject(open.error)
+        open.onsuccess = () => {
+          const db = open.result
+          const tx = db.transaction('meta', 'readwrite')
+          tx.objectStore('meta').put('someone-else', 'userId')
+          tx.onerror = () => reject(tx.error)
+          tx.oncomplete = () => {
+            db.close()
+            resolve()
+          }
+        }
+      }),
+  )
+
+test.describe('a boot that cannot reach /me', () => {
+  test.use(visitor(7))
+  test('keeps the copy and its unsent change, and asks again until it can', async ({
+    page,
+    context,
+  }) => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    await signInRequest(context.request, `unreached-${stamp}@e2e.test`)
+    await addFeed(context.request, `${FIXTURES}/jnito.xml`)
+    await cycle(context.request)
+    await page.goto('/reading')
+    await expect(page.getByTestId('subscription')).toHaveCount(1)
+
+    // A change the server has not had yet: every push is held back.
+    await page.route('**/api/v1/mutations', (route) => route.abort())
+    await page.getByTestId('article-row').first().click()
+    await expect.poll(() => pendingKeys(page)).toHaveLength(1)
+
+    // An earlier build ran since, so this boot asks /me before trusting the copy, and /me
+    // answers as tela-api does mid-deploy. That says nothing about the session.
+    await earlierBuildWrites(page)
+    await page.route('**/api/v1/me', (route) => route.fulfill({ status: 503, body: 'deploying' }))
+    await page.reload()
+    await expect(page).toHaveURL(/\/login\?next=%2Freading/)
+    expect(await pendingKeys(page)).toHaveLength(1)
+
+    // tela-api is back. Nothing but the tab's own retry asks again, and it carries on as the
+    // member, sending the change it kept.
+    const pushed = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === '/api/v1/mutations' && r.ok(),
+    )
+    await page.unroute('**/api/v1/mutations')
+    await page.unroute('**/api/v1/me')
+    await expect(page).toHaveURL(/\/reading(\?|$)/, { timeout: 20_000 })
+    await pushed
+    const pulled = await (
+      await context.request.get('/api/v1/sync?cursor=0', {
+        headers: await memberHeaders(context.request),
+      })
+    ).json()
+    expect(pulled.rows.states).toHaveLength(1)
+  })
+})

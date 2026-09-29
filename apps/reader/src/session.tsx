@@ -4,7 +4,7 @@
  * and a 401 from any sync call ends it and wipes the device's copy while it is still that
  * member's.
  */
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { AccountChanged, api, SignedOut, UpgradeRequired } from './store/api'
 import { type EarlierBuild, earlierBuild, type Persistence } from './store/db'
 import type { SyncEngine } from './store/engine'
@@ -15,8 +15,9 @@ export type SessionStatus = 'unknown' | 'member' | 'guest'
 type Session = {
   status: SessionStatus
   /**
-   * After a sign-in: learn who, and start syncing. True when the tab held another account, in
-   * which case the page is being loaded afresh at `next` and the caller has nothing left to do.
+   * After a sign-in: learn who, and start syncing. True when the caller has nothing left to do:
+   * the tab held another account, and the page is being loaded afresh at `next`; or /me could not
+   * be reached, and the session turns member when it can, which sends the login page on to `next`.
    */
   signedIn(next: string): Promise<boolean>
   signOut(): Promise<void>
@@ -99,15 +100,87 @@ export async function forgetOnSignOut(store: Pick<LocalStore, 'userId' | 'forget
   })
 }
 
-async function whoAmI(): Promise<string | null> {
+/**
+ * Who the session is: an id, or null when nobody is signed in, which only a 401 says. Any other
+ * answer rejects, since it says nothing about the session: a 5xx mid-deploy, a captive portal's
+ * page, a WAF challenge, or no network at all.
+ */
+export async function whoAmI(): Promise<string | null> {
+  let res: Response
   try {
-    const res = await api('/api/v1/me')
-    if (!res.ok) return null
-    return ((await res.json()) as { id: string }).id
+    res = await api('/api/v1/me')
   } catch (err) {
     if (err instanceof SignedOut) return null
     throw err
   }
+  if (!res.ok) throw new Error(`/api/v1/me answered ${res.status}`)
+  const { id } = (await res.json()) as { id?: unknown }
+  if (typeof id !== 'string' || !id) throw new Error('/api/v1/me named no one')
+  return id
+}
+
+/** What asking /me made of the tab; null when a later question took over before it could act. */
+export type Learned = 'member' | 'guest' | 'unreachable' | null
+
+/**
+ * Ask /me, and make the device say what it answered: the member's id claims the copy, and nobody
+ * forgets it. No answer forgets nothing: the tab shows the public side, keeps the copy and its
+ * unsent changes, and asks again (`whenReachable`); so does a claim the device's storage refused.
+ * An answer that comes once `current()` is false changes nothing: a sign-in in this tab has asked
+ * since, and its answer is the newer one.
+ */
+export async function learnWho(
+  store: Pick<LocalStore, 'userId' | 'setUser' | 'forgetAccount'>,
+  current: () => boolean,
+  ask: () => Promise<string | null> = whoAmI,
+): Promise<Learned> {
+  let id: string | null
+  try {
+    id = await ask()
+  } catch {
+    return current() ? 'unreachable' : null
+  }
+  if (!current()) return null
+  if (id === null) {
+    // Nobody is signed in: a copy this tab still holds is no one's to show.
+    await forgetOnSignOut(store)
+    return 'guest'
+  }
+  try {
+    await store.setUser(id)
+  } catch {
+    return 'unreachable'
+  }
+  return 'member'
+}
+
+/**
+ * How long a tab that could not reach /me waits before its `attempt`th question again: 2 s,
+ * doubling to 2 min.
+ */
+export const retryDelay = (attempt: number) => Math.min(2000 * 2 ** (attempt - 1), 120_000)
+
+/**
+ * Call `again` once, when /me may answer: after `delay`, or sooner when the browser comes back
+ * online or the tab into view. Returns what cancels it.
+ */
+export function whenReachable(again: () => void, delay: number): () => void {
+  const fire = () => {
+    stop()
+    again()
+  }
+  const shown = () => {
+    if (document.visibilityState === 'visible') fire()
+  }
+  const timer = setTimeout(fire, delay)
+  window.addEventListener('online', fire)
+  document.addEventListener('visibilitychange', shown)
+  const stop = () => {
+    clearTimeout(timer)
+    window.removeEventListener('online', fire)
+    document.removeEventListener('visibilitychange', shown)
+  }
+  return stop
 }
 
 /** A signed-out session that never changes: the edge renders public pages for guests with it. */
@@ -128,6 +201,16 @@ export function SessionProvider({
   // Rows alone are not enough: whose they are is what every call names. A copy this tab has
   // just left without forgetting is not trusted either; the claim after /me replaces it.
   const [status, setStatus] = useState<SessionStatus>(() => initialStatus(store))
+  // How many times /me could not be reached in a row: while any, the tab is a guest that asks
+  // again. Its own state, not a status: the question outlives the switch to the public side.
+  const [misses, setMisses] = useState(0)
+  // The boot, each retry and each sign-in ask /me; only the latest question acts on its answer,
+  // so an answer that left before a sign-in cannot forget the copy that sign-in has claimed.
+  const asked = useRef(0)
+  const ask = useCallback(() => {
+    const turn = ++asked.current
+    return learnWho(store, () => asked.current === turn)
+  }, [store])
 
   useEffect(() => {
     sessionEvents.signedOut = () => {
@@ -141,40 +224,49 @@ export function SessionProvider({
       return () => engine.stop()
     }
     if (status === 'unknown') {
-      let cancelled = false
-      const again = () => setStatus('unknown')
-      whoAmI()
-        .then(async (id) => {
-          if (cancelled) return
-          if (id) {
-            await store.setUser(id)
-            setStatus('member')
-          } else {
-            // Nobody is signed in: a copy this tab still holds is no one's to show.
-            await forgetOnSignOut(store)
-            setStatus('guest')
-          }
-        })
-        // Offline, with nothing on the device it can trust: the public side, until the network
-        // is back and /me can say who this is.
-        .catch(() => {
-          if (cancelled) return
-          setStatus('guest')
-          window.addEventListener('online', again, { once: true })
-        })
-      return () => {
-        cancelled = true
-        window.removeEventListener('online', again)
-      }
+      void ask().then((learned) => {
+        if (learned === null) return
+        // Unreachable, with nothing on the device it can trust: the public side, while it asks
+        // again below.
+        if (learned === 'unreachable') setMisses((n) => n + 1)
+        setStatus(learned === 'member' ? 'member' : 'guest')
+      })
     }
     return undefined
-  }, [status, engine, store])
+  }, [status, engine, ask])
+
+  useEffect(() => {
+    if (misses === 0) return undefined
+    return whenReachable(() => {
+      void ask().then((learned) => {
+        if (learned === null) return
+        if (learned === 'unreachable') {
+          setMisses((n) => n + 1)
+          return
+        }
+        setMisses(0)
+        setStatus(learned)
+      })
+    }, retryDelay(misses))
+  }, [misses, ask])
 
   const signedIn = useCallback(
     async (next: string) => {
-      const id = await whoAmI()
-      if (!id) return false
-      if (await store.setUser(id)) {
+      const held = store.userId
+      const learned = await ask()
+      if (learned === null) return true
+      if (learned === 'unreachable') {
+        // Signed in, but not yet told as whom: asked again as after a boot that could not reach
+        // /me, and the session turns member then.
+        setMisses((n) => n + 1)
+        return true
+      }
+      setMisses(0)
+      if (learned === 'guest') {
+        setStatus('guest')
+        return false
+      }
+      if (held !== null && held !== store.userId) {
         // This tab held someone else (their mail's link opened here): a fresh page, so nothing
         // the old account's page held in memory is shown as the new one's.
         window.location.assign(next)
@@ -186,7 +278,7 @@ export function SessionProvider({
       setStatus('member')
       return false
     },
-    [store, engine, status],
+    [store, engine, status, ask],
   )
 
   const signOut = useCallback(async () => {
