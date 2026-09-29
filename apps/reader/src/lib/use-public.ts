@@ -6,6 +6,9 @@
 import { useEffect, useState } from 'react'
 
 const held = new Map<string, unknown>()
+/** Pages changed this visit: fetched past the browser's cache, which holds them a minute. */
+const changed = new Set<string>()
+const listeners = new Set<(prefix: string) => void>()
 
 function handedOver(path: string): unknown {
   const el = typeof document === 'undefined' ? null : document.getElementById('tela-data')
@@ -26,15 +29,26 @@ export function usePublic<T>(path: string | null): Loaded<T> {
     const data = held.get(path) ?? handedOver(path)
     return data === undefined ? { status: 'loading' } : { status: 'ready', data: data as T }
   })
+  const [version, setVersion] = useState(0)
+  useEffect(() => {
+    const listener = (prefix: string) => {
+      if (path?.startsWith(prefix)) setVersion((v) => v + 1)
+    }
+    listeners.add(listener)
+    return () => void listeners.delete(listener)
+  }, [path])
+  // A bumped `version` asks for a fresh copy.
   useEffect(() => {
     if (path === null) {
       setState({ status: 'missing' })
       return
     }
     let cancelled = false
-    const known = held.get(path) ?? handedOver(path)
-    setState(known === undefined ? { status: 'loading' } : { status: 'ready', data: known as T })
-    fetch(path, { credentials: 'same-origin' })
+    const known = held.get(path) ?? (version === 0 ? handedOver(path) : undefined)
+    if (known !== undefined) setState({ status: 'ready', data: known as T })
+    else if (version === 0) setState({ status: 'loading' })
+    const stale = [...changed].some((prefix) => path.startsWith(prefix))
+    fetch(path, { credentials: 'same-origin', ...(stale ? { cache: 'reload' as const } : {}) })
       .then(async (res) => {
         if (cancelled) return
         if (res.status === 404) {
@@ -50,11 +64,13 @@ export function usePublic<T>(path: string | null): Loaded<T> {
     return () => {
       cancelled = true
     }
-  }, [path])
+  }, [path, version])
   return state
 }
 
-/** Forget a page's data after changing it, so the next visit shows the change. */
+/** Forget pages' data after changing them: what shows them now fetches again, and so does a visit. */
 export function forgetPublic(prefix: string): void {
   for (const key of held.keys()) if (key.startsWith(prefix)) held.delete(key)
+  changed.add(prefix)
+  for (const listener of listeners) listener(prefix)
 }
