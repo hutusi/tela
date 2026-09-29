@@ -92,7 +92,9 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 8. **The content object** (`object.ts`, ADR 0022): the annotated body split into top-level blocks
    with their leaf ids, images indexed so `/img/<key>/<i>` can serve them, keyed by the hash of
    the annotated HTML. Immutable, so it is cached forever everywhere. `extractArticle` (Readability
-   on linkedom) recovers full text for summary-only feeds.
+   on linkedom) recovers full text for summary-only feeds. It first drops what a browser never
+   shows as the post (`<template>` link previews, webmention and backlink containers), and it
+   refuses a result that is 70% link text or more (a site menu) or has under 100 characters.
 
 Fixtures: 21 captured real feeds in `packages/content/fixtures/`; snapshot tests pin block ids
 and hashes as the `NORM_VERSION` contract.
