@@ -5,7 +5,7 @@
  */
 import { translationKey } from '@tela/sync'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate, useSearchParams } from 'react-router'
+import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { ArticleList } from '../components/article-list'
 import { EmptyState } from '../components/empty-state'
@@ -83,13 +83,15 @@ export function ReadingPage() {
     [store, location.search, navigate],
   )
 
-  /** The article a close came from, read from the URL as it closes (see the focus effect below). */
-  const closedFrom = useRef<number | null>(null)
+  // Closes whatever the URL has open when it runs, not what the render that bound it showed: a j
+  // can have moved the URL on before React rendered it. The list it returns to is told which
+  // article it closed, in that entry's own state (see the focus effect below).
   const close = useCallback(() => {
-    closedFrom.current = parseReadingParams(new URLSearchParams(window.location.search)).articleId
-    const target = canonicalReadingHref(location.search, { articleId: null, mode: null })
-    if (target !== canonicalReadingHref(location.search)) navigate(target)
-  }, [location.search, navigate])
+    const now = window.location.search
+    const closedFrom = parseReadingParams(new URLSearchParams(now)).articleId
+    const target = canonicalReadingHref(now, { articleId: null, mode: null })
+    if (target !== canonicalReadingHref(now)) navigate(target, { state: { closedFrom } })
+  }, [navigate])
 
   // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
   // article, ? lists the keys. Typing in a field is never a shortcut, and a popover that handles
@@ -131,16 +133,26 @@ export function ReadingPage() {
   // The row of the open article stays in view as j and k move; closing puts focus back on it, so
   // the keyboard carries on from where the reader was.
   const lastOpen = useRef<number | null>(null)
+  const navigationType = useNavigationType()
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened or closed; a filter change or a later entry's state is neither
   useEffect(() => {
     const row = (id: number) =>
       document.querySelector<HTMLElement>(`[data-testid="article-row"][data-article-id="${id}"]`)
-    // A close says what it closed: renders can batch a j and an Esc into one, so the last
-    // article rendered may not be the one closed. Back has no close, and falls back to it.
-    const previous = closedFrom.current ?? lastOpen.current
-    closedFrom.current = null
-    lastOpen.current = params.articleId
-    if (params.articleId !== null) row(params.articleId)?.scrollIntoView({ block: 'nearest' })
-    else if (previous !== null) row(previous)?.focus()
+    if (params.articleId !== null) {
+      lastOpen.current = params.articleId
+      row(params.articleId)?.scrollIntoView({ block: 'nearest' })
+      return
+    }
+    // A close says what it closed, in the list entry it pushed: renders can batch a j and an Esc
+    // into one, or commit the j first, so the last article rendered may not be the one closed.
+    // Back to that entry, or a reload of it, is not that close: the article left is the last one
+    // shown.
+    const closedFrom =
+      navigationType !== 'POP'
+        ? (location.state as { closedFrom?: number | null } | null)?.closedFrom
+        : null
+    const previous = closedFrom ?? lastOpen.current
+    if (previous !== null) row(previous)?.focus()
   }, [params.articleId])
 
   // A feed that has never been fetched: pull quickly until its first posts arrive.

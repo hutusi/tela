@@ -66,6 +66,11 @@ chosen theme is cached in localStorage and applied by an inline script before an
 focus back on its row, `h` highlights the selection, and `?` lists the keys. Typing in a field is
 never a shortcut, and a popover that handles `Esc` itself keeps the article open.
 
+The row that gets focus is the article the URL had open when `Esc` was pressed. A `j` just before
+it may already have rendered another article, so the close pushes the list with that id in the
+entry's navigation state rather than leaving it for a later render to find. Back to that entry, or
+a reload of it, ignores the state and focuses the article last shown, which is the one just left.
+
 ## Consequences
 
 - **An edit anywhere in a post leaves its highlights where they were**, and one that rewrites the
@@ -82,4 +87,5 @@ never a shortcut, and a popover that handles `Esc` itself keeps the article open
     rewritten to the new version;
   - detached once the passage is gone;
   - on the translation side, and shown as elsewhere in the original-only layout;
-  - the keyboard layer, including `Esc` inside a popover.
+  - the keyboard layer, including `Esc` inside a popover, an `Esc` that lands while a `j` is
+    being committed, and Back to a list a close left.
