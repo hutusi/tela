@@ -31,6 +31,7 @@ import { readPull } from './queries/sync'
 import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
 import { feeds, sites } from './schema'
 import { bumpSeq, currentSeq, headSeq } from './seq'
+import { blockKey, seedBlockTranslations, writingMeanwhile } from './writes-meanwhile'
 
 type Matchers = {
   toEqual(expected: unknown): void
@@ -76,6 +77,38 @@ const dueFeeds = (now: number) =>
   sql`select id as key, host, next_fetch_at as ord from feeds where status = 'active' and next_fetch_at <= ${now}`
 
 const lease = (key: string, owner: string): Lease => ({ kind: 'feed.fetch', key, owner })
+
+/** Blobs in a map the test can read parts back from; the Workers pool has no portable store. */
+function memoryStore() {
+  const store = new Map<string, string>()
+  const blobs = {
+    async get(key: string) {
+      const text = store.get(key)
+      return text === undefined
+        ? null
+        : {
+            key,
+            size: text.length,
+            contentType: null,
+            text: async () => text,
+            arrayBuffer: async () => new ArrayBuffer(0),
+          }
+    },
+    async head() {
+      return null
+    },
+    async put(key: string, body: string | Uint8Array | ArrayBuffer) {
+      store.set(key, typeof body === 'string' ? body : new TextDecoder().decode(body))
+    },
+    async delete(key: string) {
+      store.delete(key)
+    },
+    async list() {
+      return { keys: [...store.keys()], cursor: null }
+    },
+  }
+  return { blobs, store }
+}
 
 export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
   const { describe, it, expect } = t
@@ -864,36 +897,74 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
           )}) where true
         `),
       ])
-      const store = new Map<string, string>()
-      const blobs = {
-        async get(key: string) {
-          const text = store.get(key)
-          return text === undefined
-            ? null
-            : {
-                key,
-                size: text.length,
-                contentType: null,
-                text: async () => text,
-                arrayBuffer: async () => new ArrayBuffer(0),
-              }
-        },
-        async head() {
-          return null
-        },
-        async put(key: string, body: string | Uint8Array | ArrayBuffer) {
-          store.set(key, typeof body === 'string' ? body : new TextDecoder().decode(body))
-        },
-        async delete(key: string) {
-          store.delete(key)
-        },
-        async list() {
-          return { keys: [...store.keys()], cursor: null }
-        },
-      }
+      const { blobs } = memoryStore()
       const manifest = await exportDatabase(db, blobs, { date: '2026-09-28', now: () => T0 })
       expect(manifest.tables.find((t) => t.name === 'articles')?.rows).toBe(1234)
       expect((await verifyExport(blobs, '2026-09-28')).ok).toBe(true)
+    })
+
+    it('reads each row once while rows are added and removed behind it', async () => {
+      // More rows added than removed, then the reverse: paged by OFFSET, the first reads the row
+      // at the page boundary twice and the second never reads it.
+      for (const writes of [
+        { added: 2, removed: 1 },
+        { added: 1, removed: 2 },
+      ]) {
+        const db = await makeDb()
+        await seedBlockTranslations(db, 1500)
+        // Two keys that JavaScript's UTF-16 order puts the other way round from SQLite's UTF-8
+        // bytes (U+FFFD before U+1F600): the check has to read the export in the database's order.
+        const [bmp, astral] = [0xfffd, 0x1f600].map((c) => `h${String.fromCodePoint(c)}`)
+        await db.run(sql`
+          insert into block_translations
+            (source_hash, target_lang, source_lang, tagged_text, model, norm_version, created_at)
+          values (${bmp}, 'en', 'und', 'x', 'mock', 1, 0), (${astral}, 'en', 'und', 'x', 'mock', 1, 0)
+        `)
+        // Tombstones have no primary key, so they page by rowid: more than a page of them.
+        const tombstones = Array.from({ length: 1001 }, (_, i) => i + 1)
+        await db.run(sql`
+          insert into tombstones (seq, user_id, feed_id, entity, key)
+          select value, null, 1, 'article', cast(value as text)
+          from json_each(${JSON.stringify(tombstones)})
+        `)
+        const before = await db.all<Record<string, unknown>>(
+          sql`select source_hash, target_lang, source_lang from block_translations`,
+        )
+        const { blobs, store } = memoryStore()
+        const meanwhile = writingMeanwhile(db, writes)
+        const manifest = await exportDatabase(meanwhile.db, blobs, {
+          date: '2026-09-28',
+          now: () => T0,
+        })
+        const exported = (name: string) =>
+          (manifest.tables.find((t) => t.name === name)?.parts ?? []).flatMap((part) =>
+            (store.get(part.key) ?? '')
+              .split('\n')
+              .filter((line) => line !== '')
+              .map((line) => JSON.parse(line) as Record<string, unknown>),
+          )
+        const once = new Set<string>()
+        const twice = exported('block_translations')
+          .map(blockKey)
+          .filter((key) => {
+            if (once.has(key)) return true
+            once.add(key)
+            return false
+          })
+        expect(twice).toEqual([])
+        const throughout = before.map(blockKey).filter((key) => !meanwhile.removed.has(key))
+        expect(throughout.filter((key) => !once.has(key))).toEqual([])
+        expect(exported('tombstones')).toEqual(
+          tombstones.map((seq) => ({
+            seq,
+            user_id: null,
+            feed_id: 1,
+            entity: 'article',
+            key: String(seq),
+          })),
+        )
+        expect(await verifyExport(blobs, '2026-09-28')).toEqual({ ok: true, problems: [] })
+      }
     })
   })
 }

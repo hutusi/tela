@@ -12,11 +12,12 @@ import {
   exportDatabase,
   latestBackup,
   pruneBackups,
+  readManifest,
   restoreDatabase,
   type TelaDb,
   verifyExport,
 } from '@tela/data'
-import { createTestDb } from '@tela/data/testing'
+import { createTestDb, seedBlockTranslations, writingMeanwhile } from '@tela/data/testing'
 import { memoryBlobs } from '@tela/platform/portable'
 import type { PullResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
@@ -75,6 +76,11 @@ async function seeded() {
 const everything = async (db: TelaDb, table: string) =>
   db.all<Record<string, unknown>>(sql`select * from ${sql.identifier(table)} order by 1, 2`)
 
+async function sha256(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 describe('the nightly export', () => {
   test('holds every table worth keeping, parents before children, and no credentials', () => {
     const names = backupTables().map((t) => t.name)
@@ -109,6 +115,25 @@ describe('the nightly export', () => {
     expect(damaged.problems.join(' ')).toContain('articles')
   })
 
+  test('a row read twice fails the check, even when the manifest counted it twice', async () => {
+    const api = await seeded()
+    const blobs = memoryBlobs()
+    const manifest = await exportDatabase(api.db, blobs, { date: '2026-09-28', now: () => 0 })
+    const articles = manifest.tables.find((t) => t.name === 'articles')!
+    const part = articles.parts[0]!
+    const lines = (await (await blobs.get(part.key))!.text()).split('\n').filter((l) => l !== '')
+    const text = `${[...lines, lines.at(-1)].join('\n')}\n`
+    await blobs.put(part.key, text)
+    part.rows += 1
+    part.sha256 = await sha256(text)
+    articles.rows += 1
+    await blobs.put('backup/2026-09-28/manifest.json', JSON.stringify(manifest))
+
+    const checked = await verifyExport(blobs, '2026-09-28')
+    expect(checked.ok).toBe(false)
+    expect(checked.problems).toEqual([`${part.key} line 8 is out of key order: [7]`])
+  })
+
   test('restores into a fresh database, which serves the member what they had', async () => {
     const api = await seeded()
     const blobs = memoryBlobs()
@@ -140,6 +165,36 @@ describe('the nightly export', () => {
     // The sequence came back too, so a device's cursor still means what it meant.
     const seq = await fresh.all<{ v: number }>(sql`select v from counters where k = 'seq'`)
     expect(pull.cursor).toBeGreaterThanOrEqual(Number(seq[0]?.v ?? 0) - 1)
+  })
+
+  test('restores an export taken while translations were added and removed', async () => {
+    const api = await seeded()
+    await seedBlockTranslations(api.db, 1200)
+    const blobs = memoryBlobs()
+    const meanwhile = writingMeanwhile(api.db, { added: 2, removed: 1 })
+    const latest = await backUp(meanwhile.db, blobs, { date: '2026-09-28', now: () => 0 })
+    expect(latest).toMatchObject({ verified: true, problems: [] })
+
+    const { db: fresh } = await createTestDb()
+    await restoreDatabase(fresh, blobs, '2026-09-28')
+    const manifest = await readManifest(blobs, '2026-09-28')
+    for (const table of manifest?.tables ?? []) {
+      const count = await fresh.all<{ n: number }>(
+        sql`select count(*) as n from ${sql.identifier(table.name)}`,
+      )
+      expect(count[0]?.n, table.name).toBe(table.rows)
+    }
+  })
+
+  test('restores only into an empty database', async () => {
+    const api = await seeded()
+    const blobs = memoryBlobs()
+    await backUp(api.db, blobs, { date: '2026-09-28', now: () => api.clock.now() })
+    const { db: fresh } = await createTestDb()
+    await restoreDatabase(fresh, blobs, '2026-09-28')
+    await expect(restoreDatabase(fresh, blobs, '2026-09-28')).rejects.toThrow(
+      'restore needs an empty database',
+    )
   })
 
   test('old exports are pruned, the recent ones kept', async () => {

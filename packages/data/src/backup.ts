@@ -8,9 +8,15 @@
  * order. The export is not one snapshot: tables are read one after another while writes go on, so
  * a child can name a parent written after its table was read. Restoring therefore turns foreign
  * key checks off. An orphan costs a missing join, nothing more.
+ *
+ * Within a table, rows are read in primary-key order, and each page starts after the last key
+ * the page before it read, never at an OFFSET, which any write behind the cursor moves. So rows
+ * written meanwhile are neither repeated nor skipped: a row there throughout is read exactly once,
+ * and one written or deleted meanwhile at most once. A table without a primary key (tombstones)
+ * pages by rowid the same way.
  */
 import type { Blobs } from '@tela/platform'
-import { is, sql } from 'drizzle-orm'
+import { is, type SQL, sql } from 'drizzle-orm'
 import { toSnakeCase } from 'drizzle-orm/casing'
 import { getTableConfig, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import type { TelaDb } from './db'
@@ -37,7 +43,12 @@ const SKIPPED = new Set([
   'session',
 ])
 
-export type BackupTable = { name: string; key: string[]; parents: string[] }
+export type BackupTable = {
+  name: string
+  /** The primary key the export pages by; null for a table without one, which pages by rowid. */
+  key: string[] | null
+  parents: string[]
+}
 
 /** A column's name in the database: the schema's keys are camelCase, its columns snake_case. */
 const columnName = (column: { name: string; keyAsName: boolean }) =>
@@ -56,11 +67,7 @@ export function backupTables(): BackupTable[] {
     const parents = config.foreignKeys
       .map((fk) => getTableConfig(fk.reference().foreignTable).name)
       .filter((name) => name !== config.name && !SKIPPED.has(name))
-    tables.push({
-      name: config.name,
-      key: key.length > 0 ? key : config.columns.map(columnName),
-      parents,
-    })
+    tables.push({ name: config.name, key: key.length > 0 ? key : null, parents })
   }
   const ordered: BackupTable[] = []
   const placed = new Set<string>()
@@ -81,7 +88,8 @@ export type BackupManifest = {
   date: string
   startedAt: number
   finishedAt: number
-  tables: { name: string; rows: number; parts: BackupPart[] }[]
+  /** `key` is what the table was paged by, which verification checks the rows' order against. */
+  tables: { name: string; key: string[] | null; rows: number; parts: BackupPart[] }[]
 }
 export type LatestBackup = {
   date: string
@@ -97,6 +105,83 @@ async function sha256(text: string): Promise<string> {
 }
 
 const manifestKey = (date: string) => `${BACKUP_PREFIX}${date}/manifest.json`
+
+/** What a table without a primary key is paged by, read beside its row and left out of the line. */
+const ROWID = '__backup_rowid'
+
+/** One page of `table` in key order, after the key values `after` (from its start when null). */
+function pageQuery(table: BackupTable, after: unknown[] | null): SQL {
+  const name = sql.identifier(table.name)
+  if (!table.key) {
+    const from = after ? sql`where rowid > ${after[0]}` : sql.empty()
+    return sql`select rowid as ${sql.identifier(ROWID)}, * from ${name} ${from}
+      order by rowid limit ${PAGE_ROWS}`
+  }
+  const key = sql.join(
+    table.key.map((c) => sql.identifier(c)),
+    sql`, `,
+  )
+  const from = after
+    ? sql`where (${key}) > (${sql.join(
+        after.map((v) => sql`${v}`),
+        sql`, `,
+      )})`
+    : sql.empty()
+  return sql`select * from ${name} ${from} order by ${key} limit ${PAGE_ROWS}`
+}
+
+const utf8 = new TextEncoder()
+
+/** SQLite's order for key values: numbers before text, and text by its UTF-8 bytes (BINARY). */
+function compareValues(a: unknown, b: unknown): number {
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  if (typeof a === 'string' && typeof b === 'string') {
+    const x = utf8.encode(a)
+    const y = utf8.encode(b)
+    for (let i = 0; i < Math.min(x.length, y.length); i++) {
+      if (x[i] !== y[i]) return (x[i] ?? 0) - (y[i] ?? 0)
+    }
+    return x.length - y.length
+  }
+  const rank = (v: unknown) => (v === null ? 0 : typeof v === 'number' ? 1 : 2)
+  return rank(a) - rank(b)
+}
+
+function compareKeys(a: unknown[], b: unknown[]): number {
+  for (let i = 0; i < a.length; i++) {
+    const order = compareValues(a[i], b[i])
+    if (order !== 0) return order
+  }
+  return 0
+}
+
+function parseRow(line: string): Record<string, unknown> | null {
+  try {
+    const row: unknown = JSON.parse(line)
+    return typeof row === 'object' && row !== null ? (row as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/** Whether `lines` go on ascending by `key` from `previous`, and the last key they reach. */
+function keyOrder(
+  lines: string[],
+  key: string[],
+  previous: unknown[] | null,
+): { last: unknown[] | null; problem: string | null } {
+  let last = previous
+  for (const [i, line] of lines.entries()) {
+    const row = parseRow(line)
+    if (!row) return { last, problem: `line ${i + 1} is not a JSON object` }
+    const values = key.map((c) => row[c])
+    if (last && compareKeys(last, values) >= 0) {
+      return { last, problem: `line ${i + 1} is out of key order: ${JSON.stringify(values)}` }
+    }
+    last = values
+  }
+  return { last, problem: null }
+}
 
 /** Write every table under `backup/<date>/`, then the manifest that names the parts. */
 export async function exportDatabase(
@@ -124,21 +209,22 @@ export async function exportDatabase(
       parts.push({ key, rows: lines.length, sha256: await sha256(text) })
       lines = []
     }
-    const order = sql.join(
-      table.key.map((c) => sql.identifier(c)),
-      sql`, `,
-    )
-    for (let offset = 0; ; offset += PAGE_ROWS) {
-      const page = await db.all<Record<string, unknown>>(
-        sql`select * from ${sql.identifier(table.name)} order by ${order} limit ${PAGE_ROWS} offset ${offset}`,
-      )
-      for (const row of page) lines.push(JSON.stringify(row))
+    const { key } = table
+    let after: unknown[] | null = null
+    for (;;) {
+      const page: Record<string, unknown>[] = await db.all(pageQuery(table, after))
+      const last = page.at(-1)
+      if (last) after = key ? key.map((c) => last[c]) : [last[ROWID]]
+      for (const row of page) {
+        if (!key) delete row[ROWID]
+        lines.push(JSON.stringify(row))
+      }
       rows += page.length
       if (lines.length >= PART_ROWS) await flush()
       if (page.length < PAGE_ROWS) break
     }
     await flush()
-    manifest.tables.push({ name: table.name, rows, parts })
+    manifest.tables.push({ name: table.name, key, rows, parts })
   }
   manifest.finishedAt = options.now()
   await blobs.put(manifestKey(options.date), JSON.stringify(manifest), {
@@ -152,7 +238,11 @@ export async function readManifest(blobs: Blobs, date: string): Promise<BackupMa
   return object ? (JSON.parse(await object.text()) as BackupManifest) : null
 }
 
-/** Read an export back: every part present, as many lines as it says, with the hash it says. */
+/**
+ * Read an export back: every part present, as many lines as it says, with the hash it says, and
+ * a keyed table's rows in strictly increasing key order across its parts. The counts alone pass a
+ * row read twice, since the manifest counted the same lines; the order does not.
+ */
 export async function verifyExport(
   blobs: Blobs,
   date: string,
@@ -162,6 +252,8 @@ export async function verifyExport(
   const problems: string[] = []
   for (const table of manifest.tables) {
     let rows = 0
+    let previous: unknown[] | null = null
+    let ordered = true
     for (const part of table.parts) {
       const object = await blobs.get(part.key)
       if (!object) {
@@ -169,10 +261,20 @@ export async function verifyExport(
         continue
       }
       const text = await object.text()
-      const lines = text.split('\n').filter((l) => l !== '').length
-      if (lines !== part.rows) problems.push(`${part.key} has ${lines} rows, not ${part.rows}`)
+      const lines = text.split('\n').filter((l) => l !== '')
+      if (lines.length !== part.rows) {
+        problems.push(`${part.key} has ${lines.length} rows, not ${part.rows}`)
+      }
       if ((await sha256(text)) !== part.sha256) problems.push(`${part.key} does not match its hash`)
-      rows += lines
+      rows += lines.length
+      if (table.key && ordered) {
+        const order = keyOrder(lines, table.key, previous)
+        previous = order.last
+        if (order.problem) {
+          problems.push(`${part.key} ${order.problem}`)
+          ordered = false
+        }
+      }
     }
     if (rows !== table.rows) problems.push(`${table.name} has ${rows} rows, not ${table.rows}`)
   }
@@ -206,6 +308,9 @@ export async function latestBackup(blobs: Blobs): Promise<LatestBackup | null> {
 /**
  * Load an export into an empty, migrated database: the exit path's first step (OPERATIONS.md).
  * Tables go in the manifest's order, a few hundred rows a statement through one JSON parameter.
+ * The inserts are plain, so a row already there is an error, and a database holding any row of a
+ * table the export names is refused before anything is written. A restore that fails partway is
+ * not undone: start again from a fresh database.
  */
 export async function restoreDatabase(
   db: TelaDb,
@@ -214,6 +319,12 @@ export async function restoreDatabase(
 ): Promise<{ rows: number }> {
   const manifest = await readManifest(blobs, date)
   if (!manifest) throw new Error(`no manifest for ${date}`)
+  for (const table of manifest.tables) {
+    const held = await db.all(sql`select 1 from ${sql.identifier(table.name)} limit 1`)
+    if (held.length > 0) {
+      throw new Error(`restore needs an empty database, and ${table.name} already has rows`)
+    }
+  }
   await db.run(sql`pragma foreign_keys = off`)
   let total = 0
   try {

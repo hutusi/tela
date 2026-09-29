@@ -50,9 +50,13 @@ look at, while a mail arrives either way.
 in place). The export is the portable one:
 
 - **What it holds:** every table worth keeping, as JSON lines in the private bucket, parts of
-  5,000 rows, with a manifest of row counts and SHA-256 hashes.
+  5,000 rows, with a manifest of row counts and SHA-256 hashes. Each table is read in pages of
+  1,000 by its primary key, every page starting after the last key read; tombstones, which have
+  no key, page by rowid. Never by `OFFSET`, which a write behind the cursor shifts.
 - **Verification:** a second pass reads it all back, and `latest.json` records the result for the
-  health check and the digest.
+  health check and the digest. It checks each keyed table's rows are in strictly increasing key
+  order across its parts: a row read twice agrees with a manifest that counted it twice, so the
+  counts alone would pass it.
 - **Left out:** sessions, sign-in codes, leases and limits. They are credentials or live
   coordination, and a restored database signs everyone in again.
 - **Order:** tables come from the Drizzle schema, parents before children.
@@ -74,7 +78,14 @@ can expire. Everything runs from the jobs Worker's own crons.
     path is run on every commit rather than kept in a runbook nobody has tried.
 - **The export is not one snapshot.** Tables are read in turn while writes go on, so a child can
   name a parent written after its table was read, and a restore turns foreign-key checks off. An
-  orphan costs a missing join. Time Travel is the transactional copy.
+  orphan costs a missing join. Time Travel is the transactional copy. Within a table, paging by
+  key means a row there throughout is read exactly once, and one written or deleted meanwhile at
+  most once. Paged by `OFFSET`, a write behind the cursor reads the boundary row twice or not at
+  all, the counts still agree, and the restore stops at `UNIQUE constraint failed`. The contract
+  suite exports while rows are added and removed behind the cursor, on libSQL and on D1.
+- **A restore takes an empty database.** Its inserts are plain, it refuses a database that holds
+  any row of an exported table, and one that fails partway is not undone: it starts again from a
+  fresh database.
 - **Two outside accounts to keep alive:** healthchecks.io and Resend, both on free tiers. If either
   lapses, nothing breaks; the owner stops hearing, and the next digest or ping says so.
 - **The thresholds are guesses at current volume** (40 feeds, one reader). They live in one object

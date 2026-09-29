@@ -9,6 +9,8 @@ import { sql } from 'drizzle-orm'
 import type { TelaDb } from './db'
 import * as schema from './schema'
 
+export { blockKey, seedBlockTranslations, writingMeanwhile } from './writes-meanwhile'
+
 const MIGRATIONS_DIR = join(import.meta.dirname, '..', 'migrations')
 
 /** The generated migrations, in journal order, each split into its statements. */

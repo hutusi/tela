@@ -331,12 +331,16 @@ Nothing here needs watching; three things speak up when something is wrong (ADR 
   and `backup/latest.json` records the result. Thirty days are kept. Sessions, sign-in codes,
   leases and limits are not exported: a restored database signs everyone in again.
 - **Check one by hand:** `wrangler r2 object get tela-content/backup/latest.json --pipe --remote`.
+  A problem reading `<part> line N is out of key order` means the export read a row twice or out
+  of order, and would not restore; the export's paging has regressed (ADR 0027).
 - **The exit path off Cloudflare** (ADR 0021), which the suite runs on every commit
   (`apps/api/test/backup.test.ts`):
   1. Copy the bucket, backups included, to any S3-compatible store (`rclone` speaks both).
   2. Create a libSQL database (a file, or Turso), apply `packages/data/migrations`, and call
      `restoreDatabase` from `@tela/data` against the S3 copy (`s3Blobs` in
-     `@tela/platform/portable`).
+     `@tela/platform/portable`). Restore into an empty database: it refuses one that holds any
+     row of an exported table. A restore that fails partway keeps what it wrote, so start again
+     from a fresh database rather than running it twice.
   3. Serve `createApp` (`apps/api/src/app.ts`) from any Hono runtime on `libsqlDb` and `s3Blobs`,
      run `runPortable` (`apps/jobs/src/portable.ts`) beside it for the sweeps, and serve the
      built SPA and `createEdge` (`apps/reader/worker/edge.ts`) in front. Every dependency is
