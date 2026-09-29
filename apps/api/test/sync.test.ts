@@ -425,3 +425,17 @@ describe('highlights', () => {
     expect(delta.rows.feeds.map((f) => f.id)).toContain(2)
   })
 })
+
+describe('a feed merged into another (ADR 0028)', () => {
+  test('a device that still knows it subscribes and unsubscribes the feed it merged into', async () => {
+    await db.run(sql`update feeds set status = 'paused', merged_into = 1, site_id = 1 where id = 2`)
+    const following = () =>
+      db.all<{ feed_id: number }>(
+        sql`select feed_id from subscriptions where user_id = ${reader.userId} and deleted_at is null`,
+      )
+    await push([{ type: 'subscribe', feedId: 2 }])
+    expect(await following()).toEqual([{ feed_id: 1 }])
+    await push([{ type: 'unsubscribe', feedId: 2 }])
+    expect(await following()).toEqual([])
+  })
+})

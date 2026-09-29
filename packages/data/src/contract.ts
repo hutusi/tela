@@ -23,6 +23,7 @@ import {
   fillSiteMetadata,
   insertArticles,
   insertVersions,
+  mergeFeed,
   updateArticles,
 } from './queries/ingest'
 import { readPull } from './queries/sync'
@@ -313,6 +314,57 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         sql`select title, primary_lang from sites where id = 1`,
       )
       expect(site).toEqual({ title: 'Blog', primary_lang: 'en' })
+    })
+  })
+
+  describe('merging a feed into another (ADR 0028)', () => {
+    it('moves its readers, its own posts and their read state in one batch', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['blog.example', 'mirror.example'])
+      await db.run(
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 1, 0, 0)`,
+      )
+      // Feed 1 is the blog's; feed 2, its mirror, shares post a and alone has post b.
+      await db.run(sql`
+        insert into articles (id, feed_id, dedup_key, url, fetched_at, sort_at) values
+          (1, 1, 'a', 'https://blog.example/a', 1, 1),
+          (2, 2, 'mirror-a', 'https://blog.example/a', 1, 1),
+          (3, 2, 'mirror-b', 'https://blog.example/b', 2, 2)
+      `)
+      await db.run(sql`
+        insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at) values
+          ('u1', 1, 1, 0, 0), ('u1', 2, 3, 0, 0)
+      `)
+      await db.run(
+        sql`insert into user_article_states (user_id, article_id, read_at) values ('u1', 2, 5)`,
+      )
+      await db.batch([
+        bumpSeq(db),
+        ...mergeFeed(db, { alias: 2, target: 1, move: [3], carry: [[2, 1]] }, T0),
+      ] as never)
+
+      expect(
+        await first(db, sql`select status, merged_into as "mergedInto" from feeds where id = 2`),
+      ).toEqual({ status: 'paused', mergedInto: 1 })
+      expect(
+        await db.all(sql`
+          select feed_id as "feedId", watermark_id as "watermarkId", deleted_at is not null as gone
+          from subscriptions order by feed_id`),
+      ).toEqual([
+        { feedId: 1, watermarkId: 3, gone: 0 },
+        { feedId: 2, watermarkId: 3, gone: 1 },
+      ])
+      expect(await db.all(sql`select id, feed_id as "feedId" from articles order by id`)).toEqual([
+        { id: 1, feedId: 1 },
+        { id: 2, feedId: 2 },
+        { id: 3, feedId: 1 },
+      ])
+      expect(
+        await first(
+          db,
+          sql`select read_at as "readAt" from user_article_states where article_id = 1`,
+        ),
+      ).toEqual({ readAt: 5 })
     })
   })
 

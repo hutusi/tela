@@ -170,6 +170,28 @@ describe('public', () => {
     expect(page.posts).toHaveLength(1)
   })
 
+  test('a blog shows its canonical feed, not a feed merged into it or its duplicate posts', async () => {
+    await blog(1, 'listed')
+    await db.batch([
+      bumpSeq(db),
+      db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, status, merged_into,
+          created_at, updated_at, seq)
+        values (7, 1, 'https://mirror.example/blog1', 'mirror.example', 0, 'paused', 1, 0, 0, ${currentSeq})`),
+      db.run(sql`insert into articles (feed_id, dedup_key, title, fetched_at, sort_at, seq)
+        values (7, 'mirror-p1', 'Post on blog 1', 0, 2, ${currentSeq})`),
+    ] as never)
+    const page = (await (await get('/api/v1/public/sites/1')).json()) as {
+      feeds: { id: number }[]
+      posts: unknown[]
+    }
+    expect(page.feeds.map((f) => f.id)).toEqual([1])
+    expect(page.posts).toHaveLength(1)
+    const discover = (await (await get('/api/v1/public/discover')).json()) as {
+      sites: { feedId: number; latestAt: number }[]
+    }
+    expect(discover.sites[0]).toMatchObject({ feedId: 1, latestAt: 1 })
+  })
+
   test('a profile shows its public side only', async () => {
     await put('/api/v1/profile', { handle: 'shown', bio: 'hello' })
     await blog(1, 'listed')

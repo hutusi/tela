@@ -187,8 +187,9 @@ export async function importFeedUrls(
       where true
       on conflict (feed_url) do nothing
     `),
+    // A merged feed's URL subscribes to the feed it merged into (ADR 0028).
     db.all(sql`
-      select f.id from feeds f
+      select distinct coalesce(f.merged_into, f.id) as id from feeds f
       where f.feed_url in (select value->>0 from json_each(${rows}))
     `),
   ] as never)

@@ -253,6 +253,11 @@ says who holds it:
   that `info` never shows.
 - **Revive a dead feed:** `update feeds set status = 'active', error_count = 0, next_fetch_at = 0
   where id = …`. The nightly upkeep does this itself after seven days.
+- **Merged feeds** (ADR 0028): `select id, feed_url, merged_into from feeds where merged_into is
+  not null`. A merge moves readers and the posts only the alias had, and deletes nothing. To undo
+  a wrong one (a category feed taken for the blog's), reactivate the alias with
+  `update feeds set status = 'active', merged_into = null, next_fetch_at = 0 where id = …`.
+  Its readers stay on the canonical feed until they subscribe to the alias again.
 - Queue messages are only accelerators. Purging a queue loses no work, because the next tick
   finds everything still due.
 

@@ -196,7 +196,7 @@ export function memberRoutes(deps: ApiDeps) {
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
           s.reader_count as "readerCount",
-          (select min(id) from feeds where site_id = s.id) as "feedId"
+          (select min(id) from feeds where site_id = s.id and merged_into is null) as "feedId"
         from sites s
         where (s.listing in ('listed', 'featured') or s.id in (
             select f.site_id from subscriptions sub join feeds f on f.id = sub.feed_id

@@ -2,7 +2,7 @@
 
 Tela is a multi-user, multilingual reader for independent blogs whose identity is "every feed here
 has a human behind it". This document is the living map of the system; decisions and their reasons
-are in `adr/`. It describes the local-first stack (ADRs 0020–0027), which replaces the Postgres app
+are in `adr/`. It describes the local-first stack (ADRs 0020–0028), which replaces the Postgres app
 at the cutover in `docs/OPERATIONS.md`.
 
 ## Topology
@@ -58,7 +58,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `user_prefs` | Synced preferences: reading mode, text size, measure, theme |
 | `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out` |
 | `site_topics`, `site_claims` | A blog's topics; claim attempts (meta or `rel="me"`) |
-| `feeds` | The fetch unit: validators, schedule (`next_fetch_at`, `fetch_interval_sec`), `fetch_region`, `timeout_streak`, `status`, `content_mode`, `hub_url` |
+| `feeds` | The fetch unit: validators, schedule (`next_fetch_at`, `fetch_interval_sec`), `fetch_region`, `timeout_streak`, `status`, `content_mode`, `hub_url`, `merged_into` (another address for the blog's canonical feed, ADR 0028) |
 | `articles` | `dedup_key` unique per feed, `sort_at`, `source_lang`, `current_version`, `content_key`, `extract_state`, counts. `AUTOINCREMENT` ids, so the unread watermark never meets a reused id |
 | `article_versions` | Every body an article has had: provenance (feed or readability), `content_key`, `raw_key` (ADR 0022) |
 | `article_titles` | Eager title and excerpt per launch language: `done`, `echo` or `failed` against the title hash |
@@ -108,6 +108,11 @@ and hashes as the `NORM_VERSION` contract.
   relay flip, alias detection, provenance and declared-home adoption, the 200-item cap,
   content-mode learning, scheduling. Everything commits in one fenced batch, so two fetches of one
   feed cannot interleave (the lease is the per-feed serialization).
+- One blog, one feed (`pipeline/merge.ts`, ADR 0028): before fetching, a feed whose blog has
+  other active feeds checks whether it holds the same post URLs as one of them over the time
+  both cover. If it does and the other is canonical (on the blog's own host, else older), it
+  pauses itself with `merged_into`, moves its readers, the posts only it had and their read state
+  across, and stops. Adding, importing or subscribing to a merged feed lands on its target.
 - Scheduling: interval = half the average gap between posts over 7 days, clamped to 30 min…24 h,
   ×1.5 when unchanged, raised to the publisher's `ttl`/`max-age`; ±10% jitter on the derived
   `next_fetch_at` only. Errors back off `interval × 2^n` up to 7 days; 429/503 honour

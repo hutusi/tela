@@ -36,12 +36,14 @@ import {
   insertVersions,
   type Lease,
   loadFeedForFetch,
+  mergeFeed,
   moveFeedToOrigin,
   type NewArticle,
   type NewVersion,
   noteHub,
   recentArticleCount,
   type StoredVersion,
+  siteFeedPosts,
   updateArticles,
   updateFeed,
   wantsExtraction,
@@ -62,6 +64,7 @@ import {
 } from '../schedule'
 import { newWebsubSecret } from '../websub'
 import { commit, type IngestContext, type Statement } from './context'
+import { planMerge } from './merge'
 
 export type HomeUrlOutcome = 'kept' | 'renamed' | 'joined' | 'split' | 'blocked' | 'detached'
 
@@ -403,6 +406,17 @@ export async function ingestFeed(ctx: IngestContext, lease: Lease): Promise<Inge
   if (!feed) return finish(ctx, lease, [], { status: 'skipped', reason: 'feed not found' })
   if (feed.status !== 'active') {
     return finish(ctx, lease, [], { status: 'skipped', reason: `feed is ${feed.status}` })
+  }
+  // Another address for a feed of the same blog (ADR 0028): hand over to it instead of fetching.
+  if (feed.site.otherFeeds > 0) {
+    const merge = planMerge(feed, feed.site.homeUrl, await siteFeedPosts(db, feed.site.id))
+    if (merge) {
+      return finish(ctx, lease, [...mergeFeed(db, { alias: feed.id, ...merge }, startedAt)], {
+        status: 'skipped',
+        reason: 'merged',
+        duplicateOf: merge.target,
+      })
+    }
   }
 
   let res: Awaited<ReturnType<IngestContext['http']['get']>>

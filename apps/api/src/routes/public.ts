@@ -45,13 +45,14 @@ export function publicRoutes(deps: ApiDeps) {
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
           s.primary_lang as "primaryLang", s.listing, (s.claimed_by is not null) as claimed,
           s.reader_count as "readerCount",
-          (select min(f.id) from feeds f where f.site_id = s.id) as "feedId",
+          (select min(f.id) from feeds f where f.site_id = s.id and f.merged_into is null) as "feedId",
           (select a.title from articles a join feeds f on f.id = a.feed_id where f.site_id = s.id
-            order by a.sort_at desc limit 1) as "latestTitle",
-          (select max(a.sort_at) from articles a join feeds f on f.id = a.feed_id where f.site_id = s.id)
-            as "latestAt",
+            and f.merged_into is null order by a.sort_at desc limit 1) as "latestTitle",
+          (select max(a.sort_at) from articles a join feeds f on f.id = a.feed_id
+            where f.site_id = s.id and f.merged_into is null) as "latestAt",
           (select count(*) from articles a join feeds f on f.id = a.feed_id
-            where f.site_id = s.id and a.sort_at >= ${since}) as "postsLast30d"
+            where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since})
+            as "postsLast30d"
         from sites s
         where s.listing in ${PUBLIC_LISTING} ${byTopic} ${byLang}
         order by s.listing = 'featured' desc, s.claimed_by is not null desc, s.reader_count desc, s.id
@@ -99,13 +100,15 @@ export function publicRoutes(deps: ApiDeps) {
       db.all(sql`
         select f.id, f.feed_url as "feedUrl", f.title from feeds f
         join sites s on s.id = f.site_id
-        where f.site_id = ${siteId} and s.listing in ${PUBLIC_LISTING} order by f.id
+        where f.site_id = ${siteId} and f.merged_into is null and s.listing in ${PUBLIC_LISTING}
+        order by f.id
       `),
-      // Posts as the reader holds them, so a member can open one from here.
+      // Posts as the reader holds them, so a member can open one from here. A merged feed's
+      // posts are duplicates of its target's (ADR 0028).
       db.all(sql`
         select ${ARTICLE_COLUMNS}
         from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-        where f.site_id = ${siteId} and s.listing in ${PUBLIC_LISTING}
+        where f.site_id = ${siteId} and f.merged_into is null and s.listing in ${PUBLIC_LISTING}
         order by a.sort_at desc, a.id desc limit 20
       `),
       db.all(sql`select topic from site_topics where site_id = ${siteId}`),

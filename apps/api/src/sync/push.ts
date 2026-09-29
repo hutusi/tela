@@ -79,8 +79,8 @@ function statementsFor(
       return [
         db.run(sql`
           insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at, seq)
-          select ${userId}, ${m.feedId}, 0, ${now}, ${now}, ${currentSeq}
-          where exists (select 1 from feeds where id = ${m.feedId}) and ${fresh}
+          select ${userId}, coalesce(merged_into, id), 0, ${now}, ${now}, ${currentSeq}
+          from feeds where id = ${m.feedId} and ${fresh}
           on conflict (user_id, feed_id) do update set
             deleted_at = null, updated_at = excluded.updated_at, seq = excluded.seq
           where subscriptions.deleted_at is not null
@@ -91,7 +91,8 @@ function statementsFor(
       return [
         db.run(sql`
           update subscriptions set deleted_at = ${now}, updated_at = ${now}, seq = ${currentSeq}
-          where user_id = ${userId} and feed_id = ${m.feedId} and deleted_at is null and ${fresh}
+          where user_id = ${userId} and deleted_at is null and ${fresh}
+            and feed_id = (select coalesce(merged_into, id) from feeds where id = ${m.feedId})
         `),
         ...recountReaders(db, siteOf(m.feedId), now),
       ]

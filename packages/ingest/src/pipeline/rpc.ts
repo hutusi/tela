@@ -71,9 +71,12 @@ export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => nu
     async addFeed({ feedUrl, actorId }) {
       const parsed = asUrl(feedUrl)
       if (!parsed) return { error: 'invalid_url' }
-      const known = await db.all<{ id: number; site_id: number }>(
-        sql`select id, site_id from feeds where feed_url = ${parsed.toString()}`,
-      )
+      // A merged feed's URL is still its URL; it subscribes to the feed it merged into (ADR 0028).
+      const known = await db.all<{ id: number; site_id: number }>(sql`
+        select coalesce(t.id, f.id) as id, coalesce(t.site_id, f.site_id) as site_id
+        from feeds f left join feeds t on t.id = f.merged_into
+        where f.feed_url = ${parsed.toString()}
+      `)
       const row = known[0]
       if (row) return { feedId: row.id, siteId: row.site_id, created: false }
       const found = await find(parsed.toString(), 1)

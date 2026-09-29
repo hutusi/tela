@@ -1,6 +1,7 @@
 export * from './context'
 export * from './extract'
 export * from './feed'
+export * from './merge'
 export * from './register'
 export * from './rpc'
 export * from './sites'

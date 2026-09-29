@@ -10,6 +10,7 @@ import {
   WEBSUB_STATUSES,
 } from '@tela/shared'
 import {
+  type AnySQLiteColumn,
   check,
   index,
   integer,
@@ -93,6 +94,12 @@ export const feeds = sqliteTable(
     hubUrl: text(),
     addedBy: text().references(() => user.id, { onDelete: 'set null' }),
     servedOrigin: text(),
+    /**
+     * The feed this one turned out to be another address for: the same blog, listing the same
+     * posts (ADR 0028). Set with `status = 'paused'`, so nothing fetches it; adding or importing
+     * its URL subscribes to this feed instead.
+     */
+    mergedInto: integer().references((): AnySQLiteColumn => feeds.id, { onDelete: 'set null' }),
     /**
      * The latest WebSub ping. The feed is due while this is set; a fetch clears it only when the
      * ping came before the fetch started, so a ping arriving mid-fetch is not lost.

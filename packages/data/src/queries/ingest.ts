@@ -23,6 +23,8 @@ export type FeedForFetch = FeedRow & {
     declaredFeedUrls: string[]
     /** The language most of the blog's posts were detected in (`fillSiteMetadata`). */
     primaryLang: string | null
+    /** Other active feeds of the same blog: when there are any, this one may be an alias. */
+    otherFeeds: number
   }
 }
 
@@ -36,6 +38,8 @@ export async function loadFeedForFetch(db: TelaDb, feedId: number): Promise<Feed
         claimedBy: sites.claimedBy,
         declaredFeedUrls: sites.declaredFeedUrls,
         primaryLang: sites.primaryLang,
+        otherFeeds: sql<number>`(select count(*) from feeds o where o.site_id = ${sites.id}
+          and o.id <> ${feeds.id} and o.status = 'active' and o.merged_into is null)`,
       },
     })
     .from(feeds)
@@ -74,6 +78,86 @@ export async function aliasTarget(db: TelaDb, feedId: number, destination: strin
     .where(and(eq(subscriptions.feedId, feedId), isNull(subscriptions.deletedAt)))
     .limit(1)
   return { exists: true, alias: reader.length > 0 ? null : target.id }
+}
+
+/** A blog's active feeds and every post each holds: what tells two feeds apart (ADR 0028). */
+export type SiteFeedPosts = {
+  id: number
+  host: string
+  posts: { id: number; url: string | null; dedupKey: string; sortAt: number }[]
+}
+
+export async function siteFeedPosts(db: TelaDb, siteId: number): Promise<SiteFeedPosts[]> {
+  const rows = await db.all<{
+    feed_id: number
+    host: string
+    id: number | null
+    url: string | null
+    dedup_key: string | null
+    sort_at: number | null
+  }>(sql`
+    select f.id as feed_id, f.host, a.id, a.url, a.dedup_key, a.sort_at
+    from feeds f left join articles a on a.feed_id = f.id
+    where f.site_id = ${siteId} and f.status = 'active' and f.merged_into is null
+    order by f.id
+  `)
+  const byFeed = new Map<number, SiteFeedPosts>()
+  for (const r of rows) {
+    const feed = byFeed.get(r.feed_id) ?? { id: r.feed_id, host: r.host, posts: [] }
+    byFeed.set(r.feed_id, feed)
+    if (r.id !== null && r.dedup_key !== null && r.sort_at !== null) {
+      feed.posts.push({ id: r.id, url: r.url, dedupKey: r.dedup_key, sortAt: r.sort_at })
+    }
+  }
+  return [...byFeed.values()]
+}
+
+/**
+ * Merge a feed into the one it turned out to be another address for (ADR 0028), as statements
+ * for a fenced batch under the alias's lease. The alias stops being fetched; its readers follow
+ * the target, keeping the higher watermark; `move` are its posts the target lacks, which go
+ * across; `carry` pairs each duplicate with the target's copy, so what a reader read stays read.
+ * The duplicates stay behind on the paused alias, where no list shows them.
+ */
+export function mergeFeed(
+  db: TelaDb,
+  merge: { alias: number; target: number; move: number[]; carry: [number, number][] },
+  now: number,
+) {
+  const { alias, target } = merge
+  const move = JSON.stringify(merge.move)
+  const carry = JSON.stringify(merge.carry)
+  return [
+    db.run(sql`
+      update feeds set status = 'paused', merged_into = ${target}, updated_at = ${now},
+        seq = ${currentSeq}
+      where id = ${alias}
+    `),
+    db.run(sql`
+      insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at, seq)
+      select user_id, ${target}, watermark_id, ${now}, ${now}, ${currentSeq} from subscriptions
+      where feed_id = ${alias} and deleted_at is null
+      on conflict (user_id, feed_id) do update set
+        deleted_at = null, watermark_id = max(subscriptions.watermark_id, excluded.watermark_id),
+        updated_at = excluded.updated_at, seq = excluded.seq
+    `),
+    db.run(sql`
+      update subscriptions set deleted_at = ${now}, updated_at = ${now}, seq = ${currentSeq}
+      where feed_id = ${alias} and deleted_at is null
+    `),
+    db.run(sql`
+      update articles set feed_id = ${target}, seq = ${currentSeq}
+      where feed_id = ${alias} and id in (select value from json_each(${move}))
+    `),
+    db.run(sql`
+      insert into user_article_states (user_id, article_id, read_at, seq)
+      select s.user_id, p.value->>1, s.read_at, ${currentSeq}
+      from json_each(${carry}) p join user_article_states s on s.article_id = p.value->>0
+      where s.read_at is not null
+      on conflict (user_id, article_id) do update set read_at = excluded.read_at, seq = excluded.seq
+      where user_article_states.read_at is null
+    `),
+  ] as const
 }
 
 export async function recentArticleCount(db: TelaDb, feedId: number, since: number) {
