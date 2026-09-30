@@ -2,7 +2,7 @@
 
 Tela is a multi-user, multilingual reader for independent blogs whose identity is "every feed here
 has a human behind it". This document is the living map of the system; decisions and their reasons
-are in `adr/`. It describes the local-first stack (ADRs 0020–0028), which replaces the Postgres app
+are in `adr/`. It describes the local-first stack (ADRs 0020–0029), which replaces the Postgres app
 at the cutover in `docs/OPERATIONS.md`.
 
 ## Topology
@@ -224,7 +224,8 @@ A Vite + React SPA that renders from the device.
 - Highlights: `lib/anchor.ts` finds a highlight again by leaf, quote and context;
   `lib/use-highlights.ts` paints them over the rendered text with the CSS Custom Highlight API and
   writes back an anchor the post moved. Typography and theme are synced prefs
-  (`lib/typography.ts`). `j`/`k`/`Esc`/`h`/`?` work on `/reading`.
+  (`lib/typography.ts`); which panes show is this device's, in localStorage (`lib/layout.ts`,
+  ADR 0029). `j`/`k`/`Esc`/`h`/`[`/`f`/`?` work on `/reading`.
 - `public/sw.js` caches the app shell only, and swaps to a new shell only once every file it
   loads is cached; `shell/kill-sw.js` replaces it in an emergency.
 

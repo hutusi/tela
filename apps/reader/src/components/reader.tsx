@@ -6,6 +6,7 @@
  */
 import type { ArticleRow } from '@tela/sync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router'
 import { useLocale, useTranslations } from 'use-intl'
 import { pairBlocks, readerBlocks, runsOf } from '../lib/block-pairs'
 import { relativeTime } from '../lib/format'
@@ -18,6 +19,7 @@ import { useArticleTranslation } from '../lib/use-translation'
 import { useNow, useStore, useTables } from '../store/hooks'
 import type { ContentObject } from '../store/objects'
 import { feedTitle, isLiked, isRecommended, shownTitle, siteOfFeed } from '../store/selectors'
+import { FocusToggle } from './focus-toggle'
 import { HighlightList, HighlightNote, HighlightToolbar, useSelectedAnchor } from './highlights'
 import { LikeButton } from './like-button'
 import { PairedBody } from './paired-body'
@@ -57,12 +59,14 @@ type Props = {
   mode: ReadingMode
   onMode: (mode: ReadingMode) => void
   onClose: () => void
+  /** The post after this one in the list as shown, if any: offered at the end of the article. */
+  next: { href: string; title: string } | null
 }
 
 /** While a summary-only post waits for its full text, pull quickly so it appears when it lands. */
 const EXTRACT_PULL_MS = 4000
 
-export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
+export function Reader({ article, readingLang, mode, onMode, onClose, next }: Props) {
   const t = useTranslations('reader')
   const locale = useLocale()
   const now = useNow()
@@ -200,14 +204,17 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
       ) : null}
 
       <div className="mx-auto mb-7 flex max-w-[1240px] flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="-ml-2.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink"
-          data-testid="close-article"
-        >
-          {t('close')}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="-ml-2.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink"
+            data-testid="close-article"
+          >
+            {t('close')}
+          </button>
+          <FocusToggle />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <TypographyMenu />
           <LikeButton
@@ -224,109 +231,143 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
         </div>
       </div>
 
-      <div className="mx-auto max-w-[1240px]">
-        <div className="mb-3.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] text-muted">
-          <Swatch id={article.feedId} title={name} size={22} />
-          <span className="font-medium text-ink">{name}</span>
-          {article.author ? (
-            <>
-              <span>·</span>
-              <span>{article.author}</span>
-            </>
-          ) : null}
-          <span>·</span>
-          <span>{relativeTime(article.publishedAt ?? article.fetchedAt, locale, now)}</span>
-          <span>·</span>
-          <span>{t('minRead', { n: article.readingMinutes || 1 })}</span>
-          {article.url ? (
-            <>
-              <span>·</span>
-              <a href={article.url} target="_blank" rel="noopener noreferrer">
-                {t('readOriginal')} ↗
-              </a>
-            </>
-          ) : null}
-        </div>
-
-        {view && sourceLang ? (
-          <TranslationBar sourceLang={sourceLang} view={view} mode={mode} onMode={onMode} />
-        ) : null}
-        {translation.notice ? (
-          <p className="text-[13px] text-muted" data-testid={`translation-${translation.notice}`}>
-            <TranslationNotice notice={translation.notice} />
-          </p>
-        ) : null}
-        {view?.state === 'failed' || translation.notice === 'unavailable' ? (
-          <RetryTranslation onRetry={translation.retry} />
-        ) : null}
-
-        {/* biome-ignore lint/a11y/useKeyWithClickEvents: a pointer shortcut to a highlight's note; the list below reaches the same popover by keyboard */}
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: as above */}
-        <div ref={body} onClick={onBodyClick}>
-          {twoCols ? (
-            <PairedBody
-              pairs={pairs}
-              title={titles.title}
-              originalTitle={article.title}
-              targetLang={readingLang}
-              sourceLang={sourceLang}
-            />
-          ) : (
-            <div className="max-w-(--reader-measure)">
-              <h1
-                className="mb-6 font-serif text-[40px] font-medium leading-[1.12] tracking-tight"
-                style={{ textWrap: 'pretty' }}
-                data-testid="article-title"
-              >
-                {title}
-              </h1>
-              {object && original.length > 0 ? (
-                runs.map((run) =>
-                  run.untranslated ? (
-                    <Untranslated key={run.id} pending={run.pending}>
-                      <Body html={run.html} lang={sourceLang} dir="auto" testId="body-translated" />
-                    </Untranslated>
-                  ) : (
-                    <Body
-                      key={run.id}
-                      html={run.html}
-                      lang={showTrans ? readingLang : sourceLang}
-                      dir={showTrans ? undefined : 'auto'}
-                      testId={showTrans ? 'body-translated' : 'body-original'}
-                    />
-                  ),
-                )
-              ) : (
-                <p className="text-muted">{t('noContent')}</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        <HighlightList
-          items={highlights.items}
-          onOpen={(item, at) => setNote({ id: item.row.id, x: at.x, y: at.y })}
-        />
-        {selectable ? (
-          <HighlightToolbar
-            selected={selectable}
-            onHighlight={(withNote) => highlight(selectable.side, withNote)}
-          />
-        ) : null}
-        {noteRow && note ? <HighlightNote row={noteRow} at={note} onClose={closeNote} /> : null}
-
-        <div className="mt-10 flex max-w-(--reader-measure) items-center gap-4 border-t border-line pt-6">
-          <Swatch id={article.feedId} title={name} size={44} round />
-          <div className="flex-1">
-            <div className="font-medium">{site?.title ?? name}</div>
-            <div className="text-[13px] text-muted">
-              {site?.description ? `${site.description} · ` : ''}
-              {t('readersOnTela', { n: site?.readerCount ?? 0 })}
-            </div>
+      {/* The column, centred: the measure while there is one column, and 1240px once the pane has
+          room for two paired ones, so the meta line, the bar and the author card are as wide as
+          the text under them. The container is a wrapper of its own because container-type brings
+          layout containment, which makes it the containing block for `fixed` descendants: the
+          highlight toolbar and note stay outside it, or they would be placed within this column. */}
+      <div className="@container">
+        <div
+          className={`mx-auto max-w-(--reader-measure) ${twoCols ? '@min-[1080px]:max-w-[1240px]' : ''}`}
+        >
+          <div className="mb-3.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] text-muted">
+            <Swatch id={article.feedId} title={name} size={22} />
+            <span className="font-medium text-ink">{name}</span>
+            {article.author ? (
+              <>
+                <span>·</span>
+                <span>{article.author}</span>
+              </>
+            ) : null}
+            <span>·</span>
+            <span>{relativeTime(article.publishedAt ?? article.fetchedAt, locale, now)}</span>
+            <span>·</span>
+            <span>{t('minRead', { n: article.readingMinutes || 1 })}</span>
+            {article.url ? (
+              <>
+                <span>·</span>
+                <a href={article.url} target="_blank" rel="noopener noreferrer">
+                  {t('readOriginal')} ↗
+                </a>
+              </>
+            ) : null}
           </div>
-          <span className="hidden text-[13px] text-muted xl:block">{t('visibleToAuthor')}</span>
+
+          {view && sourceLang ? (
+            <TranslationBar sourceLang={sourceLang} view={view} mode={mode} onMode={onMode} />
+          ) : null}
+          {translation.notice ? (
+            <p className="text-[13px] text-muted" data-testid={`translation-${translation.notice}`}>
+              <TranslationNotice notice={translation.notice} />
+            </p>
+          ) : null}
+          {view?.state === 'failed' || translation.notice === 'unavailable' ? (
+            <RetryTranslation onRetry={translation.retry} />
+          ) : null}
+
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: a pointer shortcut to a highlight's note; the list below reaches the same popover by keyboard */}
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: as above */}
+          <div ref={body} onClick={onBodyClick}>
+            {twoCols ? (
+              <PairedBody
+                pairs={pairs}
+                title={titles.title}
+                originalTitle={article.title}
+                targetLang={readingLang}
+                sourceLang={sourceLang}
+              />
+            ) : (
+              <div className="max-w-(--reader-measure)">
+                <h1
+                  className="mb-6 font-serif text-[40px] font-medium leading-[1.12] tracking-tight"
+                  style={{ textWrap: 'pretty' }}
+                  data-testid="article-title"
+                >
+                  {title}
+                </h1>
+                {object && original.length > 0 ? (
+                  runs.map((run) =>
+                    run.untranslated ? (
+                      <Untranslated key={run.id} pending={run.pending}>
+                        <Body
+                          html={run.html}
+                          lang={sourceLang}
+                          dir="auto"
+                          testId="body-translated"
+                        />
+                      </Untranslated>
+                    ) : (
+                      <Body
+                        key={run.id}
+                        html={run.html}
+                        lang={showTrans ? readingLang : sourceLang}
+                        dir={showTrans ? undefined : 'auto'}
+                        testId={showTrans ? 'body-translated' : 'body-original'}
+                      />
+                    ),
+                  )
+                ) : (
+                  <p className="text-muted">{t('noContent')}</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <HighlightList
+            items={highlights.items}
+            onOpen={(item, at) => setNote({ id: item.row.id, x: at.x, y: at.y })}
+          />
+
+          <div className="mt-10 flex max-w-(--reader-measure) items-center gap-4 border-t border-line pt-6">
+            <Swatch id={article.feedId} title={name} size={44} round />
+            <div className="flex-1">
+              <div className="font-medium">{site?.title ?? name}</div>
+              <div className="text-[13px] text-muted">
+                {site?.description ? `${site.description} · ` : ''}
+                {t('readersOnTela', { n: site?.readerCount ?? 0 })}
+              </div>
+            </div>
+            <span className="hidden text-[13px] text-muted xl:block">{t('visibleToAuthor')}</span>
+          </div>
+
+          {/* A push like a row click: the key on the Reader remounts it at the top of the next one. */}
+          {next ? (
+            <Link
+              to={next.href}
+              data-testid="next-article"
+              className="mt-6 flex max-w-(--reader-measure) flex-col gap-1 rounded-lg border border-line px-4 py-3 text-ink hover:bg-hover hover:no-underline"
+            >
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                {t('upNext')}
+              </span>
+              <span
+                className="font-serif text-[19px] font-medium leading-[1.2] tracking-tight"
+                style={{ textWrap: 'pretty' }}
+              >
+                {next.title}
+              </span>
+            </Link>
+          ) : null}
         </div>
       </div>
+
+      {selectable ? (
+        <HighlightToolbar
+          selected={selectable}
+          onHighlight={(withNote) => highlight(selectable.side, withNote)}
+        />
+      ) : null}
+      {noteRow && note ? <HighlightNote row={noteRow} at={note} onClose={closeNote} /> : null}
     </main>
   )
 }

@@ -15,7 +15,7 @@ export type Theme = (typeof THEMES)[number]
 
 export const PREFS = { size: 'reader.size', measure: 'reader.measure', theme: 'ui.theme' } as const
 
-const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
+export const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback
 
 export function typographyOf(t: Tables): { size: Size; measure: Measure; theme: Theme } {

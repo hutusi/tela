@@ -21,8 +21,9 @@ import {
   readingHref,
   readingModeParam,
 } from '../lib/href'
+import { gridColumns, toggleFocus, toggleSidebar, useLayout } from '../lib/layout'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
-import { articlesFor, isRead, subscriptionItems, totals } from '../store/selectors'
+import { articlesFor, isRead, shownTitle, subscriptionItems, totals } from '../store/selectors'
 import { useUi } from '../ui'
 
 const MODE_PREF = 'reader.mode'
@@ -51,6 +52,21 @@ export function ReadingPage() {
   const article =
     params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
   const open = params.articleId !== null
+  // Which panes show beside the article: this device's choice, not the member's (ADR 0029). In
+  // focus an open article has the page to itself; a closed one shows the list as ever.
+  const panes = useLayout()
+  const focused = open && panes.focus === 'on'
+
+  // The post after this one in the list as shown, the one `j` would open: a card at the end of
+  // the article offers it, so a pointer reader flows on without going back up to the list.
+  const at = article ? items.findIndex((a) => a.id === article.id) : -1
+  const after = at === -1 ? undefined : items[at + 1]
+  const next = after
+    ? {
+        href: readingHref({ filter: params.filter, feedId: params.feedId, articleId: after.id }),
+        title: shownTitle(tables, after, readingLang).title,
+      }
+    : null
 
   // The mode a URL without one means: this member's last choice, synced like any other pref.
   const remembered =
@@ -94,7 +110,7 @@ export function ReadingPage() {
   }, [navigate])
 
   // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
-  // article, ? lists the keys. Typing in a field is never a shortcut, and a popover that handles
+  // article, [ shows or hides the sidebar, f the list too while one is open, ? lists the keys. Typing in a field is never a shortcut, and a popover that handles
   // Esc itself marks the event so the article stays open.
   const [help, setHelp] = useState(false)
   // Read when a key is pressed, not when the listener was bound: a second `j` can come before
@@ -121,6 +137,12 @@ export function ReadingPage() {
         else if (now.articleId !== null) close()
         else return
         e.preventDefault()
+      } else if (e.key === '[') {
+        e.preventDefault()
+        toggleSidebar()
+      } else if (e.key === 'f' && now.articleId !== null) {
+        e.preventDefault()
+        toggleFocus()
       } else if (e.key === '?') {
         e.preventDefault()
         setHelp((shown) => !shown)
@@ -131,10 +153,11 @@ export function ReadingPage() {
   }, [navigate])
 
   // The row of the open article stays in view as j and k move; closing puts focus back on it, so
-  // the keyboard carries on from where the reader was.
+  // the keyboard carries on from where the reader was. Leaving focus with an article open brings
+  // the list back with that row in view, since j and k moved on while it was out of the grid.
   const lastOpen = useRef<number | null>(null)
   const navigationType = useNavigationType()
-  // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened or closed; a filter change or a later entry's state is neither
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened or closed, or per focus change; a filter change or a later entry's state is neither
   useEffect(() => {
     const row = (id: number) =>
       document.querySelector<HTMLElement>(`[data-testid="article-row"][data-article-id="${id}"]`)
@@ -153,7 +176,7 @@ export function ReadingPage() {
         : null
     const previous = closedFrom ?? lastOpen.current
     if (previous !== null) row(previous)?.focus()
-  }, [params.articleId])
+  }, [params.articleId, focused])
 
   // A feed that has never been fetched: pull quickly until its first posts arrive.
   useEffect(() => {
@@ -192,16 +215,20 @@ export function ReadingPage() {
 
   return (
     <div
-      className={`group grid flex-1 grid-cols-1 lg:min-h-0 ${
-        open
-          ? 'lg:grid-cols-[220px_260px_minmax(0,1fr)]'
-          : 'lg:grid-cols-[220px_minmax(280px,380px)_minmax(0,1fr)]'
-      }`}
+      className={`group grid flex-1 grid-cols-1 lg:min-h-0 ${gridColumns(open, panes)}`}
       data-testid="reading-layout"
       data-open={open ? '1' : undefined}
+      data-sidebar={panes.sidebar}
+      data-focus={focused ? '1' : undefined}
     >
       {open ? null : <MobileNav subscriptions={subs} totals={counts} params={params} />}
-      <Sidebar subscriptions={subs} totals={counts} params={params} />
+      {/* Not rendered rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no
+          defined winner (AGENTS.md), and a column that is gone needs no element. The list is the
+          exception: in focus it stays mounted and styles.css takes it out of the grid, so its
+          page of rows and its scroll survive and Esc still finds the row it closed. */}
+      {panes.sidebar === 'shown' && !focused ? (
+        <Sidebar subscriptions={subs} totals={counts} params={params} />
+      ) : null}
       <ArticleList
         items={items}
         params={params}
@@ -220,6 +247,7 @@ export function ReadingPage() {
           mode={mode}
           onMode={onMode}
           onClose={close}
+          next={next}
         />
       ) : open && tables.profile === null ? (
         // The first sync has not landed yet (the profile always comes in the first snapshot):

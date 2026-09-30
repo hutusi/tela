@@ -87,23 +87,39 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   row measures 335px on macOS and 341px in CI's Linux Chromium.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
-  list are sticky and scroll independently. Below `lg` the sidebar is hidden, a `MobileNav`
-  disclosure above the list carries the filters, subscriptions and "Add a feed", and the list gives
-  way to the reader when an article is open (stacked fallback: list → article as a page). Mobile is
-  a fallback, not a design; `mobile.e2e.ts` keeps it working.
+  list are sticky and scroll independently. The sidebar hides and shows from a toggle at the head
+  of the list (`[` does the same), and the grid drops its first column with it. Focus (`f`, or
+  the button beside Close) hides the list as well while an article is open, which then has the
+  grid to itself; closing brings the list back. The list stays mounted, taken out of the grid by
+  an unlayered rule in `styles.css` (a `lg:hidden` would fight its own
+  `lg:group-data-[open=1]:block`), so its page of rows and its scroll survive and Esc still finds
+  the row it closed. Which panes show is this device's choice, kept in localStorage rather than
+  synced (ADR 0029). Below `lg` the
+  sidebar is hidden, a `MobileNav` disclosure above the list carries the filters, subscriptions
+  and "Add a feed", and the list gives way to the reader when an article is open (stacked
+  fallback: list → article as a page). Mobile is a fallback, not a design; `mobile.e2e.ts` keeps
+  it working.
 - Side by side is a container query on the reader pane, not a viewport breakpoint: two columns of
   640px appear once the pane itself is 1080px, which is about a 1624px viewport after the sidebar
-  and list have taken 480. Below that the same grid is one column and the pairs interleave —
-  a source paragraph, its translation, the next paragraph — at the full measure. `styles.e2e.ts` measures the
-  columns at 1280, 1440 and 1700; the previous `xl` breakpoint rendered 348px columns at 1280 and
-  nothing caught it (ADR 0019).
+  and list have taken 480, 1404px once the sidebar is hidden, and 1144px in focus — which is why
+  a 13" or 14" laptop wants the toggle and a 1280px window wants focus; `layout.e2e.ts` measures
+  both. Below that the same grid is one column
+  and the pairs interleave — a source paragraph, its translation, the next paragraph — at the full
+  measure. `styles.e2e.ts` measures the columns at 1280, 1440 and 1700; the previous `xl`
+  breakpoint rendered 348px columns at 1280 and nothing caught it (ADR 0019).
 - List rows: feed swatch (10px), feed name, relative time, `XX → EN` badge for foreign posts,
   accent unread dot, serif title (19px wide / 15.5px slim), two-line excerpt, `min · ♡ · ↗` row.
   Read rows render at 62% opacity; the open row has a white background.
-- Reader: `✕ Close` left, Like (and Recommend, phase 7) right; meta line with swatch, feed,
-  author, time, reading time, original link; serif title 40px/1.12 alone and 32px when paired;
-  body max 640px; author card with a 44px round swatch, site title, tagline, reader count, and the
-  visibility note.
+- Reader: `✕ Close` left, Like (and Recommend, phase 7) right, at the pane's edges; below them
+  one column, centred in the pane, holding the meta line (swatch, feed, author, time, reading
+  time, original link), the translation bar, the body, the highlights and the author card (a 44px
+  round swatch, site title, tagline, reader count, and the visibility note). The column is the
+  member's measure (640px by default) while the body is one column, and 1240px once two paired
+  columns fit, so the chrome above and below the text is as wide as the text. Serif title
+  40px/1.12 alone and 32px when paired. The column is a `@container` wrapper of its own, never
+  the pane: container-type brings layout containment, and the highlight toolbar and note are
+  `fixed`. After the author card, an *Up next* card names the post after this one in the list as
+  shown — the one `j` would open — so a pointer reader flows on without going back up the list.
 - Paired reading: one grid row per top-level block, the original first — left-hand column when
   there are two, above the translation when they stack, so nothing changes places at the
   threshold. The original — its title included — sits on `source`, continuous down its column and
@@ -187,9 +203,15 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
 - **"Aa"** in the reader's action row, before Like, opens a 280 px popover. It holds three
   segmented choices, which Settings repeats under *Appearance*:
   - **Size:** four steps, ×0.88 / ×1 / ×1.13 / ×1.27 of the 19.5 px body (18 px for CJK).
-  - **Width:** 560 / 640 / 760 px for the single column. The paired body keeps its own two-column
-    measure.
+  - **Width:** 560 / 640 / 760 px for the single column, and for a stacked pair. Two paired
+    columns keep their own 640px measure.
   - **Theme:** Auto / Light / Dark.
+- **The sidebar toggle** sits at the head of the list, in one place whether the sidebar is shown
+  or hidden: a 16px panel glyph drawn inline (Tela has no icon set) in the quiet button style,
+  `aria-expanded` for its state. From `lg` only; below it `MobileNav` holds the filters.
+- **Focus** sits beside `✕ Close` in the action row: one label, `aria-pressed` and the `hover`
+  ground while it is on, as a toggle button has. From `lg` only, since below it the list already
+  gives way to the article. Both are device state (ADR 0029).
 - **Highlights** are a marker stroke over the text, never a box: `::highlight()` paint, no
   element around the words.
   - A selection in the article shows a floating pill above it (*Highlight*, *Add a note*).
@@ -198,4 +220,5 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - Under the article, *N highlights* lists each quote (in a `<mark>` there, since it is a copy)
     with its note. One the post lost says so in `muted`; one on a layout not showing says where
     it is.
-- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `h` and `?` in `kbd` chips.
+- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `h`, `[`, `f` and `?` in `kbd` chips. `[`
+  needs AltGr or Option on some non-US layouts, as `?` does on others; neither is worked around.

@@ -45,7 +45,9 @@
     "liked": "Liked",
     "subscriptions": "Subscriptions",
     "noSubscriptions": "No subscriptions yet.",
-    "browse": "Feeds"
+    "browse": "Feeds",
+    "hide": "Hide the sidebar",
+    "show": "Show the sidebar"
   },
   "list": {
     "markAllRead": "Mark all read",
@@ -79,7 +81,9 @@
     "recommended": "Recommended.",
     "recommendedWithNote": "Recommended with your note.",
     "unrecommended": "Recommendation removed.",
-    "fetchingFullText": "Fetching the full post from the site…"
+    "fetchingFullText": "Fetching the full post from the site…",
+    "upNext": "Up next",
+    "focus": "Focus"
   },
   "add": {
     "title": "Add a feed",
@@ -285,6 +289,8 @@
     "previous": "Previous article",
     "close": "Close the article",
     "highlight": "Highlight the selection",
+    "sidebar": "Show or hide the sidebar",
+    "focus": "Hide the list while reading",
     "help": "Show or hide this list",
     "dismiss": "Close"
   }

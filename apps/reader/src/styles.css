@@ -176,6 +176,15 @@
 }
 
 /*
+ * Focus (ADR 0029): the list stays mounted and leaves the grid, so its page of rows and its scroll
+ * survive and Esc still finds the row it closed. A `lg:hidden` on the list would fight its own
+ * `lg:group-data-[open=1]:block` with no defined winner; unlayered, this rule outranks both.
+ */
+[data-testid="reading-layout"][data-focus="1"] > [data-testid="article-list"] {
+  display: none;
+}
+
+/*
  * The reader's typography (ADR 0026): `--reader-scale` and `--reader-measure` are set on the
  * reader pane from the member's synced prefs. The paired body keeps its own two-column measure.
  */
@@ -303,10 +312,11 @@
 /*
  * Paired bilingual body (`PairedBody`): one grid row per top-level block, original first.
  *
- * Stacked is the base case and two columns are the override, because two columns need the pane
- * to be about 1080px — roughly a 1624px viewport, once the sidebar and list have taken 480 —
- * and below that the same DOM reads as an interleave at the full measure. The old layout turned
- * two columns on at a 1280px *viewport*, which left 348px per column.
+ * Stacked is the base case and two columns are the override, because two columns need the pane's
+ * content box to be 1080px — about a 1624px window once the sidebar and list have taken 480,
+ * 1404px with the sidebar hidden and 1144px in focus (ADR 0029) — and below that the same DOM
+ * reads as an interleave at the member's measure. The old layout turned two columns on at a
+ * 1280px *viewport*, which left 348px per column.
  *
  * Unlayered like everything else in this file, so no Tailwind utility can quietly outrank it.
  */

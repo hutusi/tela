@@ -7,6 +7,7 @@ import { relativeTime } from '../lib/format'
 import { canonicalReadingHref, type ReadingParams, readingHref } from '../lib/href'
 import { useStore, useTables } from '../store/hooks'
 import { feedTitle, isRead, shownTitle } from '../store/selectors'
+import { SidebarToggle } from './sidebar-toggle'
 import { Swatch } from './swatch'
 
 type Props = {
@@ -57,8 +58,9 @@ export function ArticleList({
       className="min-w-0 border-r border-line group-data-[open=1]:hidden lg:sticky lg:top-14 lg:h-[calc(100vh-56px)] lg:overflow-y-auto lg:group-data-[open=1]:block"
       data-testid="article-list"
     >
-      <div className="sticky top-0 z-[1] flex items-baseline justify-between bg-paper px-5 pb-2.5 pt-5">
-        <h1 className="truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
+      <div className="sticky top-0 z-[1] flex items-baseline gap-2 bg-paper px-5 pb-2.5 pt-5">
+        <SidebarToggle />
+        <h1 className="min-w-0 flex-1 truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
           {heading}
         </h1>
         {items.length > 0 ? (

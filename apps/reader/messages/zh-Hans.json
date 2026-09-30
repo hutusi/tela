@@ -45,7 +45,9 @@
     "liked": "喜欢",
     "subscriptions": "订阅",
     "noSubscriptions": "还没有订阅。",
-    "browse": "订阅"
+    "browse": "订阅",
+    "hide": "隐藏侧栏",
+    "show": "显示侧栏"
   },
   "list": {
     "markAllRead": "全部标为已读",
@@ -79,7 +81,9 @@
     "recommended": "已推荐。",
     "recommendedWithNote": "已附上你的推荐语。",
     "unrecommended": "已取消推荐。",
-    "fetchingFullText": "正在从原站获取全文…"
+    "fetchingFullText": "正在从原站获取全文…",
+    "upNext": "下一篇",
+    "focus": "专注"
   },
   "add": {
     "title": "添加订阅",
@@ -285,6 +289,8 @@
     "previous": "上一篇",
     "close": "关闭文章",
     "highlight": "为所选文字划线",
+    "sidebar": "显示或隐藏侧栏",
+    "focus": "阅读时隐藏列表",
     "help": "显示或隐藏此列表",
     "dismiss": "关闭"
   }

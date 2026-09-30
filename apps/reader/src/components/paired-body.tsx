@@ -21,8 +21,8 @@ type Props = {
  * Every cell is a direct child of one grid, in `o1, t1, o2, t2 …` order. Two columns place pair
  * *i* on row *i*, so the two sides align by construction and cannot drift apart the way two
  * whole documents in two cells did. One column reads the same DOM as an interleave — the source
- * paragraph, then its translation, then the next one — which keeps the full measure instead of
- * halving it.
+ * paragraph, then its translation, then the next one — at the member's measure, as a single column
+ * would be, instead of halving it. Two columns keep their own 640px measure.
  *
  * The original leads in both, which is the arrangement every facing-page edition uses and the
  * only one where nothing changes places as the window crosses the two-column threshold.
@@ -40,7 +40,7 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
   return (
     <div className="@container">
       <div
-        className="grid grid-cols-[minmax(0,640px)] items-start gap-x-10 @min-[1080px]:grid-cols-[minmax(0,640px)_minmax(0,640px)]"
+        className="grid grid-cols-[minmax(0,var(--reader-measure))] items-start gap-x-10 @min-[1080px]:grid-cols-[minmax(0,640px)_minmax(0,640px)]"
         data-testid="paired-body"
       >
         {/* `hidden` rather than `sr-only`: display:none takes the cell out of the grid, and
