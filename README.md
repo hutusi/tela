@@ -56,7 +56,8 @@ bun run dev           # the reader with tela-api and tela-jobs beside it; see do
 - **Highlights and notes**: private, on either side of a translation, and found again when the
   post is edited.
 - **Reading comfort**: text size, line length and a dark theme, synced across devices; `j`/`k`
-  to move through the list and `Esc` to close.
+  to move through the list, `Esc` to close and `[` to hide the sidebar, which each device
+  remembers for itself.
 - **Discover**: listed blogs with topic and language filters, blog pages, subscribe from a card.
   A blog gets there three ways: an editorial pick, its author claiming it, or three distinct
   members subscribing to it.

@@ -45,7 +45,9 @@
     "liked": "喜欢",
     "subscriptions": "订阅",
     "noSubscriptions": "还没有订阅。",
-    "browse": "订阅"
+    "browse": "订阅",
+    "hide": "隐藏侧栏",
+    "show": "显示侧栏"
   },
   "list": {
     "markAllRead": "全部标为已读",
@@ -285,6 +287,7 @@
     "previous": "上一篇",
     "close": "关闭文章",
     "highlight": "为所选文字划线",
+    "sidebar": "显示或隐藏侧栏",
     "help": "显示或隐藏此列表",
     "dismiss": "关闭"
   }

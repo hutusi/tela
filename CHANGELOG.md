@@ -31,6 +31,9 @@ everything so far sits under `[Unreleased]`.
 - **Highlights and notes**, private, on either side of a translation, and found again when the
   post is edited; text size, line length and a dark theme, synced across devices; `j`/`k`, `Esc`
   and `h` on the reading page (ADR 0026).
+- **A quieter reading page:** the sidebar hides (`[`, or the toggle at the head of the list), and
+  the choice is this device's rather than synced (ADR 0029), which on a laptop window is what
+  makes room for the two bilingual columns.
 
 - **Running unattended.** A dead-man's switch pinged by the sweeps while they are healthy, a
   Monday digest to the owner, and a nightly export verified against its manifest, which the suite

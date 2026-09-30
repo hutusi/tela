@@ -21,6 +21,7 @@ import {
   readingHref,
   readingModeParam,
 } from '../lib/href'
+import { gridColumns, toggleSidebar, useLayout } from '../lib/layout'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { articlesFor, isRead, subscriptionItems, totals } from '../store/selectors'
 import { useUi } from '../ui'
@@ -51,6 +52,8 @@ export function ReadingPage() {
   const article =
     params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
   const open = params.articleId !== null
+  // Which panes show beside the article: this device's choice, not the member's (ADR 0029).
+  const panes = useLayout()
 
   // The mode a URL without one means: this member's last choice, synced like any other pref.
   const remembered =
@@ -94,7 +97,7 @@ export function ReadingPage() {
   }, [navigate])
 
   // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
-  // article, ? lists the keys. Typing in a field is never a shortcut, and a popover that handles
+  // article, [ shows or hides the sidebar, ? lists the keys. Typing in a field is never a shortcut, and a popover that handles
   // Esc itself marks the event so the article stays open.
   const [help, setHelp] = useState(false)
   // Read when a key is pressed, not when the listener was bound: a second `j` can come before
@@ -121,6 +124,9 @@ export function ReadingPage() {
         else if (now.articleId !== null) close()
         else return
         e.preventDefault()
+      } else if (e.key === '[') {
+        e.preventDefault()
+        toggleSidebar()
       } else if (e.key === '?') {
         e.preventDefault()
         setHelp((shown) => !shown)
@@ -192,16 +198,17 @@ export function ReadingPage() {
 
   return (
     <div
-      className={`group grid flex-1 grid-cols-1 lg:min-h-0 ${
-        open
-          ? 'lg:grid-cols-[220px_260px_minmax(0,1fr)]'
-          : 'lg:grid-cols-[220px_minmax(280px,380px)_minmax(0,1fr)]'
-      }`}
+      className={`group grid flex-1 grid-cols-1 lg:min-h-0 ${gridColumns(open, panes)}`}
       data-testid="reading-layout"
       data-open={open ? '1' : undefined}
+      data-sidebar={panes.sidebar}
     >
       {open ? null : <MobileNav subscriptions={subs} totals={counts} params={params} />}
-      <Sidebar subscriptions={subs} totals={counts} params={params} />
+      {/* Not rendered rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no
+          defined winner (AGENTS.md), and a column that is gone needs no element. */}
+      {panes.sidebar === 'shown' ? (
+        <Sidebar subscriptions={subs} totals={counts} params={params} />
+      ) : null}
       <ArticleList
         items={items}
         params={params}
