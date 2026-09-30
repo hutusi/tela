@@ -53,5 +53,6 @@ export const profile = {
   uiLocale: null,
   readingLang: null,
   publicSubscriptions: false,
+  publicLikes: false,
   seq: 1,
 }

@@ -106,16 +106,21 @@ function statementsFor(
           where excluded.updated_at >= user_prefs.updated_at
         `),
       ]
-    case 'setProfile':
+    case 'setProfile': {
+      // Bound as 1 or 0: `false` is a value to write, and only an absent flag keeps the column.
+      const flag = (v: boolean | undefined) => (v === undefined ? null : v ? 1 : 0)
       return [
         db.run(sql`
           update profiles set
             reading_lang = coalesce(${m.readingLang ?? null}, reading_lang),
             ui_locale = coalesce(${m.uiLocale ?? null}, ui_locale),
+            public_subscriptions = coalesce(${flag(m.publicSubscriptions)}, public_subscriptions),
+            public_likes = coalesce(${flag(m.publicLikes)}, public_likes),
             updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and ${fresh}
         `),
       ]
+    }
     case 'recommend':
       return [
         db.run(sql`
@@ -162,6 +167,30 @@ function statementsFor(
         db.run(sql`
           update highlights set deleted_at = ${at}, updated_at = ${at}, seq = ${currentSeq}
           where id = ${m.id} and user_id = ${userId} and deleted_at is null and ${fresh}
+        `),
+      ]
+    case 'follow':
+      // Through the followee's profile, so nobody to follow writes nothing; and never yourself,
+      // excluded here because the table's check would sink the whole push (ADR 0031). A follow
+      // after an unfollow is a new follow, from now.
+      return [
+        db.run(sql`
+          insert into follows (follower_id, followee_id, created_at, updated_at, seq)
+          select ${userId}, p.user_id, ${at}, ${at}, ${currentSeq} from profiles p
+          where p.user_id = ${m.userId} and p.user_id <> ${userId} and ${fresh}
+          on conflict (follower_id, followee_id) do update set
+            created_at = case when follows.deleted_at is null then follows.created_at
+              else excluded.created_at end,
+            deleted_at = null, updated_at = excluded.updated_at, seq = excluded.seq
+          where excluded.updated_at >= follows.updated_at
+        `),
+      ]
+    case 'unfollow':
+      return [
+        db.run(sql`
+          update follows set deleted_at = ${at}, updated_at = ${at}, seq = ${currentSeq}
+          where follower_id = ${userId} and followee_id = ${m.userId} and deleted_at is null
+            and updated_at <= ${at} and ${fresh}
         `),
       ]
   }

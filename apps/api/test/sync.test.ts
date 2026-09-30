@@ -516,6 +516,97 @@ describe('highlights', () => {
   })
 })
 
+describe('follows (ADR 0031)', () => {
+  const ANNA = 'member-anna-0000001'
+  const BO = 'member-bo-000000002'
+  /** A member who never signs in here: a user and a profile, written as the invite writes them. */
+  async function person(id: string, handle: string) {
+    await write(
+      db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+        values (${id}, ${handle}, ${`${handle}@x.test`}, 1, 0, 0)`),
+      db.run(sql`insert into profiles (user_id, handle, display_name, created_at, updated_at, seq)
+        values (${id}, ${handle}, ${handle.toUpperCase()}, 0, 0, ${currentSeq})`),
+    )
+  }
+  beforeEach(async () => {
+    await person(ANNA, 'anna')
+    await person(BO, 'bobo')
+  })
+
+  test('a follow syncs to the follower only, carrying who they follow', async () => {
+    const snap = await pull(0)
+    await push([{ type: 'follow', userId: ANNA }])
+    const delta = await pull(snap.cursor)
+    expect(delta.rows.follows).toMatchObject([
+      { userId: ANNA, handle: 'anna', displayName: 'ANNA', deletedAt: null },
+    ])
+    const other = await signedIn(api, 'other@x.test')
+    expect((await pull(0, other)).rows.follows).toEqual([])
+    expect((await pull(0)).rows.follows).toHaveLength(1)
+  })
+
+  test("a followee's new name is sent again; someone not followed is not", async () => {
+    await push([{ type: 'follow', userId: ANNA }])
+    const snap = await pull(0)
+    await write(
+      db.run(
+        sql`update profiles set handle = 'anna_k', seq = ${currentSeq} where user_id = ${ANNA}`,
+      ),
+      db.run(
+        sql`update profiles set display_name = 'Bobo B', seq = ${currentSeq} where user_id = ${BO}`,
+      ),
+    )
+    const delta = await pull(snap.cursor)
+    expect(delta.rows.follows).toMatchObject([{ userId: ANNA, handle: 'anna_k' }])
+  })
+
+  test('an unfollow is sent as a deletion, and a snapshot holds live follows only', async () => {
+    await push([
+      { type: 'follow', userId: ANNA, at: now - 10 },
+      { type: 'follow', userId: BO, at: now - 10 },
+    ])
+    const snap = await pull(0)
+    await push([{ type: 'unfollow', userId: ANNA }])
+    const delta = await pull(snap.cursor)
+    expect(delta.rows.follows).toMatchObject([{ userId: ANNA, deletedAt: now }])
+    expect((await pull(0)).rows.follows.map((f) => f.userId)).toEqual([BO])
+  })
+
+  test('following yourself or nobody is a no-op, and the rest of the push applies', async () => {
+    const res = await push([
+      { type: 'follow', userId: reader.userId },
+      { type: 'follow', userId: 'nobody-at-all-0001' },
+      { type: 'follow', userId: BO },
+    ])
+    expect(res.rejected).toEqual([])
+    expect((await pull(0)).rows.follows.map((f) => f.userId)).toEqual([BO])
+  })
+
+  test('two devices: the later of follow and unfollow wins, whatever order they arrive in', async () => {
+    // Times in the past: `at` is clamped to the server's clock.
+    const t = now - 100
+    // Unfollowed later on one device, followed again earlier on another, arriving after.
+    await push([{ type: 'follow', userId: ANNA, at: t }])
+    await push([{ type: 'unfollow', userId: ANNA, at: t + 20 }])
+    await push([{ type: 'follow', userId: ANNA, at: t + 10 }])
+    expect((await pull(0)).rows.follows).toEqual([])
+    // And the other way round: a follow made last wins over an older unfollow sent after it.
+    await push([{ type: 'follow', userId: BO, at: t + 30 }])
+    await push([{ type: 'unfollow', userId: BO, at: t + 25 }])
+    expect((await pull(0)).rows.follows.map((f) => f.userId)).toEqual([BO])
+  })
+
+  test('the privacy flags are profile mutations, false included', async () => {
+    const snap = await pull(0)
+    await push([{ type: 'setProfile', publicSubscriptions: true, publicLikes: true }])
+    const on = await pull(snap.cursor)
+    expect(on.rows.profile).toMatchObject([{ publicSubscriptions: true, publicLikes: true }])
+    await push([{ type: 'setProfile', publicLikes: false }])
+    const off = await pull(on.cursor)
+    expect(off.rows.profile).toMatchObject([{ publicSubscriptions: true, publicLikes: false }])
+  })
+})
+
 describe('a feed merged into another (ADR 0028)', () => {
   test('a device that still knows it subscribes and unsubscribes the feed it merged into', async () => {
     await db.run(sql`update feeds set status = 'paused', merged_into = 1, site_id = 1 where id = 2`)

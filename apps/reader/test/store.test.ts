@@ -78,7 +78,7 @@ describe('the device store', () => {
   test('a pull rewrites only the tables it touched', async () => {
     const storage = recording()
     const store = await member(storage)
-    expect(storage.saved.at(-1)).toHaveLength(12) // a snapshot writes every table
+    expect(storage.saved.at(-1)).toHaveLength(13) // a snapshot writes every table
     await store.applyPull(pull(6, { articles: [article(9)] }), store.epoch)
     expect(storage.saved.at(-1)).toEqual(['articles'])
     // Unsubscribing prunes the feed's articles: no article row named them, yet they changed.

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { applyPull, type Confirmed, emptyTables, type Pending, settle, view } from './client'
 import { emptyRows, type PullResponse } from './protocol'
-import type { ArticleRow, StateRow, SubscriptionRow } from './rows'
+import type { ArticleRow, FollowRow, ProfileRow, StateRow, SubscriptionRow } from './rows'
 
 const article = (id: number, feedId = 1): ArticleRow => ({
   id,
@@ -166,5 +166,67 @@ describe('highlights on the device', () => {
     )
     expect(deleted.tables.highlights.size).toBe(0)
     expect(deleted.tables.articles.size).toBe(0)
+  })
+})
+
+describe('follows and privacy flags on the device (ADR 0031)', () => {
+  const ID = 'member-anna-00000001'
+  const followRow = (deletedAt: number | null, handle = 'anna', seq = 2): FollowRow => ({
+    userId: ID,
+    handle,
+    displayName: 'Anna',
+    createdAt: 5,
+    deletedAt,
+    seq,
+  })
+  const profile: ProfileRow = {
+    handle: 'me',
+    displayName: null,
+    bio: null,
+    uiLocale: null,
+    readingLang: null,
+    publicSubscriptions: true,
+    publicLikes: false,
+    seq: 1,
+  }
+
+  test('a follow shows at once, nameless until the pull names it', () => {
+    const shown = view(start, [
+      { mutation: { mid: 'follow-anna', at: 10, type: 'follow', userId: ID } },
+    ])
+    expect(shown.follows.get(ID)).toMatchObject({ handle: null, createdAt: 10, deletedAt: null })
+    const pulled = applyPull(start, pull(4, { follows: [followRow(null)] }))
+    expect(view(pulled, []).follows.get(ID)?.handle).toBe('anna')
+  })
+
+  test('an unfollow lets the row go, from a pull or a prediction; a rename replaces it', () => {
+    const held = applyPull(start, pull(4, { follows: [followRow(null)] }))
+    expect(
+      view(held, [{ mutation: { mid: 'unfollow-anna', at: 11, type: 'unfollow', userId: ID } }])
+        .follows.size,
+    ).toBe(0)
+    const renamed = applyPull(held, pull(6, { follows: [followRow(null, 'anna_k', 6)] }))
+    expect(renamed.tables.follows.get(ID)?.handle).toBe('anna_k')
+    expect(applyPull(renamed, pull(7, { follows: [followRow(7)] })).tables.follows.size).toBe(0)
+  })
+
+  test('privacy flags apply, false included', () => {
+    const held = applyPull(start, pull(4, { profile: [profile] }))
+    const shown = view(held, [
+      {
+        mutation: {
+          mid: 'hide-subs-pad',
+          at: 10,
+          type: 'setProfile',
+          publicSubscriptions: false,
+          publicLikes: true,
+        },
+      },
+    ])
+    expect(shown.profile).toMatchObject({ publicSubscriptions: false, publicLikes: true })
+    const untouched = view(held, [
+      { mutation: { mid: 'lang-only-pad', at: 10, type: 'setProfile', readingLang: 'zh-Hans' } },
+    ])
+    expect(untouched.profile).toMatchObject({ publicSubscriptions: true, readingLang: 'zh-Hans' })
   })
 })

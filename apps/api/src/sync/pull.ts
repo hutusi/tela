@@ -19,8 +19,9 @@ const json = <T>(v: unknown, fallback: T): T => {
 function shape(rows: Record<keyof SyncRows, RawRow[]>): SyncRows {
   const out = emptyRows()
   out.profile = rows.profile.map((r) => ({
-    ...(r as Omit<SyncRows['profile'][number], 'publicSubscriptions'>),
+    ...(r as Omit<SyncRows['profile'][number], 'publicSubscriptions' | 'publicLikes'>),
     publicSubscriptions: bool(r.publicSubscriptions),
+    publicLikes: bool(r.publicLikes),
   }))
   out.prefs = rows.prefs.map((r) => ({
     key: String(r.key),
@@ -48,6 +49,7 @@ function shape(rows: Record<keyof SyncRows, RawRow[]>): SyncRows {
     'recommendations',
     'highlights',
     'claims',
+    'follows',
   ] as const) {
     ;(out[name] as RawRow[]) = rows[name]
   }

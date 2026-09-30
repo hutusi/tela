@@ -77,6 +77,22 @@ describe('the device database', () => {
     expect(stored.pending).toEqual([])
   })
 
+  test('a copy written before a table existed starts over from a snapshot (follows, ADR 0031)', async () => {
+    const name = fresh()
+    const one = await indexedDbPersistence(name)
+    await one.claim('a')
+    const tables = tablesOf(pull(5, { profile: [profile], subscriptions: [sub(1)] }, true))
+    expect(await one.commit('a', { tables, cursor: 5 })).toBe(true)
+    // What the build before follows left: every other table, and a cursor past rows it dropped.
+    const raw = await openDB(name)
+    await raw.delete('tables', 'follows')
+    raw.close()
+    const loaded = await one.load()
+    expect(loaded.owner).toBe('a')
+    expect(loaded.cursor).toBe(0)
+    expect(loaded.rows).toBeNull()
+  })
+
   test('a copy an earlier build wrote starts over', async () => {
     const name = fresh()
     await seedEarlierBuild(name, pull(5, { profile: [profile], subscriptions: [sub(1)] }, true), {

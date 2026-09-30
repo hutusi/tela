@@ -133,7 +133,7 @@ export interface Persistence {
 /**
  * Every table the device holds. One missing from storage means it was written by a build that
  * did not know it, so the device starts over from a snapshot rather than trust a cursor that has
- * passed rows it never kept (highlights, added after the first devices synced).
+ * passed rows it never kept (highlights, added after the first devices synced; follows, ADR 0031).
  */
 const TABLES: (keyof TableRows)[] = [
   'profile',
@@ -148,6 +148,7 @@ const TABLES: (keyof TableRows)[] = [
   'highlights',
   'claims',
   'translations',
+  'follows',
 ]
 
 /** This layout's database. Earlier builds used 'tela', with no owner and no checks. */

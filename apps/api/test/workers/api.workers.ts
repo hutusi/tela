@@ -98,6 +98,11 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       values (1, 1, 'https://b.example/feed', 'b.example', 0, 0, 0, ${currentSeq})`),
     db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at, seq)
       values (1, 1, 'k1', 'Post', ${now}, ${now}, ${currentSeq})`),
+    // Someone to follow (ADR 0031).
+    db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+      values ('workers-anna-00001', 'Anna', 'anna@x.test', 1, 0, 0)`),
+    db.run(sql`insert into profiles (user_id, handle, display_name, created_at, updated_at, seq)
+      values ('workers-anna-00001', 'anna', 'Anna', 0, 0, ${currentSeq})`),
   ])
 
   // A guarded push, then its replay.
@@ -124,16 +129,19 @@ it('invites, signs in, pushes and pulls on D1', async () => {
         suffix: '',
         note: 'on D1',
       },
+      // A follow is an insert-select upsert, its pull a join paged by max() of two seqs.
+      { mid: 'workers-follow-1', at: now, type: 'follow', userId: 'workers-anna-00001' },
+      { mid: 'workers-flags-1', at: now, type: 'setProfile', publicLikes: true },
     ],
   }
   const pushed = (await (
     await call('/api/v1/mutations', { body: push, ...member })
   ).json()) as PushResponse
-  expect(pushed.applied).toHaveLength(4)
+  expect(pushed.applied).toHaveLength(6)
   const again = (await (
     await call('/api/v1/mutations', { body: push, ...member })
   ).json()) as PushResponse
-  expect(again.applied).toHaveLength(4)
+  expect(again.applied).toHaveLength(6)
   const likes = await db.all<{ like_count: number }>(
     sql`select like_count from articles where id = 1`,
   )
@@ -145,9 +153,21 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   expect(snap.rows.states).toMatchObject([{ articleId: 1, likedAt: now }])
   expect(snap.rows.subscriptions).toMatchObject([{ feedId: 1 }])
   expect(snap.rows.highlights).toMatchObject([{ id: 'workers-hl-1', end: 4, note: 'on D1' }])
+  expect(snap.rows.follows).toMatchObject([{ userId: 'workers-anna-00001', handle: 'anna' }])
+  expect(snap.rows.profile).toMatchObject([{ publicLikes: true }])
   const delta = (await (
     await call(`/api/v1/sync?cursor=${snap.cursor}`, member)
   ).json()) as PullResponse
   expect(delta.rows.articles).toEqual([])
   expect(delta.more).toBe(false)
+  // A rename sends the follow again, in a delta.
+  await db.batch([
+    bumpSeq(db),
+    db.run(sql`update profiles set handle = 'anna_k', seq = ${currentSeq}
+      where user_id = 'workers-anna-00001'`),
+  ])
+  const renamed = (await (
+    await call(`/api/v1/sync?cursor=${delta.cursor}`, member)
+  ).json()) as PullResponse
+  expect(renamed.rows.follows).toMatchObject([{ handle: 'anna_k' }])
 })

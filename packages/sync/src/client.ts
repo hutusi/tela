@@ -17,6 +17,7 @@ import type {
   ArticleRow,
   ClaimRow,
   FeedRow,
+  FollowRow,
   HighlightRow,
   PrefRow,
   ProfileRow,
@@ -47,6 +48,8 @@ export type Tables = {
   claims: Map<number, ClaimRow>
   /** By `${contentKey}:${lang}`. */
   translations: Map<string, TranslationRow>
+  /** By the followed member's id: the people the member follows (an unfollowed one is not held). */
+  follows: Map<string, FollowRow>
 }
 
 export type Confirmed = { cursor: number; tables: Tables }
@@ -71,6 +74,7 @@ export const emptyTables = (): Tables => ({
   highlights: new Map(),
   claims: new Map(),
   translations: new Map(),
+  follows: new Map(),
 })
 
 export const titleKey = (articleId: number, lang: string) => `${articleId}:${lang}`
@@ -91,6 +95,7 @@ function copy(tables: Tables): Tables {
     highlights: new Map(tables.highlights),
     claims: new Map(tables.claims),
     translations: new Map(tables.translations),
+    follows: new Map(tables.follows),
   }
 }
 
@@ -119,6 +124,10 @@ export function applyPull(confirmed: Confirmed, pull: PullResponse): Confirmed {
   for (const row of r.translations)
     t.translations.set(translationKey(row.contentKey, row.lang), row)
   for (const row of r.subscriptions) t.subscriptions.set(row.feedId, row)
+  for (const row of r.follows) {
+    if (row.deletedAt === null) t.follows.set(row.userId, row)
+    else t.follows.delete(row.userId)
+  }
   for (const stone of pull.tombstones) {
     if (stone.entity === 'article') t.articles.delete(Number(stone.key))
   }
@@ -236,6 +245,11 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
           ...t.profile,
           ...(m.readingLang ? { readingLang: m.readingLang } : {}),
           ...(m.uiLocale ? { uiLocale: m.uiLocale } : {}),
+          // Booleans: `false` is a value, not an absence.
+          ...(m.publicSubscriptions !== undefined
+            ? { publicSubscriptions: m.publicSubscriptions }
+            : {}),
+          ...(m.publicLikes !== undefined ? { publicLikes: m.publicLikes } : {}),
         }
       }
       return t
@@ -289,6 +303,24 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       t.highlights.delete(m.id)
       return t
     }
+    case 'follow': {
+      // Who they are arrives with the pull; until then the row has only their id, and the page
+      // that followed them knows the rest. (The server ignores a self-follow; no page offers one.)
+      if (t.follows.has(m.userId)) return t
+      t.follows.set(m.userId, {
+        userId: m.userId,
+        handle: null,
+        displayName: null,
+        createdAt: m.at,
+        deletedAt: null,
+        seq: 0,
+      })
+      return t
+    }
+    case 'unfollow': {
+      t.follows.delete(m.userId)
+      return t
+    }
   }
 }
 
@@ -333,6 +365,7 @@ export function rowsOf(tables: Tables) {
     highlights: [...tables.highlights.values()],
     claims: [...tables.claims.values()],
     translations: [...tables.translations.values()],
+    follows: [...tables.follows.values()],
   }
 }
 
@@ -340,6 +373,7 @@ export type {
   ArticleRow,
   ClaimRow,
   FeedRow,
+  FollowRow,
   HighlightRow,
   SiteRow,
   SubscriptionRow,
@@ -364,5 +398,6 @@ export function tablesFromRows(rows: TableRows): Tables {
     highlights: new Map(rows.highlights.map((r) => [r.id, r])),
     claims: new Map(rows.claims.map((r) => [r.id, r])),
     translations: new Map(rows.translations.map((r) => [translationKey(r.contentKey, r.lang), r])),
+    follows: new Map(rows.follows.map((r) => [r.userId, r])),
   }
 }
