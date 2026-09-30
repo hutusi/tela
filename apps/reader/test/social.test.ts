@@ -102,6 +102,15 @@ describe('a language never translated', () => {
     // Tags compare exactly: never translating Traditional Chinese leaves Japanese alone.
     expect(shownTitle(t, post, 'en', ['zh-Hant']).badge).toBe(true)
   })
+
+  test('a post held from a public page reads under the title that page showed', () => {
+    const held = {
+      ...article(9, { title: '半島日記', sourceLang: 'ja' }),
+      titles: { en: 'Peninsula' },
+    }
+    expect(shownTitle(tables({}), held, 'en')).toMatchObject({ title: 'Peninsula', badge: true })
+    expect(shownTitle(tables({}), held, 'en', ['ja']).title).toBe('半島日記')
+  })
 })
 
 describe('dates and colours for people', () => {

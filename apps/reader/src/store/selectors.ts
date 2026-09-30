@@ -142,7 +142,7 @@ export function articlesFor(
  */
 export function shownTitle(
   t: Tables,
-  a: ArticleRow,
+  a: ArticleRow & { titles?: Partial<Record<string, string>> },
   readingLang: string,
   never: readonly string[] = [],
 ) {
@@ -150,7 +150,9 @@ export function shownTitle(
     return { title: a.title, excerpt: a.excerpt, badge: false }
   }
   const translated = t.titles.get(titleKey(a.id, readingLang))
-  const title = translated?.title ?? null
+  // A post held from a public page, whose feed the device does not sync, brings the titles that
+  // page showed: the reader opening it says what the link said.
+  const title = translated?.title ?? a.titles?.[readingLang] ?? null
   return {
     title: title ?? a.title,
     excerpt: translated?.excerpt ?? a.excerpt,

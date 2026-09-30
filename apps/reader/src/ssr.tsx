@@ -106,7 +106,12 @@ export function renderPublicPage(input: {
     ) : route.kind === 'discover' ? (
       <DiscoverView data={data as DiscoverData} params={route.params} locale={locale} />
     ) : route.kind === 'site' ? (
-      <SiteView data={data as SiteData} locale={locale} now={now} />
+      <SiteView
+        data={data as SiteData}
+        reading={{ lang: locale, never: [] }}
+        locale={locale}
+        now={now}
+      />
     ) : (
       <ProfileView
         data={data as ProfileData}

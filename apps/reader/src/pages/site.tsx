@@ -1,16 +1,17 @@
 import { TOPICS } from '@tela/shared'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { displayHost } from '../lib/format'
 import { useMemberControls } from '../lib/member'
+import { readingPrefsOf } from '../lib/prefs'
 import { useTitle } from '../lib/title'
 import { forgetPublic, usePublic } from '../lib/use-public'
-import { api } from '../store/api'
-import { useNow } from '../store/hooks'
+import { api, apiJson } from '../store/api'
+import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { useUi } from '../ui'
 import { SiteView } from '../views/site'
-import type { SiteData } from '../views/types'
+import type { Person, SiteData } from '../views/types'
 import { NotFoundPage } from './not-found'
 
 export const sitePath = (siteId: number) => `/api/v1/public/sites/${siteId}`
@@ -22,6 +23,11 @@ export function SitePage() {
   const member = useMemberControls()
   const { locale } = useUi()
   const now = useNow()
+  const tables = useTables()
+  const readingLang = useReadingLang(locale)
+  const never = readingPrefsOf(tables).never
+  const reading = useMemo(() => ({ lang: readingLang, never }), [readingLang, never])
+  const readers = useFollowedReaders(valid ? siteId : null, member !== undefined)
   const data = loaded.status === 'ready' ? loaded.data : null
   useTitle(data ? (data.site.title ?? displayHost(data.site.homeUrl)) : null)
 
@@ -32,11 +38,41 @@ export function SitePage() {
     <SiteView
       data={data}
       member={member}
+      reading={reading}
       locale={locale}
       now={now}
+      readers={readers}
       ownerPanel={owner ? <TopicsForm siteId={data.site.id} topics={data.topics} /> : null}
     />
   )
+}
+
+/**
+ * The people the member follows who read this blog: a member call beside the page, since the
+ * page is cached for everyone (ADR 0031). Asked again when whom they follow changes.
+ */
+function useFollowedReaders(siteId: number | null, member: boolean): Person[] {
+  const { store } = useStore()
+  const tables = useTables()
+  const followees = [...tables.follows.keys()].sort().join(',')
+  const [readers, setReaders] = useState<Person[]>([])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: asked again when the follows change
+  useEffect(() => {
+    if (siteId === null || !member || followees === '') {
+      setReaders([])
+      return
+    }
+    let cancelled = false
+    apiJson<{ readers: Person[] }>(`/api/v1/sites/${siteId}/followed-readers`)
+      .then(({ status, body }) => {
+        if (!cancelled && status === 200) setReaders(body.readers)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [siteId, member, followees, store.userId])
+  return readers
 }
 
 /** The blog's topics, which its owner picks (they decide where Discover lists it). */

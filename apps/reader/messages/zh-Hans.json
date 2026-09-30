@@ -173,12 +173,26 @@
     }
   },
   "site": {
-    "claimedBy": "由 @{handle} 认领",
+    "claimedByName": "✓ 由 {name} 认领",
+    "visit": "访问网站 ↗",
+    "writtenIn": "用{lang}写作",
+    "cadence": "{key, select, daily {每日更新} weekly {每周更新} biweekly {每月两更} monthly {每月更新} other {最近安静}}",
+    "readersOnTela": "{n} 位 Tela 读者",
     "claimLink": "这是你的网站？认领它",
     "yourTopics": "你的主题",
     "saveTopics": "保存",
-    "latestPosts": "最新文章",
-    "noPosts": "还没有抓取到文章。"
+    "posts": "文章",
+    "minutes": "{n} 分钟",
+    "noPosts": "还没有抓取到文章。",
+    "about": "关于",
+    "readersYouFollow": "你关注的读者",
+    "readersText": {
+      "one": "{a} 在读这个博客。",
+      "two": "{a} 和 {b} 在读这个博客。",
+      "more": "{a}、{b} 等 {total} 人在读这个博客。"
+    },
+    "fromReaders": "读者说",
+    "noteOn": "<person></person> 推荐了 <post></post>"
   },
   "claim": {
     "title": "认领你的订阅源",

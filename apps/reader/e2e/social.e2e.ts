@@ -4,11 +4,13 @@
  * what they did. Nothing of theirs reaches the follower's device but the follow itself.
  */
 import { type APIRequestContext, expect, request, test } from '@playwright/test'
-import { BASE, FIXTURES, memberHeaders, signInRequest } from './helpers'
+import { ADMIN_TOKEN, BASE, FIXTURES, memberHeaders, signInRequest } from './helpers'
 
 const OTHER = 'anna@e2e.test'
 const HANDLE = 'anna_e2e'
 const NOTE = 'Read this one slowly; the ending is worth it.'
+/** The blog she reads, made public in the setup so it has a page. */
+let siteId = 0
 
 /** One of the member's own calls, from their own context, as the app makes them. */
 async function push(api: APIRequestContext, mutations: Record<string, unknown>[]) {
@@ -45,6 +47,13 @@ test.beforeAll(async () => {
     ).json()) as { rows: { articles: { id: number; feedId: number }[] } }
     const [first, second] = pulled.rows.articles
     if (!first || !second) throw new Error('the fixture feed has no posts')
+    // A blog nobody claimed has no public page; an operator featuring it gives it one.
+    const curated = await anna.post(`${BASE}/api/admin/curate`, {
+      headers: { origin: BASE, authorization: `Bearer ${ADMIN_TOKEN}` },
+      data: { feedUrl: `${FIXTURES}/jvns.xml`, topics: [] },
+    })
+    expect(curated.ok()).toBe(true)
+    siteId = ((await curated.json()) as { siteId: number }).siteId
     await push(anna, [
       { type: 'recommend', articleId: first.id, note: NOTE },
       { type: 'setLiked', articleId: second.id, liked: true },
@@ -90,6 +99,16 @@ test.describe('following', () => {
     await items.first().getByRole('link', { name: /.+/ }).last().click()
     await expect(page).toHaveURL(/\/reading\?.*article=\d+/)
     await expect(page.getByTestId('reader')).toBeVisible()
+  })
+
+  test('a blog page names the readers I follow there, and what readers said of it', async ({
+    page,
+  }) => {
+    await page.goto(`/s/${siteId}`)
+    await expect(page.getByTestId('site-page')).toBeVisible()
+    await expect(page.getByTestId('site-readers')).toContainText('Anna reads this blog.')
+    await expect(page.getByTestId('site-notes')).toContainText(NOTE)
+    await expect(page.getByTestId('site-notes')).toContainText('Anna Kowalska')
   })
 
   test('her public profile shows her likes and what she reads, to anyone', async ({ page }) => {

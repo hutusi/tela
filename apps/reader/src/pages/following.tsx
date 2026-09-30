@@ -397,7 +397,7 @@ function Activity({
                     style={{ background: swatchColor(post.article.feedId) }}
                   />
                   <PostLink
-                    article={post.article}
+                    article={heldArticle(post, lang)}
                     source={source}
                     member={member}
                     className="min-w-0 flex-1 truncate font-serif text-[18px] text-ink after:absolute after:inset-0 hover:no-underline"
@@ -420,6 +420,12 @@ function Activity({
     </article>
   )
 }
+
+/** The post to hold for the reader, with the title the feed showed in the member's language. */
+const heldArticle = (post: Post, lang: string) =>
+  post.translatedTitle
+    ? { ...post.article, titles: { [lang]: post.translatedTitle } }
+    : post.article
 
 function PostCard({
   post,
@@ -452,7 +458,7 @@ function PostCard({
       </div>
       <h3 className="m-0 font-serif text-[23px] leading-[1.2] font-medium tracking-[-0.005em]">
         <PostLink
-          article={post.article}
+          article={heldArticle(post, lang)}
           source={source}
           member={member}
           className="text-ink after:absolute after:inset-0 hover:no-underline"

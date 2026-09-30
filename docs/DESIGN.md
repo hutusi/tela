@@ -188,6 +188,16 @@ Subscribe. Items are grouped by the viewer's local day and paged a fortnight at 
 "Older activity". The aside lists the people followed (from the device, no request) and a few
 readers to follow, drawn only from what is public. No toasts: a Follow button changes at once.
 
+Blog (`/s/:id`, Tela v2): a 1080 px page. The header is an 84 px avatar (20 px corners), the host
+and "✓ Claimed by {name}" in accent, the title in 56 px serif (40 px on a phone), the blog's
+description as an italic tagline, and "Written in Japanese · Posts weekly · N readers on Tela",
+with topic chips below; on the right, *Visit site ↗* and Subscribe, and the claim link for an
+unclaimed blog. The owner's topics form follows the header. Posts are the profile's list: a date
+column, a 24 px serif title (translated when the page carries one), two lines of excerpt, minutes
+and ♡. A 280 px aside holds *About* (the claimant's name and bio), *Readers you follow* (a stack
+of avatars and "Anna and Jonas read this blog.", a member call beside the cached page) and
+*From readers* (the newest notes readers left recommending its posts).
+
 Dashboard reuses the header and a single 720–960 px column with `font-serif` headings; there is no
 dedicated design for it, so it follows the Discover page's spacing and the site card's chips.
 

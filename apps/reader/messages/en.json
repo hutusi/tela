@@ -173,12 +173,26 @@
     }
   },
   "site": {
-    "claimedBy": "claimed by @{handle}",
+    "claimedByName": "✓ Claimed by {name}",
+    "visit": "Visit site ↗",
+    "writtenIn": "Written in {lang}",
+    "cadence": "{key, select, daily {Posts daily} weekly {Posts weekly} biweekly {Posts twice a month} monthly {Posts monthly} other {Quiet lately}}",
+    "readersOnTela": "{n, plural, one {# reader on Tela} other {# readers on Tela}}",
     "claimLink": "Is this your site? Claim it",
     "yourTopics": "Your topics",
     "saveTopics": "Save",
-    "latestPosts": "Latest posts",
-    "noPosts": "No posts fetched yet."
+    "posts": "Posts",
+    "minutes": "{n} min",
+    "noPosts": "No posts fetched yet.",
+    "about": "About",
+    "readersYouFollow": "Readers you follow",
+    "readersText": {
+      "one": "{a} reads this blog.",
+      "two": "{a} and {b} read this blog.",
+      "more": "{a}, {b} and {n, plural, one {# other} other {# others}} read this blog."
+    },
+    "fromReaders": "From readers",
+    "noteOn": "<person></person> on <post></post>"
   },
   "claim": {
     "title": "Claim your feed",

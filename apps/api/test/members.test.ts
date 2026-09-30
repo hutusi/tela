@@ -318,6 +318,13 @@ describe('public', () => {
       expect(page.notes).toMatchObject([
         { note: 'lovely', person: { handle: 'other', displayName: 'Name other' } },
       ])
+      // Posts carry their titles in the launch languages, for each reader to pick theirs.
+      await db.run(sql`insert into article_titles (article_id, feed_id, lang, title, status, source_hash, updated_at, seq)
+        values (1, 1, 'zh-Hans', '博客一的文章', 'done', 'h', 0, 1)`)
+      const titled = (await (await get('/api/v1/public/sites/1')).json()) as {
+        posts: { titles: Record<string, string> }[]
+      }
+      expect(titled.posts[0]?.titles).toEqual({ 'zh-Hans': '博客一的文章' })
       expect(JSON.stringify(page)).not.toContain('@x.test')
     })
   })
