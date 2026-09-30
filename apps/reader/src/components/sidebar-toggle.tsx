@@ -5,6 +5,14 @@ import { toggleSidebar, useLayout } from '../lib/layout'
 const ID = 'sidebar-toggle'
 
 /**
+ * The row the toggle heads, in the sidebar beside "Library" and at the top of its rail: one box for
+ * both, so the toggle sits on the same line in either state and only moves sideways. Sticky, so a
+ * long list never scrolls it away.
+ */
+export const TOGGLE_ROW =
+  'sticky top-0 z-[1] flex h-[46px] shrink-0 items-center bg-paper pb-2.5 pt-5'
+
+/**
  * A panel with its left third marked off: the sidebar, drawn here since Tela has no icon set. The
  * third is shaded while the sidebar is shown, so the glyph says which state it is in.
  */
@@ -48,14 +56,10 @@ export function toggleSidebarKeepingFocus(): void {
 
 /**
  * Shows or hides the sidebar (ADR 0029), from `lg`, which is where there is one: below it the
- * filters live in `MobileNav`. While the sidebar is shown the toggle heads it, beside "Library";
- * while it is hidden the toggle heads the list, where the sidebar's edge was. `[` does the same.
- *
- * There is no collapsed strip to hold it in one place: a strip wide enough for this button would
- * cost a 1440px window the two bilingual columns that hiding the sidebar is for (DESIGN.md has
- * the arithmetic). One instance is mounted at a time, hence the id. `aria-expanded` without
- * `aria-controls`: the sidebar is not in the DOM while hidden, and an id that points at nothing
- * is worse than none.
+ * filters live in `MobileNav`. It heads the sidebar beside "Library", and the rail the sidebar
+ * collapses to (ADR 0030); `[` does the same. One instance is mounted at a time, hence the id.
+ * `aria-expanded` without `aria-controls`: the two are different elements, and whichever the
+ * toggle would point at is not in the DOM once it has done its work.
  */
 export function SidebarToggle({ className = '' }: { className?: string }) {
   const t = useTranslations('sidebar')

@@ -1,6 +1,7 @@
 /**
  * Which panes the reading page shows beside the article (ADR 0029): the sidebar can be hidden,
- * and in focus the list goes too while an article is open.
+ * which shows its rail in its place (ADR 0030), and in focus the list goes too while an article
+ * is open.
  *
  * This is state of the device, not a synced pref: a 13" laptop hides what a 27" monitor has room
  * for, so the choice belongs to the screen it was made on. It lives in localStorage behind this
@@ -93,15 +94,15 @@ export function useLayout(): Layout {
 
 /**
  * The reading grid's columns from `lg`: sidebar, list, article. The list is narrower while an
- * article is open, the sidebar's column goes with the sidebar, and in focus an open article has
- * the grid to itself. Whole literals, so Tailwind's scanner sees each one.
+ * article is open, the sidebar's column narrows to its 48px rail when it collapses, and in focus
+ * an open article has the grid to itself. Whole literals, so Tailwind's scanner sees each one.
  */
 export function gridColumns(open: boolean, { sidebar, focus }: Layout): string {
   if (open && focus === 'on') return 'lg:grid-cols-[minmax(0,1fr)]'
   if (sidebar === 'hidden') {
     return open
-      ? 'lg:grid-cols-[260px_minmax(0,1fr)]'
-      : 'lg:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]'
+      ? 'lg:grid-cols-[48px_260px_minmax(0,1fr)]'
+      : 'lg:grid-cols-[48px_minmax(280px,380px)_minmax(0,1fr)]'
   }
   return open
     ? 'lg:grid-cols-[220px_260px_minmax(0,1fr)]'

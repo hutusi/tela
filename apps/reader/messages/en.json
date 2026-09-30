@@ -47,8 +47,8 @@
     "subscriptions": "Subscriptions",
     "noSubscriptions": "No subscriptions yet.",
     "browse": "Feeds",
-    "hide": "Hide the sidebar",
-    "show": "Show the sidebar"
+    "hide": "Collapse the sidebar",
+    "show": "Expand the sidebar"
   },
   "list": {
     "markAllRead": "Mark all read",
@@ -290,7 +290,7 @@
     "previous": "Previous article",
     "close": "Close the article",
     "highlight": "Highlight the selection",
-    "sidebar": "Show or hide the sidebar",
+    "sidebar": "Collapse or expand the sidebar",
     "focus": "Hide the list while reading",
     "help": "Show or hide this list",
     "dismiss": "Close"
