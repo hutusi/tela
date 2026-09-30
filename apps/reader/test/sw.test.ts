@@ -311,9 +311,10 @@ describe('the app-shell service worker', () => {
     // Only now does the first tab ask for what A loads.
     for (const path of [A.js, A.css]) {
       const res = await dispatch(sw, request(path)).response
-      expect({ body: await res.text(), type: res.headers.get('content-type') }).toEqual(
-        asBuilt(A, path),
-      )
+      expect<File | null>({
+        body: await res.text(),
+        type: res.headers.get('content-type') ?? '',
+      }).toEqual(asBuilt(A, path))
     }
 
     // The next deploy lets A go, and keeps B as the shell before.
