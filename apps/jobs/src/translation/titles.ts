@@ -148,9 +148,10 @@ export async function translateTitlesJob(
           // A title may be a name that reads the same in every language; excerpts keep the
           // echo guard.
           allowIdenticalBlockIds: missing.filter((b) => b.id.startsWith('t')).map((b) => b.id),
-          // A group can take several calls (chunks, the strict retry). Each one extends the
-          // lease, and a lease lost between them stops the group before it pays for another.
-          onChunk: async () => {
+          // A group can take several calls (chunks, the strict retry), and a feed several groups.
+          // Each call first extends the lease, so one lost meanwhile (after a call that failed,
+          // too) stops the job before it pays for another.
+          beforeCall: async () => {
             if (!(await extendLease(db, lease, ctx.clock.now(), TITLE_TTL_MS))) {
               throw new LeaseLost()
             }

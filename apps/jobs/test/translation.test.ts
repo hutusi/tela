@@ -395,6 +395,24 @@ describe('titles, batched by feed', () => {
     expect(calls).toHaveLength(1)
   })
 
+  test('a call that failed, with the lease lost meanwhile, is followed by no other', async () => {
+    // Found in review: the lease was checked only after a call that succeeded, so a slow failing
+    // provider let a holder whose lease had lapsed send the next group's call regardless.
+    const failing = createMockTranslator({ calls, fail: true })
+    const lapses: Translator = {
+      model: failing.model,
+      async translate(request) {
+        await db.run(sql`update leases set until = 0 where kind = 'translate.title'`)
+        return failing.translate(request)
+      },
+    }
+    const ctx = context({ translator: lapses })
+    await twoSourceLanguages(ctx)
+    const { outcomes } = await cycle(ctx)
+    expect(outcomes).toContainEqual({ status: 'lost' })
+    expect(calls).toHaveLength(1)
+  })
+
   test('a batch that keeps failing is recorded failed, stamped for sync, and asked for no more', async () => {
     const ctx = context({ translator: createMockTranslator({ calls, fail: true }) })
     await ingest(ctx, manyPosts(2))

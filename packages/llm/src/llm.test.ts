@@ -220,6 +220,23 @@ describe('translateBlocks with the mock translator', () => {
     expect(chunks.every((c) => c.inputTokens > 0)).toBe(true)
   })
 
+  test('asks beforeCall before every call, after a failed one too, and stops at what it throws', async () => {
+    const calls: Parameters<ReturnType<typeof createMockTranslator>['translate']>[0][] = []
+    let asked = 0
+    const run = translateBlocks(createMockTranslator({ calls, fail: true }), {
+      blocks,
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+      maxTokensPerChunk: 20,
+      beforeCall: async () => {
+        // The first call may go out (and fail); the lease is gone before the second.
+        if (++asked === 2) throw new Error('lease lost')
+      },
+    })
+    await expect(run).rejects.toThrow('lease lost')
+    expect([asked, calls.length]).toEqual([2, 1])
+  })
+
   test('throws when the provider fails for every chunk', async () => {
     await expect(
       translateBlocks(createMockTranslator({ fail: true }), {

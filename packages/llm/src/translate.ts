@@ -28,6 +28,12 @@ export type TranslateBlocksInput = {
   /** Called after every successful provider call, so progress can be persisted before the next. */
   onChunk?: (chunk: ChunkResult) => Promise<void>
   /**
+   * Called before every provider call, the strict retry's included. What it throws ends the run
+   * unhandled: a job that has lost its lease uses it to stop before it pays for another call,
+   * whether or not the call before succeeded.
+   */
+  beforeCall?: () => Promise<void>
+  /**
    * Epoch milliseconds after which no further provider call is started. Blocks left unattempted
    * are neither translated nor failed; the outcome says the run `stopped` so the caller can
    * continue it later from what was persisted.
@@ -91,6 +97,7 @@ export async function translateBlocks(
 
   const run = async (blocks: TranslationBlock[], strict: boolean) => {
     if (blocks.length === 0) return
+    if (input.beforeCall) await input.beforeCall()
     let response: Awaited<ReturnType<Translator['translate']>>
     try {
       response = await translator.translate({
