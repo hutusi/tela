@@ -147,9 +147,19 @@ author"), Cancel and a filled Recommend button. Success shows a bottom-centre to
 (the toast lives inside `RecommendPopover`; there is no global toast bus yet). A recommended post
 renders the pill filled (`bg-ink`), and clicking it again removes the recommendation.
 
-Profile (`/@handle`), dashboard and settings reuse the header and a single 720–960 px column with
-`font-serif` headings; there is no dedicated design for them, so they follow the Discover page's
-spacing and the site card's chips.
+Settings (Tela v2): a 1040 px page, a 200 px section nav on the left (sticky from `md`, one row
+that scrolls below it) holding the serif "Settings" heading, and the section in a 640 px column.
+Each section is an address (`/settings`, `/settings/reading`, `/translation`, `/subscriptions`,
+`/privacy`), so Back and a shared link land on it. A section opens with a 30 px serif heading and a
+muted intro; below, rows (`SettingRow`) separated by `line` rules: the label and a muted hint on the
+left, the control on the right. Controls are `Segmented` (the choices on the `hover` ground, the
+chosen one lifted on `surface`), `Switch` (40 × 24, `accent` on / `thumb` off, `knob`), a native
+select, or a quiet pill button. Settings that change what others see say so, and that the public
+profile can take a few minutes to catch up. The design's Notifications section, avatar upload,
+"Who can follow you" and "Delete account" are not built (ADR 0031), so they are not shown.
+
+Dashboard reuses the header and a single 720–960 px column with `font-serif` headings; there is no
+dedicated design for it, so it follows the Discover page's spacing and the site card's chips.
 
 Discover card (from the design): 40 px avatar (favicon or initial), name with a green ✓ when
 claimed, host, language chip, serif tagline, "Latest: …", "N readers · cadence", and a
@@ -203,7 +213,7 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
 ## Reading controls
 
 - **"Aa"** in the reader's action row, before Like, opens a 280 px popover. It holds three
-  segmented choices, which Settings repeats under *Appearance*:
+  segmented choices, which Settings → Reading repeats as rows:
   - **Size:** four steps, ×0.88 / ×1 / ×1.13 / ×1.27 of the 19.5 px body (18 px for CJK).
   - **Width:** 560 / 640 / 760 px for the single column, and for a stacked pair. Two paired
     columns keep their own 640px measure.

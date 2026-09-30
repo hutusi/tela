@@ -121,6 +121,14 @@ function Routed() {
                       }
                     />
                     <Route
+                      path="/settings/:section"
+                      element={
+                        <Members>
+                          <SettingsPage />
+                        </Members>
+                      }
+                    />
+                    <Route
                       path="/dashboard"
                       element={
                         <Members>

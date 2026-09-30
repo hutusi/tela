@@ -178,7 +178,7 @@ test.describe('recommendations, profile, dashboard, settings', () => {
 
   test('the Settings button saves that list as a file', async ({ page }) => {
     // A fetch and a Blob, not a plain link: only a call can name the account (ADR 0025).
-    await page.goto('/settings')
+    await page.goto('/settings/subscriptions')
     const saved = page.waitForEvent('download')
     await page.getByTestId('opml-export').click()
     const download = await saved

@@ -306,7 +306,7 @@ test.describe('stylesheet', () => {
     const paper = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
     const ink = () => page.evaluate(() => getComputedStyle(document.body).color)
     await page.emulateMedia({ colorScheme: 'dark' })
-    await page.goto('/settings')
+    await page.goto('/settings/reading')
     await page.getByTestId('theme-system').click()
     expect(await paper()).toBe('rgb(22, 20, 15)')
     expect(await ink()).toBe('rgb(237, 231, 219)')

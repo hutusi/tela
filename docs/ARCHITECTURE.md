@@ -240,7 +240,8 @@ A Vite + React SPA that renders from the device.
 | `/discover?topic=&lang=`, `/s/:id`, `/@handle` | Public pages, rendered at the edge too |
 | `/search?q=` | The device first, then blogs and older posts from the server |
 | `/add`, `/claim`, `/sites/:id/claim` | Add feeds and OPML; claim a blog |
-| `/settings`, `/dashboard` | Profile, reading language, appearance, OPML export; the author's view |
+| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out), Privacy (with "Your data") |
+| `/dashboard` | The author's view |
 
 ## Sync (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025)
 
