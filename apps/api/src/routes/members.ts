@@ -1,9 +1,9 @@
 /**
  * What a signed-in member reads or sets that is not a sync mutation: their public profile (a
  * handle must be unique, so the answer matters), their blogs' settings, their author dashboard,
- * and search past what their device holds.
+ * search past what their device holds, and everything they have done, as one file.
  */
-import { ARTICLE_COLUMNS, bumpSeq, currentSeq, first } from '@tela/data'
+import { ARTICLE_COLUMNS, bumpSeq, consumeLimit, currentSeq, first } from '@tela/data'
 import { isReadingLanguage, isTopic } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -35,6 +35,7 @@ const RESERVED_HANDLES = new Set([
   'me',
   'profile',
   'search',
+  'following',
 ])
 const HANDLE = /^[a-z0-9_]{3,30}$/
 export const isValidHandle = (h: string) => HANDLE.test(h) && !RESERVED_HANDLES.has(h)
@@ -176,6 +177,83 @@ export function memberRoutes(deps: ApiDeps) {
         posts: posts.filter((p) => p.siteId === s.id).map(({ n: _n, siteId: _s, ...p }) => p),
       })),
       notes,
+    })
+  })
+
+  /**
+   * "Your data": what the member did, as one JSON file. Their own rows only; of anyone they
+   * follow, only what a public profile already says.
+   */
+  routes.get('/export', async (c) => {
+    const member = c.get('member')
+    const now = deps.clock.now()
+    if (!(await consumeLimit(db, 'export', member.id, now)).allowed) {
+      return c.json({ error: 'rate_limited' }, 429)
+    }
+    const id = member.id
+    const post = sql`a.url, a.title, s.home_url as "blog"`
+    const on = (articleId: ReturnType<typeof sql>) => sql`join articles a on a.id = ${articleId}
+      join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id`
+    const [profiles, prefs, subscriptions, likes, recommendations, highlights, following] =
+      (await db.batch([
+        db.all(sql`
+          select handle, display_name as "displayName", bio, reading_lang as "readingLang",
+            ui_locale as "uiLocale", public_subscriptions as "publicSubscriptions",
+            public_likes as "publicLikes", created_at as "memberSince"
+          from profiles where user_id = ${id}
+        `),
+        db.all(
+          sql`select key, value_json as "valueJson" from user_prefs where user_id = ${id} order by key`,
+        ),
+        db.all(sql`
+          select f.feed_url as "feedUrl", s.home_url as "blog", s.title, sub.created_at as "since"
+          from subscriptions sub join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id
+          where sub.user_id = ${id} and sub.deleted_at is null order by s.title
+        `),
+        db.all(sql`
+          select ${post}, st.liked_at as "likedAt" from user_article_states st ${on(sql`st.article_id`)}
+          where st.user_id = ${id} and st.liked_at is not null order by st.liked_at desc
+        `),
+        db.all(sql`
+          select ${post}, r.note, r.created_at as "recommendedAt"
+          from recommendations r ${on(sql`r.article_id`)}
+          where r.user_id = ${id} and r.deleted_at is null order by r.created_at desc
+        `),
+        db.all(sql`
+          select ${post}, h.quote, h.note, h.side, h.lang, h.created_at as "createdAt"
+          from highlights h ${on(sql`h.article_id`)}
+          where h.user_id = ${id} and h.deleted_at is null order by h.created_at desc
+        `),
+        db.all(sql`
+          select p.handle, p.display_name as "displayName", fo.created_at as "since"
+          from follows fo join profiles p on p.user_id = fo.followee_id
+          where fo.follower_id = ${id} and fo.deleted_at is null order by p.handle
+        `),
+      ] as never)) as unknown as Record<string, unknown>[][]
+    const profile = profiles?.[0]
+    const body = {
+      exportedAt: new Date(now).toISOString(),
+      email: member.email,
+      profile: profile
+        ? {
+            ...profile,
+            publicSubscriptions: profile.publicSubscriptions === 1,
+            publicLikes: profile.publicLikes === 1,
+          }
+        : null,
+      prefs: (prefs ?? []).map((p) => ({ key: p.key, value: JSON.parse(String(p.valueJson)) })),
+      subscriptions,
+      likes,
+      recommendations,
+      highlights,
+      following,
+    }
+    return new Response(JSON.stringify(body, null, 2), {
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'content-disposition': `attachment; filename="tela-${profile?.handle ?? 'export'}.json"`,
+        'cache-control': 'no-store',
+      },
     })
   })
 

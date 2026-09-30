@@ -13,6 +13,7 @@ import { curate } from './routes/curate'
 import { feedRoutes } from './routes/feeds'
 import { memberRoutes } from './routes/members'
 import { publicRoutes } from './routes/public'
+import { socialRoutes } from './routes/social'
 import { translationRoutes } from './routes/translations'
 import { websubRoutes } from './routes/websub'
 import { answerPull } from './sync/pull'
@@ -190,6 +191,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1/feeds', feedRoutes(deps))
   app.route('/api/v1/claims', claimRoutes(deps))
   app.route('/api/v1', memberRoutes(deps))
+  app.route('/api/v1', socialRoutes(deps))
 
   return { app, auth }
 }

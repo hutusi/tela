@@ -255,7 +255,7 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   can linger that long on a device that kept the cookie.
 - **Rate limits** on reader actions are `ACTION_LIMITS` (`packages/data/src/queries/limits.ts`):
   discover 30/h, subscribe 120/h, OPML import 5/h, claim start 10/h, claim verify 30/h, translate
-  30/h. Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
+  30/h, data export 10/h. Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
 
 ## tela-jobs
 

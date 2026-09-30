@@ -228,6 +228,13 @@ const MEMBER_ROUTES: MemberRoute[] = [
   },
   { route: 'GET /api/v1/dashboard', path: '/api/v1/dashboard', effect: 'reads' },
   { route: 'GET /api/v1/search', path: '/api/v1/search?q=blog', effect: 'reads' },
+  { route: 'GET /api/v1/following', path: '/api/v1/following', effect: 'reads' },
+  {
+    route: 'GET /api/v1/sites/:siteId/followed-readers',
+    path: '/api/v1/sites/1/followed-readers',
+    effect: 'reads',
+  },
+  { route: 'GET /api/v1/export', path: '/api/v1/export', effect: 'writes' }, // its rate limit
   {
     route: 'POST /api/v1/claims',
     path: '/api/v1/claims',
