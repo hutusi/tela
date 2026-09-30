@@ -227,6 +227,16 @@ is tela-api.
 
   A shell older than the sync protocol clears itself anyway: tela-api answers it 409 `upgrade`.
 
+  Bump `SHELL` in `public/sw.js` (`tela-shell-v2` now) whenever a released worker may have cached
+  something wrong. The new worker's activation deletes every other cache and warms its own from
+  the network, holding the open tabs' requests until it has, for at most 3 s (`WARM_MS`); if the
+  warm fails, the first navigation goes to the network like a first visit. v2 exists because v1 could keep `index.html`
+  under a script's name: a blank page after a deploy, and in the console "Expected a
+  JavaScript-or-Wasm module script but the server responded with a MIME type of "text/html"" for
+  `/assets/index-*.js`. A cached shell changes only once every file it loads is cached, so a
+  refresh that cannot get one (the network gone halfway, a proxy's page) leaves readers on the
+  shell before, and the next navigation tries again.
+
 ## tela-api
 
 `apps/api/wrangler.jsonc`: sign-in, sync, mutations and every reader RPC (ADR 0024). It shares the

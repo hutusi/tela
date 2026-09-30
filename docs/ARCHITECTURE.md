@@ -202,7 +202,10 @@ The only public Worker, unpinned, with no D1.
 - `/discover`, `/s/:id` and `/@handle` are rendered here (`src/ssr.tsx`) with the SPA's own views,
   from tela-api's public JSON, into the built `index.html`, cached per colo, locale and deploy for
   five minutes, with the data handed to the SPA in `#tela-data`.
-- Everything else is the SPA's static assets, which answer without running the Worker.
+- Everything else is the SPA's static assets, which answer without running the Worker. A path
+  with no file is answered 200 with `index.html`, a missing `/assets/*` script included:
+  `run_worker_first` is a list, and then the fallback applies to every request, not only
+  navigations.
 
 ## The reader (`apps/reader/src`, ADRs 0025, 0026)
 
@@ -222,7 +225,8 @@ A Vite + React SPA that renders from the device.
   `lib/use-highlights.ts` paints them over the rendered text with the CSS Custom Highlight API and
   writes back an anchor the post moved. Typography and theme are synced prefs
   (`lib/typography.ts`). `j`/`k`/`Esc`/`h`/`?` work on `/reading`.
-- `public/sw.js` caches the app shell only; `shell/kill-sw.js` replaces it in an emergency.
+- `public/sw.js` caches the app shell only, and swaps to a new shell only once every file it
+  loads is cached; `shell/kill-sw.js` replaces it in an emergency.
 
 | Route | Purpose |
 |---|---|
