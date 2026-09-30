@@ -108,6 +108,8 @@ export const profiles = sqliteTable(
     uiLocale: text(),
     readingLang: text(),
     publicSubscriptions: integer({ mode: 'boolean' }).notNull().default(false),
+    /** Whether the member's liked posts show on their profile and to their followers (ADR 0031). */
+    publicLikes: integer({ mode: 'boolean' }).notNull().default(false),
     isAdmin: integer({ mode: 'boolean' }).notNull().default(false),
     createdAt: ms().notNull(),
     updatedAt: ms().notNull(),

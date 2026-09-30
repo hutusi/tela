@@ -92,6 +92,7 @@ describe('the nightly export', () => {
     expect(at('sites')).toBeLessThan(at('feeds'))
     expect(at('feeds')).toBeLessThan(at('articles'))
     expect(at('articles')).toBeLessThan(at('highlights'))
+    expect(at('user')).toBeLessThan(at('follows'))
     expect(names).toContain('counters')
   })
 

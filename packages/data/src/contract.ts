@@ -145,6 +145,26 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         sql`insert into profiles (user_id, handle, created_at, updated_at) values ('u1', 'good_handle_1', 1, 1)`,
       )
     })
+
+    it('refuses a member following themselves, or someone who does not exist (ADR 0031)', async () => {
+      const db = await makeDb()
+      await db.run(
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values
+          ('u1', 'u', 'u@x.y', 0, 0, 0), ('u2', 'v', 'v@x.y', 0, 0, 0)`,
+      )
+      const follow = (follower: string, followee: string) =>
+        caught(() =>
+          db.run(
+            sql`insert into follows (follower_id, followee_id, created_at, updated_at)
+              values (${follower}, ${followee}, 1, 1)`,
+          ),
+        )
+      expect((await follow('u1', 'u1')) === null).toBe(false)
+      expect((await follow('u1', 'nobody')) === null).toBe(false)
+      expect(await follow('u1', 'u2')).toBe(null)
+      // One way: u2 following back is a second row, not a conflict.
+      expect(await follow('u2', 'u1')).toBe(null)
+    })
   })
 
   describe("D1's statement limits", () => {

@@ -54,7 +54,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | Table | Role |
 |---|---|
 | `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024) |
-| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, `public_subscriptions` |
+| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, and whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default) |
 | `user_prefs` | Synced preferences: reading mode, text size, measure, theme |
 | `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out` |
 | `site_topics`, `site_claims` | A blog's topics; claim attempts (meta or `rel="me"`) |
@@ -66,6 +66,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `body_translations` | A body per content version and language: state, reservation, streamed `chunk_keys`, the finished object (ADR 0023) |
 | `subscriptions` | `(user_id, feed_id)` with `watermark_id`: everything at or below it is read (ADR 0009) |
 | `user_article_states`, `recommendations`, `highlights` | The member's read and like state, public recommendations with notes, private highlights with notes (ADR 0026) |
+| `follows` | `(follower_id, followee_id)`: one member following another, one-way and public, soft-deleted, synced to the follower (ADR 0031) |
 | `websub_subscriptions` | One per feed with a hub: topic, secret, status, lease |
 | `leases`, `lease_fence` | Who holds which piece of background work, and the fence that aborts a stale holder's batch |
 | `dead_letters`, `ops_heartbeats` | Work that gave up; the tick's last run |
