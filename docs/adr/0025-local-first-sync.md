@@ -166,8 +166,9 @@ and the URL.
   shell at once and refresh it behind, and hashed assets are served forever. So a hashed file is
   kept only if it is what its name says (never a 200 with `index.html`), and the refresh replaces
   the cached shell only once every file the new one loads is cached. It keeps the files of the
-  shell it replaced, which a tab may be booting, and drops older ones. `/api`, `/o` and
-  `/img` never pass through it, so offline reading is not something it pretends to do.
+  shell it replaced, which a tab may be booting, and drops older ones; that shell is remembered
+  until the next deploy, so a refresh that finds the shell unchanged keeps its files too. `/api`,
+  `/o` and `/img` never pass through it, so offline reading is not something it pretends to do.
   `shell/kill-sw.js` replaces it when a bad shell has to go. A shell older than the protocol meets
   409, clears itself and reloads, at most once a minute.
 - **Writes to `/api/*` must carry tela-web's origin.** Session cookies are `SameSite=Lax`, which

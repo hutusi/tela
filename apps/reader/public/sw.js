@@ -81,6 +81,13 @@ async function uses(cache, html) {
   return refs
 }
 
+/**
+ * The shell before the cached one: the last shell a refresh replaced. Its files stay, since a tab
+ * may still be booting it. Kept under a key of its own, because a refresh that finds the shell
+ * unchanged must not take the current one for it and drop the files that tab is about to ask for.
+ */
+const PREVIOUS = '/__tela/previous-shell'
+
 /** The refresh in flight, which a second navigation joins instead of fetching the shell again. */
 let refreshing = null
 
@@ -96,7 +103,8 @@ function refreshShell() {
  * Fetch the shell, cache every file it loads that is missing, and only then replace the cached
  * one. A file the network cannot give, or answers with something else (the app itself, a
  * captive portal), leaves the old shell and its files as they were: the next refresh tries again.
- * The previous shell's files stay, since a tab may be booting it right now; anything older goes.
+ * The previous shell's files stay, since a tab may be booting it right now (`PREVIOUS`);
+ * anything older goes.
  */
 async function swapShell() {
   const res = await fetch('/', { cache: 'no-cache' })
@@ -113,7 +121,13 @@ async function swapShell() {
     }),
   )
   if (ready.includes(false)) return
-  const previous = await cache.match('/')
+  const current = await cache.match('/')
+  const was = current ? await current.text() : null
+  // Only a shell this refresh replaces becomes the previous one; an unchanged refresh keeps it.
+  if (was !== null && was !== html) {
+    await cache.put(PREVIOUS, new Response(was, { headers: { 'content-type': 'text/html' } }))
+  }
+  const previous = await cache.match(PREVIOUS)
   const keep = await uses(cache, html)
   if (previous) for (const ref of await uses(cache, await previous.text())) keep.add(ref)
   await cache.put('/', res)

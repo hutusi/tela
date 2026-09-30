@@ -291,6 +291,42 @@ describe('the app-shell service worker', () => {
     }
   })
 
+  test("more navigations to the new shell, while a tab still boots the old one, keep the old one's files", async () => {
+    // Found by review (Codex): a second refresh found the new shell unchanged, took it for the
+    // previous one too, and deleted the files of the shell a tab was still booting. Tabs a
+    // browser restores after a deploy start together, so one can ask for its script late.
+    const A = build('A')
+    const B = build('B')
+    live = A
+    const sw = await start()
+    await visit(sw)
+
+    live = B
+    // The first tab paints A from the cache, and its refresh swaps the shell to B.
+    const first = dispatch(sw, request('/reading', 'navigate'))
+    expect(await (await first.response).text()).toBe(A.html)
+    await first.settled()
+    // Two more tabs boot B, and each refreshes B again, unchanged.
+    for (let i = 0; i < 2; i++) expect((await visit(sw)).html).toBe(B.html)
+    // Only now does the first tab ask for what A loads.
+    for (const path of [A.js, A.css]) {
+      const res = await dispatch(sw, request(path)).response
+      expect({ body: await res.text(), type: res.headers.get('content-type') }).toEqual(
+        asBuilt(A, path),
+      )
+    }
+
+    // The next deploy lets A go, and keeps B as the shell before.
+    const C = build('C')
+    live = C
+    await visit(sw)
+    await visit(sw)
+    expect(await caches.file(A.js)).toBeNull()
+    for (const path of [B.js, B.css, C.js, C.css]) {
+      expect(await caches.file(path)).toEqual(asBuilt(path.includes('-B.') ? B : C, path))
+    }
+  })
+
   test('two deploys: the shell cached last boots from the cache, the next one replaces it, the first goes', async () => {
     const A = build('A', 'figtree-1')
     const B = build('B', 'figtree-2')
