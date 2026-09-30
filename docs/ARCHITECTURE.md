@@ -182,7 +182,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `/api/v1/feeds` | Discover feeds at a URL, add one, import and export OPML |
 | `/api/v1/claims` | Start a claim, see its proofs, ask for the check |
 | `/api/v1/profile`, `/api/v1/sites/:id/*`, `/api/v1/dashboard`, `/api/v1/search` | Handle and profile, owner-only topics and opt-out, the author dashboard, search past the device's horizon |
-| `/api/v1/public/*` | Discover, a blog's page, a profile: listed and featured blogs only, edge-cacheable |
+| `/api/v1/public/*` | Discover, a blog's page (with its claimant and readers' notes), a profile (with follow counts, and liked posts only if shown): listed and featured blogs only, edge-cacheable |
 | `/api/websub/:feedId` | The hub callback: intent checks, and signed pings that make the feed due |
 | `/api/health` | Liveness and D1 latency |
 

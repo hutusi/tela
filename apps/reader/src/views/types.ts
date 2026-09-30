@@ -20,6 +20,9 @@ export type DiscoverSite = {
 
 export type DiscoverData = { sites: DiscoverSite[]; languages: { lang: string; count: number }[] }
 
+/** A member as a page names them: their handle, and their name if they gave one. */
+export type PersonRef = { handle: string; displayName: string | null }
+
 export type SiteData = {
   site: {
     id: number
@@ -32,32 +35,56 @@ export type SiteData = {
     readerCount: number
     /** The claimant's handle. */
     claimedBy: string | null
+    /** Who writes it, for the About: the claimant's own name and bio. */
+    claimant: (PersonRef & { bio: string | null }) | null
+    postsLast30d: number
   }
   feeds: { id: number; feedUrl: string; title: string | null }[]
   posts: ArticleRow[]
   topics: string[]
+  /** Recent recommendations of its posts that came with a note. */
+  notes: { note: string; createdAt: number; person: PersonRef; article: ArticleRow }[]
+}
+
+/** A post on a profile: the article, its blog, and whether that blog has a public page. */
+type ProfilePost = {
+  siteId: number
+  siteTitle: string | null
+  homeUrl: string
+  listed: boolean
+  article: ArticleRow
 }
 
 export type ProfileData = {
-  profile: { handle: string; displayName: string | null; bio: string | null; memberSince: number }
+  profile: {
+    /** The account id, which a follow names (ADR 0031). */
+    id: string
+    handle: string
+    displayName: string | null
+    bio: string | null
+    memberSince: number
+  }
+  counts: {
+    following: number
+    followers: number
+    recommendations: number
+    /** Null unless the member shows their liked posts, or their subscriptions. */
+    liked: number | null
+    subscriptions: number | null
+  }
   blogs: { id: number; title: string | null; homeUrl: string; faviconKey: string | null }[]
-  recommendations: {
-    note: string | null
-    createdAt: number
-    siteId: number
-    siteTitle: string | null
-    homeUrl: string
-    article: ArticleRow
-  }[]
+  recommendations: (ProfilePost & { note: string | null; createdAt: number })[]
   subscriptions:
     | {
         id: number
         title: string | null
         homeUrl: string
+        description: string | null
         faviconKey: string | null
         listed: boolean
       }[]
     | null
+  liked: (ProfilePost & { likedAt: number })[] | null
 }
 
 /** What a member adds to a public page: their own subscription state, and ways to act on it. */
