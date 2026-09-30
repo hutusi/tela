@@ -98,6 +98,11 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
      Keep it short, or take tela-web back with it.
    - tela-web may not go back while the new tela-api is live: every restored older shell would
      be told to upgrade and find no newer shell to load.
+   - Follows (ADR 0031, migration 0002) are additive and keep protocol 2: apply the migration
+     before deploying tela-api. An older tela-api left beside it ignores the new table and
+     column, and refuses `follow`, `unfollow` and the privacy flags as invalid mutations, which
+     the newer shell drops as refused; the Following page and "Your data" answer 404 until it
+     is current.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
