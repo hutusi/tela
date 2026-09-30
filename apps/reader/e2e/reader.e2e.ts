@@ -286,4 +286,30 @@ test.describe('reader', () => {
       stop()
     }
   })
+
+  test('the end of an article offers the next post in the list, the one j would open', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    const rows = page.getByTestId('article-row')
+    await expect(rows.first()).toContainText('Julia Evans')
+    const second = await rows.nth(1).getAttribute('data-article-id')
+    const secondTitle = (await rows.nth(1).locator('h2').textContent())?.trim() ?? ''
+
+    await rows.first().click()
+    await expect(page).toHaveURL(/article=\d+/)
+    const next = page.getByTestId('next-article')
+    await expect(next).toContainText(secondTitle)
+    await next.click()
+    await expect(page).toHaveURL(new RegExp(`article=${second}$`))
+    await expect(page.getByTestId('article-title')).toHaveText(secondTitle)
+
+    // The last post has nothing after it.
+    await rows.last().click()
+    await expect(page).toHaveURL(/article=\d+/)
+    await expect(page.getByTestId('next-article')).toHaveCount(0)
+  })
 })

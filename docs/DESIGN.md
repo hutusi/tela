@@ -112,7 +112,8 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   columns fit, so the chrome above and below the text is as wide as the text. Serif title
   40px/1.12 alone and 32px when paired. The column is a `@container` wrapper of its own, never
   the pane: container-type brings layout containment, and the highlight toolbar and note are
-  `fixed`.
+  `fixed`. After the author card, an *Up next* card names the post after this one in the list as
+  shown — the one `j` would open — so a pointer reader flows on without going back up the list.
 - Paired reading: one grid row per top-level block, the original first — left-hand column when
   there are two, above the translation when they stack, so nothing changes places at the
   threshold. The original — its title included — sits on `source`, continuous down its column and

@@ -6,6 +6,7 @@
  */
 import type { ArticleRow } from '@tela/sync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router'
 import { useLocale, useTranslations } from 'use-intl'
 import { pairBlocks, readerBlocks, runsOf } from '../lib/block-pairs'
 import { relativeTime } from '../lib/format'
@@ -57,12 +58,14 @@ type Props = {
   mode: ReadingMode
   onMode: (mode: ReadingMode) => void
   onClose: () => void
+  /** The post after this one in the list as shown, if any: offered at the end of the article. */
+  next: { href: string; title: string } | null
 }
 
 /** While a summary-only post waits for its full text, pull quickly so it appears when it lands. */
 const EXTRACT_PULL_MS = 4000
 
-export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
+export function Reader({ article, readingLang, mode, onMode, onClose, next }: Props) {
   const t = useTranslations('reader')
   const locale = useLocale()
   const now = useNow()
@@ -332,6 +335,25 @@ export function Reader({ article, readingLang, mode, onMode, onClose }: Props) {
             </div>
             <span className="hidden text-[13px] text-muted xl:block">{t('visibleToAuthor')}</span>
           </div>
+
+          {/* A push like a row click: the key on the Reader remounts it at the top of the next one. */}
+          {next ? (
+            <Link
+              to={next.href}
+              data-testid="next-article"
+              className="mt-6 flex max-w-(--reader-measure) flex-col gap-1 rounded-lg border border-line px-4 py-3 text-ink hover:bg-hover hover:no-underline"
+            >
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                {t('upNext')}
+              </span>
+              <span
+                className="font-serif text-[19px] font-medium leading-[1.2] tracking-tight"
+                style={{ textWrap: 'pretty' }}
+              >
+                {next.title}
+              </span>
+            </Link>
+          ) : null}
         </div>
       </div>
 

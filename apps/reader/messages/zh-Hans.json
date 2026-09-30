@@ -81,7 +81,8 @@
     "recommended": "已推荐。",
     "recommendedWithNote": "已附上你的推荐语。",
     "unrecommended": "已取消推荐。",
-    "fetchingFullText": "正在从原站获取全文…"
+    "fetchingFullText": "正在从原站获取全文…",
+    "upNext": "下一篇"
   },
   "add": {
     "title": "添加订阅",

@@ -23,7 +23,7 @@ import {
 } from '../lib/href'
 import { gridColumns, toggleSidebar, useLayout } from '../lib/layout'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
-import { articlesFor, isRead, subscriptionItems, totals } from '../store/selectors'
+import { articlesFor, isRead, shownTitle, subscriptionItems, totals } from '../store/selectors'
 import { useUi } from '../ui'
 
 const MODE_PREF = 'reader.mode'
@@ -54,6 +54,17 @@ export function ReadingPage() {
   const open = params.articleId !== null
   // Which panes show beside the article: this device's choice, not the member's (ADR 0029).
   const panes = useLayout()
+
+  // The post after this one in the list as shown, the one `j` would open: a card at the end of
+  // the article offers it, so a pointer reader flows on without going back up to the list.
+  const at = article ? items.findIndex((a) => a.id === article.id) : -1
+  const after = at === -1 ? undefined : items[at + 1]
+  const next = after
+    ? {
+        href: readingHref({ filter: params.filter, feedId: params.feedId, articleId: after.id }),
+        title: shownTitle(tables, after, readingLang).title,
+      }
+    : null
 
   // The mode a URL without one means: this member's last choice, synced like any other pref.
   const remembered =
@@ -227,6 +238,7 @@ export function ReadingPage() {
           mode={mode}
           onMode={onMode}
           onClose={close}
+          next={next}
         />
       ) : open && tables.profile === null ? (
         // The first sync has not landed yet (the profile always comes in the first snapshot):

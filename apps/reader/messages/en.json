@@ -81,7 +81,8 @@
     "recommended": "Recommended.",
     "recommendedWithNote": "Recommended with your note.",
     "unrecommended": "Recommendation removed.",
-    "fetchingFullText": "Fetching the full post from the site…"
+    "fetchingFullText": "Fetching the full post from the site…",
+    "upNext": "Up next"
   },
   "add": {
     "title": "Add a feed",

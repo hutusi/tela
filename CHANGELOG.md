@@ -33,7 +33,8 @@ everything so far sits under `[Unreleased]`.
   and `h` on the reading page (ADR 0026).
 - **A quieter reading page:** the sidebar hides (`[`, or the toggle at the head of the list), and
   the choice is this device's rather than synced (ADR 0029), which on a laptop window is what
-  makes room for the two bilingual columns.
+  makes room for the two bilingual columns. The article column is centred in the pane, and an
+  *Up next* card at the end of a post offers the one after it.
 
 - **Running unattended.** A dead-man's switch pinged by the sweeps while they are healthy, a
   Monday digest to the owner, and a nightly export verified against its manifest, which the suite
