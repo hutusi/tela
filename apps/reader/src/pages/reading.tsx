@@ -145,8 +145,8 @@ export function ReadingPage() {
     }
     // A close says what it closed, in the list entry it pushed: renders can batch a j and an Esc
     // into one, or commit the j first, so the last article rendered may not be the one closed.
-    // Back to that entry, or a reload of it, is not that close: the article left is the last one
-    // shown.
+    // Back to that entry is not that close: the article left is the last one shown. Nor is a
+    // reload of it, which has shown none yet and so focuses nothing.
     const closedFrom =
       navigationType !== 'POP'
         ? (location.state as { closedFrom?: number | null } | null)?.closedFrom

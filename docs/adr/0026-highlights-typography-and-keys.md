@@ -68,8 +68,9 @@ never a shortcut, and a popover that handles `Esc` itself keeps the article open
 
 The row that gets focus is the article the URL had open when `Esc` was pressed. A `j` just before
 it may already have rendered another article, so the close pushes the list with that id in the
-entry's navigation state rather than leaving it for a later render to find. Back to that entry, or
-a reload of it, ignores the state and focuses the article last shown, which is the one just left.
+entry's navigation state rather than leaving it for a later render to find. Back to that entry
+ignores the state and focuses the article last shown, which is the one just left; a reload of it
+ignores the state too, and, with no article shown yet, focuses nothing.
 
 ## Consequences
 
