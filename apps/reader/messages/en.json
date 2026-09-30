@@ -57,7 +57,9 @@
     "minutes": "{n} min",
     "translatedBadge": "{from} → {to}",
     "loadMore": "Older articles",
-    "fetching": "Fetching this feed for the first time…"
+    "fetching": "Fetching this feed for the first time…",
+    "allRead": "You're all caught up.",
+    "allReadHint": "Read posts are hidden. <settings>Show them again</settings> in Settings."
   },
   "reader": {
     "close": "✕ Close",
@@ -84,7 +86,8 @@
     "unrecommended": "Recommendation removed.",
     "fetchingFullText": "Fetching the full post from the site…",
     "upNext": "Up next",
-    "focus": "Focus"
+    "focus": "Focus",
+    "markRead": "Mark as read"
   },
   "add": {
     "title": "Add a feed",
@@ -249,6 +252,10 @@
     "measureHint": "How wide an article's column may grow.",
     "theme": "Theme",
     "themeHint": "Auto follows your system.",
+    "markOnOpen": "Mark as read when opened",
+    "markOnOpenHint": "Otherwise, a post stays unread until you mark it.",
+    "hideRead": "Hide read articles",
+    "hideReadHint": "Lists show unread posts only. Liked posts are always kept.",
     "translationIntro": "Tela translates posts written in other languages. The original is always one click away.",
     "translateInto": "Translate into",
     "translateIntoHint": "Your main reading language.",

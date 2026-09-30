@@ -249,6 +249,7 @@ function ReadingSection() {
   const tables = useTables()
   const { store } = useStore()
   const { size, measure, theme } = typographyOf(tables)
+  const prefs = readingPrefsOf(tables)
   const set = (key: string, value: string) => store.mutate({ type: 'setPref', key, value })
   return (
     <>
@@ -281,6 +282,22 @@ function ReadingSection() {
           render={(th) => ty(`themes.${th}`)}
           onChoose={(th) => set(PREFS.theme, th)}
           testId="theme"
+        />
+      </SettingRow>
+      <SettingRow label={t('markOnOpen')} hint={t('markOnOpenHint')}>
+        <Switch
+          checked={prefs.markOnOpen}
+          onChange={(on) => store.mutate({ type: 'setPref', key: PREF_KEYS.markOnOpen, value: on })}
+          label={t('markOnOpen')}
+          testId="pref-mark-on-open"
+        />
+      </SettingRow>
+      <SettingRow label={t('hideRead')} hint={t('hideReadHint')}>
+        <Switch
+          checked={prefs.hideRead}
+          onChange={(on) => store.mutate({ type: 'setPref', key: PREF_KEYS.hideRead, value: on })}
+          label={t('hideRead')}
+          testId="pref-hide-read"
         />
       </SettingRow>
     </>

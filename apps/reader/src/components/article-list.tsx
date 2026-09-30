@@ -5,6 +5,7 @@ import { Link, useLocation } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { relativeTime } from '../lib/format'
 import { canonicalReadingHref, type ReadingParams, readingHref } from '../lib/href'
+import { readingPrefsOf } from '../lib/prefs'
 import { useStore, useTables } from '../store/hooks'
 import { feedTitle, isRead, shownTitle } from '../store/selectors'
 import { Swatch } from './swatch'
@@ -17,6 +18,8 @@ type Props = {
   locale: string
   now: number
   pendingFetch?: boolean
+  /** Read posts are hidden (a pref), and they are all there is: say so, not "no posts". */
+  hidingRead?: boolean
 }
 
 /** How many rows render; older ones follow on request. The device holds the whole horizon. */
@@ -30,6 +33,7 @@ export function ArticleList({
   locale,
   now,
   pendingFetch = false,
+  hidingRead = false,
 }: Props) {
   const t = useTranslations('list')
   const ts = useTranslations('sidebar')
@@ -37,6 +41,7 @@ export function ArticleList({
   const { store } = useStore()
   const location = useLocation()
   const heading = title ?? ts(params.filter)
+  const { markOnOpen } = readingPrefsOf(tables)
   const target = languageBadge(readingLang)
   const [limit, setLimit] = useState(PAGE)
   const shown = items.slice(0, limit)
@@ -76,6 +81,15 @@ export function ArticleList({
         <div className="px-6 py-10 text-[13.5px] text-muted" data-testid="list-empty">
           {pendingFetch ? (
             <p>{t('fetching')}</p>
+          ) : hidingRead ? (
+            <>
+              <p>{t('allRead')}</p>
+              <p>
+                {t.rich('allReadHint', {
+                  settings: (chunks) => <Link to="/settings/reading">{chunks}</Link>,
+                })}
+              </p>
+            </>
           ) : (
             <>
               <p>{t('empty')}</p>
@@ -87,7 +101,9 @@ export function ArticleList({
       <div className="flex flex-col px-3 pb-10">
         {shown.map((a) => {
           const active = a.id === params.articleId
-          const read = active || isRead(tables, a, now)
+          // The open post counts as read before its markRead lands, unless the member marks
+          // posts read themselves: then it is unread until they do, and its dot says so.
+          const read = (active && markOnOpen) || isRead(tables, a, now)
           const { title: rowTitle, excerpt, badge } = shownTitle(tables, a, readingLang)
           const name = feedTitle(tables, a.feedId)
           // No mode in the href: the remembered mode is the one an open should use (ADR 0017).

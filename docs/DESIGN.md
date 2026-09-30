@@ -218,6 +218,12 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - **Width:** 560 / 640 / 760 px for the single column, and for a stacked pair. Two paired
     columns keep their own 640px measure.
   - **Theme:** Auto / Light / Dark.
+- **Marking read and hiding read posts** are the member's (Settings → Reading). With marking on
+  opening off, the open post keeps its unread dot and the action row offers *Mark as read*; liking
+  a post still reads it. With read posts hidden, a list keeps what was unread when the reader
+  entered it, so opening a post, `j` and `k` never pull it out from under them; it is gone the
+  next time they come to that list. An empty list then says "all caught up", with a link back to
+  the setting.
 - **The sidebar toggle** heads the sidebar under a "Library" label, in the small-caps heading
   style at the headings' indent, with the toggle at the row's right end and its icon on the
   counts' right edge. The glyph is a 16px panel drawn inline (Tela has no icon set), its left

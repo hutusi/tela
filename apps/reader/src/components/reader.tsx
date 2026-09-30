@@ -13,12 +13,20 @@ import { relativeTime } from '../lib/format'
 import { pointAt, type Side } from '../lib/highlight-dom'
 import type { ReadingMode } from '../lib/href'
 import { newId } from '../lib/id'
+import { readingPrefsOf } from '../lib/prefs'
 import { readerStyle, typographyOf } from '../lib/typography'
 import { useHighlights } from '../lib/use-highlights'
 import { useArticleTranslation } from '../lib/use-translation'
 import { useNow, useStore, useTables } from '../store/hooks'
 import type { ContentObject } from '../store/objects'
-import { feedTitle, isLiked, isRecommended, shownTitle, siteOfFeed } from '../store/selectors'
+import {
+  feedTitle,
+  isLiked,
+  isRead,
+  isRecommended,
+  shownTitle,
+  siteOfFeed,
+} from '../store/selectors'
 import { FocusToggle } from './focus-toggle'
 import { HighlightList, HighlightNote, HighlightToolbar, useSelectedAnchor } from './highlights'
 import { LikeButton } from './like-button'
@@ -216,6 +224,17 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
           <FocusToggle />
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Only for a member who marks posts read themselves: otherwise opening did it. */}
+          {!readingPrefsOf(tables).markOnOpen && !isRead(tables, article, now) ? (
+            <button
+              type="button"
+              onClick={() => store.mutate({ type: 'markRead', articleId: article.id })}
+              className="whitespace-nowrap rounded-full border border-thumb px-3.5 py-[7px] font-medium text-ink hover:border-ink"
+              data-testid="mark-read"
+            >
+              {t('markRead')}
+            </button>
+          ) : null}
           <TypographyMenu />
           <LikeButton
             articleId={article.id}

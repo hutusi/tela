@@ -57,7 +57,9 @@
     "minutes": "{n} 分钟",
     "translatedBadge": "{from} → {to}",
     "loadMore": "更早的文章",
-    "fetching": "正在首次抓取这个订阅源…"
+    "fetching": "正在首次抓取这个订阅源…",
+    "allRead": "都读完了。",
+    "allReadHint": "已读文章被隐藏了，可以在<settings>设置</settings>里重新显示。"
   },
   "reader": {
     "close": "✕ 关闭",
@@ -84,7 +86,8 @@
     "unrecommended": "已取消推荐。",
     "fetchingFullText": "正在从原站获取全文…",
     "upNext": "下一篇",
-    "focus": "专注"
+    "focus": "专注",
+    "markRead": "标为已读"
   },
   "add": {
     "title": "添加订阅",
@@ -249,6 +252,10 @@
     "measureHint": "文章栏最宽能到多少。",
     "theme": "主题",
     "themeHint": "「跟随系统」随系统设置切换。",
+    "markOnOpen": "打开即标为已读",
+    "markOnOpenHint": "关掉的话，文章会一直是未读，直到你手动标记。",
+    "hideRead": "隐藏已读文章",
+    "hideReadHint": "列表只显示未读文章，喜欢的文章始终保留。",
     "translationIntro": "Tela 会翻译用其他语言写的文章，原文随时一键可见。",
     "translateInto": "翻译成",
     "translateIntoHint": "你主要的阅读语言。",

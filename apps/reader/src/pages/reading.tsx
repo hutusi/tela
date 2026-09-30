@@ -4,7 +4,7 @@
  * filter change or Back is a render, not a request (ADR 0025).
  */
 import { translationKey } from '@tela/sync'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { ArticleList } from '../components/article-list'
@@ -23,9 +23,16 @@ import {
   readingHref,
 } from '../lib/href'
 import { gridColumns, toggleFocus, useLayout } from '../lib/layout'
-import { PREF_KEYS, readingPrefsOf } from '../lib/prefs'
+import { PREF_KEYS, useReadingPrefs } from '../lib/prefs'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
-import { articlesFor, isRead, shownTitle, subscriptionItems, totals } from '../store/selectors'
+import {
+  articlesFor,
+  isLiked,
+  isRead,
+  shownTitle,
+  subscriptionItems,
+  totals,
+} from '../store/selectors'
 import { useUi } from '../ui'
 
 /** While a new feed waits for its first fetch, pull this often so its posts appear. */
@@ -46,7 +53,33 @@ export function ReadingPage() {
 
   const subs = subscriptionItems(tables, now)
   const counts = totals(tables, now)
-  const items = articlesFor(tables, params, now)
+  const prefs = useReadingPrefs(tables)
+  const all = articlesFor(tables, params, now)
+  // Hiding read posts (a pref) must not pull a post out from under the reader: what was unread
+  // when this list was entered stays in it until the reader moves to another list, so opening a
+  // post, or j and k, never lose their place. Posts arriving later join it unread.
+  const listKey = `${params.filter}:${params.feedId}`
+  const enteredUnread = useRef<{ key: string; ids: ReadonlySet<number> } | null>(null)
+  if (prefs.hideRead && enteredUnread.current?.key !== listKey) {
+    enteredUnread.current = {
+      key: listKey,
+      ids: new Set(all.filter((a) => !isRead(tables, a, now)).map((a) => a.id)),
+    }
+  }
+  const kept = enteredUnread.current?.ids
+  const items = useMemo(
+    () =>
+      prefs.hideRead
+        ? all.filter(
+            (a) =>
+              a.id === params.articleId ||
+              kept?.has(a.id) ||
+              !isRead(tables, a, now) ||
+              isLiked(tables, a.id),
+          )
+        : all,
+    [all, prefs.hideRead, kept, tables, now, params.articleId],
+  )
   const selected = params.feedId !== null ? subs.find((s) => s.feedId === params.feedId) : undefined
   const listTitle = params.feedId !== null ? (selected?.title ?? '') : undefined
   const pendingFetch = selected !== undefined && selected.lastFetchedAt === null
@@ -70,13 +103,13 @@ export function ReadingPage() {
     : null
 
   // The mode a URL without one means: this member's last choice, synced like any other pref.
-  const mode = params.mode ?? readingPrefsOf(tables).mode
+  const mode = params.mode ?? prefs.mode
 
-  // Opening an article reads it.
+  // Opening an article reads it, unless the member marks posts read themselves (a pref).
   const articleId = article?.id ?? null
   // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened
   useEffect(() => {
-    if (!article || isRead(tables, article, Date.now())) return
+    if (!article || !prefs.markOnOpen || isRead(tables, article, Date.now())) return
     store.mutate({ type: 'markRead', articleId: article.id })
   }, [articleId])
 
@@ -239,6 +272,7 @@ export function ReadingPage() {
         locale={locale}
         now={now}
         pendingFetch={pendingFetch}
+        hidingRead={prefs.hideRead && all.length > 0}
       />
       {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}
       {article ? (
