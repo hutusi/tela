@@ -87,8 +87,9 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   row measures 335px on macOS and 341px in CI's Linux Chromium.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
-  list are sticky and scroll independently. The sidebar hides and shows from a toggle at the head
-  of the list (`[` does the same), and the grid drops its first column with it. Focus (`f`, or
+  list are sticky and scroll independently. The sidebar hides from a toggle in its own header and
+  comes back from one at the head of the list (`[` does both), and the grid drops its first
+  column with it. Focus (`f`, or
   the button beside Close) hides the list as well while an article is open, which then has the
   grid to itself; closing brings the list back. The list stays mounted, taken out of the grid by
   an unlayered rule in `styles.css` (a `lg:hidden` would fight its own
@@ -206,9 +207,17 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - **Width:** 560 / 640 / 760 px for the single column, and for a stacked pair. Two paired
     columns keep their own 640px measure.
   - **Theme:** Auto / Light / Dark.
-- **The sidebar toggle** sits at the head of the list, in one place whether the sidebar is shown
-  or hidden: a 16px panel glyph drawn inline (Tela has no icon set) in the quiet button style,
-  `aria-expanded` for its state. From `lg` only; below it `MobileNav` holds the filters.
+- **The sidebar toggle** heads the sidebar while it is shown: a "Library" label in the
+  small-caps heading style at the headings' indent, and the toggle at the row's right end, its
+  icon on the counts' right edge. The row is sticky, so a long list never scrolls it away. While
+  the sidebar is hidden the toggle heads the list instead, left of its title. There is no
+  collapsed strip to keep it in one place: with the sidebar hidden, a 1440px window's pane has a
+  1116px content box (1101 with a 15px scrollbar) against the 1080 that side by side needs, so a
+  strip wide enough for the button would give back the two columns that hiding the sidebar is
+  for. A toggle that had focus hands it to the one in the other place. The glyph is a 16px panel
+  drawn inline (Tela has no icon set), its left third shaded while the sidebar is shown, in the
+  quiet button style, with `aria-expanded` for its state. From `lg` only; below it `MobileNav`
+  holds the filters.
 - **Focus** sits beside `✕ Close` in the action row: one label, `aria-pressed` and the `hover`
   ground while it is on, as a toggle button has. From `lg` only, since below it the list already
   gives way to the article. Both are device state (ADR 0029).

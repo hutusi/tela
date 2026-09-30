@@ -32,31 +32,106 @@ const firstPair = (page: Page) =>
     }
   })
 
-test('the sidebar hides from the head of the list, and stays hidden on this device', async ({
-  page,
-}) => {
+test('the sidebar hides from its own header, and stays hidden on this device', async ({ page }) => {
   await page.goto('/reading')
   await synced(page)
   const layout = page.getByTestId('reading-layout')
+  const aside = page.locator('aside')
+  const list = page.getByTestId('article-list')
   const toggle = page.getByTestId('sidebar-toggle')
   await expect(layout).toHaveAttribute('data-sidebar', 'shown')
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  // Shown, the toggle heads the sidebar it hides, and the list has none of its own.
+  await expect(aside.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'true')
+  await expect(list.getByTestId('sidebar-toggle')).toHaveCount(0)
 
   await toggle.click()
-  await expect(page.locator('aside')).toHaveCount(0)
+  await expect(aside).toHaveCount(0)
   await expect(layout).toHaveAttribute('data-sidebar', 'hidden')
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
-  // The list took the sidebar's column: nothing is left of it.
-  expect((await page.getByTestId('article-list').boundingBox())?.x).toBe(0)
+  // Hidden, it heads the list, which took the sidebar's column: nothing is left of it.
+  await expect(list.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false')
+  expect((await list.boundingBox())?.x).toBe(0)
 
   // Remembered on this device, with no round trip to wait for: the next visit reads it back.
   await page.reload()
   await expect(layout).toHaveAttribute('data-sidebar', 'hidden')
-  await expect(page.locator('aside')).toHaveCount(0)
+  await expect(aside).toHaveCount(0)
 
   await toggle.click()
-  await expect(page.locator('aside')).toBeVisible()
+  await expect(aside).toBeVisible()
   await expect(layout).toHaveAttribute('data-sidebar', 'shown')
+})
+
+/** Where the sidebar's header sits against what is under it, in viewport pixels. */
+const header = (page: Page) =>
+  page.evaluate(() => {
+    const aside = document.querySelector('aside')
+    if (!aside) return null
+    // Where a heading's words start, not its box, which the padding puts at the aside's edge.
+    const textLeft = (text: string) => {
+      const walk = document.createTreeWalker(aside, NodeFilter.SHOW_TEXT)
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        if (n.textContent !== text) continue
+        const range = document.createRange()
+        range.selectNodeContents(n)
+        return range.getBoundingClientRect().left
+      }
+      return Number.NaN
+    }
+    const rect = (sel: string) => aside.querySelector(sel)?.getBoundingClientRect()
+    return {
+      library: textLeft('Library'),
+      subscriptions: textLeft('Subscriptions'),
+      icon: rect('[data-testid="sidebar-toggle"] svg')?.right ?? Number.NaN,
+      count: rect('nav a span:last-child')?.right ?? Number.NaN,
+      toggle:
+        (rect('[data-testid="sidebar-toggle"]')?.top ?? Number.NaN) -
+        aside.getBoundingClientRect().top,
+      overflows: aside.scrollHeight > aside.clientHeight,
+    }
+  })
+
+test('the sidebar header lines up with the rows under it, and stays as they scroll', async ({
+  page,
+}) => {
+  // Short enough that the subscriptions overflow and the aside scrolls on its own.
+  await page.setViewportSize({ width: 1280, height: 420 })
+  await page.goto('/reading')
+  await synced(page)
+  const before = await header(page)
+  expect(before, 'no sidebar').not.toBeNull()
+  if (!before) return
+  // "Library" at the headings' indent, and the icon's right edge on the counts'.
+  expect(Math.abs(before.library - before.subscriptions), JSON.stringify(before)).toBeLessThan(1)
+  expect(Math.abs(before.icon - before.count), JSON.stringify(before)).toBeLessThan(1)
+
+  // Scrolled to its end, the toggle is where it was: the header is sticky, and its top padding is
+  // its own, so it reads the same stuck as at rest.
+  expect(before.overflows, 'the aside does not scroll at this height').toBe(true)
+  await page.locator('aside').evaluate((el) => {
+    el.scrollTop = el.scrollHeight
+  })
+  const after = await header(page)
+  expect(
+    Math.abs((after?.toggle ?? Number.NaN) - before.toggle),
+    JSON.stringify(after),
+  ).toBeLessThan(1)
+  await expect(page.getByTestId('sidebar-toggle')).toBeInViewport()
+})
+
+test('a toggle that had focus keeps it in its other place', async ({ page }) => {
+  // Each state has its own toggle, so the one pressed is gone once it has done its work.
+  await page.goto('/reading')
+  await synced(page)
+  const list = page.getByTestId('article-list')
+  await page.getByTestId('sidebar-toggle').focus()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('aside')).toHaveCount(0)
+  await expect(list.getByTestId('sidebar-toggle')).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('aside').getByTestId('sidebar-toggle')).toBeFocused()
+  // [ from the toggle hands it on too.
+  await page.keyboard.press('[')
+  await expect(list.getByTestId('sidebar-toggle')).toBeFocused()
 })
 
 test('[ toggles the sidebar, and ? lists it', async ({ page }) => {

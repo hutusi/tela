@@ -5,6 +5,7 @@ import { Link, useLocation } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { relativeTime } from '../lib/format'
 import { canonicalReadingHref, type ReadingParams, readingHref } from '../lib/href'
+import { useLayout } from '../lib/layout'
 import { useStore, useTables } from '../store/hooks'
 import { feedTitle, isRead, shownTitle } from '../store/selectors'
 import { SidebarToggle } from './sidebar-toggle'
@@ -37,6 +38,7 @@ export function ArticleList({
   const tables = useTables()
   const { store } = useStore()
   const location = useLocation()
+  const sidebar = useLayout().sidebar
   const heading = title ?? ts(params.filter)
   const target = languageBadge(readingLang)
   const [limit, setLimit] = useState(PAGE)
@@ -59,7 +61,8 @@ export function ArticleList({
       data-testid="article-list"
     >
       <div className="sticky top-0 z-[1] flex items-baseline gap-2 bg-paper px-5 pb-2.5 pt-5">
-        <SidebarToggle />
+        {/* Here only while the sidebar is hidden: shown, it heads the sidebar itself. */}
+        {sidebar === 'hidden' ? <SidebarToggle className="-ml-2.5" /> : null}
         <h1 className="min-w-0 flex-1 truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
           {heading}
         </h1>

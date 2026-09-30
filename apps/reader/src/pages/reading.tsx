@@ -13,6 +13,7 @@ import { MobileNav } from '../components/mobile-nav'
 import { Reader } from '../components/reader'
 import { Shortcuts } from '../components/shortcuts'
 import { Sidebar } from '../components/sidebar'
+import { toggleSidebarKeepingFocus } from '../components/sidebar-toggle'
 import { ReaderPaneSkeleton } from '../components/skeletons'
 import {
   canonicalReadingHref,
@@ -21,7 +22,7 @@ import {
   readingHref,
   readingModeParam,
 } from '../lib/href'
-import { gridColumns, toggleFocus, toggleSidebar, useLayout } from '../lib/layout'
+import { gridColumns, toggleFocus, useLayout } from '../lib/layout'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { articlesFor, isRead, shownTitle, subscriptionItems, totals } from '../store/selectors'
 import { useUi } from '../ui'
@@ -139,7 +140,7 @@ export function ReadingPage() {
         e.preventDefault()
       } else if (e.key === '[') {
         e.preventDefault()
-        toggleSidebar()
+        toggleSidebarKeepingFocus()
       } else if (e.key === 'f' && now.articleId !== null) {
         e.preventDefault()
         toggleFocus()
