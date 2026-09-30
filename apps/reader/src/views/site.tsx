@@ -203,6 +203,7 @@ export function SiteView({
                   handle={claimant.handle}
                   displayName={claimant.displayName}
                   size={28}
+                  me={member?.handle === claimant.handle}
                 />
                 {author}
               </Link>
