@@ -22,9 +22,12 @@ const sessionSet = (key: string, value: string) => {
 export const registerShell = {
   register() {
     if (!('serviceWorker' in navigator) || import.meta.env.DEV) return
-    window.addEventListener('load', () => {
-      void navigator.serviceWorker.register(SW_URL).catch(() => undefined)
-    })
+    const go = () => void navigator.serviceWorker.register(SW_URL).catch(() => undefined)
+    // After the page has loaded, so registering never competes with the first paint. The boot
+    // awaits IndexedDB before it gets here, and the page may have loaded by then: a listener
+    // added after `load` never runs, and the shell was never cached.
+    if (document.readyState === 'complete') go()
+    else window.addEventListener('load', go, { once: true })
   },
 
   /**
