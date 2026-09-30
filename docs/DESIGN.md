@@ -170,7 +170,7 @@ plural syntax.
 
 ## New tokens, and the dark ground (ADR 0026)
 
-Three tokens the Next app did not need, because it hard-coded them:
+Tokens the Next app did not need, because it hard-coded them (and `knob`, which Tela v2's switches added):
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
@@ -178,6 +178,7 @@ Three tokens the Next app did not need, because it hard-coded them:
 | `danger` | `oklch(0.50 0.15 25)` | `oklch(0.72 0.15 25)` | error text |
 | `highlight` | `oklch(0.91 0.10 95)` | `oklch(0.50 0.09 90 / 0.55)` | a highlight's paint |
 | `highlight-strong` | `oklch(0.80 0.14 90)` | `oklch(0.70 0.12 90)` | the highlight being edited |
+| `knob` | `#fff` | `#ede7db` | a switch's knob, light on either track in both themes (Tela v2) |
 
 Dark mode redefines every token on a warm near-black ground rather than adding `dark:` variants:
 

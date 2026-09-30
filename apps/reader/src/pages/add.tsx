@@ -6,24 +6,12 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { readingHref } from '../lib/href'
+import { type AddError, addError, importOpml } from '../lib/opml'
 import { useTitle } from '../lib/title'
 import { apiJson } from '../store/api'
 import { useStore } from '../store/hooks'
 
 type Candidate = { url: string; title: string | null; format: string; itemCount: number }
-type AddError = 'invalid_url' | 'fetch_failed' | 'rate_limited' | 'opml_invalid' | 'opml_too_large'
-
-/** tela-api's answer, as the message the page has for it. */
-export function addError(code: string | undefined): AddError {
-  if (
-    code === 'invalid_url' ||
-    code === 'rate_limited' ||
-    code === 'opml_invalid' ||
-    code === 'opml_too_large'
-  )
-    return code
-  return 'fetch_failed'
-}
 
 const ERROR = 'text-sm text-danger'
 
@@ -174,29 +162,14 @@ function OpmlForm() {
     setBusy(true)
     setError(null)
     setImported(null)
-    try {
-      if (file.size > 1024 * 1024) {
-        setError('opml_too_large')
-        return
-      }
-      const { status, body } = await apiJson<{ feeds?: number; error?: string }>(
-        '/api/v1/feeds/opml',
-        {
-          method: 'POST',
-          raw: await file.text(),
-        },
-      )
-      if (status !== 200 || body.feeds === undefined) {
-        setError(addError(body?.error))
-        return
-      }
-      setImported(body.feeds)
-      void engine.pull()
-    } catch {
-      setError('fetch_failed')
-    } finally {
-      setBusy(false)
+    const result = await importOpml(file)
+    setBusy(false)
+    if ('error' in result) {
+      setError(result.error)
+      return
     }
+    setImported(result.feeds)
+    void engine.pull()
   }
 
   return (

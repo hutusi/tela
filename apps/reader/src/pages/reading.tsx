@@ -21,14 +21,13 @@ import {
   parseReadingParams,
   type ReadingMode,
   readingHref,
-  readingModeParam,
 } from '../lib/href'
 import { gridColumns, toggleFocus, useLayout } from '../lib/layout'
+import { PREF_KEYS, readingPrefsOf } from '../lib/prefs'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { articlesFor, isRead, shownTitle, subscriptionItems, totals } from '../store/selectors'
 import { useUi } from '../ui'
 
-const MODE_PREF = 'reader.mode'
 /** While a new feed waits for its first fetch, pull this often so its posts appear. */
 const FIRST_FETCH_PULL_MS = 3000
 const PREFETCH_IDLE_MS = 1500
@@ -71,9 +70,7 @@ export function ReadingPage() {
     : null
 
   // The mode a URL without one means: this member's last choice, synced like any other pref.
-  const remembered =
-    readingModeParam((tables.prefs.get(MODE_PREF)?.value as string | undefined) ?? null) ?? 'side'
-  const mode = params.mode ?? remembered
+  const mode = params.mode ?? readingPrefsOf(tables).mode
 
   // Opening an article reads it.
   const articleId = article?.id ?? null
@@ -90,7 +87,7 @@ export function ReadingPage() {
 
   const onMode = useCallback(
     (next: ReadingMode) => {
-      store.mutate({ type: 'setPref', key: MODE_PREF, value: next })
+      store.mutate({ type: 'setPref', key: PREF_KEYS.mode, value: next })
       // The URL still says it, so a copied link opens the way it was being read.
       const url = new URLSearchParams(location.search)
       if (next === 'side') url.delete('mode')

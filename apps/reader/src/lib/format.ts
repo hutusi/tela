@@ -56,3 +56,37 @@ export function cadenceKey(
   if (postsLast30d >= 1) return 'monthly'
   return 'quiet'
 }
+
+/** Deterministic colour for a member, from their handle: the same on every page that names them. */
+export function personColor(handle: string): string {
+  let hash = 0
+  for (const ch of handle) hash = (hash * 31 + (ch.codePointAt(0) ?? 0)) >>> 0
+  return `oklch(0.55 0.11 ${(hash % 360).toFixed(1)})`
+}
+
+/**
+ * A day as a list's date column shows it: "Today", "Yesterday", "Sep 27", or with the year once
+ * it is not this one. Local days, as the reader lives them.
+ */
+export function shortDate(at: number, locale: string, now = Date.now()): string {
+  const day = (t: number) => {
+    const d = new Date(t)
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  }
+  const days = Math.round((day(now) - day(at)) / 86_400_000)
+  if (days === 0 || days === 1) {
+    const word = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-days, 'day')
+    return word.charAt(0).toLocaleUpperCase(locale) + word.slice(1)
+  }
+  const sameYear = new Date(at).getFullYear() === new Date(now).getFullYear()
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  }).format(new Date(at))
+}
+
+/** "September 2026", "2026年9月": when a member joined. */
+export function monthYear(at: number, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(new Date(at))
+}

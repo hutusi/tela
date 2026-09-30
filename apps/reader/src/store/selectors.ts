@@ -8,6 +8,7 @@
 
 import type { ArticleRow, SiteRow } from '@tela/sync'
 import { HORIZON_DAYS, type Tables, titleKey } from '@tela/sync'
+import type { Person } from '../views/types'
 
 export type Filter = 'all' | 'today' | 'liked'
 export const FILTERS: Filter[] = ['all', 'today', 'liked']
@@ -145,4 +146,21 @@ export function shownTitle(t: Tables, a: ArticleRow, readingLang: string) {
     /** Badge it only when the languages differ and a translation is shown (AGENTS.md). */
     badge: title !== null && a.sourceLang !== null && a.sourceLang !== readingLang,
   }
+}
+
+/**
+ * The people the member follows, named: by the follow row once the pull brought it, else by the
+ * page they were followed from (a prediction has only the id). Alphabetical, as a list of people
+ * reads best.
+ */
+export function followedPeople(t: Tables, person: (id: string) => Person | undefined): Person[] {
+  const people: Person[] = []
+  for (const f of t.follows.values()) {
+    const known = f.handle
+      ? { id: f.userId, handle: f.handle, displayName: f.displayName }
+      : person(f.userId)
+    if (known) people.push(known)
+  }
+  const name = (p: Person) => (p.displayName ?? p.handle).toLocaleLowerCase()
+  return people.sort((a, b) => name(a).localeCompare(name(b)))
 }

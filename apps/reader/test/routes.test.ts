@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { discoverApiPath, discoverHref, parseDiscoverParams } from '../src/lib/discover-href'
 import { canonicalReadingHref, parseReadingParams, readingHref } from '../src/lib/href'
-import { addError } from '../src/pages/add'
+import { addError } from '../src/lib/opml'
 import { claimError } from '../src/pages/claim'
 import { safeNext } from '../src/pages/login'
 import { handleFrom } from '../src/pages/profile'

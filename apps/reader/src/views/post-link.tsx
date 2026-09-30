@@ -11,12 +11,16 @@ export function PostLink({
   source,
   member,
   className,
+  children,
 }: {
   article: ArticleRow
   source: string | null
   member: MemberControls | undefined
   className: string
+  /** What the link says: the post's title unless the page shows it another way (translated). */
+  children?: React.ReactNode
 }) {
+  const label = children ?? article.title
   if (member) {
     return (
       <Link
@@ -24,15 +28,15 @@ export function PostLink({
         onClick={() => member.hold(article, source)}
         className={className}
       >
-        {article.title}
+        {label}
       </Link>
     )
   }
   return article.url ? (
     <a href={article.url} target="_blank" rel="noopener noreferrer" className={className}>
-      {article.title}
+      {label}
     </a>
   ) : (
-    <span className={className}>{article.title}</span>
+    <span className={className}>{label}</span>
   )
 }

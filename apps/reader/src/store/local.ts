@@ -25,6 +25,7 @@ import {
   view,
 } from '@tela/sync'
 import { newId } from '../lib/id'
+import type { Person } from '../views/types'
 import type { Change, Persistence } from './db'
 
 /** A mutation as the UI states it: the store adds the id and the time. */
@@ -78,6 +79,20 @@ export class LocalStore {
   private transient = new Map<number, ArticleRow>()
   /** What those articles' feeds are called, since the device holds no row for them. */
   private transientNames = new Map<number, string>()
+  /**
+   * Members a page showed this visit, by account id: a follow made from that page is named by it
+   * until the pull brings the follow row with its name (ADR 0031).
+   */
+  private people = new Map<string, Person>()
+
+  rememberPeople(people: readonly Person[]): void {
+    for (const p of people) this.people.set(p.id, p)
+  }
+
+  /** A member a page showed this visit. */
+  person(id: string): Person | undefined {
+    return this.people.get(id)
+  }
 
   remember(articles: ArticleRow[], source?: string | null): void {
     for (const a of articles) {
@@ -147,6 +162,7 @@ export class LocalStore {
     this.pending = []
     this.transient = new Map()
     this.transientNames = new Map()
+    this.people = new Map()
     this.recompute()
   }
 

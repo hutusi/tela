@@ -23,6 +23,9 @@ export type DiscoverData = { sites: DiscoverSite[]; languages: { lang: string; c
 /** A member as a page names them: their handle, and their name if they gave one. */
 export type PersonRef = { handle: string; displayName: string | null }
 
+/** A member someone can follow: named, and with the account id a follow names (ADR 0031). */
+export type Person = PersonRef & { id: string }
+
 export type SiteData = {
   site: {
     id: number
@@ -97,4 +100,9 @@ export type MemberControls = {
   hold(article: ArticleRow, source: string | null): void
   /** The member's handle: a blog claimed under it has settings that are theirs to change. */
   handle: string | null
+  /** The member's account id: their own profile offers no Follow. */
+  userId: string | null
+  isFollowing(userId: string): boolean
+  /** Follow someone or stop, at once; the page names them until the pull does (ADR 0031). */
+  setFollowing(person: Person, follow: boolean): void
 }
