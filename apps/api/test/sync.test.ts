@@ -561,6 +561,54 @@ describe('a feed merged into another (ADR 0028)', () => {
     ])
     expect(synced.tables.states.get(x)).toEqual(fresh.tables.states.get(x))
   })
+
+  describe("a read only the alias's watermark said", () => {
+    // Found in review: the merge carried only reads written down, so a post read by a watermark
+    // (markAllRead) showed unread once it was the target's, where no alias watermark covers it.
+    const shown = async (id: number) => {
+      const device = applyPull({ cursor: 0, tables: emptyTables() }, await pull(0))
+      const article = device.tables.articles.get(id)
+      expect(article).toBeDefined()
+      return isRead(device.tables, article as ArticleRow, now)
+    }
+    const merge = (move: number[], carry: [number, number][]) =>
+      write(...mergeFeed(db, { alias: 2, target: 1, move, carry }, now))
+
+    test('stays read for a post kept from the alias the reader left, its row compacted', async () => {
+      await push([{ type: 'subscribe', feedId: 2 }])
+      const x = await addArticle(2)
+      await push([
+        { type: 'markRead', articleId: x },
+        { type: 'markAllRead', feedId: 2, upTo: x },
+      ])
+      await push([{ type: 'unsubscribe', feedId: 2 }])
+      await push([{ type: 'recommend', articleId: x, note: null }])
+      await compactReadStates(db)
+      expect(await shown(x)).toBe(true)
+      await merge([x], [])
+      expect(await shown(x)).toBe(true)
+    })
+
+    test('stays read for a moved post the reader, following the target now, read on the alias', async () => {
+      await push([{ type: 'subscribe', feedId: 2 }])
+      const x = await addArticle(2)
+      await push([{ type: 'markAllRead', feedId: 2, upTo: x }])
+      await push([{ type: 'unsubscribe', feedId: 2 }])
+      await push([{ type: 'subscribe', feedId: 1 }])
+      await merge([x], [])
+      expect(await shown(x)).toBe(true)
+    })
+
+    test("is carried to the target's own copy, which the watermark never reached", async () => {
+      await push([{ type: 'subscribe', feedId: 2 }])
+      const duplicate = await addArticle(2)
+      await push([{ type: 'markAllRead', feedId: 2, upTo: duplicate }])
+      // The target fetched its copy of the same post later: its id is past the watermark.
+      const copy = await addArticle(1)
+      await merge([], [[duplicate, copy]])
+      expect(await shown(copy)).toBe(true)
+    })
+  })
 })
 
 describe('a device holding another account (another tab switched)', () => {

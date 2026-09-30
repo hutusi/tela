@@ -119,6 +119,10 @@ export async function siteFeedPosts(db: TelaDb, siteId: number): Promise<SiteFee
  * across, with their titles, translations and read states restamped so the target's readers are
  * sent them; `carry` pairs each duplicate with the target's copy, so what a reader read stays
  * read. The duplicates stay behind on the paused alias, where no list shows them.
+ *
+ * A read the alias's watermark implied is written down as a read, for the moved posts and the
+ * target's copies alike, and for readers who left the alias too: once a post is the target's,
+ * no alias watermark covers it, and compaction may have dropped the row that said so.
  */
 export function mergeFeed(
   db: TelaDb,
@@ -164,6 +168,14 @@ export function mergeFeed(
       )
     `),
     db.run(sql`
+      insert into user_article_states (user_id, article_id, read_at, seq)
+      select s.user_id, p.value, ${now}, ${currentSeq}
+      from subscriptions s join json_each(${move}) p on p.value <= s.watermark_id
+      where s.feed_id = ${alias}
+      on conflict (user_id, article_id) do update set
+        read_at = coalesce(user_article_states.read_at, excluded.read_at), seq = excluded.seq
+    `),
+    db.run(sql`
       update user_article_states set seq = ${currentSeq}
       where article_id in (select value from json_each(${move}))
     `),
@@ -172,6 +184,14 @@ export function mergeFeed(
       select s.user_id, p.value->>1, s.read_at, ${currentSeq}
       from json_each(${carry}) p join user_article_states s on s.article_id = p.value->>0
       where s.read_at is not null
+      on conflict (user_id, article_id) do update set read_at = excluded.read_at, seq = excluded.seq
+      where user_article_states.read_at is null
+    `),
+    db.run(sql`
+      insert into user_article_states (user_id, article_id, read_at, seq)
+      select s.user_id, p.value->>1, ${now}, ${currentSeq}
+      from json_each(${carry}) p join subscriptions s on p.value->>0 <= s.watermark_id
+      where s.feed_id = ${alias}
       on conflict (user_id, article_id) do update set read_at = excluded.read_at, seq = excluded.seq
       where user_article_states.read_at is null
     `),

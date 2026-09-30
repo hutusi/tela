@@ -50,7 +50,11 @@ own lease:
   Without that, a device following the canonical feed got the moved post but not its title,
   its translation, or the fact that it was read. A title written after the merge takes its feed
   from the post, so a title job still leased on the alias files it in the right place too;
-- a read on a duplicate carries over to the canonical copy.
+- a read on a duplicate carries over to the canonical copy;
+- a read that only the alias's watermark implied (`markAllRead`) is written down as a read, on
+  the moved posts and on the canonical copies, for readers who left the alias too. Once a post is
+  the canonical feed's, no alias watermark covers it, and compaction may already have dropped
+  the row that said it was read.
 
 The duplicates stay on the paused alias, where no list shows them. Nothing is deleted, so no
 tombstone is needed and a wrong merge can be undone by hand (OPERATIONS.md).
