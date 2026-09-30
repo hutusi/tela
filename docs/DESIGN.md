@@ -101,8 +101,9 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   fallback: list → article as a page). Mobile is a fallback, not a design; `mobile.e2e.ts` keeps
   it working.
 - Side by side is a container query on the reader pane, not a viewport breakpoint: two columns of
-  640px appear once the pane itself is 1080px, which is about a 1624px viewport after the sidebar
-  and list have taken 480, 1404px once the sidebar is hidden, and 1144px in focus — which is why
+  up to 640px appear once the pane itself is 1040px (500px a column, ADR 0030), which is about a
+  1584px viewport after the sidebar and list have taken 480, 1364px once the sidebar is hidden,
+  and 1104px in focus — which is why
   a 13" or 14" laptop wants the toggle and a 1280px window wants focus; `layout.e2e.ts` measures
   both. Below that the same grid is one column
   and the pairs interleave — a source paragraph, its translation, the next paragraph — at the full
@@ -210,11 +211,8 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
 - **The sidebar toggle** heads the sidebar while it is shown: a "Library" label in the
   small-caps heading style at the headings' indent, and the toggle at the row's right end, its
   icon on the counts' right edge. The row is sticky, so a long list never scrolls it away. While
-  the sidebar is hidden the toggle heads the list instead, left of its title. There is no
-  collapsed strip to keep it in one place: with the sidebar hidden, a 1440px window's pane has a
-  1116px content box (1101 with a 15px scrollbar) against the 1080 that side by side needs, so a
-  strip wide enough for the button would give back the two columns that hiding the sidebar is
-  for. A toggle that had focus hands it to the one in the other place. The glyph is a 16px panel
+  the sidebar is hidden the toggle heads the list instead, left of its title. A toggle that had
+  focus hands it to the one in the other place. The glyph is a 16px panel
   drawn inline (Tela has no icon set), its left third shaded while the sidebar is shown, in the
   quiet button style, with `aria-expanded` for its state. From `lg` only; below it `MobileNav`
   holds the filters.

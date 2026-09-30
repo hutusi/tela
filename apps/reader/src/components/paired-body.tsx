@@ -40,16 +40,16 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
   return (
     <div className="@container">
       <div
-        className="grid grid-cols-[minmax(0,var(--reader-measure))] items-start gap-x-10 @min-[1080px]:grid-cols-[minmax(0,640px)_minmax(0,640px)]"
+        className="grid grid-cols-[minmax(0,var(--reader-measure))] items-start gap-x-10 @min-[1040px]:grid-cols-[minmax(0,640px)_minmax(0,640px)]"
         data-testid="paired-body"
       >
         {/* `hidden` rather than `sr-only`: display:none takes the cell out of the grid, and
             `not-sr-only` would set margin:0 against mb-3.5 with no defined winner. */}
-        <div className="mb-3.5 hidden text-[11px] font-semibold uppercase tracking-[0.08em] text-muted @min-[1080px]:block">
+        <div className="mb-3.5 hidden text-[11px] font-semibold uppercase tracking-[0.08em] text-muted @min-[1040px]:block">
           {tt('columnOriginal')}
         </div>
         {/* The accent marks the translation wherever it sits, not whichever column is first. */}
-        <div className="mb-3.5 hidden text-[11px] font-semibold uppercase tracking-[0.08em] text-accent @min-[1080px]:block">
+        <div className="mb-3.5 hidden text-[11px] font-semibold uppercase tracking-[0.08em] text-accent @min-[1040px]:block">
           {tt('columnTranslated', { target: targetName })}
         </div>
 

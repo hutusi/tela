@@ -1,6 +1,7 @@
 # 0029 — Pane layout is device state, not a synced pref
 
-Status: accepted (2026-09-30). Beside 0026, which made typography and theme synced prefs.
+Status: accepted (2026-09-30). Beside 0026, which made typography and theme synced prefs. A hidden
+sidebar became a rail in 0030.
 
 ## Context
 

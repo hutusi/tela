@@ -149,7 +149,7 @@ test('hiding the sidebar is what gives a 1440px window its two bilingual columns
   page,
 }) => {
   // A 13" or 14" MacBook window. The sidebar and the list take 480px, so the pane is 960px and
-  // its content box 896, short of the 1080 the paired body asks for: the pairs interleave.
+  // its content box 896, short of the 1040 the paired body asks for: the pairs interleave.
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/reading')
   await synced(page)
@@ -303,7 +303,7 @@ test('focus hides the list too while an article is open, and j, k and Esc carry 
 
 test('focus is what gives a 1280px window its two bilingual columns', async ({ page }) => {
   // With the sidebar hidden the pane is still 1020px here; only the list going too gets it past
-  // 1080: (1216 − 40) / 2 = 588px columns, ~580 in CI's Linux Chromium.
+  // 1040: (1216 − 40) / 2 = 588px columns, ~580 in CI's Linux Chromium.
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto('/reading')
   await synced(page)
