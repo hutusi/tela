@@ -18,6 +18,21 @@ export const PUBLIC_CACHE = 'public, max-age=60, s-maxage=300, stale-while-reval
 const LANG = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/
 const DAY = 24 * 60 * 60 * 1000
 const PUBLIC_LISTING = sql.raw(`('listed', 'featured')`)
+/**
+ * A post's titles in the launch languages it has one in, from a table aliased `a`: a public page
+ * is cached for everyone, so it carries each and the reader picks the one they read in.
+ */
+const TITLES = sql.raw(`(select json_group_object(t.lang, t.title) from article_titles t
+  where t.article_id = a.id and t.title is not null) as "titles"`)
+/** The titles object SQLite handed back as text. */
+function withTitles<T extends Record<string, unknown>>(row: T): T {
+  if (typeof row.titles !== 'string') return row
+  try {
+    return { ...row, titles: JSON.parse(row.titles) as Record<string, string> }
+  } catch {
+    return { ...row, titles: {} }
+  }
+}
 
 export function publicRoutes(deps: ApiDeps) {
   const { db } = deps
@@ -110,7 +125,7 @@ export function publicRoutes(deps: ApiDeps) {
       // Posts as the reader holds them, so a member can open one from here. A merged feed's
       // posts are duplicates of its target's (ADR 0028).
       db.all(sql`
-        select ${ARTICLE_COLUMNS}
+        select ${ARTICLE_COLUMNS}, ${TITLES}
         from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         where f.site_id = ${siteId} and f.merged_into is null and s.listing in ${PUBLIC_LISTING}
         order by a.sort_at desc, a.id desc limit 20
@@ -119,7 +134,7 @@ export function publicRoutes(deps: ApiDeps) {
       // What readers said recommending its posts: recommendations are public (ADR 0031).
       db.all(sql`
         select r.note, r.created_at as "createdAt", p.handle, p.display_name as "displayName",
-          ${ARTICLE_COLUMNS}
+          ${ARTICLE_COLUMNS}, ${TITLES}
         from recommendations r join articles a on a.id = r.article_id
         join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         join profiles p on p.user_id = r.user_id
@@ -141,11 +156,11 @@ export function publicRoutes(deps: ApiDeps) {
             : null,
         },
         feeds,
-        posts,
+        posts: (posts ?? []).map(withTitles),
         topics: (topics ?? []).map((t) => t.topic),
         notes: (notes ?? []).map((n) => {
           const { note, createdAt, handle, displayName, ...article } = n
-          return { note, createdAt, person: { handle, displayName }, article }
+          return { note, createdAt, person: { handle, displayName }, article: withTitles(article) }
         }),
       },
       200,
@@ -178,7 +193,8 @@ export function publicRoutes(deps: ApiDeps) {
       `),
       db.all(sql`
         select r.note, r.created_at as "createdAt", s.id as "siteId", s.title as "siteTitle",
-          s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS}
+          s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS},
+          ${TITLES}
         from recommendations r join articles a on a.id = r.article_id
         join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         where r.user_id = ${id} and r.deleted_at is null
@@ -196,7 +212,8 @@ export function publicRoutes(deps: ApiDeps) {
       profile.public_likes
         ? db.all(sql`
             select st.liked_at as "likedAt", s.id as "siteId", s.title as "siteTitle",
-              s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS}
+              s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS},
+              ${TITLES}
             from user_article_states st join articles a on a.id = st.article_id
             join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
             where st.user_id = ${id} and st.liked_at is not null
@@ -226,7 +243,7 @@ export function publicRoutes(deps: ApiDeps) {
         siteTitle,
         homeUrl,
         listed: listed === 1,
-        article,
+        article: withTitles(article),
       }
     }
     return c.json(

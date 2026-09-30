@@ -48,8 +48,11 @@ export type EdgeDeps = {
 
 type Waiter = { waitUntil(promise: Promise<unknown>): void }
 
-export type PublicPages<R extends { api: string } = { api: string }> = {
-  /** The page a URL names, with the tela-api endpoint its data comes from. */
+export type PublicPages<R extends { api: string; key?: string } = { api: string; key?: string }> = {
+  /**
+   * The page a URL names, with the tela-api endpoint its data comes from, and the key it is
+   * cached under when that endpoint serves more than one page (a profile's tabs).
+   */
   route(url: URL): R | null
   /** The UI language to render in, from the locale cookie and Accept-Language. */
   locale(request: Request): string
@@ -243,7 +246,7 @@ export function createEdge(deps: EdgeDeps) {
     const build = [...new Uint8Array(digest).slice(0, 6)]
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('')
-    const cacheKey = new Request(`${CACHE_ORIGIN}/page/${build}/${locale}${route.api}`)
+    const cacheKey = new Request(`${CACHE_ORIGIN}/page/${build}/${locale}${route.key ?? route.api}`)
     const hit = await cache.match(cacheKey)
     if (hit) {
       const cached = new Response(hit.body, hit)

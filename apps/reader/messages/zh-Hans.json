@@ -206,11 +206,22 @@
     }
   },
   "profile": {
-    "memberSince": "{when}加入",
+    "joined": "{when}加入",
+    "editProfile": "编辑资料",
+    "follow": "关注",
+    "following": "已关注",
+    "stats": {
+      "following": "关注 <b>{n}</b> 人",
+      "followers": "<b>{n}</b> 位关注者",
+      "recommendations": "<b>{n}</b> 条推荐"
+    },
     "writes": "写作",
-    "recommendations": "推荐",
-    "noRecommendations": "还没有推荐过文章。",
-    "reads": "在读"
+    "tabs": {
+      "recommendations": "推荐",
+      "liked": "喜欢",
+      "subscriptions": "订阅"
+    },
+    "nothing": "这里还什么都没有。"
   },
   "dashboard": {
     "title": "你的站点",

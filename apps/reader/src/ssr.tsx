@@ -24,14 +24,18 @@ import { LocalStore } from './store/local'
 import { Objects } from './store/objects'
 import { UiContext } from './ui'
 import { DiscoverView } from './views/discover'
-import { ProfileView } from './views/profile'
+import { ProfileView, profileTab } from './views/profile'
 import { SiteView } from './views/site'
 import type { DiscoverData, ProfileData, SiteData } from './views/types'
 
+/**
+ * `key` is what the edge caches the page under when it is not `api` alone: a profile's tabs share
+ * one endpoint and are different pages.
+ */
 export type PublicRoute =
   | { kind: 'discover'; params: DiscoverParams; api: string }
   | { kind: 'site'; siteId: number; api: string }
-  | { kind: 'profile'; handle: string; api: string }
+  | { kind: 'profile'; handle: string; tab: string | null; api: string; key: string }
 
 /** The public page a URL names, and the endpoint its data comes from; null for anything else. */
 export function publicRoute(url: URL): PublicRoute | null {
@@ -42,7 +46,12 @@ export function publicRoute(url: URL): PublicRoute | null {
   const site = url.pathname.match(/^\/s\/(\d{1,12})$/)
   if (site) return { kind: 'site', siteId: Number(site[1]), api: sitePath(Number(site[1])) }
   const handle = handleFrom(url.pathname)
-  if (handle) return { kind: 'profile', handle, api: profilePath(handle) }
+  if (handle) {
+    const asked = url.searchParams.get('tab')
+    const tab = asked === 'liked' || asked === 'subscriptions' ? asked : null
+    const api = profilePath(handle)
+    return { kind: 'profile', handle, tab, api, key: tab ? `${api}?tab=${tab}` : api }
+  }
   return null
 }
 
@@ -99,7 +108,13 @@ export function renderPublicPage(input: {
     ) : route.kind === 'site' ? (
       <SiteView data={data as SiteData} locale={locale} now={now} />
     ) : (
-      <ProfileView data={data as ProfileData} locale={locale} now={now} />
+      <ProfileView
+        data={data as ProfileData}
+        tab={profileTab(route.tab, data as ProfileData)}
+        reading={{ lang: locale, never: [] }}
+        locale={locale}
+        now={now}
+      />
     )
   const body = renderToString(
     <StoreProvider value={handle}>

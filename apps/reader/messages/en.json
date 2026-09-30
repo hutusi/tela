@@ -206,11 +206,22 @@
     }
   },
   "profile": {
-    "memberSince": "joined {when}",
+    "joined": "Joined {when}",
+    "editProfile": "Edit profile",
+    "follow": "Follow",
+    "following": "Following",
+    "stats": {
+      "following": "<b>{n}</b> following",
+      "followers": "<b>{n}</b> {n, plural, one {follower} other {followers}}",
+      "recommendations": "<b>{n}</b> {n, plural, one {recommendation} other {recommendations}}"
+    },
     "writes": "Writes",
-    "recommendations": "Recommendations",
-    "noRecommendations": "Nothing recommended yet.",
-    "reads": "Reads"
+    "tabs": {
+      "recommendations": "Recommendations",
+      "liked": "Liked",
+      "subscriptions": "Subscriptions"
+    },
+    "nothing": "Nothing to show yet."
   },
   "dashboard": {
     "title": "Your sites",

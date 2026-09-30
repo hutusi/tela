@@ -165,6 +165,19 @@ select, or a quiet pill button. Settings that change what others see say so, and
 profile can take a few minutes to catch up. The design's Notifications section, avatar upload,
 "Who can follow you" and "Delete account" are not built (ADR 0031), so they are not shown.
 
+Profile (`/@handle`, Tela v2): a 960 px column. The header is a 112 px avatar (80 px below `md`,
+the accent for the member's own, their colour for anyone else's), the serif name at 46 px,
+"@handle · Joined September 2026", the bio in 20 px serif, and counts ("**N** following · **N**
+followers · **N** recommendations"), then a "Writes" line of their claimed blogs. On the right:
+*Edit profile* on one's own, *Follow* / *Following* on another member's, and for a visitor a
+*Follow* that signs in first. Below, underlined tabs as addresses (`?tab=liked`,
+`?tab=subscriptions`), each with its count; Liked and Subscriptions exist only when the member
+shows them. Posts are a list with a 96 px date column ("Today", "Sep 27"), the note in italic
+serif, then the blog's swatch, name and language badge ("JA → EN" when the page carries the
+title in the reader's language) and the title; the whole post is the link. Subscriptions are a
+grid of cards. The page is edge-cached, so the member's own follow moves the followers count on
+their screen at once, and their own following count comes from their device.
+
 Dashboard reuses the header and a single 720–960 px column with `font-serif` headings; there is no
 dedicated design for it, so it follows the Discover page's spacing and the site card's chips.
 

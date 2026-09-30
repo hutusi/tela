@@ -1,6 +1,15 @@
 /** What tela-api's public endpoints return (`/api/v1/public/*`): the data a public page renders. */
 import type { ArticleRow } from '@tela/sync'
 
+/**
+ * A post on a public page: the row the reader holds, with its titles in the launch languages it
+ * has one in, since the page is cached for everyone and each reader picks their own.
+ */
+export type PublicArticle = ArticleRow & { titles?: Partial<Record<string, string>> }
+
+/** Which language a public page's reader reads in, and which they read as written. */
+export type Reading = { lang: string; never: readonly string[] }
+
 export type DiscoverSite = {
   id: number
   title: string | null
@@ -43,10 +52,10 @@ export type SiteData = {
     postsLast30d: number
   }
   feeds: { id: number; feedUrl: string; title: string | null }[]
-  posts: ArticleRow[]
+  posts: PublicArticle[]
   topics: string[]
   /** Recent recommendations of its posts that came with a note. */
-  notes: { note: string; createdAt: number; person: PersonRef; article: ArticleRow }[]
+  notes: { note: string; createdAt: number; person: PersonRef; article: PublicArticle }[]
 }
 
 /** A post on a profile: the article, its blog, and whether that blog has a public page. */
@@ -55,7 +64,7 @@ type ProfilePost = {
   siteTitle: string | null
   homeUrl: string
   listed: boolean
-  article: ArticleRow
+  article: PublicArticle
 }
 
 export type ProfileData = {

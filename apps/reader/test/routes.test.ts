@@ -49,7 +49,18 @@ describe('public pages at the edge', () => {
       siteId: 12,
       api: '/api/v1/public/sites/12',
     })
-    expect(route('/@Reader_1')).toMatchObject({ kind: 'profile', handle: 'reader_1' })
+    expect(route('/@Reader_1')).toMatchObject({
+      kind: 'profile',
+      handle: 'reader_1',
+      tab: null,
+      key: '/api/v1/public/profiles/reader_1',
+    })
+    // A profile's tabs are one endpoint and two pages, cached apart; an unknown tab is the first.
+    expect(route('/@reader_1?tab=liked')).toMatchObject({
+      api: '/api/v1/public/profiles/reader_1',
+      key: '/api/v1/public/profiles/reader_1?tab=liked',
+    })
+    expect(route('/@reader_1?tab=nope')).toMatchObject({ tab: null })
     for (const path of ['/s/12/x', '/s/abc', '/@', '/@a/b', '/reading'])
       expect(route(path)).toBeNull()
     expect(handleFrom('/%40someone')).toBe('someone')
