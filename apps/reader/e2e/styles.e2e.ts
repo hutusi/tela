@@ -38,7 +38,7 @@ test.describe('stylesheet', () => {
 
     // Ink in every state: the design carries the active pill on its background alone, so a colour
     // difference here would be a second signal for the same thing.
-    for (const key of ['reading', 'discover', 'dashboard', 'settings']) {
+    for (const key of ['reading', 'discover']) {
       const pill = page.getByTestId(`nav-${key}`)
       expect(await colour(pill), key).toBe(INK)
       expect(await decoration(pill), key).toBe('none')
@@ -105,14 +105,22 @@ test.describe('stylesheet', () => {
         const doc = document.documentElement
         const nav = document.querySelector('header nav') as HTMLElement
         const pill = nav.querySelector('a') as HTMLElement
+        const account = (
+          document.querySelector('[data-testid="account-menu"]') as HTMLElement
+        ).getBoundingClientRect()
         return {
           overflow: doc.scrollWidth - doc.clientWidth,
           client: nav.clientWidth,
           scroll: nav.scrollWidth,
           pill: Math.round(pill.getBoundingClientRect().width),
+          account: { width: Math.round(account.width), right: account.right },
+          viewport: doc.clientWidth,
         }
       })
       expect(m.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)
+      // The one way to Settings, the Dashboard and signing out: whole, and on screen.
+      expect(m.account.width, 'account menu squeezed').toBe(30)
+      expect(m.account.right, 'account menu off screen').toBeLessThanOrEqual(m.viewport)
       // The pill row may scroll here; being squeezed below one pill is the failure. There is no
       // other route to Dashboard or Settings, and a 4px nav — which is what main renders at 768 —
       // leaves nothing to grab and nothing to read.

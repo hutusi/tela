@@ -12,7 +12,10 @@
     "signOut": "退出登录",
     "addFeed": "+ 添加订阅",
     "dashboard": "仪表盘",
-    "settings": "设置"
+    "settings": "设置",
+    "account": "你的账户",
+    "yourProfile": "我的主页",
+    "subscriptions": "订阅"
   },
   "home": {
     "title": "独立博客，任何语言。",

@@ -66,9 +66,16 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 ## Layout rules
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
-  Reading/Discover/Dashboard/Settings pills, search, Read-in menu, locale switcher, avatar (accent
-  circle with initial, links to the profile) and sign-out. Pills are ink in every state: the active
-  one is distinguished by its `hover` background alone, never by colour.
+  Reading/Discover pills, search, Read-in menu, locale switcher, and the member's avatar (accent
+  circle with initial, 30px). Pills are ink in every state: the active one is distinguished by its
+  `hover` background alone, never by colour.
+- The avatar opens the account menu (Tela v2): a 220px `surface` panel under it with the member's
+  name and @handle, then Your profile, Subscriptions (`/settings/subscriptions`), Dashboard,
+  Settings, a rule, and Sign out in `muted`. A disclosure, not an ARIA menu: Tab reaches its items.
+  Esc closes it and returns focus to the avatar, before the reader's own Esc can close an article;
+  a click elsewhere or any navigation closes it too. The avatar is `shrink-0` at every width,
+  since it is the only way to Settings, the Dashboard and signing out, and `styles.e2e.ts` holds it
+  to 30px on screen at every header breakpoint.
 - The header holds more controls than a narrow viewport fits, so it arrives in three stages:
   compact below `lg` (mark only, `gap-2.5`, search as a 34px link to `/search`), the wordmark and
   the wider desktop spacing at `lg`, the 240px search field at `xl`. Turning the wordmark and the

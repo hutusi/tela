@@ -113,3 +113,25 @@ test('? lists the keys; Esc in a popover closes the popover, not the article', a
   await expect(page.getByTestId('reader')).toBeVisible()
   await expect(page).toHaveURL(/article=\d+/)
 })
+
+test('Esc in the account menu closes the menu, not the article, and gives the avatar focus', async ({
+  page,
+}) => {
+  await page.goto('/reading')
+  await synced(page)
+  await page.getByTestId('article-row').first().click()
+  await expect(page.getByTestId('reader')).toBeVisible()
+  const button = page.getByTestId('account-menu')
+  await button.click()
+  await expect(page.getByTestId('account-panel')).toBeVisible()
+  await expect(button).toHaveAttribute('aria-expanded', 'true')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('account-panel')).toHaveCount(0)
+  await expect(page.getByTestId('reader')).toBeVisible()
+  await expect(page).toHaveURL(/article=\d+/)
+  await expect(button).toBeFocused()
+  // A click elsewhere closes it too.
+  await button.click()
+  await page.getByTestId('sidebar').getByText('Library').click()
+  await expect(page.getByTestId('account-panel')).toHaveCount(0)
+})

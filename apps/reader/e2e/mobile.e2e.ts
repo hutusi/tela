@@ -31,4 +31,17 @@ test.describe('mobile fallback', () => {
     await expect(page.getByTestId('article-list')).toBeVisible()
     await expect(page.getByTestId('mobile-nav')).toBeVisible()
   })
+
+  test('the account menu opens on a phone, and holds the way to Settings', async ({ page }) => {
+    await page.goto('/reading')
+    await page.getByTestId('account-menu').click()
+    const panel = page.getByTestId('account-panel')
+    await expect(panel).toBeVisible()
+    const box = await panel.boundingBox()
+    const width = page.viewportSize()?.width ?? 0
+    expect(box && box.x >= 0 && box.x + box.width <= width, 'menu inside the screen').toBe(true)
+    await page.getByTestId('nav-settings').click()
+    await expect(page).toHaveURL(/\/settings$/)
+    await expect(panel).toHaveCount(0)
+  })
 })

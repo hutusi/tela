@@ -12,7 +12,10 @@
     "signOut": "Sign out",
     "addFeed": "+ Add a feed",
     "dashboard": "Dashboard",
-    "settings": "Settings"
+    "settings": "Settings",
+    "account": "Your account",
+    "yourProfile": "Your profile",
+    "subscriptions": "Subscriptions"
   },
   "home": {
     "title": "Independent blogs, in any language.",

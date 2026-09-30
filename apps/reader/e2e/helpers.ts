@@ -106,6 +106,12 @@ export function keepCycling(page: Page, everyMs = 1000): () => void {
   }
 }
 
+/** Open the account menu under the avatar and choose one of its items (Tela v2). */
+export async function fromAccountMenu(page: Page, item: string): Promise<void> {
+  await page.getByTestId('account-menu').click()
+  await page.getByTestId(item).click()
+}
+
 /** Wait until the page's first sync has landed: the sidebar lists the subscriptions. */
 export async function synced(page: Page): Promise<void> {
   await page.getByTestId('subscription').first().waitFor()

@@ -5,7 +5,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
-import { BASE, FIXTURES, keepCycling, memberHeaders, synced } from './helpers'
+import { BASE, FIXTURES, fromAccountMenu, keepCycling, memberHeaders, synced } from './helpers'
 
 test.describe('for a visitor', () => {
   test.use({ storageState: { cookies: [], origins: [] }, javaScriptEnabled: false })
@@ -133,14 +133,14 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     // The profile is public data from the server: let the push land first.
     await page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
 
-    await page.getByTestId('nav-profile').click()
+    await fromAccountMenu(page, 'nav-profile')
     await expect(page).toHaveURL(/\/@[a-z0-9_]+$/)
     const recs = page.getByTestId('profile-recommendations')
     await expect(recs).toContainText(title.slice(0, 20))
     await expect(recs).toContainText('Worth your time')
 
     // The member claimed the fixture site earlier, so the note reaches the dashboard.
-    await page.getByTestId('nav-dashboard').click()
+    await fromAccountMenu(page, 'nav-dashboard')
     await expect(page.getByTestId('dashboard-site')).toHaveCount(1)
     await expect(page.getByTestId('dashboard-notes')).toContainText('Worth your time')
     await expect(page.getByTestId('dashboard-post').first()).toBeVisible()

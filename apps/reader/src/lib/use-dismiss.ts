@@ -7,7 +7,8 @@ import { type RefObject, useEffect, useRef } from 'react'
 
 export function useDismiss(
   open: boolean,
-  close: () => void,
+  /** Esc says so: a keyboard close hands focus back to the button, a click elsewhere keeps it. */
+  close: (by: 'escape' | 'outside') => void,
   box: RefObject<HTMLElement | null>,
 ): void {
   // The latest close, without re-listening every render for a new closure.
@@ -16,12 +17,12 @@ export function useDismiss(
   useEffect(() => {
     if (!open) return
     const outside = (e: MouseEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) latest.current()
+      if (box.current && !box.current.contains(e.target as Node)) latest.current('outside')
     }
     const onEscape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.preventDefault()
-      latest.current()
+      latest.current('escape')
     }
     document.addEventListener('mousedown', outside)
     document.addEventListener('keydown', onEscape, true)
