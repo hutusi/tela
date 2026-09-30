@@ -1,7 +1,7 @@
 # 0019 — Block-paired bilingual reading
 
 Status: accepted (2026-09-19). Works within ADR 0016's render budget and ADR 0017's URL rule;
-amends neither.
+amends neither. Its two-column threshold moved from 1080px to 1040px in 0030.
 
 ## Context
 

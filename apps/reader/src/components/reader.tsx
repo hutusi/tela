@@ -238,7 +238,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
           highlight toolbar and note stay outside it, or they would be placed within this column. */}
       <div className="@container">
         <div
-          className={`mx-auto max-w-(--reader-measure) ${twoCols ? '@min-[1080px]:max-w-[1240px]' : ''}`}
+          className={`mx-auto max-w-(--reader-measure) ${twoCols ? '@min-[1040px]:max-w-[1240px]' : ''}`}
         >
           <div className="mb-3.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] text-muted">
             <Swatch id={article.feedId} title={name} size={22} />

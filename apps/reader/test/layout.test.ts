@@ -130,13 +130,13 @@ describe('the panes this device shows', () => {
 })
 
 describe('the grid', () => {
-  test('loses the sidebar column with the sidebar, and narrows the list while an article is open', () => {
+  test('narrows the sidebar column to the rail, and the list while an article is open', () => {
     const shown = { sidebar: 'shown', focus: 'off' } as const
     const hidden = { sidebar: 'hidden', focus: 'off' } as const
     expect(gridColumns(false, shown)).toBe('lg:grid-cols-[220px_minmax(280px,380px)_minmax(0,1fr)]')
     expect(gridColumns(true, shown)).toBe('lg:grid-cols-[220px_260px_minmax(0,1fr)]')
-    expect(gridColumns(false, hidden)).toBe('lg:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]')
-    expect(gridColumns(true, hidden)).toBe('lg:grid-cols-[260px_minmax(0,1fr)]')
+    expect(gridColumns(false, hidden)).toBe('lg:grid-cols-[48px_minmax(280px,380px)_minmax(0,1fr)]')
+    expect(gridColumns(true, hidden)).toBe('lg:grid-cols-[48px_260px_minmax(0,1fr)]')
   })
 
   test('in focus an open article has the grid to itself, and a closed one does not', () => {

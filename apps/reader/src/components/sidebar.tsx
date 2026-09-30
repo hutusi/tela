@@ -2,7 +2,7 @@ import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { type ReadingParams, readingHref } from '../lib/href'
 import type { Filter, SubscriptionItem, Totals } from '../store/selectors'
-import { SidebarToggle } from './sidebar-toggle'
+import { SidebarToggle, TOGGLE_ROW } from './sidebar-toggle'
 import { Swatch } from './swatch'
 
 type Props = { subscriptions: SubscriptionItem[]; totals: Totals; params: ReadingParams }
@@ -24,12 +24,15 @@ export function Sidebar({ subscriptions, totals, params }: Props) {
     )
   }
   return (
-    <aside className="hidden flex-col border-r border-line px-3.5 pb-5 lg:sticky lg:top-14 lg:flex lg:h-[calc(100vh-56px)] lg:overflow-auto">
+    <aside
+      data-testid="sidebar"
+      className="hidden flex-col border-r border-line px-3.5 pb-5 lg:sticky lg:top-14 lg:flex lg:h-[calc(100vh-56px)] lg:overflow-auto"
+    >
       {/* "Library" at the headings' indent, and the icon's right edge on the counts' (pr-0.5 plus
-          the button's px-2.5 makes their px-3). Sticky as a child of the aside itself, the
-          scroller, so a long list never scrolls the toggle away; it carries the top padding the
-          aside dropped, so it looks the same stuck or at rest. */}
-      <div className="sticky top-0 z-[1] flex items-center justify-between bg-paper pb-2.5 pl-3 pr-0.5 pt-5">
+          the button's px-2.5 makes their px-3). A child of the aside itself, the scroller, so it
+          can stick; it carries the top padding the aside dropped, so it looks the same stuck or
+          at rest. */}
+      <div className={`${TOGGLE_ROW} justify-between pl-3 pr-0.5`}>
         <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
           {t('library')}
         </span>

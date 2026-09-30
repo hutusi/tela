@@ -87,11 +87,10 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   row measures 335px on macOS and 341px in CI's Linux Chromium.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
-  list are sticky and scroll independently. The sidebar hides from a toggle in its own header and
-  comes back from one at the head of the list (`[` does both), and the grid drops its first
-  column with it. Focus (`f`, or
-  the button beside Close) hides the list as well while an article is open, which then has the
-  grid to itself; closing brings the list back. The list stays mounted, taken out of the grid by
+  list are sticky and scroll independently. The sidebar collapses to a 48px rail from a toggle in
+  its own header, and the rail's toggle expands it again (`[` does both). Focus (`f`, or
+  the button beside Close) hides the list and the sidebar or rail while an article is open,
+  which then has the grid to itself; closing brings the list back. The list stays mounted, taken out of the grid by
   an unlayered rule in `styles.css` (a `lg:hidden` would fight its own
   `lg:group-data-[open=1]:block`), so its page of rows and its scroll survive and Esc still finds
   the row it closed. Which panes show is this device's choice, kept in localStorage rather than
@@ -101,8 +100,9 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   fallback: list → article as a page). Mobile is a fallback, not a design; `mobile.e2e.ts` keeps
   it working.
 - Side by side is a container query on the reader pane, not a viewport breakpoint: two columns of
-  640px appear once the pane itself is 1080px, which is about a 1624px viewport after the sidebar
-  and list have taken 480, 1404px once the sidebar is hidden, and 1144px in focus — which is why
+  up to 640px appear once the pane itself is 1040px (500px a column, ADR 0030), which is about a
+  1584px viewport after the sidebar and list have taken 480, 1412px with the sidebar collapsed to
+  its rail, and 1104px in focus — which is why
   a 13" or 14" laptop wants the toggle and a 1280px window wants focus; `layout.e2e.ts` measures
   both. Below that the same grid is one column
   and the pairs interleave — a source paragraph, its translation, the next paragraph — at the full
@@ -207,17 +207,20 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - **Width:** 560 / 640 / 760 px for the single column, and for a stacked pair. Two paired
     columns keep their own 640px measure.
   - **Theme:** Auto / Light / Dark.
-- **The sidebar toggle** heads the sidebar while it is shown: a "Library" label in the
-  small-caps heading style at the headings' indent, and the toggle at the row's right end, its
-  icon on the counts' right edge. The row is sticky, so a long list never scrolls it away. While
-  the sidebar is hidden the toggle heads the list instead, left of its title. There is no
-  collapsed strip to keep it in one place: with the sidebar hidden, a 1440px window's pane has a
-  1116px content box (1101 with a 15px scrollbar) against the 1080 that side by side needs, so a
-  strip wide enough for the button would give back the two columns that hiding the sidebar is
-  for. A toggle that had focus hands it to the one in the other place. The glyph is a 16px panel
-  drawn inline (Tela has no icon set), its left third shaded while the sidebar is shown, in the
-  quiet button style, with `aria-expanded` for its state. From `lg` only; below it `MobileNav`
-  holds the filters.
+- **The sidebar toggle** heads the sidebar under a "Library" label, in the small-caps heading
+  style at the headings' indent, with the toggle at the row's right end and its icon on the
+  counts' right edge. The glyph is a 16px panel drawn inline (Tela has no icon set), its left
+  third shaded while the sidebar is shown, in the quiet button style, with `aria-expanded` for
+  its state. A toggle that had focus hands it to the one in the other state.
+- **The rail** is the sidebar collapsed (ADR 0030), 48px wide. From the top: the toggle, on the
+  Library row's line so that it only moves sideways between states; a divider; All, Today and
+  Liked as 36px icon links (three lines, a ring with a dot and a heart, drawn like the panel);
+  another divider; then a 24px swatch per feed, with the list's accent dot at its top-right while
+  the feed has unread posts. Names live in each link's label and tooltip. The active item has the
+  `hover` ground. Both toggle rows share one sticky box (`TOGGLE_ROW`), so neither scrolls away,
+  and the rail scrolls with no scrollbar, which would take a third of its width. 48px, not the
+  60 the design drew, because 60 would put a 1440px window under the side-by-side threshold. The
+  sidebar and the rail exist from `lg` only; below it `MobileNav` holds the filters.
 - **Focus** sits beside `✕ Close` in the action row: one label, `aria-pressed` and the `hover`
   ground while it is on, as a toggle button has. From `lg` only, since below it the list already
   gives way to the article. Both are device state (ADR 0029).

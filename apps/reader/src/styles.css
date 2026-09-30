@@ -313,10 +313,10 @@
  * Paired bilingual body (`PairedBody`): one grid row per top-level block, original first.
  *
  * Stacked is the base case and two columns are the override, because two columns need the pane's
- * content box to be 1080px — about a 1624px window once the sidebar and list have taken 480,
- * 1404px with the sidebar hidden and 1144px in focus (ADR 0029) — and below that the same DOM
- * reads as an interleave at the member's measure. The old layout turned two columns on at a
- * 1280px *viewport*, which left 348px per column.
+ * content box to be 1040px, 500px a column — about a 1584px window once the sidebar and list have
+ * taken 480, 1412px with the sidebar collapsed to its rail and 1104px in focus (ADR 0030) — and
+ * below that the same DOM reads as an interleave at the member's measure. The old layout turned
+ * two columns on at a 1280px *viewport*, which left 348px per column.
  *
  * Unlayered like everything else in this file, so no Tailwind utility can quietly outrank it.
  */
@@ -367,7 +367,7 @@
   color: var(--color-muted);
 }
 
-@container (min-width: 1080px) {
+@container (min-width: 1040px) {
   /* Rows are contiguous, so stretching each source cell tiles the tint into one continuous band
      down the second column rather than a stack of rectangles. Only the two ends of that band
      need the padding and the rounding a stacked panel has on all four sides. */

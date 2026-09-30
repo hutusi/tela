@@ -32,39 +32,69 @@ const firstPair = (page: Page) =>
     }
   })
 
-test('the sidebar hides from its own header, and stays hidden on this device', async ({ page }) => {
+test('the sidebar collapses to its rail, and stays collapsed on this device', async ({ page }) => {
   await page.goto('/reading')
   await synced(page)
   const layout = page.getByTestId('reading-layout')
-  const aside = page.locator('aside')
-  const list = page.getByTestId('article-list')
+  const sidebar = page.getByTestId('sidebar')
+  const rail = page.getByTestId('sidebar-rail')
   const toggle = page.getByTestId('sidebar-toggle')
   await expect(layout).toHaveAttribute('data-sidebar', 'shown')
-  // Shown, the toggle heads the sidebar it hides, and the list has none of its own.
-  await expect(aside.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'true')
-  await expect(list.getByTestId('sidebar-toggle')).toHaveCount(0)
+  await expect(sidebar.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'true')
+  await expect(rail).toHaveCount(0)
+  const top = (await toggle.boundingBox())?.y ?? Number.NaN
 
   await toggle.click()
-  await expect(aside).toHaveCount(0)
+  await expect(sidebar).toHaveCount(0)
   await expect(layout).toHaveAttribute('data-sidebar', 'hidden')
-  // Hidden, it heads the list, which took the sidebar's column: nothing is left of it.
-  await expect(list.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false')
-  expect((await list.boundingBox())?.x).toBe(0)
+  // The rail keeps 48px of the column, and the toggle heads it on the Library row's line: between
+  // the two states it only moves sideways.
+  await expect(rail.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false')
+  expect((await rail.boundingBox())?.width).toBe(48)
+  expect((await page.getByTestId('article-list').boundingBox())?.x).toBe(48)
+  expect(Math.abs(((await toggle.boundingBox())?.y ?? Number.NaN) - top)).toBeLessThan(1)
 
   // Remembered on this device, with no round trip to wait for: the next visit reads it back.
   await page.reload()
   await expect(layout).toHaveAttribute('data-sidebar', 'hidden')
-  await expect(aside).toHaveCount(0)
+  await expect(rail).toBeVisible()
+  await expect(sidebar).toHaveCount(0)
 
   await toggle.click()
-  await expect(aside).toBeVisible()
+  await expect(sidebar).toBeVisible()
+  await expect(rail).toHaveCount(0)
   await expect(layout).toHaveAttribute('data-sidebar', 'shown')
+})
+
+test('the rail keeps the filters and the feeds', async ({ page }) => {
+  await page.goto('/reading')
+  await synced(page)
+  await page.getByTestId('sidebar-toggle').click()
+  const rail = page.getByTestId('sidebar-rail')
+  const all = rail.getByRole('link', { name: 'All articles', exact: true })
+  const today = rail.getByRole('link', { name: 'Today', exact: true })
+  await expect(all).toHaveAttribute('aria-current', 'page')
+
+  await today.click()
+  await expect(page).toHaveURL(/filter=today/)
+  await expect(today).toHaveAttribute('aria-current', 'page')
+  await expect(all).not.toHaveAttribute('aria-current')
+
+  // A feed is its swatch, named in its label and tooltip, with the list's dot while it has unread.
+  const feed = rail.getByRole('link', { name: /^Julia Evans · \d+ unread$/ })
+  await expect(feed.getByTestId('rail-unread')).toBeVisible()
+  await expect(feed).toHaveAttribute('title', /^Julia Evans · \d+ unread$/)
+  await feed.click()
+  await expect(page).toHaveURL(/feed=\d+/)
+  await expect(feed).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByTestId('article-list').locator('h1')).toHaveText('Julia Evans')
+  await expect(page.getByTestId('sidebar')).toHaveCount(0)
 })
 
 /** Where the sidebar's header sits against what is under it, in viewport pixels. */
 const header = (page: Page) =>
   page.evaluate(() => {
-    const aside = document.querySelector('aside')
+    const aside = document.querySelector('[data-testid="sidebar"]')
     if (!aside) return null
     // Where a heading's words start, not its box, which the padding puts at the aside's edge.
     const textLeft = (text: string) => {
@@ -107,7 +137,7 @@ test('the sidebar header lines up with the rows under it, and stays as they scro
   // Scrolled to its end, the toggle is where it was: the header is sticky, and its top padding is
   // its own, so it reads the same stuck as at rest.
   expect(before.overflows, 'the aside does not scroll at this height').toBe(true)
-  await page.locator('aside').evaluate((el) => {
+  await page.getByTestId('sidebar').evaluate((el) => {
     el.scrollTop = el.scrollHeight
   })
   const after = await header(page)
@@ -122,34 +152,37 @@ test('a toggle that had focus keeps it in its other place', async ({ page }) => 
   // Each state has its own toggle, so the one pressed is gone once it has done its work.
   await page.goto('/reading')
   await synced(page)
-  const list = page.getByTestId('article-list')
+  const sidebar = page.getByTestId('sidebar')
+  const rail = page.getByTestId('sidebar-rail')
   await page.getByTestId('sidebar-toggle').focus()
   await page.keyboard.press('Enter')
-  await expect(page.locator('aside')).toHaveCount(0)
-  await expect(list.getByTestId('sidebar-toggle')).toBeFocused()
+  await expect(sidebar).toHaveCount(0)
+  await expect(rail.getByTestId('sidebar-toggle')).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page.locator('aside').getByTestId('sidebar-toggle')).toBeFocused()
+  await expect(sidebar.getByTestId('sidebar-toggle')).toBeFocused()
   // [ from the toggle hands it on too.
   await page.keyboard.press('[')
-  await expect(list.getByTestId('sidebar-toggle')).toBeFocused()
+  await expect(rail.getByTestId('sidebar-toggle')).toBeFocused()
 })
 
 test('[ toggles the sidebar, and ? lists it', async ({ page }) => {
   await page.goto('/reading')
   await synced(page)
   await page.keyboard.press('[')
-  await expect(page.locator('aside')).toHaveCount(0)
+  await expect(page.getByTestId('sidebar')).toHaveCount(0)
+  await expect(page.getByTestId('sidebar-rail')).toBeVisible()
   await page.keyboard.press('[')
-  await expect(page.locator('aside')).toBeVisible()
+  await expect(page.getByTestId('sidebar')).toBeVisible()
+  await expect(page.getByTestId('sidebar-rail')).toHaveCount(0)
   await page.keyboard.press('?')
   await expect(page.getByTestId('shortcuts')).toContainText('[')
 })
 
-test('hiding the sidebar is what gives a 1440px window its two bilingual columns', async ({
+test('collapsing the sidebar to its rail is what gives a 1440px window its two columns', async ({
   page,
 }) => {
   // A 13" or 14" MacBook window. The sidebar and the list take 480px, so the pane is 960px and
-  // its content box 896, short of the 1080 the paired body asks for: the pairs interleave.
+  // its content box 896, short of the 1040 the paired body asks for: the pairs interleave.
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/reading')
   await synced(page)
@@ -161,8 +194,8 @@ test('hiding the sidebar is what gives a 1440px window its two bilingual columns
   const stacked = await firstPair(page)
   expect(stacked.t.top, 'stacked while the sidebar is shown').toBeGreaterThan(stacked.o.top)
 
-  // Without the sidebar the pane is 1180px: two columns of (1116 − 40) / 2 = 538px, or ~530 in
-  // CI's Linux Chromium with its 15px scrollbar. 500 is the floor styles.e2e.ts holds the pair to.
+  // With the 48px rail the pane is 1132px: two columns of (1068 − 40) / 2 = 514px, or ~506 in CI's
+  // Linux Chromium with its 15px scrollbar, over the 500 styles.e2e.ts holds the pair to (ADR 0030).
   await page.getByTestId('sidebar-toggle').click()
   await expect
     .poll(async () => {
@@ -172,8 +205,8 @@ test('hiding the sidebar is what gives a 1440px window its two bilingual columns
     .toBeLessThan(4)
   const paired = await firstPair(page)
   expect(paired.o.left, 'the original is not the left-hand column').toBeLessThan(paired.t.left)
-  expect(paired.t.width, 'translation column is cramped').toBeGreaterThanOrEqual(520)
-  expect(paired.o.width, 'original column is cramped').toBeGreaterThanOrEqual(520)
+  expect(paired.t.width, 'translation column is cramped').toBeGreaterThanOrEqual(500)
+  expect(paired.o.width, 'original column is cramped').toBeGreaterThanOrEqual(500)
   expect(paired.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)
 })
 
@@ -303,7 +336,7 @@ test('focus hides the list too while an article is open, and j, k and Esc carry 
 
 test('focus is what gives a 1280px window its two bilingual columns', async ({ page }) => {
   // With the sidebar hidden the pane is still 1020px here; only the list going too gets it past
-  // 1080: (1216 − 40) / 2 = 588px columns, ~580 in CI's Linux Chromium.
+  // 1040: (1216 − 40) / 2 = 588px columns, ~580 in CI's Linux Chromium.
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto('/reading')
   await synced(page)
@@ -344,12 +377,13 @@ test('a change made in another tab reaches a tab that was away from the reading 
   await other.goto('/reading')
   await synced(other)
   await other.getByTestId('sidebar-toggle').click()
-  await expect(other.locator('aside')).toHaveCount(0)
+  await expect(other.getByTestId('sidebar-rail')).toBeVisible()
 
   // Back by the header pill: a navigation inside the app, so nothing is reloaded or re-read.
   await page.locator('header nav').getByRole('link', { name: 'Reading' }).click()
   await expect(page).toHaveURL(/\/reading$/)
   await expect(page.getByTestId('reading-layout')).toHaveAttribute('data-sidebar', 'hidden')
-  await expect(page.locator('aside')).toHaveCount(0)
+  await expect(page.getByTestId('sidebar')).toHaveCount(0)
+  await expect(page.getByTestId('sidebar-rail')).toBeVisible()
   await other.close()
 })

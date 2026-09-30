@@ -13,6 +13,7 @@ import { MobileNav } from '../components/mobile-nav'
 import { Reader } from '../components/reader'
 import { Shortcuts } from '../components/shortcuts'
 import { Sidebar } from '../components/sidebar'
+import { SidebarRail } from '../components/sidebar-rail'
 import { toggleSidebarKeepingFocus } from '../components/sidebar-toggle'
 import { ReaderPaneSkeleton } from '../components/skeletons'
 import {
@@ -223,13 +224,16 @@ export function ReadingPage() {
       data-focus={focused ? '1' : undefined}
     >
       {open ? null : <MobileNav subscriptions={subs} totals={counts} params={params} />}
-      {/* Not rendered rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no
-          defined winner (AGENTS.md), and a column that is gone needs no element. The list is the
+      {/* The sidebar, or the rail it collapses to (ADR 0030), and neither in focus. Not rendered
+          rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no defined
+          winner (AGENTS.md), and a column that is gone needs no element. The list is the
           exception: in focus it stays mounted and styles.css takes it out of the grid, so its
           page of rows and its scroll survive and Esc still finds the row it closed. */}
-      {panes.sidebar === 'shown' && !focused ? (
+      {focused ? null : panes.sidebar === 'shown' ? (
         <Sidebar subscriptions={subs} totals={counts} params={params} />
-      ) : null}
+      ) : (
+        <SidebarRail subscriptions={subs} params={params} />
+      )}
       <ArticleList
         items={items}
         params={params}
