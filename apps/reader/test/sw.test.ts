@@ -269,6 +269,28 @@ describe('the app-shell service worker', () => {
     expect(await caches.file(B.js)).toEqual(asBuilt(B, B.js))
   })
 
+  test('a script or stylesheet answered as another type is not kept, and the shell stays', async () => {
+    // Found in review: every wrong answer above is text/html, so nothing showed that the type
+    // must also match the name.
+    for (const wrong of ['js', 'css'] as const) {
+      caches = memoryCaches()
+      const A = build('A')
+      const B = build('B')
+      const path = wrong === 'js' ? B.js : B.css
+      B.files.set(path, { body: 'not what the name says', type: 'text/plain' })
+      live = A
+      const sw = await start()
+      await visit(sw)
+
+      live = B
+      await visit(sw)
+      expect([wrong, await caches.file('/')]).toEqual([wrong, asBuilt(A, '/')])
+      expect(await caches.file(path)).toBeNull()
+      await dispatch(sw, request(path)).response
+      expect(await caches.file(path)).toBeNull()
+    }
+  })
+
   test('two deploys: the shell cached last boots from the cache, the next one replaces it, the first goes', async () => {
     const A = build('A', 'figtree-1')
     const B = build('B', 'figtree-2')
