@@ -66,8 +66,8 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 ## Layout rules
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
-  Reading/Discover pills, search, Read-in menu, locale switcher, and the member's avatar (accent
-  circle with initial, 30px). Pills are ink in every state: the active one is distinguished by its
+  Reading/Discover/Following pills (Following for members), search, Read-in menu, locale
+  switcher, and the member's avatar (accent circle with initial, 30px). Pills are ink in every state: the active one is distinguished by its
   `hover` background alone, never by colour.
 - The avatar opens the account menu (Tela v2): a 220px `surface` panel under it with the member's
   name and @handle, then Your profile, Subscriptions (`/settings/subscriptions`), Dashboard,
@@ -177,6 +177,16 @@ serif, then the blog's swatch, name and language badge ("JA → EN" when the pag
 title in the reader's language) and the title; the whole post is the link. Subscriptions are a
 grid of cards. The page is edge-cached, so the member's own follow moves the followers count on
 their screen at once, and their own following count comes from their device.
+
+Following (`/following`, Tela v2): a 1120 px page, the feed beside a 280 px aside (sticky from
+`lg`, below the feed on narrower screens). The serif heading and a one-line intro, then underlined
+tabs All / Recommendations / Likes as addresses. Each item is a 40 px avatar beside "**Name**
+verb · 2h ago": a recommendation brings its note in 21 px italic serif and a post card (blog
+swatch, name and "JA → EN", a 23 px serif title, two lines of excerpt, minutes, ♡, "Read →"); a
+day's likes are one card listing the posts; a day's new subscriptions are blog cards with
+Subscribe. Items are grouped by the viewer's local day and paged a fortnight at a time behind
+"Older activity". The aside lists the people followed (from the device, no request) and a few
+readers to follow, drawn only from what is public. No toasts: a Follow button changes at once.
 
 Dashboard reuses the header and a single 720–960 px column with `font-serif` headings; there is no
 dedicated design for it, so it follows the Discover page's spacing and the site card's chips.

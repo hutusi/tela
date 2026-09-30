@@ -9,6 +9,7 @@ import { AddPage } from './pages/add'
 import { ClaimPage, ClaimSitePage } from './pages/claim'
 import { DashboardPage } from './pages/dashboard'
 import { DiscoverPage } from './pages/discover'
+import { FollowingPage } from './pages/following'
 import { LandingPage } from './pages/landing'
 import { LoginPage } from './pages/login'
 import { NotFoundPage } from './pages/not-found'
@@ -95,6 +96,14 @@ function Routed() {
                       }
                     />
                     <Route path="/discover" element={<DiscoverPage />} />
+                    <Route
+                      path="/following"
+                      element={
+                        <Members>
+                          <FollowingPage />
+                        </Members>
+                      }
+                    />
                     <Route path="/s/:siteId" element={<SitePage />} />
                     <Route
                       path="/search"

@@ -237,7 +237,8 @@ A Vite + React SPA that renders from the device.
 | `/` | Landing for visitors; members go to `/reading` |
 | `/login` | Email code, and the mail's link that submits the same code |
 | `/reading?filter=&feed=&article=&mode=` | Sidebar, list and the open article |
-| `/discover?topic=&lang=`, `/s/:id`, `/@handle` | Public pages, rendered at the edge too |
+| `/discover?topic=&lang=`, `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart |
+| `/following?tab=` | What the people a member follows did, by RPC; whom they follow, from the device (ADR 0031) |
 | `/search?q=` | The device first, then blogs and older posts from the server |
 | `/add`, `/claim`, `/sites/:id/claim` | Add feeds and OPML; claim a blog |
 | `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out), Privacy (with "Your data") |

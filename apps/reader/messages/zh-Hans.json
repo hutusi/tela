@@ -6,6 +6,7 @@
   "nav": {
     "reading": "阅读",
     "discover": "发现",
+    "following": "关注",
     "readIn": "阅读语言",
     "search": "搜索博客、文章、人",
     "signIn": "登录",
@@ -222,6 +223,29 @@
       "subscriptions": "订阅"
     },
     "nothing": "这里还什么都没有。"
+  },
+  "following": {
+    "title": "关注",
+    "intro": "你关注的人在读什么、喜欢什么、推荐什么。",
+    "tabs": {
+      "all": "全部",
+      "recs": "推荐",
+      "likes": "喜欢"
+    },
+    "recommended": "推荐了",
+    "liked": "喜欢了 {n} 篇文章",
+    "subscribed": "{n, plural, =1 {订阅了} other {订阅了 {n} 个博客，包括}}",
+    "minutes": "{n} 分钟",
+    "read": "阅读 →",
+    "empty": "这里还没有动态。关注几位读者，看看他们推荐什么。",
+    "failed": "动态没能加载出来。",
+    "retry": "重试",
+    "older": "更早的动态",
+    "peopleYouFollow": "你关注的人",
+    "noOneYet": "还没有。去读者的个人页关注他们。",
+    "readersToFollow": "可以关注的读者",
+    "follow": "关注",
+    "followingButton": "已关注"
   },
   "dashboard": {
     "title": "你的站点",

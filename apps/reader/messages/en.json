@@ -6,6 +6,7 @@
   "nav": {
     "reading": "Reading",
     "discover": "Discover",
+    "following": "Following",
     "readIn": "Read in",
     "search": "Search blogs, articles, people",
     "signIn": "Sign in",
@@ -222,6 +223,29 @@
       "subscriptions": "Subscriptions"
     },
     "nothing": "Nothing to show yet."
+  },
+  "following": {
+    "title": "Following",
+    "intro": "What the people you follow are reading, liking and passing on.",
+    "tabs": {
+      "all": "All",
+      "recs": "Recommendations",
+      "likes": "Likes"
+    },
+    "recommended": "recommended",
+    "liked": "{n, plural, one {liked a post} other {liked # posts}}",
+    "subscribed": "{n, plural, one {subscribed to} other {subscribed to # blogs, including}}",
+    "minutes": "{n} min",
+    "read": "Read →",
+    "empty": "Nothing here yet. Follow a few readers to see what they pass on.",
+    "failed": "The activity could not be loaded.",
+    "retry": "Try again",
+    "older": "Older activity",
+    "peopleYouFollow": "People you follow",
+    "noOneYet": "No one yet. Follow readers from their profiles.",
+    "readersToFollow": "Readers to follow",
+    "follow": "Follow",
+    "followingButton": "Following"
   },
   "dashboard": {
     "title": "Your sites",

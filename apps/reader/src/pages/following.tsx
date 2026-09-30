@@ -1,0 +1,510 @@
+/**
+ * `/following` (Tela v2): what the people the member follows recommended, liked and subscribed to.
+ * Their activity is other members' rows, so it comes by RPC, pages of fourteen local days at a
+ * time (ADR 0031); whom the member follows is their own synced rows, so the aside needs no
+ * network. What a page fetched is held for the visit, so Back is a render.
+ */
+import { languageBadge } from '@tela/shared'
+import type { ArticleRow } from '@tela/sync'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router'
+import { useTranslations } from 'use-intl'
+import { PersonAvatar } from '../components/person-avatar'
+import { SiteAvatar } from '../components/site-avatar'
+import { displayHost, relativeTime, swatchColor } from '../lib/format'
+import { useMemberControls } from '../lib/member'
+import { readingPrefsOf } from '../lib/prefs'
+import { useTitle } from '../lib/title'
+import { apiJson } from '../store/api'
+import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
+import { followedPeople } from '../store/selectors'
+import { useUi } from '../ui'
+import { PostLink } from '../views/post-link'
+import type { MemberControls, Person } from '../views/types'
+
+type Tab = 'all' | 'recs' | 'likes'
+const TABS: Tab[] = ['all', 'recs', 'likes']
+
+type Post = {
+  siteId: number
+  siteTitle: string | null
+  homeUrl: string
+  listed: boolean
+  translatedTitle: string | null
+  translatedExcerpt: string | null
+  article: ArticleRow
+}
+type Site = {
+  id: number
+  title: string | null
+  homeUrl: string
+  description: string | null
+  faviconKey: string | null
+  primaryLang: string | null
+  feedId: number | null
+}
+export type FeedItem =
+  | { kind: 'recommended'; at: number; person: Person; note: string | null; post: Post }
+  | { kind: 'liked'; at: number; person: Person; count: number; posts: Post[] }
+  | { kind: 'subscribed'; at: number; person: Person; count: number; sites: Site[] }
+type Suggested = Person & { bio: string | null }
+type FeedPage = { items: FeedItem[]; next: number | null; suggested: Suggested[] }
+
+type Feed = {
+  status: 'loading' | 'ready' | 'failed'
+  /** Which tab in which language this is, so a refetch after a follow keeps it on screen. */
+  view: string
+  items: FeedItem[]
+  next: number | null
+  suggested: Suggested[]
+}
+
+/** What each tab fetched this visit, by member, tab, language and whom they followed. */
+const held = new Map<string, Feed>()
+
+const loading = (view: string): Feed => ({
+  status: 'loading',
+  view,
+  items: [],
+  next: null,
+  suggested: [],
+})
+
+function useFeed(tab: Tab, lang: string) {
+  const { store } = useStore()
+  const tables = useTables()
+  // A follow or an unfollow changes what the feed holds: fetch again, from the start.
+  const followees = [...tables.follows.keys()].sort().join(',')
+  const view = `${store.userId}:${tab}:${lang}`
+  const key = `${view}:${followees}`
+  const [feed, setFeed] = useState<Feed>(() => held.get(key) ?? loading(view))
+  const [busy, setBusy] = useState(false)
+
+  const fetchPage = useCallback(
+    async (before: number | null): Promise<FeedPage | null> => {
+      const q = new URLSearchParams({
+        tab,
+        lang,
+        tz: String(-new Date().getTimezoneOffset()),
+      })
+      if (before !== null) q.set('before', String(before))
+      try {
+        const { status, body } = await apiJson<FeedPage>(`/api/v1/following?${q}`)
+        return status === 200 ? body : null
+      } catch {
+        return null
+      }
+    },
+    [tab, lang],
+  )
+
+  useEffect(() => {
+    const known = held.get(key)
+    if (known) {
+      setFeed(known)
+      return
+    }
+    let cancelled = false
+    // The same tab after a follow stays on screen until its fresh copy comes; another tab loads.
+    setFeed((shown) => (shown.view === view ? shown : loading(view)))
+    void fetchPage(null).then((page) => {
+      if (cancelled) return
+      const next: Feed = page
+        ? { status: 'ready', view, ...page }
+        : { ...loading(view), status: 'failed' }
+      if (page) held.set(key, next)
+      setFeed(next)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [key, view, fetchPage])
+
+  const more = async () => {
+    if (feed.next === null || busy) return
+    setBusy(true)
+    const page = await fetchPage(feed.next)
+    setBusy(false)
+    if (!page) return
+    const next: Feed = { ...feed, items: [...feed.items, ...page.items], next: page.next }
+    held.set(key, next)
+    setFeed(next)
+  }
+  const retry = () => {
+    held.delete(key)
+    setFeed(loading(view))
+    void fetchPage(null).then((page) => {
+      const next: Feed = page
+        ? { status: 'ready', view, ...page }
+        : { ...loading(view), status: 'failed' }
+      if (page) held.set(key, next)
+      setFeed(next)
+    })
+  }
+  return { feed, more, busy, retry }
+}
+
+export function FollowingPage() {
+  const t = useTranslations('following')
+  const [search] = useSearchParams()
+  const asked = search.get('tab')
+  const tab: Tab = asked === 'recs' || asked === 'likes' ? asked : 'all'
+  const { locale } = useUi()
+  const lang = useReadingLang(locale)
+  const tables = useTables()
+  const { store } = useStore()
+  const member = useMemberControls()
+  const now = useNow()
+  const { feed, more, busy, retry } = useFeed(tab, lang)
+  const never = readingPrefsOf(tables).never
+  const people = followedPeople(tables, (id) => store.person(id))
+  useTitle(t('title'))
+
+  // The people this page shows: a follow from here is named by them until the pull comes.
+  useEffect(() => {
+    store.rememberPeople(feed.suggested)
+    store.rememberPeople(feed.items.map((i) => i.person))
+  }, [feed, store])
+
+  return (
+    <main className="mx-auto grid w-full max-w-[1120px] flex-1 animate-fade grid-cols-1 items-start gap-12 px-4 pt-10 pb-24 md:px-12 md:pt-11 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-16">
+      <div className="min-w-0" data-testid="following-page">
+        <h1 className="m-0 mb-2 font-serif text-[40px] leading-[1.1] font-medium tracking-[-0.015em]">
+          {t('title')}
+        </h1>
+        <p className="mt-0 mb-7 text-[15px] leading-normal text-ink-2">{t('intro')}</p>
+        <nav className="flex gap-6 border-b border-line" aria-label={t('title')}>
+          {TABS.map((k) => (
+            <Link
+              key={k}
+              to={k === 'all' ? '/following' : `/following?tab=${k}`}
+              replace
+              aria-current={k === tab ? 'page' : undefined}
+              className={`-mb-px border-b-2 py-2.5 font-medium hover:text-ink hover:no-underline ${
+                k === tab ? 'border-ink text-ink' : 'border-transparent text-muted'
+              }`}
+              data-testid={`following-tab-${k}`}
+            >
+              {t(`tabs.${k}`)}
+            </Link>
+          ))}
+        </nav>
+        {feed.status === 'loading' ? (
+          <div className="py-12" aria-busy="true" data-testid="following-loading" />
+        ) : feed.status === 'failed' ? (
+          <div className="py-12 text-center text-muted" data-testid="following-failed">
+            <p>{t('failed')}</p>
+            <button type="button" onClick={retry} className="mt-2 underline">
+              {t('retry')}
+            </button>
+          </div>
+        ) : feed.items.length === 0 ? (
+          <p className="py-12 text-center text-muted" data-testid="following-empty">
+            {t('empty')}
+          </p>
+        ) : (
+          <div data-testid="following-items">
+            {feed.items.map((item) => (
+              <Activity
+                key={`${item.kind}:${item.person.id}:${item.at}:${item.kind === 'recommended' ? item.post.article.id : ''}`}
+                item={item}
+                member={member}
+                lang={lang}
+                never={never}
+                locale={locale}
+                now={now}
+              />
+            ))}
+            {feed.next !== null ? (
+              <div className="pt-8 text-center">
+                <button
+                  type="button"
+                  onClick={() => void more()}
+                  disabled={busy}
+                  className="rounded-full border border-thumb px-4 py-2 text-[13px] font-medium text-ink hover:border-ink disabled:opacity-60"
+                  data-testid="following-older"
+                >
+                  {t('older')}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      <aside className="flex flex-col gap-9 lg:sticky lg:top-24">
+        <section className="flex flex-col gap-1" data-testid="people-you-follow">
+          <h2 className="m-0 mb-2 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">
+            {t('peopleYouFollow')}
+          </h2>
+          {people.length === 0 ? (
+            <p className="m-0 text-[13px] text-muted">{t('noOneYet')}</p>
+          ) : (
+            people.map((p) => (
+              <Link
+                key={p.id}
+                to={`/@${p.handle}`}
+                className="-mx-2 flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-ink hover:bg-hover hover:no-underline"
+              >
+                <PersonAvatar handle={p.handle} displayName={p.displayName} size={28} />
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {p.displayName ?? p.handle}
+                </span>
+                <span className="text-[12.5px] text-muted">@{p.handle}</span>
+              </Link>
+            ))
+          )}
+        </section>
+        {feed.suggested.length > 0 && member ? (
+          <section className="flex flex-col gap-4" data-testid="readers-to-follow">
+            <h2 className="m-0 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">
+              {t('readersToFollow')}
+            </h2>
+            {feed.suggested.map((p) => {
+              const on = member.isFollowing(p.id)
+              return (
+                <div key={p.id} className="flex items-start gap-3">
+                  <Link to={`/@${p.handle}`} className="hover:no-underline">
+                    <PersonAvatar handle={p.handle} displayName={p.displayName} size={32} />
+                  </Link>
+                  <div className="min-w-0 flex-1">
+                    <Link to={`/@${p.handle}`} className="font-medium text-ink hover:underline">
+                      {p.displayName ?? `@${p.handle}`}
+                    </Link>
+                    {p.bio ? (
+                      <div className="mt-0.5 line-clamp-2 text-[12.5px] leading-[1.4] text-ink-2">
+                        {p.bio}
+                      </div>
+                    ) : null}
+                  </div>
+                  <FollowButton person={p} on={on} member={member} small />
+                </div>
+              )
+            })}
+          </section>
+        ) : null}
+      </aside>
+    </main>
+  )
+}
+
+function FollowButton({
+  person,
+  on,
+  member,
+  small = false,
+}: {
+  person: Person
+  on: boolean
+  member: MemberControls
+  small?: boolean
+}) {
+  const t = useTranslations('following')
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={() => member.setFollowing(person, !on)}
+      className={`shrink-0 rounded-full border font-medium whitespace-nowrap ${
+        small ? 'px-[11px] py-1 text-[12px]' : 'px-3.5 py-1.5 text-[13px]'
+      } ${on ? 'border-thumb text-ink-2' : 'border-ink bg-ink text-paper'}`}
+      data-testid="follow-suggested"
+    >
+      {on ? t('followingButton') : t('follow')}
+    </button>
+  )
+}
+
+/** A post's title as the member reads it: translated unless its language is one they read. */
+function titleOf(post: Post, lang: string, never: readonly string[]) {
+  const source = post.article.sourceLang
+  const translate = source !== null && source !== lang && !never.includes(source)
+  const title = translate ? (post.translatedTitle ?? post.article.title) : post.article.title
+  const excerpt = translate
+    ? (post.translatedExcerpt ?? post.article.excerpt)
+    : post.article.excerpt
+  const badge =
+    translate && post.translatedTitle ? `${languageBadge(source)} → ${languageBadge(lang)}` : null
+  return { title, excerpt, badge }
+}
+
+function Activity({
+  item,
+  member,
+  lang,
+  never,
+  locale,
+  now,
+}: {
+  item: FeedItem
+  member: MemberControls | undefined
+  lang: string
+  never: readonly string[]
+  locale: string
+  now: number
+}) {
+  const t = useTranslations('following')
+  const { person } = item
+  const profile = `/@${person.handle}`
+  const verb =
+    item.kind === 'recommended'
+      ? t('recommended')
+      : item.kind === 'liked'
+        ? t('liked', { n: item.count })
+        : t('subscribed', { n: item.count })
+  return (
+    <article
+      className="grid animate-fade grid-cols-[40px_minmax(0,1fr)] gap-4 border-b border-line py-7"
+      data-testid="following-item"
+      data-kind={item.kind}
+    >
+      <Link to={profile} className="hover:no-underline" aria-hidden="true" tabIndex={-1}>
+        <PersonAvatar handle={person.handle} displayName={person.displayName} size={40} />
+      </Link>
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className="flex flex-wrap items-baseline gap-1.5 pt-0.5 text-[14px]">
+          <Link to={profile} className="font-semibold text-ink hover:underline">
+            {person.displayName ?? `@${person.handle}`}
+          </Link>
+          <span className="text-ink-2">{verb}</span>
+          <span className="text-muted">· {relativeTime(item.at, locale, now)}</span>
+        </div>
+        {item.kind === 'recommended' ? (
+          <>
+            {item.note ? (
+              <p
+                className="m-0 font-serif text-[21px] leading-[1.4] italic"
+                style={{ textWrap: 'pretty' }}
+                data-testid="following-note"
+              >
+                “{item.note}”
+              </p>
+            ) : null}
+            <PostCard post={item.post} member={member} lang={lang} never={never} />
+          </>
+        ) : item.kind === 'liked' ? (
+          <ul className="m-0 flex list-none flex-col overflow-hidden rounded-xl border border-line bg-surface p-0">
+            {item.posts.map((post, i) => {
+              const source = post.siteTitle ?? displayHost(post.homeUrl)
+              return (
+                <li
+                  key={post.article.id}
+                  className={`relative flex min-w-0 items-center gap-3 px-[18px] py-[13px] hover:bg-paper ${i > 0 ? 'border-t border-line' : ''}`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="size-2.5 shrink-0 rounded-[3px]"
+                    style={{ background: swatchColor(post.article.feedId) }}
+                  />
+                  <PostLink
+                    article={post.article}
+                    source={source}
+                    member={member}
+                    className="min-w-0 flex-1 truncate font-serif text-[18px] text-ink after:absolute after:inset-0 hover:no-underline"
+                  >
+                    {titleOf(post, lang, never).title}
+                  </PostLink>
+                  <span className="text-[12.5px] whitespace-nowrap text-muted">{source}</span>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {item.sites.map((site) => (
+              <SiteRow key={site.id} site={site} member={member} />
+            ))}
+          </div>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function PostCard({
+  post,
+  member,
+  lang,
+  never,
+}: {
+  post: Post
+  member: MemberControls | undefined
+  lang: string
+  never: readonly string[]
+}) {
+  const t = useTranslations('following')
+  const source = post.siteTitle ?? displayHost(post.homeUrl)
+  const { title, excerpt, badge } = titleOf(post, lang, never)
+  return (
+    <div className="relative flex flex-col gap-2 rounded-xl border border-line bg-surface px-5 py-[18px] transition-colors hover:border-muted">
+      <div className="flex items-center gap-2 text-[12.5px] text-muted">
+        <span
+          aria-hidden="true"
+          className="flex size-4 items-center justify-center rounded text-[9px] font-semibold text-white"
+          style={{ background: swatchColor(post.article.feedId) }}
+        >
+          {source.charAt(0).toUpperCase()}
+        </span>
+        <span className="font-medium text-ink">{source}</span>
+        {badge ? (
+          <span className="rounded border border-line px-[5px] text-[10.5px]">{badge}</span>
+        ) : null}
+      </div>
+      <h3 className="m-0 font-serif text-[23px] leading-[1.2] font-medium tracking-[-0.005em]">
+        <PostLink
+          article={post.article}
+          source={source}
+          member={member}
+          className="text-ink after:absolute after:inset-0 hover:no-underline"
+        >
+          {title}
+        </PostLink>
+      </h3>
+      {excerpt ? (
+        <p className="m-0 line-clamp-2 font-serif text-[16.5px] leading-[1.45] text-ink-2">
+          {excerpt}
+        </p>
+      ) : null}
+      <div className="mt-0.5 flex gap-3 text-[12px] text-muted">
+        <span>{t('minutes', { n: post.article.readingMinutes || 1 })}</span>
+        <span>♡ {post.article.likeCount}</span>
+        <span className="flex-1" />
+        <span className="font-medium text-ink">{t('read')}</span>
+      </div>
+    </div>
+  )
+}
+
+function SiteRow({ site, member }: { site: Site; member: MemberControls | undefined }) {
+  const td = useTranslations('discover')
+  const title = site.title ?? displayHost(site.homeUrl)
+  const subscribed = site.feedId !== null && member?.isSubscribed(site.feedId) === true
+  return (
+    <div className="flex flex-wrap items-center gap-3.5 rounded-xl border border-line bg-surface px-[18px] py-4">
+      <SiteAvatar id={site.id} title={title} faviconKey={site.faviconKey} size={40} />
+      <div className="min-w-[180px] flex-1">
+        <Link to={`/s/${site.id}`} className="font-medium text-ink hover:underline">
+          {title}
+        </Link>
+        {site.description ? (
+          <div className="mt-0.5 line-clamp-2 font-serif text-[16px] text-ink-2">
+            {site.description}
+          </div>
+        ) : null}
+      </div>
+      {site.feedId !== null && member ? (
+        <button
+          type="button"
+          aria-pressed={subscribed}
+          onClick={() => member.toggle(site.feedId as number, subscribed)}
+          className={`rounded-full border px-3.5 py-1.5 text-[13px] font-medium ${
+            subscribed ? 'border-thumb text-ink-2' : 'border-ink bg-ink text-paper'
+          }`}
+          data-testid="following-subscribe"
+        >
+          {subscribed ? td('subscribed') : td('subscribe')}
+        </button>
+      ) : null}
+    </div>
+  )
+}

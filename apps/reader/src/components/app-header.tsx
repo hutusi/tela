@@ -9,11 +9,12 @@ import { LogoMark } from './logo'
 import { ReadInMenu } from './read-in-menu'
 import { SearchField } from './search-field'
 
-type NavKey = 'reading' | 'discover'
+type NavKey = 'reading' | 'discover' | 'following'
 
 const ACTIVE: [NavKey, RegExp][] = [
   ['reading', /^\/reading/],
   ['discover', /^\/(discover|s\/)/],
+  ['following', /^\/following/],
 ]
 
 /**
@@ -53,6 +54,7 @@ export function AppHeader() {
       <nav className="flex min-w-0 gap-1 overflow-x-auto whitespace-nowrap text-sm lg:shrink-0 [scrollbar-width:none]">
         {pill('reading', '/reading')}
         {pill('discover', '/discover')}
+        {member ? pill('following', '/following') : null}
       </nav>
       <div className="flex-1" />
       <Link

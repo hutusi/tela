@@ -38,7 +38,7 @@ test.describe('stylesheet', () => {
 
     // Ink in every state: the design carries the active pill on its background alone, so a colour
     // difference here would be a second signal for the same thing.
-    for (const key of ['reading', 'discover']) {
+    for (const key of ['reading', 'discover', 'following']) {
       const pill = page.getByTestId(`nav-${key}`)
       expect(await colour(pill), key).toBe(INK)
       expect(await decoration(pill), key).toBe('none')
