@@ -5,7 +5,7 @@ Source of truth: the Claude Design project "Tela RSS Reader Platform"
 app and `Tela Logo.dc.html` the mark. This file records what the code takes from them so the two
 stay aligned.
 
-## Tokens (`apps/web/src/app/globals.css`, Tailwind `@theme`)
+## Tokens (`apps/reader/src/styles.css`, Tailwind `@theme`)
 
 | Token | Value | Use |
 |---|---|---|
@@ -22,10 +22,11 @@ stay aligned.
 | `accent-strong` | `oklch(0.40 0.10 150)` | link hover |
 
 On a dark ground the accent lifts to `oklch(0.68 0.14 150)` (`#4eb068`), which is where the tiled
-mark takes its green from. It is not a token: nothing in the app has a dark ground.
+mark takes its green from, and what `accent` becomes in dark mode (below).
 
 Fonts: EB Garamond (headings, article body, excerpts; 400/500/600, italic) and Figtree (UI;
-400/500/600), both self-hosted by `next/font`. CJK fallbacks: Songti SC / Noto Serif CJK SC for
+400/500/600), both self-hosted from `@fontsource` (Latin and Latin Extended), so no page asks
+Google Fonts for anything. CJK fallbacks: Songti SC / Noto Serif CJK SC for
 serif, PingFang SC / Noto Sans CJK SC for sans. Base UI size 14px; article body 19.5px/1.55
 (CJK 18px/1.8).
 
@@ -40,7 +41,7 @@ Motion: `animate-fade` (250 ms fade + 4px rise) on view changes and popovers. Un
 both with `text-ink` and `hover:no-underline`; links inside `.article-body` are underlined at rest
 in `line`, offset 3px, because prose needs an affordance the chrome does not.
 
-The base rules live in `@layer base` in `globals.css`, and they have to. Tailwind v4 emits every
+The base rules live in `@layer base` in `styles.css`, and they have to. Tailwind v4 emits every
 utility into `@layer utilities`, and an **unlayered** declaration outranks every layered one
 whatever its specificity — so an unlayered `a { }` block silently beats the class list on every
 link in the app. `styles.e2e.ts` checks the computed styles, since nothing about the JSX shows it.
@@ -50,7 +51,7 @@ link in the app. `styles.e2e.ts` checks the computed styles, since nothing about
 Two mirrored strands that both pass through the centre, so it balances whichever way it flips. Two
 forms, and the transparent one is primary:
 
-- **Transparent** — `LogoMark` (`apps/web/src/components/logo.tsx`), 28px in the header lockup
+- **Transparent** — `LogoMark` (`apps/reader/src/components/logo.tsx`), 28px in the header lockup
   beside the wordmark. Strands in `currentColor` and `accent`, stroke 3.4 on a 48 viewBox, round
   caps. It sits on the paper; there is no badge behind it. Below `lg` the mark carries the brand
   alone, and the wordmark stays as the link's accessible name.
@@ -59,7 +60,7 @@ forms, and the transparent one is primary:
   itself). A dark `ink` tile, `rx=11`, strands in `paper` and the lifted accent, on the inset path.
   The strands thicken as the tile shrinks — 3.3 at 32px, 5.0 at 16px — so the crossing survives.
 
-All three files come from `cd apps/web && bun run icons`, which renders them through the Chromium
+All three files come from `cd apps/reader && bun run icons`, which renders them through the Chromium
 Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 ## Layout rules
@@ -112,13 +113,16 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 - Swatch colors are derived from the feed id (`oklch(0.55 0.11 hue)`, hue = id × 137.508 mod 360)
   so a feed keeps its color everywhere without storing one.
 
-## Components (`apps/web/src/components`)
+## Components (`apps/reader/src/components`)
 
-`AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `ArticleList`, `Reader`, `PairedBody`,
-`TranslationBar`, `Untranslated`, `LikeButton`, `MarkRead`, `RequestTranslation`, `AutoRefresh`,
-`EmptyState`,
-`LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `RecommendPopover`. Discover's hero, topic chips,
-language menu (a native `<details>` dropdown), and claim banner live in `app/discover/page.tsx`.
+`AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `MobileNav`, `ArticleList`, `Reader`,
+`PairedBody`, `TranslationBar`, `Untranslated`, `LikeButton`, `RecommendPopover`, `EmptyState`,
+`LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `TypographyMenu`, the highlight
+toolbar, note and list (`highlights.tsx`), and `Shortcuts`. Discover, a blog's page and a profile
+are pure views in `apps/reader/src/views`, rendered by the SPA and by the edge alike. Anything
+interactive in them must work without JavaScript or degrade to a link: Discover's language menu
+is a native `<details>`, and a visitor's Subscribe is a link to sign in. The store marks read,
+requests translations and follows background work itself, so no component polls or refreshes.
 
 Recommend (from the design): the reader's action row holds Like and Recommend pills; Recommend
 opens a 320 px popover with a three-line serif textarea, a hint ("shown on your profile and to the
@@ -136,5 +140,62 @@ Subscribe/Subscribed pill. Cadence is derived from posts in the last 30 days.
 
 ## Strings
 
-Every user-facing string lives in `apps/web/messages/en.json` and `zh-Hans.json` under the same
-keys; components read them with next-intl. Placeholders use ICU plural syntax.
+Every user-facing string lives in `apps/reader/messages/en.json` and `zh-Hans.json` under the same
+keys; components read them with use-intl (next-intl's framework-free core). Placeholders use ICU
+plural syntax.
+
+## States the reader adds
+
+- A skeleton pane while the first sync has not landed: the article is on its way, not gone.
+- "Older articles" under a list longer than 200.
+- A not-found page (`notFound.*`).
+- A sign-in message for too many tries (`login.errors.rate_limited`), which is not a wrong code.
+
+## New tokens, and the dark ground (ADR 0026)
+
+Three tokens the Next app did not need, because it hard-coded them:
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `surface` | `#fff` | `#1f1c17` | cards, popovers, inputs (was `bg-white`) |
+| `danger` | `oklch(0.50 0.15 25)` | `oklch(0.72 0.15 25)` | error text |
+| `highlight` | `oklch(0.91 0.10 95)` | `oklch(0.50 0.09 90 / 0.55)` | a highlight's paint |
+| `highlight-strong` | `oklch(0.80 0.14 90)` | `oklch(0.70 0.12 90)` | the highlight being edited |
+
+Dark mode redefines every token on a warm near-black ground rather than adding `dark:` variants:
+
+| Token | Dark |
+|---|---|
+| `paper` | `#16140f` |
+| `ink` | `#ede7db` |
+| `body` | `#ddd6c8` |
+| `ink-2` | `#b1a999` |
+| `muted` | `#8c8476` |
+| `line` | `#34302a` |
+| `hover` | `#29251f` |
+| `thumb` | `#454038` |
+| `accent` | `oklch(0.68 0.14 150)`, the lifted green above |
+| `accent-strong` | `oklch(0.78 0.12 150)` |
+
+`data-theme="dark|light"` on `<html>` is the member's choice. Without it,
+`prefers-color-scheme` decides. The two token blocks in `styles.css` must stay identical. A
+literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the dark ground:
+`styles.e2e.ts` checks the computed page colours in both themes.
+
+## Reading controls
+
+- **"Aa"** in the reader's action row, before Like, opens a 280 px popover. It holds three
+  segmented choices, which Settings repeats under *Appearance*:
+  - **Size:** four steps, ×0.88 / ×1 / ×1.13 / ×1.27 of the 19.5 px body (18 px for CJK).
+  - **Width:** 560 / 640 / 760 px for the single column. The paired body keeps its own two-column
+    measure.
+  - **Theme:** Auto / Light / Dark.
+- **Highlights** are a marker stroke over the text, never a box: `::highlight()` paint, no
+  element around the words.
+  - A selection in the article shows a floating pill above it (*Highlight*, *Add a note*).
+  - Clicking painted text opens a 320 px note popover: the quote under a `highlight-strong` rule,
+    a three-line serif textarea, *Remove highlight*, *Cancel* and *Save*, as Recommend's does.
+  - Under the article, *N highlights* lists each quote (in a `<mark>` there, since it is a copy)
+    with its note. One the post lost says so in `muted`; one on a layout not showing says where
+    it is.
+- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `h` and `?` in `kbd` chips.

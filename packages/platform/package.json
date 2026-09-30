@@ -1,0 +1,23 @@
+{
+  "name": "@tela/platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The seams between Tela and whatever runs it: Db, Blobs, Jobs, Clock and Mail, with Cloudflare and portable adapters",
+  "exports": {
+    ".": "./src/index.ts",
+    "./cloudflare": "./src/cloudflare.ts",
+    "./portable": "./src/portable.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "aws4fetch": "^1.0.20",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260927.1"
+  }
+}

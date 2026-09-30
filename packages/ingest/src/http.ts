@@ -33,6 +33,8 @@ export type HttpGetOptions = {
   accept?: string
   /** Override the client's timeout for this request (a quick side lookup inside a bounded job). */
   timeoutMs?: number
+  /** Override the client's body cap for this request (extraction parses in a 128 MB isolate). */
+  maxBytes?: number
 }
 
 export type HttpClient = {
@@ -250,7 +252,7 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
 
         let bytes: Uint8Array
         try {
-          bytes = await readCapped(response, maxBytes)
+          bytes = await readCapped(response, opts.maxBytes ?? maxBytes)
         } catch (err) {
           if (err instanceof HttpError) throw err
           throw classify(err)

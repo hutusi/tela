@@ -7,7 +7,34 @@ everything so far sits under `[Unreleased]`.
 
 ## [Unreleased]
 
+### Changed
+
+- **The local-first stack.** Tela moved all-in onto Cloudflare — three Workers, D1, R2, Queues
+  and Cron — and Fly, Supabase, Hyperdrive, Next.js and pg-boss went (ADR 0020).
+  - **The reader renders from the device.** Every screen reads the rows the browser holds in
+    IndexedDB, and a seq-cursor sync keeps them current behind it. After the first sync, opening
+    posts, changing filters and going back make no request at all, which is what makes reading
+    instant from mainland China without a mainland CDN (ADR 0025).
+  - **Bodies are immutable versions**, stored as render-ready objects and cached forever at the
+    edge and on the device, which also fixed a summary overwriting an extracted full text (ADR 0022).
+  - **Translation streams:** the first paragraphs of a foreign post arrive in about five seconds,
+    and titles are translated a feed at a time, which cut their cost to a fraction (ADR 0023).
+  - **Background work is state under leases**, so a lost message costs nothing, one feed is never
+    fetched twice at once, and a job killed by its limit cannot retry for ever.
+  - **Sign-in is an emailed code** through better-auth; the mail's link works on any device
+    (ADR 0024).
+  - **Portable by construction:** every binding sits behind an interface with a portable
+    adapter, and the suite runs on them (ADR 0021).
+
 ### Added
+
+- **Highlights and notes**, private, on either side of a translation, and found again when the
+  post is edited; text size, line length and a dark theme, synced across devices; `j`/`k`, `Esc`
+  and `h` on the reading page (ADR 0026).
+
+- **Running unattended.** A dead-man's switch pinged by the sweeps while they are healthy, a
+  Monday digest to the owner, and a nightly export verified against its manifest, which the suite
+  restores into a fresh database and serves from on every run (ADR 0027).
 
 - **Milestone 1 — the reader.** Subscribe by URL or OPML; unread counts kept by a watermark on
   ingest order rather than a row per article per reader (ADR 0009); filters for all, today and
@@ -33,8 +60,8 @@ everything so far sits under `[Unreleased]`.
 
 - **Three doors into Discover.** A claim gate alone left the directory empty until the first
   blogger claimed a site, which reads as a broken page rather than an empty one. An editorial list
-  of independent blogs now seeds it — checked into `apps/worker/src/seed/curated-sites.ts` and
-  applied by `worker:once seed-discover` — and an unclaimed site lists itself once three distinct
+  of independent blogs now seeds it — checked into `apps/api/scripts/curated-sites.ts` and
+  applied by `bun run admin curate` — and an unclaimed site lists itself once three distinct
   members subscribe to it. Three, not one: at one, the directory would republish a single member's
   reading list (ADR 0018).
 
@@ -210,6 +237,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Security
 
+- **One browser, one account at a time.** Every tab shares the session cookie and the device's
+  database, so a tab still showing one account could act for the one another tab signed into:
+  apply its unsent changes, write its rows into that account's copy, subscribe, save a profile,
+  or verify a blog claim. Every member call now names the member and tela-api refuses a
+  mismatch; every write to the device's copy checks its owner in the same transaction; a stale
+  tab starts over. Protocol 2: older cached shells are told to upgrade (ADR 0025).
 - **Outbound fetches are pinned to vetted addresses.** The worker resolves every host itself and
   refuses names that resolve into a private range, DNS-pinned through undici so the address that
   passed the check is the address that is dialled. Byte caps are enforced while bytes arrive, not

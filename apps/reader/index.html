@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- The member's theme before anything paints (src/lib/typography.ts keeps it current). -->
+    <script>
+      try {
+        const theme = localStorage.getItem('tela.theme')
+        if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme
+      } catch {}
+    </script>
+    <title>Tela</title>
+    <meta name="description" content="Independent blogs, in any language." />
+    <!-- The shell is the app, with nothing of its own to index, and is served without the Worker,
+         so no header can say so. Public pages drop this and follow TELA_PRIVATE_BETA instead. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-icon.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

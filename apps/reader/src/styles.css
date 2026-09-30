@@ -1,0 +1,385 @@
+/* Self-hosted fonts, Latin and Latin Extended only (next/font chose the same subsets): no runtime
+   request to Google Fonts, which matters for readers in mainland China. */
+@import "@fontsource/eb-garamond/latin-400.css";
+@import "@fontsource/eb-garamond/latin-ext-400.css";
+@import "@fontsource/eb-garamond/latin-400-italic.css";
+@import "@fontsource/eb-garamond/latin-ext-400-italic.css";
+@import "@fontsource/eb-garamond/latin-500.css";
+@import "@fontsource/eb-garamond/latin-ext-500.css";
+@import "@fontsource/eb-garamond/latin-600.css";
+@import "@fontsource/eb-garamond/latin-ext-600.css";
+@import "@fontsource/figtree/latin-400.css";
+@import "@fontsource/figtree/latin-ext-400.css";
+@import "@fontsource/figtree/latin-500.css";
+@import "@fontsource/figtree/latin-ext-500.css";
+@import "@fontsource/figtree/latin-600.css";
+@import "@fontsource/figtree/latin-ext-600.css";
+@import "tailwindcss";
+
+/* Tela design tokens, from the Claude Design file Tela.dc.html. See docs/DESIGN.md. */
+@theme {
+  --color-paper: #f6f2ea;
+  --color-ink: #1f1c18;
+  --color-body: #2a261f;
+  --color-ink-2: #5c554b;
+  --color-muted: #8a8275;
+  --color-line: #e3dccf;
+  --color-hover: #ece6da;
+  --color-thumb: #d9d2c5;
+  /* Ground for the original beside a translation. Derived, not a new colour: the only tint we
+     already had is --color-hover, which means hovered/selected in the list. */
+  --color-source: color-mix(in oklab, var(--color-hover) 55%, var(--color-paper));
+  --color-accent: oklch(0.5 0.1 150);
+  --color-accent-strong: oklch(0.4 0.1 150);
+  /* Cards, popovers and inputs: white on paper, lifted a step on a dark ground. */
+  --color-surface: #fff;
+  --color-danger: oklch(0.5 0.15 25);
+  /* A highlight is a marker's stroke over the text, never a box around it. */
+  --color-highlight: oklch(0.91 0.1 95);
+  --color-highlight-strong: oklch(0.8 0.14 90);
+
+  --font-serif: "EB Garamond", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+  --font-sans: "Figtree", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+
+  --animate-fade: fade 0.25s ease;
+  @keyframes fade {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/*
+ * Dark mode (ADR 0026, DESIGN.md): the same tokens on a warm near-black ground, so every utility
+ * that names one follows without a `dark:` variant. `data-theme` on <html> is the member's choice
+ * (synced, and cached in localStorage so the first paint is right); without one, the system's.
+ * The block is written twice because a media query cannot share a selector list with an
+ * attribute: keep the two identical.
+ */
+:root {
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-paper: #16140f;
+    --color-surface: #1f1c17;
+    --color-ink: #ede7db;
+    --color-body: #ddd6c8;
+    --color-ink-2: #b1a999;
+    --color-muted: #8c8476;
+    --color-line: #34302a;
+    --color-hover: #29251f;
+    --color-thumb: #454038;
+    --color-accent: oklch(0.68 0.14 150);
+    --color-accent-strong: oklch(0.78 0.12 150);
+    --color-danger: oklch(0.72 0.15 25);
+    --color-highlight: oklch(0.5 0.09 90 / 0.55);
+    --color-highlight-strong: oklch(0.7 0.12 90);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-paper: #16140f;
+  --color-surface: #1f1c17;
+  --color-ink: #ede7db;
+  --color-body: #ddd6c8;
+  --color-ink-2: #b1a999;
+  --color-muted: #8c8476;
+  --color-line: #34302a;
+  --color-hover: #29251f;
+  --color-thumb: #454038;
+  --color-accent: oklch(0.68 0.14 150);
+  --color-accent-strong: oklch(0.78 0.12 150);
+  --color-danger: oklch(0.72 0.15 25);
+  --color-highlight: oklch(0.5 0.09 90 / 0.55);
+  --color-highlight-strong: oklch(0.7 0.12 90);
+}
+
+/*
+ * Motion is opt-out at the token, which is where every use of it resolves: Tailwind compiles
+ * `animate-fade` to `animation: var(--animate-fade)`, so one override covers all of them.
+ * `styles.e2e.ts` checks the computed value, because nothing in the JSX shows this.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --animate-fade: none;
+  }
+}
+
+/*
+ * Base element styles, in @layer base so Tailwind utilities can override them.
+ *
+ * Tailwind v4 emits every utility into @layer utilities, and an unlayered declaration outranks
+ * every layered one regardless of specificity. Left unlayered, the `a` rules below beat the class
+ * list on every link: `text-ink` and `hover:no-underline` in the chrome were silently dead, so the
+ * wordmark, the nav pills and every article title rendered accent green and underlined on hover.
+ * Layered, the default still applies to a bare <a> and a class can say otherwise.
+ */
+@layer base {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 14px;
+  }
+
+  a {
+    color: var(--color-accent);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--color-accent-strong);
+    text-decoration: underline;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-thumb);
+    border-radius: 4px;
+  }
+}
+
+/*
+ * Article rows dim when read and undim while selected.
+ *
+ * Both live here rather than as Tailwind variants because they are the same property under two
+ * conditions, and which utility wins would then depend on Tailwind's emission order rather than on
+ * anything written down. Declared explicitly, the selected rule is second and that is the whole
+ * rule.
+ */
+[data-testid="article-row"][data-read="1"] {
+  opacity: 0.62;
+}
+[data-testid="article-row"][data-active="1"] {
+  opacity: 1;
+}
+
+/*
+ * The reader's typography (ADR 0026): `--reader-scale` and `--reader-measure` are set on the
+ * reader pane from the member's synced prefs. The paired body keeps its own two-column measure.
+ */
+[data-testid="reader"] {
+  --reader-scale: 1;
+  --reader-measure: 640px;
+}
+
+/* Highlights, painted over the rendered text by the CSS Custom Highlight API. */
+::highlight(tela-highlight) {
+  background-color: var(--color-highlight);
+}
+::highlight(tela-highlight-active) {
+  background-color: var(--color-highlight-strong);
+}
+
+/* Article bodies: sanitized HTML from @tela/content, one leaf block per data-tb id. */
+.article-body {
+  font-family: var(--font-serif);
+  font-size: calc(19.5px * var(--reader-scale, 1));
+  line-height: 1.55;
+  color: var(--color-body);
+  overflow-wrap: anywhere;
+}
+.article-body :is(p, ul, ol, blockquote, pre, table, figure, dl, details, hr) {
+  margin: 0 0 20px;
+}
+.article-body :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin: 32px 0 12px;
+  color: var(--color-ink);
+}
+.article-body h1 {
+  font-size: 1.5em;
+}
+.article-body h2 {
+  font-size: 1.35em;
+}
+.article-body h3 {
+  font-size: 1.15em;
+}
+.article-body :is(h4, h5, h6) {
+  font-size: 1em;
+}
+.article-body :is(ul, ol) {
+  padding-left: 1.4em;
+}
+.article-body li {
+  margin: 0 0 6px;
+}
+.article-body blockquote {
+  border-left: 3px solid var(--color-line);
+  padding-left: 16px;
+  color: var(--color-ink-2);
+}
+.article-body :is(pre, code, kbd, samp) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8em;
+}
+.article-body pre {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+.article-body :not(pre) > code {
+  background: var(--color-hover);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.article-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+.article-body figure {
+  margin-left: 0;
+  margin-right: 0;
+}
+.article-body figcaption {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-top: 6px;
+}
+.article-body table {
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.article-body :is(th, td) {
+  border: 1px solid var(--color-line);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.article-body th {
+  background: var(--color-hover);
+  font-weight: 600;
+}
+.article-body hr {
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}
+.article-body a {
+  text-decoration: underline;
+  text-decoration-color: var(--color-line);
+  text-underline-offset: 3px;
+}
+.article-body :lang(zh),
+.article-body:lang(zh),
+.article-body:lang(ja),
+.article-body:lang(ko) {
+  font-size: calc(18px * var(--reader-scale, 1));
+  line-height: 1.8;
+}
+
+/*
+ * Paired bilingual body (`PairedBody`): one grid row per top-level block, original first.
+ *
+ * Stacked is the base case and two columns are the override, because two columns need the pane
+ * to be about 1080px — roughly a 1624px viewport, once the sidebar and list have taken 480 —
+ * and below that the same DOM reads as an interleave at the full measure. The old layout turned
+ * two columns on at a 1280px *viewport*, which left 348px per column.
+ *
+ * Unlayered like everything else in this file, so no Tailwind utility can quietly outrank it.
+ */
+
+/* A grid item never collapses margins with a sibling, so p then h2 would go from max(20,32)=32
+   to 52. The row puts a heading's lead back with mt-3 on both of its cells. */
+.article-body.article-block > * {
+  margin-top: 0;
+}
+
+/* The original reads as the reference, on its own ground. The colour has to be set on the block:
+   .article-body colours the element itself, so text-ink-2 on a wrapper never reaches the text. */
+.article-body.article-source,
+.article-body.article-source :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--color-ink-2);
+}
+/* The ground itself, which the original's title shares with its blocks. */
+.article-source {
+  background: var(--color-source);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+}
+/* Stacked, a pair is the source paragraph and the translation under it: the two hug, and the
+   larger gap falls after the translation, where one pair ends and the next begins. */
+.article-body.article-source > :last-child {
+  margin-bottom: 0;
+}
+.article-body.article-block:not(.article-source) > :last-child {
+  margin-bottom: 24px;
+}
+
+/* A block the translator could not do keeps its source text in the translation column; passing
+   that off as a translation is the thing to avoid. The label is a real element, so it can be
+   selected and is announced like any other text. */
+.article-untranslated {
+  border-left: 2px dashed var(--color-thumb);
+  padding-left: 12px;
+}
+.article-untranslated-label {
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+@container (min-width: 1080px) {
+  /* Rows are contiguous, so stretching each source cell tiles the tint into one continuous band
+     down the second column rather than a stack of rectangles. Only the two ends of that band
+     need the padding and the rounding a stacked panel has on all four sides. */
+  .article-source {
+    align-self: stretch;
+    border-radius: 0;
+    padding: 0 16px;
+    margin-bottom: 0;
+  }
+  .article-source[data-edge-first] {
+    padding-top: 16px;
+    border-start-start-radius: 8px;
+    border-start-end-radius: 8px;
+  }
+  .article-source[data-edge-last] {
+    padding-bottom: 16px;
+    border-end-start-radius: 8px;
+    border-end-end-radius: 8px;
+  }
+  /* Matching the narrow rule selector for selector: :not(.article-source) makes that one
+     (0,4,0), so a tidier (0,3,0) here loses wherever the two disagree, container query or not. */
+  .article-body.article-block:not(.article-source) > :last-child {
+    margin-bottom: 20px;
+  }
+}

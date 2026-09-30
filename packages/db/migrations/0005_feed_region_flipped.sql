@@ -1,1 +1,0 @@
-ALTER TABLE "feeds" ADD COLUMN "region_flipped_at" timestamp with time zone;

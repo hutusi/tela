@@ -25,6 +25,8 @@ coverage/
 playwright-report/
 test-results/
 .embedded-postgres/
+# Left by the Supabase CLI and the Next build in checkouts from before the local-first stack.
+supabase/.temp/
 
 # OS / editors
 .DS_Store

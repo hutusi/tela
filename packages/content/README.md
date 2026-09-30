@@ -88,9 +88,12 @@ letters (`\p{L}`), which covers image-only paragraphs, dates, and separators.
 
 ## 5. Derived fields
 
-- `detectLanguage`: script ratios first (kana ≥ 5% → `ja`, hangul ≥ 20% → `ko`, han ≥ 30% →
-  `zh-Hans`/`zh-Hant` by simplified-vs-traditional character counts), then tinyld; the feed language
-  only breaks ties for very short text.
+- `detectLanguage`: soft hyphens, zero-width marks and links are removed first. Then script ratios
+  (kana ≥ 5% → `ja`, hangul ≥ 20% → `ko`, han ≥ 30% → `zh-Hans`/`zh-Hant` by simplified-vs-traditional
+  character counts), then eld's extra-small model (60 languages). The hint (the item's declared
+  language, else the blog's majority, else the feed's declared language) decides text of fewer than
+  20 letters, and wins only when it scores within 90% of the best guess: declared tags are sometimes
+  a template's default. Detection is not part of any hash.
 - `makeExcerpt`: first three translatable blocks, ≤ 280 chars, cut on a word boundary for
   non-CJK text, ellipsis appended.
 - `readingMinutes`: CJK characters / 400 + words / 230, minimum 1.
@@ -104,6 +107,26 @@ letters (`\p{L}`), which covers image-only paragraphs, dates, and separators.
 - `findFeedLinks` lists declared `<link rel=alternate>` feeds, then feed-looking anchors;
   `candidateFeedUrls` gives the well-known paths to probe.
 - `dedupKey`: `g:<guid>` → `u:<normalized link>` → `h:<sha256(title|published_at)>`.
+
+## 7. Content objects (`object.ts`, ADR 0022)
+
+What a reader receives, built once at ingest and stored immutably at `c/<key>.json`:
+
+- `key` is the first 32 hex of `contentHash`, the SHA-256 of the annotated HTML with its
+  *original* image URLs. The key never depends on how images are served.
+- `blocks` are the top-level children (the pairing unit of ADR 0019). Each holds its HTML and
+  the leaf `data-tb` ids inside it, in document order. Every leaf appears in exactly one block.
+- `leaves` maps each leaf id to `{hash, chars, skip?}`: the full block hash the translation
+  cache is keyed by, and the length that budgets use.
+- `images` lists the original URLs. Each `<img src>` in `blocks` is rewritten to
+  `/img/<key>/<index>`, one index per distinct URL, and gains `data-origin`. The proxy resolves
+  an index against the object, so it can only fetch URLs that stored content contains.
+- `format` is `OBJECT_FORMAT` and `norm` is the `NORM_VERSION` the leaves were annotated under.
+
+Image `src` is an attribute, and attributes never enter tagged text (§3). So rewriting images
+changes no block hash, and the object format is not a `NORM_VERSION` matter. Changing *what* the
+object contains is: bump `OBJECT_FORMAT` and keep readers able to render the previous format
+until every live article has a new version.
 
 ## Fixtures
 

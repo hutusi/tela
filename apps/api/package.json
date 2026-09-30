@@ -1,0 +1,31 @@
+{
+  "name": "@tela/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The tela-api Worker: sync, mutations, sign-in and every reader RPC, pinned beside D1; reached only through tela-web",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json && tsc -p test/workers/tsconfig.json",
+    "dev": "wrangler dev",
+    "test:workers": "vitest run --config test/workers/vitest.config.ts"
+  },
+  "dependencies": {
+    "@tela/content": "workspace:*",
+    "@tela/data": "workspace:*",
+    "@tela/ingest": "workspace:*",
+    "@tela/platform": "workspace:*",
+    "@tela/shared": "workspace:*",
+    "@tela/sync": "workspace:*",
+    "better-auth": "1.7.6",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.10"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20260927.1",
+    "@vitest/runner": "^4.1.0",
+    "@vitest/snapshot": "^4.1.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.143.0"
+  }
+}

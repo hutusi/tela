@@ -1,0 +1,1 @@
+ALTER TABLE `feeds` ADD `merged_into` integer REFERENCES feeds(id) ON DELETE set null;

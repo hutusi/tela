@@ -1,0 +1,10 @@
+{
+  "extends": "../../packages/config/tsconfig.base.json",
+  "compilerOptions": {
+    // One program for the SPA and the edge Worker: the Worker renders the SPA's public views.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["@cloudflare/workers-types", "vite/client"]
+  },
+  "include": ["worker", "src"]
+}

@@ -31,7 +31,8 @@ function collectIds(node: ChildNode, out: string[]): void {
   for (const child of node.children) collectIds(child, out)
 }
 
-function blocksOf(doc: ParentNode): ArticleBlock[] {
+/** The top-level blocks of an already-parsed document (shared with the content-object builder). */
+export function blocksOf(doc: ParentNode): ArticleBlock[] {
   const out: ArticleBlock[] = []
   for (const child of doc.children) {
     if (isTag(child)) {

@@ -1,0 +1,39 @@
+{
+  // tela-api (ADR 0024): sign-in, sync, mutations and every reader RPC. Placement pins it beside
+  // the D1 primary in Singapore (6–10 ms a round trip, spike S3). No public route: tela-web
+  // forwards /api/* over a service binding.
+  "name": "tela-api",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "placement": { "region": "aws:ap-southeast-1" },
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tela",
+      // The same database as tela-jobs.
+      "database_id": "b78974b8-403a-460d-a15d-acaaaf119952",
+      "migrations_dir": "../../packages/data/migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content" }],
+  // Work that fetches on a member's behalf runs in tela-jobs, over RPC: the parsers and the
+  // DNS-pinned client stay out of this bundle.
+  "services": [{ "binding": "JOBS", "service": "tela-jobs", "entrypoint": "Ingest" }],
+  "queues": {
+    // Producers only: work a reader triggers is claimed here and sent on; tela-jobs consumes.
+    "producers": [
+      { "binding": "FETCH_QUEUE", "queue": "tela-fetch" },
+      { "binding": "EXTRACT_QUEUE", "queue": "tela-extract" },
+      { "binding": "TRANSLATE_QUEUE", "queue": "tela-translate" },
+      { "binding": "MISC_QUEUE", "queue": "tela-misc" }
+    ]
+  },
+  "vars": {
+    "PUBLIC_URL": "https://tela.ainaive.com",
+    "MAIL_FROM": "Tela <noreply@ainaive.com>"
+  }
+  // Secrets (wrangler secret put): AUTH_SECRET (shared with tela-web), ADMIN_TOKEN, RESEND_API_KEY.
+}

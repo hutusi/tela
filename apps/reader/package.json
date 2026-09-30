@@ -1,0 +1,43 @@
+{
+  "name": "@tela/reader",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "tela-web: the local-first reader (a Vite + React SPA) and its edge Worker, which serves content objects, the image proxy, public pages and the /api forward",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json",
+    "icons": "bun scripts/generate-icons.ts"
+  },
+  "dependencies": {
+    "@fontsource/eb-garamond": "^5.3.0",
+    "@fontsource/figtree": "^5.3.0",
+    "@tela/ingest": "workspace:*",
+    "@tela/platform": "workspace:*",
+    "@tela/shared": "workspace:*",
+    "@tela/sync": "workspace:*",
+    "better-auth": "1.7.6",
+    "idb": "^8.0.3",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router": "^8.4.0",
+    "use-intl": "^4.14.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.62.0",
+    "@cloudflare/workers-types": "^5.20260927.1",
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tela/data": "workspace:*",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "drizzle-orm": "^0.45.2",
+    "fake-indexeddb": "^6.2.5",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.1",
+    "wrangler": "^4.143.0"
+  }
+}

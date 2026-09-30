@@ -125,6 +125,8 @@ export function rss(options: {
     date?: string
   }>
   ttl?: number
+  /** The channel's declared language; `null` declares none, as many feeds do. */
+  language?: string | null
 }): string {
   const items = options.items
     .map(
@@ -144,7 +146,7 @@ export function rss(options: {
     <title>${options.title ?? 'Test Blog'}</title>
     <link>${options.link ?? 'https://blog.example/'}</link>
     <description>A test blog</description>
-    <language>en</language>
+    ${options.language === null ? '' : `<language>${options.language ?? 'en'}</language>`}
     ${options.ttl ? `<ttl>${options.ttl}</ttl>` : ''}
     ${items}
   </channel>

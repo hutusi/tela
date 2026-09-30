@@ -8,8 +8,6 @@
   "files": {
     "includes": [
       "**",
-      "!**/.next",
-      "!**/.open-next",
       "!**/dist",
       "!**/fixtures/**/*.xml",
       "!**/fixtures/**/*.html",

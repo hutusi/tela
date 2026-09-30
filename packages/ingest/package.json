@@ -6,17 +6,24 @@
   "description": "Ingestion library: HTTP client, feed discovery, feed fetching, article extraction (no queue, no runtime-specific APIs)",
   "exports": {
     ".": "./src/index.ts",
-    "./extract": "./src/extract-article.ts",
     "./http": "./src/http.ts",
-    "./net": "./src/net.ts"
+    "./net": "./src/net.ts",
+    "./pipeline": "./src/pipeline/index.ts",
+    "./relay": "./src/relay.ts",
+    "./schedule": "./src/schedule.ts",
+    "./region-policy": "./src/region-policy.ts",
+    "./websub": "./src/websub.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@tela/content": "workspace:*",
-    "@tela/db": "workspace:*",
+    "@tela/data": "workspace:*",
+    "@tela/platform": "workspace:*",
     "@tela/shared": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "domutils": "^3.2.2",
+    "drizzle-orm": "^0.45.2",
+    "htmlparser2": "^10.1.0"
   }
 }
