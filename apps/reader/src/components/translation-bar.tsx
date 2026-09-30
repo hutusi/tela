@@ -30,11 +30,14 @@ export function TranslationBar({
   view,
   mode,
   onMode,
+  onTranslate,
 }: {
   sourceLang: string
   view: TranslationView
   mode: ReadingMode
   onMode: (mode: ReadingMode) => void
+  /** Set while the member translates only when asked: a Translate button stands in the toggle. */
+  onTranslate?: (() => void) | undefined
 }) {
   const t = useTranslations('translation')
   const locale = useLocale()
@@ -49,7 +52,7 @@ export function TranslationBar({
       data-state={view.state}
     >
       <span className="text-ink-2">
-        {t.rich('writtenIn', {
+        {t.rich(onTranslate ? 'writtenInOnly' : 'writtenIn', {
           source: sourceName,
           target: targetName,
           b: (chunks) => <b className="font-medium text-ink">{chunks}</b>,
@@ -63,34 +66,45 @@ export function TranslationBar({
         {view.state === 'partial' ? t('partial', { n: view.failedBlocks }) : null}
       </span>
       <div className="flex-1" />
-      {/* A fieldset rather than role="group": same semantics, and the one Biome asks for. */}
-      <fieldset
-        className="flex min-w-0 gap-0.5 rounded-lg bg-paper p-0.5"
-        aria-label={t('modesLabel')}
-      >
-        {MODES.map((m) => {
-          const active = mode === m
-          const disabled = !ready && m !== 'orig'
-          return (
-            <button
-              key={m}
-              type="button"
-              disabled={disabled}
-              onClick={() => onMode(m)}
-              aria-current={active ? 'true' : undefined}
-              aria-disabled={disabled ? 'true' : undefined}
-              data-testid={`mode-${m}`}
-              className={`rounded-md px-2.5 py-[5px] text-[12.5px] ${
-                active
-                  ? 'bg-surface text-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]'
-                  : 'text-muted hover:text-ink'
-              } ${disabled ? 'pointer-events-none opacity-50' : ''}`}
-            >
-              {t(`modes.${m}`)}
-            </button>
-          )
-        })}
-      </fieldset>
+      {onTranslate ? (
+        <button
+          type="button"
+          onClick={onTranslate}
+          className="rounded-lg bg-paper px-3 py-[5px] text-[12.5px] font-medium text-ink hover:bg-hover"
+          data-testid="translate-now"
+        >
+          {t('translateNow', { target: targetName })}
+        </button>
+      ) : (
+        /* A fieldset rather than role="group": same semantics, and the one Biome asks for. */
+        <fieldset
+          className="flex min-w-0 gap-0.5 rounded-lg bg-paper p-0.5"
+          aria-label={t('modesLabel')}
+        >
+          {MODES.map((m) => {
+            const active = mode === m
+            const disabled = !ready && m !== 'orig'
+            return (
+              <button
+                key={m}
+                type="button"
+                disabled={disabled}
+                onClick={() => onMode(m)}
+                aria-current={active ? 'true' : undefined}
+                aria-disabled={disabled ? 'true' : undefined}
+                data-testid={`mode-${m}`}
+                className={`rounded-md px-2.5 py-[5px] text-[12.5px] ${
+                  active
+                    ? 'bg-surface text-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]'
+                    : 'text-muted hover:text-ink'
+                } ${disabled ? 'pointer-events-none opacity-50' : ''}`}
+              >
+                {t(`modes.${m}`)}
+              </button>
+            )
+          })}
+        </fieldset>
+      )}
     </div>
   )
 }

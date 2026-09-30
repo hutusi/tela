@@ -136,8 +136,19 @@ export function articlesFor(
   })
 }
 
-/** A post's title and excerpt as the member reads them: the translation whenever one exists. */
-export function shownTitle(t: Tables, a: ArticleRow, readingLang: string) {
+/**
+ * A post's title and excerpt as the member reads them: the translation whenever one exists,
+ * except in a language the member never has translated (`never`, a pref), which reads as written.
+ */
+export function shownTitle(
+  t: Tables,
+  a: ArticleRow,
+  readingLang: string,
+  never: readonly string[] = [],
+) {
+  if (a.sourceLang !== null && never.includes(a.sourceLang)) {
+    return { title: a.title, excerpt: a.excerpt, badge: false }
+  }
   const translated = t.titles.get(titleKey(a.id, readingLang))
   const title = translated?.title ?? null
   return {

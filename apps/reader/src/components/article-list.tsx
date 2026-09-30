@@ -41,7 +41,7 @@ export function ArticleList({
   const { store } = useStore()
   const location = useLocation()
   const heading = title ?? ts(params.filter)
-  const { markOnOpen } = readingPrefsOf(tables)
+  const { markOnOpen, never } = readingPrefsOf(tables)
   const target = languageBadge(readingLang)
   const [limit, setLimit] = useState(PAGE)
   const shown = items.slice(0, limit)
@@ -104,7 +104,7 @@ export function ArticleList({
           // The open post counts as read before its markRead lands, unless the member marks
           // posts read themselves: then it is unread until they do, and its dot says so.
           const read = (active && markOnOpen) || isRead(tables, a, now)
-          const { title: rowTitle, excerpt, badge } = shownTitle(tables, a, readingLang)
+          const { title: rowTitle, excerpt, badge } = shownTitle(tables, a, readingLang, never)
           const name = feedTitle(tables, a.feedId)
           // No mode in the href: the remembered mode is the one an open should use (ADR 0017).
           const href = readingHref({

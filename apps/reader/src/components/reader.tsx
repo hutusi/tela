@@ -13,7 +13,7 @@ import { relativeTime } from '../lib/format'
 import { pointAt, type Side } from '../lib/highlight-dom'
 import type { ReadingMode } from '../lib/href'
 import { newId } from '../lib/id'
-import { readingPrefsOf } from '../lib/prefs'
+import { useReadingPrefs } from '../lib/prefs'
 import { readerStyle, typographyOf } from '../lib/typography'
 import { useHighlights } from '../lib/use-highlights'
 import { useArticleTranslation } from '../lib/use-translation'
@@ -108,7 +108,15 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
   useEffect(() => {
     if (loaded) pane.current?.focus({ preventScroll: true })
   }, [loaded])
-  const translation = useArticleTranslation(article, object, readingLang)
+  // Translated on opening, or only once asked (a pref), and never in a language the member reads
+  // as written. The Reader is keyed by the article, so asking lasts for this post.
+  const prefs = useReadingPrefs(tables)
+  const [asked, setAsked] = useState(false)
+  const wanted = prefs.autoTranslate || asked
+  const translation = useArticleTranslation(article, object, readingLang, {
+    enabled: wanted,
+    never: prefs.never,
+  })
   const original = useMemo(() => (object ? readerBlocks(object) : []), [object])
   const pairs = useMemo(
     () =>
@@ -117,7 +125,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
   )
 
   const view = translation.view
-  const shown: ReadingMode = view?.available ? mode : 'orig'
+  const shown: ReadingMode = view?.available && wanted ? mode : 'orig'
 
   // Highlights: painted over what is rendered, found again after the post changes (ADR 0026).
   const body = useRef<HTMLDivElement>(null)
@@ -188,7 +196,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
   const sourceLang = article.sourceLang ?? undefined
   const name = feedTitle(tables, article.feedId) || store.sourceName(article.feedId)
   const site = siteOfFeed(tables, article.feedId)
-  const titles = shownTitle(tables, article, readingLang)
+  const titles = shownTitle(tables, article, readingLang, prefs.never)
   const title = showTrans ? titles.title : article.title
   const runs = showTrans
     ? runsOf(pairs, 'translated')
@@ -225,7 +233,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Only for a member who marks posts read themselves: otherwise opening did it. */}
-          {!readingPrefsOf(tables).markOnOpen && !isRead(tables, article, now) ? (
+          {!prefs.markOnOpen && !isRead(tables, article, now) ? (
             <button
               type="button"
               onClick={() => store.mutate({ type: 'markRead', articleId: article.id })}
@@ -283,7 +291,13 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
           </div>
 
           {view && sourceLang ? (
-            <TranslationBar sourceLang={sourceLang} view={view} mode={mode} onMode={onMode} />
+            <TranslationBar
+              sourceLang={sourceLang}
+              view={view}
+              mode={mode}
+              onMode={onMode}
+              onTranslate={wanted ? undefined : () => setAsked(true)}
+            />
           ) : null}
           {translation.notice ? (
             <p className="text-[13px] text-muted" data-testid={`translation-${translation.notice}`}>

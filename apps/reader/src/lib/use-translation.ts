@@ -1,7 +1,8 @@
 /**
  * An article's translation into the reading language, streamed (ADR 0023, 0025).
  *
- * - A foreign article asks for one when it opens, unless one exists.
+ * - A foreign article asks for one when it opens, unless one exists, or the member translates only
+ *   when asked (`enabled` is false until they do). A language they never translate is not foreign.
  * - While it runs, the status is polled every 1.5 s (visible tabs only) and each new chunk object
  *   is fetched and laid over the original by block index: the first paragraphs show in seconds.
  * - Once done, the finished object replaces the chunks; the synced row says so on every device.
@@ -65,9 +66,16 @@ export function useArticleTranslation(
   article: ArticleRow | null,
   content: ContentObject | null,
   readingLang: string,
+  options: {
+    /** Ask for it and fetch what exists; false shows the original until the member asks. */
+    enabled: boolean
+    /** Languages the member reads as written (a pref): never translated. */
+    never: readonly string[]
+  } = { enabled: true, never: [] },
 ): ArticleTranslation {
   const tables = useTables()
   const { objects, engine } = useStore()
+  const { enabled } = options
   const contentKey = article?.contentKey ?? null
   const optOut = article ? (siteOfFeed(tables, article.feedId)?.translationOptOut ?? false) : false
   const needed =
@@ -75,6 +83,7 @@ export function useArticleTranslation(
     contentKey !== null &&
     article.sourceLang !== null &&
     article.sourceLang !== readingLang &&
+    !options.never.includes(article.sourceLang) &&
     !optOut
   const row = contentKey
     ? tables.translations.get(translationKey(contentKey, readingLang))
@@ -114,17 +123,17 @@ export function useArticleTranslation(
 
   // Ask once per article and language, when there is nothing to show yet.
   useEffect(() => {
-    if (!needed || row || !contentKey) return
+    if (!needed || !enabled || row || !contentKey) return
     const key = `${contentKey}:${readingLang}`
     if (asked.current === key) return
     asked.current = key
     void request()
-  }, [needed, row, contentKey, readingLang, request])
+  }, [needed, enabled, row, contentKey, readingLang, request])
 
   // Poll while it runs, in a visible tab.
   const running = current?.state === 'requested' || current?.state === 'running'
   useEffect(() => {
-    if (!running || !contentKey) return
+    if (!running || !enabled || !contentKey) return
     let stopped = false
     const tick = async () => {
       if (document.visibilityState !== 'visible') return
@@ -144,11 +153,11 @@ export function useArticleTranslation(
       stopped = true
       clearInterval(id)
     }
-  }, [running, contentKey, readingLang, engine])
+  }, [running, enabled, contentKey, readingLang, engine])
 
   // Fetch each chunk as it is named, and lay it over the original. Keyed by the list's text: the
   // row is a fresh array on every pull even when it names the same chunks.
-  const chunkList = (current?.chunkKeys ?? []).join('|')
+  const chunkList = enabled ? (current?.chunkKeys ?? []).join('|') : ''
   useEffect(() => {
     let cancelled = false
     for (const key of chunkList ? chunkList.split('|') : []) {
@@ -167,7 +176,7 @@ export function useArticleTranslation(
   }, [chunkList, objects])
 
   // The finished object, once there is one.
-  const objectKey = current?.objectKey ?? null
+  const objectKey = enabled ? (current?.objectKey ?? null) : null
   useEffect(() => {
     if (!objectKey) return
     let cancelled = false
@@ -202,9 +211,11 @@ export function useArticleTranslation(
     () => (content ? blocksContaining(content, failed ? failed.split('|') : []) : []),
     [content, failed],
   )
-  const state: ReaderTranslationState = current
-    ? ((current.state === 'skipped' ? 'failed' : current.state) as ReaderTranslationState)
-    : 'none'
+  // Until the member asks, nothing is under way for them, whatever another reader started.
+  const state: ReaderTranslationState =
+    current && enabled
+      ? ((current.state === 'skipped' ? 'failed' : current.state) as ReaderTranslationState)
+      : 'none'
   return {
     view: needed
       ? {

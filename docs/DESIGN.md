@@ -224,6 +224,11 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   entered it, so opening a post, `j` and `k` never pull it out from under them; it is gone the
   next time they come to that list. An empty list then says "all caught up", with a link back to
   the setting.
+- **Translating is the member's too** (Settings → Translation). With *Translate automatically* off,
+  a foreign post opens in the original, and the translation bar says "Written in Japanese." with
+  a *Translate into English* button where the mode toggle would be; nothing is requested or
+  fetched until it is pressed, for that post. *Never translate* lists languages the member reads
+  comfortably: their posts open as written, with original titles in the lists and no badge.
 - **The sidebar toggle** heads the sidebar under a "Library" label, in the small-caps heading
   style at the headings' indent, with the toggle at the row's right end and its icon on the
   counts' right edge. The glyph is a 16px panel drawn inline (Tela has no icon set), its left

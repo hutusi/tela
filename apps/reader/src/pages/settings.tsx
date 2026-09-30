@@ -339,6 +339,16 @@ function TranslationSection() {
           ))}
         </select>
       </SettingRow>
+      <SettingRow label={t('autoTranslate')} hint={t('autoTranslateHint')}>
+        <Switch
+          checked={prefs.autoTranslate}
+          onChange={(on) =>
+            store.mutate({ type: 'setPref', key: PREF_KEYS.autoTranslate, value: on })
+          }
+          label={t('autoTranslate')}
+          testId="pref-auto-translate"
+        />
+      </SettingRow>
       <SettingRow label={t('defaultView')} hint={t('defaultViewHint')}>
         <Segmented
           label={t('defaultView')}
@@ -349,7 +359,76 @@ function TranslationSection() {
           testId="default-mode"
         />
       </SettingRow>
+      <NeverTranslate never={prefs.never} readingLang={readingLang} names={names} />
     </>
+  )
+}
+
+/**
+ * Languages the member reads as written: chips to remove, and a native select to add from every
+ * language Tela names plus any a post on this device is in. Tags compare exactly: zh-Hans and
+ * zh-Hant are two languages here (AGENTS.md).
+ */
+function NeverTranslate({
+  never,
+  readingLang,
+  names,
+}: {
+  never: readonly string[]
+  readingLang: string
+  names: Record<string, string>
+}) {
+  const t = useTranslations('settings')
+  const tables = useTables()
+  const { store } = useStore()
+  const set = (value: string[]) => store.mutate({ type: 'setPref', key: PREF_KEYS.never, value })
+  const seen = new Set(Object.keys(names))
+  for (const a of tables.articles.values()) if (a.sourceLang) seen.add(a.sourceLang)
+  const name = (tag: string) => names[tag] ?? tag
+  const pool = [...seen]
+    .filter((tag) => tag !== readingLang && !never.includes(tag))
+    .sort((a, b) => name(a).localeCompare(name(b)))
+  return (
+    <div className="border-t border-line py-5" data-testid="never-translate">
+      <div className="font-medium">{t('never')}</div>
+      <div className="mt-[3px] text-[13px] text-muted">{t('neverHint')}</div>
+      <div className="mt-3.5 flex flex-wrap gap-2">
+        {never.map((tag) => (
+          <span
+            key={tag}
+            className="flex items-center gap-1.5 rounded-full border border-line bg-surface py-[5px] pr-1.5 pl-3 text-[13px]"
+            data-testid="never-chip"
+          >
+            {name(tag)}
+            <button
+              type="button"
+              onClick={() => set(never.filter((x) => x !== tag))}
+              aria-label={t('removeLanguage', { lang: name(tag) })}
+              className="flex size-5 items-center justify-center rounded-full text-[12px] text-muted hover:bg-hover hover:text-ink"
+              data-testid={`never-remove-${tag}`}
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+        <select
+          value=""
+          aria-label={t('addLanguage')}
+          onChange={(e) => {
+            if (e.target.value) set([...never, e.target.value])
+          }}
+          className="cursor-pointer rounded-full border border-dashed border-thumb bg-transparent px-3 py-[5px] text-[13px] text-muted hover:border-muted hover:text-ink"
+          data-testid="never-add"
+        >
+          <option value="">{t('addLanguage')}</option>
+          {pool.map((tag) => (
+            <option key={tag} value={tag}>
+              {name(tag)}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
   )
 }
 

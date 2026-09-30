@@ -98,7 +98,7 @@ export function ReadingPage() {
   const next = after
     ? {
         href: readingHref({ filter: params.filter, feedId: params.feedId, articleId: after.id }),
-        title: shownTitle(tables, after, readingLang).title,
+        title: shownTitle(tables, after, readingLang, prefs.never).title,
       }
     : null
 
@@ -233,8 +233,12 @@ export function ReadingPage() {
       void objects
         .prefetch([...unread(items), ...unread(everything)], controller.signal)
         .then(async () => {
+          // Only translations the member will see on opening: none while they translate only when
+          // asked, and none in a language they read as written.
+          if (!prefs.autoTranslate) return
           for (const a of everything) {
             if (controller.signal.aborted || !a.contentKey) continue
+            if (a.sourceLang !== null && prefs.never.includes(a.sourceLang)) continue
             const row = tables.translations.get(translationKey(a.contentKey, readingLang))
             if (row?.objectKey && (row.state === 'done' || row.state === 'partial')) {
               await objects.object(row.objectKey, controller.signal, true).catch(() => null)
@@ -243,7 +247,7 @@ export function ReadingPage() {
         })
     }, PREFETCH_IDLE_MS)
     return () => clearTimeout(timer)
-  }, [tables, items, objects, readingLang])
+  }, [tables, items, objects, readingLang, prefs])
 
   return (
     <div

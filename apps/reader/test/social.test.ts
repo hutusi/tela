@@ -3,8 +3,8 @@ import { describe, expect, test } from 'bun:test'
 import { applyPull, emptyTables, type Tables, view } from '@tela/sync'
 import { monthYear, personColor, shortDate } from '../src/lib/format'
 import { PREF_KEYS, readingPrefsOf } from '../src/lib/prefs'
-import { followedPeople } from '../src/store/selectors'
-import { pull } from './rows'
+import { followedPeople, shownTitle } from '../src/store/selectors'
+import { article, pull, sub } from './rows'
 
 function tables(rows: Parameters<typeof pull>[1]): Tables {
   return view(applyPull({ cursor: 0, tables: emptyTables() }, pull(1, rows, true)), [])
@@ -71,6 +71,36 @@ describe('reading prefs', () => {
     )
     expect(set).toMatchObject({ markOnOpen: false, hideRead: false, mode: 'trans' })
     expect(set.never).toBe(never) // the stored array itself, so memos keyed on it hold
+  })
+})
+
+describe('a language never translated', () => {
+  test('reads as written in lists and the reader, with no badge', () => {
+    const post = article(1, { title: '漁船が早く戻ってきた', sourceLang: 'ja' })
+    const t = tables({
+      subscriptions: [sub(1)],
+      articles: [post],
+      titles: [
+        {
+          articleId: 1,
+          lang: 'en',
+          title: 'The boats came back early',
+          excerpt: null,
+          status: 'done',
+          seq: 1,
+        },
+      ],
+    })
+    expect(shownTitle(t, post, 'en')).toMatchObject({
+      title: 'The boats came back early',
+      badge: true,
+    })
+    expect(shownTitle(t, post, 'en', ['ja'])).toMatchObject({
+      title: '漁船が早く戻ってきた',
+      badge: false,
+    })
+    // Tags compare exactly: never translating Traditional Chinese leaves Japanese alone.
+    expect(shownTitle(t, post, 'en', ['zh-Hant']).badge).toBe(true)
   })
 })
 
