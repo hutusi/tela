@@ -153,10 +153,11 @@ export function ReadingPage() {
   }, [navigate])
 
   // The row of the open article stays in view as j and k move; closing puts focus back on it, so
-  // the keyboard carries on from where the reader was.
+  // the keyboard carries on from where the reader was. Leaving focus with an article open brings
+  // the list back with that row in view, since j and k moved on while it was out of the grid.
   const lastOpen = useRef<number | null>(null)
   const navigationType = useNavigationType()
-  // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened or closed; a filter change or a later entry's state is neither
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened or closed, or per focus change; a filter change or a later entry's state is neither
   useEffect(() => {
     const row = (id: number) =>
       document.querySelector<HTMLElement>(`[data-testid="article-row"][data-article-id="${id}"]`)
@@ -175,7 +176,7 @@ export function ReadingPage() {
         : null
     const previous = closedFrom ?? lastOpen.current
     if (previous !== null) row(previous)?.focus()
-  }, [params.articleId])
+  }, [params.articleId, focused])
 
   // A feed that has never been fetched: pull quickly until its first posts arrive.
   useEffect(() => {
@@ -222,22 +223,21 @@ export function ReadingPage() {
     >
       {open ? null : <MobileNav subscriptions={subs} totals={counts} params={params} />}
       {/* Not rendered rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no
-          defined winner (AGENTS.md), and a column that is gone needs no element. The list too:
-          in focus it remounts on close, which the focus effect below is fine with. */}
+          defined winner (AGENTS.md), and a column that is gone needs no element. The list is the
+          exception: in focus it stays mounted and styles.css takes it out of the grid, so its
+          page of rows and its scroll survive and Esc still finds the row it closed. */}
       {panes.sidebar === 'shown' && !focused ? (
         <Sidebar subscriptions={subs} totals={counts} params={params} />
       ) : null}
-      {focused ? null : (
-        <ArticleList
-          items={items}
-          params={params}
-          title={listTitle}
-          readingLang={readingLang}
-          locale={locale}
-          now={now}
-          pendingFetch={pendingFetch}
-        />
-      )}
+      <ArticleList
+        items={items}
+        params={params}
+        title={listTitle}
+        readingLang={readingLang}
+        locale={locale}
+        now={now}
+        pendingFetch={pendingFetch}
+      />
       {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}
       {article ? (
         <Reader

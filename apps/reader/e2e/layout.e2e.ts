@@ -173,14 +173,36 @@ test('focus hides the list too while an article is open, and j, k and Esc carry 
 
   const layout = page.getByTestId('reading-layout')
   const toggle = page.getByTestId('focus-toggle')
+  const list = page.getByTestId('article-list')
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  // What the list holds must survive focus — its page of rows ("Older articles") and its scroll —
+  // or an Esc past row 200 finds no row to focus. A property set on the element proves it was
+  // never remounted; scrolling its row out of view first proves it comes back with the row shown.
+  await list.evaluate((el) => {
+    ;(el as HTMLElement & { kept?: boolean }).kept = true
+    el.scrollTop = 400
+  })
   await toggle.click()
   await expect(layout).toHaveAttribute('data-focus', '1')
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByTestId('article-list')).toHaveCount(0)
+  await expect(list).toBeHidden()
   await expect(page.locator('aside')).toHaveCount(0)
   // The article has the pane to itself.
   expect((await page.getByTestId('reader').boundingBox())?.width).toBeGreaterThanOrEqual(1200)
+  await page.keyboard.press('f')
+  await expect(list).toBeVisible()
+  expect(await list.evaluate((el) => (el as HTMLElement & { kept?: boolean }).kept)).toBe(true)
+  const rowInView = () =>
+    page.evaluate((id) => {
+      const list = document.querySelector('[data-testid="article-list"]')?.getBoundingClientRect()
+      const row = document
+        .querySelector(`[data-testid="article-row"][data-article-id="${id}"]`)
+        ?.getBoundingClientRect()
+      return !!list && !!row && row.top >= list.top && row.bottom <= list.bottom
+    }, first)
+  await expect.poll(rowInView, { message: 'the open row is not in view' }).toBe(true)
+  await toggle.click()
+  await expect(list).toBeHidden()
 
   // The keys still walk the list, which is in the store, not on screen; and Esc puts the list
   // back with focus on the row it closed, as it does with the list in view.
@@ -188,7 +210,7 @@ test('focus hides the list too while an article is open, and j, k and Esc carry 
   await expect(page).toHaveURL(new RegExp(`article=${second}$`))
   await page.keyboard.press('Escape')
   await expect(page).not.toHaveURL(/article=/)
-  await expect(page.getByTestId('article-list')).toBeVisible()
+  await expect(list).toBeVisible()
   await expect(layout).not.toHaveAttribute('data-focus')
   await expect
     .poll(() => page.evaluate(() => document.activeElement?.getAttribute('data-article-id')))
@@ -197,9 +219,9 @@ test('focus hides the list too while an article is open, and j, k and Esc carry 
   // Remembered: the next article opens in focus, and f brings the list back.
   await page.keyboard.press('j')
   await expect(page).toHaveURL(/article=\d+$/)
-  await expect(page.getByTestId('article-list')).toHaveCount(0)
+  await expect(list).toBeHidden()
   await page.keyboard.press('f')
-  await expect(page.getByTestId('article-list')).toBeVisible()
+  await expect(list).toBeVisible()
   await expect(layout).not.toHaveAttribute('data-focus')
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
 })

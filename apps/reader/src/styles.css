@@ -176,6 +176,15 @@
 }
 
 /*
+ * Focus (ADR 0029): the list stays mounted and leaves the grid, so its page of rows and its scroll
+ * survive and Esc still finds the row it closed. A `lg:hidden` on the list would fight its own
+ * `lg:group-data-[open=1]:block` with no defined winner; unlayered, this rule outranks both.
+ */
+[data-testid="reading-layout"][data-focus="1"] > [data-testid="article-list"] {
+  display: none;
+}
+
+/*
  * The reader's typography (ADR 0026): `--reader-scale` and `--reader-measure` are set on the
  * reader pane from the member's synced prefs. The paired body keeps its own two-column measure.
  */

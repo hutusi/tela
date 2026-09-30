@@ -90,8 +90,11 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   list are sticky and scroll independently. The sidebar hides and shows from a toggle at the head
   of the list (`[` does the same), and the grid drops its first column with it. Focus (`f`, or
   the button beside Close) hides the list as well while an article is open, which then has the
-  grid to itself; closing brings the list back. Which panes show is this device's choice, kept in
-  localStorage rather than synced (ADR 0029). Below `lg` the
+  grid to itself; closing brings the list back. The list stays mounted, taken out of the grid by
+  an unlayered rule in `styles.css` (a `lg:hidden` would fight its own
+  `lg:group-data-[open=1]:block`), so its page of rows and its scroll survive and Esc still finds
+  the row it closed. Which panes show is this device's choice, kept in localStorage rather than
+  synced (ADR 0029). Below `lg` the
   sidebar is hidden, a `MobileNav` disclosure above the list carries the filters, subscriptions
   and "Add a feed", and the list gives way to the reader when an article is open (stacked
   fallback: list → article as a page). Mobile is a fallback, not a design; `mobile.e2e.ts` keeps
