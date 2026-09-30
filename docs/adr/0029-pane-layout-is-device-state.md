@@ -29,8 +29,10 @@ and a value this build does not know falls back to the default, so a later build
 without breaking an earlier one. A store that cannot be read or written (private mode, a blocked
 origin) leaves the defaults, and a choice made then holds for the session.
 
-Other tabs of the same browser follow through the `storage` event. The theme's localStorage key
-(0026) is unchanged: it is a first-paint cache of a synced pref, not device state.
+Other tabs of the same browser follow through the `storage` event, heard for the module's life
+rather than per subscriber, so a tab away from the reading page has a fresh answer when it comes
+back. The theme's localStorage key (0026) is unchanged: it is a first-paint cache of a synced
+pref, not device state.
 
 ## Consequences
 

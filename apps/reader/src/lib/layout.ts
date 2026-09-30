@@ -18,10 +18,29 @@ export type Focus = (typeof FOCUS)[number]
 export type Layout = { sidebar: Sidebar; focus: Focus }
 
 const KEYS: Record<keyof Layout, string> = { sidebar: 'tela.sidebar', focus: 'tela.focus' }
+const OURS = new Set(Object.values(KEYS))
 const DEFAULT: Layout = { sidebar: 'shown', focus: 'off' }
 
 let cached: Layout | null = null
 const listeners = new Set<() => void>()
+let watching = false
+
+/**
+ * Another tab's change arrives as its `storage` event (a tab never gets its own), which drops the
+ * cache so the next read comes from the store. One listener for the module's life, not one per
+ * subscriber: a tab away from the reading page has no subscriber, and a cache kept through that
+ * gap would hand it the layout it left with when it comes back.
+ */
+function watch(): void {
+  if (watching) return
+  watching = true
+  window.addEventListener('storage', (e) => {
+    // `key === null` is `clear()`.
+    if (e.key !== null && !OURS.has(e.key)) return
+    cached = null
+    for (const listener of listeners) listener()
+  })
+}
 
 function read(key: string): string | null {
   try {
@@ -33,6 +52,7 @@ function read(key: string): string | null {
 
 /** What this device has chosen: read once, kept until something here or in another tab changes it. */
 export function layout(): Layout {
+  watch()
   cached ??= {
     sidebar: pick(read(KEYS.sidebar), SIDEBAR, DEFAULT.sidebar),
     focus: pick(read(KEYS.focus), FOCUS, DEFAULT.focus),
@@ -58,23 +78,12 @@ export function toggleFocus(): void {
   setLayout({ focus: layout().focus === 'on' ? 'off' : 'on' })
 }
 
-/**
- * Hear every change: this tab's through `setLayout`, another tab's through its `storage` event
- * (a tab never gets its own), which drops the cache so the next read comes from the store.
- */
+/** Hear this tab's changes, made through `setLayout`, and another tab's, heard by `watch`. */
 export function subscribeLayout(listener: () => void): () => void {
+  watch()
   listeners.add(listener)
-  const ours = new Set(Object.values(KEYS))
-  const onStorage = (e: StorageEvent) => {
-    // `key === null` is `clear()`.
-    if (e.key !== null && !ours.has(e.key)) return
-    cached = null
-    listener()
-  }
-  window.addEventListener('storage', onStorage)
   return () => {
     listeners.delete(listener)
-    window.removeEventListener('storage', onStorage)
   }
 }
 

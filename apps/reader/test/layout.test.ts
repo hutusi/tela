@@ -38,9 +38,8 @@ function storageEvent(key: string | null) {
 }
 /** Drop the module's cache the way a `clear()` elsewhere would. */
 function forget() {
-  const stop = subscribeLayout(() => {})
+  layout()
   storageEvent(null)
-  stop()
 }
 
 describe('the panes this device shows', () => {
@@ -92,6 +91,19 @@ describe('the panes this device shows', () => {
     expect(told).toBe(1)
     expect(layout().sidebar).toBe('hidden')
     stop()
+  })
+
+  test('another tab’s choice is not missed while nobody here is listening', () => {
+    // A tab on Settings has no subscriber. It must still come back to /reading with the layout the
+    // other tab chose meanwhile, not the one it left with.
+    held.clear()
+    forget()
+    expect(layout().sidebar).toBe('shown')
+    held.set('tela.sidebar', 'hidden')
+    storageEvent('tela.sidebar')
+    expect(layout().sidebar).toBe('hidden')
+    // And one listener for the module's life, however many times the page subscribed.
+    expect(storageListeners.size).toBe(1)
   })
 
   test('a store that refuses leaves the defaults, and the choice still holds for the session', () => {

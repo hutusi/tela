@@ -231,3 +231,28 @@ test('focus is what gives a 1280px window its two bilingual columns', async ({ p
   expect(paired.o.width, 'original column is cramped').toBeGreaterThanOrEqual(520)
   expect(paired.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)
 })
+
+test('a change made in another tab reaches a tab that was away from the reading page', async ({
+  page,
+  context,
+}) => {
+  // Leaving /reading takes its subscribers with it. The store once heard other tabs only through
+  // them, so a tab that came back was handed the layout it had left with.
+  await page.goto('/reading')
+  await synced(page)
+  await page.locator('header nav').getByRole('link', { name: 'Settings' }).click()
+  await expect(page).toHaveURL(/\/settings$/)
+
+  const other = await context.newPage()
+  await other.goto('/reading')
+  await synced(other)
+  await other.getByTestId('sidebar-toggle').click()
+  await expect(other.locator('aside')).toHaveCount(0)
+
+  // Back by the header pill: a navigation inside the app, so nothing is reloaded or re-read.
+  await page.locator('header nav').getByRole('link', { name: 'Reading' }).click()
+  await expect(page).toHaveURL(/\/reading$/)
+  await expect(page.getByTestId('reading-layout')).toHaveAttribute('data-sidebar', 'hidden')
+  await expect(page.locator('aside')).toHaveCount(0)
+  await other.close()
+})
