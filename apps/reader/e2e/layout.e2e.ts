@@ -155,3 +155,79 @@ test('the column is centred in the pane, at the width the member chose', async (
   expect(m?.width).toBe(640)
   expect(centred(m), `original not centred: ${JSON.stringify(m)}`).toBe(true)
 })
+
+test('focus hides the list too while an article is open, and j, k and Esc carry on', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto('/reading')
+  await synced(page)
+  await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+  await expect(page).toHaveURL(/feed=\d+$/)
+  const rows = page.getByTestId('article-row')
+  await expect(rows.first()).toContainText('Julia Evans')
+  const first = await rows.nth(0).getAttribute('data-article-id')
+  const second = await rows.nth(1).getAttribute('data-article-id')
+  await page.keyboard.press('j')
+  await expect(page).toHaveURL(new RegExp(`article=${first}$`))
+
+  const layout = page.getByTestId('reading-layout')
+  const toggle = page.getByTestId('focus-toggle')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await toggle.click()
+  await expect(layout).toHaveAttribute('data-focus', '1')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('article-list')).toHaveCount(0)
+  await expect(page.locator('aside')).toHaveCount(0)
+  // The article has the pane to itself.
+  expect((await page.getByTestId('reader').boundingBox())?.width).toBeGreaterThanOrEqual(1200)
+
+  // The keys still walk the list, which is in the store, not on screen; and Esc puts the list
+  // back with focus on the row it closed, as it does with the list in view.
+  await page.keyboard.press('j')
+  await expect(page).toHaveURL(new RegExp(`article=${second}$`))
+  await page.keyboard.press('Escape')
+  await expect(page).not.toHaveURL(/article=/)
+  await expect(page.getByTestId('article-list')).toBeVisible()
+  await expect(layout).not.toHaveAttribute('data-focus')
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.getAttribute('data-article-id')))
+    .toBe(second)
+
+  // Remembered: the next article opens in focus, and f brings the list back.
+  await page.keyboard.press('j')
+  await expect(page).toHaveURL(/article=\d+$/)
+  await expect(page.getByTestId('article-list')).toHaveCount(0)
+  await page.keyboard.press('f')
+  await expect(page.getByTestId('article-list')).toBeVisible()
+  await expect(layout).not.toHaveAttribute('data-focus')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('focus is what gives a 1280px window its two bilingual columns', async ({ page }) => {
+  // With the sidebar hidden the pane is still 1020px here; only the list going too gets it past
+  // 1080: (1216 − 40) / 2 = 588px columns, ~580 in CI's Linux Chromium.
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto('/reading')
+  await synced(page)
+  await page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first().click()
+  await expect(page.getByTestId('translation-bar')).toHaveAttribute('data-state', /done|partial/, {
+    timeout: 30_000,
+  })
+  await expect(page.getByTestId('paired-body')).toBeVisible()
+  const stacked = await firstPair(page)
+  expect(stacked.t.top, 'stacked with the list beside it').toBeGreaterThan(stacked.o.top)
+
+  await page.getByTestId('focus-toggle').click()
+  await expect
+    .poll(async () => {
+      const m = await firstPair(page)
+      return Math.abs(m.t.top - m.o.top)
+    })
+    .toBeLessThan(4)
+  const paired = await firstPair(page)
+  expect(paired.o.left, 'the original is not the left-hand column').toBeLessThan(paired.t.left)
+  expect(paired.t.width, 'translation column is cramped').toBeGreaterThanOrEqual(520)
+  expect(paired.o.width, 'original column is cramped').toBeGreaterThanOrEqual(520)
+  expect(paired.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)
+})

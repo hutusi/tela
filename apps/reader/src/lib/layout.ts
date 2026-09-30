@@ -1,5 +1,6 @@
 /**
- * Which panes the reading page shows beside the article (ADR 0029): the sidebar can be hidden.
+ * Which panes the reading page shows beside the article (ADR 0029): the sidebar can be hidden,
+ * and in focus the list goes too while an article is open.
  *
  * This is state of the device, not a synced pref: a 13" laptop hides what a 27" monitor has room
  * for, so the choice belongs to the screen it was made on. It lives in localStorage behind this
@@ -11,11 +12,13 @@ import { useSyncExternalStore } from 'react'
 import { pick } from './typography'
 
 export const SIDEBAR = ['shown', 'hidden'] as const
+export const FOCUS = ['off', 'on'] as const
 export type Sidebar = (typeof SIDEBAR)[number]
-export type Layout = { sidebar: Sidebar }
+export type Focus = (typeof FOCUS)[number]
+export type Layout = { sidebar: Sidebar; focus: Focus }
 
-const KEYS: Record<keyof Layout, string> = { sidebar: 'tela.sidebar' }
-const DEFAULT: Layout = { sidebar: 'shown' }
+const KEYS: Record<keyof Layout, string> = { sidebar: 'tela.sidebar', focus: 'tela.focus' }
+const DEFAULT: Layout = { sidebar: 'shown', focus: 'off' }
 
 let cached: Layout | null = null
 const listeners = new Set<() => void>()
@@ -30,7 +33,10 @@ function read(key: string): string | null {
 
 /** What this device has chosen: read once, kept until something here or in another tab changes it. */
 export function layout(): Layout {
-  cached ??= { sidebar: pick(read(KEYS.sidebar), SIDEBAR, DEFAULT.sidebar) }
+  cached ??= {
+    sidebar: pick(read(KEYS.sidebar), SIDEBAR, DEFAULT.sidebar),
+    focus: pick(read(KEYS.focus), FOCUS, DEFAULT.focus),
+  }
   return cached
 }
 
@@ -46,6 +52,10 @@ export function setLayout(patch: Partial<Layout>): void {
 
 export function toggleSidebar(): void {
   setLayout({ sidebar: layout().sidebar === 'hidden' ? 'shown' : 'hidden' })
+}
+
+export function toggleFocus(): void {
+  setLayout({ focus: layout().focus === 'on' ? 'off' : 'on' })
 }
 
 /**
@@ -74,10 +84,11 @@ export function useLayout(): Layout {
 
 /**
  * The reading grid's columns from `lg`: sidebar, list, article. The list is narrower while an
- * article is open, and the sidebar's column goes with the sidebar. Whole literals, so Tailwind's
- * scanner sees each one.
+ * article is open, the sidebar's column goes with the sidebar, and in focus an open article has
+ * the grid to itself. Whole literals, so Tailwind's scanner sees each one.
  */
-export function gridColumns(open: boolean, { sidebar }: Layout): string {
+export function gridColumns(open: boolean, { sidebar, focus }: Layout): string {
+  if (open && focus === 'on') return 'lg:grid-cols-[minmax(0,1fr)]'
   if (sidebar === 'hidden') {
     return open
       ? 'lg:grid-cols-[260px_minmax(0,1fr)]'

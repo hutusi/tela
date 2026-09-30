@@ -88,16 +88,19 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
   list are sticky and scroll independently. The sidebar hides and shows from a toggle at the head
-  of the list (`[` does the same), and the grid drops its first column with it; which panes show
-  is this device's choice, kept in localStorage rather than synced (ADR 0029). Below `lg` the
+  of the list (`[` does the same), and the grid drops its first column with it. Focus (`f`, or
+  the button beside Close) hides the list as well while an article is open, which then has the
+  grid to itself; closing brings the list back. Which panes show is this device's choice, kept in
+  localStorage rather than synced (ADR 0029). Below `lg` the
   sidebar is hidden, a `MobileNav` disclosure above the list carries the filters, subscriptions
   and "Add a feed", and the list gives way to the reader when an article is open (stacked
   fallback: list → article as a page). Mobile is a fallback, not a design; `mobile.e2e.ts` keeps
   it working.
 - Side by side is a container query on the reader pane, not a viewport breakpoint: two columns of
   640px appear once the pane itself is 1080px, which is about a 1624px viewport after the sidebar
-  and list have taken 480, or 1404px once the sidebar is hidden — which is why a 13" or 14" laptop
-  wants the toggle; `layout.e2e.ts` measures that at 1440. Below that the same grid is one column
+  and list have taken 480, 1404px once the sidebar is hidden, and 1144px in focus — which is why
+  a 13" or 14" laptop wants the toggle and a 1280px window wants focus; `layout.e2e.ts` measures
+  both. Below that the same grid is one column
   and the pairs interleave — a source paragraph, its translation, the next paragraph — at the full
   measure. `styles.e2e.ts` measures the columns at 1280, 1440 and 1700; the previous `xl`
   breakpoint rendered 348px columns at 1280 and nothing caught it (ADR 0019).
@@ -203,6 +206,9 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
 - **The sidebar toggle** sits at the head of the list, in one place whether the sidebar is shown
   or hidden: a 16px panel glyph drawn inline (Tela has no icon set) in the quiet button style,
   `aria-expanded` for its state. From `lg` only; below it `MobileNav` holds the filters.
+- **Focus** sits beside `✕ Close` in the action row: one label, `aria-pressed` and the `hover`
+  ground while it is on, as a toggle button has. From `lg` only, since below it the list already
+  gives way to the article. Both are device state (ADR 0029).
 - **Highlights** are a marker stroke over the text, never a box: `::highlight()` paint, no
   element around the words.
   - A selection in the article shows a floating pill above it (*Highlight*, *Add a note*).
@@ -211,5 +217,5 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - Under the article, *N highlights* lists each quote (in a `<mark>` there, since it is a copy)
     with its note. One the post lost says so in `muted`; one on a layout not showing says where
     it is.
-- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `h`, `[` and `?` in `kbd` chips. `[`
+- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `h`, `[`, `f` and `?` in `kbd` chips. `[`
   needs AltGr or Option on some non-US layouts, as `?` does on others; neither is worked around.

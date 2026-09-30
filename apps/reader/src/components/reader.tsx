@@ -19,6 +19,7 @@ import { useArticleTranslation } from '../lib/use-translation'
 import { useNow, useStore, useTables } from '../store/hooks'
 import type { ContentObject } from '../store/objects'
 import { feedTitle, isLiked, isRecommended, shownTitle, siteOfFeed } from '../store/selectors'
+import { FocusToggle } from './focus-toggle'
 import { HighlightList, HighlightNote, HighlightToolbar, useSelectedAnchor } from './highlights'
 import { LikeButton } from './like-button'
 import { PairedBody } from './paired-body'
@@ -203,14 +204,17 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
       ) : null}
 
       <div className="mx-auto mb-7 flex max-w-[1240px] flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="-ml-2.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink"
-          data-testid="close-article"
-        >
-          {t('close')}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="-ml-2.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink"
+            data-testid="close-article"
+          >
+            {t('close')}
+          </button>
+          <FocusToggle />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <TypographyMenu />
           <LikeButton

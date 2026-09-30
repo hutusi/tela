@@ -304,10 +304,10 @@
  * Paired bilingual body (`PairedBody`): one grid row per top-level block, original first.
  *
  * Stacked is the base case and two columns are the override, because two columns need the pane's
- * content box to be 1080px — about a 1624px window once the sidebar and list have taken 480, or
- * 1404px with the sidebar hidden (ADR 0029) — and below that the same DOM reads as an interleave
- * at the member's measure. The old layout turned two columns on at a 1280px *viewport*, which
- * left 348px per column.
+ * content box to be 1080px — about a 1624px window once the sidebar and list have taken 480,
+ * 1404px with the sidebar hidden and 1144px in focus (ADR 0029) — and below that the same DOM
+ * reads as an interleave at the member's measure. The old layout turned two columns on at a
+ * 1280px *viewport*, which left 348px per column.
  *
  * Unlayered like everything else in this file, so no Tailwind utility can quietly outrank it.
  */

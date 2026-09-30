@@ -82,7 +82,8 @@
     "recommendedWithNote": "Recommended with your note.",
     "unrecommended": "Recommendation removed.",
     "fetchingFullText": "Fetching the full post from the site…",
-    "upNext": "Up next"
+    "upNext": "Up next",
+    "focus": "Focus"
   },
   "add": {
     "title": "Add a feed",
@@ -289,6 +290,7 @@
     "close": "Close the article",
     "highlight": "Highlight the selection",
     "sidebar": "Show or hide the sidebar",
+    "focus": "Hide the list while reading",
     "help": "Show or hide this list",
     "dismiss": "Close"
   }

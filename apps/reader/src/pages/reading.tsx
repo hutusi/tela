@@ -21,7 +21,7 @@ import {
   readingHref,
   readingModeParam,
 } from '../lib/href'
-import { gridColumns, toggleSidebar, useLayout } from '../lib/layout'
+import { gridColumns, toggleFocus, toggleSidebar, useLayout } from '../lib/layout'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { articlesFor, isRead, shownTitle, subscriptionItems, totals } from '../store/selectors'
 import { useUi } from '../ui'
@@ -52,8 +52,10 @@ export function ReadingPage() {
   const article =
     params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
   const open = params.articleId !== null
-  // Which panes show beside the article: this device's choice, not the member's (ADR 0029).
+  // Which panes show beside the article: this device's choice, not the member's (ADR 0029). In
+  // focus an open article has the page to itself; a closed one shows the list as ever.
   const panes = useLayout()
+  const focused = open && panes.focus === 'on'
 
   // The post after this one in the list as shown, the one `j` would open: a card at the end of
   // the article offers it, so a pointer reader flows on without going back up to the list.
@@ -108,7 +110,7 @@ export function ReadingPage() {
   }, [navigate])
 
   // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
-  // article, [ shows or hides the sidebar, ? lists the keys. Typing in a field is never a shortcut, and a popover that handles
+  // article, [ shows or hides the sidebar, f the list too while one is open, ? lists the keys. Typing in a field is never a shortcut, and a popover that handles
   // Esc itself marks the event so the article stays open.
   const [help, setHelp] = useState(false)
   // Read when a key is pressed, not when the listener was bound: a second `j` can come before
@@ -138,6 +140,9 @@ export function ReadingPage() {
       } else if (e.key === '[') {
         e.preventDefault()
         toggleSidebar()
+      } else if (e.key === 'f' && now.articleId !== null) {
+        e.preventDefault()
+        toggleFocus()
       } else if (e.key === '?') {
         e.preventDefault()
         setHelp((shown) => !shown)
@@ -213,22 +218,26 @@ export function ReadingPage() {
       data-testid="reading-layout"
       data-open={open ? '1' : undefined}
       data-sidebar={panes.sidebar}
+      data-focus={focused ? '1' : undefined}
     >
       {open ? null : <MobileNav subscriptions={subs} totals={counts} params={params} />}
       {/* Not rendered rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no
-          defined winner (AGENTS.md), and a column that is gone needs no element. */}
-      {panes.sidebar === 'shown' ? (
+          defined winner (AGENTS.md), and a column that is gone needs no element. The list too:
+          in focus it remounts on close, which the focus effect below is fine with. */}
+      {panes.sidebar === 'shown' && !focused ? (
         <Sidebar subscriptions={subs} totals={counts} params={params} />
       ) : null}
-      <ArticleList
-        items={items}
-        params={params}
-        title={listTitle}
-        readingLang={readingLang}
-        locale={locale}
-        now={now}
-        pendingFetch={pendingFetch}
-      />
+      {focused ? null : (
+        <ArticleList
+          items={items}
+          params={params}
+          title={listTitle}
+          readingLang={readingLang}
+          locale={locale}
+          now={now}
+          pendingFetch={pendingFetch}
+        />
+      )}
       {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}
       {article ? (
         <Reader
