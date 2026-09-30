@@ -101,3 +101,57 @@ test('hiding the sidebar is what gives a 1440px window its two bilingual columns
   expect(paired.o.width, 'original column is cramped').toBeGreaterThanOrEqual(520)
   expect(paired.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)
 })
+
+/** Where an element sits in the reader pane: its two margins, and its width. */
+const margins = (page: Page, selector: string) =>
+  page.evaluate((selector) => {
+    const pane = document.querySelector('[data-testid="reader"]')?.getBoundingClientRect()
+    const el = document.querySelector(selector)?.getBoundingClientRect()
+    if (!pane || !el) return null
+    return { left: el.left - pane.left, right: pane.right - el.right, width: el.width }
+  }, selector)
+
+test('the column is centred in the pane, at the width the member chose', async ({ page }) => {
+  // 1280 is Playwright's desktop default and a common laptop: the pane is 800px and its content
+  // box 736, so a 640px column has 48px to spare on each side. Before, all 96 sat on the right.
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto('/reading')
+  await synced(page)
+  await page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first().click()
+  await expect(page.getByTestId('translation-bar')).toHaveAttribute('data-state', /done|partial/, {
+    timeout: 30_000,
+  })
+  await expect(page.getByTestId('paired-body')).toBeVisible()
+  const centred = (m: { left: number; right: number } | null) =>
+    m !== null && Math.abs(m.left - m.right) < 2
+
+  // Side by side, stacked at this width: the pair's column.
+  let m = await margins(page, '[data-testid="body-original"]')
+  expect(m?.width, 'stacked pair at the measure').toBe(640)
+  expect(centred(m), `stacked pair not centred: ${JSON.stringify(m)}`).toBe(true)
+
+  // Translation alone: the same column.
+  await page.getByTestId('mode-trans').click()
+  m = await margins(page, '[data-testid="article-title"]')
+  expect(m?.width).toBe(640)
+  expect(centred(m), `single column not centred: ${JSON.stringify(m)}`).toBe(true)
+
+  // A wider measure reaches the stacked pair too, which used to stop at 640 whatever was chosen.
+  await page.getByTestId('typography-button').click()
+  await page.getByTestId('measure-wide').click()
+  await page.getByTestId('mode-side').click()
+  await expect(page.getByTestId('paired-body')).toBeVisible()
+  m = await margins(page, '[data-testid="body-original"]')
+  expect(m?.width, 'a stacked pair ignores the wide measure').toBeGreaterThan(700)
+  expect(centred(m)).toBe(true)
+
+  // A post with nothing to translate: its original, centred like the rest.
+  await page.getByTestId('typography-button').click()
+  await page.getByTestId('measure-normal').click()
+  await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).first().click()
+  await page.getByTestId('article-row').first().click()
+  await expect(page.getByTestId('article-title')).toBeVisible()
+  m = await margins(page, '[data-testid="article-title"]')
+  expect(m?.width).toBe(640)
+  expect(centred(m), `original not centred: ${JSON.stringify(m)}`).toBe(true)
+})

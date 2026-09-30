@@ -104,10 +104,15 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 - List rows: feed swatch (10px), feed name, relative time, `XX → EN` badge for foreign posts,
   accent unread dot, serif title (19px wide / 15.5px slim), two-line excerpt, `min · ♡ · ↗` row.
   Read rows render at 62% opacity; the open row has a white background.
-- Reader: `✕ Close` left, Like (and Recommend, phase 7) right; meta line with swatch, feed,
-  author, time, reading time, original link; serif title 40px/1.12 alone and 32px when paired;
-  body max 640px; author card with a 44px round swatch, site title, tagline, reader count, and the
-  visibility note.
+- Reader: `✕ Close` left, Like (and Recommend, phase 7) right, at the pane's edges; below them
+  one column, centred in the pane, holding the meta line (swatch, feed, author, time, reading
+  time, original link), the translation bar, the body, the highlights and the author card (a 44px
+  round swatch, site title, tagline, reader count, and the visibility note). The column is the
+  member's measure (640px by default) while the body is one column, and 1240px once two paired
+  columns fit, so the chrome above and below the text is as wide as the text. Serif title
+  40px/1.12 alone and 32px when paired. The column is a `@container` wrapper of its own, never
+  the pane: container-type brings layout containment, and the highlight toolbar and note are
+  `fixed`.
 - Paired reading: one grid row per top-level block, the original first — left-hand column when
   there are two, above the translation when they stack, so nothing changes places at the
   threshold. The original — its title included — sits on `source`, continuous down its column and
@@ -191,8 +196,8 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
 - **"Aa"** in the reader's action row, before Like, opens a 280 px popover. It holds three
   segmented choices, which Settings repeats under *Appearance*:
   - **Size:** four steps, ×0.88 / ×1 / ×1.13 / ×1.27 of the 19.5 px body (18 px for CJK).
-  - **Width:** 560 / 640 / 760 px for the single column. The paired body keeps its own two-column
-    measure.
+  - **Width:** 560 / 640 / 760 px for the single column, and for a stacked pair. Two paired
+    columns keep their own 640px measure.
   - **Theme:** Auto / Light / Dark.
 - **The sidebar toggle** sits at the head of the list, in one place whether the sidebar is shown
   or hidden: a 16px panel glyph drawn inline (Tela has no icon set) in the quiet button style,
