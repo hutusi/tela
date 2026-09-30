@@ -7,6 +7,13 @@
  */
 import type { Persistence } from './db'
 
+/**
+ * Sent on every request the idle prefetch makes. The edge ignores it; it says the request is
+ * one nothing on screen waits for, which the no-network spec (e2e/local-first.e2e.ts) relies on:
+ * a prefetch re-arms after every render, so one can start while that spec counts.
+ */
+export const PREFETCH_HEADER = 'x-tela-prefetch'
+
 export type ContentBlock = { tag: string; html: string; leaves: string[] }
 /** `c/<key>.json`, as `@tela/content` writes it. */
 export type ContentObject = {
@@ -90,8 +97,11 @@ export class Objects {
     ;(await this.heldKeys()).add(key)
   }
 
-  /** A translation or chunk object by its R2 key. */
-  async object<T>(key: string, signal?: AbortSignal): Promise<T | null> {
+  /**
+   * A translation or chunk object by its R2 key. `background` marks the request as a prefetch
+   * (`PREFETCH_HEADER`): nothing on screen is waiting for it.
+   */
+  async object<T>(key: string, signal?: AbortSignal, background = false): Promise<T | null> {
     const hit = this.recent.get(key) as T | undefined
     if (hit) return hit
     const stored = await this.persistence.getObject(key)
@@ -101,6 +111,7 @@ export class Objects {
     }
     const res = await fetch(`/o/${key}`, {
       credentials: 'same-origin',
+      ...(background ? { headers: { [PREFETCH_HEADER]: '1' } } : {}),
       ...(signal ? { signal } : {}),
     })
     if (!res.ok) return null
@@ -129,6 +140,7 @@ export class Objects {
         try {
           const res = await fetch(`/o/bundle?k=${next.join(',')}`, {
             credentials: 'same-origin',
+            headers: { [PREFETCH_HEADER]: '1' },
             ...(signal ? { signal } : {}),
           })
           if (!res.ok) return

@@ -28,8 +28,10 @@ test('after sync, five opens, a filter change and Back make no request to /api o
   page.on('request', (r) => {
     const path = new URL(r.url()).pathname
     // Pushes of the reads themselves, and the pulls after them, are the store writing behind:
-    // never something a render waits on.
+    // never something a render waits on. Nor is the idle prefetch, which re-arms after every
+    // open and may fetch another post's translation meanwhile; its requests say so.
     if (path === '/api/v1/mutations' || path === '/api/v1/sync') return
+    if (r.headers()['x-tela-prefetch']) return
     if (path.startsWith('/api/') || path.startsWith('/o/')) requests.push(`${r.method()} ${path}`)
   })
 

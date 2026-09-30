@@ -182,7 +182,7 @@ export function ReadingPage() {
             if (controller.signal.aborted || !a.contentKey) continue
             const row = tables.translations.get(translationKey(a.contentKey, readingLang))
             if (row?.objectKey && (row.state === 'done' || row.state === 'partial')) {
-              await objects.object(row.objectKey, controller.signal).catch(() => null)
+              await objects.object(row.objectKey, controller.signal, true).catch(() => null)
             }
           }
         })
