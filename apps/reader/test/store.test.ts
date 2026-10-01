@@ -71,6 +71,25 @@ describe('the device store', () => {
     expect(store.confirmedFollowees()).toBe(ID)
   })
 
+  test('says when a pull changes whom the member follows, with the rows', async () => {
+    const store = await member()
+    const heard: string[][] = []
+    store.onFollowsConfirmed = (rows) => heard.push(rows.map((r) => `${r.handle}:${r.deletedAt}`))
+    const row = (deletedAt: number | null, seq: number) => ({
+      userId: 'member-anna-0000001',
+      handle: 'anna',
+      displayName: null,
+      createdAt: NOW,
+      deletedAt,
+      seq,
+    })
+    await store.applyPull(pull(9, { follows: [row(null, 9)] }), store.epoch)
+    await store.applyPull(pull(10, { articles: [article(10)] }), store.epoch) // nothing to say
+    await store.applyPull(pull(11, { follows: [row(11, 11)] }), store.epoch)
+    // The unfollow comes with the row as it was, which still names whose page to forget.
+    expect(heard).toEqual([['anna:null'], ['anna:null']])
+  })
+
   test('a delta from a tela-api without follows lands, cursor and all', async () => {
     const storage = memoryPersistence()
     const store = await member(storage)

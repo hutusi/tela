@@ -29,10 +29,14 @@ export function usePublic<T>(path: string | null): Loaded<T> {
     const data = held.get(path) ?? handedOver(path)
     return data === undefined ? { status: 'loading' } : { status: 'ready', data: data as T }
   })
-  const [version, setVersion] = useState(0)
+  // How often this path was forgotten while shown. Counted per path: a page that stays mounted
+  // across paths (one profile, then another) starts each at 0, so the next shows loading rather
+  // than the last one's data until its own answer comes.
+  const [bump, setBump] = useState<{ path: string | null; n: number }>({ path, n: 0 })
+  const version = bump.path === path ? bump.n : 0
   useEffect(() => {
     const listener = (prefix: string) => {
-      if (path?.startsWith(prefix)) setVersion((v) => v + 1)
+      if (path?.startsWith(prefix)) setBump((b) => ({ path, n: (b.path === path ? b.n : 0) + 1 }))
     }
     listeners.add(listener)
     return () => void listeners.delete(listener)

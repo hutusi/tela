@@ -20,8 +20,8 @@ export function handleFrom(pathname: string): string | null {
 
 export const profilePath = (handle: string) => `/api/v1/public/profiles/${handle}`
 
-/** Whether the member followed a profile when each copy of it was first shown, for the visit. */
-const followingWhenShown = new WeakMap<ProfileData, boolean>()
+/** Whether each copy of a profile counts the member's follow, as far as the device can tell. */
+const countedFollowing = new WeakMap<ProfileData, boolean>()
 
 export function ProfilePage() {
   const handle = handleFrom(useLocation().pathname)
@@ -47,25 +47,21 @@ export function ProfilePage() {
   }, [seq, mine, handle])
 
   // The page is cached for everyone and a few minutes old; the member's own follow is not. Their
-  // click moves the followers count at once, from whatever this copy of the page said: each copy
-  // remembers whether they followed when it was first shown, for the visit, so coming back to the
-  // copy held (Back) still counts the click. Once the server has the follow, the copy is dropped
-  // and fetched again past the browser's cache, and the fresh one counts it itself.
+  // click moves the followers count at once, from whatever this copy of the page counted: each
+  // copy is taken to count the follow the server had when it was first shown (the confirmed
+  // follows, not the prediction). A copy from the browser's cache after the click is no newer than
+  // that, and once the server has the follow, the app forgets the copies and fetches past the
+  // cache (`onFollowsConfirmed`), so a fresh one counts the follow itself.
   const data = loaded.status === 'ready' ? profileDataOf(loaded.data) : null
   const following = data ? member?.isFollowing(data.profile.id) === true : false
-  if (data && !followingWhenShown.has(data)) followingWhenShown.set(data, following)
   const confirmed = useConfirmedFollowees()
-  const confirmedFollowing = data !== null && confirmed.split(',').includes(data.profile.id)
-  const lastConfirmed = useRef<boolean | null>(null)
-  useEffect(() => {
-    if (lastConfirmed.current !== null && lastConfirmed.current !== confirmedFollowing && handle)
-      forgetPublic(profilePath(handle))
-    lastConfirmed.current = confirmedFollowing
-  }, [confirmedFollowing, handle])
+  if (data && !countedFollowing.has(data)) {
+    countedFollowing.set(data, confirmed.split(',').includes(data.profile.id))
+  }
 
   if (!handle || loaded.status === 'missing') return <NotFoundPage />
   if (!data) return <main className="flex-1" aria-busy="true" />
-  const shift = (following ? 1 : 0) - (followingWhenShown.get(data) ? 1 : 0)
+  const shift = (following ? 1 : 0) - (countedFollowing.get(data) ? 1 : 0)
   const counts = {
     ...data.counts,
     followers: Math.max(0, data.counts.followers + shift),

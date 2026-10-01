@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { AppHeader } from './components/app-header'
 import { detectLocale, I18n, localeCookie } from './i18n'
 import { applyTheme, typographyOf } from './lib/typography'
+import { forgetPublic } from './lib/use-public'
 import { AddPage } from './pages/add'
 import { ClaimPage, ClaimSitePage } from './pages/claim'
 import { DashboardPage } from './pages/dashboard'
@@ -13,7 +14,7 @@ import { FollowingPage } from './pages/following'
 import { LandingPage } from './pages/landing'
 import { LoginPage } from './pages/login'
 import { NotFoundPage } from './pages/not-found'
-import { ProfilePage } from './pages/profile'
+import { ProfilePage, profilePath } from './pages/profile'
 import { ReadingPage } from './pages/reading'
 import { SearchPage } from './pages/search'
 import { SettingsPage } from './pages/settings'
@@ -51,6 +52,17 @@ function HandleOrMissing() {
 
 function Routed() {
   const { store } = useStore()
+  // A follow the server now has, or an unfollow: the profile page held for this visit, and the one
+  // the browser cached, still count the old state. Forgotten here, wherever the member is, so a
+  // return to that profile fetches it again past the cache (ADR 0031).
+  useEffect(() => {
+    store.onFollowsConfirmed = (rows) => {
+      for (const row of rows) if (row.handle) forgetPublic(profilePath(row.handle))
+    }
+    return () => {
+      store.onFollowsConfirmed = null
+    }
+  }, [store])
   const [locale, setLocaleState] = useState<UiLocale>(() =>
     detectLocale(document.cookie, navigator.languages ?? [navigator.language]),
   )

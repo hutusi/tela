@@ -14,6 +14,7 @@ import {
   type Confirmed,
   completePull,
   emptyTables,
+  type FollowRow,
   type Mutation,
   type Pending,
   type PullResponse,
@@ -56,6 +57,11 @@ export class LocalStore {
    * nothing this tab holds belongs to whoever has it now.
    */
   onLost: (() => void) | null = null
+  /**
+   * Called when a pull changes whom the server has the member follow, with those rows (as they
+   * were, for an unfollow): a page cached from before still counts the old state (ADR 0031).
+   */
+  onFollowsConfirmed: ((rows: FollowRow[]) => void) | null = null
   /** The account this tab holds: every write is made for it, and every request names it. */
   userId: string | null = null
   /**
@@ -211,6 +217,12 @@ export class LocalStore {
     const from = this.confirmed.cursor
     const held = this.pending
     this.confirmed = applyPull(this.confirmed, pull)
+    const after = this.confirmed.tables.follows
+    const changedFollows = [
+      ...[...after.values()].filter((f) => !before.follows.has(f.userId)),
+      ...[...before.follows.values()].filter((f) => !after.has(f.userId)),
+    ]
+    if (changedFollows.length > 0) this.onFollowsConfirmed?.(changedFollows)
     this.pending = settle(this.confirmed, this.pending)
     this.recompute()
     const rows = rowsOf(this.confirmed.tables)

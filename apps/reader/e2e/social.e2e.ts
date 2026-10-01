@@ -95,8 +95,14 @@ test.describe('following', () => {
     await page.getByTestId('following-tab-recs').click()
     await expect(items.first()).toHaveAttribute('data-kind', 'recommended')
 
-    // Back to her profile: the count still has the follow, from the copy held or a fresh one.
+    // Back to her profile: the count still has the follow, after the page has asked again (a copy
+    // the browser cached from before the follow must not undo it).
+    const refetched = page.waitForResponse((r) =>
+      r.url().includes(`/api/v1/public/profiles/${HANDLE}`),
+    )
     await page.goBack()
+    await refetched
+    await page.waitForTimeout(300)
     await expect(page.getByTestId('profile-count-followers')).toContainText('1 follower')
     await page.goForward()
     await expect(items.first()).toHaveAttribute('data-kind', 'recommended')
@@ -152,10 +158,29 @@ test.describe('following from the Following page', () => {
     await expect(page.getByTestId('people-you-follow')).toContainText('Anna Kowalska')
     // Asked again after the push and the pull, not before: her note arrives.
     await expect(page.getByTestId('following-note')).toContainText(NOTE)
-    // Away and back: what is held shows, and is asked again behind it.
+    // Away and back: what is held shows, and is asked again behind it, so what she recommended
+    // meanwhile arrives without a reload.
     await page.getByTestId('nav-reading').click()
+    const anna = await request.newContext({
+      baseURL: BASE,
+      extraHTTPHeaders: { 'cf-connecting-ip': '198.51.100.40' },
+    })
+    try {
+      await signInRequest(anna, OTHER)
+      const pulled = (await (
+        await anna.get(`${BASE}/api/v1/sync?cursor=0`, { headers: await memberHeaders(anna) })
+      ).json()) as { rows: { articles: { id: number }[] } }
+      const third = pulled.rows.articles[2]
+      if (!third) throw new Error('the fixture feed has too few posts')
+      await push(anna, [
+        { type: 'recommend', articleId: third.id, note: 'Fresh while you were away.' },
+      ])
+    } finally {
+      await anna.dispose()
+    }
     await page.getByTestId('nav-following').click()
-    await expect(page.getByTestId('following-note')).toContainText(NOTE)
+    await expect(page.getByTestId('following-items')).toContainText('Fresh while you were away.')
+    await expect(page.getByTestId('following-items')).toContainText(NOTE)
   })
 })
 
