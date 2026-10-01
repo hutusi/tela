@@ -147,10 +147,11 @@ and the URL.
 - **Bodies and translations** (`src/store/objects.ts`) come from memory, then IndexedDB, then the
   edge, each downloaded once however many ask while it is on its way (an open joins a download
   under way, and takes a body a prefetch bundle has brought before it is written). While the
-  reader is idle (1.5 s after the list settles) it prefetches unread bodies, the
-  list on screen first, 25 to a `/o/bundle` request and two requests at a time, and then finished
-  translations in the reading language. Nothing is prefetched under Save-Data. Read bodies are
-  evicted after seven days, or once the store passes 50 MB.
+  reader is idle (1.5 s after what it would fetch last changed, not after any render: every pull
+  makes new tables) it prefetches unread bodies, the list on screen first, 25 to a `/o/bundle`
+  request and two requests at a time, and then finished translations in the reading language.
+  Nothing is prefetched under Save-Data. Read bodies are evicted after seven days, or once the
+  store passes 50 MB.
 - **Streamed translation** (ADR 0023): a foreign post asks for one when it opens. While it runs,
   the page polls its status every 1.5 s in a visible tab, fetches each chunk as the status names
   it, and lays it over the original by block index. The finished object replaces the chunks, and

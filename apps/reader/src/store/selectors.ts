@@ -7,7 +7,7 @@
  */
 
 import type { ArticleRow, SiteRow } from '@tela/sync'
-import { HORIZON_DAYS, type Tables, titleKey } from '@tela/sync'
+import { HORIZON_DAYS, type Tables, titleKey, translationKey } from '@tela/sync'
 import type { Person } from '../views/types'
 
 export type Filter = 'all' | 'today' | 'liked'
@@ -134,6 +134,38 @@ export function articlesFor(
     }
     return out.sort(newestFirst)
   })
+}
+
+/**
+ * What the idle prefetch would fetch (ADR 0025): the unread bodies, the list on screen first, then
+ * every other feed's; and, when translations open on their own, the finished ones in the reading
+ * language, none in a language the member reads as written. The reading page keys its timer on
+ * this, so a render that changes none of it (an empty pull, the minute's tick) neither puts a
+ * prefetch off nor cancels one under way.
+ */
+export function prefetchPlan(
+  t: Tables,
+  list: readonly ArticleRow[],
+  now: number,
+  readingLang: string,
+  prefs: { autoTranslate: boolean; never: readonly string[] },
+): { bodies: string[]; translations: string[] } {
+  const everything = articlesFor(t, { filter: 'all', feedId: null }, now)
+  const bodies = new Set<string>()
+  for (const a of [...list, ...everything]) {
+    if (a.contentKey && !isRead(t, a, now)) bodies.add(a.contentKey)
+  }
+  const translations: string[] = []
+  if (prefs.autoTranslate) {
+    for (const a of everything) {
+      if (!a.contentKey || (a.sourceLang !== null && prefs.never.includes(a.sourceLang))) continue
+      const row = t.translations.get(translationKey(a.contentKey, readingLang))
+      if (row?.objectKey && (row.state === 'done' || row.state === 'partial')) {
+        translations.push(row.objectKey)
+      }
+    }
+  }
+  return { bodies: [...bodies], translations }
 }
 
 /**

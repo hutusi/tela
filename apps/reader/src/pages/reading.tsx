@@ -3,7 +3,6 @@
  * (ADR 0017's rule, kept), and every pane is a function of it and the local store, so a click, a
  * filter change or Back is a render, not a request (ADR 0025).
  */
-import { translationKey } from '@tela/sync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
@@ -28,6 +27,7 @@ import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
   isRead,
+  prefetchPlan,
   shownTitle,
   subscriptionItems,
   totals,
@@ -204,37 +204,33 @@ export function ReadingPage() {
     return () => clearInterval(id)
   }, [pendingFetch, engine])
 
-  // Prefetch unread bodies and finished translations while idle: the list on screen first.
+  // Prefetch unread bodies and finished translations while idle: the list on screen first. Keyed on
+  // what it would fetch, not on the tables: every pull makes new ones, even an empty pull a minute,
+  // and a timer reset by each would put the prefetch off, and cancel one under way, for nothing.
+  // An open marks a post read, which changes the plan, so each open plans again.
+  const plan = useMemo(
+    () => JSON.stringify(prefetchPlan(tables, items, now, readingLang, prefs)),
+    [tables, items, now, readingLang, prefs],
+  )
   const lastPrefetch = useRef<AbortController | null>(null)
   useEffect(() => {
     const timer = setTimeout(() => {
       lastPrefetch.current?.abort()
       const controller = new AbortController()
       lastPrefetch.current = controller
-      const at = Date.now()
-      const unread = (list: typeof items) =>
-        list
-          .filter((a) => a.contentKey && !isRead(tables, a, at))
-          .map((a) => a.contentKey as string)
-      const everything = articlesFor(tables, { filter: 'all', feedId: null }, at)
+      const { bodies, translations } = JSON.parse(plan) as ReturnType<typeof prefetchPlan>
       void objects
-        .prefetch([...unread(items), ...unread(everything)], controller.signal)
+        .prefetch(bodies, controller.signal)
         .then(async () => {
-          // Only translations the member will see on opening: none while they translate only when
-          // asked, and none in a language they read as written.
-          if (!prefs.autoTranslate) return
-          for (const a of everything) {
-            if (controller.signal.aborted || !a.contentKey) continue
-            if (a.sourceLang !== null && prefs.never.includes(a.sourceLang)) continue
-            const row = tables.translations.get(translationKey(a.contentKey, readingLang))
-            if (row?.objectKey && (row.state === 'done' || row.state === 'partial')) {
-              await objects.object(row.objectKey, controller.signal, true).catch(() => null)
-            }
+          for (const key of translations) {
+            if (controller.signal.aborted) return
+            await objects.object(key, controller.signal, true).catch(() => null)
           }
         })
+        .catch(() => undefined)
     }, PREFETCH_IDLE_MS)
     return () => clearTimeout(timer)
-  }, [tables, items, objects, readingLang, prefs])
+  }, [plan, objects])
 
   return (
     <div
