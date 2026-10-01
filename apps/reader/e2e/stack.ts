@@ -88,6 +88,8 @@ const configs = {
     LLM_MOCK_DROP_MARKER: '[[drop]]',
     PUBLIC_URL: baseUrl,
     WEBSUB_ENABLED: '1',
+    // Asked whether a member has a Gravatar (ADR 0033): the fixture server, never gravatar.com.
+    GRAVATAR_URL: `${process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'}/gravatar`,
   }),
 }
 for (const [name, config] of Object.entries(configs)) {

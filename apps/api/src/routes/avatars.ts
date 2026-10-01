@@ -5,12 +5,12 @@
  */
 import { sha256Hex } from '@tela/content/hash'
 import { first } from '@tela/data'
+import { GRAVATAR_URL } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
 
-export const GRAVATAR_URL = 'https://gravatar.com/avatar'
 /** The address carries the version, so an answer never changes under it: 30 days, everywhere. */
 export const AVATAR_CACHE = 'public, max-age=2592000, immutable'
 const MEMBER_ID = /^[A-Za-z0-9_-]{8,64}$/

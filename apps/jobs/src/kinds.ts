@@ -9,6 +9,7 @@ import {
   dueBodies,
   dueExtractions,
   dueFeeds,
+  dueGravatarChecks,
   dueTitles,
   FEED_FETCH_TTL_MS,
   failDueTitles,
@@ -24,6 +25,7 @@ import {
   dueClaims,
   dueWebsub,
   extractArticleJob,
+  gravatarCheckJob,
   ingestFeed,
   siteAssetsJob,
   verifyClaimJob,
@@ -101,6 +103,20 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
       db.run(
         sql`update sites set assets_checked_at = ${now}, seq = ${currentSeq} where id = ${Number(key)}`,
       ),
+    ],
+  },
+  'member.gravatar': {
+    // Whether Gravatar has a picture for a member who shows theirs (ADR 0033). One host for every
+    // member, so they are asked one at a time, a couple of seconds apart.
+    queue: 'misc',
+    ttlMs: 2 * MIN,
+    limit: 50,
+    backoff: { baseMs: 10 * MIN, maxMs: 24 * 60 * MIN, maxAttempts: 3 },
+    due: (now) => dueGravatarChecks(now),
+    run: gravatarCheckJob,
+    // Asked often enough: stamp it, and the answer it had (none, if never) waits a week.
+    exhausted: (db, key, now) => [
+      db.run(sql`update profiles set gravatar_checked_at = ${now} where user_id = ${key}`),
     ],
   },
   'site.claim': {

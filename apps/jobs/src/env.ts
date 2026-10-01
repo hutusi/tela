@@ -13,6 +13,8 @@ export type Env = {
   EXTRACT_QUEUE: Queue<JobMessage>
   TRANSLATE_QUEUE: Queue<JobMessage>
   MISC_QUEUE: Queue<JobMessage>
+  /** Where Gravatar serves pictures (ADR 0033); unset is gravatar.com. The e2e points it here. */
+  GRAVATAR_URL?: string
   WORKER_USER_AGENT?: string
   FETCH_TIMEOUT_MS?: string
   /** Origin of the HK relay; unset means feeds never change region. */

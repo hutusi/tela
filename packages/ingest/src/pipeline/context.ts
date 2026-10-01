@@ -21,6 +21,8 @@ export type IngestContext = {
   assets?: Blobs
   /** Public origin of the web app: claim `rel="me"` targets and the WebSub callback. */
   publicUrl?: string
+  /** Where Gravatar serves pictures (ADR 0033); unset is `GRAVATAR_URL`. Tests point it here. */
+  gravatarUrl?: string
   /** Tests only: let side requests the HTTP client does not make (WebSub hubs) reach localhost. */
   allowPrivateHosts?: boolean
 }

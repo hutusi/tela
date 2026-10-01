@@ -124,7 +124,9 @@ and hashes as the `NORM_VERSION` contract.
   its latest Readability extraction, so a changed summary asks for a new extraction instead of
   replacing the full text.
 - `extractArticleJob`, `siteAssetsJob` (raster favicons to `tela-assets`), `verifyClaimJob`
-  (meta or `rel="me"`, then provenance), `websubSubscribeJob`.
+  (meta or `rel="me"`, then provenance), `websubSubscribeJob`, and `gravatarCheckJob`
+  (`pipeline/gravatar.ts`: whether Gravatar has a picture for a member, recorded and never copied,
+  ADR 0033).
 - `createIngest` (`pipeline/rpc.ts`) is what tela-api reaches over the `Ingest` RPC: discovery,
   adding a feed, starting a claim, reading OPML. The parsers never enter tela-api's bundle.
 - `relay.ts` is the relay client (HMAC-SHA256 over a timestamp and the body); `region-policy.ts`
