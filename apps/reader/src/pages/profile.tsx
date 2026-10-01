@@ -52,16 +52,21 @@ export function ProfilePage() {
   // follows, not the prediction). A copy from the browser's cache after the click is no newer than
   // that, and once the server has the follow, the app forgets the copies and fetches past the
   // cache (`onFollowsConfirmed`), so a fresh one counts the follow itself.
+  // Only for a member: before the session is known (a boot) there is no follow to count, and a
+  // baseline taken then from the device's copy would read one too few. (A copy fetched in the few
+  // milliseconds between the server applying the follow and the pull bringing it back counts it
+  // twice until the copy is forgotten.)
   const data = loaded.status === 'ready' ? profileDataOf(loaded.data) : null
   const following = data ? member?.isFollowing(data.profile.id) === true : false
   const confirmed = useConfirmedFollowees()
-  if (data && !countedFollowing.has(data)) {
+  if (data && member && !countedFollowing.has(data)) {
     countedFollowing.set(data, confirmed.split(',').includes(data.profile.id))
   }
 
   if (!handle || loaded.status === 'missing') return <NotFoundPage />
   if (!data) return <main className="flex-1" aria-busy="true" />
-  const shift = (following ? 1 : 0) - (countedFollowing.get(data) ? 1 : 0)
+  const counted = countedFollowing.get(data)
+  const shift = counted === undefined ? 0 : (following ? 1 : 0) - (counted ? 1 : 0)
   const counts = data.counts && {
     ...data.counts,
     followers: Math.max(0, data.counts.followers + shift),

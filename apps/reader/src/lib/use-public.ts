@@ -3,14 +3,20 @@
  * back to Discover is a render, not a request; a page the edge rendered hands its data over in
  * `#tela-data`, so the first render needs no request either.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const held = new Map<string, unknown>()
 /** Pages changed this visit: fetched past the browser's cache, which holds them a minute. */
 const changed = new Set<string>()
 const listeners = new Set<(prefix: string) => void>()
 
+/**
+ * The data the edge rendered this page with, if it was this path and the page has not been
+ * forgotten since: the handover stays in the document for the whole visit, and after a change it
+ * says what the page said before it.
+ */
 function handedOver(path: string): unknown {
+  if ([...changed].some((prefix) => path.startsWith(prefix))) return undefined
   const el = typeof document === 'undefined' ? null : document.getElementById('tela-data')
   if (!el) return undefined
   try {
@@ -29,6 +35,9 @@ export function usePublic<T>(path: string | null): Loaded<T> {
     const data = held.get(path) ?? handedOver(path)
     return data === undefined ? { status: 'loading' } : { status: 'ready', data: data as T }
   })
+  // Which path the state on screen belongs to: a page mounted across paths must not show one
+  // path's data under another while the other's answer is on its way.
+  const shown = useRef(path)
   // How often this path was forgotten while shown. Counted per path: a page that stays mounted
   // across paths (one profile, then another) starts each at 0, so the next shows loading rather
   // than the last one's data until its own answer comes.
@@ -50,7 +59,9 @@ export function usePublic<T>(path: string | null): Loaded<T> {
     let cancelled = false
     const known = held.get(path) ?? (version === 0 ? handedOver(path) : undefined)
     if (known !== undefined) setState({ status: 'ready', data: known as T })
-    else if (version === 0) setState({ status: 'loading' })
+    // A refetch of the path on screen keeps showing it; any other path shows loading.
+    else if (version === 0 || shown.current !== path) setState({ status: 'loading' })
+    shown.current = path
     const stale = [...changed].some((prefix) => path.startsWith(prefix))
     fetch(path, { credentials: 'same-origin', ...(stale ? { cache: 'reload' as const } : {}) })
       .then(async (res) => {
