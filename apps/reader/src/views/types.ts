@@ -49,7 +49,8 @@ export type SiteData = {
     claimedBy: string | null
     /** Who writes it, for the About: the claimant's own name and bio. */
     claimant: (PersonRef & { bio: string | null }) | null
-    postsLast30d: number
+    /** Null when the answering tela-api does not say (one from before ADR 0031). */
+    postsLast30d: number | null
   }
   feeds: { id: number; feedUrl: string; title: string | null }[]
   posts: PublicArticle[]

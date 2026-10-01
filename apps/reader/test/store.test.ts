@@ -71,6 +71,20 @@ describe('the device store', () => {
     expect(store.confirmedFollowees()).toBe(ID)
   })
 
+  test('a delta from a tela-api without follows lands, cursor and all', async () => {
+    const storage = memoryPersistence()
+    const store = await member(storage)
+    const { follows: _f, ...rows } = pull(9, { articles: [article(9)] }).rows
+    await store.applyPull(
+      { cursor: 9, more: false, reset: false, rows, tombstones: [] } as unknown as Parameters<
+        LocalStore['applyPull']
+      >[0],
+      store.epoch,
+    )
+    expect(store.getSnapshot().tables.articles.has(9)).toBe(true)
+    expect((await storage.load()).cursor).toBe(9)
+  })
+
   test('keeps an acknowledged change until a pull reaches it, then drops it', async () => {
     const store = await member()
     store.mutate({ type: 'markRead', articleId: 7 })

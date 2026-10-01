@@ -12,6 +12,7 @@ import {
   type ArticleRow,
   applyPull,
   type Confirmed,
+  completePull,
   emptyTables,
   type Mutation,
   type Pending,
@@ -201,9 +202,11 @@ export class LocalStore {
    * when it would move the stored cursor back over newer tables another tab of this account
    * wrote (`Change` in db.ts).
    */
-  async applyPull(pull: PullResponse, epoch: number): Promise<void> {
+  async applyPull(given: PullResponse, epoch: number): Promise<void> {
     const owner = this.userId
     if (owner === null || epoch !== this.epoch) return
+    // Every table this build knows, so the loop below never reads one an older tela-api left out.
+    const pull = completePull(given)
     const before = this.confirmed.tables
     const from = this.confirmed.cursor
     const held = this.pending

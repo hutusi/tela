@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { applyPull, type Confirmed, emptyTables, type Pending, settle, view } from './client'
+import type { Mutation } from './mutations'
 import { emptyRows, type PullResponse } from './protocol'
 import type { ArticleRow, FollowRow, ProfileRow, StateRow, SubscriptionRow } from './rows'
 
@@ -228,5 +229,48 @@ describe('follows and privacy flags on the device (ADR 0031)', () => {
       { mutation: { mid: 'lang-only-pad', at: 10, type: 'setProfile', readingLang: 'zh-Hans' } },
     ])
     expect(untouched.profile).toMatchObject({ publicSubscriptions: true, readingLang: 'zh-Hans' })
+  })
+})
+
+describe('a pull from a tela-api of an earlier release', () => {
+  test("reads as having no rows of the tables it does not know, and keeps the device's flags", () => {
+    const profile: ProfileRow = {
+      handle: 'me',
+      displayName: null,
+      bio: null,
+      uiLocale: null,
+      readingLang: null,
+      publicSubscriptions: false,
+      publicLikes: true,
+      seq: 1,
+    }
+    const follow: FollowRow = {
+      userId: 'member-anna-0000001',
+      handle: 'anna',
+      displayName: null,
+      createdAt: 1,
+      deletedAt: null,
+      seq: 2,
+    }
+    const held = applyPull(start, pull(4, { profile: [profile], follows: [follow] }))
+    // What the previous release sends: no `follows`, and a profile without `publicLikes`.
+    const { follows: _f, ...rows } = emptyRows()
+    const { publicLikes: _p, ...oldProfile } = { ...profile, handle: 'me_renamed', seq: 5 }
+    const old = {
+      cursor: 5,
+      more: false,
+      reset: false,
+      rows: { ...rows, profile: [oldProfile] },
+      tombstones: [],
+    } as unknown as PullResponse
+    const next = applyPull(held, old)
+    expect(next.tables.follows.get(follow.userId)?.handle).toBe('anna')
+    expect(next.tables.profile).toMatchObject({ handle: 'me_renamed', publicLikes: true })
+  })
+
+  test('a change of a type this build does not know changes nothing it shows', () => {
+    const held = applyPull(start, pull(3, { subscriptions: [sub(1)], articles: [article(7)] }))
+    const later = { mid: 'from-a-later-build', at: 5, type: 'somethingNew' } as unknown as Mutation
+    expect(view(held, [{ mutation: later }])).toEqual(held.tables)
   })
 })

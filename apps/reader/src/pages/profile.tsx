@@ -7,6 +7,7 @@ import { forgetPublic, usePublic } from '../lib/use-public'
 import { useNow, useReadingLang, useTables } from '../store/hooks'
 import { useUi } from '../ui'
 import { ProfileView, profileTab } from '../views/profile'
+import { profileDataOf } from '../views/public-data'
 import type { ProfileData } from '../views/types'
 import { NotFoundPage } from './not-found'
 
@@ -44,7 +45,7 @@ export function ProfilePage() {
 
   // The page is cached for everyone and a few minutes old; the member's own follow is not. Their
   // click moves the followers count at once, from whatever the page said when it loaded.
-  const data = loaded.status === 'ready' ? loaded.data : null
+  const data = loaded.status === 'ready' ? profileDataOf(loaded.data) : null
   const following = data ? member?.isFollowing(data.profile.id) === true : false
   const atLoad = useRef<{ data: ProfileData; following: boolean } | null>(null)
   if (data && atLoad.current?.data !== data) atLoad.current = { data, following }

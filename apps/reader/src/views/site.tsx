@@ -80,7 +80,9 @@ export function SiteView({
             {site.primaryLang ? (
               <span>{t('writtenIn', { lang: names[site.primaryLang] ?? site.primaryLang })}</span>
             ) : null}
-            <span>{t('cadence', { key: cadenceKey(site.postsLast30d) })}</span>
+            {site.postsLast30d !== null ? (
+              <span>{t('cadence', { key: cadenceKey(site.postsLast30d) })}</span>
+            ) : null}
             <span>{t('readersOnTela', { n: site.readerCount })}</span>
           </div>
           {data.topics.length > 0 ? (

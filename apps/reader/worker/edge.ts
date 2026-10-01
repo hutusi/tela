@@ -261,7 +261,16 @@ export function createEdge(deps: EdgeDeps) {
       })
     }
     const data = res.status === 404 ? null : ((await res.json()) as unknown)
-    const html = pages.render({ route, url, data, locale, template })
+    let html: string
+    try {
+      html = pages.render({ route, url, data, locale, template })
+    } catch {
+      // An answer this build cannot render (a tela-api of another release beside it): the plain
+      // shell, uncached, whose app asks again from the browser, rather than an error page.
+      return new Response(template, {
+        headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': PAGE_CACHE },
+      })
+    }
     const headers = { 'content-type': 'text/html; charset=utf-8', 'content-language': locale }
     const status = data === null ? 404 : 200
     const put = cache.put(

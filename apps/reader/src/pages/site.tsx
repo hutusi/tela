@@ -10,6 +10,7 @@ import { forgetPublic, usePublic } from '../lib/use-public'
 import { api, apiJson } from '../store/api'
 import { useConfirmedFollowees, useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { useUi } from '../ui'
+import { siteDataOf } from '../views/public-data'
 import { SiteView } from '../views/site'
 import type { Person, SiteData } from '../views/types'
 import { NotFoundPage } from './not-found'
@@ -28,7 +29,7 @@ export function SitePage() {
   const never = readingPrefsOf(tables).never
   const reading = useMemo(() => ({ lang: readingLang, never }), [readingLang, never])
   const readers = useFollowedReaders(valid ? siteId : null, member !== undefined)
-  const data = loaded.status === 'ready' ? loaded.data : null
+  const data = loaded.status === 'ready' ? siteDataOf(loaded.data) : null
   useTitle(data ? (data.site.title ?? displayHost(data.site.homeUrl)) : null)
 
   if (!valid || loaded.status === 'missing') return <NotFoundPage />

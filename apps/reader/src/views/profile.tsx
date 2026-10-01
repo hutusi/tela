@@ -44,8 +44,10 @@ export function ProfileView({
   const { profile } = data
   const name = profile.displayName ?? `@${profile.handle}`
   const here = `/@${profile.handle}`
-  const mine = member !== undefined && member.userId === profile.id
-  const following = member?.isFollowing(profile.id) === true
+  // No id is an answer from a tela-api before follows: nothing to follow, and nothing to edit here.
+  const known = profile.id !== ''
+  const mine = known && member !== undefined && member.userId === profile.id
+  const following = known && member?.isFollowing(profile.id) === true
   const person = { id: profile.id, handle: profile.handle, displayName: profile.displayName }
   const tabs = PROFILE_TABS.filter((k) =>
     k === 'recommendations' ? true : k === 'liked' ? data.liked : data.subscriptions,
@@ -90,7 +92,7 @@ export function ProfileView({
               >
                 {t('editProfile')}
               </Link>
-            ) : member ? (
+            ) : member && known ? (
               <button
                 type="button"
                 aria-pressed={following}
@@ -100,7 +102,7 @@ export function ProfileView({
               >
                 {following ? t('following') : t('follow')}
               </button>
-            ) : (
+            ) : member ? null : (
               <Link
                 to={`/login?next=${encodeURIComponent(here)}`}
                 className={`${pill} border-ink bg-ink text-paper`}

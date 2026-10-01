@@ -25,6 +25,7 @@ import { Objects } from './store/objects'
 import { UiContext } from './ui'
 import { DiscoverView } from './views/discover'
 import { ProfileView, profileTab } from './views/profile'
+import { profileDataOf, siteDataOf } from './views/public-data'
 import { SiteView } from './views/site'
 import type { DiscoverData, ProfileData, SiteData } from './views/types'
 
@@ -107,15 +108,15 @@ export function renderPublicPage(input: {
       <DiscoverView data={data as DiscoverData} params={route.params} locale={locale} />
     ) : route.kind === 'site' ? (
       <SiteView
-        data={data as SiteData}
+        data={siteDataOf(data as SiteData)}
         reading={{ lang: locale, never: [] }}
         locale={locale}
         now={now}
       />
     ) : (
       <ProfileView
-        data={data as ProfileData}
-        tab={profileTab(route.tab, data as ProfileData)}
+        data={profileDataOf(data as ProfileData)}
+        tab={profileTab(route.tab, profileDataOf(data as ProfileData))}
         reading={{ lang: locale, never: [] }}
         locale={locale}
         now={now}

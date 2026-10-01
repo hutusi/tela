@@ -12,7 +12,7 @@
  * No I/O here, so the rules can be tested on their own and shared with anything that syncs.
  */
 import type { Mutation } from './mutations'
-import type { PullResponse } from './protocol'
+import { completePull, type PullResponse } from './protocol'
 import type {
   ArticleRow,
   ClaimRow,
@@ -105,10 +105,17 @@ function copy(tables: Tables): Tables {
  * member keeps it (liked, recommended or highlighted); the server sends a kept article back whole
  * the moment it becomes kept again.
  */
-export function applyPull(confirmed: Confirmed, pull: PullResponse): Confirmed {
+export function applyPull(confirmed: Confirmed, given: PullResponse): Confirmed {
+  const pull = completePull(given)
   const t = pull.reset ? emptyTables() : copy(confirmed.tables)
   const r = pull.rows
-  for (const row of r.profile) t.profile = row
+  // A profile row from a tela-api that predates a field keeps the device's value for it, rather
+  // than reading as the field's default until the profile next changes.
+  const previous = confirmed.tables.profile
+  for (const row of r.profile) {
+    t.profile =
+      row.publicLikes === undefined ? { ...row, publicLikes: previous?.publicLikes ?? false } : row
+  }
   for (const row of r.prefs) t.prefs.set(row.key, row)
   for (const row of r.feeds) t.feeds.set(row.id, row)
   for (const row of r.sites) t.sites.set(row.id, row)
@@ -328,6 +335,14 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
     }
     case 'unfollow': {
       t.follows.delete(m.userId)
+      return t
+    }
+    default: {
+      // Exhaustive for every type this build knows; a change from a later build that a rollback
+      // left in this device's queue changes nothing here, and its push says what the server
+      // makes of it. Without this, an older build's view threw on a follow and booted blank.
+      const unknown: never = m
+      void unknown
       return t
     }
   }

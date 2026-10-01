@@ -76,9 +76,15 @@ private subscription or a private like.
 - `MIN_CLIENT` stays 2, as for highlights. A shell that predates this ignores the new pull table
   and never sends the new mutations, and a device copy without a `follows` table starts over
   from a snapshot (0025). The residual risk is an old tab left open across the deploy, which
-  shares the database and moves the cursor past a follow row it drops. The row comes back the
-  next time the followee's profile changes. Otherwise it comes back after a sign-in, when the
-  copy starts over.
+  shares the database and moves the cursor past a follow row it drops. A follow it dropped comes
+  back the next time the followee's profile changes; an unfollow it dropped clears when the
+  member unfollows again, since an unfollow always moves the row's seq. Otherwise either comes
+  back after a sign-in, when the copy starts over.
+- Rolling back is one-way. tela-api may go back alone: a pull without `follows` reads as having
+  none, and public pages from the older API render without what it never said. tela-web may not
+  go back past this release, because the shell before it throws on a pending follow at boot.
+  This release's reducer ignores mutation types it does not know, so the next release can be
+  rolled back to it (OPERATIONS.md).
 - The profile says nothing about the languages a member reads. The design's "Reads in" would
   have published the private never-translate list.
 - Out of scope, and absent from Settings rather than shown disabled: follow approval, email
