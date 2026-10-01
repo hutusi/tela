@@ -8,7 +8,8 @@ import { SiteCard, type SiteCardData } from '../components/site-card'
 import { relativeTime } from '../lib/format'
 import { readingHref } from '../lib/href'
 import { useMemberControls } from '../lib/member'
-import { type ArticleHit, mergeHits, normalizeQuery, searchLocal } from '../lib/search'
+import { readingPrefsOf } from '../lib/prefs'
+import { type ArticleHit, hitTitles, mergeHits, normalizeQuery, searchLocal } from '../lib/search'
 import { useTitle } from '../lib/title'
 import { api } from '../store/api'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
@@ -27,6 +28,7 @@ export function SearchPage() {
   const readingLang = useReadingLang(locale)
   const now = useNow()
   const member = useMemberControls()
+  const never = readingPrefsOf(tables).never
   const [remote, setRemote] = useState<Remote | null>(null)
   useTitle(t('title'))
 
@@ -105,12 +107,9 @@ export function SearchPage() {
             ) : null
           ) : (
             <div className="flex flex-col" data-testid="search-articles">
-              {hits.map(({ article: a, translatedTitle }) => {
-                // The query may have matched the translation, so it is the text to show; the
-                // badge also needs the languages to differ (AGENTS.md).
-                const shown = translatedTitle ?? a.title
-                const badge =
-                  translatedTitle !== null && a.sourceLang !== null && a.sourceLang !== readingLang
+              {hits.map((hit) => {
+                const a = hit.article
+                const { main, secondary, badge } = hitTitles(hit, query, readingLang, never)
                 return (
                   <Link
                     key={a.id}
@@ -127,9 +126,9 @@ export function SearchPage() {
                       ) : null}
                       <span>{relativeTime(a.publishedAt ?? a.fetchedAt, locale, now)}</span>
                     </span>
-                    <span className="font-serif text-[18px] leading-snug">{shown}</span>
-                    {shown !== a.title ? (
-                      <span className="text-[13px] text-ink-2">{a.title}</span>
+                    <span className="font-serif text-[18px] leading-snug">{main}</span>
+                    {secondary !== null ? (
+                      <span className="text-[13px] text-ink-2">{secondary}</span>
                     ) : null}
                   </Link>
                 )

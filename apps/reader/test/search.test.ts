@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { applyPull, emptyTables, view } from '@tela/sync'
-import { mergeHits, normalizeQuery, searchLocal } from '../src/lib/search'
+import { hitTitles, mergeHits, normalizeQuery, searchLocal } from '../src/lib/search'
 import { article, pull, sub } from './rows'
 
 const t = view(
@@ -79,5 +79,31 @@ describe('search on the device', () => {
     expect(normalizeQuery('  a   b ')).toBe('a b')
     expect(normalizeQuery(null)).toBe('')
     expect(normalizeQuery('x'.repeat(150))).toHaveLength(100)
+  })
+})
+
+describe('how a hit reads', () => {
+  const hit = {
+    article: article(1, { title: '漁船が早く戻ってきた', sourceLang: 'ja' }),
+    translatedTitle: 'The fishing boats came back early',
+  }
+  test('in the translation, badged, with the original beneath', () => {
+    expect(hitTitles(hit, 'boats', 'en', [])).toEqual({
+      main: 'The fishing boats came back early',
+      secondary: '漁船が早く戻ってきた',
+      badge: true,
+    })
+  })
+  test('as written in a language never translated, with the translation only if that matched', () => {
+    expect(hitTitles(hit, '漁船', 'en', ['ja'])).toEqual({
+      main: '漁船が早く戻ってきた',
+      secondary: null,
+      badge: false,
+    })
+    expect(hitTitles(hit, 'boats', 'en', ['ja'])).toEqual({
+      main: '漁船が早く戻ってきた',
+      secondary: 'The fishing boats came back early',
+      badge: false,
+    })
   })
 })

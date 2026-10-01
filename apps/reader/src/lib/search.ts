@@ -48,3 +48,33 @@ export function mergeHits(local: ArticleHit[], remote: ArticleHit[], limit = 30)
     .sort(newestFirst)
     .slice(0, limit)
 }
+
+/**
+ * How a hit reads. Its translation whenever it has one, since the query may have matched only
+ * that and a hit must show the words typed (AGENTS.md), badged when the languages differ, with the
+ * original beneath. A post in a language the member never translates reads as written and
+ * unbadged, as it does everywhere else, with the translation beneath only when that is all the
+ * query matched.
+ */
+export function hitTitles(
+  hit: ArticleHit,
+  query: string,
+  readingLang: string,
+  never: readonly string[],
+): { main: string; secondary: string | null; badge: boolean } {
+  const { article: a, translatedTitle } = hit
+  if (a.sourceLang !== null && never.includes(a.sourceLang)) {
+    const matched = fold(a.title).includes(fold(normalizeQuery(query)))
+    return {
+      main: a.title,
+      secondary: translatedTitle !== null && !matched ? translatedTitle : null,
+      badge: false,
+    }
+  }
+  const main = translatedTitle ?? a.title
+  return {
+    main,
+    secondary: main !== a.title ? a.title : null,
+    badge: translatedTitle !== null && a.sourceLang !== null && a.sourceLang !== readingLang,
+  }
+}
