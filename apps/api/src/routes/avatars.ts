@@ -93,7 +93,13 @@ export function avatarRoutes(deps: ApiDeps) {
       (upstream.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? ''
     if (upstream.status !== 200 || !upstream.body || !TYPES.has(type)) return failed()
     if (Number(upstream.headers.get('content-length') ?? '0') > MAX_BYTES) return failed()
-    const bytes = await readAtMost(upstream.body, MAX_BYTES)
+    // The headers can arrive and the body still break off, or outlast the timeout.
+    let bytes: Uint8Array<ArrayBuffer> | null
+    try {
+      bytes = await readAtMost(upstream.body, MAX_BYTES)
+    } catch {
+      return failed()
+    }
     if (!bytes) return failed()
     return new Response(bytes, {
       headers: {

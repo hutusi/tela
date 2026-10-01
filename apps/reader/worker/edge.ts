@@ -252,7 +252,13 @@ export function createEdge(deps: EdgeDeps) {
     )
     const failed = () => text('upstream failed', 502, { 'cache-control': 'no-store' })
     if ((res.status !== 200 && res.status !== 404) || !res.body) return failed()
-    const bytes = await readAtMost(res.body, AVATAR_MAX_BYTES)
+    // A body that breaks off is a failure like any other: answered, and never cached.
+    let bytes: Uint8Array<ArrayBuffer> | null
+    try {
+      bytes = await readAtMost(res.body, AVATAR_MAX_BYTES)
+    } catch {
+      return failed()
+    }
     if (!bytes) return failed()
     const headers = new Headers(res.headers)
     headers.set('x-robots-tag', 'noindex')

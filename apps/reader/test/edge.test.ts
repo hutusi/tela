@@ -268,6 +268,24 @@ describe("members' pictures (ADR 0032)", () => {
     expect(res.headers.get('cache-control')).toBe('no-store')
     await down.fetchPath('/avatar/member-anna-0001?v=5')
     expect(down.asked).toHaveLength(2)
+    // A body that breaks off after its headers: the same 502, and nothing kept.
+    const cut = pictures(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(PNG)
+              controller.error(new Error('connection reset'))
+            },
+          }),
+          { headers: { 'content-type': 'image/png' } },
+        ),
+    )
+    const broken = await cut.fetchPath('/avatar/member-anna-0001?v=5')
+    expect(broken.status).toBe(502)
+    expect(broken.headers.get('cache-control')).toBe('no-store')
+    await cut.fetchPath('/avatar/member-anna-0001?v=5')
+    expect(cut.asked).toHaveLength(2)
   })
 
   test('an address that names no member or version asks tela-api nothing', async () => {

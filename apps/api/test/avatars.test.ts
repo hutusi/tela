@@ -102,6 +102,16 @@ describe('a member’s picture', () => {
       ],
       ['an error', (res) => res.writeHead(503).end()],
       ['a redirect', (res) => res.writeHead(302, { location: 'http://127.0.0.1:1/x' }).end()],
+      [
+        // Headers first, then the connection drops: the fetch has resolved, the read rejects.
+        'a body cut off',
+        (res) => {
+          res.writeHead(200, { 'content-type': 'image/png', 'content-length': '4096' })
+          res.flushHeaders()
+          res.write(PNG)
+          setTimeout(() => res.destroy(), 50)
+        },
+      ],
     ]
     for (const [what, answer] of answers) {
       gravatar.set(path, (_req, res) => answer(res))
