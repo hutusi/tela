@@ -246,6 +246,9 @@ test('the column is centred in the pane, at the width the member chose', async (
 
   // A wider measure reaches the stacked pair too, which used to stop at 640 whatever was chosen.
   await page.getByTestId('typography-button').click()
+  // A click on the menu's own label keeps it open, though focus falls to the pane that holds it.
+  await page.getByTestId('typography-menu').locator('legend').first().click()
+  await expect(page.getByTestId('typography-menu')).toBeVisible()
   await page.getByTestId('measure-wide').click()
   await page.getByTestId('mode-side').click()
   await expect(page.getByTestId('paired-body')).toBeVisible()

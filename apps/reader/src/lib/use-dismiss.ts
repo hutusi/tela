@@ -2,7 +2,10 @@
  * Close a popover on a click outside it, on focus moving out of it (Tab past its last control), or
  * on Esc. Esc is taken in the capture phase and marked handled, so it closes the popover and only
  * the popover: the reader's own Esc closes the article. A popover left open behind the focus would
- * take the next Esc meant for the page.
+ * take the next Esc meant for the page. Focus that lands on something holding the popover is not
+ * focus leaving it: a click on a popover's label or padding focuses the nearest focusable
+ * container (the reader's pane, `tabIndex={-1}`), and Safari does the same for a click on any of
+ * its buttons.
  */
 import { type RefObject, useEffect, useRef } from 'react'
 
@@ -18,7 +21,11 @@ export function useDismiss(
   useEffect(() => {
     if (!open) return
     const outside = (e: Event) => {
-      if (box.current && !box.current.contains(e.target as Node)) latest.current('outside')
+      const el = box.current
+      const target = e.target as Node
+      if (!el || el.contains(target)) return
+      if (e.type === 'focusin' && target.contains(el)) return
+      latest.current('outside')
     }
     const onEscape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
