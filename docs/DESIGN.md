@@ -141,7 +141,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 ## Components (`apps/reader/src/components`)
 
-`AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `MobileNav`, `ArticleList`, `Reader`,
+`AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
 `PairedBody`, `TranslationBar`, `Untranslated`, `LikeButton`, `RecommendPopover`, `EmptyState`,
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `TypographyMenu`, the highlight
 toolbar, note and list (`highlights.tsx`), and `Shortcuts`. Discover, a blog's page and a profile
@@ -282,6 +282,10 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   counts' right edge. The glyph is a 16px panel drawn inline (Tela has no icon set), its left
   third shaded while the sidebar is shown, in the quiet button style, with `aria-expanded` for
   its state. A toggle that had focus hands it to the one in the other state.
+- **Manage** sits beside the Subscriptions heading, in the sidebar and in `MobileNav`: two sliders
+  drawn like the panel (`glyph.tsx`), in the toggle's quiet style, with its right edge on the
+  counts' as the toggle's is on the Library row. It opens `/settings/subscriptions`, and its name
+  is in its label and tooltip. The rail has none; the account menu's Subscriptions covers it.
 - **The rail** is the sidebar collapsed (ADR 0030), 48px wide. From the top: the toggle, on the
   Library row's line so that it only moves sideways between states; a divider; All, Today and
   Liked as 36px icon links (three lines, a ring with a dot and a heart, drawn like the panel);

@@ -52,7 +52,8 @@
     "noSubscriptions": "No subscriptions yet.",
     "browse": "Feeds",
     "hide": "Collapse the sidebar",
-    "show": "Expand the sidebar"
+    "show": "Expand the sidebar",
+    "manage": "Manage subscriptions"
   },
   "list": {
     "markAllRead": "Mark all read",

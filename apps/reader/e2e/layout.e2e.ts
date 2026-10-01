@@ -112,6 +112,7 @@ const header = (page: Page) =>
       library: textLeft('Library'),
       subscriptions: textLeft('Subscriptions'),
       icon: rect('[data-testid="sidebar-toggle"] svg')?.right ?? Number.NaN,
+      manage: rect('[data-testid="manage-subscriptions"] svg')?.right ?? Number.NaN,
       count: rect('nav a span:last-child')?.right ?? Number.NaN,
       toggle:
         (rect('[data-testid="sidebar-toggle"]')?.top ?? Number.NaN) -
@@ -133,6 +134,8 @@ test('the sidebar header lines up with the rows under it, and stays as they scro
   // "Library" at the headings' indent, and the icon's right edge on the counts'.
   expect(Math.abs(before.library - before.subscriptions), JSON.stringify(before)).toBeLessThan(1)
   expect(Math.abs(before.icon - before.count), JSON.stringify(before)).toBeLessThan(1)
+  // Manage beside Subscriptions puts its glyph on the same edge.
+  expect(Math.abs(before.manage - before.count), JSON.stringify(before)).toBeLessThan(1)
 
   // Scrolled to its end, the toggle is where it was: the header is sticky, and its top padding is
   // its own, so it reads the same stuck as at rest.
@@ -146,6 +149,20 @@ test('the sidebar header lines up with the rows under it, and stays as they scro
     JSON.stringify(after),
   ).toBeLessThan(1)
   await expect(page.getByTestId('sidebar-toggle')).toBeInViewport()
+})
+
+test('Manage beside Subscriptions opens the list in Settings', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto('/reading')
+  await synced(page)
+  const manage = page.getByTestId('sidebar').getByTestId('manage-subscriptions')
+  await expect(manage).toHaveAttribute('title', 'Manage subscriptions')
+  await manage.click()
+  await expect(page).toHaveURL(/\/settings\/subscriptions$/)
+  await expect(page.getByTestId('settings-content')).toHaveAttribute(
+    'data-section',
+    'subscriptions',
+  )
 })
 
 test('a toggle that had focus keeps it in its other place', async ({ page }) => {

@@ -52,7 +52,8 @@
     "noSubscriptions": "还没有订阅。",
     "browse": "订阅",
     "hide": "收起侧栏",
-    "show": "展开侧栏"
+    "show": "展开侧栏",
+    "manage": "管理订阅"
   },
   "list": {
     "markAllRead": "全部标为已读",

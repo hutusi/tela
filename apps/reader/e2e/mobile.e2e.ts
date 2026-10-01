@@ -32,6 +32,18 @@ test.describe('mobile fallback', () => {
     await expect(page.getByTestId('mobile-nav')).toBeVisible()
   })
 
+  test('Manage beside the feeds opens the list in Settings', async ({ page }) => {
+    await page.goto('/reading')
+    const nav = page.getByTestId('mobile-nav')
+    await nav.locator('summary').click()
+    await nav.getByTestId('manage-subscriptions').click()
+    await expect(page).toHaveURL(/\/settings\/subscriptions$/)
+    await expect(page.getByTestId('settings-content')).toHaveAttribute(
+      'data-section',
+      'subscriptions',
+    )
+  })
+
   test('the account menu opens on a phone, and holds the way to Settings', async ({ page }) => {
     await page.goto('/reading')
     await page.getByTestId('account-menu').click()

@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { type ReadingParams, readingHref } from '../lib/href'
 import type { Filter, SubscriptionItem, Totals } from '../store/selectors'
+import { ManageSubscriptions } from './manage-subscriptions'
 import { SidebarToggle, TOGGLE_ROW } from './sidebar-toggle'
 import { Swatch } from './swatch'
 
@@ -45,8 +46,13 @@ export function Sidebar({ subscriptions, totals, params }: Props) {
           {filterRow('liked', t('liked'), totals.liked)}
         </nav>
         <div className="flex flex-col gap-0.5">
-          <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-            {t('subscriptions')}
+          {/* The heading at the headings' indent, and Manage's glyph on the counts' right edge, as
+              the Library row has its toggle. */}
+          <div className="flex items-center justify-between pb-2 pl-3 pr-0.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+              {t('subscriptions')}
+            </span>
+            <ManageSubscriptions className="-my-1.5" />
           </div>
           {subscriptions.length === 0 ? (
             <p className="px-3 text-[13px] text-muted">{t('noSubscriptions')}</p>
