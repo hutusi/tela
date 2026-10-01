@@ -145,7 +145,9 @@ and the URL.
   wipes the device's copy while it is still this tab's; 409 `upgrade` reloads a newer shell, and
   409 `account_changed` (from any call) starts over from `/` as whoever is signed in now.
 - **Bodies and translations** (`src/store/objects.ts`) come from memory, then IndexedDB, then the
-  edge. While the reader is idle (1.5 s after the list settles) it prefetches unread bodies, the
+  edge, each downloaded once however many ask while it is on its way (an open joins a download
+  under way, and takes a body a prefetch bundle has brought before it is written). While the
+  reader is idle (1.5 s after the list settles) it prefetches unread bodies, the
   list on screen first, 25 to a `/o/bundle` request and two requests at a time, and then finished
   translations in the reading language. Nothing is prefetched under Save-Data. Read bodies are
   evicted after seven days, or once the store passes 50 MB.
