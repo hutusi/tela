@@ -346,9 +346,17 @@ describe('public pages', () => {
       config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
     })
     await listedBlog(4, 'Unrenderable')
-    const res = await throwing.fetch(new Request(`${ORIGIN}/s/4`))
-    expect(res.status).toBe(200)
-    expect(await res.text()).toBe(TEMPLATE)
+    const logged: unknown[][] = []
+    const error = console.error
+    console.error = (...args: unknown[]) => void logged.push(args)
+    try {
+      const res = await throwing.fetch(new Request(`${ORIGIN}/s/4`))
+      expect(res.status).toBe(200)
+      expect(await res.text()).toBe(TEMPLATE)
+    } finally {
+      console.error = error
+    }
+    expect(logged).toMatchObject([['public page did not render', '/s/4', expect.any(TypeError)]])
   })
 
   test('a blog that is not public is a 404 page, and a path that is no page is the plain shell', async () => {
