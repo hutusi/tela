@@ -172,8 +172,9 @@ followers · **N** recommendations"), then a "Writes" line of their claimed blog
 *Edit profile* on one's own, *Follow* / *Following* on another member's, and for a visitor a
 *Follow* that signs in first. Below, underlined tabs as addresses (`?tab=liked`,
 `?tab=subscriptions`), each with its count; Liked and Subscriptions exist only when the member
-shows them. Posts are a list with a 96 px date column ("Today", "Sep 27"), the note in italic
-serif, then the blog's swatch, name and language badge ("JA → EN" when the page carries the
+shows them. Posts are a list with a 96 px date column ("Today", "Sep 27": the reader's local
+days; the edge, rendering one page for everyone, uses UTC's, so a post within the reader's offset
+of midnight can change day when the app takes over), the note in italic serif, then the blog's swatch, name and language badge ("JA → EN" when the page carries the
 title in the reader's language) and the title; the whole post is the link. Subscriptions are a
 grid of cards. The page is edge-cached, so the member's own follow moves the followers count on
 their screen at once, and their own following count comes from their device.

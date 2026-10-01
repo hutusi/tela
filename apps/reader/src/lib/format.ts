@@ -66,7 +66,9 @@ export function personColor(handle: string): string {
 
 /**
  * A day as a list's date column shows it: "Today", "Yesterday", "Sep 27", or with the year once
- * it is not this one. Local days, as the reader lives them.
+ * it is not this one. Local days, as the reader lives them. The edge renders one cached page for
+ * everyone, in UTC, and the app redraws it on boot in the reader's own: a day apart only for a post
+ * within their offset of midnight, which is cheaper than an edge cache split by timezone.
  */
 export function shortDate(at: number, locale: string, now = Date.now()): string {
   const day = (t: number) => {
