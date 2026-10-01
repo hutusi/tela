@@ -94,6 +94,13 @@ export class LocalStore {
     return this.people.get(id)
   }
 
+  /**
+   * Whom the member follows as the server has said, sorted: the confirmed rows, without the
+   * changes still on their way. What the server answers about the people followed is about
+   * these, so a page asks again when they change, not when a prediction does (ADR 0031).
+   */
+  confirmedFollowees = (): string => [...this.confirmed.tables.follows.keys()].sort().join(',')
+
   remember(articles: ArticleRow[], source?: string | null): void {
     for (const a of articles) {
       this.transient.set(a.id, a)

@@ -135,6 +135,24 @@ test.describe('following', () => {
   })
 })
 
+test.describe('following from the Following page', () => {
+  test('a reader followed from the suggestions brings their activity, once the server has the follow', async ({
+    page,
+  }) => {
+    // The setup's member does not follow her now, and she recommends what they read.
+    await page.goto('/following')
+    const suggestion = page.locator(`[data-testid="suggested-reader"][data-handle="${HANDLE}"]`)
+    await suggestion.getByTestId('follow-suggested').click()
+    await expect(page.getByTestId('people-you-follow')).toContainText('Anna Kowalska')
+    // Asked again after the push and the pull, not before: her note arrives.
+    await expect(page.getByTestId('following-note')).toContainText(NOTE)
+    // Away and back: what is held shows, and is asked again behind it.
+    await page.getByTestId('nav-reading').click()
+    await page.getByTestId('nav-following').click()
+    await expect(page.getByTestId('following-note')).toContainText(NOTE)
+  })
+})
+
 test.describe('for a visitor', () => {
   test.use({ storageState: { cookies: [], origins: [] }, javaScriptEnabled: false })
 

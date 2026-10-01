@@ -47,6 +47,30 @@ describe('the device store', () => {
     expect(pushes).toBe(1)
   })
 
+  test('whom the server knows the member follows moves with the pull, not the prediction', async () => {
+    const store = await member()
+    const ID = 'member-anna-0000001'
+    store.mutate({ type: 'follow', userId: ID })
+    expect(store.getSnapshot().tables.follows.has(ID)).toBe(true) // shown at once
+    expect(store.confirmedFollowees()).toBe('') // but the server has not heard of it
+    await store.applyPull(
+      pull(9, {
+        follows: [
+          {
+            userId: ID,
+            handle: 'anna',
+            displayName: null,
+            createdAt: NOW,
+            deletedAt: null,
+            seq: 9,
+          },
+        ],
+      }),
+      store.epoch,
+    )
+    expect(store.confirmedFollowees()).toBe(ID)
+  })
+
   test('keeps an acknowledged change until a pull reaches it, then drops it', async () => {
     const store = await member()
     store.mutate({ type: 'markRead', articleId: 7 })

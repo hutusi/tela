@@ -6,7 +6,7 @@
  */
 import { languageBadge } from '@tela/shared'
 import type { ArticleRow } from '@tela/sync'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { PersonAvatar } from '../components/person-avatar'
@@ -16,7 +16,7 @@ import { useMemberControls } from '../lib/member'
 import { readingPrefsOf } from '../lib/prefs'
 import { useTitle } from '../lib/title'
 import { apiJson } from '../store/api'
-import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
+import { useConfirmedFollowees, useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { followedPeople } from '../store/selectors'
 import { useUi } from '../ui'
 import { PostLink } from '../views/post-link'
@@ -80,13 +80,19 @@ const loading = (view: string): Feed => ({
 
 function useFeed(tab: Tab, lang: string) {
   const { store } = useStore()
-  const tables = useTables()
-  // A follow or an unfollow changes what the feed holds: fetch again, from the start.
-  const followees = [...tables.follows.keys()].sort().join(',')
+  // The feed is the server's answer about whom the member follows, so it is asked again once a
+  // follow or an unfollow has reached the server and come back by the pull. Asked on the
+  // prediction, the request beat the debounced push, and the answer, cached under the new
+  // follows, never showed the person just followed.
+  const followees = useConfirmedFollowees()
   const view = `${store.userId}:${tab}:${lang}`
   const key = `${view}:${followees}`
   const [feed, setFeed] = useState<Feed>(() => held.get(key) ?? loading(view))
   const [busy, setBusy] = useState(false)
+  // The key on screen now: an answer to a request made under another one updates what is held for
+  // that one, never what this tab shows.
+  const shown = useRef(key)
+  shown.current = key
 
   const fetchPage = useCallback(
     async (cursor: string | null): Promise<FeedPage | null> => {
@@ -106,21 +112,32 @@ function useFeed(tab: Tab, lang: string) {
     [tab, lang],
   )
 
+  // What is held shows at once, and the first page is asked for again behind it: the people
+  // followed may have done more since. The same first page keeps what is held, older pages too.
   useEffect(() => {
-    const known = held.get(key)
-    if (known) {
-      setFeed(known)
-      return
-    }
     let cancelled = false
+    setBusy(false)
+    const known = held.get(key)
     // The same tab after a follow stays on screen until its fresh copy comes; another tab loads.
-    setFeed((shown) => (shown.view === view ? shown : loading(view)))
+    setFeed((now) => known ?? (now.view === view ? now : loading(view)))
     void fetchPage(null).then((page) => {
       if (cancelled) return
-      const next: Feed = page
-        ? { status: 'ready', view, ...page }
-        : { ...loading(view), status: 'failed' }
-      if (page) held.set(key, next)
+      const kept = held.get(key)
+      if (!page) {
+        if (!kept) setFeed({ ...loading(view), status: 'failed' })
+        return
+      }
+      // Same only if every entry of the fresh page is where it was, and nothing held past it has
+      // gone: an empty or shorter feed replaces what is held.
+      const same =
+        kept?.status === 'ready' &&
+        page.items.length > 0 &&
+        page.items.every((item, i) => kept.items[i]?.key === item.key) &&
+        (page.next !== null || kept.items.length === page.items.length)
+      const next: Feed = same
+        ? { ...kept, suggested: page.suggested }
+        : { status: 'ready', view, ...page }
+      held.set(key, next)
       setFeed(next)
     })
     return () => {
@@ -129,24 +146,30 @@ function useFeed(tab: Tab, lang: string) {
   }, [key, view, fetchPage])
 
   const more = async () => {
-    if (feed.next === null || busy) return
+    const asked = key
+    const from = held.get(asked) ?? feed
+    if (from.next === null || busy) return
     setBusy(true)
-    const page = await fetchPage(feed.next)
-    setBusy(false)
-    if (!page) return
-    const next: Feed = { ...feed, items: [...feed.items, ...page.items], next: page.next }
-    held.set(key, next)
-    setFeed(next)
+    const page = await fetchPage(from.next)
+    if (shown.current === asked) setBusy(false)
+    // Appended to what is held for the key it was asked under, if that still ends where this page
+    // starts: a refresh in between replaced it, and the page would no longer follow on.
+    const base = held.get(asked)
+    if (!page || !base || base.next !== from.next) return
+    const next: Feed = { ...base, items: [...base.items, ...page.items], next: page.next }
+    held.set(asked, next)
+    if (shown.current === asked) setFeed(next)
   }
   const retry = () => {
-    held.delete(key)
+    const asked = key
+    held.delete(asked)
     setFeed(loading(view))
     void fetchPage(null).then((page) => {
       const next: Feed = page
         ? { status: 'ready', view, ...page }
         : { ...loading(view), status: 'failed' }
-      if (page) held.set(key, next)
-      setFeed(next)
+      if (page) held.set(asked, next)
+      if (shown.current === asked) setFeed(next)
     })
   }
   return { feed, more, busy, retry }
@@ -206,7 +229,7 @@ export function FollowingPage() {
               {t('retry')}
             </button>
           </div>
-        ) : feed.items.length === 0 ? (
+        ) : feed.items.length === 0 && feed.next === null ? (
           <p className="py-12 text-center text-muted" data-testid="following-empty">
             {t('empty')}
           </p>
@@ -271,7 +294,12 @@ export function FollowingPage() {
             {feed.suggested.map((p) => {
               const on = member.isFollowing(p.id)
               return (
-                <div key={p.id} className="flex items-start gap-3">
+                <div
+                  key={p.id}
+                  className="flex items-start gap-3"
+                  data-testid="suggested-reader"
+                  data-handle={p.handle}
+                >
                   <Link to={`/@${p.handle}`} className="hover:no-underline">
                     <PersonAvatar handle={p.handle} displayName={p.displayName} size={32} />
                   </Link>

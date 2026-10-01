@@ -8,7 +8,7 @@ import { readingPrefsOf } from '../lib/prefs'
 import { useTitle } from '../lib/title'
 import { forgetPublic, usePublic } from '../lib/use-public'
 import { api, apiJson } from '../store/api'
-import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
+import { useConfirmedFollowees, useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { useUi } from '../ui'
 import { SiteView } from '../views/site'
 import type { Person, SiteData } from '../views/types'
@@ -53,8 +53,8 @@ export function SitePage() {
  */
 function useFollowedReaders(siteId: number | null, member: boolean): Person[] {
   const { store } = useStore()
-  const tables = useTables()
-  const followees = [...tables.follows.keys()].sort().join(',')
+  // Asked again once a follow is confirmed, not predicted: the server answers about its own rows.
+  const followees = useConfirmedFollowees()
   const [readers, setReaders] = useState<Person[]>([])
   // biome-ignore lint/correctness/useExhaustiveDependencies: asked again when the follows change
   useEffect(() => {
