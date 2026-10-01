@@ -596,6 +596,35 @@ describe('follows (ADR 0031)', () => {
     expect((await pull(0)).rows.follows.map((f) => f.userId)).toEqual([BO])
   })
 
+  test('an unfollow keeps its time even on a follow already gone, or never made', async () => {
+    const t = now - 100
+    // Unfollowed twice; an older follow from a third device arrives last.
+    await push([{ type: 'follow', userId: ANNA, at: t }])
+    await push([{ type: 'unfollow', userId: ANNA, at: t + 10 }])
+    await push([{ type: 'unfollow', userId: ANNA, at: t + 30 }])
+    await push([{ type: 'follow', userId: ANNA, at: t + 20 }])
+    // Unfollowed where no follow ever reached the server; the older follow arrives after.
+    await push([{ type: 'unfollow', userId: BO, at: t + 50 }])
+    await push([{ type: 'follow', userId: BO, at: t + 40 }])
+    expect((await pull(0)).rows.follows).toEqual([])
+    // Following yourself, or nobody, is no tombstone either.
+    const res = await push([
+      { type: 'unfollow', userId: reader.userId },
+      { type: 'unfollow', userId: 'nobody-at-all-0001' },
+    ])
+    expect(res.rejected).toEqual([])
+  })
+
+  test('unfollowing again sends the deletion again, to a device that missed it', async () => {
+    await push([{ type: 'follow', userId: ANNA, at: now - 30 }])
+    await push([{ type: 'unfollow', userId: ANNA, at: now - 20 }])
+    const past = await pull(0) // a device whose cursor passed the deletion without keeping it
+    await push([{ type: 'unfollow', userId: ANNA, at: now - 10 }])
+    expect((await pull(past.cursor)).rows.follows).toMatchObject([
+      { userId: ANNA, deletedAt: now - 20 },
+    ])
+  })
+
   test('the privacy switches are mutations, false included', async () => {
     const snap = await pull(0)
     await push([{ type: 'setPrivacy', publicSubscriptions: true, publicLikes: true, at: now - 50 }])

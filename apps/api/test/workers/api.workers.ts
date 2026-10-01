@@ -132,16 +132,18 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       // A follow is an insert-select upsert, its pull a join paged by max() of two seqs.
       { mid: 'workers-follow-1', at: now, type: 'follow', userId: 'workers-anna-00001' },
       { mid: 'workers-flags-1', at: now, type: 'setPrivacy', publicLikes: true },
+      // An unfollow of someone never followed is a tombstone upsert through their profile.
+      { mid: 'workers-unfollow-1', at: now, type: 'unfollow', userId: 'workers-nobody-0001' },
     ],
   }
   const pushed = (await (
     await call('/api/v1/mutations', { body: push, ...member })
   ).json()) as PushResponse
-  expect(pushed.applied).toHaveLength(6)
+  expect(pushed.applied).toHaveLength(7)
   const again = (await (
     await call('/api/v1/mutations', { body: push, ...member })
   ).json()) as PushResponse
-  expect(again.applied).toHaveLength(6)
+  expect(again.applied).toHaveLength(7)
   const likes = await db.all<{ like_count: number }>(
     sql`select like_count from articles where id = 1`,
   )
