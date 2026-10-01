@@ -241,6 +241,12 @@ export class Objects {
     return fetched
   }
 
+  /** Which of these bodies the device does not hold yet. */
+  async missing(keys: readonly string[]): Promise<string[]> {
+    const held = await this.heldKeys()
+    return keys.filter((key) => !held.has(key))
+  }
+
   /** Drop bodies not opened for a week, then the oldest until under the cap. */
   async evict(): Promise<void> {
     const stale = await this.persistence.staleBodies(this.now() - BODY_KEEP_MS)

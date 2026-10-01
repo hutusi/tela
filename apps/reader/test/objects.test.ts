@@ -38,17 +38,26 @@ test('what the idle prefetch asks for says so, and what a page opens does not', 
 function network() {
   const sent: string[] = []
   const waiting = new Map<string, (res: Response) => void>()
+  const failing = new Map<string, (error: Error) => void>()
   globalThis.fetch = ((input: string, init?: RequestInit) => {
     const url = String(input)
     const prefetch = new Headers(init?.headers).get(PREFETCH_HEADER) === '1'
     sent.push(`${prefetch ? 'prefetch' : 'page'} ${url}`)
     return new Promise<Response>((resolve, reject) => {
       waiting.set(url, resolve)
+      failing.set(url, reject)
       init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
     })
   }) as unknown as typeof fetch
   return {
     sent,
+    fail(url: string) {
+      const reject = failing.get(url)
+      if (!reject) throw new Error(`nothing asked for ${url}; asked: ${sent.join(', ')}`)
+      failing.delete(url)
+      waiting.delete(url)
+      reject(new TypeError('Failed to fetch'))
+    },
     answer(url: string, body: unknown, status = 200) {
       const resolve = waiting.get(url)
       if (!resolve) throw new Error(`nothing asked for ${url}; asked: ${sent.join(', ')}`)
@@ -178,5 +187,20 @@ describe('one download per object, however many ask while it is on its way', () 
     await until(() => net.sent.length === 2)
     net.answer('/o/c/k1.json', { blocks: [] })
     expect(await c).toEqual({ blocks: [] } as never)
+  })
+
+  test('a bundle that fails leaves its bodies missing, and the next prefetch asks for them', async () => {
+    const net = network()
+    const objects = new Objects(memoryPersistence())
+    const first = objects.prefetch(['k1', 'k2'])
+    await until(() => net.sent.length === 1)
+    net.fail('/o/bundle?k=k1,k2')
+    expect(await first).toBe(0)
+    expect(await objects.missing(['k1', 'k2'])).toEqual(['k1', 'k2'])
+    const second = objects.prefetch(['k1', 'k2'])
+    await until(() => net.sent.length === 2)
+    net.answer('/o/bundle?k=k1,k2', { k1: { blocks: [] }, k2: { blocks: [] } })
+    expect(await second).toBe(2)
+    expect(await objects.missing(['k1', 'k2'])).toEqual([])
   })
 })

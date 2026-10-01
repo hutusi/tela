@@ -61,3 +61,27 @@ test('a reload renders the list from the device before any sync answers', async 
   await expect(page.getByTestId('article-row').first()).toBeVisible()
   await expect(page.getByTestId('subscription')).toHaveCount(subscriptions)
 })
+
+test('a prefetch that failed is asked for again once the network is back', async ({ page }) => {
+  // Bundles fail until the network "comes back". (Routing turns the HTTP cache off, which
+  // nothing here needs.)
+  let down = true
+  const asked: string[] = []
+  await page.route('**/o/bundle**', (route) => {
+    asked.push(route.request().url())
+    return down ? route.abort('internetdisconnected') : route.continue()
+  })
+  await page.goto('/reading')
+  await synced(page)
+  const unread = page.getByTestId('article-row').filter({ has: page.getByTestId('unread-dot') })
+  await expect(unread.first()).toBeVisible()
+  const ids = [Number(/article=(\d+)/.exec((await unread.first().getAttribute('href')) ?? '')?.[1])]
+  await expect.poll(() => asked.length, { timeout: 30_000 }).toBeGreaterThan(0)
+  // Any run for a plan still changing fails too; then the plan stays as it is.
+  await page.waitForTimeout(2000)
+  down = false
+  // Back online the engine pulls, nothing new arrives, and the plan is unchanged: only the run
+  // that fell short asking again fills the device.
+  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  await expect.poll(() => heldOnDevice(page, ids), { timeout: 30_000 }).toEqual(ids)
+})

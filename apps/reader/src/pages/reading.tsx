@@ -212,25 +212,40 @@ export function ReadingPage() {
     () => JSON.stringify(prefetchPlan(tables, items, now, readingLang, prefs)),
     [tables, items, now, readingLang, prefs],
   )
+  // A run that fell short (the network went, a request failed) asks again on the next pull: the
+  // engine pulls when the browser is back online, on focus and every minute, and by then the plan
+  // is the same, so nothing else would ask. Only a run that fell short; any pull once did.
+  const [retry, setRetry] = useState(0)
+  const fellShort = useRef(false)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on every pull, by its new tables
+  useEffect(() => {
+    if (!fellShort.current) return
+    fellShort.current = false
+    setRetry((n) => n + 1)
+  }, [tables])
   const lastPrefetch = useRef<AbortController | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `retry` asks again for the same plan
   useEffect(() => {
     const timer = setTimeout(() => {
       lastPrefetch.current?.abort()
       const controller = new AbortController()
       lastPrefetch.current = controller
       const { bodies, translations } = JSON.parse(plan) as ReturnType<typeof prefetchPlan>
-      void objects
-        .prefetch(bodies, controller.signal)
-        .then(async () => {
-          for (const key of translations) {
-            if (controller.signal.aborted) return
-            await objects.object(key, controller.signal, true).catch(() => null)
-          }
-        })
-        .catch(() => undefined)
+      const run = async () => {
+        await objects.prefetch(bodies, controller.signal)
+        let short = (await objects.missing(bodies)).length > 0
+        for (const key of translations) {
+          if (controller.signal.aborted) return
+          const object = await objects.object(key, controller.signal, true).catch(() => null)
+          if (object === null) short = true
+        }
+        // A run cancelled for a newer plan did not fall short: the newer one is on its way.
+        if (short && !controller.signal.aborted) fellShort.current = true
+      }
+      void run().catch(() => undefined)
     }, PREFETCH_IDLE_MS)
     return () => clearTimeout(timer)
-  }, [plan, objects])
+  }, [plan, objects, retry])
 
   return (
     <div
