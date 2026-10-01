@@ -39,7 +39,11 @@ tabs. What it reveals, that @old became @new, a follower list reveals anyway.
 
 **What the people you follow do comes by RPC.** `GET /api/v1/following` merges their
 recommendations, their likes (only if they show them) and their subscriptions to listed blogs
-(only if they show them), newest first, in windows of fourteen days. Its posts arrive as full
+(only if they show them), newest first, thirty entries a page behind a cursor of (time, key). A
+day's likes, or new subscriptions, are one entry per person, placed at the newest of them over
+the whole day, so a group lands whole on one page and a page is never cut inside one. Windows of
+days were tried first: they left a first page empty when the activity was older than the window,
+and a day busier than a page could not be paged past. Its posts arrive as full
 article rows held for the visit, like any post from outside the synced feeds (0025). The
 Dashboard is the precedent for a member page served this way. "Readers you follow" on a blog page
 is a member RPC too, beside the edge-cached public page, never in it.

@@ -182,7 +182,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `/api/v1/feeds` | Discover feeds at a URL, add one, import and export OPML |
 | `/api/v1/claims` | Start a claim, see its proofs, ask for the check |
 | `/api/v1/profile`, `/api/v1/sites/:id/*`, `/api/v1/dashboard`, `/api/v1/search` | Handle and profile, owner-only topics and opt-out, the author dashboard, search past the device's horizon |
-| `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, in windows of 14 local days, with readers to follow; which of them read a blog. Only as far as each shows it (ADR 0031) |
+| `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, key) cursor, a day's likes grouped and placed at the newest, with readers to follow; which of them read a blog. Only as far as each shows it (ADR 0031) |
 | `GET /api/v1/export` | "Your data": the member's own rows as one JSON file |
 | `/api/v1/public/*` | Discover, a blog's page (with its claimant and readers' notes), a profile (with follow counts, and liked posts only if shown): listed and featured blogs only, edge-cacheable |
 | `/api/websub/:feedId` | The hub callback: intent checks, and signed pings that make the feed due |

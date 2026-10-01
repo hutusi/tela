@@ -1,7 +1,7 @@
 /**
  * `/following` (Tela v2): what the people the member follows recommended, liked and subscribed to.
- * Their activity is other members' rows, so it comes by RPC, pages of fourteen local days at a
- * time (ADR 0031); whom the member follows is their own synced rows, so the aside needs no
+ * Their activity is other members' rows, so it comes by RPC, a page of entries at a time behind a
+ * cursor (ADR 0031); whom the member follows is their own synced rows, so the aside needs no
  * network. What a page fetched is held for the visit, so Back is a render.
  */
 import { languageBadge } from '@tela/shared'
@@ -43,19 +43,27 @@ type Site = {
   primaryLang: string | null
   feedId: number | null
 }
+/** `key` is unique in the feed: what a cursor names, and what React keys the entry by. */
 export type FeedItem =
-  | { kind: 'recommended'; at: number; person: Person; note: string | null; post: Post }
-  | { kind: 'liked'; at: number; person: Person; count: number; posts: Post[] }
-  | { kind: 'subscribed'; at: number; person: Person; count: number; sites: Site[] }
+  | {
+      kind: 'recommended'
+      key: string
+      at: number
+      person: Person
+      note: string | null
+      post: Post
+    }
+  | { kind: 'liked'; key: string; at: number; person: Person; count: number; posts: Post[] }
+  | { kind: 'subscribed'; key: string; at: number; person: Person; count: number; sites: Site[] }
 type Suggested = Person & { bio: string | null }
-type FeedPage = { items: FeedItem[]; next: number | null; suggested: Suggested[] }
+type FeedPage = { items: FeedItem[]; next: string | null; suggested: Suggested[] }
 
 type Feed = {
   status: 'loading' | 'ready' | 'failed'
   /** Which tab in which language this is, so a refetch after a follow keeps it on screen. */
   view: string
   items: FeedItem[]
-  next: number | null
+  next: string | null
   suggested: Suggested[]
 }
 
@@ -81,13 +89,13 @@ function useFeed(tab: Tab, lang: string) {
   const [busy, setBusy] = useState(false)
 
   const fetchPage = useCallback(
-    async (before: number | null): Promise<FeedPage | null> => {
+    async (cursor: string | null): Promise<FeedPage | null> => {
       const q = new URLSearchParams({
         tab,
         lang,
         tz: String(-new Date().getTimezoneOffset()),
       })
-      if (before !== null) q.set('before', String(before))
+      if (cursor !== null) q.set('cursor', cursor)
       try {
         const { status, body } = await apiJson<FeedPage>(`/api/v1/following?${q}`)
         return status === 200 ? body : null
@@ -206,7 +214,7 @@ export function FollowingPage() {
           <div data-testid="following-items">
             {feed.items.map((item) => (
               <Activity
-                key={`${item.kind}:${item.person.id}:${item.at}:${item.kind === 'recommended' ? item.post.article.id : ''}`}
+                key={item.key}
                 item={item}
                 member={member}
                 lang={lang}

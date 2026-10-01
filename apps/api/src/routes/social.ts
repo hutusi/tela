@@ -3,9 +3,11 @@
  * blog. By RPC, not sync: these are other members' rows, shown only as far as each chose to show
  * them, and that choice is applied here, when they are read.
  *
- * The feed pages by windows of local days rather than by a count of items: likes and new
- * subscriptions are grouped per person per day ("liked 3 posts"), and a window that starts at a
- * local midnight never cuts a group in two, so no page repeats or drops part of one.
+ * The feed pages by count, newest first, behind a cursor of (time, key). A recommendation is an
+ * entry of its own. Likes and new subscriptions are grouped per person per local day ("liked 3
+ * posts"), and a group is placed at its newest event, computed over the whole day whatever the
+ * cursor: so a group always lands whole on exactly one page, a busy day pages through like any
+ * other, and activity of any age is on the first page when it is the newest there is.
  */
 import { ARTICLE_COLUMNS } from '@tela/data'
 import { isReadingLanguage } from '@tela/shared'
@@ -15,14 +17,14 @@ import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
 
 const DAY = 24 * 60 * 60 * 1000
-/** Local days per page of the feed. */
-export const WINDOW_DAYS = 14
-/** Recommendations one page holds; past it, the page ends at a day boundary. */
-export const MAX_RECOMMENDATIONS = 200
+/** Entries per page of the feed: recommendations, and days of likes or subscriptions. */
+export const PAGE_ENTRIES = 30
 /** Posts shown of one day's likes, and blogs of one day's subscriptions. */
 const LIKED_SHOWN = 5
 const SUBSCRIBED_SHOWN = 3
 const PUBLIC_LISTING = sql.raw(`('listed', 'featured')`)
+/** Where a page ends: an entry's time, and its key for entries at the same millisecond. */
+const CURSOR = /^(\d{1,15}):([rls]:[A-Za-z0-9_:-]{1,160})$/
 
 export type FeedTab = 'all' | 'recs' | 'likes'
 
@@ -48,6 +50,9 @@ function postOf(r: Row) {
     handle: _h,
     displayName: _d,
     at: _at,
+    k: _k,
+    groupAt: _g,
+    rank: _r,
     note: _note,
     n: _n,
     total: _t,
@@ -71,6 +76,10 @@ const personOf = (r: Row) => ({
   displayName: (r.displayName as string | null) ?? null,
 })
 
+/** Newest first, then by key: the order pages are cut in, the same in SQL and here (ASCII keys). */
+const newestFirst = (a: { at: number; key: string }, b: { at: number; key: string }) =>
+  b.at - a.at || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0)
+
 export function socialRoutes(deps: ApiDeps) {
   const { db } = deps
   const routes = new Hono<ApiEnv>()
@@ -82,12 +91,13 @@ export function socialRoutes(deps: ApiDeps) {
     const lang = isReadingLanguage(c.req.query('lang')) ? c.req.query('lang') : null
     const offset = offsetOf(c.req.query('tz'))
     const now = deps.clock.now()
-    const given = Number(c.req.query('before'))
-    const end = Number.isInteger(given) && given > 0 ? Math.min(given, now + 1) : now + 1
-    const dayOf = (at: number) => Math.floor((at + offset) / DAY)
-    const startOf = (day: number) => day * DAY - offset
-    const start = startOf(dayOf(end - 1) - (WINDOW_DAYS - 1))
-    const first = !(Number.isInteger(given) && given > 0)
+    const cursor = CURSOR.exec(c.req.query('cursor') ?? '')
+    const first = cursor === null
+    // Entries strictly after the cursor in the feed's order: older, or as old with a smaller key.
+    const after = (at: SQL, key: SQL) =>
+      cursor
+        ? sql`(${at} < ${Number(cursor[1])} or (${at} = ${Number(cursor[1])} and ${key} < ${cursor[2]}))`
+        : sql`true`
 
     const followees = sql`select followee_id from follows where follower_id = ${me} and deleted_at is null`
     const translated = (column: 'title' | 'excerpt') =>
@@ -99,10 +109,9 @@ export function socialRoutes(deps: ApiDeps) {
     // A local day's index. Cast, in case a driver binds the offset as a real: days are whole.
     const day = (column: SQL) => sql`cast((${column} + ${offset}) / ${DAY} as integer)`
     const none = sql`select 1 where false`
-    /** An absent term of the union below, shaped like the others. */
-    const noAt = sql`select null as at where false`
     const postOn = (articleId: SQL) => sql`join articles a on a.id = ${articleId}
       join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id`
+    const over = PAGE_ENTRIES + 1
 
     // Each source as the viewer may see it, from the people they follow only.
     const recsFrom = sql`recommendations r join profiles p on p.user_id = r.user_id`
@@ -114,58 +123,85 @@ export function socialRoutes(deps: ApiDeps) {
       join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id`
     const subsWhere = sql`sub.user_id in (${followees}) and p.public_subscriptions = 1
       and sub.deleted_at is null and s.listing in ${PUBLIC_LISTING}`
-    const within = (column: SQL) => sql`and ${column} >= ${start} and ${column} < ${end}`
+
+    /**
+     * One person's day of `rows` as groups: each placed at its newest event over the whole day
+     * (`groupAt`), so the cursor never splits one; then the first `over` groups after the cursor,
+     * with at most `shown` rows each, the newest first.
+     */
+    const grouped = (input: {
+      prefix: string
+      who: SQL
+      at: SQL
+      partition: SQL
+      tiebreak: SQL
+      columns: SQL
+      from: SQL
+      shown: number
+    }) => {
+      const d = day(input.at)
+      const g = sql`partition by ${input.partition}, ${d}`
+      return sql`
+        select * from (
+          select x.*, dense_rank() over (order by x."groupAt" desc, x.k desc) as rank from (
+            select ${input.who}, ${input.at} as at, ${d} as day,
+              ${input.prefix} || ${input.partition} || ':' || ${d} as k,
+              max(${input.at}) over (${g}) as "groupAt",
+              count(*) over (${g}) as total,
+              row_number() over (${g} order by ${input.at} desc, ${input.tiebreak} desc) as n,
+              ${input.columns}
+            from ${input.from}
+          ) x where x.n <= ${input.shown} and ${after(sql`x."groupAt"`, sql`x.k`)}
+        ) where rank <= ${over}
+        order by "groupAt" desc, k desc, n`
+    }
+
     const wantRecs = tab !== 'likes'
     const wantLikes = tab !== 'recs'
     const wantSubs = tab === 'all'
 
-    const [recommended, liked, subscribed, older, suggested] = (await db.batch([
+    const [recommended, liked, subscribed, suggested] = (await db.batch([
       wantRecs
         ? db.all(sql`
-            select ${who}, r.note, r.created_at as at, ${post}
-            from ${recsFrom} ${postOn(sql`r.article_id`)}
-            where ${recsWhere} ${within(sql`r.created_at`)}
-            order by r.created_at desc limit ${MAX_RECOMMENDATIONS}
+            select * from (
+              select ${who}, r.note, r.created_at as at, 'r:' || printf('%012d', r.id) as k, ${post}
+              from ${recsFrom} ${postOn(sql`r.article_id`)}
+              where ${recsWhere}
+            ) where ${after(sql`at`, sql`k`)}
+            order by at desc, k desc limit ${over}
           `)
         : db.all(none),
       wantLikes
-        ? db.all(sql`
-            select * from (
-              select ${who}, st.liked_at as at, ${day(sql`st.liked_at`)} as day,
-                row_number() over (partition by st.user_id, ${day(sql`st.liked_at`)}
-                  order by st.liked_at desc) as n,
-                count(*) over (partition by st.user_id, ${day(sql`st.liked_at`)}) as total,
-                ${post}
-              from ${likesFrom} ${postOn(sql`st.article_id`)}
-              where ${likesWhere} ${within(sql`st.liked_at`)}
-            ) where n <= ${LIKED_SHOWN}
-          `)
+        ? db.all(
+            grouped({
+              prefix: 'l:',
+              who,
+              at: sql`st.liked_at`,
+              partition: sql`st.user_id`,
+              tiebreak: sql`st.article_id`,
+              columns: post,
+              from: sql`${likesFrom} ${postOn(sql`st.article_id`)} where ${likesWhere}`,
+              shown: LIKED_SHOWN,
+            }) as never,
+          )
         : db.all(none),
       wantSubs
-        ? db.all(sql`
-            select * from (
-              select ${who}, sub.created_at as at, ${day(sql`sub.created_at`)} as day,
-                row_number() over (partition by sub.user_id, ${day(sql`sub.created_at`)}
-                  order by sub.created_at desc) as n,
-                count(*) over (partition by sub.user_id, ${day(sql`sub.created_at`)}) as total,
-                s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
-                s.primary_lang as "primaryLang",
+        ? db.all(
+            grouped({
+              prefix: 's:',
+              who,
+              at: sql`sub.created_at`,
+              partition: sql`sub.user_id`,
+              tiebreak: sql`s.id`,
+              columns: sql`s.id, s.title, s.home_url as "homeUrl", s.description,
+                s.favicon_key as "faviconKey", s.primary_lang as "primaryLang",
                 (select min(f2.id) from feeds f2 where f2.site_id = s.id and f2.merged_into is null)
-                  as "feedId"
-              from ${subsFrom} where ${subsWhere} ${within(sql`sub.created_at`)}
-            ) where n <= ${SUBSCRIBED_SHOWN}
-          `)
+                  as "feedId"`,
+              from: sql`${subsFrom} where ${subsWhere}`,
+              shown: SUBSCRIBED_SHOWN,
+            }) as never,
+          )
         : db.all(none),
-      // Whether anything is older than this window, and when: the next page ends that day.
-      db.all(sql`
-        select max(at) as at from (
-          ${wantRecs ? sql`select max(r.created_at) as at from ${recsFrom} where ${recsWhere} and r.created_at < ${start}` : noAt}
-          union all
-          ${wantLikes ? sql`select max(st.liked_at) as at from ${likesFrom} where ${likesWhere} and st.liked_at < ${start}` : noAt}
-          union all
-          ${wantSubs ? sql`select max(sub.created_at) as at from ${subsFrom} where ${subsWhere} and sub.created_at < ${start}` : noAt}
-        )
-      `),
       // Readers to follow, on the first page only, from what is public: people who recommended
       // posts from blogs the member reads, people whose shown subscriptions overlap theirs, and
       // people recommending lately (ADR 0031).
@@ -191,59 +227,57 @@ export function socialRoutes(deps: ApiDeps) {
         : db.all(none),
     ] as never)) as unknown as Row[][]
 
+    type Person = ReturnType<typeof personOf>
     type Item =
       | {
           kind: 'recommended'
+          key: string
           at: number
-          person: ReturnType<typeof personOf>
+          person: Person
           note: string | null
           post: ReturnType<typeof postOf>
         }
       | {
           kind: 'liked'
+          key: string
           at: number
-          person: ReturnType<typeof personOf>
+          person: Person
           count: number
           posts: ReturnType<typeof postOf>[]
         }
-      | {
-          kind: 'subscribed'
-          at: number
-          person: ReturnType<typeof personOf>
-          count: number
-          sites: Row[]
-        }
-    let items: Item[] = (recommended ?? []).map((r) => ({
+      | { kind: 'subscribed'; key: string; at: number; person: Person; count: number; sites: Row[] }
+
+    const items: Item[] = (recommended ?? []).map((r) => ({
       kind: 'recommended' as const,
+      key: String(r.k),
       at: Number(r.at),
       person: personOf(r),
       note: (r.note as string | null) ?? null,
       post: postOf(r),
     }))
-    /** Rows of one person's day, newest first, as one item. */
-    const grouped = (rows: Row[]) => {
-      const groups = new Map<string, Row[]>()
-      for (const r of rows) {
-        const key = `${r.userId}:${r.day}`
-        groups.set(key, [...(groups.get(key) ?? []), r])
-      }
-      return [...groups.values()].map((g) => g.sort((a, b) => Number(b.at) - Number(a.at)))
+    /** A source's rows as their groups, in the order the query returned them. */
+    const groups = (rows: Row[]) => {
+      const byKey = new Map<string, Row[]>()
+      for (const r of rows) byKey.set(String(r.k), [...(byKey.get(String(r.k)) ?? []), r])
+      return [...byKey.values()]
     }
-    for (const g of grouped(liked ?? [])) {
+    for (const g of groups(liked ?? [])) {
       const head = g[0] as Row
       items.push({
         kind: 'liked',
-        at: Number(head.at),
+        key: String(head.k),
+        at: Number(head.groupAt),
         person: personOf(head),
         count: Number(head.total),
         posts: g.map(postOf),
       })
     }
-    for (const g of grouped(subscribed ?? [])) {
+    for (const g of groups(subscribed ?? [])) {
       const head = g[0] as Row
       items.push({
         kind: 'subscribed',
-        at: Number(head.at),
+        key: String(head.k),
+        at: Number(head.groupAt),
         person: personOf(head),
         count: Number(head.total),
         sites: g.map(
@@ -252,6 +286,9 @@ export function socialRoutes(deps: ApiDeps) {
             handle: _h,
             displayName: _d,
             at,
+            k: _k,
+            groupAt: _g,
+            rank: _r,
             n: _n,
             total: _t,
             day: _day,
@@ -264,25 +301,16 @@ export function socialRoutes(deps: ApiDeps) {
       })
     }
 
-    // Where the next page ends: the end of the day of the newest thing older than this window.
-    // A window with more recommendations than a page holds ends at the day of the oldest one
-    // held, which the next page repeats whole: what this page shows of that day goes.
-    const olderAt = Number(older?.[0]?.at)
-    let next: number | null =
-      Number.isFinite(olderAt) && olderAt > 0 ? startOf(dayOf(olderAt) + 1) : null
-    const oldestRec = recommended?.at(-1)
-    if ((recommended?.length ?? 0) >= MAX_RECOMMENDATIONS && oldestRec) {
-      const cut = dayOf(Number(oldestRec.at))
-      if (cut > dayOf(start)) {
-        items = items.filter((i) => dayOf(i.at) > cut)
-        next = startOf(cut + 1)
-      }
-    }
-    items.sort((a, b) => b.at - a.at)
+    // Each source gave its first `over` entries after the cursor, so the first `over` of them all
+    // are among these; one past the page says there is more.
+    items.sort(newestFirst)
+    const page = items.slice(0, PAGE_ENTRIES)
+    const last = page.at(-1)
+    const next = items.length > PAGE_ENTRIES && last ? `${last.at}:${last.key}` : null
 
     return c.json(
       {
-        items,
+        items: page,
         next,
         suggested: (suggested ?? []).map(({ score: _s, ...p }) => p),
       },

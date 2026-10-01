@@ -172,4 +172,29 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     await call(`/api/v1/sync?cursor=${delta.cursor}`, member)
   ).json()) as PullResponse
   expect(renamed.rows.follows).toMatchObject([{ handle: 'anna_k' }])
+
+  // The Following feed: printf keys, nested window functions and the (time, key) cursor, on D1.
+  await db.batch([
+    bumpSeq(db),
+    db.run(
+      sql`update profiles set public_likes = 1, seq = ${currentSeq} where user_id = 'workers-anna-00001'`,
+    ),
+    db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at, seq)
+      values ('workers-anna-00001', 1, 'on D1', ${now - 2000}, ${now - 2000}, ${currentSeq})`),
+    db.run(sql`insert into user_article_states (user_id, article_id, read_at, liked_at, liked_updated_at, seq)
+      values ('workers-anna-00001', 1, ${now - 1000}, ${now - 1000}, ${now - 1000}, ${currentSeq})`),
+  ])
+  const feed = (await (await call('/api/v1/following?tz=480', member)).json()) as {
+    items: { kind: string; key: string }[]
+    next: string | null
+  }
+  expect(feed.items.map((i) => i.kind)).toEqual(['liked', 'recommended'])
+  expect(feed.items[1]?.key).toMatch(/^r:\d{12}$/)
+  const older = (await (
+    await call(
+      `/api/v1/following?cursor=${encodeURIComponent(`${now - 1000}:${feed.items[0]?.key}`)}`,
+      member,
+    )
+  ).json()) as { items: { kind: string }[] }
+  expect(older.items.map((i) => i.kind)).toEqual(['recommended'])
 })

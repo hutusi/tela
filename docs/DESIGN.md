@@ -184,8 +184,8 @@ tabs All / Recommendations / Likes as addresses. Each item is a 40 px avatar bes
 verb · 2h ago": a recommendation brings its note in 21 px italic serif and a post card (blog
 swatch, name and "JA → EN", a 23 px serif title, two lines of excerpt, minutes, ♡, "Read →"); a
 day's likes are one card listing the posts; a day's new subscriptions are blog cards with
-Subscribe. Items are grouped by the viewer's local day and paged a fortnight at a time behind
-"Older activity". The aside lists the people followed (from the device, no request) and a few
+Subscribe. Likes and subscriptions are grouped by the viewer's local day, and the feed pages
+thirty entries at a time behind "Older activity". The aside lists the people followed (from the device, no request) and a few
 readers to follow, drawn only from what is public. No toasts: a Follow button changes at once.
 
 Blog (`/s/:id`, Tela v2): a 1080 px page. The header is an 84 px avatar (20 px corners), the host

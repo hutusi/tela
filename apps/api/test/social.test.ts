@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { bumpSeq, currentSeq, type TelaDb } from '@tela/data'
 import { sql } from 'drizzle-orm'
-import { MAX_RECOMMENDATIONS, WINDOW_DAYS } from '../src/routes/social'
+import { PAGE_ENTRIES } from '../src/routes/social'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -35,7 +35,7 @@ type Item =
       count: number
       sites: { id: number; feedId: number }[]
     }
-type Feed = { items: Item[]; next: number | null; suggested: (Person & { bio: string | null })[] }
+type Feed = { items: Item[]; next: string | null; suggested: (Person & { bio: string | null })[] }
 
 async function write(...statements: ReturnType<TelaDb['run']>[]) {
   await db.batch([bumpSeq(db), ...statements] as never)
@@ -189,37 +189,88 @@ describe('the Following feed', () => {
     expect((await feed('?tz=-180')).items.map((i) => (i as { count: number }).count)).toEqual([2])
   })
 
-  test('pages by windows of days, jumping empty stretches, with nothing twice', async () => {
+  /** Every page of the feed, following each `next`; it must end, and each page move on. */
+  async function everyPage(query = '') {
+    const pages: Feed[] = []
+    let cursor: string | null = null
+    for (let i = 0; i < 50; i++) {
+      const page: Feed = await feed(
+        `?${new URLSearchParams({ ...(cursor ? { cursor } : {}), ...Object.fromEntries(new URLSearchParams(query)) })}`,
+      )
+      pages.push(page)
+      if (page.next === null) return pages
+      expect(page.items).toHaveLength(PAGE_ENTRIES) // a page is short only when it is the last
+      cursor = page.next
+    }
+    throw new Error('the feed never ended')
+  }
+  const keyOf = (i: Item) =>
+    `${i.kind}:${i.person.id}:${i.at}:${'post' in i ? i.post.article.id : ''}`
+
+  test('activity of any age is on the first page when it is the newest there is', async () => {
     const recent = await article(1)
     const old = await article(1)
-    const older = await article(1)
     await follow(ANNA)
     await recommend(ANNA, recent, now - 2 * DAY)
-    await recommend(ANNA, old, now - 40 * DAY) // weeks of nothing between
-    await recommend(ANNA, older, now - 41 * DAY)
+    await recommend(ANNA, old, now - 400 * DAY) // more than a year of nothing between
     const first = await feed()
-    expect(first.items).toHaveLength(1)
-    expect(first.next).not.toBeNull()
-    const second = await feed(`?before=${first.next}`)
-    expect(second.items.map((i) => (i as { post: Post }).post.article.id)).toEqual([old, older])
-    expect(second.next).toBeNull()
-    expect(second.suggested).toEqual([]) // suggestions come with the first page only
-    expect(WINDOW_DAYS).toBe(14)
+    expect(first.items.map((i) => (i as { post: Post }).post.article.id)).toEqual([recent, old])
+    expect(first.next).toBeNull()
   })
 
-  test('a window holding more recommendations than a page ends at a day, and the next repeats it whole', async () => {
+  test('pages by count, newest first, with nothing twice and nothing skipped', async () => {
+    await follow(ANNA, CLEO)
+    const recs: number[] = []
+    for (let i = 0; i < 70; i++) {
+      const id = await article(1)
+      recs.push(id)
+      await recommend(i % 2 ? ANNA : CLEO, id, now - i * 37 * 60_000) // one every 37 minutes
+    }
+    // Anna liked 7 posts one afternoon, between the recommendations.
+    const liked: number[] = []
+    for (let i = 0; i < 7; i++) {
+      const id = await article(2)
+      liked.push(id)
+      await like(ANNA, id, now - 20 * 60 * 60_000 - i * 60_000)
+    }
+    const pages = await everyPage()
+    const items = pages.flatMap((p) => p.items)
+    expect(new Set(items.map(keyOf)).size).toBe(items.length)
+    const seenRecs = items.flatMap((i) => (i.kind === 'recommended' ? [i.post.article.id] : []))
+    expect(seenRecs.sort((x, y) => x - y)).toEqual(recs)
+    // The day's likes are one entry, whole, on one page, placed at the newest of them.
+    const days = items.filter((i) => i.kind === 'liked')
+    expect(days).toHaveLength(1)
+    expect(days[0]).toMatchObject({ count: 7, at: now - 20 * 60 * 60_000 })
+    expect((days[0] as Extract<Item, { kind: 'liked' }>).posts).toHaveLength(5)
+    // Newest first across the pages.
+    const times = items.map((i) => i.at)
+    expect([...times].sort((x, y) => y - x)).toEqual(times)
+  })
+
+  test('a busy day pages through, and entries at the same moment are split without loss', async () => {
     await follow(ANNA)
     const ids: number[] = []
-    for (let i = 0; i < MAX_RECOMMENDATIONS + 5; i++) ids.push(await article(1))
-    // Most today; the rest yesterday.
-    for (const [i, id] of ids.entries()) {
-      await recommend(ANNA, id, now - (i < MAX_RECOMMENDATIONS - 10 ? i * 1000 : DAY + i * 1000))
+    for (let i = 0; i < 2 * PAGE_ENTRIES + 7; i++) {
+      const id = await article(1)
+      ids.push(id)
+      // One morning, and the first 40 in the very same millisecond.
+      await recommend(ANNA, id, i < 40 ? now - 60_000 : now - 60_000 - i)
     }
-    const first = await feed()
-    const second = await feed(`?before=${first.next}`)
-    const seen = [...first.items, ...second.items].map((i) => (i as { post: Post }).post.article.id)
+    const pages = await everyPage()
+    expect(pages).toHaveLength(3)
+    const seen = pages.flatMap((p) => p.items).map((i) => (i as { post: Post }).post.article.id)
     expect(new Set(seen).size).toBe(seen.length)
     expect(seen.sort((x, y) => x - y)).toEqual(ids)
+  })
+
+  test('a malformed cursor is the first page', async () => {
+    const a = await article(1)
+    await follow(ANNA)
+    await recommend(ANNA, a, now - 60_000)
+    const page = await feed('?cursor=nonsense')
+    expect(page.items).toHaveLength(1)
+    expect(page.suggested).toBeDefined()
   })
 
   test('suggests readers from public signals only, never myself or someone I follow', async () => {
