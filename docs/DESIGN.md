@@ -158,8 +158,9 @@ renders the pill filled (`bg-ink`), and clicking it again removes the recommenda
 
 Settings (Tela v2): a 1040 px page, a 200 px section nav on the left (sticky from `md`, one row
 that scrolls below it) holding the serif "Settings" heading, and the section in a 640 px column.
-Each section is an address (`/settings`, `/settings/reading`, `/translation`, `/subscriptions`,
-`/privacy`), so Back and a shared link land on it. `/translation` is labelled Language: the
+Each section is an address (`/settings`, `/settings/reading`, `/settings/translation`,
+`/settings/subscriptions`, `/settings/privacy`), so Back and a shared link land on it.
+`/settings/translation` is labelled Language: the
 interface language comes first, each choice in its own name (English, 简体中文) so it can be found
 whatever the page is in, then what posts are translated into. The interface language is the
 profile's, so it follows the member to every device; the `tela_locale` cookie mirrors it for the
