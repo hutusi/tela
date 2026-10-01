@@ -15,6 +15,12 @@ import type { ApiDeps } from '../deps'
 
 /** Five minutes at the edge, a day of serving stale while it refreshes. */
 export const PUBLIC_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=86400'
+/**
+ * A profile shows what its member chose to show, and Settings tells them a change reaches it in a
+ * few minutes: a browser may serve its copy a minute and four more while it asks again, never a
+ * day (ADR 0031). Discover and a blog's page keep PUBLIC_CACHE (ADR 0024).
+ */
+export const PROFILE_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=240'
 const LANG = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/
 const DAY = 24 * 60 * 60 * 1000
 const PUBLIC_LISTING = sql.raw(`('listed', 'featured')`)
@@ -270,7 +276,7 @@ export function publicRoutes(deps: ApiDeps) {
         liked: profile.public_likes ? (liked ?? []).map(withArticle) : null,
       },
       200,
-      cached,
+      { 'cache-control': PROFILE_CACHE },
     )
   })
 
