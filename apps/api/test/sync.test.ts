@@ -647,9 +647,14 @@ describe('follows (ADR 0031)', () => {
     await push([{ type: 'unfollow', userId: ANNA, at: now - 20 }])
     const past = await pull(0) // a device whose cursor passed the deletion without keeping it
     await push([{ type: 'unfollow', userId: ANNA, at: now - 10 }])
-    expect((await pull(past.cursor)).rows.follows).toMatchObject([
-      { userId: ANNA, deletedAt: now - 20 },
-    ])
+    const again = await pull(past.cursor)
+    expect(again.rows.follows).toMatchObject([{ userId: ANNA, deletedAt: now - 20 }])
+    // Even from a device whose clock is behind the first unfollow.
+    await push([{ type: 'unfollow', userId: ANNA, at: now - 25 }])
+    expect((await pull(again.cursor)).rows.follows).toMatchObject([{ userId: ANNA }])
+    // And still no follow comes back from an older one.
+    await push([{ type: 'follow', userId: ANNA, at: now - 15 }])
+    expect((await pull(0)).rows.follows).toEqual([])
   })
 
   test('the privacy switches are mutations, false included', async () => {

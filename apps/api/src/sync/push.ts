@@ -203,8 +203,9 @@ function statementsFor(
     case 'unfollow':
       // Recorded whatever it finds, as follow is: a tombstone where there was no row, and the
       // later clock on one already deleted. Otherwise an older follow arriving after it would see
-      // only the clock of an earlier unfollow, or none, and bring the follow back. The seq moves
-      // even then, so unfollowing again sends the deletion again to a device that dropped it.
+      // only the clock of an earlier unfollow, or none, and bring the follow back. On a row
+      // already deleted the seq moves whatever the clocks say, so unfollowing again sends the
+      // deletion again to a device that dropped it, even from a device whose clock is behind.
       return [
         db.run(sql`
           insert into follows (follower_id, followee_id, created_at, updated_at, deleted_at, seq)
@@ -212,8 +213,8 @@ function statementsFor(
           where p.user_id = ${m.userId} and p.user_id <> ${userId} and ${fresh}
           on conflict (follower_id, followee_id) do update set
             deleted_at = coalesce(follows.deleted_at, excluded.deleted_at),
-            updated_at = excluded.updated_at, seq = excluded.seq
-          where excluded.updated_at >= follows.updated_at
+            updated_at = max(follows.updated_at, excluded.updated_at), seq = excluded.seq
+          where excluded.updated_at >= follows.updated_at or follows.deleted_at is not null
         `),
       ]
   }

@@ -103,6 +103,11 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       values ('workers-anna-00001', 'Anna', 'anna@x.test', 1, 0, 0)`),
     db.run(sql`insert into profiles (user_id, handle, display_name, created_at, updated_at, seq)
       values ('workers-anna-00001', 'anna', 'Anna', 0, 0, ${currentSeq})`),
+    // And someone never followed, whom the member unfollows anyway.
+    db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+      values ('workers-bo-0000002', 'Bo', 'bo@x.test', 1, 0, 0)`),
+    db.run(sql`insert into profiles (user_id, handle, display_name, created_at, updated_at, seq)
+      values ('workers-bo-0000002', 'bobo', 'Bo', 0, 0, ${currentSeq})`),
   ])
 
   // A guarded push, then its replay.
@@ -133,7 +138,7 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       { mid: 'workers-follow-1', at: now, type: 'follow', userId: 'workers-anna-00001' },
       { mid: 'workers-flags-1', at: now, type: 'setPrivacy', publicLikes: true },
       // An unfollow of someone never followed is a tombstone upsert through their profile.
-      { mid: 'workers-unfollow-1', at: now, type: 'unfollow', userId: 'workers-nobody-0001' },
+      { mid: 'workers-unfollow-1', at: now, type: 'unfollow', userId: 'workers-bo-0000002' },
     ],
   }
   const pushed = (await (
@@ -144,6 +149,10 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     await call('/api/v1/mutations', { body: push, ...member })
   ).json()) as PushResponse
   expect(again.applied).toHaveLength(7)
+  const tombstones = await db.all<{ deleted_at: number }>(
+    sql`select deleted_at from follows where followee_id = 'workers-bo-0000002'`,
+  )
+  expect(tombstones).toEqual([{ deleted_at: now }])
   const likes = await db.all<{ like_count: number }>(
     sql`select like_count from articles where id = 1`,
   )
