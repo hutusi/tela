@@ -72,6 +72,7 @@ export function ProfileView({
         <PersonAvatar
           handle={profile.handle}
           displayName={profile.displayName}
+          avatar={profile.avatar}
           size={112}
           me={mine}
           className="max-md:!size-20 max-md:!text-[36px]"

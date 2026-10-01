@@ -10,7 +10,7 @@
  * other, and activity of any age is on the first page when it is the newest there is. The offset
  * is the one the walk began under, so all its pages agree on where a day starts.
  */
-import { ARTICLE_COLUMNS } from '@tela/data'
+import { ARTICLE_COLUMNS, avatarOf } from '@tela/data'
 import { isReadingLanguage } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -79,6 +79,7 @@ const personOf = (r: Row) => ({
   id: String(r.userId),
   handle: String(r.handle),
   displayName: (r.displayName as string | null) ?? null,
+  avatar: (r.avatar as string | null) ?? null,
 })
 
 /** Newest first, then by key: the order pages are cut in, the same in SQL and here (ASCII keys). */
@@ -111,7 +112,8 @@ export function socialRoutes(deps: ApiDeps) {
     const post = sql`s.id as "siteId", s.title as "siteTitle", s.home_url as "homeUrl",
       (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS},
       ${translated('title')} as "translatedTitle", ${translated('excerpt')} as "translatedExcerpt"`
-    const who = sql`p.user_id as "userId", p.handle, p.display_name as "displayName"`
+    const who = sql`p.user_id as "userId", p.handle, p.display_name as "displayName",
+      ${avatarOf('p')} as avatar`
     // A local day's index. Cast, in case a driver binds the offset as a real: days are whole.
     const day = (column: SQL) => sql`cast((${column} + ${offset}) / ${DAY} as integer)`
     const none = sql`select 1 where false`
@@ -214,7 +216,7 @@ export function socialRoutes(deps: ApiDeps) {
       first
         ? db.all(sql`
             select p.user_id as id, p.handle, p.display_name as "displayName", p.bio,
-              count(*) as score
+              ${avatarOf('p')} as avatar, count(*) as score
             from (
               select r.user_id from recommendations r join articles a on a.id = r.article_id
               where r.deleted_at is null and a.feed_id in (
@@ -334,7 +336,8 @@ export function socialRoutes(deps: ApiDeps) {
     const siteId = Number(c.req.param('siteId'))
     if (!Number.isInteger(siteId)) return c.json({ readers: [] })
     const readers = await db.all<Row>(sql`
-      select distinct p.user_id as id, p.handle, p.display_name as "displayName"
+      select distinct p.user_id as id, p.handle, p.display_name as "displayName",
+        ${avatarOf('p')} as avatar
       from follows fo join profiles p on p.user_id = fo.followee_id
       join subscriptions sub on sub.user_id = fo.followee_id and sub.deleted_at is null
       join feeds f on f.id = sub.feed_id

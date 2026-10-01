@@ -288,6 +288,9 @@
       "privacy": "隐私"
     },
     "profileIntro": "读者和作者在 Tela 上看到的你。",
+    "gravatar": "显示我的 Gravatar 头像",
+    "gravatarHint": "Gravatar 上与你登录邮箱对应的头像，会出现在你名字出现的地方。在那边换了头像？点「刷新」。别人那里可能要过几分钟才更新。",
+    "gravatarRefresh": "刷新",
     "name": "名字",
     "handle": "用户名",
     "handleHint": "3–30 个小写字母、数字或下划线，用于你的个人页地址。",

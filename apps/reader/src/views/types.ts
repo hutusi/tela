@@ -29,8 +29,11 @@ export type DiscoverSite = {
 
 export type DiscoverData = { sites: DiscoverSite[]; languages: { lang: string; count: number }[] }
 
-/** A member as a page names them: their handle, and their name if they gave one. */
-export type PersonRef = { handle: string; displayName: string | null }
+/**
+ * A member as a page names them: their handle, their name if they gave one, and their picture's
+ * address while they show one (ADR 0032; absent from a tela-api before it).
+ */
+export type PersonRef = { handle: string; displayName: string | null; avatar?: string | null }
 
 /** A member someone can follow: named, and with the account id a follow names (ADR 0031). */
 export type Person = PersonRef & { id: string }
@@ -84,6 +87,8 @@ export type ProfileData = {
     handle: string
     displayName: string | null
     bio: string | null
+    /** Their picture's address, while they show one (ADR 0032). */
+    avatar?: string | null
     memberSince: number
   }
   /** Null from a tela-api before follows (ADR 0031), which counts nothing: shown as absent, never 0. */

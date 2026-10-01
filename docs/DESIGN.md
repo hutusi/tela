@@ -67,7 +67,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
   Reading/Discover/Following pills (Following for members), search, the Read-in menu ("Read in
-  中文 EN", for members), and the member's avatar (accent circle with initial, 30px). The UI
+  中文 EN", for members), and the member's avatar (30px: their picture, or their initial on the accent). The UI
   locale is not in the header: a member sets it in Settings → Language, and a visitor gets their
   browser's, with a switch on the sign-in page. Pills are ink in every state: the active one is distinguished by its
   `hover` background alone, never by colour.
@@ -168,8 +168,16 @@ muted intro; below, rows (`SettingRow`) separated by `line` rules: the label and
 left, the control on the right. Controls are `Segmented` (the choices on the `hover` ground, the
 chosen one lifted on `surface`), `Switch` (40 × 24, `accent` on / `thumb` off, `knob`), a native
 select, or a quiet pill button. Settings that change what others see say so, and that the public
-profile can take a few minutes to catch up. The design's Notifications section, avatar upload,
+profile can take a few minutes to catch up. Profile opens with the member's avatar at 64 px
+beside *Show my Gravatar*: a switch, and while it is on a quiet *Refresh* that sends it on again
+(ADR 0032). The design's Notifications section, avatar upload,
 "Who can follow you" and "Delete account" are not built (ADR 0031), so they are not shown.
+
+A person's avatar (`PersonAvatar`) is their initial in a circle of their colour, the accent for
+one's own, with their picture over it when they show their Gravatar (ADR 0032). The initial
+always renders and the picture covers it only once it has loaded, so a slow, failed or offline
+load still shows a face of sorts; the picture's address comes from the server (`/avatar/…`),
+never from the page.
 
 Profile (`/@handle`, Tela v2): a 960 px column. The header is a 112 px avatar (80 px below `md`,
 the accent for the member's own, their colour for anyone else's), the serif name at 46 px,

@@ -171,3 +171,54 @@ test.describe('the interface language', () => {
     }
   })
 })
+
+test.describe("the member's picture (ADR 0032)", () => {
+  /** The switch, through the API, as the page's own push sends it. */
+  async function setGravatar(request: APIRequestContext, on: boolean) {
+    const res = await request.post(`${BASE}/api/v1/mutations`, {
+      headers: { origin: BASE, ...(await memberHeaders(request)) },
+      data: {
+        mutations: [{ mid: crypto.randomUUID(), at: Date.now(), type: 'setAvatar', gravatar: on }],
+      },
+    })
+    expect(res.ok()).toBe(true)
+  }
+
+  test('is their Gravatar from Tela once turned on; Refresh moves it; off leaves the initial', async ({
+    page,
+    request,
+  }) => {
+    try {
+      await page.goto('/settings')
+      const picture = page.getByTestId('account-menu').locator('img')
+      await expect(picture).toHaveCount(0)
+      const pushed = () =>
+        page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+
+      let push = pushed()
+      await page.getByTestId('profile-gravatar').click()
+      await push
+      // Tela's own address, at the switch's version: never gravatar.com, and it loads.
+      await expect(picture).toHaveAttribute('src', /^\/avatar\/[A-Za-z0-9_-]+\?v=\d+$/)
+      await expect
+        .poll(() => picture.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth))
+        .toBeGreaterThan(0)
+      const first = (await picture.getAttribute('src')) ?? ''
+
+      push = pushed()
+      await page.getByTestId('profile-gravatar-refresh').click()
+      await push
+      await expect(picture).not.toHaveAttribute('src', first)
+      await expect(picture).toHaveAttribute('src', /^\/avatar\/[A-Za-z0-9_-]+\?v=\d+$/)
+
+      push = pushed()
+      await page.getByTestId('profile-gravatar').click()
+      await push
+      await expect(picture).toHaveCount(0)
+      await expect(page.getByTestId('profile-gravatar-refresh')).toHaveCount(0)
+    } finally {
+      // Every spec signs in as this member: the next one starts from the initial.
+      await setGravatar(request, false)
+    }
+  })
+})

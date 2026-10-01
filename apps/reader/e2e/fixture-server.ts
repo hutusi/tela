@@ -222,6 +222,12 @@ createServer(async (req, res) => {
     res.end()
     return
   }
+  // Stands in for gravatar.com (tela-api's GRAVATAR_URL in the e2e): every address has a picture.
+  if (req.method === 'GET' && /^\/gravatar\/[0-9a-f]{64}$/.test(path)) {
+    res.writeHead(200, { 'content-type': 'image/png' })
+    res.end(PNG)
+    return
+  }
   if (req.method === 'POST' && path === '/__claim-token') {
     claimToken = url.searchParams.get('token') ?? ''
     res.writeHead(204)

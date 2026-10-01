@@ -344,6 +344,23 @@ describe('public pages', () => {
     expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/'))).toHaveLength(2)
   })
 
+  test("a profile's picture renders as Tela's address, never Gravatar's (ADR 0032)", async () => {
+    const reader = await signedIn(api, 'pictured@x.test')
+    await api.request('/api/v1/profile', {
+      method: 'PUT',
+      body: { handle: 'pictured' },
+      as: reader,
+    })
+    await api.request('/api/v1/mutations', {
+      body: { mutations: [{ mid: 'gravatar-on-edge', at: 77, type: 'setAvatar', gravatar: true }] },
+      as: reader,
+    })
+    const html = await (await page('/@pictured')).text()
+    expect(html).toContain(`src="/avatar/${reader.userId}?v=77"`)
+    expect(html).not.toContain('gravatar.com')
+    expect(html).not.toContain('pictured@x.test')
+  })
+
   test("a profile's tabs are pages of their own, cached apart", async () => {
     const reader = await signedIn(api, 'shown@x.test')
     await api.request('/api/v1/profile', {

@@ -6,7 +6,7 @@
  * Only listed and featured blogs appear. The Postgres app rendered a private or rejected site's
  * page for anyone with its id, which on a cached public page would be a leak.
  */
-import { ARTICLE_COLUMNS, first } from '@tela/data'
+import { ARTICLE_COLUMNS, avatarOf, first } from '@tela/data'
 import { isTopic } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -116,6 +116,7 @@ export function publicRoutes(deps: ApiDeps) {
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
           s.primary_lang as "primaryLang", s.listing, s.reader_count as "readerCount",
           p.handle as "claimedBy", p.display_name as "claimantName", p.bio as "claimantBio",
+          ${avatarOf('p')} as "claimantAvatar",
           (select count(*) from articles a join feeds f on f.id = a.feed_id
             where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since})
             as "postsLast30d"
@@ -151,14 +152,19 @@ export function publicRoutes(deps: ApiDeps) {
     ] as never)) as unknown as Record<string, unknown>[][]
     const row = sites?.[0]
     if (!row) return notFound()
-    const { claimantName, claimantBio, ...site } = row
+    const { claimantName, claimantBio, claimantAvatar, ...site } = row
     return c.json(
       {
         site: {
           ...site,
           // Who writes it, for the page's About: the claimant's own name and bio.
           claimant: site.claimedBy
-            ? { handle: site.claimedBy, displayName: claimantName, bio: claimantBio }
+            ? {
+                handle: site.claimedBy,
+                displayName: claimantName,
+                bio: claimantBio,
+                avatar: claimantAvatar,
+              }
             : null,
         },
         feeds,
@@ -184,10 +190,12 @@ export function publicRoutes(deps: ApiDeps) {
       created_at: number
       public_subscriptions: number
       public_likes: number
+      avatar: string | null
     }>(
       db,
-      sql`select user_id, handle, display_name, bio, created_at, public_subscriptions, public_likes
-          from profiles where handle = ${handle}`,
+      sql`select user_id, handle, display_name, bio, created_at, public_subscriptions, public_likes,
+            ${avatarOf('p')} as avatar
+          from profiles p where handle = ${handle}`,
     )
     if (!profile) return notFound()
     const id = profile.user_id
@@ -260,6 +268,7 @@ export function publicRoutes(deps: ApiDeps) {
           handle: profile.handle,
           displayName: profile.display_name,
           bio: profile.bio,
+          avatar: profile.avatar,
           memberSince: profile.created_at,
         },
         counts: {

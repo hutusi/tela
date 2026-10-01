@@ -288,6 +288,9 @@
       "privacy": "Privacy"
     },
     "profileIntro": "How you appear to readers and authors on Tela.",
+    "gravatar": "Show my Gravatar",
+    "gravatarHint": "The picture Gravatar has for the email you sign in with, wherever your name appears. Changed it there? Refresh. Others may see it a few minutes later.",
+    "gravatarRefresh": "Refresh",
     "name": "Name",
     "handle": "Handle",
     "handleHint": "3–30 lowercase letters, digits, or underscores. Used in your profile URL.",
