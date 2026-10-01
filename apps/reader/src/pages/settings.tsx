@@ -4,7 +4,13 @@
  * another device shows here. Most settings are mutations and take effect at once; the handle,
  * name and bio are an RPC, since a handle has to be unique.
  */
-import { LANGUAGE_NAMES, languageBadge, READING_LANGUAGES, type UiLocale } from '@tela/shared'
+import {
+  LANGUAGE_NAMES,
+  languageBadge,
+  READING_LANGUAGES,
+  UI_LOCALES,
+  type UiLocale,
+} from '@tela/shared'
 import type { ProfileRow } from '@tela/sync'
 import { useRef, useState } from 'react'
 import { Link, Navigate, NavLink, useParams } from 'react-router'
@@ -130,7 +136,7 @@ function ProfileForm({
   onState: (state: SaveState) => void
 }) {
   const t = useTranslations('settings')
-  const { engine } = useStore()
+  const { engine, store } = useStore()
   const [handle, setHandle] = useState(profile.handle)
   const [displayName, setDisplayName] = useState(profile.displayName ?? '')
   const [bio, setBio] = useState(profile.bio ?? '')
@@ -164,8 +170,39 @@ function ProfileForm({
 
   return (
     <form onSubmit={(e) => void submit(e)} className="flex flex-col" data-testid="settings-form">
+      {/* The picture: their Gravatar, through Tela, or their initial (ADR 0032). Refresh sends the
+          switch on again, which is a new address, so a picture changed on Gravatar shows now
+          rather than when the 30-day cache lets go of the old one. */}
       <div className="flex items-center gap-[18px] pb-6">
-        <PersonAvatar handle={profile.handle} displayName={profile.displayName} size={64} me />
+        <PersonAvatar
+          handle={profile.handle}
+          displayName={profile.displayName}
+          avatar={profile.avatar}
+          size={64}
+          me
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="font-medium">{t('gravatar')}</span>
+          <span className="text-[12.5px] leading-[1.45] text-muted">{t('gravatarHint')}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          {profile.gravatar ? (
+            <button
+              type="button"
+              onClick={() => store.mutate({ type: 'setAvatar', gravatar: true })}
+              className="rounded-full border border-thumb px-3.5 py-[7px] text-[13px] font-medium whitespace-nowrap text-ink hover:border-ink"
+              data-testid="profile-gravatar-refresh"
+            >
+              {t('gravatarRefresh')}
+            </button>
+          ) : null}
+          <Switch
+            checked={profile.gravatar}
+            onChange={(on) => store.mutate({ type: 'setAvatar', gravatar: on })}
+            label={t('gravatar')}
+            testId="profile-gravatar"
+          />
+        </div>
       </div>
       <div className="flex flex-col gap-5 border-t border-line pt-6">
         <label className="flex flex-col gap-1.5">
@@ -314,13 +351,24 @@ function TranslationSection() {
   const tt = useTranslations('translation')
   const tables = useTables()
   const { store } = useStore()
-  const { locale } = useUi()
+  const { locale, setLocale } = useUi()
   const readingLang = useReadingLang(locale)
   const names = LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en
   const prefs = readingPrefsOf(tables)
   return (
     <>
       <Intro>{t('translationIntro')}</Intro>
+      {/* Each language in its own name, so it can be found whatever the page is in now. */}
+      <SettingRow label={t('uiLocale')} hint={t('uiLocaleHint')}>
+        <Segmented
+          label={t('uiLocale')}
+          options={UI_LOCALES}
+          value={locale as UiLocale}
+          render={(l) => <span lang={l}>{LANGUAGE_NAMES[l][l]}</span>}
+          onChoose={setLocale}
+          testId="ui-locale"
+        />
+      </SettingRow>
       <SettingRow label={t('translateInto')} hint={t('translateIntoHint')}>
         <select
           value={readingLang}

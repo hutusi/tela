@@ -18,6 +18,7 @@
 import type { SQL } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
+import { avatarSql } from './people'
 
 /** Raw rows as SQL returns them; the API shapes them into the protocol's row types. */
 export type RawRow = Record<string, unknown>
@@ -48,7 +49,8 @@ export type PullRead = {
 
 const PROFILE = sql.raw(`p.handle, p.display_name as "displayName", p.bio,
   p.ui_locale as "uiLocale", p.reading_lang as "readingLang",
-  p.public_subscriptions as "publicSubscriptions", p.public_likes as "publicLikes", p.seq`)
+  p.public_subscriptions as "publicSubscriptions", p.public_likes as "publicLikes",
+  p.gravatar, ${avatarSql('p')} as "avatar", p.seq`)
 const PREF = sql.raw(`key, value_json as "valueJson", updated_at as "updatedAt", seq`)
 const SUBSCRIPTION = sql.raw(`feed_id as "feedId", watermark_id as "watermarkId",
   created_at as "createdAt", deleted_at as "deletedAt", seq`)
@@ -80,7 +82,7 @@ const CLAIM = sql.raw(`id, site_id as "siteId", method, token, status, error,
 const FOLLOW_SEQ = sql.raw(`(case when f.deleted_at is null then max(f.seq, p.seq) else f.seq end)`)
 /** A follow with how the followed member appears, from `follows f join profiles p`. */
 const FOLLOW = sql`f.followee_id as "userId", p.handle, p.display_name as "displayName",
-  f.created_at as "createdAt", f.deleted_at as "deletedAt", ${FOLLOW_SEQ} as seq`
+  ${sql.raw(avatarSql('p'))} as "avatar", f.created_at as "createdAt", f.deleted_at as "deletedAt", ${FOLLOW_SEQ} as seq`
 const TRANSLATION = sql.raw(`b.content_key as "contentKey", b.lang, b.state,
   b.chunk_keys as "chunkKeys", b.object_key as "objectKey", b.failed_leaves as "failedLeaves",
   b.seq`)

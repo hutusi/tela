@@ -136,6 +136,26 @@ function statementsFor(
         `),
       ]
     }
+    case 'setAvatar': {
+      // The switch goes to the later `at`, on its clock alone, like a privacy switch. The picture's
+      // version is a counter beside it (ADR 0032): every "on" the switch accepts counts it up, so
+      // Refresh is a new address past every cache, whatever its `at` (two clicks in a millisecond,
+      // a device whose clock is behind). Kept apart, so a version never outruns a later "off". An
+      // older "on" that arrives after an "off" is no choice at all, and leaves both alone. SQLite
+      // reads the row as it was in every SET, so `gravatar = 1` is the switch before this one.
+      const later = sql`${at} >= gravatar_at`
+      const counts = m.gravatar ? sql`(${later} or gravatar = 1)` : sql`false`
+      return [
+        db.run(sql`
+          update profiles set
+            gravatar = case when ${later} then ${m.gravatar ? 1 : 0} else gravatar end,
+            gravatar_at = case when ${later} then ${at} else gravatar_at end,
+            avatar_version = case when ${counts} then avatar_version + 1 else avatar_version end,
+            updated_at = ${now}, seq = ${currentSeq}
+          where user_id = ${userId} and ${fresh}
+        `),
+      ]
+    }
     case 'recommend':
       return [
         db.run(sql`

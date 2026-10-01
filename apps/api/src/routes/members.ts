@@ -202,7 +202,7 @@ export function memberRoutes(deps: ApiDeps) {
         db.all(sql`
           select handle, display_name as "displayName", bio, reading_lang as "readingLang",
             ui_locale as "uiLocale", public_subscriptions as "publicSubscriptions",
-            public_likes as "publicLikes", created_at as "memberSince"
+            public_likes as "publicLikes", gravatar as "showsGravatar", created_at as "memberSince"
           from profiles where user_id = ${id}
         `),
         db.all(
@@ -242,6 +242,7 @@ export function memberRoutes(deps: ApiDeps) {
             ...profile,
             publicSubscriptions: profile.publicSubscriptions === 1,
             publicLikes: profile.publicLikes === 1,
+            showsGravatar: profile.showsGravatar === 1,
           }
         : null,
       prefs: (prefs ?? []).map((p) => ({ key: p.key, value: JSON.parse(String(p.valueJson)) })),

@@ -74,6 +74,12 @@ export const mutationSchema = z.discriminatedUnion('type', [
   }),
   z.object({ ...base, type: z.literal('unrecommend'), articleId: id }),
   /**
+   * Whether the member's Gravatar is their picture (ADR 0032), to the later `at`. Sent on again it
+   * is Refresh: the `at` is the picture's version, so its address changes. A type of its own for
+   * the reason `setPrivacy` is one.
+   */
+  z.object({ ...base, type: z.literal('setAvatar'), gravatar: z.boolean() }),
+  /**
    * Make a highlight, or change one: its note, or its anchor once the post has changed and the
    * device found the passage again. The later `at` wins, and a deleted highlight stays deleted.
    */

@@ -8,7 +8,7 @@ at the cutover in `docs/OPERATIONS.md`.
 ## Topology
 
 ```
-Browser ──▶ tela-web (edge, unpinned): static SPA, public pages, /o/* objects, /img/*, /api/* forward
+Browser ──▶ tela-web (edge, unpinned): static SPA, public pages, /o/* objects, /img/*, /avatar/*, /api/* forward
               │ service binding
               ▼
             tela-api  (pinned aws:ap-southeast-1) ──┐
@@ -54,7 +54,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | Table | Role |
 |---|---|
 | `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024) |
-| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, and whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it) |
+| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it), and whether they show their Gravatar (`gravatar`, with its `gravatar_at`, and `avatar_version`, the picture's version, counted up by every "on", ADR 0032) |
 | `user_prefs` | Synced preferences, one row per key: reading mode, text size, measure, theme (`lib/typography.ts`), and the Reading and Translation settings `reader.mark_on_open`, `reader.hide_read`, `translate.auto`, `translate.never` (`lib/prefs.ts`) |
 | `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out` |
 | `site_topics`, `site_claims` | A blog's topics; claim attempts (meta or `rel="me"`) |
@@ -185,6 +185,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest, with readers to follow; which of them read a blog. Only as far as each shows it (ADR 0031) |
 | `GET /api/v1/export` | "Your data": the member's own rows as one JSON file |
 | `/api/v1/public/*` | Discover, a blog's page (with its claimant and readers' notes), a profile (with follow counts, and liked posts only if shown): listed and featured blogs only, edge-cacheable |
+| `GET /api/v1/public/avatars/:userId?v=` | A member's Gravatar while they show it and only at the version their switch is at (ADR 0032): fetched here by the hash of their email, which never leaves tela-api, raster types only, 512 KB, immutable for 30 days; no picture is a 404 the letter stands in for |
 | `/api/websub/:feedId` | The hub callback: intent checks, and signed pings that make the feed due |
 | `/api/health` | Liveness and D1 latency |
 
@@ -200,6 +201,10 @@ The only public Worker, unpinned, with no D1.
   the session check; raw HTML (`r/`) and backups are never served.
 - `/img/<contentKey>/<i>` proxies the image the content object names: the object is the
   allowlist. Raster types only, no SVG, 10 MB, cached for seven days.
+- `/avatar/<userId>?v=<n>` is a member's picture (ADR 0032), from tela-api's
+  `/api/v1/public/avatars/:userId`, cached per colo for as long as tela-api says (30 days for a
+  picture, since the version is in the address). Public, and it asks tela-api nothing for an
+  address that names no member or version.
 - Sessions come from the signed cookie cache; when it has lapsed, tela-api's get-session is asked
   and its fresh cookie passed on.
 - `/discover`, `/s/:id` and `/@handle` are rendered here (`src/ssr.tsx`) with the SPA's own views,

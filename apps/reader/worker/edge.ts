@@ -7,6 +7,7 @@
  *   colo after the session check; `/o/bundle` serves up to 25 content objects in one response.
  * - `/img/<contentKey>/<index>` proxies the image a content object names (ADR 0007's rules),
  *   replacing the HMAC-signed `/img?u=` of the Postgres app: the object is the allowlist.
+ * - `/avatar/<userId>?v=` is a member's picture (ADR 0032), from tela-api, cached per colo.
  * - Sessions are read from better-auth's signed five-minute cookie cache with the shared secret.
  *   Only when that has lapsed does it ask tela-api, and passes on the refreshed cookie.
  * - `/discover`, `/s/:id` and `/@handle` are rendered here from tela-api's public JSON, poured into
@@ -67,6 +68,10 @@ const BUNDLE_MAX = 25
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024
 const IMAGE_TIMEOUT_MS = 10_000
 const IMAGE_UA = 'Tela/0.1 (+https://tela.ainaive.com; image proxy)'
+/** `/avatar/<userId>?v=<n>` (ADR 0032): an account id as profiles name them, and a version. */
+const MEMBER_ID = /^[A-Za-z0-9_-]{8,64}$/
+const AVATAR_VERSION = /^\d{1,16}$/
+const AVATAR_MAX_BYTES = 512 * 1024
 const OBJECT_CACHE = 'private, max-age=31536000, immutable'
 const IMAGE_CACHE = 'private, max-age=604800, immutable'
 /** The cache's own namespace: keys are never a URL a reader can request directly. */
@@ -233,6 +238,36 @@ export function createEdge(deps: EdgeDeps) {
     return withCookies(new Response(bytes, { headers }), member.setCookies)
   }
 
+  /**
+   * A member's picture (ADR 0032), from tela-api through this colo's cache. The address carries
+   * the version, so nothing cached under it goes stale: tela-api's 30 days stand here and in the
+   * browser, and its 404s for as long as it says. Public, like the profiles it appears on.
+   */
+  async function serveAvatar(request: Request, userId: string, version: string, waiter?: Waiter) {
+    const cacheKey = new Request(`${CACHE_ORIGIN}/avatar/${userId}?v=${version}`)
+    const hit = await cache.match(cacheKey)
+    if (hit) return new Response(hit.body, hit)
+    const res = await api.fetch(
+      new Request(new URL(`/api/v1/public/avatars/${userId}?v=${version}`, request.url).toString()),
+    )
+    const failed = () => text('upstream failed', 502, { 'cache-control': 'no-store' })
+    if ((res.status !== 200 && res.status !== 404) || !res.body) return failed()
+    // A body that breaks off is a failure like any other: answered, and never cached.
+    let bytes: Uint8Array<ArrayBuffer> | null
+    try {
+      bytes = await readAtMost(res.body, AVATAR_MAX_BYTES)
+    } catch {
+      return failed()
+    }
+    if (!bytes) return failed()
+    const headers = new Headers(res.headers)
+    headers.set('x-robots-tag', 'noindex')
+    const put = cache.put(cacheKey, new Response(bytes, { status: res.status, headers }))
+    if (waiter) waiter.waitUntil(put)
+    else await put
+    return new Response(bytes, { status: res.status, headers })
+  }
+
   async function servePublic(request: Request, waiter?: Waiter): Promise<Response> {
     const url = new URL(request.url)
     const route = request.method === 'GET' ? pages.route(url) : null
@@ -308,6 +343,13 @@ export function createEdge(deps: EdgeDeps) {
         response = await serveBundle(request, waiter)
       } else if (path.startsWith('/o/')) {
         response = await serveObject(request, decodeURIComponent(path.slice(3)), waiter)
+      } else if (path.startsWith('/avatar/')) {
+        const userId = path.slice('/avatar/'.length)
+        const version = url.searchParams.get('v') ?? ''
+        response =
+          request.method === 'GET' && MEMBER_ID.test(userId) && AVATAR_VERSION.test(version)
+            ? await serveAvatar(request, userId, version, waiter)
+            : text('not found', 404)
       } else if (path.startsWith('/img/')) {
         const [, , key = '', index = ''] = path.split('/')
         const i = Number(index)

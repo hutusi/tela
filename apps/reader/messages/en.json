@@ -52,7 +52,8 @@
     "noSubscriptions": "No subscriptions yet.",
     "browse": "Feeds",
     "hide": "Collapse the sidebar",
-    "show": "Expand the sidebar"
+    "show": "Expand the sidebar",
+    "manage": "Manage subscriptions"
   },
   "list": {
     "markAllRead": "Mark all read",
@@ -282,11 +283,14 @@
     "sections": {
       "profile": "Profile",
       "reading": "Reading",
-      "translation": "Translation",
+      "translation": "Language",
       "subscriptions": "Subscriptions",
       "privacy": "Privacy"
     },
     "profileIntro": "How you appear to readers and authors on Tela.",
+    "gravatar": "Show my Gravatar",
+    "gravatarHint": "The picture Gravatar has for the email you sign in with, wherever your name appears. Changed it there? Refresh. Others may see it a few minutes later.",
+    "gravatarRefresh": "Refresh",
     "name": "Name",
     "handle": "Handle",
     "handleHint": "3–30 lowercase letters, digits, or underscores. Used in your profile URL.",
@@ -310,7 +314,9 @@
     "markOnOpenHint": "Otherwise, a post stays unread until you mark it.",
     "hideRead": "Hide read articles",
     "hideReadHint": "Lists show unread posts only. Liked posts are always kept.",
-    "translationIntro": "Tela translates posts written in other languages. The original is always one click away.",
+    "translationIntro": "The language Tela itself speaks, and the one it translates posts into. The original is always one click away.",
+    "uiLocale": "Interface language",
+    "uiLocaleHint": "Menus, buttons and messages, on every device you sign in on.",
     "translateInto": "Translate into",
     "translateIntoHint": "Your main reading language.",
     "autoTranslate": "Translate automatically",

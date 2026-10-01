@@ -204,6 +204,7 @@ export function SiteView({
                 <PersonAvatar
                   handle={claimant.handle}
                   displayName={claimant.displayName}
+                  avatar={claimant.avatar}
                   size={28}
                   me={member?.handle === claimant.handle}
                 />
@@ -227,7 +228,12 @@ export function SiteView({
                     title={p.displayName ?? p.handle}
                     className="-ml-1.5 rounded-full border-2 border-paper hover:no-underline"
                   >
-                    <PersonAvatar handle={p.handle} displayName={p.displayName} size={32} />
+                    <PersonAvatar
+                      handle={p.handle}
+                      displayName={p.displayName}
+                      avatar={p.avatar}
+                      size={32}
+                    />
                   </Link>
                 ))}
               </div>

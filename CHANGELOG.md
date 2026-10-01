@@ -43,6 +43,11 @@ everything so far sits under `[Unreleased]`.
   avatar opens a menu holding the profile, the Dashboard, Settings and sign-out. New settings:
   marking read on opening, hiding read posts, translating only when asked, languages never
   translated, and "Your data" as one file.
+- **Pictures and languages.** A member can show their Gravatar wherever their name appears,
+  served from Tela's own origin so it loads in mainland China and their email's hash stays
+  private; Refresh shows a picture changed on Gravatar (ADR 0032). The interface language moved
+  from the header to Settings → Language and follows the member to every device; the header keeps
+  *Read in 中文 EN*. A Manage link beside Subscriptions opens their list in Settings.
 
 - **Running unattended.** A dead-man's switch pinged by the sweeps while they are healthy, a
   Monday digest to the owner, and a nightly export verified against its manifest, which the suite

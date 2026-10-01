@@ -275,7 +275,12 @@ export function FollowingPage() {
                 to={`/@${p.handle}`}
                 className="-mx-2 flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-ink hover:bg-hover hover:no-underline"
               >
-                <PersonAvatar handle={p.handle} displayName={p.displayName} size={28} />
+                <PersonAvatar
+                  handle={p.handle}
+                  displayName={p.displayName}
+                  avatar={p.avatar}
+                  size={28}
+                />
                 <span className="min-w-0 flex-1 truncate font-medium">
                   {p.displayName ?? p.handle}
                 </span>
@@ -299,7 +304,12 @@ export function FollowingPage() {
                   data-handle={p.handle}
                 >
                   <Link to={`/@${p.handle}`} className="hover:no-underline">
-                    <PersonAvatar handle={p.handle} displayName={p.displayName} size={32} />
+                    <PersonAvatar
+                      handle={p.handle}
+                      displayName={p.displayName}
+                      avatar={p.avatar}
+                      size={32}
+                    />
                   </Link>
                   <div className="min-w-0 flex-1">
                     <Link to={`/@${p.handle}`} className="font-medium text-ink hover:underline">
@@ -393,7 +403,12 @@ function Activity({
       data-kind={item.kind}
     >
       <Link to={profile} className="hover:no-underline" aria-hidden="true" tabIndex={-1}>
-        <PersonAvatar handle={person.handle} displayName={person.displayName} size={40} />
+        <PersonAvatar
+          handle={person.handle}
+          displayName={person.displayName}
+          avatar={person.avatar}
+          size={40}
+        />
       </Link>
       <div className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-baseline gap-1.5 pt-0.5 text-[14px]">

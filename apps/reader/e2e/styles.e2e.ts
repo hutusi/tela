@@ -96,9 +96,9 @@ test.describe('stylesheet', () => {
     test(`the header fits and keeps its nav at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 })
       await page.goto('/reading')
-      // The Read-in menu appears once the session is known and is 133px wide. Measuring before it
-      // lands reads a header ~145px lighter than the one a member sees, which passes when it
-      // shouldn't.
+      // The Read-in menu appears once the session is known and is 140px wide ("Read in 中文 EN").
+      // Measuring before it lands reads a header ~150px lighter than the one a member sees, which
+      // passes when it shouldn't.
       await page.getByTestId('read-in').waitFor({ state: 'attached' })
 
       const m = await page.evaluate(() => {

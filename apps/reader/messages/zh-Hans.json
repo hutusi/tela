@@ -52,7 +52,8 @@
     "noSubscriptions": "还没有订阅。",
     "browse": "订阅",
     "hide": "收起侧栏",
-    "show": "展开侧栏"
+    "show": "展开侧栏",
+    "manage": "管理订阅"
   },
   "list": {
     "markAllRead": "全部标为已读",
@@ -282,11 +283,14 @@
     "sections": {
       "profile": "个人资料",
       "reading": "阅读",
-      "translation": "翻译",
+      "translation": "语言",
       "subscriptions": "订阅",
       "privacy": "隐私"
     },
     "profileIntro": "读者和作者在 Tela 上看到的你。",
+    "gravatar": "显示我的 Gravatar 头像",
+    "gravatarHint": "Gravatar 上与你登录邮箱对应的头像，会出现在你名字出现的地方。在那边换了头像？点「刷新」。别人那里可能要过几分钟才更新。",
+    "gravatarRefresh": "刷新",
     "name": "名字",
     "handle": "用户名",
     "handleHint": "3–30 个小写字母、数字或下划线，用于你的个人页地址。",
@@ -310,7 +314,9 @@
     "markOnOpenHint": "关掉的话，文章会一直是未读，直到你手动标记。",
     "hideRead": "隐藏已读文章",
     "hideReadHint": "列表只显示未读文章，喜欢的文章始终保留。",
-    "translationIntro": "Tela 会翻译用其他语言写的文章，原文随时一键可见。",
+    "translationIntro": "Tela 界面用的语言，以及文章翻译成的语言。原文随时一键可见。",
+    "uiLocale": "界面语言",
+    "uiLocaleHint": "菜单、按钮和提示文字，在你登录的每台设备上都一样。",
     "translateInto": "翻译成",
     "translateIntoHint": "你主要的阅读语言。",
     "autoTranslate": "自动翻译",

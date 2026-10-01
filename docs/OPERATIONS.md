@@ -31,6 +31,7 @@ directory.
 | `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@ainaive.com>` |
 | `PUBLIC_URL` | tela-api, tela-jobs | The one public origin: better-auth's base URL and trusted origin, claim `rel="me"` targets, the WebSub callback |
 | `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var |
+| `GRAVATAR_URL` | tela-api | Where members' pictures are fetched from (ADR 0032), default `https://gravatar.com/avatar`. The e2e points it at its fixture server. A picture is cached for 30 days in each colo and browser under an address with its version, and turning the switch off cannot purge a colo: a copy already held stays, at an address nothing links to any more |
 | `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, and fetches to private addresses. Never deployed |
 | `WORKER_USER_AGENT` | tela-jobs | Sent on every fetch; keep a contact URL in it |
 | `FETCH_TIMEOUT_MS` | tela-jobs, the relay | Per-request timeout, default 20000 |
@@ -113,6 +114,12 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        (made offline, or pushed as the tab closed) boots blank under it, and stays blank until
        tela-web rolls forward or the browser's site data is cleared. This release's reducer
        ignores types it does not know, so rolling back *to* it from a later one is safe.
+   - Gravatar pictures (ADR 0032, migration 0003) are additive and keep protocol 2: apply the
+     migration before deploying tela-api, and deploy tela-api before tela-web.
+     - **Either Worker may go back alone.** An older tela-api refuses `setAvatar` as invalid, so
+       the switch visibly goes back; its profile rows carry no picture, and a device keeps the
+       one it held; `/avatar/…` answers 404, which shows the letter. An older tela-web (not
+       before the follows release) ignores an unsent `setAvatar` in its reducer.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way

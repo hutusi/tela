@@ -54,7 +54,13 @@ export function AccountMenu() {
         className="flex size-[30px] items-center justify-center rounded-full hover:shadow-[0_0_0_3px_var(--color-line)]"
       >
         {handle ? (
-          <PersonAvatar handle={handle} displayName={profile?.displayName ?? null} size={30} me />
+          <PersonAvatar
+            handle={handle}
+            displayName={profile?.displayName ?? null}
+            avatar={profile?.avatar}
+            size={30}
+            me
+          />
         ) : (
           <span className="size-[30px] rounded-full bg-accent" />
         )}

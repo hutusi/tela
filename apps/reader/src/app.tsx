@@ -1,5 +1,5 @@
 /** The reader app: providers, and one route per page. Every page renders from the local store. */
-import type { UiLocale } from '@tela/shared'
+import { isUiLocale, type UiLocale } from '@tela/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { AppHeader } from './components/app-header'
@@ -81,15 +81,33 @@ function Routed() {
   const [locale, setLocaleState] = useState<UiLocale>(() =>
     detectLocale(document.cookie, navigator.languages ?? [navigator.language]),
   )
+  const applyLocale = useCallback((next: UiLocale) => {
+    // biome-ignore lint/suspicious/noDocumentCookie: the edge reads it to render public pages.
+    document.cookie = localeCookie(next)
+    setLocaleState(next)
+  }, [])
+  // A member's choice is a mutation even before their first sync has brought the profile: it
+  // waits with the others, and lands on the row when that arrives. Skipping it then left only the
+  // cookie, and the row's older choice, applied below, took the page back. A visitor has no owner,
+  // and `mutate` keeps nothing for no one.
   const setLocale = useCallback(
     (next: UiLocale) => {
-      // biome-ignore lint/suspicious/noDocumentCookie: the edge reads it to render public pages.
-      document.cookie = localeCookie(next)
-      setLocaleState(next)
-      if (store.hasData) store.mutate({ type: 'setProfile', uiLocale: next })
+      applyLocale(next)
+      store.mutate({ type: 'setProfile', uiLocale: next })
     },
-    [store],
+    [store, applyLocale],
   )
+  // A member's interface language is their profile's, so a choice made on another device or in
+  // another tab arrives here with the sync, and the cookie follows it for the edge. Applied when
+  // the profile's value changes, never when the page's does: a row that has not caught up with a
+  // click would otherwise undo it. Nothing is sent back; this device only learns the choice.
+  const accountLocale = tables.profile?.uiLocale ?? null
+  const lastAccountLocale = useRef<string | null>(null)
+  useEffect(() => {
+    const last = lastAccountLocale.current
+    lastAccountLocale.current = accountLocale
+    if (accountLocale !== last && isUiLocale(accountLocale)) applyLocale(accountLocale)
+  }, [accountLocale, applyLocale])
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])

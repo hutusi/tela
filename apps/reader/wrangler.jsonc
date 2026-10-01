@@ -15,7 +15,16 @@
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/o/*", "/img/*", "/robots.txt", "/discover", "/s/*", "/@*"]
+    "run_worker_first": [
+      "/api/*",
+      "/o/*",
+      "/img/*",
+      "/avatar/*",
+      "/robots.txt",
+      "/discover",
+      "/s/*",
+      "/@*"
+    ]
   },
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content" }],
   "services": [{ "binding": "API", "service": "tela-api" }],

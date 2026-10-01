@@ -3,31 +3,13 @@ import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { type ReadingParams, readingHref } from '../lib/href'
 import type { Filter, SubscriptionItem } from '../store/selectors'
+import { Glyph } from './glyph'
 import { SidebarToggle, TOGGLE_ROW } from './sidebar-toggle'
 import { Swatch } from './swatch'
 
 type Props = { subscriptions: SubscriptionItem[]; params: ReadingParams }
 
-/** The filters' glyphs, 16px and drawn like the toggle's panel, since Tela has no icon set. */
-function Glyph({ children }: { children: ReactNode }) {
-  return (
-    <svg
-      width={16}
-      height={16}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {children}
-    </svg>
-  )
-}
-
+/** The filters' glyphs, drawn like the toggle's panel. */
 const GLYPHS: Record<Filter, ReactNode> = {
   all: <path d="M3 4.5h10M3 8h10M3 11.5h10" />,
   today: (

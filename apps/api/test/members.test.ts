@@ -235,6 +235,22 @@ describe('public', () => {
     expect(JSON.stringify(shown)).not.toContain('@x.test')
   })
 
+  test("a profile carries the member's picture only while their Gravatar is on (ADR 0032)", async () => {
+    await put('/api/v1/profile', { handle: 'shown' })
+    const page = async () => (await get('/api/v1/public/profiles/shown')).json()
+    const avatar = async () =>
+      ((await page()) as { profile: { avatar: string | null } }).profile.avatar
+    expect(await avatar()).toBeNull()
+    await api.request('/api/v1/mutations', {
+      body: { mutations: [{ mid: 'gravatar-on-0001', at: 42, type: 'setAvatar', gravatar: true }] },
+      as: reader,
+    })
+    expect(await avatar()).toBe(`/avatar/${reader.userId}?v=1`)
+    // The address it is fetched by is never in the page, nor its hash.
+    expect(JSON.stringify(await page())).not.toContain('@x.test')
+    expect(JSON.stringify(await page())).not.toContain('gravatar.com')
+  })
+
   describe('the social side (ADR 0031)', () => {
     const OTHER = 'member-other-000001'
     /** Someone who never signs in here, following or followed. */
@@ -332,6 +348,7 @@ describe('public', () => {
         handle: 'writer',
         displayName: 'The Writer',
         bio: 'I write here.',
+        avatar: null,
       })
       // Only a recommendation with a note is a note.
       expect(page.notes).toMatchObject([

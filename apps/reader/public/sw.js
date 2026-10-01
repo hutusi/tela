@@ -24,7 +24,7 @@
 const SHELL = 'tela-shell-v2'
 /** How long activation waits for its warm before it lets the open tabs' requests through. */
 const WARM_MS = 3000
-const PASS = /^\/(api|o|img)\//
+const PASS = /^\/(api|o|img|avatar)\//
 const ICONS = new Set(['/favicon.ico', '/icon.svg', '/apple-icon.png'])
 /** What a hashed file's content type must name, by extension. */
 const TYPES = { js: 'javascript', css: 'text/css', woff2: 'font/woff2', woff: 'font/woff' }

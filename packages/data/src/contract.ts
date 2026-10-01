@@ -26,6 +26,7 @@ import {
   mergeFeed,
   updateArticles,
 } from './queries/ingest'
+import { avatarOf } from './queries/people'
 import { compactReadStates } from './queries/reader'
 import { readPull } from './queries/sync'
 import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
@@ -144,6 +145,31 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       await db.run(
         sql`insert into profiles (user_id, handle, created_at, updated_at) values ('u1', 'good_handle_1', 1, 1)`,
       )
+    })
+
+    it("gives a member's picture only while their Gravatar is on, versioned by its switch (ADR 0032)", async () => {
+      const db = await makeDb()
+      await db.run(
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 0, 0, 0)`,
+      )
+      await db.run(
+        sql`insert into profiles (user_id, handle, created_at, updated_at) values ('u1', 'pic', 1, 1)`,
+      )
+      const picture = async () =>
+        (
+          (await db.all(
+            sql`select ${avatarOf('p')} as avatar from profiles p where p.user_id = 'u1'`,
+          )) as {
+            avatar: string | null
+          }[]
+        )[0]?.avatar
+      expect(await picture()).toBe(null)
+      await db.run(sql`update profiles set gravatar = 1, avatar_version = 1 where user_id = 'u1'`)
+      expect(await picture()).toBe('/avatar/u1?v=1')
+      await db.run(sql`update profiles set avatar_version = 2 where user_id = 'u1'`)
+      expect(await picture()).toBe('/avatar/u1?v=2')
+      await db.run(sql`update profiles set gravatar = 0 where user_id = 'u1'`)
+      expect(await picture()).toBe(null)
     })
 
     it('refuses a member following themselves, or someone who does not exist (ADR 0031)', async () => {

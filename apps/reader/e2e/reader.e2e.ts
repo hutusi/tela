@@ -297,14 +297,23 @@ test.describe('reader', () => {
     ).toHaveText('')
   })
 
-  test('the UI switches to Chinese', async ({ page }) => {
-    await page.goto('/reading')
-    const switcher = page.getByTestId('locale-switcher')
-    await switcher.getByRole('button', { name: '中文' }).click()
-    await expect(page.getByRole('link', { name: '阅读' })).toBeVisible()
+  test('the UI switches to Chinese, in Settings and nowhere in the header', async ({ page }) => {
+    await page.goto('/settings/translation')
+    await expect(page.getByTestId('read-in')).toBeVisible()
+    await expect(page.getByTestId('locale-switcher')).toHaveCount(0)
+    // Each push is waited for: every spec signs in as this member, and the next one should not
+    // inherit Chinese because this page closed before its last change went out.
+    const pushed = () =>
+      page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+    let push = pushed()
+    await page.getByTestId('ui-locale-zh-Hans').click()
+    await expect(page.getByTestId('nav-reading')).toHaveText('阅读')
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
-    await switcher.getByRole('button', { name: 'EN' }).click()
-    await expect(page.getByRole('link', { name: 'Reading' })).toBeVisible()
+    await push
+    push = pushed()
+    await page.getByTestId('ui-locale-en').click()
+    await expect(page.getByTestId('nav-reading')).toHaveText('Reading')
+    await push
   })
 
   test('add a feed by page URL, and its posts arrive by sync', async ({ page }) => {

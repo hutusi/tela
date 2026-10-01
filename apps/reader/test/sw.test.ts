@@ -427,4 +427,19 @@ describe('the app-shell service worker', () => {
     // The tabs were claimed, and are let through; the next navigation tries the warm again.
     expect(log).toEqual(['claim', '/'])
   }, 10_000)
+  test("what the edge serves itself, pictures included, is never the worker's to answer", async () => {
+    live = build('A')
+    const sw = await start()
+    for (const path of ['/api/v1/me', '/o/c/x.json', '/img/x/0', '/avatar/member-anna-0001?v=5']) {
+      let answered = false
+      sw.handlers.get('fetch')?.({
+        request: request(path),
+        respondWith: () => {
+          answered = true
+        },
+        waitUntil: () => undefined,
+      })
+      expect([path, answered]).toEqual([path, false])
+    }
+  })
 })

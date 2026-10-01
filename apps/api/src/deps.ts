@@ -17,6 +17,8 @@ export type ApiConfig = {
   mailFrom: string
   /** Test mode: exposes the mail outbox. Never set in production. */
   testMode?: boolean
+  /** Where Gravatar serves pictures (ADR 0032); tests point it at a fixture. */
+  gravatarUrl?: string
 }
 
 export type ApiDeps = {

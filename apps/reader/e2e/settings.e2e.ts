@@ -4,7 +4,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import { type APIRequestContext, expect, test } from '@playwright/test'
-import { BASE, FIXTURES, memberHeaders } from './helpers'
+import { BASE, FIXTURES, memberHeaders, STATE_FILE, setPrefs, synced } from './helpers'
 
 /** The member's profile row as the server has it, through a snapshot pull. */
 async function serverProfile(request: APIRequestContext) {
@@ -139,5 +139,121 @@ test.describe('settings', () => {
     const bio = page.locator('textarea[name="bio"]')
     await bio.fill('Hello')
     await expect(page.getByTestId('settings-form')).toContainText('275 characters left')
+  })
+})
+
+test.describe('the interface language', () => {
+  test('chosen before the first sync lands, is kept and saved', async ({ browser, request }) => {
+    // The account says English; this device has never synced.
+    await setPrefs(request, {}, { uiLocale: 'en' })
+    const fresh = await browser.newContext({ storageState: STATE_FILE })
+    try {
+      const page = await fresh.newPage()
+      let release = () => {}
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      await page.route('**/api/v1/sync**', async (route) => {
+        await held
+        await route.continue()
+      })
+      await page.goto('/settings/translation')
+      const pushed = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+      await page.getByTestId('ui-locale-zh-Hans').click()
+      await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+      // Now the profile arrives, with the account's older English, and the choice stands.
+      release()
+      await pushed
+      await page.goto('/reading')
+      await synced(page)
+      await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+      const snapshot = await request.get(`${BASE}/api/v1/sync?cursor=0`, {
+        headers: await memberHeaders(request),
+      })
+      const body = (await snapshot.json()) as { rows: { profile: { uiLocale: string }[] } }
+      expect(body.rows.profile[0]?.uiLocale).toBe('zh-Hans')
+    } finally {
+      await fresh.close()
+      await setPrefs(request, {}, { uiLocale: 'en' })
+    }
+  })
+
+  test('follows the member to a device that was in English', async ({ page, browser, request }) => {
+    try {
+      await page.goto('/settings/translation')
+      const pushed = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+      await page.getByTestId('ui-locale-zh-Hans').click()
+      await pushed
+
+      // Another device: the same member, and a cookie that still says English.
+      const other = await browser.newContext({ storageState: STATE_FILE })
+      try {
+        await other.addCookies([{ name: 'tela_locale', value: 'en', url: BASE }])
+        const there = await other.newPage()
+        await there.goto('/reading')
+        await synced(there)
+        await expect(there.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+        await expect(there.getByTestId('nav-reading')).toHaveText('阅读')
+        // And the cookie follows, so the edge renders the next public page in Chinese too.
+        const cookies = await other.cookies(BASE)
+        expect(cookies.find((c) => c.name === 'tela_locale')?.value).toBe('zh-Hans')
+      } finally {
+        await other.close()
+      }
+    } finally {
+      // Every spec signs in as this member: none should inherit Chinese from this one.
+      await setPrefs(request, {}, { uiLocale: 'en' })
+    }
+  })
+})
+
+test.describe("the member's picture (ADR 0032)", () => {
+  /** The switch, through the API, as the page's own push sends it. */
+  async function setGravatar(request: APIRequestContext, on: boolean) {
+    const res = await request.post(`${BASE}/api/v1/mutations`, {
+      headers: { origin: BASE, ...(await memberHeaders(request)) },
+      data: {
+        mutations: [{ mid: crypto.randomUUID(), at: Date.now(), type: 'setAvatar', gravatar: on }],
+      },
+    })
+    expect(res.ok()).toBe(true)
+  }
+
+  test('is their Gravatar from Tela once turned on; Refresh moves it; off leaves the initial', async ({
+    page,
+    request,
+  }) => {
+    try {
+      await page.goto('/settings')
+      const picture = page.getByTestId('account-menu').locator('img')
+      await expect(picture).toHaveCount(0)
+      const pushed = () =>
+        page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+
+      let push = pushed()
+      await page.getByTestId('profile-gravatar').click()
+      await push
+      // Tela's own address, at the switch's version: never gravatar.com, and it loads.
+      await expect(picture).toHaveAttribute('src', /^\/avatar\/[A-Za-z0-9_-]+\?v=\d+$/)
+      await expect
+        .poll(() => picture.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth))
+        .toBeGreaterThan(0)
+      const first = (await picture.getAttribute('src')) ?? ''
+
+      push = pushed()
+      await page.getByTestId('profile-gravatar-refresh').click()
+      await push
+      await expect(picture).not.toHaveAttribute('src', first)
+      await expect(picture).toHaveAttribute('src', /^\/avatar\/[A-Za-z0-9_-]+\?v=\d+$/)
+
+      push = pushed()
+      await page.getByTestId('profile-gravatar').click()
+      await push
+      await expect(picture).toHaveCount(0)
+      await expect(page.getByTestId('profile-gravatar-refresh')).toHaveCount(0)
+    } finally {
+      // Every spec signs in as this member: the next one starts from the initial.
+      await setGravatar(request, false)
+    }
   })
 })

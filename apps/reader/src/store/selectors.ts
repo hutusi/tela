@@ -219,7 +219,7 @@ export function followedPeople(t: Tables, person: (id: string) => Person | undef
   const people: Person[] = []
   for (const f of t.follows.values()) {
     const known = f.handle
-      ? { id: f.userId, handle: f.handle, displayName: f.displayName }
+      ? { id: f.userId, handle: f.handle, displayName: f.displayName, avatar: f.avatar ?? null }
       : person(f.userId)
     if (known) people.push(known)
   }

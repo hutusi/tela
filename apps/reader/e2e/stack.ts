@@ -79,6 +79,8 @@ const configs = {
     ADMIN_TOKEN: 'e2e-admin',
     ENV: 'test',
     PUBLIC_URL: baseUrl,
+    // The fixture server stands in for gravatar.com (ADR 0032).
+    GRAVATAR_URL: `${process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'}/gravatar`,
   }),
   jobs: relocate(join(root, 'apps/jobs/wrangler.jsonc'), {
     ENV: 'test',

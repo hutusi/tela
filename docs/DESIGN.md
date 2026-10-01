@@ -66,8 +66,10 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 ## Layout rules
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
-  Reading/Discover/Following pills (Following for members), search, Read-in menu, locale
-  switcher, and the member's avatar (accent circle with initial, 30px). Pills are ink in every state: the active one is distinguished by its
+  Reading/Discover/Following pills (Following for members), search, the Read-in menu ("Read in
+  中文 EN", for members), and the member's avatar (30px: their picture, or their initial on the accent). The UI
+  locale is not in the header: a member sets it in Settings → Language, and a visitor gets their
+  browser's, with a switch on the sign-in page. Pills are ink in every state: the active one is distinguished by its
   `hover` background alone, never by colour.
 - The avatar opens the account menu (Tela v2): a 220px `surface` panel under it with the member's
   name and @handle, then Your profile, Subscriptions (`/settings/subscriptions`), Dashboard,
@@ -139,7 +141,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 ## Components (`apps/reader/src/components`)
 
-`AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `MobileNav`, `ArticleList`, `Reader`,
+`AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
 `PairedBody`, `TranslationBar`, `Untranslated`, `LikeButton`, `RecommendPopover`, `EmptyState`,
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `TypographyMenu`, the highlight
 toolbar, note and list (`highlights.tsx`), and `Shortcuts`. Discover, a blog's page and a profile
@@ -156,14 +158,27 @@ renders the pill filled (`bg-ink`), and clicking it again removes the recommenda
 
 Settings (Tela v2): a 1040 px page, a 200 px section nav on the left (sticky from `md`, one row
 that scrolls below it) holding the serif "Settings" heading, and the section in a 640 px column.
-Each section is an address (`/settings`, `/settings/reading`, `/translation`, `/subscriptions`,
-`/privacy`), so Back and a shared link land on it. A section opens with a 30 px serif heading and a
+Each section is an address (`/settings`, `/settings/reading`, `/settings/translation`,
+`/settings/subscriptions`, `/settings/privacy`), so Back and a shared link land on it.
+`/settings/translation` is labelled Language: the
+interface language comes first, each choice in its own name (English, 简体中文) so it can be found
+whatever the page is in, then what posts are translated into. The interface language is the
+profile's, so it follows the member to every device; the `tela_locale` cookie mirrors it for the
+edge, and is all a visitor has. A section opens with a 30 px serif heading and a
 muted intro; below, rows (`SettingRow`) separated by `line` rules: the label and a muted hint on the
 left, the control on the right. Controls are `Segmented` (the choices on the `hover` ground, the
 chosen one lifted on `surface`), `Switch` (40 × 24, `accent` on / `thumb` off, `knob`), a native
 select, or a quiet pill button. Settings that change what others see say so, and that the public
-profile can take a few minutes to catch up. The design's Notifications section, avatar upload,
+profile can take a few minutes to catch up. Profile opens with the member's avatar at 64 px
+beside *Show my Gravatar*: a switch, and while it is on a quiet *Refresh* that sends it on again
+(ADR 0032). The design's Notifications section, avatar upload,
 "Who can follow you" and "Delete account" are not built (ADR 0031), so they are not shown.
+
+A person's avatar (`PersonAvatar`) is their initial in a circle of their colour, the accent for
+one's own, with their picture over it when they show their Gravatar (ADR 0032). The initial
+always renders and the picture covers it only once it has loaded, so a slow, failed or offline
+load still shows a face of sorts; the picture's address comes from the server (`/avatar/…`),
+never from the page.
 
 Profile (`/@handle`, Tela v2): a 960 px column. The header is a 112 px avatar (80 px below `md`,
 the accent for the member's own, their colour for anyone else's), the serif name at 46 px,
@@ -276,6 +291,10 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   counts' right edge. The glyph is a 16px panel drawn inline (Tela has no icon set), its left
   third shaded while the sidebar is shown, in the quiet button style, with `aria-expanded` for
   its state. A toggle that had focus hands it to the one in the other state.
+- **Manage** sits beside the Subscriptions heading, in the sidebar and in `MobileNav`: two sliders
+  drawn like the panel (`glyph.tsx`), in the toggle's quiet style, with its right edge on the
+  counts' as the toggle's is on the Library row. It opens `/settings/subscriptions`, and its name
+  is in its label and tooltip. The rail has none; the account menu's Subscriptions covers it.
 - **The rail** is the sidebar collapsed (ADR 0030), 48px wide. From the top: the toggle, on the
   Library row's line so that it only moves sideways between states; a divider; All, Today and
   Liked as 36px icon links (three lines, a ring with a dot and a heart, drawn like the panel);

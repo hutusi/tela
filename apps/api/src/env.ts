@@ -26,4 +26,6 @@ export type Env = {
   RESEND_API_KEY?: string
   /** `test` for local e2e: mail goes to an outbox route instead of Resend, and the test routes exist. */
   ENV?: string
+  /** Where Gravatar serves pictures; unset is gravatar.com. The e2e points it at its fixtures. */
+  GRAVATAR_URL?: string
 }

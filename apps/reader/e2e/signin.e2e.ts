@@ -466,3 +466,17 @@ test.describe('the mail link while the device refuses the claim once', () => {
     expect(await page.evaluate(() => sessionStorage.getItem('refused'))).toBe('1')
   })
 })
+
+test.describe("a visitor's language", () => {
+  test('is chosen on the sign-in page, not in the header', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible()
+    await expect(page.getByTestId('locale-switcher')).toHaveCount(0)
+    await page.goto('/login')
+    await page.getByTestId('locale-switcher').getByRole('button', { name: '中文' }).click()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+    // The choice is the cookie the edge reads, so a public page arrives in Chinese too.
+    await page.goto('/discover')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+  })
+})

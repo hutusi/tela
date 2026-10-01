@@ -685,6 +685,49 @@ describe('follows (ADR 0031)', () => {
     expect(await flags()).toMatchObject({ publicLikes: true, publicSubscriptions: true })
   })
 
+  test('the Gravatar switch goes to the later choice, and on again is a new address (ADR 0032)', async () => {
+    const t = now - 1000
+    const shown = async () => (await pull(0)).rows.profile[0]
+    const at = (v: number) => `/avatar/${reader.userId}?v=${v}`
+    expect(await shown()).toMatchObject({ gravatar: false, avatar: null })
+    await push([{ type: 'setAvatar', gravatar: true, at: t }])
+    expect(await shown()).toMatchObject({ gravatar: true, avatar: at(1) })
+    // Refresh: the switch sent on again moves the address past every cache, whatever its `at`:
+    // later, the same millisecond, or from a device whose clock is behind.
+    await push([{ type: 'setAvatar', gravatar: true, at: t + 100 }])
+    expect((await shown())?.avatar).toBe(at(2))
+    await push([{ type: 'setAvatar', gravatar: true, at: t + 100 }])
+    expect((await shown())?.avatar).toBe(at(3))
+    await push([{ type: 'setAvatar', gravatar: true, at: t + 20 }])
+    expect((await shown())?.avatar).toBe(at(4))
+    // An older "off" from another device, arriving late, changes nothing.
+    await push([{ type: 'setAvatar', gravatar: false, at: t + 50 }])
+    expect(await shown()).toMatchObject({ gravatar: true, avatar: at(4) })
+    // An "off" newer than every "on" wins, however many Refreshes counted the version up: the
+    // version is never the clock the switch is decided by.
+    await push([{ type: 'setAvatar', gravatar: false, at: t + 101 }])
+    expect(await shown()).toMatchObject({ gravatar: false, avatar: null })
+    // An older "on" arriving after it is no choice at all.
+    await push([{ type: 'setAvatar', gravatar: true, at: t + 90 }])
+    expect(await shown()).toMatchObject({ gravatar: false, avatar: null })
+    // On again: past every address it had.
+    await push([{ type: 'setAvatar', gravatar: true, at: t + 300 }])
+    expect(await shown()).toMatchObject({ gravatar: true, avatar: at(5) })
+  })
+
+  test("a followee's picture comes with the follow, and turning it on sends the row again", async () => {
+    await push([{ type: 'follow', userId: ANNA }])
+    const snap = await pull(0)
+    expect(snap.rows.follows).toMatchObject([{ userId: ANNA, avatar: null }])
+    await write(
+      db.run(
+        sql`update profiles set gravatar = 1, avatar_version = 7, seq = ${currentSeq} where user_id = ${ANNA}`,
+      ),
+    )
+    const delta = await pull(snap.cursor)
+    expect(delta.rows.follows).toMatchObject([{ userId: ANNA, avatar: `/avatar/${ANNA}?v=7` }])
+  })
+
   test('a profile save from a shell before the switches may hide subscriptions, never show them', async () => {
     await push([{ type: 'setPrivacy', publicSubscriptions: false, at: now - 10 }])
     // The old form sends what it loaded with every save.

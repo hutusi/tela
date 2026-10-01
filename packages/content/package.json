@@ -6,6 +6,7 @@
   "description": "Pure content pipeline: discovery, parsing, sanitization, blocks, hashing, language detection",
   "exports": {
     ".": "./src/index.ts",
+    "./hash": "./src/hash.ts",
     "./images": "./src/images.ts",
     "./split": "./src/split.ts",
     "./tagged": "./src/tagged.ts",

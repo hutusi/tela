@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { type ReadingParams, readingHref } from '../lib/href'
 import type { SubscriptionItem, Totals } from '../store/selectors'
+import { ManageSubscriptions } from './manage-subscriptions'
 import { Swatch } from './swatch'
 
 type Props = { subscriptions: SubscriptionItem[]; totals: Totals; params: ReadingParams }
@@ -55,8 +56,11 @@ export function MobileNav({ subscriptions, totals, params }: Props) {
           totals.liked,
           params.feedId === null && params.filter === 'liked',
         )}
-        <div className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-          {t('subscriptions')}
+        <div className="flex items-center justify-between pb-1 pl-3 pr-0.5 pt-3">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+            {t('subscriptions')}
+          </span>
+          <ManageSubscriptions className="-my-1.5" />
         </div>
         {subscriptions.map((s) => (
           <Link
