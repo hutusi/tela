@@ -68,8 +68,8 @@ only hide; its "show" saves and quietly changes nothing, which lasts only until 
 newer shell.
 
 **Suggestions use only what is already public**: members who recommended posts from blogs you
-read, and members whose public subscriptions overlap yours. Nobody is suggested because of a
-private subscription or a private like.
+read, members whose public subscriptions overlap yours, and members who recommended anything in
+the last thirty days. Nobody is suggested because of a private subscription or a private like.
 
 ## Consequences
 
@@ -78,7 +78,14 @@ private subscription or a private like.
   not.
 - Public profiles and blog pages can lag a change by up to five minutes: the edge caches them.
   Settings says so beside the privacy switches, and the member's own device forgets its cached
-  copy of their profile when the profile row changes.
+  copy of their profile when the profile row changes. A browser that showed a page within the
+  last day may show its own copy once more, under the public JSON's day of
+  stale-while-revalidate (0024), and fetches the new one behind it: nothing it had not already
+  shown.
+- The Following page's device copy is checked against a fresh first page only. An entry that
+  appears at an old time below that page (a re-subscription keeps its first date; a followee who
+  starts showing likes shows old days) stays out of the older pages already loaded until the next
+  visit. Finding it would mean walking every loaded page again on each return to the page.
 - `MIN_CLIENT` stays 2, as for highlights. A shell that predates this ignores the new pull table
   and never sends the new mutations, and a device copy without a `follows` table starts over
   from a snapshot (0025). The residual risk is an old tab left open across the deploy, which

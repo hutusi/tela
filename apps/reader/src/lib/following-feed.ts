@@ -17,7 +17,9 @@ const before = (a: Entry, b: Entry) => a.at > b.at || (a.at === b.at && a.key > 
  * an entry gone from it (a day's group an unlike moved down, or one removed), or one new inside the
  * span already held rather than above it (a followee who began to show their likes shows them at
  * the times they were made). The held pages past that point were fetched before the change and do
- * not have it, and keeping them would hide it for the visit.
+ * not have it, and keeping them would hide it for the visit. Only the fresh page can be checked:
+ * an entry that appears further down, older than all of it, stays out of the held pages until the
+ * next visit (ADR 0031).
  */
 export function mergeFirstPage<T extends Entry>(
   held: FeedPageOf<T> | null,
