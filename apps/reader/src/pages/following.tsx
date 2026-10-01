@@ -87,7 +87,10 @@ function useFeed(tab: Tab, lang: string) {
   // prediction, the request beat the debounced push, and the answer, cached under the new
   // follows, never showed the person just followed.
   const followees = useConfirmedFollowees()
-  const view = `${store.userId}:${tab}:${lang}`
+  // The device's offset is part of what a page means (it groups days), so a change starts afresh
+  // rather than splicing pages grouped two ways.
+  const tz = -new Date().getTimezoneOffset()
+  const view = `${store.userId}:${tab}:${lang}:${tz}`
   const key = `${view}:${followees}`
   const [feed, setFeed] = useState<Feed>(() => held.get(key) ?? loading(view))
   const [busy, setBusy] = useState(false)
@@ -98,11 +101,7 @@ function useFeed(tab: Tab, lang: string) {
 
   const fetchPage = useCallback(
     async (cursor: string | null): Promise<FeedPage | null> => {
-      const q = new URLSearchParams({
-        tab,
-        lang,
-        tz: String(-new Date().getTimezoneOffset()),
-      })
+      const q = new URLSearchParams({ tab, lang, tz: String(tz) })
       if (cursor !== null) q.set('cursor', cursor)
       try {
         const { status, body } = await apiJson<FeedPage>(`/api/v1/following?${q}`)
@@ -111,7 +110,7 @@ function useFeed(tab: Tab, lang: string) {
         return null
       }
     },
-    [tab, lang],
+    [tab, lang, tz],
   )
 
   // What is held shows at once, and the first page is asked for again behind it: the people

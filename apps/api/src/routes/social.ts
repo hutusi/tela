@@ -3,11 +3,12 @@
  * blog. By RPC, not sync: these are other members' rows, shown only as far as each chose to show
  * them, and that choice is applied here, when they are read.
  *
- * The feed pages by count, newest first, behind a cursor of (time, key). A recommendation is an
- * entry of its own. Likes and new subscriptions are grouped per person per local day ("liked 3
- * posts"), and a group is placed at its newest event, computed over the whole day whatever the
+ * The feed pages by count, newest first, behind a cursor of (time, offset, key). A recommendation
+ * is an entry of its own. Likes and new subscriptions are grouped per person per local day ("liked
+ * 3 posts"), and a group is placed at its newest event, computed over the whole day whatever the
  * cursor: so a group always lands whole on exactly one page, a busy day pages through like any
- * other, and activity of any age is on the first page when it is the newest there is.
+ * other, and activity of any age is on the first page when it is the newest there is. The offset
+ * is the one the walk began under, so all its pages agree on where a day starts.
  */
 import { ARTICLE_COLUMNS } from '@tela/data'
 import { isReadingLanguage } from '@tela/shared'

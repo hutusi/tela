@@ -39,17 +39,19 @@ tabs. What it reveals, that @old became @new, a follower list reveals anyway.
 
 **What the people you follow do comes by RPC.** `GET /api/v1/following` merges their
 recommendations, their likes (only if they show them) and their subscriptions to listed blogs
-(only if they show them), newest first, thirty entries a page behind a cursor of (time, key). A
-day's likes, or new subscriptions, are one entry per person, placed at the newest of them over
-the whole day, so a group lands whole on one page and a page is never cut inside one. Windows of
-days were tried first: they left a first page empty when the activity was older than the window,
-and a day busier than a page could not be paged past. A group's place can move if its day changes
-between two page requests (a like, an unlike); the device drops an entry it already holds, and a
-group that moved up shows when the first page is next asked for. The cursor carries the offset
-the walk grouped days under, so its pages agree on what a day is. Its posts arrive as full
-article rows held for the visit, like any post from outside the synced feeds (0025). The
-Dashboard is the precedent for a member page served this way. "Readers you follow" on a blog page
-is a member RPC too, beside the edge-cached public page, never in it.
+(only if they show them), newest first, thirty entries a page behind a cursor of (time, offset,
+key). A day's likes, or new subscriptions, are one entry per person, placed at the newest of them
+over the whole day, so a group lands whole on one page and a page is never cut inside one. Windows
+of days were tried first: they left a first page empty when the activity was older than the
+window, and a day busier than a page could not be paged past. The cursor carries the offset the
+walk grouped days under, so its pages agree on what a day is. A group's place can move if its day
+changes between two page requests (a like, an unlike). The device drops an entry it already holds;
+a group that moved up shows when the first page is next asked for; and when an entry the first
+page held has moved down or gone, the refresh keeps only the fresh page rather than older pages
+that no longer say where it is. Its posts arrive as full article rows held for the visit, like
+any post from outside the synced feeds (0025). The Dashboard is the precedent for a member page
+served this way. "Readers you follow" on a blog page is a member RPC too, beside the edge-cached
+public page, never in it.
 
 **Liked posts are private unless the member shows them** (`profiles.public_likes`, default off),
 like subscriptions. Authors still see how many likes a post has, never who liked it.

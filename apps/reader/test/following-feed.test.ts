@@ -29,6 +29,14 @@ describe('a fresh first page over the pages held', () => {
     const none = { items: [], next: null }
     expect(mergeFirstPage(held, none)).toEqual(none)
   })
+
+  test('keeps only the fresh page when an entry it held in that range moved down or went', () => {
+    // A day's likes held at 80: an unlike moved the group to 55, among the held older pages, which
+    // were fetched before and so do not have it there. Keeping them would hide it for the visit.
+    const liked = { items: [e(90), e(80, 'l:anna:20000'), e(70), e(60), e(50)], next: '50:x' }
+    const fresh = { items: [e(90), e(70)], next: '70:r:000000000070' }
+    expect(mergeFirstPage(liked, fresh)).toEqual(fresh)
+  })
 })
 
 describe('an older page after the ones held', () => {

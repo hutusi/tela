@@ -182,7 +182,7 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   ).json()) as PullResponse
   expect(renamed.rows.follows).toMatchObject([{ handle: 'anna_k' }])
 
-  // The Following feed: printf keys, nested window functions and the (time, key) cursor, on D1.
+  // The Following feed: printf keys, nested window functions and the (time, offset, key) cursor, on D1.
   await db.batch([
     bumpSeq(db),
     db.run(
