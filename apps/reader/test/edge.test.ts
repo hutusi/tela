@@ -201,6 +201,26 @@ describe('the image proxy', () => {
     })
     expect((await get(`/img/${KEY}/0`)).status).toBe(413)
   })
+
+  test('an image whose body breaks off is a 502, and nothing is kept', async () => {
+    images.push({
+      url: 'https://img.example/a.png',
+      response: () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
+              controller.error(new Error('connection reset'))
+            },
+          }),
+          { headers: { 'content-type': 'image/png' } },
+        ),
+    })
+    expect((await get(`/img/${KEY}/0`)).status).toBe(502)
+    // Not kept: the next request asks the image's host again.
+    expect((await get(`/img/${KEY}/0`)).status).toBe(502)
+    expect(fetched).toEqual(['https://img.example/a.png', 'https://img.example/a.png'])
+  })
 })
 
 describe("members' pictures (ADR 0032)", () => {

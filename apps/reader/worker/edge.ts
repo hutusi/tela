@@ -223,7 +223,13 @@ export function createEdge(deps: EdgeDeps) {
     if (!type.startsWith('image/') || type === 'image/svg+xml') return text('not an image', 415)
     const declared = Number(upstream.headers.get('content-length') ?? '0')
     if (declared > IMAGE_MAX_BYTES) return text('too large', 413)
-    const bytes = await readAtMost(upstream.body, IMAGE_MAX_BYTES)
+    // The headers can arrive and the body still break off: a failure, answered and never kept.
+    let bytes: Uint8Array<ArrayBuffer> | null
+    try {
+      bytes = await readAtMost(upstream.body, IMAGE_MAX_BYTES)
+    } catch {
+      return text('upstream failed', 502)
+    }
     if (!bytes) return text('too large', 413)
     const headers = {
       'content-type': type,
