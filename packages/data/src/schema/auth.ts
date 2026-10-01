@@ -110,6 +110,12 @@ export const profiles = sqliteTable(
     publicSubscriptions: integer({ mode: 'boolean' }).notNull().default(false),
     /** Whether the member's liked posts show on their profile and to their followers (ADR 0031). */
     publicLikes: integer({ mode: 'boolean' }).notNull().default(false),
+    /**
+     * When each privacy switch was last set, by the `at` of the change that set it: the later
+     * choice wins, whichever device's push arrives last (ADR 0031).
+     */
+    publicSubscriptionsAt: ms().notNull().default(0),
+    publicLikesAt: ms().notNull().default(0),
     isAdmin: integer({ mode: 'boolean' }).notNull().default(false),
     createdAt: ms().notNull(),
     updatedAt: ms().notNull(),

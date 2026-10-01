@@ -106,16 +106,31 @@ function statementsFor(
           where excluded.updated_at >= user_prefs.updated_at
         `),
       ]
-    case 'setProfile': {
-      // Bound as 1 or 0: `false` is a value to write, and only an absent flag keeps the column.
-      const flag = (v: boolean | undefined) => (v === undefined ? null : v ? 1 : 0)
+    case 'setProfile':
       return [
         db.run(sql`
           update profiles set
             reading_lang = coalesce(${m.readingLang ?? null}, reading_lang),
             ui_locale = coalesce(${m.uiLocale ?? null}, ui_locale),
-            public_subscriptions = coalesce(${flag(m.publicSubscriptions)}, public_subscriptions),
-            public_likes = coalesce(${flag(m.publicLikes)}, public_likes),
+            updated_at = ${now}, seq = ${currentSeq}
+          where user_id = ${userId} and ${fresh}
+        `),
+      ]
+    case 'setPrivacy': {
+      // Each switch to the later `at`, on a clock of its own: one switch's change never decides
+      // the other's, and an older choice arriving late changes nothing (ADR 0031). Bound as 1 or
+      // 0, since `false` is a value; an absent switch is left alone, its clock included.
+      const flag = (column: 'public_subscriptions' | 'public_likes', v: boolean | undefined) => {
+        if (v === undefined) return sql``
+        const later = sql`${at} >= ${sql.raw(`${column}_at`)}`
+        return sql`${sql.raw(column)} = case when ${later} then ${v ? 1 : 0} else ${sql.raw(column)} end,
+          ${sql.raw(`${column}_at`)} = case when ${later} then ${at} else ${sql.raw(`${column}_at`)} end,`
+      }
+      return [
+        db.run(sql`
+          update profiles set
+            ${flag('public_subscriptions', m.publicSubscriptions)}
+            ${flag('public_likes', m.publicLikes)}
             updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and ${fresh}
         `),

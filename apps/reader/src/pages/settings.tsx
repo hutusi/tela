@@ -628,7 +628,7 @@ function PrivacySection() {
       <SettingRow label={t('showLikes')} hint={t('showLikesHint')}>
         <Switch
           checked={profile?.publicLikes ?? false}
-          onChange={(on) => store.mutate({ type: 'setProfile', publicLikes: on })}
+          onChange={(on) => store.mutate({ type: 'setPrivacy', publicLikes: on })}
           label={t('showLikes')}
           testId="privacy-likes"
         />
@@ -636,7 +636,7 @@ function PrivacySection() {
       <SettingRow label={t('showSubscriptions')} hint={t('showSubscriptionsHint')}>
         <Switch
           checked={profile?.publicSubscriptions ?? false}
-          onChange={(on) => store.mutate({ type: 'setProfile', publicSubscriptions: on })}
+          onChange={(on) => store.mutate({ type: 'setPrivacy', publicSubscriptions: on })}
           label={t('showSubscriptions')}
           testId="privacy-subscriptions"
         />

@@ -26,7 +26,7 @@ async function hideEverything(request: APIRequestContext) {
         {
           mid: crypto.randomUUID(),
           at: Date.now(),
-          type: 'setProfile',
+          type: 'setPrivacy',
           publicLikes: false,
           publicSubscriptions: false,
         },

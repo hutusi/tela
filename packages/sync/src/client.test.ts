@@ -210,14 +210,14 @@ describe('follows and privacy flags on the device (ADR 0031)', () => {
     expect(applyPull(renamed, pull(7, { follows: [followRow(7)] })).tables.follows.size).toBe(0)
   })
 
-  test('privacy flags apply, false included', () => {
+  test('privacy switches apply, false included', () => {
     const held = applyPull(start, pull(4, { profile: [profile] }))
     const shown = view(held, [
       {
         mutation: {
           mid: 'hide-subs-pad',
           at: 10,
-          type: 'setProfile',
+          type: 'setPrivacy',
           publicSubscriptions: false,
           publicLikes: true,
         },

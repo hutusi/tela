@@ -274,7 +274,7 @@ describe('public pages', () => {
     })
     await api.request('/api/v1/mutations', {
       body: {
-        mutations: [{ mid: 'show-subs-000', at: 1, type: 'setProfile', publicSubscriptions: true }],
+        mutations: [{ mid: 'show-subs-000', at: 1, type: 'setPrivacy', publicSubscriptions: true }],
       },
       as: reader,
     })

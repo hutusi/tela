@@ -69,11 +69,14 @@ export function memberRoutes(deps: ApiDeps) {
       const v = typeof body.bio === 'string' ? body.bio.trim().slice(0, 280) : ''
       sets.push(sql`bio = ${v || null}`)
     }
-    if (body.publicSubscriptions !== undefined) {
-      sets.push(sql`public_subscriptions = ${body.publicSubscriptions === true ? 1 : 0}`)
+    const now = deps.clock.now()
+    // The privacy switches are `setPrivacy` mutations now (ADR 0031). A shell from before them
+    // still sends its form's `publicSubscriptions` with every save, as the form loaded it, so it
+    // may only hide: a stale form never makes public what the member hid since.
+    if (body.publicSubscriptions === false) {
+      sets.push(sql`public_subscriptions = 0, public_subscriptions_at = ${now}`)
     }
     if (sets.length === 0) return c.json({ ok: true })
-    const now = deps.clock.now()
     // Taken handles are refused in the statement itself, so two members racing for one cannot
     // both win and neither sees a constraint error.
     const [, updated] = (await db.batch([

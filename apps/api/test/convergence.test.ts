@@ -206,8 +206,8 @@ async function scenario(seed: number, steps: number) {
     if (choice === 14)
       m =
         random() < 0.5
-          ? { mid, at, type: 'setProfile', publicSubscriptions: random() < 0.5 }
-          : { mid, at, type: 'setProfile', publicLikes: random() < 0.5 }
+          ? { mid, at, type: 'setPrivacy', publicSubscriptions: random() < 0.5 }
+          : { mid, at, type: 'setPrivacy', publicLikes: random() < 0.5 }
     if (m) pending.push({ mutation: m })
   }
 

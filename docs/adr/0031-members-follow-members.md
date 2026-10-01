@@ -1,6 +1,6 @@
 # 0031 — Members follow members; what others do arrives by RPC, not sync
 
-Status: accepted (2026-09-30). Amends 0025: two mutations and one synced table join the
+Status: accepted (2026-09-30). Amends 0025: three mutations and one synced table join the
 protocol.
 
 ## Context
@@ -46,9 +46,15 @@ is a member RPC too, beside the edge-cached public page, never in it.
 **Liked posts are private unless the member shows them** (`profiles.public_likes`, default off),
 like subscriptions. Authors still see how many likes a post has, never who liked it.
 
-**The privacy switches are mutations.** `setProfile` carries `publicSubscriptions` and
-`publicLikes`, so a switch flips at once and offline. The handle, name and bio stay behind
-`PUT /api/v1/profile`, since a handle must be unique.
+**The privacy switches are a mutation of their own, `setPrivacy`**, so a switch flips at once and
+offline. Each switch goes to the later `at`, on a clock of its own (`public_likes_at`,
+`public_subscriptions_at`): a device reconnecting with an older "show" cannot make public what
+the member has since hidden, and one switch's change never decides the other's. It is a type of
+its own rather than more fields on `setProfile` because a tela-api that predates it must refuse
+it: an older `setProfile` would strip the fields, acknowledge the change and drop it. The handle,
+name and bio stay behind `PUT /api/v1/profile`, since a handle must be unique; a shell from before
+the switches still sends its form's `publicSubscriptions` there with every save, so that path may
+only hide.
 
 **Suggestions use only what is already public**: members who recommended posts from blogs you
 read, and members whose public subscriptions overlap yours. Nobody is suggested because of a

@@ -596,14 +596,50 @@ describe('follows (ADR 0031)', () => {
     expect((await pull(0)).rows.follows.map((f) => f.userId)).toEqual([BO])
   })
 
-  test('the privacy flags are profile mutations, false included', async () => {
+  test('the privacy switches are mutations, false included', async () => {
     const snap = await pull(0)
-    await push([{ type: 'setProfile', publicSubscriptions: true, publicLikes: true }])
+    await push([{ type: 'setPrivacy', publicSubscriptions: true, publicLikes: true, at: now - 50 }])
     const on = await pull(snap.cursor)
     expect(on.rows.profile).toMatchObject([{ publicSubscriptions: true, publicLikes: true }])
-    await push([{ type: 'setProfile', publicLikes: false }])
+    await push([{ type: 'setPrivacy', publicLikes: false, at: now - 40 }])
     const off = await pull(on.cursor)
     expect(off.rows.profile).toMatchObject([{ publicSubscriptions: true, publicLikes: false }])
+  })
+
+  test('each privacy switch goes to the later choice, whatever order the devices push in', async () => {
+    const t = now - 1000
+    const flags = async () => (await pull(0)).rows.profile[0]
+    // Hidden on one device at t+200; an older "show" from another device arrives after it.
+    await push([{ type: 'setPrivacy', publicLikes: true, at: t }])
+    await push([{ type: 'setPrivacy', publicLikes: false, at: t + 200 }])
+    await push([{ type: 'setPrivacy', publicLikes: true, at: t + 100 }])
+    expect(await flags()).toMatchObject({ publicLikes: false })
+    // The other way round: a later "show" that arrives first stands.
+    await push([{ type: 'setPrivacy', publicSubscriptions: true, at: t + 300 }])
+    await push([{ type: 'setPrivacy', publicSubscriptions: false, at: t + 250 }])
+    expect(await flags()).toMatchObject({ publicSubscriptions: true })
+    // One switch's change never decides the other's: an older likes change still applies after a
+    // newer subscriptions change, since each has its own clock.
+    await push([{ type: 'setPrivacy', publicLikes: true, at: t + 260 }])
+    expect(await flags()).toMatchObject({ publicLikes: true, publicSubscriptions: true })
+  })
+
+  test('a profile save from a shell before the switches may hide subscriptions, never show them', async () => {
+    await push([{ type: 'setPrivacy', publicSubscriptions: false, at: now - 10 }])
+    // The old form sends what it loaded with every save.
+    await api.request('/api/v1/profile', {
+      method: 'PUT',
+      body: { displayName: 'R', publicSubscriptions: true },
+      as: reader,
+    })
+    expect((await pull(0)).rows.profile[0]).toMatchObject({ publicSubscriptions: false })
+    await push([{ type: 'setPrivacy', publicSubscriptions: true, at: now - 5 }])
+    await api.request('/api/v1/profile', {
+      method: 'PUT',
+      body: { displayName: 'R', publicSubscriptions: false },
+      as: reader,
+    })
+    expect((await pull(0)).rows.profile[0]).toMatchObject({ publicSubscriptions: false })
   })
 })
 

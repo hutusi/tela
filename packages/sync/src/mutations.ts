@@ -53,7 +53,16 @@ export const mutationSchema = z.discriminatedUnion('type', [
     type: z.literal('setProfile'),
     readingLang: z.enum(READING_LANGUAGES).optional(),
     uiLocale: z.enum(UI_LOCALES).optional(),
-    /** Whether the profile shows what the member reads, and what they liked (ADR 0031). */
+  }),
+  /**
+   * Whether the profile shows what the member reads, and what they liked (ADR 0031). Each switch
+   * goes to the later `at`, so a device reconnecting with an older choice cannot make public what
+   * the member has since hidden. A type of its own: a tela-api that predates it refuses it, and
+   * the switch visibly goes back, rather than acknowledging a change it then drops.
+   */
+  z.object({
+    ...base,
+    type: z.literal('setPrivacy'),
     publicSubscriptions: z.boolean().optional(),
     publicLikes: z.boolean().optional(),
   }),

@@ -54,7 +54,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | Table | Role |
 |---|---|
 | `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024) |
-| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, and whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default) |
+| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, and whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it) |
 | `user_prefs` | Synced preferences: reading mode, text size, measure, theme |
 | `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out` |
 | `site_topics`, `site_claims` | A blog's topics; claim attempts (meta or `rel="me"`) |

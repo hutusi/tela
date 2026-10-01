@@ -131,7 +131,7 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       },
       // A follow is an insert-select upsert, its pull a join paged by max() of two seqs.
       { mid: 'workers-follow-1', at: now, type: 'follow', userId: 'workers-anna-00001' },
-      { mid: 'workers-flags-1', at: now, type: 'setProfile', publicLikes: true },
+      { mid: 'workers-flags-1', at: now, type: 'setPrivacy', publicLikes: true },
     ],
   }
   const pushed = (await (

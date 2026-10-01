@@ -57,7 +57,7 @@ test.beforeAll(async () => {
     await push(anna, [
       { type: 'recommend', articleId: first.id, note: NOTE },
       { type: 'setLiked', articleId: second.id, liked: true },
-      { type: 'setProfile', publicLikes: true, publicSubscriptions: true },
+      { type: 'setPrivacy', publicLikes: true, publicSubscriptions: true },
     ])
   } finally {
     await anna.dispose()

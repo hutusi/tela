@@ -198,7 +198,14 @@ describe('public', () => {
     }
     expect(hidden.profile.bio).toBe('hello')
     expect(hidden.subscriptions).toBeNull()
-    await put('/api/v1/profile', { publicSubscriptions: true })
+    await api.request('/api/v1/mutations', {
+      body: {
+        mutations: [
+          { mid: 'show-subs-0001', at: 1, type: 'setPrivacy', publicSubscriptions: true },
+        ],
+      },
+      as: reader,
+    })
     const shown = (await (await get('/api/v1/public/profiles/shown')).json()) as {
       subscriptions: { id: number; listed: boolean }[]
     }
@@ -271,7 +278,7 @@ describe('public', () => {
       expect(hidden.liked).toBeNull()
       expect(hidden.recommendations).toMatchObject([{ note: 'read this', listed: true }])
 
-      await mutate([{ type: 'setProfile', publicLikes: true }])
+      await mutate([{ type: 'setPrivacy', publicLikes: true }])
       const shown = (await (await get('/api/v1/public/profiles/shown')).json()) as Profile
       expect(shown.counts.liked).toBe(2)
       // A post from a private blog shows, without a page to link to.

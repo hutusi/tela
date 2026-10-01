@@ -245,7 +245,16 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
           ...t.profile,
           ...(m.readingLang ? { readingLang: m.readingLang } : {}),
           ...(m.uiLocale ? { uiLocale: m.uiLocale } : {}),
-          // Booleans: `false` is a value, not an absence.
+        }
+      }
+      return t
+    }
+    case 'setPrivacy': {
+      // In order, as this device made them; the server decides between devices by `at`, and its
+      // row replaces this one with the next pull. Booleans: `false` is a value, not an absence.
+      if (t.profile) {
+        t.profile = {
+          ...t.profile,
           ...(m.publicSubscriptions !== undefined
             ? { publicSubscriptions: m.publicSubscriptions }
             : {}),
