@@ -382,12 +382,16 @@ function NeverTranslate({
   const tables = useTables()
   const { store } = useStore()
   const set = (value: string[]) => store.mutate({ type: 'setPref', key: PREF_KEYS.never, value })
+  // The select only chooses; Add commits. Arrow keys on a closed select (Windows, Linux) and
+  // type-ahead fire a change per step, which added a language at each one.
+  const [pick, setPick] = useState('')
   const seen = new Set(Object.keys(names))
   for (const a of tables.articles.values()) if (a.sourceLang) seen.add(a.sourceLang)
   const name = (tag: string) => names[tag] ?? tag
   const pool = [...seen]
     .filter((tag) => tag !== readingLang && !never.includes(tag))
     .sort((a, b) => name(a).localeCompare(name(b)))
+  const chosen = pool.includes(pick) ? pick : ''
   return (
     <div className="border-t border-line py-5" data-testid="never-translate">
       <div className="font-medium">{t('never')}</div>
@@ -412,11 +416,9 @@ function NeverTranslate({
           </span>
         ))}
         <select
-          value=""
+          value={chosen}
           aria-label={t('addLanguage')}
-          onChange={(e) => {
-            if (e.target.value) set([...never, e.target.value])
-          }}
+          onChange={(e) => setPick(e.target.value)}
           className="cursor-pointer rounded-full border border-dashed border-thumb bg-transparent px-3 py-[5px] text-[13px] text-muted hover:border-muted hover:text-ink"
           data-testid="never-add"
         >
@@ -427,6 +429,19 @@ function NeverTranslate({
             </option>
           ))}
         </select>
+        {chosen ? (
+          <button
+            type="button"
+            onClick={() => {
+              set([...never, chosen])
+              setPick('')
+            }}
+            className="rounded-full border border-ink bg-ink px-3 py-[5px] text-[13px] font-medium text-paper"
+            data-testid="never-add-confirm"
+          >
+            {t('add')}
+          </button>
+        ) : null}
       </div>
     </div>
   )
@@ -445,8 +460,9 @@ function SubscriptionsSection() {
   const { store, engine } = useStore()
   // Blogs left from this page stay listed, dimmed, so a slip can be undone where it was made. The
   // subscription row is still there with its `deletedAt`: this is which rows to show, not a
-  // second record of what is subscribed.
-  const [left, setLeft] = useState<ReadonlySet<number>>(new Set())
+  // second record of what is subscribed. Each keeps the count of posts it had when left, since
+  // leaving drops the feed's posts from the device and would read as "quiet lately".
+  const [left, setLeft] = useState<ReadonlyMap<number, number>>(new Map())
 
   const posted = new Map<number, number>()
   for (const a of tables.articles.values()) {
@@ -462,14 +478,14 @@ function SubscriptionsSection() {
         subscribed: s.deletedAt === null,
         title: feedTitle(tables, s.feedId) || '…',
         site,
-        cadence: cadenceKey(posted.get(s.feedId) ?? 0),
+        cadence: cadenceKey(Math.max(posted.get(s.feedId) ?? 0, left.get(s.feedId) ?? 0)),
       }
     })
     .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
   const count = rows.filter((r) => r.subscribed).length
 
   const toggle = (feedId: number, subscribed: boolean) => {
-    if (subscribed) setLeft((l) => new Set(l).add(feedId))
+    if (subscribed) setLeft((l) => new Map(l).set(feedId, posted.get(feedId) ?? 0))
     store.mutate(subscribed ? { type: 'unsubscribe', feedId } : { type: 'subscribe', feedId })
   }
 
@@ -512,7 +528,10 @@ function SubscriptionsSection() {
                 ) : (
                   <span className="font-medium">{r.title}</span>
                 )}
-                <div className="truncate text-[12.5px] text-muted">
+                <div
+                  className="truncate text-[12.5px] text-muted"
+                  data-testid="settings-subscription-meta"
+                >
                   {r.site ? `${displayHost(r.site.homeUrl)} · ` : ''}
                   {td(`cadence.${r.cadence}`)}
                 </div>
@@ -525,7 +544,6 @@ function SubscriptionsSection() {
               <button
                 type="button"
                 onClick={() => toggle(r.feedId, r.subscribed)}
-                aria-pressed={r.subscribed}
                 data-testid="settings-subscription-toggle"
                 className={`min-w-[104px] rounded-full border px-3 py-[5px] text-[12.5px] font-medium ${
                   r.subscribed ? 'border-thumb text-ink-2' : 'border-ink bg-ink text-paper'

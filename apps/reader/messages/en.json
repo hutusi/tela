@@ -320,6 +320,7 @@
     "never": "Never translate",
     "neverHint": "Languages you read comfortably: their posts open in the original, titles included.",
     "addLanguage": "+ Add language",
+    "add": "Add",
     "removeLanguage": "Remove {lang}",
     "subscriptionsIntro": "{n, plural, one {# blog} other {# blogs}}. Bring feeds from another reader with OPML.",
     "importOpml": "Import OPML",

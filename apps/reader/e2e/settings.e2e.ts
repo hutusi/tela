@@ -86,14 +86,19 @@ test.describe('settings', () => {
     const count = await rows.count()
     const row = rows.filter({ hasText: 'Julia Evans' })
     const toggle = row.getByTestId('settings-subscription-toggle')
-    await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    // The button names what it does, not a pressed state ("Unsubscribe, pressed" read backwards).
+    await expect(toggle).toHaveText('Unsubscribe')
+    await expect(toggle).not.toHaveAttribute('aria-pressed')
+    const cadence = await row.getByTestId('settings-subscription-meta').textContent()
     await toggle.click()
-    await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    await expect(toggle).toHaveText('Subscribe')
+    // Leaving drops the blog's posts from the device; the row still says how often it posts.
+    await expect(row.getByTestId('settings-subscription-meta')).toHaveText(cadence ?? '')
     await expect(rows).toHaveCount(count)
     await expect(page.getByTestId('subscription-count')).toContainText(`${count - 1} blog`)
     const back = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
     await toggle.click()
-    await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    await expect(toggle).toHaveText('Unsubscribe')
     await expect(page.getByTestId('subscription-count')).toContainText(`${count} blog`)
     await back
   })
@@ -108,6 +113,23 @@ test.describe('settings', () => {
       subscriptions: { feedUrl: string }[]
     }
     expect(body.subscriptions.map((s) => s.feedUrl)).toContain(`${FIXTURES}/jvns.xml`)
+  })
+
+  test('a never-translated language is chosen, then added', async ({ page }) => {
+    await page.goto('/settings/translation')
+    const chips = page.getByTestId('never-chip')
+    const before = await chips.count()
+    // Choosing is not adding: arrow keys and type-ahead on a select fire a change per step.
+    await page.getByTestId('never-add').selectOption('ja')
+    await expect(chips).toHaveCount(before)
+    await page.getByTestId('never-add-confirm').click()
+    await expect(chips).toHaveCount(before + 1)
+    await expect(page.getByTestId('never-add-confirm')).toHaveCount(0)
+    // Taken back, so no other spec meets a language it did not ask to read as written.
+    const pushed = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+    await page.getByTestId('never-remove-ja').click()
+    await expect(chips).toHaveCount(before)
+    await pushed
   })
 
   test('the bio counts what is left of it', async ({ page }) => {

@@ -320,6 +320,7 @@
     "never": "从不翻译",
     "neverHint": "你读得顺的语言：这些文章直接显示原文，标题也是。",
     "addLanguage": "+ 添加语言",
+    "add": "添加",
     "removeLanguage": "移除{lang}",
     "subscriptionsIntro": "{n} 个博客。可以用 OPML 从别的阅读器带来订阅。",
     "importOpml": "导入 OPML",
