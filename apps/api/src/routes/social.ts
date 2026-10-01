@@ -23,18 +23,22 @@ export const PAGE_ENTRIES = 30
 const LIKED_SHOWN = 5
 const SUBSCRIBED_SHOWN = 3
 const PUBLIC_LISTING = sql.raw(`('listed', 'featured')`)
-/** Where a page ends: an entry's time, and its key for entries at the same millisecond. */
-const CURSOR = /^(\d{1,15}):([rls]:[A-Za-z0-9_:-]{1,160})$/
+/**
+ * Where a page ends: an entry's time, the viewer's offset the page was grouped under, and the
+ * entry's key for entries at the same millisecond. The offset rides in the cursor so every page of
+ * one walk groups days alike, whatever the device's clock does between them (a DST change).
+ */
+const CURSOR = /^(\d{1,15}):(-?\d{1,4}):([rls]:[A-Za-z0-9_:-]{1,160})$/
 
 export type FeedTab = 'all' | 'recs' | 'likes'
 
 type Row = Record<string, unknown>
 
-/** The viewer's offset from UTC in milliseconds, from minutes east (`tz`), within real zones. */
-function offsetOf(tz: string | undefined): number {
+/** The viewer's offset from UTC in minutes east (`tz`), within real zones. */
+function minutesOf(tz: string | undefined): number {
   const minutes = Number(tz ?? 0)
   if (!Number.isInteger(minutes)) return 0
-  return Math.max(-14 * 60, Math.min(14 * 60, minutes)) * 60_000
+  return Math.max(-14 * 60, Math.min(14 * 60, minutes))
 }
 
 /** A post as the feed carries one: the article, its blog, and its title in the member's language. */
@@ -89,14 +93,15 @@ export function socialRoutes(deps: ApiDeps) {
     const asked = c.req.query('tab')
     const tab: FeedTab = asked === 'recs' || asked === 'likes' ? asked : 'all'
     const lang = isReadingLanguage(c.req.query('lang')) ? c.req.query('lang') : null
-    const offset = offsetOf(c.req.query('tz'))
     const now = deps.clock.now()
     const cursor = CURSOR.exec(c.req.query('cursor') ?? '')
     const first = cursor === null
+    const minutes = minutesOf(cursor ? cursor[2] : c.req.query('tz'))
+    const offset = minutes * 60_000
     // Entries strictly after the cursor in the feed's order: older, or as old with a smaller key.
     const after = (at: SQL, key: SQL) =>
       cursor
-        ? sql`(${at} < ${Number(cursor[1])} or (${at} = ${Number(cursor[1])} and ${key} < ${cursor[2]}))`
+        ? sql`(${at} < ${Number(cursor[1])} or (${at} = ${Number(cursor[1])} and ${key} < ${cursor[3]}))`
         : sql`true`
 
     const followees = sql`select followee_id from follows where follower_id = ${me} and deleted_at is null`
@@ -306,7 +311,7 @@ export function socialRoutes(deps: ApiDeps) {
     items.sort(newestFirst)
     const page = items.slice(0, PAGE_ENTRIES)
     const last = page.at(-1)
-    const next = items.length > PAGE_ENTRIES && last ? `${last.at}:${last.key}` : null
+    const next = items.length > PAGE_ENTRIES && last ? `${last.at}:${minutes}:${last.key}` : null
 
     return c.json(
       {

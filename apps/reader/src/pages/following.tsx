@@ -2,7 +2,8 @@
  * `/following` (Tela v2): what the people the member follows recommended, liked and subscribed to.
  * Their activity is other members' rows, so it comes by RPC, a page of entries at a time behind a
  * cursor (ADR 0031); whom the member follows is their own synced rows, so the aside needs no
- * network. What a page fetched is held for the visit, so Back is a render.
+ * network. What a page fetched is held for the visit, so Back renders at once, and the first page
+ * is asked for again behind it.
  */
 import { languageBadge } from '@tela/shared'
 import type { ArticleRow } from '@tela/sync'
@@ -11,6 +12,7 @@ import { Link, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { PersonAvatar } from '../components/person-avatar'
 import { SiteAvatar } from '../components/site-avatar'
+import { appendPage, mergeFirstPage } from '../lib/following-feed'
 import { displayHost, relativeTime, swatchColor } from '../lib/format'
 import { useMemberControls } from '../lib/member'
 import { readingPrefsOf } from '../lib/prefs'
@@ -113,7 +115,7 @@ function useFeed(tab: Tab, lang: string) {
   )
 
   // What is held shows at once, and the first page is asked for again behind it: the people
-  // followed may have done more since. The same first page keeps what is held, older pages too.
+  // followed may have done more since.
   useEffect(() => {
     let cancelled = false
     setBusy(false)
@@ -127,16 +129,9 @@ function useFeed(tab: Tab, lang: string) {
         if (!kept) setFeed({ ...loading(view), status: 'failed' })
         return
       }
-      // Same only if every entry of the fresh page is where it was, and nothing held past it has
-      // gone: an empty or shorter feed replaces what is held.
-      const same =
-        kept?.status === 'ready' &&
-        page.items.length > 0 &&
-        page.items.every((item, i) => kept.items[i]?.key === item.key) &&
-        (page.next !== null || kept.items.length === page.items.length)
-      const next: Feed = same
-        ? { ...kept, suggested: page.suggested }
-        : { status: 'ready', view, ...page }
+      // The fresh first page over what is held, keeping the older pages loaded where they carry on.
+      const merged = mergeFirstPage(kept?.status === 'ready' ? kept : null, page)
+      const next: Feed = { status: 'ready', view, ...merged, suggested: page.suggested }
       held.set(key, next)
       setFeed(next)
     })
@@ -156,7 +151,7 @@ function useFeed(tab: Tab, lang: string) {
     // starts: a refresh in between replaced it, and the page would no longer follow on.
     const base = held.get(asked)
     if (!page || !base || base.next !== from.next) return
-    const next: Feed = { ...base, items: [...base.items, ...page.items], next: page.next }
+    const next: Feed = { ...base, ...appendPage(base, page) }
     held.set(asked, next)
     if (shown.current === asked) setFeed(next)
   }

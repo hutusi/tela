@@ -264,6 +264,23 @@ describe('the Following feed', () => {
     expect(seen.sort((x, y) => x - y)).toEqual(ids)
   })
 
+  test('a walk keeps the day grouping it started with, whatever the clock says next', async () => {
+    const a = await article(1)
+    const b = await article(2)
+    await follow(ANNA)
+    // A like just after a UTC midnight: today in UTC+8, still yesterday in UTC.
+    const midnight = Math.floor(now / DAY) * DAY
+    await like(ANNA, a, midnight + 60_000)
+    await recommend(ANNA, b, midnight - 60_000)
+    const first = await feed('?tz=480')
+    const group = first.items[0] as Item & { key: string }
+    expect(group.kind).toBe('liked')
+    // The next page is asked for after the device's offset changed (a DST change, a flight).
+    const cursor = `${group.at}:480:${group.key}`
+    const next = await feed(`?tz=-300&cursor=${encodeURIComponent(cursor)}`)
+    expect(next.items.map((i) => i.kind)).toEqual(['recommended'])
+  })
+
   test('a malformed cursor is the first page', async () => {
     const a = await article(1)
     await follow(ANNA)

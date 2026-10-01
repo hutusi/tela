@@ -192,7 +192,8 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   expect(feed.items[1]?.key).toMatch(/^r:\d{12}$/)
   const older = (await (
     await call(
-      `/api/v1/following?cursor=${encodeURIComponent(`${now - 1000}:${feed.items[0]?.key}`)}`,
+      // The offset the first page grouped under rides in the cursor, so the day keys agree.
+      `/api/v1/following?cursor=${encodeURIComponent(`${now - 1000}:480:${feed.items[0]?.key}`)}`,
       member,
     )
   ).json()) as { items: { kind: string }[] }
