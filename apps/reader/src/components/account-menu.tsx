@@ -30,7 +30,9 @@ export function AccountMenu() {
     },
     box,
   )
-  // Wherever an item leads, the menu is done: close it on any change of page.
+  // Wherever an item leads, the menu is done: close it when one is chosen (the page it names may be
+  // the one shown, so the address need not change), and on any change of page.
+  const done = () => setOpen(false)
   const location = useLocation()
   // biome-ignore lint/correctness/useExhaustiveDependencies: on every navigation, by its address
   useEffect(() => setOpen(false), [location.pathname, location.search])
@@ -68,17 +70,22 @@ export function AccountMenu() {
             {handle ? <div className="text-[12.5px] text-muted">@{handle}</div> : null}
           </div>
           {handle ? (
-            <Link to={`/@${handle}`} className={ITEM} data-testid="nav-profile">
+            <Link to={`/@${handle}`} className={ITEM} onClick={done} data-testid="nav-profile">
               {t('yourProfile')}
             </Link>
           ) : null}
-          <Link to="/settings/subscriptions" className={ITEM} data-testid="nav-subscriptions">
+          <Link
+            to="/settings/subscriptions"
+            className={ITEM}
+            onClick={done}
+            data-testid="nav-subscriptions"
+          >
             {t('subscriptions')}
           </Link>
-          <Link to="/dashboard" className={ITEM} data-testid="nav-dashboard">
+          <Link to="/dashboard" className={ITEM} onClick={done} data-testid="nav-dashboard">
             {t('dashboard')}
           </Link>
-          <Link to="/settings" className={ITEM} data-testid="nav-settings">
+          <Link to="/settings" className={ITEM} onClick={done} data-testid="nav-settings">
             {t('settings')}
           </Link>
           <div className="my-1 h-px bg-line" />

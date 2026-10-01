@@ -1,7 +1,8 @@
 /**
- * Close a popover on a click outside it, or on Esc. Esc is taken in the capture phase and marked
- * handled, so it closes the popover and only the popover: the reader's own Esc closes the article,
- * and it leaves a key another handler has already used alone.
+ * Close a popover on a click outside it, on focus moving out of it (Tab past its last control), or
+ * on Esc. Esc is taken in the capture phase and marked handled, so it closes the popover and only
+ * the popover: the reader's own Esc closes the article. A popover left open behind the focus would
+ * take the next Esc meant for the page.
  */
 import { type RefObject, useEffect, useRef } from 'react'
 
@@ -16,7 +17,7 @@ export function useDismiss(
   latest.current = close
   useEffect(() => {
     if (!open) return
-    const outside = (e: MouseEvent) => {
+    const outside = (e: Event) => {
       if (box.current && !box.current.contains(e.target as Node)) latest.current('outside')
     }
     const onEscape = (e: KeyboardEvent) => {
@@ -25,9 +26,11 @@ export function useDismiss(
       latest.current('escape')
     }
     document.addEventListener('mousedown', outside)
+    document.addEventListener('focusin', outside)
     document.addEventListener('keydown', onEscape, true)
     return () => {
       document.removeEventListener('mousedown', outside)
+      document.removeEventListener('focusin', outside)
       document.removeEventListener('keydown', onEscape, true)
     }
   }, [open, box])
