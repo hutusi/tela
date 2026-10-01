@@ -116,12 +116,15 @@ export const profiles = sqliteTable(
      */
     publicSubscriptionsAt: ms().notNull().default(0),
     publicLikesAt: ms().notNull().default(0),
-    /**
-     * Whether the member shows their Gravatar, and the `at` that last set it (ADR 0032). That clock
-     * is also the picture's version: the `v` of `/avatar/<userId>`, so Refresh is a new address.
-     */
+    /** Whether the member shows their Gravatar, and the `at` that last set it: the later wins. */
     gravatar: integer({ mode: 'boolean' }).notNull().default(false),
     gravatarAt: ms().notNull().default(0),
+    /**
+     * The picture's version, the `v` of `/avatar/<userId>` (ADR 0032): one more on every accepted
+     * "on", Refresh included, so each is a new address past the 30-day caches. A counter of its
+     * own, never the switch's clock: bumping that would let it outrun a later "off".
+     */
+    avatarVersion: integer().notNull().default(0),
     isAdmin: integer({ mode: 'boolean' }).notNull().default(false),
     createdAt: ms().notNull(),
     updatedAt: ms().notNull(),

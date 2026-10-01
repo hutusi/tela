@@ -71,7 +71,7 @@ export function avatarRoutes(deps: ApiDeps) {
     const row = await first<{ email: string }>(
       db,
       sql`select u.email from profiles p join "user" u on u.id = p.user_id
-        where p.user_id = ${userId} and p.gravatar = 1 and p.gravatar_at = ${Number(version)}`,
+        where p.user_id = ${userId} and p.gravatar = 1 and p.avatar_version = ${Number(version)}`,
     )
     if (!row) return none(300)
     const hash = await sha256Hex(row.email.trim().toLowerCase())

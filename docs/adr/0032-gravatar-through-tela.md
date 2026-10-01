@@ -34,7 +34,7 @@ key and a way to delete it.
 set by a `setAvatar` mutation of its own, its clock `gravatar_at` resolved by the later `at` as
 0031's privacy switches are). Until then, and whenever no picture loads, the letter is shown.
 
-**Linked, through Tela's origin.** A person's picture is `/avatar/<userId>?v=<gravatar_at>`.
+**Linked, through Tela's origin.** A person's picture is `/avatar/<userId>?v=<avatar_version>`.
 tela-web serves it through the colo cache, as it serves `/img/`; on a miss, tela-api looks up the
 member's email, hashes it (SHA-256 of the trimmed, lower-cased address, which Gravatar takes) and
 fetches `gravatar.com/avatar/<hash>?s=256&d=404`. The hash never leaves the server, the page never
@@ -43,11 +43,12 @@ nothing to keep fresh or delete.
 
 **Cached for 30 days, versioned by the switch.** The answer is immutable for 30 days in the colo
 and the browser, because the address changes whenever the picture should: *Refresh* sends the
-switch on again, so `gravatar_at` and the address move and the next request goes to Gravatar.
-Every accepted Refresh moves the version, by at least a millisecond when its `at` is no later than
-the last (two clicks in one millisecond, or a device whose clock is behind), while the switch itself
-still goes to the later choice. tela-api answers only the current version, so a made-up one is a
-404 and never another fetch.
+switch on again, and every "on" the switch accepts counts `avatar_version` up by one, so the
+address moves and the next request goes to Gravatar. The count is its own column, never the
+switch's clock: a Refresh whose `at` is no later than the last (two clicks in a millisecond, a
+device whose clock is behind) still counts, and counting can never make the clock outrun a later
+"off". tela-api answers only the current version, so a made-up one is a 404 and never another
+fetch.
 
 **One place decides the address.** The queries that return a person select it from one SQL
 fragment, and the client renders whatever path it is given (`/avatar/…` only), never building one.

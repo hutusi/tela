@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "204d13b3-e7d0-4303-ac67-e760e83d2165",
+  "id": "3c834e9a-b0c6-4536-9249-3f5caebf7bbb",
   "prevId": "1888a4bb-d7c2-4211-a5b2-5d95380aff8a",
   "tables": {
     "article_titles": {
@@ -932,6 +932,14 @@
         },
         "gravatar_at": {
           "name": "gravatar_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "avatar_version": {
+          "name": "avatar_version",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

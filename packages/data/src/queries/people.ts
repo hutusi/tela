@@ -7,12 +7,12 @@ import { type SQL, sql } from 'drizzle-orm'
 
 /**
  * The SQL for a member's picture over the profiles row aliased `alias`: their Gravatar, served
- * through Tela at `/avatar/<userId>?v=<gravatar_at>`, or null while they have not turned it on.
- * The version is the switch's clock, so Refresh (the switch sent on again) is a new address.
+ * through Tela at `/avatar/<userId>?v=<avatar_version>`, or null while they have not turned it on.
+ * Every accepted "on" counts the version up, so Refresh (the switch sent on again) is a new address.
  */
 export function avatarSql(alias: string): string {
   if (!/^[a-z_]+$/.test(alias)) throw new Error(`not an alias: ${alias}`)
-  return `case when ${alias}.gravatar then '/avatar/' || ${alias}.user_id || '?v=' || ${alias}.gravatar_at end`
+  return `case when ${alias}.gravatar then '/avatar/' || ${alias}.user_id || '?v=' || ${alias}.avatar_version end`
 }
 
 /** `avatarSql` as a fragment, for queries built with `sql`. */

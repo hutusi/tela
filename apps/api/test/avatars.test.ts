@@ -37,6 +37,8 @@ beforeEach(async () => {
 })
 
 const at = 1790000000123
+/** The version after the first "on", and after a Refresh. */
+const FIRST = 1
 
 async function show(gravatarOn: boolean, when = at) {
   const res = await api.request('/api/v1/mutations', {
@@ -54,7 +56,7 @@ const picture = (v: number | string, userId = reader.userId) =>
 describe('a member’s picture', () => {
   test('is their Gravatar while they show it, immutable at its version', async () => {
     await show(true)
-    const res = await picture(at)
+    const res = await picture(FIRST)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('image/png')
     expect(res.headers.get('cache-control')).toBe(AVATAR_CACHE)
@@ -66,27 +68,27 @@ describe('a member’s picture', () => {
   })
 
   test('is none, without asking Gravatar, while hidden or at another version', async () => {
-    expect((await picture(at)).status).toBe(404) // never turned on
+    expect((await picture(0)).status).toBe(404) // never turned on
     await show(true)
-    expect((await picture(at + 1)).status).toBe(404) // a made-up version
+    expect((await picture(FIRST + 1)).status).toBe(404) // a made-up version
     expect((await picture('x')).status).toBe(404)
-    expect((await picture(at, 'not an id')).status).toBe(404)
+    expect((await picture(FIRST, 'not an id')).status).toBe(404)
     await show(false, at + 10)
-    expect((await picture(at)).status).toBe(404) // turned off
+    expect((await picture(FIRST)).status).toBe(404) // turned off
     expect(gravatar.requests).toEqual([])
   })
 
   test('Refresh moves it to a new version, and the old one stops answering', async () => {
     await show(true)
     await show(true, at + 500)
-    expect((await picture(at)).status).toBe(404)
-    expect((await picture(at + 500)).status).toBe(200)
+    expect((await picture(FIRST)).status).toBe(404)
+    expect((await picture(FIRST + 1)).status).toBe(200)
   })
 
   test('is none for a day when Gravatar has no picture for the address', async () => {
     gravatar.reset()
     await show(true)
-    const res = await picture(at)
+    const res = await picture(FIRST)
     expect(res.status).toBe(404)
     expect(res.headers.get('cache-control')).toBe('public, max-age=86400')
   })
@@ -115,7 +117,7 @@ describe('a member’s picture', () => {
     ]
     for (const [what, answer] of answers) {
       gravatar.set(path, (_req, res) => answer(res))
-      const res = await picture(at)
+      const res = await picture(FIRST)
       expect([what, res.status]).toEqual([what, 502])
       expect(res.headers.get('cache-control')).toBe('no-store')
     }

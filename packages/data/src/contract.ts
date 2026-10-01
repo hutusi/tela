@@ -164,12 +164,10 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
           }[]
         )[0]?.avatar
       expect(await picture()).toBe(null)
-      await db.run(
-        sql`update profiles set gravatar = 1, gravatar_at = 1790000000123 where user_id = 'u1'`,
-      )
-      expect(await picture()).toBe('/avatar/u1?v=1790000000123')
-      await db.run(sql`update profiles set gravatar_at = 1790000000456 where user_id = 'u1'`)
-      expect(await picture()).toBe('/avatar/u1?v=1790000000456')
+      await db.run(sql`update profiles set gravatar = 1, avatar_version = 1 where user_id = 'u1'`)
+      expect(await picture()).toBe('/avatar/u1?v=1')
+      await db.run(sql`update profiles set avatar_version = 2 where user_id = 'u1'`)
+      expect(await picture()).toBe('/avatar/u1?v=2')
       await db.run(sql`update profiles set gravatar = 0 where user_id = 'u1'`)
       expect(await picture()).toBe(null)
     })

@@ -245,7 +245,7 @@ describe('public', () => {
       body: { mutations: [{ mid: 'gravatar-on-0001', at: 42, type: 'setAvatar', gravatar: true }] },
       as: reader,
     })
-    expect(await avatar()).toBe(`/avatar/${reader.userId}?v=42`)
+    expect(await avatar()).toBe(`/avatar/${reader.userId}?v=1`)
     // The address it is fetched by is never in the page, nor its hash.
     expect(JSON.stringify(await page())).not.toContain('@x.test')
     expect(JSON.stringify(await page())).not.toContain('gravatar.com')

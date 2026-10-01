@@ -314,7 +314,9 @@ describe('the readers I follow, on a blog', () => {
       readers: [{ id: ANNA, handle: 'anna', displayName: 'Name anna', avatar: null }],
     })
     // With her Gravatar on, she comes with her picture's address (ADR 0032).
-    await api.db.run(sql`update profiles set gravatar = 1, gravatar_at = 9 where user_id = ${ANNA}`)
+    await api.db.run(
+      sql`update profiles set gravatar = 1, avatar_version = 9 where user_id = ${ANNA}`,
+    )
     const shown = await api.request('/api/v1/sites/1/followed-readers', { as: me })
     expect(((await shown.json()) as { readers: { avatar: string }[] }).readers[0]?.avatar).toBe(
       `/avatar/${ANNA}?v=9`,

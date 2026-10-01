@@ -374,7 +374,7 @@ describe('public pages', () => {
       as: reader,
     })
     const html = await (await page('/@pictured')).text()
-    expect(html).toContain(`src="/avatar/${reader.userId}?v=77"`)
+    expect(html).toContain(`src="/avatar/${reader.userId}?v=1"`)
     expect(html).not.toContain('gravatar.com')
     expect(html).not.toContain('pictured@x.test')
   })
