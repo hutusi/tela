@@ -212,37 +212,55 @@ export function ReadingPage() {
     () => JSON.stringify(prefetchPlan(tables, items, now, readingLang, prefs)),
     [tables, items, now, readingLang, prefs],
   )
-  // A run that fell short (the network went, a request failed) asks again on the next pull: the
-  // engine pulls when the browser is back online, on focus and every minute, and by then the plan
-  // is the same, so nothing else would ask. Only a run that fell short; any pull once did.
+  // On each pull, ask again when the device lacks part of the plan and no run is under way: a run
+  // fell short (the network went, a request failed), or bodies went since (eviction drops bodies
+  // not opened for a week, unread ones too, ten seconds after boot). The engine pulls when the
+  // browser is back online, on focus and every minute, and the plan is the same by then, so
+  // nothing else would ask. A pull while the device holds all of it changes nothing.
   const [retry, setRetry] = useState(0)
+  /** A translation the last run could not fetch: the device keeps no list of those to check. */
   const fellShort = useRef(false)
+  const running = useRef<{ plan: string; controller: AbortController; done: boolean } | null>(null)
   // biome-ignore lint/correctness/useExhaustiveDependencies: on every pull, by its new tables
   useEffect(() => {
-    if (!fellShort.current) return
-    fellShort.current = false
-    setRetry((n) => n + 1)
-  }, [tables])
-  const lastPrefetch = useRef<AbortController | null>(null)
+    const last = running.current
+    if (last && !last.done) return
+    let cancelled = false
+    const { bodies } = JSON.parse(plan) as ReturnType<typeof prefetchPlan>
+    void objects.missing(bodies).then((missing) => {
+      if (cancelled || (missing.length === 0 && !fellShort.current)) return
+      fellShort.current = false
+      setRetry((n) => n + 1)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [tables, plan, objects])
   // biome-ignore lint/correctness/useExhaustiveDependencies: `retry` asks again for the same plan
   useEffect(() => {
     const timer = setTimeout(() => {
-      lastPrefetch.current?.abort()
+      const last = running.current
+      // Still fetching this very plan: let it finish rather than start it over.
+      if (last && !last.done && last.plan === plan) return
+      last?.controller.abort()
       const controller = new AbortController()
-      lastPrefetch.current = controller
+      const mine = { plan, controller, done: false }
+      running.current = mine
       const { bodies, translations } = JSON.parse(plan) as ReturnType<typeof prefetchPlan>
       const run = async () => {
         await objects.prefetch(bodies, controller.signal)
-        let short = (await objects.missing(bodies)).length > 0
         for (const key of translations) {
           if (controller.signal.aborted) return
           const object = await objects.object(key, controller.signal, true).catch(() => null)
-          if (object === null) short = true
+          // A run cancelled for a newer plan did not fall short: the newer one is on its way.
+          if (object === null && !controller.signal.aborted) fellShort.current = true
         }
-        // A run cancelled for a newer plan did not fall short: the newer one is on its way.
-        if (short && !controller.signal.aborted) fellShort.current = true
       }
-      void run().catch(() => undefined)
+      void run()
+        .catch(() => undefined)
+        .finally(() => {
+          mine.done = true
+        })
     }, PREFETCH_IDLE_MS)
     return () => clearTimeout(timer)
   }, [plan, objects, retry])

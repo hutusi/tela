@@ -85,3 +85,50 @@ test('a prefetch that failed is asked for again once the network is back', async
   await page.evaluate(() => window.dispatchEvent(new Event('online')))
   await expect.poll(() => heldOnDevice(page, ids), { timeout: 30_000 }).toEqual(ids)
 })
+
+test('a body evicted after the prefetch found it held is fetched again on the next pull', async ({
+  page,
+}) => {
+  await page.goto('/reading')
+  await synced(page)
+  const unread = page.getByTestId('article-row').filter({ has: page.getByTestId('unread-dot') })
+  await expect(unread.first()).toBeVisible()
+  const ids = [Number(/article=(\d+)/.exec((await unread.first().getAttribute('href')) ?? '')?.[1])]
+  await expect.poll(() => heldOnDevice(page, ids), { timeout: 30_000 }).toEqual(ids)
+  // Last opened eight days ago, as an unread body prefetched then is: eviction drops bodies not
+  // opened for a week, ten seconds after boot.
+  await page.evaluate(
+    ({ id }) =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open('tela-2')
+        open.onerror = () => reject(open.error)
+        open.onsuccess = () => {
+          const db = open.result
+          const tx = db.transaction(['tables', 'bodies'], 'readwrite')
+          const articles = tx.objectStore('tables').get('articles')
+          articles.onsuccess = () => {
+            const rows = articles.result as { id: number; contentKey: string }[]
+            const key = rows.find((a) => a.id === id)?.contentKey ?? ''
+            const bodies = tx.objectStore('bodies')
+            const body = bodies.get(key)
+            body.onsuccess = () => {
+              bodies.put({ ...body.result, lastOpened: Date.now() - 8 * 86_400_000 })
+            }
+          }
+          tx.onerror = () => reject(tx.error)
+          tx.oncomplete = () => {
+            db.close()
+            resolve()
+          }
+        }
+      }),
+    { id: ids[0] },
+  )
+  // The boot's prefetch finds it held; then eviction drops it.
+  await page.reload()
+  await expect.poll(() => heldOnDevice(page, ids), { timeout: 20_000 }).toEqual([])
+  // The plan is unchanged and nothing fell short: only the pull's look at what the device holds
+  // fetches it again.
+  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  await expect.poll(() => heldOnDevice(page, ids), { timeout: 30_000 }).toEqual(ids)
+})

@@ -220,7 +220,7 @@ A Vite + React SPA that renders from the device.
   quarter-second after a change, and at once (`keepalive`) when the tab hides.
 - `store/objects.ts` serves bodies and translations from memory, then IndexedDB, then `/o/*`,
   downloading each once however many ask while it is on its way. It prefetches unread bodies
-  while idle and evicts read ones after seven days or 50 MB.
+  while idle, and evicts bodies not opened for seven days, and the oldest past 50 MB.
 - `store/selectors.ts` answers the reading view: unread, lists, counts, the title to show.
 - The URL alone says which article is open (ADR 0017's rule, kept): a click, a filter change or
   Back is a render, not a request.
