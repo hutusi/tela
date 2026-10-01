@@ -3,7 +3,7 @@
  * back to Discover is a render, not a request; a page the edge rendered hands its data over in
  * `#tela-data`, so the first render needs no request either.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const held = new Map<string, unknown>()
 /** Pages changed this visit: fetched past the browser's cache, which holds them a minute. */
@@ -28,16 +28,26 @@ function handedOver(path: string): unknown {
 
 export type Loaded<T> = { status: 'loading' } | { status: 'missing' } | { status: 'ready'; data: T }
 
+const LOADING = { status: 'loading' } as const
+const MISSING = { status: 'missing' } as const
+
+/** What a path shows before its own answer: what is held this visit, else loading. */
+function initial<T>(path: string | null, handover: boolean): Loaded<T> {
+  if (path === null) return MISSING
+  const data = held.get(path) ?? (handover ? handedOver(path) : undefined)
+  return data === undefined ? LOADING : { status: 'ready', data: data as T }
+}
+
 /** `null` is a page that cannot exist (a malformed id): missing, with no request. */
 export function usePublic<T>(path: string | null): Loaded<T> {
-  const [state, setState] = useState<Loaded<T>>(() => {
-    if (path === null) return { status: 'missing' }
-    const data = held.get(path) ?? handedOver(path)
-    return data === undefined ? { status: 'loading' } : { status: 'ready', data: data as T }
-  })
-  // Which path the state on screen belongs to: a page mounted across paths must not show one
-  // path's data under another while the other's answer is on its way.
-  const shown = useRef(path)
+  // The state says which path it is for, and is shown only for that path. A page mounted across
+  // paths (one profile, then another) renders the new path before any effect runs, and the router
+  // commits that render in a transition: checked in an effect, the last path's data would paint
+  // under the new address.
+  const [state, setState] = useState<{ path: string | null; loaded: Loaded<T> }>(() => ({
+    path,
+    loaded: initial<T>(path, true),
+  }))
   // How often this path was forgotten while shown. Counted per path: a page that stays mounted
   // across paths (one profile, then another) starts each at 0, so the next shows loading rather
   // than the last one's data until its own answer comes.
@@ -53,34 +63,34 @@ export function usePublic<T>(path: string | null): Loaded<T> {
   // A bumped `version` asks for a fresh copy.
   useEffect(() => {
     if (path === null) {
-      setState({ status: 'missing' })
+      setState({ path, loaded: MISSING })
       return
     }
     let cancelled = false
-    const known = held.get(path) ?? (version === 0 ? handedOver(path) : undefined)
-    if (known !== undefined) setState({ status: 'ready', data: known as T })
-    // A refetch of the path on screen keeps showing it; any other path shows loading.
-    else if (version === 0 || shown.current !== path) setState({ status: 'loading' })
-    shown.current = path
+    const known = initial<T>(path, version === 0)
+    // A refetch of the path on screen keeps showing it until the answer comes.
+    setState((s) =>
+      known === LOADING && version !== 0 && s.path === path ? s : { path, loaded: known },
+    )
     const stale = [...changed].some((prefix) => path.startsWith(prefix))
     fetch(path, { credentials: 'same-origin', ...(stale ? { cache: 'reload' as const } : {}) })
       .then(async (res) => {
         if (cancelled) return
         if (res.status === 404) {
-          setState({ status: 'missing' })
+          setState({ path, loaded: MISSING })
           return
         }
         if (!res.ok) return
         const data = (await res.json()) as T
         held.set(path, data)
-        if (!cancelled) setState({ status: 'ready', data })
+        if (!cancelled) setState({ path, loaded: { status: 'ready', data } })
       })
       .catch(() => undefined)
     return () => {
       cancelled = true
     }
   }, [path, version])
-  return state
+  return state.path === path ? state.loaded : initial<T>(path, false)
 }
 
 /** Forget pages' data after changing them: what shows them now fetches again, and so does a visit. */
