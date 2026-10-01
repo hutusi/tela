@@ -162,6 +162,25 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     await expect(page.getByTestId('profile-link')).toHaveAttribute('href', '/@devreader')
     await page.getByTestId('profile-link').click()
     await expect(page.getByTestId('profile-page')).toContainText('Dev Reader')
+
+    // An edit made from the profile reaches it: the copy held while Settings was open, and the
+    // one the browser cached (a minute, PUBLIC_CACHE), are forgotten once the server has the
+    // change. A fresh load first: the rename above has already sent this page past the cache.
+    await page.goto('/@devreader')
+    await expect(page.getByTestId('profile-page')).toContainText('Dev Reader')
+    await page.getByTestId('edit-profile').click()
+    const bio = `Edited ${Date.now()}`
+    await page.locator('textarea[name="bio"]').fill(bio)
+    // Back only once the device has the change, so the profile page is not there to see it land.
+    const pulled = page.waitForResponse(
+      async (r) => r.url().includes('/api/v1/sync') && r.ok() && (await r.text()).includes(bio),
+    )
+    await page.getByTestId('settings-save').click()
+    await expect(page.getByTestId('settings-saved')).toBeVisible()
+    await pulled
+    await page.goBack()
+    await expect(page).toHaveURL(/\/@devreader$/)
+    await expect(page.getByTestId('profile-page')).toContainText(bio)
   })
 
   test('OPML export lists the subscriptions', async ({ request }) => {

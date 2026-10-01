@@ -1,6 +1,6 @@
 /** The reader app: providers, and one route per page. Every page renders from the local store. */
 import type { UiLocale } from '@tela/shared'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { AppHeader } from './components/app-header'
 import { detectLocale, I18n, localeCookie } from './i18n'
@@ -63,6 +63,21 @@ function Routed() {
       store.onFollowsConfirmed = null
     }
   }, [store])
+  // The member's own profile changed (a privacy switch, a new name or handle), and the server has
+  // it: the copies of their public profile held this visit, and the one the browser cached, still
+  // say what it said. Watched here, not on the profile page, which is not mounted while Settings
+  // makes the change. A new handle forgets both addresses.
+  const tables = useTables()
+  const ownSeq = tables.profile?.seq ?? null
+  const ownHandle = tables.profile?.handle ?? null
+  const lastOwn = useRef({ seq: ownSeq, handle: ownHandle })
+  useEffect(() => {
+    const last = lastOwn.current
+    lastOwn.current = { seq: ownSeq, handle: ownHandle }
+    if (last.seq === null || ownSeq === null || last.seq === ownSeq) return
+    if (last.handle) forgetPublic(profilePath(last.handle))
+    if (ownHandle && ownHandle !== last.handle) forgetPublic(profilePath(ownHandle))
+  }, [ownSeq, ownHandle])
   const [locale, setLocaleState] = useState<UiLocale>(() =>
     detectLocale(document.cookie, navigator.languages ?? [navigator.language]),
   )
@@ -79,7 +94,6 @@ function Routed() {
     document.documentElement.lang = locale
   }, [locale])
   // A member's theme is a synced pref; a visitor keeps whatever this browser last had.
-  const tables = useTables()
   const theme = typographyOf(tables).theme
   const synced = tables.profile !== null
   useEffect(() => {
