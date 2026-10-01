@@ -13,6 +13,7 @@ import {
   dueTitles,
   FEED_FETCH_TTL_MS,
   failDueTitles,
+  GRAVATAR_CHECK_TTL_MS,
   type LeaseKind,
   type QueueName,
   settleBodyUsage,
@@ -109,7 +110,7 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     // Whether Gravatar has a picture for a member who shows theirs (ADR 0033). One host for every
     // member, so they are asked one at a time, a couple of seconds apart.
     queue: 'misc',
-    ttlMs: 2 * MIN,
+    ttlMs: GRAVATAR_CHECK_TTL_MS,
     limit: 50,
     backoff: { baseMs: 10 * MIN, maxMs: 24 * 60 * MIN, maxAttempts: 3 },
     due: (now) => dueGravatarChecks(now),

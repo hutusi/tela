@@ -13,8 +13,12 @@ export type ProfileRow = {
   publicSubscriptions: boolean
   /** Whether the member's liked posts show on their profile and to their followers (ADR 0031). */
   publicLikes: boolean
-  /** Whether the member shows their Gravatar (ADR 0032). */
+  /** Whether the member shows their Gravatar: on until they choose (ADR 0032, 0033). */
   gravatar: boolean
+  /** Whether Gravatar has a picture for their email; null until it has been asked (ADR 0033). */
+  gravatarFound: boolean | null
+  /** Whether they uploaded a picture of their own, which comes before any Gravatar. */
+  avatarUploaded: boolean
   /** Their picture's address (`/avatar/…`), or null: the server's to say, never built here. */
   avatar: string | null
   seq: number

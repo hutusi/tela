@@ -55,6 +55,8 @@ export const profile = {
   publicSubscriptions: false,
   publicLikes: false,
   gravatar: false,
+  gravatarFound: null,
+  avatarUploaded: false,
   avatar: null,
   seq: 1,
 }

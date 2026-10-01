@@ -689,13 +689,15 @@ describe('follows (ADR 0031)', () => {
     const t = now - 1000
     const shown = async () => (await pull(0)).rows.profile[0]
     const at = (v: number) => `/avatar/${reader.userId}?v=${v}`
-    expect(await shown()).toMatchObject({ gravatar: false, avatar: null })
-    // Gravatar has a picture for them, as the check found (ADR 0033).
+    // On by default (ADR 0033), but no address until Gravatar is known to have a picture.
+    expect(await shown()).toMatchObject({ gravatar: true, gravatarFound: null, avatar: null })
     await write(
       db.run(
-        sql`update profiles set gravatar_found = 1, seq = ${currentSeq} where user_id = ${reader.userId}`,
+        sql`update profiles set gravatar_found = 1, gravatar_checked_at = ${t}, seq = ${currentSeq}
+          where user_id = ${reader.userId}`,
       ),
     )
+    expect(await shown()).toMatchObject({ gravatar: true, gravatarFound: true, avatar: at(0) })
     await push([{ type: 'setAvatar', gravatar: true, at: t }])
     expect(await shown()).toMatchObject({ gravatar: true, avatar: at(1) })
     // Refresh: the switch sent on again moves the address past every cache, whatever its `at`:
@@ -719,6 +721,27 @@ describe('follows (ADR 0031)', () => {
     // On again: past every address it had.
     await push([{ type: 'setAvatar', gravatar: true, at: t + 300 }])
     expect(await shown()).toMatchObject({ gravatar: true, avatar: at(5) })
+  })
+
+  test('turning the Gravatar on, or Refresh, asks Gravatar again at once (ADR 0033)', async () => {
+    await write(
+      db.run(
+        sql`update profiles set gravatar_found = 0, gravatar_checked_at = ${now - 1000}, seq = ${currentSeq}
+          where user_id = ${reader.userId}`,
+      ),
+    )
+    await push([{ type: 'setAvatar', gravatar: true, at: now - 10 }])
+    const checked = await db.all<{ gravatar_checked_at: number | null }>(
+      sql`select gravatar_checked_at from profiles where user_id = ${reader.userId}`,
+    )
+    expect(checked[0]?.gravatar_checked_at).toBe(null)
+    // Claimed by the push and sent on, not left for the next sweep.
+    expect(api.jobs.sent.filter((j) => j.body.kind === 'member.gravatar')).toMatchObject([
+      { queue: 'misc', body: { kind: 'member.gravatar', key: reader.userId } },
+    ])
+    // Turning it off asks nothing.
+    await push([{ type: 'setAvatar', gravatar: false, at: now - 5 }])
+    expect(api.jobs.sent.filter((j) => j.body.kind === 'member.gravatar')).toHaveLength(1)
   })
 
   test("a followee's picture comes with the follow, and turning it on sends the row again", async () => {

@@ -118,6 +118,9 @@ export function applyPull(confirmed: Confirmed, given: PullResponse): Confirmed 
       ...row,
       publicLikes: row.publicLikes ?? previous?.publicLikes ?? false,
       gravatar: row.gravatar ?? previous?.gravatar ?? false,
+      gravatarFound:
+        row.gravatarFound === undefined ? (previous?.gravatarFound ?? null) : row.gravatarFound,
+      avatarUploaded: row.avatarUploaded ?? previous?.avatarUploaded ?? false,
       avatar: row.avatar === undefined ? (previous?.avatar ?? null) : row.avatar,
     }
   }
@@ -276,10 +279,12 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       return t
     }
     case 'setAvatar': {
-      // Off takes the picture away at once. On, or Refresh, waits for the server's row: it names
-      // the new address, which this device does not build.
+      // Off takes a Gravatar away at once, though not an upload, which comes first. On, or
+      // Refresh, waits for the server's row: it names the new address, which this device does
+      // not build.
       if (t.profile) {
-        t.profile = { ...t.profile, gravatar: m.gravatar, ...(m.gravatar ? {} : { avatar: null }) }
+        const keeps = m.gravatar || t.profile.avatarUploaded
+        t.profile = { ...t.profile, gravatar: m.gravatar, ...(keeps ? {} : { avatar: null }) }
       }
       return t
     }

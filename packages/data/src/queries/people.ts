@@ -7,6 +7,8 @@
 import { type SQL, sql } from 'drizzle-orm'
 
 const DAY = 24 * 60 * 60 * 1000
+/** How long a check of one member's Gravatar may hold its lease (tela-jobs and tela-api claim it). */
+export const GRAVATAR_CHECK_TTL_MS = 2 * 60_000
 /** How long an answer from Gravatar stands before it is asked again: a picture, and none. */
 export const GRAVATAR_RECHECK_FOUND_MS = 30 * DAY
 export const GRAVATAR_RECHECK_MISSING_MS = 7 * DAY

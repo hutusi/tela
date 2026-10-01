@@ -9,7 +9,7 @@
  * - **Conflicts across devices go to the later `at`**, clamped to the server's clock so a device
  *   with a clock in the future cannot win every argument.
  */
-import { bumpSeq, currentSeq, recountReaders, type TelaDb } from '@tela/data'
+import { bumpSeq, currentSeq, gravatarOn, recountReaders, type TelaDb } from '@tela/data'
 import { type Mutation, mutationSchema, PREF_MAX_BYTES, type PushResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 
@@ -141,16 +141,19 @@ function statementsFor(
       // version is a counter beside it (ADR 0032): every "on" the switch accepts counts it up, so
       // Refresh is a new address past every cache, whatever its `at` (two clicks in a millisecond,
       // a device whose clock is behind). Kept apart, so a version never outruns a later "off". An
-      // older "on" that arrives after an "off" is no choice at all, and leaves both alone. SQLite
-      // reads the row as it was in every SET, so `gravatar = 1` is the switch before this one.
+      // older "on" that arrives after an "off" is no choice at all, and leaves both alone. An "on"
+      // also asks Gravatar again (ADR 0033): the check is due at once, and the push claims it.
+      // SQLite reads the row as it was in every SET, so the switch tested is the one before this
+      // change, and a switch never set counts as on.
       const later = sql`${at} >= gravatar_at`
-      const counts = m.gravatar ? sql`(${later} or gravatar = 1)` : sql`false`
+      const counts = m.gravatar ? sql`(${later} or ${gravatarOn('profiles')})` : sql`false`
       return [
         db.run(sql`
           update profiles set
             gravatar = case when ${later} then ${m.gravatar ? 1 : 0} else gravatar end,
             gravatar_at = case when ${later} then ${at} else gravatar_at end,
             avatar_version = case when ${counts} then avatar_version + 1 else avatar_version end,
+            gravatar_checked_at = case when ${counts} then null else gravatar_checked_at end,
             updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and ${fresh}
         `),
@@ -250,6 +253,19 @@ function refusal(m: Mutation): string | null {
   if (m.type === 'putHighlight' && (m.end <= m.start || m.quote.length !== m.end - m.start))
     return 'invalid_range'
   return null
+}
+
+/** Whether an applied mutation turned the member's Gravatar on, or asked again (Refresh). */
+export function asksGravatar(raw: unknown[], applied: readonly string[]): boolean {
+  return raw.some((item) => {
+    const parsed = mutationSchema.safeParse(item)
+    return (
+      parsed.success &&
+      parsed.data.type === 'setAvatar' &&
+      parsed.data.gravatar &&
+      applied.includes(parsed.data.mid)
+    )
+  })
 }
 
 export async function applyPush(

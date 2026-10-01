@@ -17,8 +17,9 @@ import { publicRoutes } from './routes/public'
 import { socialRoutes } from './routes/social'
 import { translationRoutes } from './routes/translations'
 import { websubRoutes } from './routes/websub'
+import { checkGravatarSoon } from './sync/gravatar'
 import { answerPull } from './sync/pull'
-import { applyPush } from './sync/push'
+import { applyPush, asksGravatar } from './sync/push'
 
 export type Member = { id: string; email: string }
 export type ApiEnv = { Variables: { member: Member } }
@@ -180,12 +181,9 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.post('/api/v1/mutations', async (c) => {
     const body = pushSchema.safeParse(await c.req.json().catch(() => null))
     if (!body.success) return c.json({ error: 'invalid_push' }, 400)
-    const result = await applyPush(
-      deps.db,
-      c.get('member').id,
-      body.data.mutations,
-      deps.clock.now(),
-    )
+    const member = c.get('member').id
+    const result = await applyPush(deps.db, member, body.data.mutations, deps.clock.now())
+    if (asksGravatar(body.data.mutations, result.applied)) await checkGravatarSoon(deps, member)
     return c.json(result, 200, { 'cache-control': 'no-store' })
   })
 
