@@ -37,6 +37,13 @@ describe('a fresh first page over the pages held', () => {
     const fresh = { items: [e(90), e(70)], next: '70:r:000000000070' }
     expect(mergeFirstPage(liked, fresh)).toEqual(fresh)
   })
+
+  test('keeps only the fresh page when an entry appears inside the span it held', () => {
+    // A followee began to show their likes: their day at 85 is new, though older than the head.
+    // Older days of theirs would be inside the held older pages, which do not have them.
+    const fresh = { items: [e(90), e(85, 'l:anna:20000'), e(80)], next: '80:r:000000000080' }
+    expect(mergeFirstPage(held, fresh)).toEqual(fresh)
+  })
 })
 
 describe('an older page after the ones held', () => {

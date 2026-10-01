@@ -13,9 +13,11 @@ const before = (a: Entry, b: Entry) => a.at > b.at || (a.at === b.at && a.key > 
  * A fresh first page over the pages held. The fresh entries replace the held ones (a day's likes
  * may have grown, a note changed), and the older pages the member had loaded stay when they carry
  * on from where the fresh page ends. Only the fresh page is kept when the held list does not reach
- * back that far (there would be a gap), or when an entry it held in the fresh page's range is no
- * longer there: a day's group an unlike moved down, or one removed. The held pages past that
- * point no longer say where it is, and keeping them would hide it for the visit.
+ * back that far (there would be a gap), or when the fresh page's range no longer holds what it did:
+ * an entry gone from it (a day's group an unlike moved down, or one removed), or one new inside the
+ * span already held rather than above it (a followee who began to show their likes shows them at
+ * the times they were made). The held pages past that point were fetched before the change and do
+ * not have it, and keeping them would hide it for the visit.
  */
 export function mergeFirstPage<T extends Entry>(
   held: FeedPageOf<T> | null,
@@ -26,6 +28,8 @@ export function mergeFirstPage<T extends Entry>(
   if (!held || !last || !head || fresh.next === null || before(last, head)) return fresh
   const seen = new Set(fresh.items.map((i) => i.key))
   if (held.items.some((i) => !before(last, i) && !seen.has(i.key))) return fresh
+  const had = new Set(held.items.map((i) => i.key))
+  if (fresh.items.some((i) => !had.has(i.key) && before(head, i))) return fresh
   const older = held.items.filter((i) => !seen.has(i.key) && before(last, i))
   return older.length === 0 ? fresh : { items: [...fresh.items, ...older], next: held.next }
 }
