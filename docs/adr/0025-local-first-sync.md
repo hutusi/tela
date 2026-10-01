@@ -145,10 +145,17 @@ and the URL.
   wipes the device's copy while it is still this tab's; 409 `upgrade` reloads a newer shell, and
   409 `account_changed` (from any call) starts over from `/` as whoever is signed in now.
 - **Bodies and translations** (`src/store/objects.ts`) come from memory, then IndexedDB, then the
-  edge. While the reader is idle (1.5 s after the list settles) it prefetches unread bodies, the
-  list on screen first, 25 to a `/o/bundle` request and two requests at a time, and then finished
-  translations in the reading language. Nothing is prefetched under Save-Data. Read bodies are
-  evicted after seven days, or once the store passes 50 MB.
+  edge, each downloaded once however many ask while it is on its way (an open joins a download
+  under way, and takes a body a prefetch bundle has brought before it is written). While the
+  reader is idle (1.5 s after what it would fetch last changed, not after any render: every pull
+  makes new tables) it prefetches unread bodies, the list on screen first, 25 to a `/o/bundle`
+  request and two requests at a time, and then finished translations in the reading language.
+  Each pull also looks at what the device holds, and asks again when a body in the plan is missing
+  and no run is under way: a run fell short (the network went, a request failed), or the body was
+  evicted since. Every object request gives up after 30 s, so a stalled connection ends its run
+  rather than holding it. Nothing is prefetched under Save-Data. Bodies not opened for seven days are
+  evicted, unread ones too (the prefetch fetches those again), and the oldest once the store
+  passes 50 MB.
 - **Streamed translation** (ADR 0023): a foreign post asks for one when it opens. While it runs,
   the page polls its status every 1.5 s in a visible tab, fetches each chunk as the status names
   it, and lays it over the original by block index. The finished object replaces the chunks, and

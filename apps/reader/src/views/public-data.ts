@@ -1,6 +1,7 @@
 /**
  * A public page's JSON as the views read it, whichever tela-api answered. The previous API (a
- * rollback, or a browser that cached its answer for up to a day under `stale-while-revalidate`)
+ * rollback, or a browser that cached its answer under `stale-while-revalidate`: up to a day for
+ * Discover and a blog's page, five minutes for a profile)
  * sends no counts, notes, claimant or account id; a view that read them as given threw, and with
  * no error boundary the whole page went blank. One normalized copy per answer, so a page keyed by
  * its data's identity sees the same object every render.

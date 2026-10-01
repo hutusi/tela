@@ -4,7 +4,15 @@
  * [[drop]], which is how a provider omitting an entry looks.
  */
 import { expect, test } from '@playwright/test'
-import { ensureFeeds, FIXTURES, keepCycling, resetReading, setPrefs, synced } from './helpers'
+import {
+  ensureFeeds,
+  FIXTURES,
+  heldOnDevice,
+  keepCycling,
+  resetReading,
+  setPrefs,
+  synced,
+} from './helpers'
 
 test.beforeAll(async () => {
   // A Japanese blog, whose titles the setup's sweeps have not seen yet.
@@ -115,15 +123,19 @@ test.describe('translation', () => {
         timeout: 30_000,
       },
     )
+    // The bar says done from the synced row; the object itself may still be on its way. Wait
+    // until the device holds it, so the second open is from the device by construction.
+    const id = Number(/article=(\d+)/.exec((await row.getAttribute('href')) ?? '')?.[1])
+    await expect.poll(() => heldOnDevice(page, [id], 'en'), { timeout: 30_000 }).toEqual([id])
     await page.getByTestId('close-article').click()
 
-    // Opening a post fetches its body and translation one object at a time; only the idle
-    // prefetcher asks for bundles, and on a slow runner it may still be filling the device with
-    // other posts. Opening this one must fetch nothing itself.
+    // The idle prefetcher may still be filling the device with other posts, their bodies in
+    // bundles and their finished translations one at a time; its requests say so. Opening this
+    // one must fetch nothing itself.
     const asked: string[] = []
     page.on('request', (r) => {
       const path = new URL(r.url()).pathname
-      if (path === '/o/bundle') return
+      if (r.headers()['x-tela-prefetch']) return
       if (path.startsWith('/api/v1/translations') || path.startsWith('/o/')) asked.push(path)
     })
     await row.click()

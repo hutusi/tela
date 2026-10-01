@@ -217,3 +217,57 @@ export const painted = (page: Page) =>
       ...(registry?.get('tela-highlight-active') ?? []),
     ].map((range) => range.toString())
   })
+
+/**
+ * Which of these posts the device holds the body of, or with `lang` the finished translation of
+ * (a synced `done` or `partial` row whose object is stored), read from IndexedDB itself: a spec
+ * that counts requests waits for what the device holds, not for time to pass.
+ */
+export async function heldOnDevice(page: Page, ids: number[], lang?: string): Promise<number[]> {
+  return page.evaluate(
+    ({ ids, lang }) =>
+      new Promise<number[]>((resolve, reject) => {
+        const open = indexedDB.open('tela-2')
+        // Not created yet: never create it empty under the app.
+        open.onupgradeneeded = () => open.transaction?.abort()
+        open.onerror = () => resolve([])
+        open.onsuccess = () => {
+          const db = open.result
+          const tx = db.transaction(['tables', 'bodies', 'objects'])
+          const articles = tx.objectStore('tables').get('articles')
+          const translations = tx.objectStore('tables').get('translations')
+          const bodies = tx.objectStore('bodies').getAllKeys()
+          const objects = tx.objectStore('objects').getAllKeys()
+          tx.onerror = () => reject(tx.error)
+          tx.oncomplete = () => {
+            db.close()
+            type Row = { id: number; contentKey: string | null }
+            type Translation = {
+              contentKey: string
+              lang: string
+              state: string
+              objectKey: string | null
+            }
+            const keyOf = new Map(
+              ((articles.result ?? []) as Row[]).map((a) => [a.id, a.contentKey]),
+            )
+            const finished = new Map(
+              ((translations.result ?? []) as Translation[])
+                .filter((t) => t.lang === lang && (t.state === 'done' || t.state === 'partial'))
+                .map((t) => [t.contentKey, t.objectKey]),
+            )
+            const held = new Set((lang ? objects : bodies).result.map(String))
+            resolve(
+              ids.filter((id) => {
+                const key = keyOf.get(id)
+                if (!key) return false
+                const wanted = lang ? finished.get(key) : key
+                return typeof wanted === 'string' && held.has(wanted)
+              }),
+            )
+          }
+        }
+      }),
+    { ids, lang: lang ?? null },
+  )
+}

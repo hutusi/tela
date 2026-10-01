@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { bumpSeq, currentSeq, first, type TelaDb } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { likePattern } from '../src/routes/members'
-import { PUBLIC_CACHE } from '../src/routes/public'
+import { PROFILE_CACHE, PUBLIC_CACHE } from '../src/routes/public'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 let api: TestApi
@@ -163,6 +163,18 @@ describe('public', () => {
     }
     expect(page.site.claimedBy).toMatch(/^u_/)
     expect(page.posts).toHaveLength(1)
+  })
+
+  test('a browser keeps a profile five minutes at most, a blog page and Discover a day', async () => {
+    await put('/api/v1/profile', { handle: 'shown' })
+    await blog(1, 'listed')
+    const profile = await get('/api/v1/public/profiles/shown')
+    expect(profile.headers.get('cache-control')).toBe(PROFILE_CACHE)
+    // What Settings says beside the privacy switches: a change reaches the profile in minutes.
+    const seconds = (name: string) => Number(new RegExp(`${name}=(\\d+)`).exec(PROFILE_CACHE)?.[1])
+    expect(seconds('max-age') + seconds('stale-while-revalidate')).toBeLessThanOrEqual(300)
+    const site = await get('/api/v1/public/sites/1')
+    expect(site.headers.get('cache-control')).toBe(PUBLIC_CACHE)
   })
 
   test('a blog shows its canonical feed, not a feed merged into it or its duplicate posts', async () => {

@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import { applyPull, emptyTables, type Tables, titleKey, view } from '@tela/sync'
-import { articlesFor, isRead, shownTitle, subscriptionItems, totals } from '../src/store/selectors'
+import {
+  articlesFor,
+  isRead,
+  prefetchPlan,
+  shownTitle,
+  subscriptionItems,
+  totals,
+} from '../src/store/selectors'
 import { article, DAY, NOW, pull, sub } from './rows'
 
 function tables(rows: Parameters<typeof pull>[1]): Tables {
@@ -60,5 +67,82 @@ describe('what the reading view shows', () => {
       title: 'Post 1',
       badge: false,
     })
+  })
+})
+
+describe('what the idle prefetch would fetch', () => {
+  const translation = (contentKey: string, state: string, objectKey: string | null) => ({
+    contentKey,
+    lang: 'en',
+    state,
+    chunkKeys: [],
+    objectKey,
+    failedLeaves: [],
+    seq: 1,
+  })
+  const rows = {
+    subscriptions: [sub(1), sub(2)],
+    articles: [
+      article(1, { contentKey: 'c1', sortAt: NOW - 1 * DAY }),
+      article(2, { contentKey: 'c2', feedId: 2, sourceLang: 'ja', sortAt: NOW - 2 * DAY }),
+      article(3, { contentKey: 'c3', sortAt: NOW - 3 * DAY }),
+      article(4, { sortAt: NOW - 4 * DAY }),
+      article(5, { contentKey: 'c5', feedId: 2, sourceLang: 'de', sortAt: NOW - 5 * DAY }),
+      article(6, { contentKey: 'c6', feedId: 2, sourceLang: 'ja', sortAt: NOW - 6 * DAY }),
+    ],
+    states: [{ articleId: 3, readAt: 1, likedAt: null, likedUpdatedAt: null, seq: 1 }],
+    translations: [
+      translation('c2', 'done', 't/c2/en/a.json'),
+      translation('c5', 'partial', 't/c5/en/b.json'),
+      translation('c6', 'running', null),
+    ],
+  }
+  const prefs = { autoTranslate: true, never: [] as string[] }
+
+  test('unread bodies, the list on screen first, then the finished translations it would open', () => {
+    const t = tables(rows)
+    const list = articlesFor(t, { filter: 'all', feedId: 2 }, NOW)
+    expect(prefetchPlan(t, list, NOW, 'en', prefs)).toEqual({
+      bodies: ['c2', 'c5', 'c6', 'c1'],
+      translations: ['t/c2/en/a.json', 't/c5/en/b.json'],
+    })
+    // None in a language read as written, and none while translation waits to be asked for.
+    expect(
+      prefetchPlan(t, list, NOW, 'en', { autoTranslate: true, never: ['de'] }).translations,
+    ).toEqual(['t/c2/en/a.json'])
+    expect(
+      prefetchPlan(t, list, NOW, 'en', { autoTranslate: false, never: [] }).translations,
+    ).toEqual([])
+  })
+
+  test('is the same after a pull that brings nothing, and changes with what it would fetch', () => {
+    const confirmed = applyPull({ cursor: 0, tables: emptyTables() }, pull(1, rows, true))
+    const plan = (t: Tables) =>
+      JSON.stringify(
+        prefetchPlan(t, articlesFor(t, { filter: 'all', feedId: null }, NOW), NOW, 'en', prefs),
+      )
+    const before = view(confirmed, [])
+    // Every pull makes new tables, an empty one too: what the prefetch was keyed on before.
+    const empty = view(applyPull(confirmed, pull(2, {})), [])
+    expect(empty).not.toBe(before)
+    expect(plan(empty)).toBe(plan(before))
+    const opened = view(
+      applyPull(
+        confirmed,
+        pull(2, {
+          states: [{ articleId: 1, readAt: 2, likedAt: null, likedUpdatedAt: null, seq: 2 }],
+        }),
+      ),
+      [],
+    )
+    expect(plan(opened)).not.toBe(plan(before))
+    const finished = view(
+      applyPull(
+        confirmed,
+        pull(2, { translations: [translation('c6', 'done', 't/c6/en/c.json')] }),
+      ),
+      [],
+    )
+    expect(plan(finished)).not.toBe(plan(before))
   })
 })

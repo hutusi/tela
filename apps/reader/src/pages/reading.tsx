@@ -3,7 +3,6 @@
  * (ADR 0017's rule, kept), and every pane is a function of it and the local store, so a click, a
  * filter change or Back is a render, not a request (ADR 0025).
  */
-import { translationKey } from '@tela/sync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
@@ -28,6 +27,7 @@ import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
   isRead,
+  prefetchPlan,
   shownTitle,
   subscriptionItems,
   totals,
@@ -204,37 +204,66 @@ export function ReadingPage() {
     return () => clearInterval(id)
   }, [pendingFetch, engine])
 
-  // Prefetch unread bodies and finished translations while idle: the list on screen first.
-  const lastPrefetch = useRef<AbortController | null>(null)
+  // Prefetch unread bodies and finished translations while idle: the list on screen first. Keyed on
+  // what it would fetch, not on the tables: every pull makes new ones, even an empty pull a minute,
+  // and a timer reset by each would put the prefetch off, and cancel one under way, for nothing.
+  // An open marks a post read, which changes the plan, so each open plans again.
+  const plan = useMemo(
+    () => JSON.stringify(prefetchPlan(tables, items, now, readingLang, prefs)),
+    [tables, items, now, readingLang, prefs],
+  )
+  // On each pull, ask again when the device lacks part of the plan and no run is under way: a run
+  // fell short (the network went, a request failed), or bodies went since (eviction drops bodies
+  // not opened for a week, unread ones too, ten seconds after boot). The engine pulls when the
+  // browser is back online, on focus and every minute, and the plan is the same by then, so
+  // nothing else would ask. A pull while the device holds all of it changes nothing.
+  const [retry, setRetry] = useState(0)
+  /** A translation the last run could not fetch: the device keeps no list of those to check. */
+  const fellShort = useRef(false)
+  const running = useRef<{ plan: string; controller: AbortController; done: boolean } | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on every pull, by its new tables
+  useEffect(() => {
+    const last = running.current
+    if (last && !last.done) return
+    let cancelled = false
+    const { bodies } = JSON.parse(plan) as ReturnType<typeof prefetchPlan>
+    void objects.missing(bodies).then((missing) => {
+      if (cancelled || (missing.length === 0 && !fellShort.current)) return
+      fellShort.current = false
+      setRetry((n) => n + 1)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [tables, plan, objects])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `retry` asks again for the same plan
   useEffect(() => {
     const timer = setTimeout(() => {
-      lastPrefetch.current?.abort()
+      const last = running.current
+      // Still fetching this very plan: let it finish rather than start it over.
+      if (last && !last.done && last.plan === plan) return
+      last?.controller.abort()
       const controller = new AbortController()
-      lastPrefetch.current = controller
-      const at = Date.now()
-      const unread = (list: typeof items) =>
-        list
-          .filter((a) => a.contentKey && !isRead(tables, a, at))
-          .map((a) => a.contentKey as string)
-      const everything = articlesFor(tables, { filter: 'all', feedId: null }, at)
-      void objects
-        .prefetch([...unread(items), ...unread(everything)], controller.signal)
-        .then(async () => {
-          // Only translations the member will see on opening: none while they translate only when
-          // asked, and none in a language they read as written.
-          if (!prefs.autoTranslate) return
-          for (const a of everything) {
-            if (controller.signal.aborted || !a.contentKey) continue
-            if (a.sourceLang !== null && prefs.never.includes(a.sourceLang)) continue
-            const row = tables.translations.get(translationKey(a.contentKey, readingLang))
-            if (row?.objectKey && (row.state === 'done' || row.state === 'partial')) {
-              await objects.object(row.objectKey, controller.signal, true).catch(() => null)
-            }
-          }
+      const mine = { plan, controller, done: false }
+      running.current = mine
+      const { bodies, translations } = JSON.parse(plan) as ReturnType<typeof prefetchPlan>
+      const run = async () => {
+        await objects.prefetch(bodies, controller.signal)
+        for (const key of translations) {
+          if (controller.signal.aborted) return
+          const object = await objects.object(key, controller.signal, true).catch(() => null)
+          // A run cancelled for a newer plan did not fall short: the newer one is on its way.
+          if (object === null && !controller.signal.aborted) fellShort.current = true
+        }
+      }
+      void run()
+        .catch(() => undefined)
+        .finally(() => {
+          mine.done = true
         })
     }, PREFETCH_IDLE_MS)
     return () => clearTimeout(timer)
-  }, [tables, items, objects, readingLang, prefs])
+  }, [plan, objects, retry])
 
   return (
     <div

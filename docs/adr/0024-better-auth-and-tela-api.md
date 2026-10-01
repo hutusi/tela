@@ -102,8 +102,8 @@ binding: discovery, adding a feed by URL, starting a claim, and reading OPML.
   placeholder sites keyed by origin. The sweeps fetch them, per host, within the minute.
 
 **Public reads** (`/api/v1/public/discover`, `/sites/:id`, `/profiles/:handle`) need no
-session. They are JSON with `s-maxage=300` and a day of stale-while-revalidate; tela-web renders
-them into pages with the reader's own components (Phase 6).
+session. They are JSON with `s-maxage=300` and a day of stale-while-revalidate (a profile, four
+minutes: 0031); tela-web renders them into pages with the reader's own components (Phase 6).
 - They show listed and featured blogs only. The Postgres app rendered a private or rejected
   site's page for anyone who knew its id, which on a cached public page would be a leak.
 - A profile's subscriptions appear only when the member turned that on. Private blogs among them

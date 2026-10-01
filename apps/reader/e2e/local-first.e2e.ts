@@ -4,7 +4,7 @@
  * cost no request to tela-api or the object store.
  */
 import { expect, test } from '@playwright/test'
-import { synced } from './helpers'
+import { heldOnDevice, synced } from './helpers'
 
 test('after sync, five opens, a filter change and Back make no request to /api or /o', async ({
   page,
@@ -19,17 +19,18 @@ test('after sync, five opens, a filter change and Back make no request to /api o
   const unread = page.getByTestId('article-row').filter({ has: page.getByTestId('unread-dot') })
   await expect(unread.nth(4)).toBeVisible()
   const hrefs = await Promise.all([0, 1, 2, 3, 4].map((i) => unread.nth(i).getAttribute('href')))
-  // Let the idle prefetch of bodies finish: it is what makes the opens free.
-  await page.waitForLoadState('networkidle')
-  await page.waitForTimeout(2500)
-  await page.waitForLoadState('networkidle')
+  const ids = hrefs.map((href) => Number(/article=(\d+)/.exec(href ?? '')?.[1]))
+  // The idle prefetch of bodies is what makes the opens free: wait until the device holds all
+  // five, not for time to pass, which a slow runner can outlast.
+  await expect.poll(() => heldOnDevice(page, ids), { timeout: 30_000 }).toEqual(ids)
 
   const requests: string[] = []
   page.on('request', (r) => {
     const path = new URL(r.url()).pathname
     // Pushes of the reads themselves, and the pulls after them, are the store writing behind:
-    // never something a render waits on. Nor is the idle prefetch, which re-arms after every
-    // open and may fetch another post's translation meanwhile; its requests say so.
+    // never something a render waits on. Nor is the idle prefetch, which plans again after every
+    // open (it marks a post read) and may fetch another post's translation meanwhile; its
+    // requests say so.
     if (path === '/api/v1/mutations' || path === '/api/v1/sync') return
     if (r.headers()['x-tela-prefetch']) return
     if (path.startsWith('/api/') || path.startsWith('/o/')) requests.push(`${r.method()} ${path}`)
@@ -59,4 +60,75 @@ test('a reload renders the list from the device before any sync answers', async 
   await page.reload()
   await expect(page.getByTestId('article-row').first()).toBeVisible()
   await expect(page.getByTestId('subscription')).toHaveCount(subscriptions)
+})
+
+test('a prefetch that failed is asked for again once the network is back', async ({ page }) => {
+  // Bundles fail until the network "comes back". (Routing turns the HTTP cache off, which
+  // nothing here needs.)
+  let down = true
+  const asked: string[] = []
+  await page.route('**/o/bundle**', (route) => {
+    asked.push(route.request().url())
+    return down ? route.abort('internetdisconnected') : route.continue()
+  })
+  await page.goto('/reading')
+  await synced(page)
+  const unread = page.getByTestId('article-row').filter({ has: page.getByTestId('unread-dot') })
+  await expect(unread.first()).toBeVisible()
+  const ids = [Number(/article=(\d+)/.exec((await unread.first().getAttribute('href')) ?? '')?.[1])]
+  await expect.poll(() => asked.length, { timeout: 30_000 }).toBeGreaterThan(0)
+  // Any run for a plan still changing fails too; then the plan stays as it is.
+  await page.waitForTimeout(2000)
+  down = false
+  // Back online the engine pulls, nothing new arrives, and the plan is unchanged: only the run
+  // that fell short asking again fills the device.
+  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  await expect.poll(() => heldOnDevice(page, ids), { timeout: 30_000 }).toEqual(ids)
+})
+
+test('a body evicted after the prefetch found it held is fetched again on the next pull', async ({
+  page,
+}) => {
+  await page.goto('/reading')
+  await synced(page)
+  const unread = page.getByTestId('article-row').filter({ has: page.getByTestId('unread-dot') })
+  await expect(unread.first()).toBeVisible()
+  const ids = [Number(/article=(\d+)/.exec((await unread.first().getAttribute('href')) ?? '')?.[1])]
+  await expect.poll(() => heldOnDevice(page, ids), { timeout: 30_000 }).toEqual(ids)
+  // Last opened eight days ago, as an unread body prefetched then is: eviction drops bodies not
+  // opened for a week, ten seconds after boot.
+  await page.evaluate(
+    ({ id }) =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open('tela-2')
+        open.onerror = () => reject(open.error)
+        open.onsuccess = () => {
+          const db = open.result
+          const tx = db.transaction(['tables', 'bodies'], 'readwrite')
+          const articles = tx.objectStore('tables').get('articles')
+          articles.onsuccess = () => {
+            const rows = articles.result as { id: number; contentKey: string }[]
+            const key = rows.find((a) => a.id === id)?.contentKey ?? ''
+            const bodies = tx.objectStore('bodies')
+            const body = bodies.get(key)
+            body.onsuccess = () => {
+              bodies.put({ ...body.result, lastOpened: Date.now() - 8 * 86_400_000 })
+            }
+          }
+          tx.onerror = () => reject(tx.error)
+          tx.oncomplete = () => {
+            db.close()
+            resolve()
+          }
+        }
+      }),
+    { id: ids[0] },
+  )
+  // The boot's prefetch finds it held; then eviction drops it.
+  await page.reload()
+  await expect.poll(() => heldOnDevice(page, ids), { timeout: 20_000 }).toEqual([])
+  // The plan is unchanged and nothing fell short: only the pull's look at what the device holds
+  // fetches it again.
+  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  await expect.poll(() => heldOnDevice(page, ids), { timeout: 30_000 }).toEqual(ids)
 })
