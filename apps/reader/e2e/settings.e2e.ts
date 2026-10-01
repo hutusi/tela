@@ -89,11 +89,8 @@ test.describe('settings', () => {
     // The button names what it does, not a pressed state ("Unsubscribe, pressed" read backwards).
     await expect(toggle).toHaveText('Unsubscribe')
     await expect(toggle).not.toHaveAttribute('aria-pressed')
-    const cadence = await row.getByTestId('settings-subscription-meta').textContent()
     await toggle.click()
     await expect(toggle).toHaveText('Subscribe')
-    // Leaving drops the blog's posts from the device; the row still says how often it posts.
-    await expect(row.getByTestId('settings-subscription-meta')).toHaveText(cadence ?? '')
     await expect(rows).toHaveCount(count)
     await expect(page.getByTestId('subscription-count')).toContainText(`${count - 1} blog`)
     const back = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
@@ -122,13 +119,18 @@ test.describe('settings', () => {
     // Choosing is not adding: arrow keys and type-ahead on a select fire a change per step.
     await page.getByTestId('never-add').selectOption('ja')
     await expect(chips).toHaveCount(before)
-    await page.getByTestId('never-add-confirm').click()
+    // From the keyboard: Add removes itself, and focus stays in the control rather than the page.
+    await page.getByTestId('never-add-confirm').focus()
+    await page.keyboard.press('Enter')
     await expect(chips).toHaveCount(before + 1)
     await expect(page.getByTestId('never-add-confirm')).toHaveCount(0)
+    await expect(page.getByTestId('never-add')).toBeFocused()
     // Taken back, so no other spec meets a language it did not ask to read as written.
     const pushed = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
-    await page.getByTestId('never-remove-ja').click()
+    await page.getByTestId('never-remove-ja').focus()
+    await page.keyboard.press('Enter')
     await expect(chips).toHaveCount(before)
+    await expect(page.getByTestId('never-add')).toBeFocused()
     await pushed
   })
 

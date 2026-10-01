@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import { applyPull, emptyTables, type Tables, view } from '@tela/sync'
 import { monthYear, personColor, shortDate } from '../src/lib/format'
 import { PREF_KEYS, readingPrefsOf } from '../src/lib/prefs'
+import { leaving } from '../src/pages/settings'
 import { followedPeople, shownTitle, withoutRead } from '../src/store/selectors'
 import { article, NOW, pull, sub } from './rows'
 
@@ -178,5 +179,16 @@ describe('hiding read posts', () => {
       withoutRead(t, [...t.articles.values()], NOW, open, seen).map((a) => a.id)
     expect(list(1)).toEqual([1]) // opened from a public page, read before its row arrived
     expect(list(null)).toEqual([1]) // still there after j, so k can return to it
+  })
+})
+
+describe('a blog left from Settings', () => {
+  test('keeps the count of posts it had, though leaving drops them from the device', () => {
+    const once = leaving(new Map(), 7, 8)
+    expect(once.get(7)).toBe(8)
+    // Taken back and left again before a pull returned its posts: the device holds none.
+    expect(leaving(once, 7, 0).get(7)).toBe(8)
+    // A pull in between brought more: the larger count.
+    expect(leaving(once, 7, 9).get(7)).toBe(9)
   })
 })

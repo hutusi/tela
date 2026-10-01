@@ -6,7 +6,7 @@
  */
 import { LANGUAGE_NAMES, languageBadge, READING_LANGUAGES, type UiLocale } from '@tela/shared'
 import type { ProfileRow } from '@tela/sync'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, Navigate, NavLink, useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { PersonAvatar } from '../components/person-avatar'
@@ -385,6 +385,9 @@ function NeverTranslate({
   // The select only chooses; Add commits. Arrow keys on a closed select (Windows, Linux) and
   // type-ahead fire a change per step, which added a language at each one.
   const [pick, setPick] = useState('')
+  // Add and a chip's ✕ remove themselves when pressed: focus goes to the select, which stays,
+  // rather than to the page.
+  const select = useRef<HTMLSelectElement>(null)
   const seen = new Set(Object.keys(names))
   for (const a of tables.articles.values()) if (a.sourceLang) seen.add(a.sourceLang)
   const name = (tag: string) => names[tag] ?? tag
@@ -406,7 +409,10 @@ function NeverTranslate({
             {name(tag)}
             <button
               type="button"
-              onClick={() => set(never.filter((x) => x !== tag))}
+              onClick={() => {
+                select.current?.focus()
+                set(never.filter((x) => x !== tag))
+              }}
               aria-label={t('removeLanguage', { lang: name(tag) })}
               className="flex size-5 items-center justify-center rounded-full text-[12px] text-muted hover:bg-hover hover:text-ink"
               data-testid={`never-remove-${tag}`}
@@ -416,6 +422,7 @@ function NeverTranslate({
           </span>
         ))}
         <select
+          ref={select}
           value={chosen}
           aria-label={t('addLanguage')}
           onChange={(e) => setPick(e.target.value)}
@@ -433,6 +440,7 @@ function NeverTranslate({
           <button
             type="button"
             onClick={() => {
+              select.current?.focus()
               set([...never, chosen])
               setPick('')
             }}
@@ -451,6 +459,19 @@ function NeverTranslate({
 // Subscriptions
 
 const DAY = 86_400_000
+
+/**
+ * The blogs left from this page, with the count of recent posts each had: the larger of the one
+ * kept and what the device holds now. Left, taken back and left again before a pull returns its
+ * posts, the device holds none of them, and that 0 would read as "quiet lately".
+ */
+export function leaving(
+  left: ReadonlyMap<number, number>,
+  feedId: number,
+  held: number,
+): ReadonlyMap<number, number> {
+  return new Map(left).set(feedId, Math.max(left.get(feedId) ?? 0, held))
+}
 
 function SubscriptionsSection() {
   const t = useTranslations('settings')
@@ -485,7 +506,7 @@ function SubscriptionsSection() {
   const count = rows.filter((r) => r.subscribed).length
 
   const toggle = (feedId: number, subscribed: boolean) => {
-    if (subscribed) setLeft((l) => new Map(l).set(feedId, posted.get(feedId) ?? 0))
+    if (subscribed) setLeft((l) => leaving(l, feedId, posted.get(feedId) ?? 0))
     store.mutate(subscribed ? { type: 'unsubscribe', feedId } : { type: 'subscribe', feedId })
   }
 
@@ -528,10 +549,7 @@ function SubscriptionsSection() {
                 ) : (
                   <span className="font-medium">{r.title}</span>
                 )}
-                <div
-                  className="truncate text-[12.5px] text-muted"
-                  data-testid="settings-subscription-meta"
-                >
+                <div className="truncate text-[12.5px] text-muted">
                   {r.site ? `${displayHost(r.site.homeUrl)} · ` : ''}
                   {td(`cadence.${r.cadence}`)}
                 </div>
