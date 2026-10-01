@@ -138,9 +138,9 @@ export async function setPrefs(
 }
 
 /**
- * Put the member's synced reading state back to its defaults: English, side by side, the default
- * text, line length and theme, posts read on opening, read posts listed, translation on opening
- * and nothing left untranslated. Every spec signs in as the same member, and a spec's last change
+ * Put the member's synced reading state back to its defaults: English to read and to use Tela in,
+ * side by side, the default text, line length and theme, posts read on opening, read posts listed,
+ * translation on opening and nothing left untranslated. Every spec signs in as the same member, and a spec's last change
  * is lost when its page closes before the push goes out, so a spec that depends on this state
  * resets it first instead of trusting the last spec to have put it back.
  */
@@ -157,7 +157,7 @@ export async function resetReading(api: APIRequestContext): Promise<void> {
       'translate.auto': true,
       'translate.never': [],
     },
-    { readingLang: 'en' },
+    { readingLang: 'en', uiLocale: 'en' },
   )
 }
 

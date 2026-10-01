@@ -4,7 +4,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import { type APIRequestContext, expect, test } from '@playwright/test'
-import { BASE, FIXTURES, memberHeaders } from './helpers'
+import { BASE, FIXTURES, memberHeaders, STATE_FILE, setPrefs, synced } from './helpers'
 
 /** The member's profile row as the server has it, through a snapshot pull. */
 async function serverProfile(request: APIRequestContext) {
@@ -139,5 +139,35 @@ test.describe('settings', () => {
     const bio = page.locator('textarea[name="bio"]')
     await bio.fill('Hello')
     await expect(page.getByTestId('settings-form')).toContainText('275 characters left')
+  })
+})
+
+test.describe('the interface language', () => {
+  test('follows the member to a device that was in English', async ({ page, browser, request }) => {
+    try {
+      await page.goto('/settings/translation')
+      const pushed = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+      await page.getByTestId('ui-locale-zh-Hans').click()
+      await pushed
+
+      // Another device: the same member, and a cookie that still says English.
+      const other = await browser.newContext({ storageState: STATE_FILE })
+      try {
+        await other.addCookies([{ name: 'tela_locale', value: 'en', url: BASE }])
+        const there = await other.newPage()
+        await there.goto('/reading')
+        await synced(there)
+        await expect(there.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+        await expect(there.getByTestId('nav-reading')).toHaveText('阅读')
+        // And the cookie follows, so the edge renders the next public page in Chinese too.
+        const cookies = await other.cookies(BASE)
+        expect(cookies.find((c) => c.name === 'tela_locale')?.value).toBe('zh-Hans')
+      } finally {
+        await other.close()
+      }
+    } finally {
+      // Every spec signs in as this member: none should inherit Chinese from this one.
+      await setPrefs(request, {}, { uiLocale: 'en' })
+    }
   })
 })

@@ -312,7 +312,7 @@
     "hideReadHint": "Lists show unread posts only. Liked posts are always kept.",
     "translationIntro": "The language Tela itself speaks, and the one it translates posts into. The original is always one click away.",
     "uiLocale": "Interface language",
-    "uiLocaleHint": "Menus, buttons and messages.",
+    "uiLocaleHint": "Menus, buttons and messages, on every device you sign in on.",
     "translateInto": "Translate into",
     "translateIntoHint": "Your main reading language.",
     "autoTranslate": "Translate automatically",

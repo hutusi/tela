@@ -312,7 +312,7 @@
     "hideReadHint": "列表只显示未读文章，喜欢的文章始终保留。",
     "translationIntro": "Tela 界面用的语言，以及文章翻译成的语言。原文随时一键可见。",
     "uiLocale": "界面语言",
-    "uiLocaleHint": "菜单、按钮和提示文字。",
+    "uiLocaleHint": "菜单、按钮和提示文字，在你登录的每台设备上都一样。",
     "translateInto": "翻译成",
     "translateIntoHint": "你主要的阅读语言。",
     "autoTranslate": "自动翻译",

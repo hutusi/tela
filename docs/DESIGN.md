@@ -161,7 +161,9 @@ that scrolls below it) holding the serif "Settings" heading, and the section in 
 Each section is an address (`/settings`, `/settings/reading`, `/translation`, `/subscriptions`,
 `/privacy`), so Back and a shared link land on it. `/translation` is labelled Language: the
 interface language comes first, each choice in its own name (English, 简体中文) so it can be found
-whatever the page is in, then what posts are translated into. A section opens with a 30 px serif heading and a
+whatever the page is in, then what posts are translated into. The interface language is the
+profile's, so it follows the member to every device; the `tela_locale` cookie mirrors it for the
+edge, and is all a visitor has. A section opens with a 30 px serif heading and a
 muted intro; below, rows (`SettingRow`) separated by `line` rules: the label and a muted hint on the
 left, the control on the right. Controls are `Segmented` (the choices on the `hover` ground, the
 chosen one lifted on `surface`), `Switch` (40 × 24, `accent` on / `thumb` off, `knob`), a native
