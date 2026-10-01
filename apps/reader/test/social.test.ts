@@ -3,8 +3,8 @@ import { describe, expect, test } from 'bun:test'
 import { applyPull, emptyTables, type Tables, view } from '@tela/sync'
 import { monthYear, personColor, shortDate } from '../src/lib/format'
 import { PREF_KEYS, readingPrefsOf } from '../src/lib/prefs'
-import { followedPeople, shownTitle } from '../src/store/selectors'
-import { article, pull, sub } from './rows'
+import { followedPeople, shownTitle, withoutRead } from '../src/store/selectors'
+import { article, NOW, pull, sub } from './rows'
 
 function tables(rows: Parameters<typeof pull>[1]): Tables {
   return view(applyPull({ cursor: 0, tables: emptyTables() }, pull(1, rows, true)), [])
@@ -130,5 +130,40 @@ describe('dates and colours for people', () => {
     expect(personColor('anna')).toBe(personColor('anna'))
     expect(personColor('anna')).not.toBe(personColor('bo_b'))
     expect(personColor('anna')).toMatch(/^oklch\(0\.55 0\.11 \d+(\.\d)?\)$/)
+  })
+})
+
+describe('hiding read posts', () => {
+  const read = (articleId: number, liked = false) => ({
+    articleId,
+    readAt: 1,
+    likedAt: liked ? 1 : null,
+    likedUpdatedAt: liked ? 1 : null,
+    seq: 1,
+  })
+  test('keeps every post the list showed unread, those the catch-up pull brought included', () => {
+    const seen = new Set<number>()
+    // Painted from the device: yesterday's posts, all read, one of them liked.
+    const painted = tables({
+      subscriptions: [sub(1)],
+      articles: [article(1), article(2)],
+      states: [read(1), read(2, true)],
+    })
+    const list = (t: Tables, open: number | null = null) =>
+      withoutRead(t, [...t.articles.values()], NOW, open, seen).map((a) => a.id)
+    expect(list(painted)).toEqual([2]) // the read one goes, the liked one stays
+    // The pull brings 4, 5 and 6; the member opens 6, then j takes them to 5.
+    const pulled = tables({
+      subscriptions: [sub(1)],
+      articles: [article(1), article(2), article(4), article(5), article(6)],
+      states: [read(1), read(2, true)],
+    })
+    expect(list(pulled)).toEqual([2, 4, 5, 6])
+    const readSix = tables({
+      subscriptions: [sub(1)],
+      articles: [article(1), article(2), article(4), article(5), article(6)],
+      states: [read(1), read(2, true), read(6)],
+    })
+    expect(list(readSix, 5)).toEqual([2, 4, 5, 6]) // 6 stays, so k can go back to it
   })
 })

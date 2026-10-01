@@ -137,6 +137,23 @@ export function articlesFor(
 }
 
 /**
+ * A list with read posts hidden (a pref), keeping every post it has shown unread: `seen` is the
+ * list's memory of those for this visit, and this adds the ones unread now. So a post read since,
+ * whether opened or reached by `j`, stays where the reader left it; liked posts and the open one
+ * always stay.
+ */
+export function withoutRead(
+  t: Tables,
+  list: ArticleRow[],
+  now: number,
+  openId: number | null,
+  seen: Set<number>,
+): ArticleRow[] {
+  for (const a of list) if (!isRead(t, a, now)) seen.add(a.id)
+  return list.filter((a) => a.id === openId || seen.has(a.id) || isLiked(t, a.id))
+}
+
+/**
  * A post's title and excerpt as the member reads them: the translation whenever one exists,
  * except in a language the member never has translated (`never`, a pref), which reads as written.
  */

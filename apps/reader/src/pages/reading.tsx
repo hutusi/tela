@@ -27,11 +27,11 @@ import { PREF_KEYS, useReadingPrefs } from '../lib/prefs'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
-  isLiked,
   isRead,
   shownTitle,
   subscriptionItems,
   totals,
+  withoutRead,
 } from '../store/selectors'
 import { useUi } from '../ui'
 
@@ -55,30 +55,17 @@ export function ReadingPage() {
   const counts = totals(tables, now)
   const prefs = useReadingPrefs(tables)
   const all = articlesFor(tables, params, now)
-  // Hiding read posts (a pref) must not pull a post out from under the reader: what was unread
-  // when this list was entered stays in it until the reader moves to another list, so opening a
-  // post, or j and k, never lose their place. Posts arriving later join it unread.
+  // Hiding read posts (a pref) must not pull a post out from under the reader: a post seen unread
+  // in this list stays in it until the reader moves to another list, so opening a post, or j and
+  // k, never lose their place. That includes posts the catch-up pull brings after the list was
+  // first painted from the device, which are the first a member opens.
   const listKey = `${params.filter}:${params.feedId}`
-  const enteredUnread = useRef<{ key: string; ids: ReadonlySet<number> } | null>(null)
-  if (prefs.hideRead && enteredUnread.current?.key !== listKey) {
-    enteredUnread.current = {
-      key: listKey,
-      ids: new Set(all.filter((a) => !isRead(tables, a, now)).map((a) => a.id)),
-    }
-  }
-  const kept = enteredUnread.current?.ids
+  const seenUnread = useRef<{ key: string; ids: Set<number> }>({ key: '', ids: new Set() })
+  if (seenUnread.current.key !== listKey) seenUnread.current = { key: listKey, ids: new Set() }
+  const seen = seenUnread.current.ids
   const items = useMemo(
-    () =>
-      prefs.hideRead
-        ? all.filter(
-            (a) =>
-              a.id === params.articleId ||
-              kept?.has(a.id) ||
-              !isRead(tables, a, now) ||
-              isLiked(tables, a.id),
-          )
-        : all,
-    [all, prefs.hideRead, kept, tables, now, params.articleId],
+    () => (prefs.hideRead ? withoutRead(tables, all, now, params.articleId, seen) : all),
+    [all, prefs.hideRead, seen, tables, now, params.articleId],
   )
   const selected = params.feedId !== null ? subs.find((s) => s.feedId === params.feedId) : undefined
   const listTitle = params.feedId !== null ? (selected?.title ?? '') : undefined
