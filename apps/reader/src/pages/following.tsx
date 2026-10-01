@@ -92,7 +92,11 @@ function useFeed(tab: Tab, lang: string) {
   const tz = -new Date().getTimezoneOffset()
   const view = `${store.userId}:${tab}:${lang}:${tz}`
   const key = `${view}:${followees}`
-  const [feed, setFeed] = useState<Feed>(() => held.get(key) ?? loading(view))
+  const [state, setFeed] = useState<Feed>(() => held.get(key) ?? loading(view))
+  // Another tab or language shows its own from the render that names it, not after the effect:
+  // the router commits a navigation in a transition, so that render paints. The same view after a
+  // follow keeps its entries on screen until the fresh copy comes.
+  const feed = state.view === view ? state : (held.get(key) ?? loading(view))
   const [busy, setBusy] = useState(false)
   // The key on screen now: an answer to a request made under another one updates what is held for
   // that one, never what this tab shows.
