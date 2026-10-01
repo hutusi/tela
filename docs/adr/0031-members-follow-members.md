@@ -25,8 +25,9 @@ Three things about it do not fit the way everything else reaches the device (ADR
 
 **A follow is one-way, public, and needs no approval.** `follows (follower_id, followee_id)` is
 soft-deleted and synced to the follower only, as a row carrying the followee's handle and display
-name. The pull also re-sends a follow whose followee's profile changed (its seq is the larger of
-the two), so a rename reaches the follower's list. `follow` and `unfollow` are mutations, decided
+name. The pull also re-sends a live follow whose followee's profile changed (its seq is the larger of
+the two), so a rename reaches the follower's list; an unfollow keeps its own seq, and the pull
+selects, orders and pages follows by that one expression. `follow` and `unfollow` are mutations, decided
 by the later `at` like a like. A follow of yourself or of nobody is a no-op, excluded in the
 statement's `where`: the table's check is only a backstop, because a violated check would sink
 the whole push.

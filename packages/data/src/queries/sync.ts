@@ -72,11 +72,15 @@ const HIGHLIGHT = sql.raw(`id, article_id as "articleId", content_key as "conten
 const CLAIM = sql.raw(`id, site_id as "siteId", method, token, status, error,
   verified_at as "verifiedAt", seq`)
 /**
- * A follow with how the followed member appears, from `follows f join profiles p`. Its seq is the
- * later of the two, so a rename sends the row again and pages by the seq that brought it.
+ * The seq a follow row is sent, selected and paged by: for a live follow, the later of the follow's
+ * and the followee's profile's, so a rename sends the row again; for an unfollow, its own. One
+ * expression for all three, or a deletion whose followee renamed after it could be cut from one
+ * page by the profile's seq and never selected by the next (ADR 0031).
  */
-const FOLLOW = sql.raw(`f.followee_id as "userId", p.handle, p.display_name as "displayName",
-  f.created_at as "createdAt", f.deleted_at as "deletedAt", max(f.seq, p.seq) as seq`)
+const FOLLOW_SEQ = sql.raw(`(case when f.deleted_at is null then max(f.seq, p.seq) else f.seq end)`)
+/** A follow with how the followed member appears, from `follows f join profiles p`. */
+const FOLLOW = sql`f.followee_id as "userId", p.handle, p.display_name as "displayName",
+  f.created_at as "createdAt", f.deleted_at as "deletedAt", ${FOLLOW_SEQ} as seq`
 const TRANSLATION = sql.raw(`b.content_key as "contentKey", b.lang, b.state,
   b.chunk_keys as "chunkKeys", b.object_key as "objectKey", b.failed_leaves as "failedLeaves",
   b.seq`)
@@ -174,9 +178,8 @@ export async function readPull(
       ? sql`select ${FOLLOW} from follows f join profiles p on p.user_id = f.followee_id
           where f.follower_id = ${userId} and f.deleted_at is null`
       : sql`select ${FOLLOW} from follows f join profiles p on p.user_id = f.followee_id
-          where f.follower_id = ${userId}
-            and (f.seq > ${cursor} or (p.seq > ${cursor} and f.deleted_at is null))
-          order by max(f.seq, p.seq) limit ${over}`,
+          where f.follower_id = ${userId} and ${FOLLOW_SEQ} > ${cursor}
+          order by ${FOLLOW_SEQ} limit ${over}`,
 
     // Shared rows: the fresh part is unbounded (a horizon is bounded by itself); the changed part
     // is cut at `limit` like every other delta table.

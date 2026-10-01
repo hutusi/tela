@@ -6,6 +6,7 @@ import {
   first,
   headSeq,
   mergeFeed,
+  readPull,
   type TelaDb,
 } from '@tela/data'
 import {
@@ -613,6 +614,32 @@ describe('follows (ADR 0031)', () => {
       { type: 'unfollow', userId: 'nobody-at-all-0001' },
     ])
     expect(res.rejected).toEqual([])
+  })
+
+  test('an unfollow reaches a device that pages, though the followee renamed after it', async () => {
+    await push([{ type: 'follow', userId: ANNA, at: now - 30 }])
+    const before = await pull(0)
+    await push([{ type: 'unfollow', userId: ANNA, at: now - 20 }])
+    // Two changes after it, so a one-row page ends between them; then Anna renames.
+    await push([
+      { type: 'setPref', key: 'reader.size', value: 'l' },
+      { type: 'setPref', key: 'reader.measure', value: 'wide' },
+    ])
+    await push([{ type: 'setPref', key: 'reader.mode', value: 'orig' }])
+    await write(
+      db.run(
+        sql`update profiles set display_name = 'Anna K', seq = ${currentSeq} where user_id = ${ANNA}`,
+      ),
+    )
+    const seen: unknown[] = []
+    let cursor = before.cursor
+    for (let page = 0; page < 10; page++) {
+      const read = await readPull(db, { userId: reader.userId, cursor, horizon: 0, limit: 1 })
+      seen.push(...read.rows.follows)
+      if (read.pageEnd === null) break
+      cursor = read.pageEnd
+    }
+    expect(seen).toMatchObject([{ userId: ANNA, deletedAt: now - 20 }])
   })
 
   test('unfollowing again sends the deletion again, to a device that missed it', async () => {
