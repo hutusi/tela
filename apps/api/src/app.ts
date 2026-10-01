@@ -8,6 +8,7 @@ import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type Auth, createAuth } from './auth'
 import type { ApiDeps } from './deps'
+import { avatarRoutes } from './routes/avatars'
 import { claimRoutes } from './routes/claims'
 import { curate } from './routes/curate'
 import { feedRoutes } from './routes/feeds'
@@ -128,6 +129,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   }
 
   // Anyone may read these; tela-web caches them at the edge.
+  app.route('/api/v1/public/avatars', avatarRoutes(deps))
   app.route('/api/v1/public', publicRoutes(deps))
   // Hubs, not members, call this; the signature is the authorization.
   app.route('/api/websub', websubRoutes(deps))

@@ -46,6 +46,7 @@ function appFor(env: Env) {
       ...(env.ADMIN_TOKEN ? { adminToken: env.ADMIN_TOKEN } : {}),
       mailFrom: env.MAIL_FROM,
       testMode: env.ENV === 'test',
+      ...(env.GRAVATAR_URL ? { gravatarUrl: env.GRAVATAR_URL } : {}),
     },
   })
   cached = { env, app }

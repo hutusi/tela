@@ -203,6 +203,85 @@ describe('the image proxy', () => {
   })
 })
 
+describe("members' pictures (ADR 0032)", () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])
+  /** An edge whose tela-api answers pictures as `answer` says, counting what it was asked. */
+  function pictures(answer: () => Response) {
+    const asked: string[] = []
+    const local = memoryCache()
+    const pictureEdge = createEdge({
+      blobs,
+      api: {
+        fetch: async (req) => {
+          const url = new URL(req.url)
+          asked.push(url.pathname + url.search)
+          return answer()
+        },
+      },
+      assets: { fetch: async () => new Response(TEMPLATE) },
+      pages: pages as unknown as PublicPages,
+      cache: local,
+      fetchImage: async () => new Response('nope', { status: 404 }),
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+    })
+    const fetchPath = (path: string) => pictureEdge.fetch(new Request(`${ORIGIN}${path}`))
+    return { asked, fetchPath }
+  }
+  const image = () =>
+    new Response(PNG, {
+      headers: {
+        'content-type': 'image/png',
+        'cache-control': 'public, max-age=2592000, immutable',
+      },
+    })
+
+  test('come from tela-api once a version, then from the colo, to anyone', async () => {
+    const { asked, fetchPath } = pictures(image)
+    const first = await fetchPath('/avatar/member-anna-0001?v=5')
+    expect(first.status).toBe(200)
+    expect(first.headers.get('content-type')).toBe('image/png')
+    expect(first.headers.get('cache-control')).toBe('public, max-age=2592000, immutable')
+    expect(new Uint8Array(await first.arrayBuffer())).toEqual(PNG)
+    const again = await fetchPath('/avatar/member-anna-0001?v=5')
+    expect(new Uint8Array(await again.arrayBuffer())).toEqual(PNG)
+    await fetchPath('/avatar/member-anna-0001?v=6') // Refresh: a new address
+    expect(asked).toEqual([
+      '/api/v1/public/avatars/member-anna-0001?v=5',
+      '/api/v1/public/avatars/member-anna-0001?v=6',
+    ])
+  })
+
+  test('none is cached as tela-api says; a failure is not cached at all', async () => {
+    const none = pictures(
+      () =>
+        new Response('no picture', {
+          status: 404,
+          headers: { 'cache-control': 'public, max-age=300' },
+        }),
+    )
+    expect((await none.fetchPath('/avatar/member-anna-0001?v=5')).status).toBe(404)
+    expect((await none.fetchPath('/avatar/member-anna-0001?v=5')).status).toBe(404)
+    expect(none.asked).toHaveLength(1)
+    const down = pictures(() => new Response('down', { status: 503 }))
+    const res = await down.fetchPath('/avatar/member-anna-0001?v=5')
+    expect(res.status).toBe(502)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    await down.fetchPath('/avatar/member-anna-0001?v=5')
+    expect(down.asked).toHaveLength(2)
+  })
+
+  test('an address that names no member or version asks tela-api nothing', async () => {
+    const { asked, fetchPath } = pictures(image)
+    for (const path of [
+      '/avatar/x?v=1',
+      '/avatar/member-anna-0001?v=abc',
+      '/avatar/member-anna-0001',
+    ])
+      expect([path, (await fetchPath(path)).status]).toEqual([path, 404])
+    expect(asked).toEqual([])
+  })
+})
+
 describe('everything else', () => {
   test('/api goes to tela-api', async () => {
     const res = await get('/api/health', null)
