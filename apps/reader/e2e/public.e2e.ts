@@ -164,8 +164,8 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     await expect(page.getByTestId('profile-page')).toContainText('Dev Reader')
 
     // An edit made from the profile reaches it: the copy held while Settings was open, and the
-    // one the browser cached (a minute, PUBLIC_CACHE), are forgotten once the server has the
-    // change. A fresh load first: the rename above has already sent this page past the cache.
+    // one the browser cached (a minute fresh, PROFILE_CACHE), are forgotten once the server has
+    // the change. A fresh load first: the rename above has already sent this page past the cache.
     await page.goto('/@devreader')
     await expect(page.getByTestId('profile-page')).toContainText('Dev Reader')
     await page.getByTestId('edit-profile').click()
@@ -181,6 +181,47 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     await page.goBack()
     await expect(page).toHaveURL(/\/@devreader$/)
     await expect(page.getByTestId('profile-page')).toContainText(bio)
+  })
+
+  test('a page the edge rendered is never replaced by an older copy the browser kept', async ({
+    browser,
+    request,
+  }) => {
+    const headers = { origin: BASE, ...(await memberHeaders(request)) }
+    const save = async (bio: string) => {
+      const res = await request.put(`${BASE}/api/v1/profile`, {
+        headers,
+        data: { handle: 'devreader', displayName: 'Dev Reader', bio },
+      })
+      expect(res.ok()).toBe(true)
+    }
+    // A visitor, signed out (a new context takes the project's member state unless told): the
+    // member's own device forgets its copies of their profile when it changes (app.tsx), which
+    // would hide what this is about.
+    const visitor = await browser.newContext({
+      baseURL: BASE,
+      storageState: { cookies: [], origins: [] },
+    })
+    const page = await visitor.newPage()
+    const before = `Before ${Date.now()}`
+    const after = `After ${Date.now()}`
+    await save(before)
+    // The browser keeps this answer, fresh for a minute (PROFILE_CACHE). No page.route anywhere
+    // here: routing turns Playwright's HTTP cache off, and with it what this is about.
+    await page.goto('/discover')
+    const kept = await page.evaluate(async () => {
+      const res = await fetch('/api/v1/public/profiles/devreader')
+      return res.text()
+    })
+    expect(kept).toContain(before)
+    await save(after)
+    // A whole load: the page is rendered from what tela-api says now, or the edge's copy of it,
+    // and its data is asked for again behind it. The browser's copy is older than both.
+    await page.goto('/@devreader')
+    await expect(page.getByTestId('profile-page')).toContainText(after)
+    await page.waitForTimeout(1000)
+    await expect(page.getByTestId('profile-page')).toContainText(after)
+    await visitor.close()
   })
 
   test('OPML export lists the subscriptions', async ({ request }) => {

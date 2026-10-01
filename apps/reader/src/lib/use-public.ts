@@ -6,7 +6,10 @@
 import { useEffect, useState } from 'react'
 
 const held = new Map<string, unknown>()
-/** Pages changed this visit: fetched past the browser's cache, which holds them a minute. */
+/**
+ * Pages changed this visit: fetched past the browser's cache, which keeps a copy a minute and then
+ * serves it stale while it asks again, for a day (a profile, four minutes more).
+ */
 const changed = new Set<string>()
 const listeners = new Set<(prefix: string) => void>()
 
@@ -73,7 +76,12 @@ export function usePublic<T>(path: string | null): Loaded<T> {
       known === LOADING && version !== 0 && s.path === path ? s : { path, loaded: known },
     )
     const stale = [...changed].some((prefix) => path.startsWith(prefix))
-    fetch(path, { credentials: 'same-origin', ...(stale ? { cache: 'reload' as const } : {}) })
+    // The edge's handover is at most five minutes old, and the browser's own copy can be older:
+    // after one, the browser asks tela-api before it answers (`no-cache`), so the page on screen
+    // is never replaced by an older one. A page changed this visit is fetched past the copy.
+    const handover = version === 0 && !held.has(path) && handedOver(path) !== undefined
+    const cache: 'reload' | 'no-cache' | null = stale ? 'reload' : handover ? 'no-cache' : null
+    fetch(path, { credentials: 'same-origin', ...(cache ? { cache } : {}) })
       .then(async (res) => {
         if (cancelled) return
         if (res.status === 404) {

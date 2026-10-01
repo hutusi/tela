@@ -81,7 +81,8 @@ the last thirty days. Nobody is suggested because of a private subscription or a
   copy of their profile when the profile row changes. (Amended 2026-10-01.) A browser keeps a
   profile's JSON at most five minutes, a minute and then four of stale-while-revalidate. Discover
   and a blog's page keep 0024's day, so a browser that showed one within the last day may show
-  its own copy once more: nothing it had not already shown.
+  its own copy once more: nothing it had not already shown. A page loaded whole asks tela-api
+  past the browser's copy, so the edge's page is never replaced by an older one.
 - The Following page's device copy is checked against a fresh first page only. An entry that
   appears at an old time below that page (a re-subscription keeps its first date; a followee who
   starts showing likes shows old days) stays out of the older pages already loaded until the next
