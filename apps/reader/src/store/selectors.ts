@@ -137,10 +137,10 @@ export function articlesFor(
 }
 
 /**
- * A list with read posts hidden (a pref), keeping every post it has shown unread: `seen` is the
- * list's memory of those for this visit, and this adds the ones unread now. So a post read since,
- * whether opened or reached by `j`, stays where the reader left it; liked posts and the open one
- * always stay.
+ * A list with read posts hidden (a pref), keeping every post it has shown unread or open: `seen`
+ * is the list's memory of those for this visit, and this adds the ones unread now and the open
+ * one. So a post read since, opened or reached by `j`, stays where the reader left it, and so does
+ * one opened already read (from a public page, before its row arrived); liked posts always stay.
  */
 export function withoutRead(
   t: Tables,
@@ -149,8 +149,8 @@ export function withoutRead(
   openId: number | null,
   seen: Set<number>,
 ): ArticleRow[] {
-  for (const a of list) if (!isRead(t, a, now)) seen.add(a.id)
-  return list.filter((a) => a.id === openId || seen.has(a.id) || isLiked(t, a.id))
+  for (const a of list) if (!isRead(t, a, now) || a.id === openId) seen.add(a.id)
+  return list.filter((a) => seen.has(a.id) || isLiked(t, a.id))
 }
 
 /**

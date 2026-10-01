@@ -43,7 +43,10 @@ recommendations, their likes (only if they show them) and their subscriptions to
 day's likes, or new subscriptions, are one entry per person, placed at the newest of them over
 the whole day, so a group lands whole on one page and a page is never cut inside one. Windows of
 days were tried first: they left a first page empty when the activity was older than the window,
-and a day busier than a page could not be paged past. Its posts arrive as full
+and a day busier than a page could not be paged past. A group's place can move if its day changes
+between two page requests (a like, an unlike); the device drops an entry it already holds, and a
+group that moved up shows when the first page is next asked for. The cursor carries the offset
+the walk grouped days under, so its pages agree on what a day is. Its posts arrive as full
 article rows held for the visit, like any post from outside the synced feeds (0025). The
 Dashboard is the precedent for a member page served this way. "Readers you follow" on a blog page
 is a member RPC too, beside the edge-cached public page, never in it.
@@ -59,7 +62,8 @@ its own rather than more fields on `setProfile` because a tela-api that predates
 it: an older `setProfile` would strip the fields, acknowledge the change and drop it. The handle,
 name and bio stay behind `PUT /api/v1/profile`, since a handle must be unique; a shell from before
 the switches still sends its form's `publicSubscriptions` there with every save, so that path may
-only hide.
+only hide; its "show" saves and quietly changes nothing, which lasts only until that tab loads the
+newer shell.
 
 **Suggestions use only what is already public**: members who recommended posts from blogs you
 read, and members whose public subscriptions overlap yours. Nobody is suggested because of a
@@ -85,6 +89,14 @@ private subscription or a private like.
   go back past this release, because the shell before it throws on a pending follow at boot.
   This release's reducer ignores mutation types it does not know, so the next release can be
   rolled back to it (OPERATIONS.md).
+- The feed groups a person's day of likes or subscriptions over all of it, so each request reads
+  every like and new subscription of the people followed, not one window of them. That is cheap
+  at the beta's size; past it, the query wants a lower bound (only days that could still reach
+  the page) or a stored per-day summary.
+- The ordering follows device clocks, clamped to the server's, as every other conflict in 0025
+  does: a device whose clock runs minutes slow can lose a newer "hide" to an older "show" made
+  elsewhere for that long. Making a hide always win would need the protocol to say which version
+  a change was made against.
 - The profile says nothing about the languages a member reads. The design's "Reads in" would
   have published the private never-translate list.
 - Out of scope, and absent from Settings rather than shown disabled: follow approval, email

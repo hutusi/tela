@@ -62,7 +62,7 @@ export function ProfilePage() {
   if (!handle || loaded.status === 'missing') return <NotFoundPage />
   if (!data) return <main className="flex-1" aria-busy="true" />
   const shift = (following ? 1 : 0) - (countedFollowing.get(data) ? 1 : 0)
-  const counts = {
+  const counts = data.counts && {
     ...data.counts,
     followers: Math.max(0, data.counts.followers + shift),
     // Whom the member follows, their device knows better than a cached page.

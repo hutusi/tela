@@ -264,9 +264,11 @@ export function createEdge(deps: EdgeDeps) {
     let html: string
     try {
       html = pages.render({ route, url, data, locale, template })
-    } catch {
+    } catch (err) {
       // An answer this build cannot render (a tela-api of another release beside it): the plain
-      // shell, uncached, whose app asks again from the browser, rather than an error page.
+      // shell, uncached, whose app asks again from the browser, rather than an error page. Logged,
+      // since a page that always falls back is otherwise invisible.
+      console.error('public page did not render', url.pathname, err)
       return new Response(template, {
         headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': PAGE_CACHE },
       })

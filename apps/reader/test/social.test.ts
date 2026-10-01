@@ -166,4 +166,17 @@ describe('hiding read posts', () => {
     })
     expect(list(readSix, 5)).toEqual([2, 4, 5, 6]) // 6 stays, so k can go back to it
   })
+
+  test('keeps a post opened already read, after the reader moves on from it', () => {
+    const seen = new Set<number>()
+    const t = tables({
+      subscriptions: [sub(1)],
+      articles: [article(1), article(2)],
+      states: [read(1), read(2)],
+    })
+    const list = (open: number | null) =>
+      withoutRead(t, [...t.articles.values()], NOW, open, seen).map((a) => a.id)
+    expect(list(1)).toEqual([1]) // opened from a public page, read before its row arrived
+    expect(list(null)).toEqual([1]) // still there after j, so k can return to it
+  })
 })

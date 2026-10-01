@@ -17,13 +17,8 @@ export function profileDataOf(raw: ProfileData): ProfileData {
     ...raw,
     // An empty id is no member to follow: the page offers no Follow until it has one.
     profile: { ...raw.profile, id: raw.profile.id ?? '' },
-    counts: raw.counts ?? {
-      following: 0,
-      followers: 0,
-      recommendations: raw.recommendations.length,
-      liked: null,
-      subscriptions: raw.subscriptions?.length ?? null,
-    },
+    // What it never counted is left out, not shown as nobody.
+    counts: raw.counts ?? null,
     recommendations: raw.recommendations.map((r) => ({ ...r, listed: r.listed ?? false })),
     subscriptions:
       raw.subscriptions?.map((s) => ({ ...s, description: s.description ?? null })) ?? null,

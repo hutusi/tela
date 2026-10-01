@@ -106,7 +106,8 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        switches visibly go back; the Following page and "Your data" answer 404; public profiles
        and blog pages render without counts, notes or Follow. A device that took a snapshot
        meanwhile holds no follows until the followee's profile next changes or it starts over
-       (a sign-in), since the older API never sent them.
+       (a sign-in), since the older API never sent them, and one that had no profile row before
+       shows its likes switch off until the member's profile next changes.
      - **tela-web must not go back past this release.** The shell before it has no case for a
        follow in its reducer: a device holding an unsent `follow`, `unfollow` or `setPrivacy`
        (made offline, or pushed as the tab closed) boots blank under it, and stays blank until

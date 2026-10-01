@@ -38,7 +38,7 @@ export function ProfileView({
   locale: string
   now: number
   /** The counts to show: the page's, or the member's own device's where it knows better. */
-  counts?: ProfileData['counts']
+  counts?: ProfileData['counts'] | undefined
 }) {
   const t = useTranslations('profile')
   const { profile } = data
@@ -53,11 +53,13 @@ export function ProfileView({
     k === 'recommendations' ? true : k === 'liked' ? data.liked : data.subscriptions,
   )
   const countOf = (k: ProfileTab) =>
-    k === 'recommendations'
-      ? counts.recommendations
-      : k === 'liked'
-        ? counts.liked
-        : counts.subscriptions
+    !counts
+      ? null
+      : k === 'recommendations'
+        ? counts.recommendations
+        : k === 'liked'
+          ? counts.liked
+          : counts.subscriptions
   const pill =
     'shrink-0 rounded-full border px-4 py-2 font-medium hover:no-underline whitespace-nowrap'
 
@@ -119,19 +121,21 @@ export function ProfileView({
               {profile.bio}
             </p>
           ) : null}
-          <div
-            className="mt-1.5 flex flex-wrap gap-x-[22px] gap-y-1 text-[13.5px] text-ink-2"
-            data-testid="profile-counts"
-          >
-            {(['following', 'followers', 'recommendations'] as const).map((k) => (
-              <span key={k} data-testid={`profile-count-${k}`}>
-                {t.rich(`stats.${k}`, {
-                  n: counts[k],
-                  b: (chunks) => <b className="font-semibold text-ink">{chunks}</b>,
-                })}
-              </span>
-            ))}
-          </div>
+          {counts ? (
+            <div
+              className="mt-1.5 flex flex-wrap gap-x-[22px] gap-y-1 text-[13.5px] text-ink-2"
+              data-testid="profile-counts"
+            >
+              {(['following', 'followers', 'recommendations'] as const).map((k) => (
+                <span key={k} data-testid={`profile-count-${k}`}>
+                  {t.rich(`stats.${k}`, {
+                    n: counts[k],
+                    b: (chunks) => <b className="font-semibold text-ink">{chunks}</b>,
+                  })}
+                </span>
+              ))}
+            </div>
+          ) : null}
           {data.blogs.length > 0 ? (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] text-ink-2">
               <span>{t('writes')}</span>

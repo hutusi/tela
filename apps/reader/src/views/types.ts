@@ -68,6 +68,15 @@ type ProfilePost = {
   article: PublicArticle
 }
 
+export type ProfileCounts = {
+  following: number
+  followers: number
+  recommendations: number
+  /** Null unless the member shows their liked posts, or their subscriptions. */
+  liked: number | null
+  subscriptions: number | null
+}
+
 export type ProfileData = {
   profile: {
     /** The account id, which a follow names (ADR 0031). */
@@ -77,14 +86,8 @@ export type ProfileData = {
     bio: string | null
     memberSince: number
   }
-  counts: {
-    following: number
-    followers: number
-    recommendations: number
-    /** Null unless the member shows their liked posts, or their subscriptions. */
-    liked: number | null
-    subscriptions: number | null
-  }
+  /** Null from a tela-api before follows (ADR 0031), which counts nothing: shown as absent, never 0. */
+  counts: ProfileCounts | null
   blogs: { id: number; title: string | null; homeUrl: string; faviconKey: string | null }[]
   recommendations: (ProfilePost & { note: string | null; createdAt: number })[]
   subscriptions:

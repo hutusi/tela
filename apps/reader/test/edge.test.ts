@@ -306,6 +306,8 @@ describe('public pages', () => {
       subscriptions: null,
     })
     expect(profile).toContain('Old Reader')
+    // What it never counted is left out, not shown as nobody.
+    expect(profile).not.toContain('data-testid="profile-counts"')
     const site = render(publicRoute(new URL(`${ORIGIN}/s/1`)) as PublicRoute, {
       site: {
         id: 1,

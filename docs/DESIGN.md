@@ -260,9 +260,10 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - **Theme:** Auto / Light / Dark.
 - **Marking read and hiding read posts** are the member's (Settings → Reading). With marking on
   opening off, the open post keeps its unread dot and the action row offers *Mark as read*; liking
-  a post still reads it. With read posts hidden, a list keeps what was unread when the reader
-  entered it, so opening a post, `j` and `k` never pull it out from under them; it is gone the
-  next time they come to that list. An empty list then says "all caught up", with a link back to
+  a post still reads it. With read posts hidden, a list keeps every post it has shown unread or
+  open during the visit, including those the catch-up pull brought after it was painted, so
+  opening a post, `j` and `k` never pull it out from under them; it is gone the next time they
+  come to that list. An empty list then says "all caught up", with a link back to
   the setting.
 - **Translating is the member's too** (Settings → Translation). With *Translate automatically* off,
   a foreign post opens in the original, and the translation bar says "Written in Japanese." with
