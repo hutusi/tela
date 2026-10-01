@@ -66,9 +66,16 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 ## Layout rules
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
-  Reading/Discover/Dashboard/Settings pills, search, Read-in menu, locale switcher, avatar (accent
-  circle with initial, links to the profile) and sign-out. Pills are ink in every state: the active
-  one is distinguished by its `hover` background alone, never by colour.
+  Reading/Discover/Following pills (Following for members), search, Read-in menu, locale
+  switcher, and the member's avatar (accent circle with initial, 30px). Pills are ink in every state: the active one is distinguished by its
+  `hover` background alone, never by colour.
+- The avatar opens the account menu (Tela v2): a 220px `surface` panel under it with the member's
+  name and @handle, then Your profile, Subscriptions (`/settings/subscriptions`), Dashboard,
+  Settings, a rule, and Sign out in `muted`. A disclosure, not an ARIA menu: Tab reaches its items.
+  Esc closes it and returns focus to the avatar, before the reader's own Esc can close an article;
+  a click elsewhere or any navigation closes it too. The avatar is `shrink-0` at every width,
+  since it is the only way to Settings, the Dashboard and signing out, and `styles.e2e.ts` holds it
+  to 30px on screen at every header breakpoint.
 - The header holds more controls than a narrow viewport fits, so it arrives in three stages:
   compact below `lg` (mark only, `gap-2.5`, search as a 34px link to `/search`), the wordmark and
   the wider desktop spacing at `lg`, the 240px search field at `xl`. Turning the wordmark and the
@@ -147,9 +154,53 @@ author"), Cancel and a filled Recommend button. Success shows a bottom-centre to
 (the toast lives inside `RecommendPopover`; there is no global toast bus yet). A recommended post
 renders the pill filled (`bg-ink`), and clicking it again removes the recommendation.
 
-Profile (`/@handle`), dashboard and settings reuse the header and a single 720–960 px column with
-`font-serif` headings; there is no dedicated design for them, so they follow the Discover page's
-spacing and the site card's chips.
+Settings (Tela v2): a 1040 px page, a 200 px section nav on the left (sticky from `md`, one row
+that scrolls below it) holding the serif "Settings" heading, and the section in a 640 px column.
+Each section is an address (`/settings`, `/settings/reading`, `/translation`, `/subscriptions`,
+`/privacy`), so Back and a shared link land on it. A section opens with a 30 px serif heading and a
+muted intro; below, rows (`SettingRow`) separated by `line` rules: the label and a muted hint on the
+left, the control on the right. Controls are `Segmented` (the choices on the `hover` ground, the
+chosen one lifted on `surface`), `Switch` (40 × 24, `accent` on / `thumb` off, `knob`), a native
+select, or a quiet pill button. Settings that change what others see say so, and that the public
+profile can take a few minutes to catch up. The design's Notifications section, avatar upload,
+"Who can follow you" and "Delete account" are not built (ADR 0031), so they are not shown.
+
+Profile (`/@handle`, Tela v2): a 960 px column. The header is a 112 px avatar (80 px below `md`,
+the accent for the member's own, their colour for anyone else's), the serif name at 46 px,
+"@handle · Joined September 2026", the bio in 20 px serif, and counts ("**N** following · **N**
+followers · **N** recommendations"), then a "Writes" line of their claimed blogs. On the right:
+*Edit profile* on one's own, *Follow* / *Following* on another member's, and for a visitor a
+*Follow* that signs in first. Below, underlined tabs as addresses (`?tab=liked`,
+`?tab=subscriptions`), each with its count; Liked and Subscriptions exist only when the member
+shows them. Posts are a list with a 96 px date column ("Today", "Sep 27": the reader's local
+days; the edge, rendering one page for everyone, uses UTC's, so a post within the reader's offset
+of midnight can change day when the app takes over), the note in italic serif, then the blog's swatch, name and language badge ("JA → EN" when the page carries the
+title in the reader's language) and the title; the whole post is the link. Subscriptions are a
+grid of cards. The page is edge-cached, so the member's own follow moves the followers count on
+their screen at once, and their own following count comes from their device.
+
+Following (`/following`, Tela v2): a 1120 px page, the feed beside a 280 px aside (sticky from
+`lg`, below the feed on narrower screens). The serif heading and a one-line intro, then underlined
+tabs All / Recommendations / Likes as addresses. Each item is a 40 px avatar beside "**Name**
+verb · 2h ago": a recommendation brings its note in 21 px italic serif and a post card (blog
+swatch, name and "JA → EN", a 23 px serif title, two lines of excerpt, minutes, ♡, "Read →"); a
+day's likes are one card listing the posts; a day's new subscriptions are blog cards with
+Subscribe. Likes and subscriptions are grouped by the viewer's local day, and the feed pages
+thirty entries at a time behind "Older activity". The aside lists the people followed (from the device, no request) and a few
+readers to follow, drawn only from what is public. No toasts: a Follow button changes at once.
+
+Blog (`/s/:id`, Tela v2): a 1080 px page. The header is an 84 px avatar (20 px corners), the host
+and "✓ Claimed by {name}" in accent, the title in 56 px serif (40 px on a phone), the blog's
+description as an italic tagline, and "Written in Japanese · Posts weekly · N readers on Tela",
+with topic chips below; on the right, *Visit site ↗* and Subscribe, and the claim link for an
+unclaimed blog. The owner's topics form follows the header. Posts are the profile's list: a date
+column, a 24 px serif title (translated when the page carries one), two lines of excerpt, minutes
+and ♡. A 280 px aside holds *About* (the claimant's name and bio), *Readers you follow* (a stack
+of avatars and "Anna and Jonas read this blog.", a member call beside the cached page) and
+*From readers* (the newest notes readers left recommending its posts).
+
+Dashboard reuses the header and a single 720–960 px column with `font-serif` headings; there is no
+dedicated design for it, so it follows the Discover page's spacing and the site card's chips.
 
 Discover card (from the design): 40 px avatar (favicon or initial), name with a green ✓ when
 claimed, host, language chip, serif tagline, "Latest: …", "N readers · cadence", and a
@@ -170,7 +221,7 @@ plural syntax.
 
 ## New tokens, and the dark ground (ADR 0026)
 
-Three tokens the Next app did not need, because it hard-coded them:
+Tokens the Next app did not need, because it hard-coded them (and `knob`, which Tela v2's switches added):
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
@@ -178,6 +229,7 @@ Three tokens the Next app did not need, because it hard-coded them:
 | `danger` | `oklch(0.50 0.15 25)` | `oklch(0.72 0.15 25)` | error text |
 | `highlight` | `oklch(0.91 0.10 95)` | `oklch(0.50 0.09 90 / 0.55)` | a highlight's paint |
 | `highlight-strong` | `oklch(0.80 0.14 90)` | `oklch(0.70 0.12 90)` | the highlight being edited |
+| `knob` | `#fff` | `#ede7db` | a switch's knob, light on either track in both themes (Tela v2) |
 
 Dark mode redefines every token on a warm near-black ground rather than adding `dark:` variants:
 
@@ -202,11 +254,23 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
 ## Reading controls
 
 - **"Aa"** in the reader's action row, before Like, opens a 280 px popover. It holds three
-  segmented choices, which Settings repeats under *Appearance*:
+  segmented choices, which Settings → Reading repeats as rows:
   - **Size:** four steps, ×0.88 / ×1 / ×1.13 / ×1.27 of the 19.5 px body (18 px for CJK).
   - **Width:** 560 / 640 / 760 px for the single column, and for a stacked pair. Two paired
     columns keep their own 640px measure.
   - **Theme:** Auto / Light / Dark.
+- **Marking read and hiding read posts** are the member's (Settings → Reading). With marking on
+  opening off, the open post keeps its unread dot and the action row offers *Mark as read*; liking
+  a post still reads it. With read posts hidden, a list keeps every post it has shown unread or
+  open during the visit, including those the catch-up pull brought after it was painted, so
+  opening a post, `j` and `k` never pull it out from under them; it is gone the next time they
+  come to that list. An empty list then says "all caught up", with a link back to
+  the setting.
+- **Translating is the member's too** (Settings → Translation). With *Translate automatically* off,
+  a foreign post opens in the original, and the translation bar says "Written in Japanese." with
+  a *Translate into English* button where the mode toggle would be; nothing is requested or
+  fetched until it is pressed, for that post. *Never translate* lists languages the member reads
+  comfortably: their posts open as written, with original titles in the lists and no badge.
 - **The sidebar toggle** heads the sidebar under a "Library" label, in the small-caps heading
   style at the headings' indent, with the toggle at the row's right end and its icon on the
   counts' right edge. The glyph is a 16px panel drawn inline (Tela has no icon set), its left

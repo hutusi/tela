@@ -36,6 +36,13 @@ everything so far sits under `[Unreleased]`.
   article is open; both choices are this device's rather than synced (ADR 0029), which on a
   laptop window is what makes room for the two bilingual columns. The article column is centred in the pane, and an
   *Up next* card at the end of a post offers the one after it.
+- **Readers follow readers** (ADR 0031). A *Following* page shows what the people you follow
+  recommended, liked and subscribed to, as far as each of them shows it; likes are private until
+  their owner turns them on. Profiles, blog pages and Settings follow the Tela v2 design: profiles
+  count followers and have tabs, Settings is five sections with addresses of their own, and the
+  avatar opens a menu holding the profile, the Dashboard, Settings and sign-out. New settings:
+  marking read on opening, hiding read posts, translating only when asked, languages never
+  translated, and "Your data" as one file.
 
 - **Running unattended.** A dead-man's switch pinged by the sweeps while they are healthy, a
   Monday digest to the owner, and a nightly export verified against its manifest, which the suite

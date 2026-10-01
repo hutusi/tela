@@ -4,7 +4,7 @@
  * filter change or Back is a render, not a request (ADR 0025).
  */
 import { translationKey } from '@tela/sync'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { ArticleList } from '../components/article-list'
@@ -21,14 +21,20 @@ import {
   parseReadingParams,
   type ReadingMode,
   readingHref,
-  readingModeParam,
 } from '../lib/href'
 import { gridColumns, toggleFocus, useLayout } from '../lib/layout'
+import { PREF_KEYS, useReadingPrefs } from '../lib/prefs'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
-import { articlesFor, isRead, shownTitle, subscriptionItems, totals } from '../store/selectors'
+import {
+  articlesFor,
+  isRead,
+  shownTitle,
+  subscriptionItems,
+  totals,
+  withoutRead,
+} from '../store/selectors'
 import { useUi } from '../ui'
 
-const MODE_PREF = 'reader.mode'
 /** While a new feed waits for its first fetch, pull this often so its posts appear. */
 const FIRST_FETCH_PULL_MS = 3000
 const PREFETCH_IDLE_MS = 1500
@@ -47,7 +53,20 @@ export function ReadingPage() {
 
   const subs = subscriptionItems(tables, now)
   const counts = totals(tables, now)
-  const items = articlesFor(tables, params, now)
+  const prefs = useReadingPrefs(tables)
+  const all = articlesFor(tables, params, now)
+  // Hiding read posts (a pref) must not pull a post out from under the reader: a post seen unread
+  // in this list stays in it until the reader moves to another list, so opening a post, or j and
+  // k, never lose their place. That includes posts the catch-up pull brings after the list was
+  // first painted from the device, which are the first a member opens.
+  const listKey = `${params.filter}:${params.feedId}`
+  const seenUnread = useRef<{ key: string; ids: Set<number> }>({ key: '', ids: new Set() })
+  if (seenUnread.current.key !== listKey) seenUnread.current = { key: listKey, ids: new Set() }
+  const seen = seenUnread.current.ids
+  const items = useMemo(
+    () => (prefs.hideRead ? withoutRead(tables, all, now, params.articleId, seen) : all),
+    [all, prefs.hideRead, seen, tables, now, params.articleId],
+  )
   const selected = params.feedId !== null ? subs.find((s) => s.feedId === params.feedId) : undefined
   const listTitle = params.feedId !== null ? (selected?.title ?? '') : undefined
   const pendingFetch = selected !== undefined && selected.lastFetchedAt === null
@@ -66,20 +85,18 @@ export function ReadingPage() {
   const next = after
     ? {
         href: readingHref({ filter: params.filter, feedId: params.feedId, articleId: after.id }),
-        title: shownTitle(tables, after, readingLang).title,
+        title: shownTitle(tables, after, readingLang, prefs.never).title,
       }
     : null
 
   // The mode a URL without one means: this member's last choice, synced like any other pref.
-  const remembered =
-    readingModeParam((tables.prefs.get(MODE_PREF)?.value as string | undefined) ?? null) ?? 'side'
-  const mode = params.mode ?? remembered
+  const mode = params.mode ?? prefs.mode
 
-  // Opening an article reads it.
+  // Opening an article reads it, unless the member marks posts read themselves (a pref).
   const articleId = article?.id ?? null
   // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened
   useEffect(() => {
-    if (!article || isRead(tables, article, Date.now())) return
+    if (!article || !prefs.markOnOpen || isRead(tables, article, Date.now())) return
     store.mutate({ type: 'markRead', articleId: article.id })
   }, [articleId])
 
@@ -90,7 +107,7 @@ export function ReadingPage() {
 
   const onMode = useCallback(
     (next: ReadingMode) => {
-      store.mutate({ type: 'setPref', key: MODE_PREF, value: next })
+      store.mutate({ type: 'setPref', key: PREF_KEYS.mode, value: next })
       // The URL still says it, so a copied link opens the way it was being read.
       const url = new URLSearchParams(location.search)
       if (next === 'side') url.delete('mode')
@@ -203,8 +220,12 @@ export function ReadingPage() {
       void objects
         .prefetch([...unread(items), ...unread(everything)], controller.signal)
         .then(async () => {
+          // Only translations the member will see on opening: none while they translate only when
+          // asked, and none in a language they read as written.
+          if (!prefs.autoTranslate) return
           for (const a of everything) {
             if (controller.signal.aborted || !a.contentKey) continue
+            if (a.sourceLang !== null && prefs.never.includes(a.sourceLang)) continue
             const row = tables.translations.get(translationKey(a.contentKey, readingLang))
             if (row?.objectKey && (row.state === 'done' || row.state === 'partial')) {
               await objects.object(row.objectKey, controller.signal, true).catch(() => null)
@@ -213,7 +234,7 @@ export function ReadingPage() {
         })
     }, PREFETCH_IDLE_MS)
     return () => clearTimeout(timer)
-  }, [tables, items, objects, readingLang])
+  }, [tables, items, objects, readingLang, prefs])
 
   return (
     <div
@@ -242,6 +263,7 @@ export function ReadingPage() {
         locale={locale}
         now={now}
         pendingFetch={pendingFetch}
+        hidingRead={prefs.hideRead && all.length > 0}
       />
       {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}
       {article ? (

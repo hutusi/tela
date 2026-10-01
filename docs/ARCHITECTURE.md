@@ -54,8 +54,8 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | Table | Role |
 |---|---|
 | `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024) |
-| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, `public_subscriptions` |
-| `user_prefs` | Synced preferences: reading mode, text size, measure, theme |
+| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, and whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it) |
+| `user_prefs` | Synced preferences, one row per key: reading mode, text size, measure, theme (`lib/typography.ts`), and the Reading and Translation settings `reader.mark_on_open`, `reader.hide_read`, `translate.auto`, `translate.never` (`lib/prefs.ts`) |
 | `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out` |
 | `site_topics`, `site_claims` | A blog's topics; claim attempts (meta or `rel="me"`) |
 | `feeds` | The fetch unit: validators, schedule (`next_fetch_at`, `fetch_interval_sec`), `fetch_region`, `timeout_streak`, `status`, `content_mode`, `hub_url`, `merged_into` (another address for the blog's canonical feed, ADR 0028) |
@@ -66,6 +66,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `body_translations` | A body per content version and language: state, reservation, streamed `chunk_keys`, the finished object (ADR 0023) |
 | `subscriptions` | `(user_id, feed_id)` with `watermark_id`: everything at or below it is read (ADR 0009) |
 | `user_article_states`, `recommendations`, `highlights` | The member's read and like state, public recommendations with notes, private highlights with notes (ADR 0026) |
+| `follows` | `(follower_id, followee_id)`: one member following another, one-way and public, soft-deleted, synced to the follower (ADR 0031) |
 | `websub_subscriptions` | One per feed with a hub: topic, secret, status, lease |
 | `leases`, `lease_fence` | Who holds which piece of background work, and the fence that aborts a stale holder's batch |
 | `dead_letters`, `ops_heartbeats` | Work that gave up; the tick's last run |
@@ -181,7 +182,9 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `/api/v1/feeds` | Discover feeds at a URL, add one, import and export OPML |
 | `/api/v1/claims` | Start a claim, see its proofs, ask for the check |
 | `/api/v1/profile`, `/api/v1/sites/:id/*`, `/api/v1/dashboard`, `/api/v1/search` | Handle and profile, owner-only topics and opt-out, the author dashboard, search past the device's horizon |
-| `/api/v1/public/*` | Discover, a blog's page, a profile: listed and featured blogs only, edge-cacheable |
+| `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest, with readers to follow; which of them read a blog. Only as far as each shows it (ADR 0031) |
+| `GET /api/v1/export` | "Your data": the member's own rows as one JSON file |
+| `/api/v1/public/*` | Discover, a blog's page (with its claimant and readers' notes), a profile (with follow counts, and liked posts only if shown): listed and featured blogs only, edge-cacheable |
 | `/api/websub/:feedId` | The hub callback: intent checks, and signed pings that make the feed due |
 | `/api/health` | Liveness and D1 latency |
 
@@ -234,17 +237,21 @@ A Vite + React SPA that renders from the device.
 | `/` | Landing for visitors; members go to `/reading` |
 | `/login` | Email code, and the mail's link that submits the same code |
 | `/reading?filter=&feed=&article=&mode=` | Sidebar, list and the open article |
-| `/discover?topic=&lang=`, `/s/:id`, `/@handle` | Public pages, rendered at the edge too |
+| `/discover?topic=&lang=`, `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart |
+| `/following?tab=` | What the people a member follows did, by RPC; whom they follow, from the device (ADR 0031) |
 | `/search?q=` | The device first, then blogs and older posts from the server |
 | `/add`, `/claim`, `/sites/:id/claim` | Add feeds and OPML; claim a blog |
-| `/settings`, `/dashboard` | Profile, reading language, appearance, OPML export; the author's view |
+| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out), Privacy (with "Your data") |
+| `/dashboard` | The author's view |
 
 ## Sync (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025)
 
 - One `seq` counter: every batch that writes a synced row bumps it and stamps its rows, so a
   device's cursor is simply the last seq it saw, and the server keeps nothing per device.
 - The pull reads a member's own rows and the shared rows of the feeds they follow, plus the
-  articles they keep (liked, recommended, highlighted), in one batch.
+  articles they keep (liked, recommended, highlighted), in one batch. The members they follow
+  come as their own rows, re-sent when a followee's profile changes; what those members do does
+  not sync at all, and arrives by RPC (ADR 0031).
 - The push is guarded per mutation by `applied_mutations` and resolves conflicts by the later
   `at`, clamped to the server's clock.
 - Every member call names the account the device's rows belong to (`x-tela-member`, protocol 2).

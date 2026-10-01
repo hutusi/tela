@@ -3,7 +3,7 @@
  * it is what gives a laptop-sized window its two bilingual columns.
  */
 import { expect, type Page, test } from '@playwright/test'
-import { ensureFeeds, resetReading, synced } from './helpers'
+import { ensureFeeds, fromAccountMenu, resetReading, synced } from './helpers'
 
 // The bilingual measurement needs a Japanese blog; adding one the member follows is a no-op.
 test.beforeAll(async () => {
@@ -246,6 +246,9 @@ test('the column is centred in the pane, at the width the member chose', async (
 
   // A wider measure reaches the stacked pair too, which used to stop at 640 whatever was chosen.
   await page.getByTestId('typography-button').click()
+  // A click on the menu's own label keeps it open, though focus falls to the pane that holds it.
+  await page.getByTestId('typography-menu').locator('legend').first().click()
+  await expect(page.getByTestId('typography-menu')).toBeVisible()
   await page.getByTestId('measure-wide').click()
   await page.getByTestId('mode-side').click()
   await expect(page.getByTestId('paired-body')).toBeVisible()
@@ -370,7 +373,7 @@ test('a change made in another tab reaches a tab that was away from the reading 
   // them, so a tab that came back was handed the layout it had left with.
   await page.goto('/reading')
   await synced(page)
-  await page.locator('header nav').getByRole('link', { name: 'Settings' }).click()
+  await fromAccountMenu(page, 'nav-settings')
   await expect(page).toHaveURL(/\/settings$/)
 
   const other = await context.newPage()

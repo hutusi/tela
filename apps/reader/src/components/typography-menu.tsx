@@ -2,7 +2,7 @@
  * "Aa": text size, line length and theme. The controls are shared by the reader's menu and the
  * settings page; each is a synced pref, applied at once.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
 import {
   MEASURES,
@@ -13,6 +13,7 @@ import {
   THEMES,
   typographyOf,
 } from '../lib/typography'
+import { useDismiss } from '../lib/use-dismiss'
 import { useStore, useTables } from '../store/hooks'
 
 function Choice<T extends string>({
@@ -95,24 +96,8 @@ export function TypographyMenu() {
   const t = useTranslations('typography')
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const outside = (e: MouseEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
-    }
-    // Esc closes the menu, and only the menu: the reader's own Esc closes the article.
-    const onEscape = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      setOpen(false)
-    }
-    document.addEventListener('mousedown', outside)
-    document.addEventListener('keydown', onEscape, true)
-    return () => {
-      document.removeEventListener('mousedown', outside)
-      document.removeEventListener('keydown', onEscape, true)
-    }
-  }, [open])
+  // Esc closes the menu, and only the menu: the reader's own Esc closes the article.
+  useDismiss(open, () => setOpen(false), box)
   return (
     <div ref={box} className="relative">
       <button

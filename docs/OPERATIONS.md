@@ -98,6 +98,21 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
      Keep it short, or take tela-web back with it.
    - tela-web may not go back while the new tela-api is live: every restored older shell would
      be told to upgrade and find no newer shell to load.
+   - Follows (ADR 0031, migration 0002) are additive and keep protocol 2: apply the migration
+     before deploying tela-api.
+     - **tela-api may go back alone.** Shells keep syncing: a pull without `follows` reads as
+       having none, and a profile row without `publicLikes` keeps the device's value. The
+       older API refuses `follow`, `unfollow` and `setPrivacy` as invalid, so those buttons and
+       switches visibly go back; the Following page and "Your data" answer 404; public profiles
+       and blog pages render without counts, notes or Follow. A device that took a snapshot
+       meanwhile holds no follows until the followee's profile next changes or it starts over
+       (a sign-in), since the older API never sent them, and one that had no profile row before
+       shows its likes switch off until the member's profile next changes.
+     - **tela-web must not go back past this release.** The shell before it has no case for a
+       follow in its reducer: a device holding an unsent `follow`, `unfollow` or `setPrivacy`
+       (made offline, or pushed as the tab closed) boots blank under it, and stays blank until
+       tela-web rolls forward or the browser's site data is cleared. This release's reducer
+       ignores types it does not know, so rolling back *to* it from a later one is safe.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -255,7 +270,7 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   can linger that long on a device that kept the cookie.
 - **Rate limits** on reader actions are `ACTION_LIMITS` (`packages/data/src/queries/limits.ts`):
   discover 30/h, subscribe 120/h, OPML import 5/h, claim start 10/h, claim verify 30/h, translate
-  30/h. Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
+  30/h, data export 10/h. Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
 
 ## tela-jobs
 

@@ -50,6 +50,16 @@ export type PullResponse = {
   tombstones: Tombstone[]
 }
 
+/**
+ * A pull with every table this build knows, the ones the server did not send as empty. A tela-api
+ * older than a table (a rollback leaves one beside a newer shell) sends no key for it, and code
+ * that reads every table would throw on it.
+ */
+export const completePull = (pull: PullResponse): PullResponse => ({
+  ...pull,
+  rows: { ...emptyRows(), ...pull.rows },
+})
+
 export const emptyRows = (): SyncRows => ({
   profile: [],
   prefs: [],
@@ -63,4 +73,5 @@ export const emptyRows = (): SyncRows => ({
   highlights: [],
   claims: [],
   translations: [],
+  follows: [],
 })

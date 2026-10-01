@@ -6,6 +6,7 @@ import {
   first,
   headSeq,
   mergeFeed,
+  readPull,
   type TelaDb,
 } from '@tela/data'
 import {
@@ -513,6 +514,193 @@ describe('highlights', () => {
     const delta = await pull(head)
     expect(delta.rows.articles.map((x) => x.id)).toContain(b)
     expect(delta.rows.feeds.map((f) => f.id)).toContain(2)
+  })
+})
+
+describe('follows (ADR 0031)', () => {
+  const ANNA = 'member-anna-0000001'
+  const BO = 'member-bo-000000002'
+  /** A member who never signs in here: a user and a profile, written as the invite writes them. */
+  async function person(id: string, handle: string) {
+    await write(
+      db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+        values (${id}, ${handle}, ${`${handle}@x.test`}, 1, 0, 0)`),
+      db.run(sql`insert into profiles (user_id, handle, display_name, created_at, updated_at, seq)
+        values (${id}, ${handle}, ${handle.toUpperCase()}, 0, 0, ${currentSeq})`),
+    )
+  }
+  beforeEach(async () => {
+    await person(ANNA, 'anna')
+    await person(BO, 'bobo')
+  })
+
+  test('a follow syncs to the follower only, carrying who they follow', async () => {
+    const snap = await pull(0)
+    await push([{ type: 'follow', userId: ANNA }])
+    const delta = await pull(snap.cursor)
+    expect(delta.rows.follows).toMatchObject([
+      { userId: ANNA, handle: 'anna', displayName: 'ANNA', deletedAt: null },
+    ])
+    const other = await signedIn(api, 'other@x.test')
+    expect((await pull(0, other)).rows.follows).toEqual([])
+    expect((await pull(0)).rows.follows).toHaveLength(1)
+  })
+
+  test("a followee's new name is sent again; someone not followed is not", async () => {
+    await push([{ type: 'follow', userId: ANNA }])
+    const snap = await pull(0)
+    await write(
+      db.run(
+        sql`update profiles set handle = 'anna_k', seq = ${currentSeq} where user_id = ${ANNA}`,
+      ),
+      db.run(
+        sql`update profiles set display_name = 'Bobo B', seq = ${currentSeq} where user_id = ${BO}`,
+      ),
+    )
+    const delta = await pull(snap.cursor)
+    expect(delta.rows.follows).toMatchObject([{ userId: ANNA, handle: 'anna_k' }])
+  })
+
+  test('an unfollow is sent as a deletion, and a snapshot holds live follows only', async () => {
+    await push([
+      { type: 'follow', userId: ANNA, at: now - 10 },
+      { type: 'follow', userId: BO, at: now - 10 },
+    ])
+    const snap = await pull(0)
+    await push([{ type: 'unfollow', userId: ANNA }])
+    const delta = await pull(snap.cursor)
+    expect(delta.rows.follows).toMatchObject([{ userId: ANNA, deletedAt: now }])
+    expect((await pull(0)).rows.follows.map((f) => f.userId)).toEqual([BO])
+  })
+
+  test('following yourself or nobody is a no-op, and the rest of the push applies', async () => {
+    const res = await push([
+      { type: 'follow', userId: reader.userId },
+      { type: 'follow', userId: 'nobody-at-all-0001' },
+      { type: 'follow', userId: BO },
+    ])
+    expect(res.rejected).toEqual([])
+    expect((await pull(0)).rows.follows.map((f) => f.userId)).toEqual([BO])
+  })
+
+  test('two devices: the later of follow and unfollow wins, whatever order they arrive in', async () => {
+    // Times in the past: `at` is clamped to the server's clock.
+    const t = now - 100
+    // Unfollowed later on one device, followed again earlier on another, arriving after.
+    await push([{ type: 'follow', userId: ANNA, at: t }])
+    await push([{ type: 'unfollow', userId: ANNA, at: t + 20 }])
+    await push([{ type: 'follow', userId: ANNA, at: t + 10 }])
+    expect((await pull(0)).rows.follows).toEqual([])
+    // And the other way round: a follow made last wins over an older unfollow sent after it.
+    await push([{ type: 'follow', userId: BO, at: t + 30 }])
+    await push([{ type: 'unfollow', userId: BO, at: t + 25 }])
+    expect((await pull(0)).rows.follows.map((f) => f.userId)).toEqual([BO])
+  })
+
+  test('an unfollow keeps its time even on a follow already gone, or never made', async () => {
+    const t = now - 100
+    // Unfollowed twice; an older follow from a third device arrives last.
+    await push([{ type: 'follow', userId: ANNA, at: t }])
+    await push([{ type: 'unfollow', userId: ANNA, at: t + 10 }])
+    await push([{ type: 'unfollow', userId: ANNA, at: t + 30 }])
+    await push([{ type: 'follow', userId: ANNA, at: t + 20 }])
+    // Unfollowed where no follow ever reached the server; the older follow arrives after.
+    await push([{ type: 'unfollow', userId: BO, at: t + 50 }])
+    await push([{ type: 'follow', userId: BO, at: t + 40 }])
+    expect((await pull(0)).rows.follows).toEqual([])
+    // Following yourself, or nobody, is no tombstone either.
+    const res = await push([
+      { type: 'unfollow', userId: reader.userId },
+      { type: 'unfollow', userId: 'nobody-at-all-0001' },
+    ])
+    expect(res.rejected).toEqual([])
+  })
+
+  test('an unfollow reaches a device that pages, though the followee renamed after it', async () => {
+    await push([{ type: 'follow', userId: ANNA, at: now - 30 }])
+    const before = await pull(0)
+    await push([{ type: 'unfollow', userId: ANNA, at: now - 20 }])
+    // Two changes after it, so a one-row page ends between them; then Anna renames.
+    await push([
+      { type: 'setPref', key: 'reader.size', value: 'l' },
+      { type: 'setPref', key: 'reader.measure', value: 'wide' },
+    ])
+    await push([{ type: 'setPref', key: 'reader.mode', value: 'orig' }])
+    await write(
+      db.run(
+        sql`update profiles set display_name = 'Anna K', seq = ${currentSeq} where user_id = ${ANNA}`,
+      ),
+    )
+    const seen: unknown[] = []
+    let cursor = before.cursor
+    for (let page = 0; page < 10; page++) {
+      const read = await readPull(db, { userId: reader.userId, cursor, horizon: 0, limit: 1 })
+      seen.push(...read.rows.follows)
+      if (read.pageEnd === null) break
+      cursor = read.pageEnd
+    }
+    expect(seen).toMatchObject([{ userId: ANNA, deletedAt: now - 20 }])
+  })
+
+  test('unfollowing again sends the deletion again, to a device that missed it', async () => {
+    await push([{ type: 'follow', userId: ANNA, at: now - 30 }])
+    await push([{ type: 'unfollow', userId: ANNA, at: now - 20 }])
+    const past = await pull(0) // a device whose cursor passed the deletion without keeping it
+    await push([{ type: 'unfollow', userId: ANNA, at: now - 10 }])
+    const again = await pull(past.cursor)
+    expect(again.rows.follows).toMatchObject([{ userId: ANNA, deletedAt: now - 20 }])
+    // Even from a device whose clock is behind the first unfollow.
+    await push([{ type: 'unfollow', userId: ANNA, at: now - 25 }])
+    expect((await pull(again.cursor)).rows.follows).toMatchObject([{ userId: ANNA }])
+    // And still no follow comes back from an older one.
+    await push([{ type: 'follow', userId: ANNA, at: now - 15 }])
+    expect((await pull(0)).rows.follows).toEqual([])
+  })
+
+  test('the privacy switches are mutations, false included', async () => {
+    const snap = await pull(0)
+    await push([{ type: 'setPrivacy', publicSubscriptions: true, publicLikes: true, at: now - 50 }])
+    const on = await pull(snap.cursor)
+    expect(on.rows.profile).toMatchObject([{ publicSubscriptions: true, publicLikes: true }])
+    await push([{ type: 'setPrivacy', publicLikes: false, at: now - 40 }])
+    const off = await pull(on.cursor)
+    expect(off.rows.profile).toMatchObject([{ publicSubscriptions: true, publicLikes: false }])
+  })
+
+  test('each privacy switch goes to the later choice, whatever order the devices push in', async () => {
+    const t = now - 1000
+    const flags = async () => (await pull(0)).rows.profile[0]
+    // Hidden on one device at t+200; an older "show" from another device arrives after it.
+    await push([{ type: 'setPrivacy', publicLikes: true, at: t }])
+    await push([{ type: 'setPrivacy', publicLikes: false, at: t + 200 }])
+    await push([{ type: 'setPrivacy', publicLikes: true, at: t + 100 }])
+    expect(await flags()).toMatchObject({ publicLikes: false })
+    // The other way round: a later "show" that arrives first stands.
+    await push([{ type: 'setPrivacy', publicSubscriptions: true, at: t + 300 }])
+    await push([{ type: 'setPrivacy', publicSubscriptions: false, at: t + 250 }])
+    expect(await flags()).toMatchObject({ publicSubscriptions: true })
+    // One switch's change never decides the other's: an older likes change still applies after a
+    // newer subscriptions change, since each has its own clock.
+    await push([{ type: 'setPrivacy', publicLikes: true, at: t + 260 }])
+    expect(await flags()).toMatchObject({ publicLikes: true, publicSubscriptions: true })
+  })
+
+  test('a profile save from a shell before the switches may hide subscriptions, never show them', async () => {
+    await push([{ type: 'setPrivacy', publicSubscriptions: false, at: now - 10 }])
+    // The old form sends what it loaded with every save.
+    await api.request('/api/v1/profile', {
+      method: 'PUT',
+      body: { displayName: 'R', publicSubscriptions: true },
+      as: reader,
+    })
+    expect((await pull(0)).rows.profile[0]).toMatchObject({ publicSubscriptions: false })
+    await push([{ type: 'setPrivacy', publicSubscriptions: true, at: now - 5 }])
+    await api.request('/api/v1/profile', {
+      method: 'PUT',
+      body: { displayName: 'R', publicSubscriptions: false },
+      as: reader,
+    })
+    expect((await pull(0)).rows.profile[0]).toMatchObject({ publicSubscriptions: false })
   })
 })
 

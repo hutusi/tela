@@ -24,6 +24,9 @@ export const PREF_KEY = /^[a-z][a-z0-9_.]{0,39}$/
 export const PREF_MAX_BYTES = 2048
 export const RECOMMENDATION_NOTE_MAX = 500
 
+/** A member's account id, as public profiles name them (ADR 0031). */
+const memberId = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/)
+
 /** Client-minted, like `mid`, so a replayed push cannot make a second highlight. */
 const highlightId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
 
@@ -50,6 +53,18 @@ export const mutationSchema = z.discriminatedUnion('type', [
     type: z.literal('setProfile'),
     readingLang: z.enum(READING_LANGUAGES).optional(),
     uiLocale: z.enum(UI_LOCALES).optional(),
+  }),
+  /**
+   * Whether the profile shows what the member reads, and what they liked (ADR 0031). Each switch
+   * goes to the later `at`, so a device reconnecting with an older choice cannot make public what
+   * the member has since hidden. A type of its own: a tela-api that predates it refuses it, and
+   * the switch visibly goes back, rather than acknowledging a change it then drops.
+   */
+  z.object({
+    ...base,
+    type: z.literal('setPrivacy'),
+    publicSubscriptions: z.boolean().optional(),
+    publicLikes: z.boolean().optional(),
   }),
   z.object({
     ...base,
@@ -80,6 +95,12 @@ export const mutationSchema = z.discriminatedUnion('type', [
   }),
   /** Delete wins: no later edit from another device brings it back. */
   z.object({ ...base, type: z.literal('deleteHighlight'), id: highlightId }),
+  /**
+   * Follow a member, or stop (ADR 0031). Absolute, like a like: the later `at` wins. Following
+   * yourself, or nobody, changes nothing.
+   */
+  z.object({ ...base, type: z.literal('follow'), userId: memberId }),
+  z.object({ ...base, type: z.literal('unfollow'), userId: memberId }),
 ])
 
 export type Mutation = z.infer<typeof mutationSchema>

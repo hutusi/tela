@@ -11,6 +11,8 @@ export type ProfileRow = {
   uiLocale: string | null
   readingLang: string | null
   publicSubscriptions: boolean
+  /** Whether the member's liked posts show on their profile and to their followers (ADR 0031). */
+  publicLikes: boolean
   seq: number
 }
 
@@ -146,6 +148,21 @@ export type TranslationRow = {
   seq: number
 }
 
+/**
+ * Someone the member follows (ADR 0031), with how they appear: the pull sends the row again when
+ * their profile changes. `deletedAt` set means unfollowed, and the device lets the row go.
+ */
+export type FollowRow = {
+  /** The followed member's account id. */
+  userId: string
+  /** Null only in a prediction, until the pull brings the row. */
+  handle: string | null
+  displayName: string | null
+  createdAt: number
+  deletedAt: number | null
+  seq: number
+}
+
 export type Tombstone = { entity: string; key: string; seq: number }
 
 export type SyncRows = {
@@ -161,6 +178,7 @@ export type SyncRows = {
   highlights: HighlightRow[]
   claims: ClaimRow[]
   translations: TranslationRow[]
+  follows: FollowRow[]
 }
 
 export type SyncTable = keyof SyncRows

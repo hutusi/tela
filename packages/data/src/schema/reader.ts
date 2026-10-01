@@ -1,5 +1,6 @@
 /**
- * What each member has done: subscriptions, read and liked state, highlights, recommendations.
+ * What each member has done: subscriptions, read and liked state, highlights, recommendations,
+ * the members they follow.
  * All of it syncs to the reader's device, so every row carries `seq`, and removals are soft
  * (`deleted_at`) so a pull can see them.
  */
@@ -126,5 +127,33 @@ export const recommendations = sqliteTable(
     uniqueIndex('recommendations_user_article_idx').on(t.userId, t.articleId),
     index('recommendations_article_idx').on(t.articleId),
     index('recommendations_user_seq_idx').on(t.userId, t.seq),
+  ],
+)
+
+/**
+ * One member following another (ADR 0031): one-way, public, with no approval. The row syncs to
+ * the follower only, and an unfollow is soft so a pull can see it. The check is a backstop: a
+ * push excludes a self-follow in its own `where`, because a violated check would sink the batch.
+ */
+export const follows = sqliteTable(
+  'follows',
+  {
+    followerId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    followeeId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    createdAt: ms().notNull(),
+    /** When the follow last changed; last writer wins across devices. */
+    updatedAt: ms().notNull(),
+    deletedAt: ms(),
+    seq: seq(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.followerId, t.followeeId] }),
+    check('follows_not_self_check', sql`${t.followerId} <> ${t.followeeId}`),
+    index('follows_follower_seq_idx').on(t.followerId, t.seq),
+    index('follows_followee_idx').on(t.followeeId, t.deletedAt),
   ],
 )

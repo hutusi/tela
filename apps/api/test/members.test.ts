@@ -198,14 +198,141 @@ describe('public', () => {
     }
     expect(hidden.profile.bio).toBe('hello')
     expect(hidden.subscriptions).toBeNull()
-    await put('/api/v1/profile', { publicSubscriptions: true })
+    await api.request('/api/v1/mutations', {
+      body: {
+        mutations: [
+          { mid: 'show-subs-0001', at: 1, type: 'setPrivacy', publicSubscriptions: true },
+        ],
+      },
+      as: reader,
+    })
     const shown = (await (await get('/api/v1/public/profiles/shown')).json()) as {
       subscriptions: { id: number; listed: boolean }[]
     }
     expect(shown.subscriptions).toEqual([
-      { id: 1, title: 'Blog 1', homeUrl: 'https://blog1.example', faviconKey: null, listed: true },
+      {
+        id: 1,
+        title: 'Blog 1',
+        homeUrl: 'https://blog1.example',
+        description: null,
+        faviconKey: null,
+        listed: true,
+      },
     ] as never)
     expect((await get('/api/v1/public/profiles/nobody')).status).toBe(404)
     expect(JSON.stringify(shown)).not.toContain('@x.test')
+  })
+
+  describe('the social side (ADR 0031)', () => {
+    const OTHER = 'member-other-000001'
+    /** Someone who never signs in here, following or followed. */
+    async function person(id: string, handle: string, bio: string | null = null) {
+      await db.batch([
+        bumpSeq(db),
+        db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+          values (${id}, ${handle}, ${`${handle}@x.test`}, 1, 0, 0)`),
+        db.run(sql`insert into profiles (user_id, handle, display_name, bio, created_at, updated_at, seq)
+          values (${id}, ${handle}, ${`Name ${handle}`}, ${bio}, 0, 0, ${currentSeq})`),
+      ] as never)
+    }
+    const mutate = (mutations: Record<string, unknown>[], as = reader) =>
+      api.request('/api/v1/mutations', {
+        body: {
+          mutations: mutations.map((m, i) => ({
+            mid: `social-${i}-${Math.random()}`,
+            at: api.clock.now(),
+            ...m,
+          })),
+        },
+        as,
+      })
+    type Profile = {
+      profile: { id: string }
+      counts: Record<string, number | null>
+      liked: { likedAt: number; listed: boolean; article: { id: number } }[] | null
+      recommendations: { note: string | null; listed: boolean }[]
+    }
+
+    test('a profile counts follows and recommendations, and shows likes only once chosen', async () => {
+      await put('/api/v1/profile', { handle: 'shown' })
+      await person(OTHER, 'other')
+      await blog(1, 'listed')
+      await blog(2, 'private')
+      await db.run(sql`insert into follows (follower_id, followee_id, created_at, updated_at)
+        values (${OTHER}, ${reader.userId}, 0, 0)`)
+      await mutate([
+        { type: 'follow', userId: OTHER },
+        { type: 'setLiked', articleId: 1, liked: true },
+        { type: 'setLiked', articleId: 2, liked: true },
+        { type: 'recommend', articleId: 1, note: 'read this' },
+      ])
+      const hidden = (await (await get('/api/v1/public/profiles/shown')).json()) as Profile
+      expect(hidden.profile.id).toBe(reader.userId)
+      expect(hidden.counts).toEqual({
+        following: 1,
+        followers: 1,
+        recommendations: 1,
+        liked: null,
+        subscriptions: null,
+      })
+      expect(hidden.liked).toBeNull()
+      expect(hidden.recommendations).toMatchObject([{ note: 'read this', listed: true }])
+
+      await mutate([{ type: 'setPrivacy', publicLikes: true }])
+      const shown = (await (await get('/api/v1/public/profiles/shown')).json()) as Profile
+      expect(shown.counts.liked).toBe(2)
+      // A post from a private blog shows, without a page to link to.
+      expect(shown.liked?.map((l) => [l.article.id, l.listed]).sort()).toEqual([
+        [1, true],
+        [2, false],
+      ])
+      expect(JSON.stringify(shown)).not.toContain('@x.test')
+    })
+
+    test('an unfollow leaves the counts; a follow of a stranger is theirs to count', async () => {
+      await put('/api/v1/profile', { handle: 'shown' })
+      await person(OTHER, 'other')
+      await mutate([{ type: 'follow', userId: OTHER }])
+      await mutate([{ type: 'unfollow', userId: OTHER }])
+      const mine = (await (await get('/api/v1/public/profiles/shown')).json()) as Profile
+      expect(mine.counts.following).toBe(0)
+      await mutate([{ type: 'follow', userId: OTHER }])
+      const theirs = (await (await get('/api/v1/public/profiles/other')).json()) as Profile
+      expect(theirs.counts.followers).toBe(1)
+    })
+
+    test("a blog's page names who writes it and what readers said of its posts", async () => {
+      await put('/api/v1/profile', {
+        handle: 'writer',
+        displayName: 'The Writer',
+        bio: 'I write here.',
+      })
+      await blog(1, 'listed', reader.userId)
+      await person(OTHER, 'other')
+      await db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at)
+        values (${OTHER}, 1, 'lovely', 5, 5), (${reader.userId}, 1, null, 6, 6)`)
+      const page = (await (await get('/api/v1/public/sites/1')).json()) as {
+        site: { claimedBy: string; claimant: unknown; postsLast30d: number }
+        notes: { note: string; person: { handle: string }; article: { id: number } }[]
+      }
+      expect(page.site.claimedBy).toBe('writer')
+      expect(page.site.claimant).toEqual({
+        handle: 'writer',
+        displayName: 'The Writer',
+        bio: 'I write here.',
+      })
+      // Only a recommendation with a note is a note.
+      expect(page.notes).toMatchObject([
+        { note: 'lovely', person: { handle: 'other', displayName: 'Name other' } },
+      ])
+      // Posts carry their titles in the launch languages, for each reader to pick theirs.
+      await db.run(sql`insert into article_titles (article_id, feed_id, lang, title, status, source_hash, updated_at, seq)
+        values (1, 1, 'zh-Hans', '博客一的文章', 'done', 'h', 0, 1)`)
+      const titled = (await (await get('/api/v1/public/sites/1')).json()) as {
+        posts: { titles: Record<string, string> }[]
+      }
+      expect(titled.posts[0]?.titles).toEqual({ 'zh-Hans': '博客一的文章' })
+      expect(JSON.stringify(page)).not.toContain('@x.test')
+    })
   })
 })

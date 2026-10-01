@@ -12,11 +12,12 @@
  * No I/O here, so the rules can be tested on their own and shared with anything that syncs.
  */
 import type { Mutation } from './mutations'
-import type { PullResponse } from './protocol'
+import { completePull, type PullResponse } from './protocol'
 import type {
   ArticleRow,
   ClaimRow,
   FeedRow,
+  FollowRow,
   HighlightRow,
   PrefRow,
   ProfileRow,
@@ -47,6 +48,8 @@ export type Tables = {
   claims: Map<number, ClaimRow>
   /** By `${contentKey}:${lang}`. */
   translations: Map<string, TranslationRow>
+  /** By the followed member's id: the people the member follows (an unfollowed one is not held). */
+  follows: Map<string, FollowRow>
 }
 
 export type Confirmed = { cursor: number; tables: Tables }
@@ -71,6 +74,7 @@ export const emptyTables = (): Tables => ({
   highlights: new Map(),
   claims: new Map(),
   translations: new Map(),
+  follows: new Map(),
 })
 
 export const titleKey = (articleId: number, lang: string) => `${articleId}:${lang}`
@@ -91,6 +95,7 @@ function copy(tables: Tables): Tables {
     highlights: new Map(tables.highlights),
     claims: new Map(tables.claims),
     translations: new Map(tables.translations),
+    follows: new Map(tables.follows),
   }
 }
 
@@ -100,10 +105,17 @@ function copy(tables: Tables): Tables {
  * member keeps it (liked, recommended or highlighted); the server sends a kept article back whole
  * the moment it becomes kept again.
  */
-export function applyPull(confirmed: Confirmed, pull: PullResponse): Confirmed {
+export function applyPull(confirmed: Confirmed, given: PullResponse): Confirmed {
+  const pull = completePull(given)
   const t = pull.reset ? emptyTables() : copy(confirmed.tables)
   const r = pull.rows
-  for (const row of r.profile) t.profile = row
+  // A profile row from a tela-api that predates a field keeps the device's value for it, rather
+  // than reading as the field's default until the profile next changes.
+  const previous = confirmed.tables.profile
+  for (const row of r.profile) {
+    t.profile =
+      row.publicLikes === undefined ? { ...row, publicLikes: previous?.publicLikes ?? false } : row
+  }
   for (const row of r.prefs) t.prefs.set(row.key, row)
   for (const row of r.feeds) t.feeds.set(row.id, row)
   for (const row of r.sites) t.sites.set(row.id, row)
@@ -119,6 +131,10 @@ export function applyPull(confirmed: Confirmed, pull: PullResponse): Confirmed {
   for (const row of r.translations)
     t.translations.set(translationKey(row.contentKey, row.lang), row)
   for (const row of r.subscriptions) t.subscriptions.set(row.feedId, row)
+  for (const row of r.follows) {
+    if (row.deletedAt === null) t.follows.set(row.userId, row)
+    else t.follows.delete(row.userId)
+  }
   for (const stone of pull.tombstones) {
     if (stone.entity === 'article') t.articles.delete(Number(stone.key))
   }
@@ -240,6 +256,20 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       }
       return t
     }
+    case 'setPrivacy': {
+      // In order, as this device made them; the server decides between devices by `at`, and its
+      // row replaces this one with the next pull. Booleans: `false` is a value, not an absence.
+      if (t.profile) {
+        t.profile = {
+          ...t.profile,
+          ...(m.publicSubscriptions !== undefined
+            ? { publicSubscriptions: m.publicSubscriptions }
+            : {}),
+          ...(m.publicLikes !== undefined ? { publicLikes: m.publicLikes } : {}),
+        }
+      }
+      return t
+    }
     case 'recommend': {
       // The server also decides by the later `at`, which this row does not carry; a concurrent
       // device's different answer arrives with the next pull, and confirmed rows always win.
@@ -289,6 +319,32 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       t.highlights.delete(m.id)
       return t
     }
+    case 'follow': {
+      // Who they are arrives with the pull; until then the row has only their id, and the page
+      // that followed them knows the rest. (The server ignores a self-follow; no page offers one.)
+      if (t.follows.has(m.userId)) return t
+      t.follows.set(m.userId, {
+        userId: m.userId,
+        handle: null,
+        displayName: null,
+        createdAt: m.at,
+        deletedAt: null,
+        seq: 0,
+      })
+      return t
+    }
+    case 'unfollow': {
+      t.follows.delete(m.userId)
+      return t
+    }
+    default: {
+      // Exhaustive for every type this build knows; a change from a later build that a rollback
+      // left in this device's queue changes nothing here, and its push says what the server
+      // makes of it. Without this, an older build's view threw on a follow and booted blank.
+      const unknown: never = m
+      void unknown
+      return t
+    }
   }
 }
 
@@ -333,6 +389,7 @@ export function rowsOf(tables: Tables) {
     highlights: [...tables.highlights.values()],
     claims: [...tables.claims.values()],
     translations: [...tables.translations.values()],
+    follows: [...tables.follows.values()],
   }
 }
 
@@ -340,6 +397,7 @@ export type {
   ArticleRow,
   ClaimRow,
   FeedRow,
+  FollowRow,
   HighlightRow,
   SiteRow,
   SubscriptionRow,
@@ -364,5 +422,6 @@ export function tablesFromRows(rows: TableRows): Tables {
     highlights: new Map(rows.highlights.map((r) => [r.id, r])),
     claims: new Map(rows.claims.map((r) => [r.id, r])),
     translations: new Map(rows.translations.map((r) => [translationKey(r.contentKey, r.lang), r])),
+    follows: new Map(rows.follows.map((r) => [r.userId, r])),
   }
 }

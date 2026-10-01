@@ -116,6 +116,26 @@ function statementsFor(
           where user_id = ${userId} and ${fresh}
         `),
       ]
+    case 'setPrivacy': {
+      // Each switch to the later `at`, on a clock of its own: one switch's change never decides
+      // the other's, and an older choice arriving late changes nothing (ADR 0031). Bound as 1 or
+      // 0, since `false` is a value; an absent switch is left alone, its clock included.
+      const flag = (column: 'public_subscriptions' | 'public_likes', v: boolean | undefined) => {
+        if (v === undefined) return sql``
+        const later = sql`${at} >= ${sql.raw(`${column}_at`)}`
+        return sql`${sql.raw(column)} = case when ${later} then ${v ? 1 : 0} else ${sql.raw(column)} end,
+          ${sql.raw(`${column}_at`)} = case when ${later} then ${at} else ${sql.raw(`${column}_at`)} end,`
+      }
+      return [
+        db.run(sql`
+          update profiles set
+            ${flag('public_subscriptions', m.publicSubscriptions)}
+            ${flag('public_likes', m.publicLikes)}
+            updated_at = ${now}, seq = ${currentSeq}
+          where user_id = ${userId} and ${fresh}
+        `),
+      ]
+    }
     case 'recommend':
       return [
         db.run(sql`
@@ -162,6 +182,39 @@ function statementsFor(
         db.run(sql`
           update highlights set deleted_at = ${at}, updated_at = ${at}, seq = ${currentSeq}
           where id = ${m.id} and user_id = ${userId} and deleted_at is null and ${fresh}
+        `),
+      ]
+    case 'follow':
+      // Through the followee's profile, so nobody to follow writes nothing; and never yourself,
+      // excluded here because the table's check would sink the whole push (ADR 0031). A follow
+      // after an unfollow is a new follow, from now.
+      return [
+        db.run(sql`
+          insert into follows (follower_id, followee_id, created_at, updated_at, seq)
+          select ${userId}, p.user_id, ${at}, ${at}, ${currentSeq} from profiles p
+          where p.user_id = ${m.userId} and p.user_id <> ${userId} and ${fresh}
+          on conflict (follower_id, followee_id) do update set
+            created_at = case when follows.deleted_at is null then follows.created_at
+              else excluded.created_at end,
+            deleted_at = null, updated_at = excluded.updated_at, seq = excluded.seq
+          where excluded.updated_at >= follows.updated_at
+        `),
+      ]
+    case 'unfollow':
+      // Recorded whatever it finds, as follow is: a tombstone where there was no row, and the
+      // later clock on one already deleted. Otherwise an older follow arriving after it would see
+      // only the clock of an earlier unfollow, or none, and bring the follow back. On a row
+      // already deleted the seq moves whatever the clocks say, so unfollowing again sends the
+      // deletion again to a device that dropped it, even from a device whose clock is behind.
+      return [
+        db.run(sql`
+          insert into follows (follower_id, followee_id, created_at, updated_at, deleted_at, seq)
+          select ${userId}, p.user_id, ${at}, ${at}, ${at}, ${currentSeq} from profiles p
+          where p.user_id = ${m.userId} and p.user_id <> ${userId} and ${fresh}
+          on conflict (follower_id, followee_id) do update set
+            deleted_at = coalesce(follows.deleted_at, excluded.deleted_at),
+            updated_at = max(follows.updated_at, excluded.updated_at), seq = excluded.seq
+          where excluded.updated_at >= follows.updated_at or follows.deleted_at is not null
         `),
       ]
   }

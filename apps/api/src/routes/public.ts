@@ -18,6 +18,21 @@ export const PUBLIC_CACHE = 'public, max-age=60, s-maxage=300, stale-while-reval
 const LANG = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/
 const DAY = 24 * 60 * 60 * 1000
 const PUBLIC_LISTING = sql.raw(`('listed', 'featured')`)
+/**
+ * A post's titles in the launch languages it has one in, from a table aliased `a`: a public page
+ * is cached for everyone, so it carries each and the reader picks the one they read in.
+ */
+const TITLES = sql.raw(`(select json_group_object(t.lang, t.title) from article_titles t
+  where t.article_id = a.id and t.title is not null) as "titles"`)
+/** The titles object SQLite handed back as text. */
+function withTitles<T extends Record<string, unknown>>(row: T): T {
+  if (typeof row.titles !== 'string') return row
+  try {
+    return { ...row, titles: JSON.parse(row.titles) as Record<string, string> }
+  } catch {
+    return { ...row, titles: {} }
+  }
+}
 
 export function publicRoutes(deps: ApiDeps) {
   const { db } = deps
@@ -89,11 +104,15 @@ export function publicRoutes(deps: ApiDeps) {
   routes.get('/sites/:siteId', async (c) => {
     const siteId = Number(c.req.param('siteId'))
     if (!Number.isInteger(siteId)) return notFound()
-    const [sites, feeds, posts, topics] = (await db.batch([
+    const since = deps.clock.now() - 30 * DAY
+    const [sites, feeds, posts, topics, notes] = (await db.batch([
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
           s.primary_lang as "primaryLang", s.listing, s.reader_count as "readerCount",
-          p.handle as "claimedBy"
+          p.handle as "claimedBy", p.display_name as "claimantName", p.bio as "claimantBio",
+          (select count(*) from articles a join feeds f on f.id = a.feed_id
+            where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since})
+            as "postsLast30d"
         from sites s left join profiles p on p.user_id = s.claimed_by
         where s.id = ${siteId} and s.listing in ${PUBLIC_LISTING}
       `),
@@ -106,16 +125,47 @@ export function publicRoutes(deps: ApiDeps) {
       // Posts as the reader holds them, so a member can open one from here. A merged feed's
       // posts are duplicates of its target's (ADR 0028).
       db.all(sql`
-        select ${ARTICLE_COLUMNS}
+        select ${ARTICLE_COLUMNS}, ${TITLES}
         from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         where f.site_id = ${siteId} and f.merged_into is null and s.listing in ${PUBLIC_LISTING}
         order by a.sort_at desc, a.id desc limit 20
       `),
       db.all(sql`select topic from site_topics where site_id = ${siteId}`),
+      // What readers said recommending its posts: recommendations are public (ADR 0031).
+      db.all(sql`
+        select r.note, r.created_at as "createdAt", p.handle, p.display_name as "displayName",
+          ${ARTICLE_COLUMNS}, ${TITLES}
+        from recommendations r join articles a on a.id = r.article_id
+        join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+        join profiles p on p.user_id = r.user_id
+        where f.site_id = ${siteId} and s.listing in ${PUBLIC_LISTING}
+          and r.deleted_at is null and r.note is not null and r.note <> ''
+        order by r.created_at desc limit 5
+      `),
     ] as never)) as unknown as Record<string, unknown>[][]
-    const site = sites?.[0]
-    if (!site) return notFound()
-    return c.json({ site, feeds, posts, topics: (topics ?? []).map((t) => t.topic) }, 200, cached)
+    const row = sites?.[0]
+    if (!row) return notFound()
+    const { claimantName, claimantBio, ...site } = row
+    return c.json(
+      {
+        site: {
+          ...site,
+          // Who writes it, for the page's About: the claimant's own name and bio.
+          claimant: site.claimedBy
+            ? { handle: site.claimedBy, displayName: claimantName, bio: claimantBio }
+            : null,
+        },
+        feeds,
+        posts: (posts ?? []).map(withTitles),
+        topics: (topics ?? []).map((t) => t.topic),
+        notes: (notes ?? []).map((n) => {
+          const { note, createdAt, handle, displayName, ...article } = n
+          return { note, createdAt, person: { handle, displayName }, article: withTitles(article) }
+        }),
+      },
+      200,
+      cached,
+    )
   })
 
   routes.get('/profiles/:handle', async (c) => {
@@ -127,52 +177,97 @@ export function publicRoutes(deps: ApiDeps) {
       bio: string | null
       created_at: number
       public_subscriptions: number
+      public_likes: number
     }>(
       db,
-      sql`select user_id, handle, display_name, bio, created_at, public_subscriptions
+      sql`select user_id, handle, display_name, bio, created_at, public_subscriptions, public_likes
           from profiles where handle = ${handle}`,
     )
     if (!profile) return notFound()
-    const [blogs, recommendations, subscriptions] = (await db.batch([
+    const id = profile.user_id
+    const none = sql`select 1 where false`
+    const [blogs, recommendations, subscriptions, liked, counts] = (await db.batch([
       db.all(sql`
         select id, title, home_url as "homeUrl", favicon_key as "faviconKey" from sites
-        where claimed_by = ${profile.user_id} and listing in ${PUBLIC_LISTING} order by title
+        where claimed_by = ${id} and listing in ${PUBLIC_LISTING} order by title
       `),
       db.all(sql`
         select r.note, r.created_at as "createdAt", s.id as "siteId", s.title as "siteTitle",
-          s.home_url as "homeUrl", ${ARTICLE_COLUMNS}
+          s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS},
+          ${TITLES}
         from recommendations r join articles a on a.id = r.article_id
         join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-        where r.user_id = ${profile.user_id} and r.deleted_at is null
+        where r.user_id = ${id} and r.deleted_at is null
         order by r.created_at desc limit 100
       `),
       profile.public_subscriptions
         ? db.all(sql`
-            select distinct s.id, s.title, s.home_url as "homeUrl", s.favicon_key as "faviconKey",
-              (s.listing in ${PUBLIC_LISTING}) as listed
+            select distinct s.id, s.title, s.home_url as "homeUrl", s.description,
+              s.favicon_key as "faviconKey", (s.listing in ${PUBLIC_LISTING}) as listed
             from subscriptions sub join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id
-            where sub.user_id = ${profile.user_id} and sub.deleted_at is null order by s.title
+            where sub.user_id = ${id} and sub.deleted_at is null order by s.title
           `)
-        : db.all(sql`select 1 where false`),
+        : db.all(none),
+      // Liked posts only if the member shows them (ADR 0031).
+      profile.public_likes
+        ? db.all(sql`
+            select st.liked_at as "likedAt", s.id as "siteId", s.title as "siteTitle",
+              s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS},
+              ${TITLES}
+            from user_article_states st join articles a on a.id = st.article_id
+            join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+            where st.user_id = ${id} and st.liked_at is not null
+            order by st.liked_at desc limit 100
+          `)
+        : db.all(none),
+      db.all(sql`
+        select
+          (select count(*) from follows where follower_id = ${id} and deleted_at is null) as following,
+          (select count(*) from follows where followee_id = ${id} and deleted_at is null) as followers,
+          (select count(*) from recommendations where user_id = ${id} and deleted_at is null)
+            as recommendations,
+          (select count(*) from user_article_states where user_id = ${id} and liked_at is not null)
+            as liked
+      `),
     ] as never)) as unknown as Record<string, unknown>[][]
+    const count = counts?.[0] ?? {}
+    const shownSubscriptions = profile.public_subscriptions
+      ? (subscriptions ?? []).map((s) => ({ ...s, listed: s.listed === 1 }))
+      : null
+    // The post as the reader holds one, beside the note (or when it was liked) and its blog.
+    const withArticle = (r: Record<string, unknown>) => {
+      const { note, createdAt, likedAt, siteId, siteTitle, homeUrl, listed, ...article } = r
+      return {
+        ...(likedAt === undefined ? { note, createdAt } : { likedAt }),
+        siteId,
+        siteTitle,
+        homeUrl,
+        listed: listed === 1,
+        article: withTitles(article),
+      }
+    }
     return c.json(
       {
         profile: {
+          // The account id: what a follow names (ADR 0031). It grants nothing on its own.
+          id,
           handle: profile.handle,
           displayName: profile.display_name,
           bio: profile.bio,
           memberSince: profile.created_at,
         },
+        counts: {
+          following: Number(count.following ?? 0),
+          followers: Number(count.followers ?? 0),
+          recommendations: Number(count.recommendations ?? 0),
+          liked: profile.public_likes ? Number(count.liked ?? 0) : null,
+          subscriptions: shownSubscriptions ? shownSubscriptions.length : null,
+        },
         blogs,
-        // The post as the reader holds one, beside the note and the blog it came from.
-        recommendations: (recommendations ?? []).map((r) => {
-          const { note, createdAt, siteId, siteTitle, homeUrl, ...article } = r
-          return { note, createdAt, siteId, siteTitle, homeUrl, article }
-        }),
+        recommendations: (recommendations ?? []).map(withArticle),
         // The member chose to show what they read; a private blog shows no link to its page.
-        subscriptions: profile.public_subscriptions
-          ? (subscriptions ?? []).map((s) => ({ ...s, listed: s.listed === 1 }))
-          : null,
+        subscriptions: shownSubscriptions,
+        liked: profile.public_likes ? (liked ?? []).map(withArticle) : null,
       },
       200,
       cached,

@@ -106,33 +106,59 @@ export function keepCycling(page: Page, everyMs = 1000): () => void {
   }
 }
 
+/** Open the account menu under the avatar and choose one of its items (Tela v2). */
+export async function fromAccountMenu(page: Page, item: string): Promise<void> {
+  await page.getByTestId('account-menu').click()
+  await page.getByTestId(item).click()
+}
+
 /** Wait until the page's first sync has landed: the sidebar lists the subscriptions. */
 export async function synced(page: Page): Promise<void> {
   await page.getByTestId('subscription').first().waitFor()
 }
 
-/**
- * Put the member's synced reading state back to its defaults: English, side by side, the default
- * text, line length and theme. Every spec signs in as the same member, and a spec's last change
- * is lost when its page closes before the push goes out, so a spec that depends on this state
- * resets it first instead of trusting the last spec to have put it back.
- */
-export async function resetReading(api: APIRequestContext): Promise<void> {
+/** Set synced prefs through the API, as the app's own pushes do. */
+export async function setPrefs(
+  api: APIRequestContext,
+  prefs: Record<string, unknown>,
+  profile: Record<string, unknown> | null = null,
+): Promise<void> {
   const at = Date.now()
   const change = (m: Record<string, unknown>) => ({ mid: crypto.randomUUID(), at, ...m })
   const res = await api.post(`${BASE}/api/v1/mutations`, {
     headers: { ...ORIGIN, ...(await memberHeaders(api)) },
     data: {
       mutations: [
-        change({ type: 'setProfile', readingLang: 'en' }),
-        change({ type: 'setPref', key: 'reader.mode', value: 'side' }),
-        change({ type: 'setPref', key: 'reader.size', value: 'm' }),
-        change({ type: 'setPref', key: 'reader.measure', value: 'normal' }),
-        change({ type: 'setPref', key: 'ui.theme', value: 'system' }),
+        ...(profile ? [change({ type: 'setProfile', ...profile })] : []),
+        ...Object.entries(prefs).map(([key, value]) => change({ type: 'setPref', key, value })),
       ],
     },
   })
-  if (!res.ok()) throw new Error(`reset failed: ${res.status()} ${await res.text()}`)
+  if (!res.ok()) throw new Error(`prefs failed: ${res.status()} ${await res.text()}`)
+}
+
+/**
+ * Put the member's synced reading state back to its defaults: English, side by side, the default
+ * text, line length and theme, posts read on opening, read posts listed, translation on opening
+ * and nothing left untranslated. Every spec signs in as the same member, and a spec's last change
+ * is lost when its page closes before the push goes out, so a spec that depends on this state
+ * resets it first instead of trusting the last spec to have put it back.
+ */
+export async function resetReading(api: APIRequestContext): Promise<void> {
+  await setPrefs(
+    api,
+    {
+      'reader.mode': 'side',
+      'reader.size': 'm',
+      'reader.measure': 'normal',
+      'ui.theme': 'system',
+      'reader.mark_on_open': true,
+      'reader.hide_read': false,
+      'translate.auto': true,
+      'translate.never': [],
+    },
+    { readingLang: 'en' },
+  )
 }
 
 /**

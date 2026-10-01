@@ -265,6 +265,100 @@ describe('public pages', () => {
     expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/'))).toHaveLength(2)
   })
 
+  test("a profile's tabs are pages of their own, cached apart", async () => {
+    const reader = await signedIn(api, 'shown@x.test')
+    await api.request('/api/v1/profile', {
+      method: 'PUT',
+      body: { handle: 'shown', displayName: 'Shown Reader' },
+      as: reader,
+    })
+    await api.request('/api/v1/mutations', {
+      body: {
+        mutations: [{ mid: 'show-subs-000', at: 1, type: 'setPrivacy', publicSubscriptions: true }],
+      },
+      as: reader,
+    })
+    const recs = await (await page('/@shown')).text()
+    expect(recs).toContain('data-testid="profile-recommendations"')
+    const subs = await (await page('/@shown?tab=subscriptions')).text()
+    expect(subs).toContain('data-testid="profile-subscriptions"')
+    // A second visit to each is the cache's.
+    await page('/@shown')
+    await page('/@shown?tab=subscriptions')
+    expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/profiles/'))).toHaveLength(2)
+  })
+
+  test("the previous release's public JSON still renders, without what it never said", () => {
+    const render = (route: PublicRoute, data: unknown) =>
+      renderPublicPage({
+        route,
+        url: new URL(`${ORIGIN}/x`),
+        data,
+        locale: 'en',
+        now: 0,
+        template: TEMPLATE,
+      })
+    // As main's tela-api answers: no counts, liked, notes, claimant, postsLast30d or account id.
+    const profile = render(publicRoute(new URL(`${ORIGIN}/@old`)) as PublicRoute, {
+      profile: { handle: 'old', displayName: 'Old Reader', bio: null, memberSince: 0 },
+      blogs: [],
+      recommendations: [],
+      subscriptions: null,
+    })
+    expect(profile).toContain('Old Reader')
+    // What it never counted is left out, not shown as nobody.
+    expect(profile).not.toContain('data-testid="profile-counts"')
+    const site = render(publicRoute(new URL(`${ORIGIN}/s/1`)) as PublicRoute, {
+      site: {
+        id: 1,
+        title: 'Old Blog',
+        homeUrl: 'https://old.example',
+        description: null,
+        faviconKey: null,
+        primaryLang: 'en',
+        listing: 'listed',
+        readerCount: 3,
+        claimedBy: 'old',
+      },
+      feeds: [],
+      posts: [],
+      topics: [],
+    })
+    expect(site).toContain('Old Blog')
+    expect(site).toContain('data-testid="claimed-badge"')
+  })
+
+  test('a page this build cannot render is the plain shell, not an error', async () => {
+    const throwing = createEdge({
+      blobs,
+      api: { fetch: async (req) => api.app.fetch(req) },
+      assets: {
+        fetch: async () => new Response(TEMPLATE, { headers: { 'content-type': 'text/html' } }),
+      },
+      pages: {
+        ...pages,
+        render: () => {
+          throw new TypeError('cannot read properties of undefined')
+        },
+      } as unknown as PublicPages,
+      cache,
+      fetchImage: async () => new Response('nope', { status: 404 }),
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+    })
+    await listedBlog(4, 'Unrenderable')
+    const logged: unknown[][] = []
+    const error = console.error
+    console.error = (...args: unknown[]) => void logged.push(args)
+    try {
+      const res = await throwing.fetch(new Request(`${ORIGIN}/s/4`))
+      expect(res.status).toBe(200)
+      expect(await res.text()).toBe(TEMPLATE)
+    } finally {
+      console.error = error
+    }
+    expect(logged).toMatchObject([['public page did not render', '/s/4', expect.any(TypeError)]])
+  })
+
   test('a blog that is not public is a 404 page, and a path that is no page is the plain shell', async () => {
     await listedBlog(2, 'Hidden', 'private')
     const hidden = await page('/s/2')

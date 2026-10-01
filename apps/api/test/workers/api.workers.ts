@@ -98,6 +98,16 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       values (1, 1, 'https://b.example/feed', 'b.example', 0, 0, 0, ${currentSeq})`),
     db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at, seq)
       values (1, 1, 'k1', 'Post', ${now}, ${now}, ${currentSeq})`),
+    // Someone to follow (ADR 0031).
+    db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+      values ('workers-anna-00001', 'Anna', 'anna@x.test', 1, 0, 0)`),
+    db.run(sql`insert into profiles (user_id, handle, display_name, created_at, updated_at, seq)
+      values ('workers-anna-00001', 'anna', 'Anna', 0, 0, ${currentSeq})`),
+    // And someone never followed, whom the member unfollows anyway.
+    db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+      values ('workers-bo-0000002', 'Bo', 'bo@x.test', 1, 0, 0)`),
+    db.run(sql`insert into profiles (user_id, handle, display_name, created_at, updated_at, seq)
+      values ('workers-bo-0000002', 'bobo', 'Bo', 0, 0, ${currentSeq})`),
   ])
 
   // A guarded push, then its replay.
@@ -124,16 +134,25 @@ it('invites, signs in, pushes and pulls on D1', async () => {
         suffix: '',
         note: 'on D1',
       },
+      // A follow is an insert-select upsert, its pull a join paged by max() of two seqs.
+      { mid: 'workers-follow-1', at: now, type: 'follow', userId: 'workers-anna-00001' },
+      { mid: 'workers-flags-1', at: now, type: 'setPrivacy', publicLikes: true },
+      // An unfollow of someone never followed is a tombstone upsert through their profile.
+      { mid: 'workers-unfollow-1', at: now, type: 'unfollow', userId: 'workers-bo-0000002' },
     ],
   }
   const pushed = (await (
     await call('/api/v1/mutations', { body: push, ...member })
   ).json()) as PushResponse
-  expect(pushed.applied).toHaveLength(4)
+  expect(pushed.applied).toHaveLength(7)
   const again = (await (
     await call('/api/v1/mutations', { body: push, ...member })
   ).json()) as PushResponse
-  expect(again.applied).toHaveLength(4)
+  expect(again.applied).toHaveLength(7)
+  const tombstones = await db.all<{ deleted_at: number }>(
+    sql`select deleted_at from follows where followee_id = 'workers-bo-0000002'`,
+  )
+  expect(tombstones).toEqual([{ deleted_at: now }])
   const likes = await db.all<{ like_count: number }>(
     sql`select like_count from articles where id = 1`,
   )
@@ -145,9 +164,47 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   expect(snap.rows.states).toMatchObject([{ articleId: 1, likedAt: now }])
   expect(snap.rows.subscriptions).toMatchObject([{ feedId: 1 }])
   expect(snap.rows.highlights).toMatchObject([{ id: 'workers-hl-1', end: 4, note: 'on D1' }])
+  expect(snap.rows.follows).toMatchObject([{ userId: 'workers-anna-00001', handle: 'anna' }])
+  expect(snap.rows.profile).toMatchObject([{ publicLikes: true }])
   const delta = (await (
     await call(`/api/v1/sync?cursor=${snap.cursor}`, member)
   ).json()) as PullResponse
   expect(delta.rows.articles).toEqual([])
   expect(delta.more).toBe(false)
+  // A rename sends the follow again, in a delta.
+  await db.batch([
+    bumpSeq(db),
+    db.run(sql`update profiles set handle = 'anna_k', seq = ${currentSeq}
+      where user_id = 'workers-anna-00001'`),
+  ])
+  const renamed = (await (
+    await call(`/api/v1/sync?cursor=${delta.cursor}`, member)
+  ).json()) as PullResponse
+  expect(renamed.rows.follows).toMatchObject([{ handle: 'anna_k' }])
+
+  // The Following feed: printf keys, nested window functions and the (time, offset, key) cursor, on D1.
+  await db.batch([
+    bumpSeq(db),
+    db.run(
+      sql`update profiles set public_likes = 1, seq = ${currentSeq} where user_id = 'workers-anna-00001'`,
+    ),
+    db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at, seq)
+      values ('workers-anna-00001', 1, 'on D1', ${now - 2000}, ${now - 2000}, ${currentSeq})`),
+    db.run(sql`insert into user_article_states (user_id, article_id, read_at, liked_at, liked_updated_at, seq)
+      values ('workers-anna-00001', 1, ${now - 1000}, ${now - 1000}, ${now - 1000}, ${currentSeq})`),
+  ])
+  const feed = (await (await call('/api/v1/following?tz=480', member)).json()) as {
+    items: { kind: string; key: string }[]
+    next: string | null
+  }
+  expect(feed.items.map((i) => i.kind)).toEqual(['liked', 'recommended'])
+  expect(feed.items[1]?.key).toMatch(/^r:\d{12}$/)
+  const older = (await (
+    await call(
+      // The offset the first page grouped under rides in the cursor, so the day keys agree.
+      `/api/v1/following?cursor=${encodeURIComponent(`${now - 1000}:480:${feed.items[0]?.key}`)}`,
+      member,
+    )
+  ).json()) as { items: { kind: string }[] }
+  expect(older.items.map((i) => i.kind)).toEqual(['recommended'])
 })

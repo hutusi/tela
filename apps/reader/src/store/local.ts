@@ -12,7 +12,9 @@ import {
   type ArticleRow,
   applyPull,
   type Confirmed,
+  completePull,
   emptyTables,
+  type FollowRow,
   type Mutation,
   type Pending,
   type PullResponse,
@@ -25,6 +27,7 @@ import {
   view,
 } from '@tela/sync'
 import { newId } from '../lib/id'
+import type { Person } from '../views/types'
 import type { Change, Persistence } from './db'
 
 /** A mutation as the UI states it: the store adds the id and the time. */
@@ -54,6 +57,11 @@ export class LocalStore {
    * nothing this tab holds belongs to whoever has it now.
    */
   onLost: (() => void) | null = null
+  /**
+   * Called when a pull changes whom the server has the member follow, with those rows (as they
+   * were, for an unfollow): a page cached from before still counts the old state (ADR 0031).
+   */
+  onFollowsConfirmed: ((rows: FollowRow[]) => void) | null = null
   /** The account this tab holds: every write is made for it, and every request names it. */
   userId: string | null = null
   /**
@@ -78,6 +86,27 @@ export class LocalStore {
   private transient = new Map<number, ArticleRow>()
   /** What those articles' feeds are called, since the device holds no row for them. */
   private transientNames = new Map<number, string>()
+  /**
+   * Members a page showed this visit, by account id: a follow made from that page is named by it
+   * until the pull brings the follow row with its name (ADR 0031).
+   */
+  private people = new Map<string, Person>()
+
+  rememberPeople(people: readonly Person[]): void {
+    for (const p of people) this.people.set(p.id, p)
+  }
+
+  /** A member a page showed this visit. */
+  person(id: string): Person | undefined {
+    return this.people.get(id)
+  }
+
+  /**
+   * Whom the member follows as the server has said, sorted: the confirmed rows, without the
+   * changes still on their way. What the server answers about the people followed is about
+   * these, so a page asks again when they change, not when a prediction does (ADR 0031).
+   */
+  confirmedFollowees = (): string => [...this.confirmed.tables.follows.keys()].sort().join(',')
 
   remember(articles: ArticleRow[], source?: string | null): void {
     for (const a of articles) {
@@ -147,6 +176,7 @@ export class LocalStore {
     this.pending = []
     this.transient = new Map()
     this.transientNames = new Map()
+    this.people = new Map()
     this.recompute()
   }
 
@@ -178,13 +208,21 @@ export class LocalStore {
    * when it would move the stored cursor back over newer tables another tab of this account
    * wrote (`Change` in db.ts).
    */
-  async applyPull(pull: PullResponse, epoch: number): Promise<void> {
+  async applyPull(given: PullResponse, epoch: number): Promise<void> {
     const owner = this.userId
     if (owner === null || epoch !== this.epoch) return
+    // Every table this build knows, so the loop below never reads one an older tela-api left out.
+    const pull = completePull(given)
     const before = this.confirmed.tables
     const from = this.confirmed.cursor
     const held = this.pending
     this.confirmed = applyPull(this.confirmed, pull)
+    const after = this.confirmed.tables.follows
+    const changedFollows = [
+      ...[...after.values()].filter((f) => !before.follows.has(f.userId)),
+      ...[...before.follows.values()].filter((f) => !after.has(f.userId)),
+    ]
+    if (changedFollows.length > 0) this.onFollowsConfirmed?.(changedFollows)
     this.pending = settle(this.confirmed, this.pending)
     this.recompute()
     const rows = rowsOf(this.confirmed.tables)

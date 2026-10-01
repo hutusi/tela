@@ -5,7 +5,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
-import { BASE, FIXTURES, keepCycling, memberHeaders, synced } from './helpers'
+import { BASE, FIXTURES, fromAccountMenu, keepCycling, memberHeaders, synced } from './helpers'
 
 test.describe('for a visitor', () => {
   test.use({ storageState: { cookies: [], origins: [] }, javaScriptEnabled: false })
@@ -133,14 +133,14 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     // The profile is public data from the server: let the push land first.
     await page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
 
-    await page.getByTestId('nav-profile').click()
+    await fromAccountMenu(page, 'nav-profile')
     await expect(page).toHaveURL(/\/@[a-z0-9_]+$/)
     const recs = page.getByTestId('profile-recommendations')
     await expect(recs).toContainText(title.slice(0, 20))
     await expect(recs).toContainText('Worth your time')
 
     // The member claimed the fixture site earlier, so the note reaches the dashboard.
-    await page.getByTestId('nav-dashboard').click()
+    await fromAccountMenu(page, 'nav-dashboard')
     await expect(page.getByTestId('dashboard-site')).toHaveCount(1)
     await expect(page.getByTestId('dashboard-notes')).toContainText('Worth your time')
     await expect(page.getByTestId('dashboard-post').first()).toBeVisible()
@@ -162,6 +162,25 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     await expect(page.getByTestId('profile-link')).toHaveAttribute('href', '/@devreader')
     await page.getByTestId('profile-link').click()
     await expect(page.getByTestId('profile-page')).toContainText('Dev Reader')
+
+    // An edit made from the profile reaches it: the copy held while Settings was open, and the
+    // one the browser cached (a minute, PUBLIC_CACHE), are forgotten once the server has the
+    // change. A fresh load first: the rename above has already sent this page past the cache.
+    await page.goto('/@devreader')
+    await expect(page.getByTestId('profile-page')).toContainText('Dev Reader')
+    await page.getByTestId('edit-profile').click()
+    const bio = `Edited ${Date.now()}`
+    await page.locator('textarea[name="bio"]').fill(bio)
+    // Back only once the device has the change, so the profile page is not there to see it land.
+    const pulled = page.waitForResponse(
+      async (r) => r.url().includes('/api/v1/sync') && r.ok() && (await r.text()).includes(bio),
+    )
+    await page.getByTestId('settings-save').click()
+    await expect(page.getByTestId('settings-saved')).toBeVisible()
+    await pulled
+    await page.goBack()
+    await expect(page).toHaveURL(/\/@devreader$/)
+    await expect(page.getByTestId('profile-page')).toContainText(bio)
   })
 
   test('OPML export lists the subscriptions', async ({ request }) => {
@@ -178,7 +197,7 @@ test.describe('recommendations, profile, dashboard, settings', () => {
 
   test('the Settings button saves that list as a file', async ({ page }) => {
     // A fetch and a Blob, not a plain link: only a call can name the account (ADR 0025).
-    await page.goto('/settings')
+    await page.goto('/settings/subscriptions')
     const saved = page.waitForEvent('download')
     await page.getByTestId('opml-export').click()
     const download = await saved

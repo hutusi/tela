@@ -7,6 +7,7 @@ import {
   addFeed,
   cycle,
   FIXTURES,
+  fromAccountMenu,
   inviteAndReadCode,
   latestCode,
   memberHeaders,
@@ -47,7 +48,7 @@ test.describe('by code', () => {
     // A new member follows nothing yet.
     await expect(page.getByTestId('empty-state')).toBeVisible()
 
-    await page.getByTestId('sign-out').click()
+    await fromAccountMenu(page, 'sign-out')
     await expect(page).toHaveURL(/\/$/)
     await page.goto('/reading')
     await expect(page).toHaveURL(/\/login/)
@@ -100,14 +101,14 @@ async function twoAccounts(
 }
 
 /**
- * The page shows the account the session is now, not only an empty pane: the header's link to
- * that account's own profile, which only its own synced rows can put there.
+ * The page shows the account the session is now, not only an empty pane: the header's account
+ * menu names that account's own handle, which only its own synced rows can put there.
  */
 async function showsSessionAccount(page: Page, context: BrowserContext): Promise<void> {
   const me = (await (await context.request.get('/api/v1/me')).json()) as {
     profile: { handle: string }
   }
-  await expect(page.getByRole('banner').locator(`a[href="/@${me.profile.handle}"]`)).toBeVisible()
+  await expect(page.getByTestId('account-menu')).toHaveAttribute('data-handle', me.profile.handle)
 }
 
 /** A sync the page makes from now on, answered: only a tab holding the session's account gets one. */
@@ -174,7 +175,7 @@ test.describe('a stale tab signing out', () => {
   }) => {
     const { other } = await twoAccounts(page, context)
     const resynced = nextSync(page)
-    await page.getByTestId('sign-out').click()
+    await fromAccountMenu(page, 'sign-out')
     // The session is the second account's: this tab forgets the first and starts over as the
     // second, rather than end a session that is not its own.
     await showsSessionAccount(page, context)

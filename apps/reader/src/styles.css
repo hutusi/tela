@@ -33,6 +33,8 @@
   --color-accent-strong: oklch(0.4 0.1 150);
   /* Cards, popovers and inputs: white on paper, lifted a step on a dark ground. */
   --color-surface: #fff;
+  /* A switch's knob: white on either track, and light on a dark ground too. */
+  --color-knob: #fff;
   --color-danger: oklch(0.5 0.15 25);
   /* A highlight is a marker's stroke over the text, never a box around it. */
   --color-highlight: oklch(0.91 0.1 95);
@@ -76,6 +78,7 @@
     --color-line: #34302a;
     --color-hover: #29251f;
     --color-thumb: #454038;
+    --color-knob: #ede7db;
     --color-accent: oklch(0.68 0.14 150);
     --color-accent-strong: oklch(0.78 0.12 150);
     --color-danger: oklch(0.72 0.15 25);
@@ -94,6 +97,7 @@
   --color-line: #34302a;
   --color-hover: #29251f;
   --color-thumb: #454038;
+  --color-knob: #ede7db;
   --color-accent: oklch(0.68 0.14 150);
   --color-accent-strong: oklch(0.78 0.12 150);
   --color-danger: oklch(0.72 0.15 25);

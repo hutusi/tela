@@ -47,6 +47,63 @@ describe('the device store', () => {
     expect(pushes).toBe(1)
   })
 
+  test('whom the server knows the member follows moves with the pull, not the prediction', async () => {
+    const store = await member()
+    const ID = 'member-anna-0000001'
+    store.mutate({ type: 'follow', userId: ID })
+    expect(store.getSnapshot().tables.follows.has(ID)).toBe(true) // shown at once
+    expect(store.confirmedFollowees()).toBe('') // but the server has not heard of it
+    await store.applyPull(
+      pull(9, {
+        follows: [
+          {
+            userId: ID,
+            handle: 'anna',
+            displayName: null,
+            createdAt: NOW,
+            deletedAt: null,
+            seq: 9,
+          },
+        ],
+      }),
+      store.epoch,
+    )
+    expect(store.confirmedFollowees()).toBe(ID)
+  })
+
+  test('says when a pull changes whom the member follows, with the rows', async () => {
+    const store = await member()
+    const heard: string[][] = []
+    store.onFollowsConfirmed = (rows) => heard.push(rows.map((r) => `${r.handle}:${r.deletedAt}`))
+    const row = (deletedAt: number | null, seq: number) => ({
+      userId: 'member-anna-0000001',
+      handle: 'anna',
+      displayName: null,
+      createdAt: NOW,
+      deletedAt,
+      seq,
+    })
+    await store.applyPull(pull(9, { follows: [row(null, 9)] }), store.epoch)
+    await store.applyPull(pull(10, { articles: [article(10)] }), store.epoch) // nothing to say
+    await store.applyPull(pull(11, { follows: [row(11, 11)] }), store.epoch)
+    // The unfollow comes with the row as it was, which still names whose page to forget.
+    expect(heard).toEqual([['anna:null'], ['anna:null']])
+  })
+
+  test('a delta from a tela-api without follows lands, cursor and all', async () => {
+    const storage = memoryPersistence()
+    const store = await member(storage)
+    const { follows: _f, ...rows } = pull(9, { articles: [article(9)] }).rows
+    await store.applyPull(
+      { cursor: 9, more: false, reset: false, rows, tombstones: [] } as unknown as Parameters<
+        LocalStore['applyPull']
+      >[0],
+      store.epoch,
+    )
+    expect(store.getSnapshot().tables.articles.has(9)).toBe(true)
+    expect((await storage.load()).cursor).toBe(9)
+  })
+
   test('keeps an acknowledged change until a pull reaches it, then drops it', async () => {
     const store = await member()
     store.mutate({ type: 'markRead', articleId: 7 })
@@ -78,7 +135,7 @@ describe('the device store', () => {
   test('a pull rewrites only the tables it touched', async () => {
     const storage = recording()
     const store = await member(storage)
-    expect(storage.saved.at(-1)).toHaveLength(12) // a snapshot writes every table
+    expect(storage.saved.at(-1)).toHaveLength(13) // a snapshot writes every table
     await store.applyPull(pull(6, { articles: [article(9)] }), store.epoch)
     expect(storage.saved.at(-1)).toEqual(['articles'])
     // Unsubscribing prunes the feed's articles: no article row named them, yet they changed.

@@ -8,6 +8,7 @@
 
 import type { ArticleRow, SiteRow } from '@tela/sync'
 import { HORIZON_DAYS, type Tables, titleKey } from '@tela/sync'
+import type { Person } from '../views/types'
 
 export type Filter = 'all' | 'today' | 'liked'
 export const FILTERS: Filter[] = ['all', 'today', 'liked']
@@ -135,14 +136,61 @@ export function articlesFor(
   })
 }
 
-/** A post's title and excerpt as the member reads them: the translation whenever one exists. */
-export function shownTitle(t: Tables, a: ArticleRow, readingLang: string) {
+/**
+ * A list with read posts hidden (a pref), keeping every post it has shown unread or open: `seen`
+ * is the list's memory of those for this visit, and this adds the ones unread now and the open
+ * one. So a post read since, opened or reached by `j`, stays where the reader left it, and so does
+ * one opened already read (from a public page, before its row arrived); liked posts always stay.
+ */
+export function withoutRead(
+  t: Tables,
+  list: ArticleRow[],
+  now: number,
+  openId: number | null,
+  seen: Set<number>,
+): ArticleRow[] {
+  for (const a of list) if (!isRead(t, a, now) || a.id === openId) seen.add(a.id)
+  return list.filter((a) => seen.has(a.id) || isLiked(t, a.id))
+}
+
+/**
+ * A post's title and excerpt as the member reads them: the translation whenever one exists,
+ * except in a language the member never has translated (`never`, a pref), which reads as written.
+ */
+export function shownTitle(
+  t: Tables,
+  a: ArticleRow & { titles?: Partial<Record<string, string>> },
+  readingLang: string,
+  never: readonly string[] = [],
+) {
+  if (a.sourceLang !== null && never.includes(a.sourceLang)) {
+    return { title: a.title, excerpt: a.excerpt, badge: false }
+  }
   const translated = t.titles.get(titleKey(a.id, readingLang))
-  const title = translated?.title ?? null
+  // A post held from a public page, whose feed the device does not sync, brings the titles that
+  // page showed: the reader opening it says what the link said.
+  const title = translated?.title ?? a.titles?.[readingLang] ?? null
   return {
     title: title ?? a.title,
     excerpt: translated?.excerpt ?? a.excerpt,
     /** Badge it only when the languages differ and a translation is shown (AGENTS.md). */
     badge: title !== null && a.sourceLang !== null && a.sourceLang !== readingLang,
   }
+}
+
+/**
+ * The people the member follows, named: by the follow row once the pull brought it, else by the
+ * page they were followed from (a prediction has only the id). Alphabetical, as a list of people
+ * reads best.
+ */
+export function followedPeople(t: Tables, person: (id: string) => Person | undefined): Person[] {
+  const people: Person[] = []
+  for (const f of t.follows.values()) {
+    const known = f.handle
+      ? { id: f.userId, handle: f.handle, displayName: f.displayName }
+      : person(f.userId)
+    if (known) people.push(known)
+  }
+  const name = (p: Person) => (p.displayName ?? p.handle).toLocaleLowerCase()
+  return people.sort((a, b) => name(a).localeCompare(name(b)))
 }

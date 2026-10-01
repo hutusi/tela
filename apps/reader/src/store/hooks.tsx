@@ -32,6 +32,15 @@ export function useTables(): Tables {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).tables
 }
 
+/**
+ * Whom the member follows as the server has confirmed it (`LocalStore.confirmedFollowees`): a
+ * string, so it changes identity only when the confirmed follows do.
+ */
+export function useConfirmedFollowees(): string {
+  const { store } = useStore()
+  return useSyncExternalStore(store.subscribe, store.confirmedFollowees, store.confirmedFollowees)
+}
+
 /** The clock, ticking once a minute: relative times and "today" move without a render storm. */
 export function useNow(): number {
   const [now, setNow] = useState(() => Date.now())

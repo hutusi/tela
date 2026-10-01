@@ -6,13 +6,17 @@
   "nav": {
     "reading": "阅读",
     "discover": "发现",
+    "following": "关注",
     "readIn": "阅读语言",
     "search": "搜索博客、文章、人",
     "signIn": "登录",
     "signOut": "退出登录",
     "addFeed": "+ 添加订阅",
     "dashboard": "仪表盘",
-    "settings": "设置"
+    "settings": "设置",
+    "account": "你的账户",
+    "yourProfile": "我的主页",
+    "subscriptions": "订阅"
   },
   "home": {
     "title": "独立博客，任何语言。",
@@ -57,7 +61,9 @@
     "minutes": "{n} 分钟",
     "translatedBadge": "{from} → {to}",
     "loadMore": "更早的文章",
-    "fetching": "正在首次抓取这个订阅源…"
+    "fetching": "正在首次抓取这个订阅源…",
+    "allRead": "都读完了。",
+    "allReadHint": "已读文章被隐藏了，可以在<settings>设置</settings>里重新显示。"
   },
   "reader": {
     "close": "✕ 关闭",
@@ -84,7 +90,8 @@
     "unrecommended": "已取消推荐。",
     "fetchingFullText": "正在从原站获取全文…",
     "upNext": "下一篇",
-    "focus": "专注"
+    "focus": "专注",
+    "markRead": "标为已读"
   },
   "add": {
     "title": "添加订阅",
@@ -110,6 +117,8 @@
   },
   "translation": {
     "writtenIn": "原文为<b>{source}</b>，由 Tela 翻译成{target}。",
+    "writtenInOnly": "原文为<b>{source}</b>。",
+    "translateNow": "翻译成{target}",
     "translating": "翻译中…",
     "failed": "翻译失败。",
     "partial": "有 {n} 段未能翻译。",
@@ -164,12 +173,26 @@
     }
   },
   "site": {
-    "claimedBy": "由 @{handle} 认领",
+    "claimedByName": "✓ 由 {name} 认领",
+    "visit": "访问网站 ↗",
+    "writtenIn": "用{lang}写作",
+    "cadence": "{key, select, daily {每日更新} weekly {每周更新} biweekly {每月两更} monthly {每月更新} other {最近安静}}",
+    "readersOnTela": "{n} 位 Tela 读者",
     "claimLink": "这是你的网站？认领它",
     "yourTopics": "你的主题",
     "saveTopics": "保存",
-    "latestPosts": "最新文章",
-    "noPosts": "还没有抓取到文章。"
+    "posts": "文章",
+    "minutes": "{n} 分钟",
+    "noPosts": "还没有抓取到文章。",
+    "about": "关于",
+    "readersYouFollow": "你关注的读者",
+    "readersText": {
+      "one": "{a} 在读这个博客。",
+      "two": "{a} 和 {b} 在读这个博客。",
+      "more": "{a}、{b} 等 {total} 人在读这个博客。"
+    },
+    "fromReaders": "读者说",
+    "noteOn": "<person></person> 推荐了 <post></post>"
   },
   "claim": {
     "title": "认领你的订阅源",
@@ -198,11 +221,45 @@
     }
   },
   "profile": {
-    "memberSince": "{when}加入",
+    "joined": "{when}加入",
+    "editProfile": "编辑资料",
+    "follow": "关注",
+    "following": "已关注",
+    "stats": {
+      "following": "关注 <b>{n}</b> 人",
+      "followers": "<b>{n}</b> 位关注者",
+      "recommendations": "<b>{n}</b> 条推荐"
+    },
     "writes": "写作",
-    "recommendations": "推荐",
-    "noRecommendations": "还没有推荐过文章。",
-    "reads": "在读"
+    "tabs": {
+      "recommendations": "推荐",
+      "liked": "喜欢",
+      "subscriptions": "订阅"
+    },
+    "nothing": "这里还什么都没有。"
+  },
+  "following": {
+    "title": "关注",
+    "intro": "你关注的人在读什么、喜欢什么、推荐什么。",
+    "tabs": {
+      "all": "全部",
+      "recs": "推荐",
+      "likes": "喜欢"
+    },
+    "recommended": "推荐了",
+    "liked": "喜欢了 {n} 篇文章",
+    "subscribed": "{n, plural, =1 {订阅了} other {订阅了 {n} 个博客，包括}}",
+    "minutes": "{n} 分钟",
+    "read": "阅读 →",
+    "empty": "这里还没有动态。关注几位读者，看看他们推荐什么。",
+    "failed": "动态没能加载出来。",
+    "retry": "重试",
+    "older": "更早的动态",
+    "peopleYouFollow": "你关注的人",
+    "noOneYet": "还没有。去读者的个人页关注他们。",
+    "readersToFollow": "可以关注的读者",
+    "follow": "关注",
+    "followingButton": "已关注"
   },
   "dashboard": {
     "title": "你的站点",
@@ -222,24 +279,64 @@
   },
   "settings": {
     "title": "设置",
-    "profileLink": "你的公开个人页：",
+    "sections": {
+      "profile": "个人资料",
+      "reading": "阅读",
+      "translation": "翻译",
+      "subscriptions": "订阅",
+      "privacy": "隐私"
+    },
+    "profileIntro": "读者和作者在 Tela 上看到的你。",
+    "name": "名字",
     "handle": "用户名",
     "handleHint": "3–30 个小写字母、数字或下划线，用于你的个人页地址。",
-    "displayName": "显示名称",
     "bio": "简介",
-    "publicSubscriptions": "在个人页展示我的订阅",
-    "save": "保存",
+    "charsLeft": "还可输入 {n} 个字",
+    "saveChanges": "保存更改",
     "saved": "已保存。",
-    "reading": "阅读",
-    "readingLang": "文章会被翻译成{lang}。",
-    "data": "你的数据",
-    "opmlHint": "把订阅带去任何地方：导出为 OPML。",
-    "opmlExport": "导出 OPML",
+    "viewProfile": "查看个人页",
     "errors": {
       "invalid_handle": "用户名需为 3–30 个小写字母、数字或下划线，且不能使用保留词。",
       "handle_taken": "该用户名已被占用。"
     },
-    "appearance": "外观"
+    "readingIntro": "文章在「阅读」里的样子和行为。",
+    "textSize": "字号",
+    "textSizeHint": "作用于文章正文。",
+    "measure": "行宽",
+    "measureHint": "文章栏最宽能到多少。",
+    "theme": "主题",
+    "themeHint": "「跟随系统」随系统设置切换。",
+    "markOnOpen": "打开即标为已读",
+    "markOnOpenHint": "关掉的话，文章会一直是未读，直到你手动标记。",
+    "hideRead": "隐藏已读文章",
+    "hideReadHint": "列表只显示未读文章，喜欢的文章始终保留。",
+    "translationIntro": "Tela 会翻译用其他语言写的文章，原文随时一键可见。",
+    "translateInto": "翻译成",
+    "translateIntoHint": "你主要的阅读语言。",
+    "autoTranslate": "自动翻译",
+    "autoTranslateHint": "关掉的话，外语文章打开时是原文，附一个「翻译」按钮。",
+    "defaultView": "默认视图",
+    "defaultViewHint": "译文打开时的样子。",
+    "never": "从不翻译",
+    "neverHint": "你读得顺的语言：这些文章直接显示原文，标题也是。",
+    "addLanguage": "+ 添加语言",
+    "add": "添加",
+    "removeLanguage": "移除{lang}",
+    "subscriptionsIntro": "{n} 个博客。可以用 OPML 从别的阅读器带来订阅。",
+    "importOpml": "导入 OPML",
+    "opmlExport": "导出",
+    "unsubscribe": "取消订阅",
+    "subscribe": "订阅",
+    "noSubscriptions": "还没有订阅。",
+    "privacyIntro": "选择别人在你的个人页上能看到什么。",
+    "showLikes": "展示喜欢的文章",
+    "showLikesHint": "展示在你的个人页上，也给关注你的人看。作者能看到一篇文章有多少人喜欢，但看不到是谁。",
+    "showSubscriptions": "展示订阅",
+    "showSubscriptionsHint": "在个人页上列出你读的博客。",
+    "privacyDelay": "公开个人页可能要几分钟才会跟上改动。",
+    "yourData": "你的数据",
+    "yourDataHint": "你的资料、订阅、喜欢、推荐、划线和关注的人，打包成一个文件。",
+    "download": "下载"
   },
   "search": {
     "title": "搜索",

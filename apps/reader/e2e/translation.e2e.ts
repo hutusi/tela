@@ -4,7 +4,7 @@
  * [[drop]], which is how a provider omitting an entry looks.
  */
 import { expect, test } from '@playwright/test'
-import { ensureFeeds, FIXTURES, keepCycling, resetReading, synced } from './helpers'
+import { ensureFeeds, FIXTURES, keepCycling, resetReading, setPrefs, synced } from './helpers'
 
 test.beforeAll(async () => {
   // A Japanese blog, whose titles the setup's sweeps have not seen yet.
@@ -58,6 +58,49 @@ test.describe('translation', () => {
     await expect(page.getByTestId('body-original').first()).toBeVisible()
     await expect(page.getByTestId('body-translated')).toHaveCount(0)
     await page.getByTestId('mode-side').click()
+  })
+
+  test('translating only when asked opens the original, and asks for nothing until Translate', async ({
+    page,
+  }) => {
+    await setPrefs(page.request, { 'translate.auto': false })
+    const asked: string[] = []
+    page.on('request', (r) => {
+      if (r.method() === 'POST' && r.url().includes('/api/v1/translations')) asked.push(r.url())
+    })
+    await page.goto('/reading')
+    await synced(page)
+    const row = page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).last()
+    await row.click()
+    const bar = page.getByTestId('translation-bar')
+    await expect(bar).toContainText('Written in Japanese.')
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
+    await expect(page.getByTestId('mode-side')).toHaveCount(0)
+    expect(asked).toEqual([])
+
+    const stop = keepCycling(page)
+    try {
+      await page.getByTestId('translate-now').click()
+      await expect(page.getByTestId('mode-side')).toBeVisible()
+      await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'side', {
+        timeout: 30_000,
+      })
+    } finally {
+      stop()
+    }
+  })
+
+  test('a language never translated reads as written, titles and all', async ({ page }) => {
+    await setPrefs(page.request, { 'translate.never': ['ja'] })
+    await page.goto('/reading')
+    await synced(page)
+    await expect(page.getByTestId('article-row').first()).toBeVisible()
+    await expect(page.getByTestId('article-row').filter({ hasText: 'JA → EN' })).toHaveCount(0)
+    const row = page.getByTestId('article-row').filter({ hasText: 'give IT a try' }).first()
+    await expect(row.locator('h2')).not.toContainText('en:')
+    await row.click()
+    await expect(page.getByTestId('article-title')).not.toContainText('en:')
+    await expect(page.getByTestId('translation-bar')).toHaveCount(0)
   })
 
   test('a finished translation opens from the device the second time', async ({ page }) => {

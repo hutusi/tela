@@ -5,7 +5,7 @@
  */
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
-import { FIXTURES, keepCycling, synced } from './helpers'
+import { FIXTURES, keepCycling, resetReading, setPrefs, synced } from './helpers'
 
 test.describe('reader', () => {
   test('signed-in home goes to reading, with the subscriptions from the first sync', async ({
@@ -55,6 +55,75 @@ test.describe('reader', () => {
 
     await page.getByTestId('close-article').click()
     await expect(page).not.toHaveURL(/article=/)
+  })
+
+  test('with marking read on opening turned off, a post stays unread until marked', async ({
+    page,
+  }) => {
+    await page.goto('/settings/reading')
+    const toggle = page.getByTestId('pref-mark-on-open')
+    await expect(toggle).toHaveAttribute('aria-checked', 'true')
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-checked', 'false')
+    try {
+      await page.getByTestId('nav-reading').click()
+      await synced(page)
+      await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+      // This feed's own list, not whatever "All articles" still shows.
+      await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+      await expect(page.getByTestId('article-row').first()).toContainText('Julia Evans')
+      const unread = page.getByTestId('article-row').filter({ has: page.getByTestId('unread-dot') })
+      const href = await unread.first().getAttribute('href')
+      const row = page.locator(`[data-testid="article-row"][href="${href}"]`)
+      await row.click()
+      await expect(page.locator('.article-body').first()).toBeVisible()
+      await expect(row.getByTestId('unread-dot')).toHaveCount(1)
+      await page.getByTestId('mark-read').click()
+      await expect(row.getByTestId('unread-dot')).toHaveCount(0)
+      await expect(page.getByTestId('mark-read')).toHaveCount(0)
+    } finally {
+      await resetReading(page.request)
+    }
+  })
+
+  test('hiding read posts keeps the one being read, until the reader moves to another list', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    await synced(page)
+    const feed = page.getByTestId('subscription').filter({ hasText: 'Julia Evans' })
+    await feed.click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    await expect(page.getByTestId('article-row').first()).toContainText('Julia Evans')
+    const rows = page.getByTestId('article-row')
+    const unread = rows.filter({ has: page.getByTestId('unread-dot') })
+    // One post read before the pref, one read after it.
+    const earlier = await unread.first().getAttribute('href')
+    await page.locator(`[data-testid="article-row"][href="${earlier}"]`).click()
+    await expect(page.locator('.article-body').first()).toBeVisible()
+    await page.getByTestId('close-article').click()
+    await setPrefs(page.request, { 'reader.hide_read': true })
+    try {
+      await page.reload()
+      await synced(page)
+      await expect(page.getByTestId('article-row').first()).toContainText('Julia Evans')
+      await expect(page.locator(`[data-testid="article-row"][href="${earlier}"]`)).toHaveCount(0)
+      const later = await unread.first().getAttribute('href')
+      const row = page.locator(`[data-testid="article-row"][href="${later}"]`)
+      await row.click()
+      await expect(row).toHaveAttribute('data-read', '1')
+      await page.getByTestId('close-article').click()
+      await expect(row).toBeVisible()
+      // Another list, and back: what was read is gone from this one.
+      await page.getByTestId('sidebar').getByText('All articles').click()
+      await expect(page).toHaveURL(/\/reading$/)
+      await feed.click()
+      await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+      await expect(page.getByTestId('article-row').first()).toContainText('Julia Evans')
+      await expect(page.locator(`[data-testid="article-row"][href="${later}"]`)).toHaveCount(0)
+    } finally {
+      await resetReading(page.request)
+    }
   })
 
   test('going back to an opened article brings the article back', async ({ page }) => {

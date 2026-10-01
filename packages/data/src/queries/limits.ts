@@ -20,6 +20,8 @@ export const ACTION_LIMITS = {
   claimVerify: { limit: 30, windowSec: 3600 },
   /** A body translation can cost a dozen model calls; a reader opens far fewer. */
   translate: { limit: 30, windowSec: 3600 },
+  /** A member's whole history in one response (ADR 0031's "Your data"). */
+  export: { limit: 10, windowSec: 3600 },
 } as const satisfies Record<string, ActionLimit>
 
 export type LimitedAction = keyof typeof ACTION_LIMITS

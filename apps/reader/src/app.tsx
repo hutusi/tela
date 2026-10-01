@@ -1,18 +1,20 @@
 /** The reader app: providers, and one route per page. Every page renders from the local store. */
 import type { UiLocale } from '@tela/shared'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { AppHeader } from './components/app-header'
 import { detectLocale, I18n, localeCookie } from './i18n'
 import { applyTheme, typographyOf } from './lib/typography'
+import { forgetPublic } from './lib/use-public'
 import { AddPage } from './pages/add'
 import { ClaimPage, ClaimSitePage } from './pages/claim'
 import { DashboardPage } from './pages/dashboard'
 import { DiscoverPage } from './pages/discover'
+import { FollowingPage } from './pages/following'
 import { LandingPage } from './pages/landing'
 import { LoginPage } from './pages/login'
 import { NotFoundPage } from './pages/not-found'
-import { ProfilePage } from './pages/profile'
+import { ProfilePage, profilePath } from './pages/profile'
 import { ReadingPage } from './pages/reading'
 import { SearchPage } from './pages/search'
 import { SettingsPage } from './pages/settings'
@@ -50,6 +52,32 @@ function HandleOrMissing() {
 
 function Routed() {
   const { store } = useStore()
+  // A follow the server now has, or an unfollow: the profile page held for this visit, and the one
+  // the browser cached, still count the old state. Forgotten here, wherever the member is, so a
+  // return to that profile fetches it again past the cache (ADR 0031).
+  useEffect(() => {
+    store.onFollowsConfirmed = (rows) => {
+      for (const row of rows) if (row.handle) forgetPublic(profilePath(row.handle))
+    }
+    return () => {
+      store.onFollowsConfirmed = null
+    }
+  }, [store])
+  // The member's own profile changed (a privacy switch, a new name or handle), and the server has
+  // it: the copies of their public profile held this visit, and the one the browser cached, still
+  // say what it said. Watched here, not on the profile page, which is not mounted while Settings
+  // makes the change. A new handle forgets both addresses.
+  const tables = useTables()
+  const ownSeq = tables.profile?.seq ?? null
+  const ownHandle = tables.profile?.handle ?? null
+  const lastOwn = useRef({ seq: ownSeq, handle: ownHandle })
+  useEffect(() => {
+    const last = lastOwn.current
+    lastOwn.current = { seq: ownSeq, handle: ownHandle }
+    if (last.seq === null || ownSeq === null || last.seq === ownSeq) return
+    if (last.handle) forgetPublic(profilePath(last.handle))
+    if (ownHandle && ownHandle !== last.handle) forgetPublic(profilePath(ownHandle))
+  }, [ownSeq, ownHandle])
   const [locale, setLocaleState] = useState<UiLocale>(() =>
     detectLocale(document.cookie, navigator.languages ?? [navigator.language]),
   )
@@ -66,7 +94,6 @@ function Routed() {
     document.documentElement.lang = locale
   }, [locale])
   // A member's theme is a synced pref; a visitor keeps whatever this browser last had.
-  const tables = useTables()
   const theme = typographyOf(tables).theme
   const synced = tables.profile !== null
   useEffect(() => {
@@ -95,6 +122,14 @@ function Routed() {
                       }
                     />
                     <Route path="/discover" element={<DiscoverPage />} />
+                    <Route
+                      path="/following"
+                      element={
+                        <Members>
+                          <FollowingPage />
+                        </Members>
+                      }
+                    />
                     <Route path="/s/:siteId" element={<SitePage />} />
                     <Route
                       path="/search"
@@ -114,6 +149,14 @@ function Routed() {
                     />
                     <Route
                       path="/settings"
+                      element={
+                        <Members>
+                          <SettingsPage />
+                        </Members>
+                      }
+                    />
+                    <Route
+                      path="/settings/:section"
                       element={
                         <Members>
                           <SettingsPage />

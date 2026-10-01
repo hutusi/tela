@@ -48,8 +48,11 @@ export type EdgeDeps = {
 
 type Waiter = { waitUntil(promise: Promise<unknown>): void }
 
-export type PublicPages<R extends { api: string } = { api: string }> = {
-  /** The page a URL names, with the tela-api endpoint its data comes from. */
+export type PublicPages<R extends { api: string; key?: string } = { api: string; key?: string }> = {
+  /**
+   * The page a URL names, with the tela-api endpoint its data comes from, and the key it is
+   * cached under when that endpoint serves more than one page (a profile's tabs).
+   */
   route(url: URL): R | null
   /** The UI language to render in, from the locale cookie and Accept-Language. */
   locale(request: Request): string
@@ -243,7 +246,7 @@ export function createEdge(deps: EdgeDeps) {
     const build = [...new Uint8Array(digest).slice(0, 6)]
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('')
-    const cacheKey = new Request(`${CACHE_ORIGIN}/page/${build}/${locale}${route.api}`)
+    const cacheKey = new Request(`${CACHE_ORIGIN}/page/${build}/${locale}${route.key ?? route.api}`)
     const hit = await cache.match(cacheKey)
     if (hit) {
       const cached = new Response(hit.body, hit)
@@ -258,7 +261,18 @@ export function createEdge(deps: EdgeDeps) {
       })
     }
     const data = res.status === 404 ? null : ((await res.json()) as unknown)
-    const html = pages.render({ route, url, data, locale, template })
+    let html: string
+    try {
+      html = pages.render({ route, url, data, locale, template })
+    } catch (err) {
+      // An answer this build cannot render (a tela-api of another release beside it): the plain
+      // shell, uncached, whose app asks again from the browser, rather than an error page. Logged,
+      // since a page that always falls back is otherwise invisible.
+      console.error('public page did not render', url.pathname, err)
+      return new Response(template, {
+        headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': PAGE_CACHE },
+      })
+    }
     const headers = { 'content-type': 'text/html; charset=utf-8', 'content-language': locale }
     const status = data === null ? 404 : 200
     const put = cache.put(

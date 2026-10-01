@@ -6,13 +6,17 @@
   "nav": {
     "reading": "Reading",
     "discover": "Discover",
+    "following": "Following",
     "readIn": "Read in",
     "search": "Search blogs, articles, people",
     "signIn": "Sign in",
     "signOut": "Sign out",
     "addFeed": "+ Add a feed",
     "dashboard": "Dashboard",
-    "settings": "Settings"
+    "settings": "Settings",
+    "account": "Your account",
+    "yourProfile": "Your profile",
+    "subscriptions": "Subscriptions"
   },
   "home": {
     "title": "Independent blogs, in any language.",
@@ -57,7 +61,9 @@
     "minutes": "{n} min",
     "translatedBadge": "{from} → {to}",
     "loadMore": "Older articles",
-    "fetching": "Fetching this feed for the first time…"
+    "fetching": "Fetching this feed for the first time…",
+    "allRead": "You're all caught up.",
+    "allReadHint": "Read posts are hidden. <settings>Show them again</settings> in Settings."
   },
   "reader": {
     "close": "✕ Close",
@@ -84,7 +90,8 @@
     "unrecommended": "Recommendation removed.",
     "fetchingFullText": "Fetching the full post from the site…",
     "upNext": "Up next",
-    "focus": "Focus"
+    "focus": "Focus",
+    "markRead": "Mark as read"
   },
   "add": {
     "title": "Add a feed",
@@ -110,6 +117,8 @@
   },
   "translation": {
     "writtenIn": "Written in <b>{source}</b>. Translated to {target} by Tela.",
+    "writtenInOnly": "Written in <b>{source}</b>.",
+    "translateNow": "Translate into {target}",
     "translating": "Translating…",
     "failed": "Translation failed.",
     "partial": "{n, plural, one {# paragraph} other {# paragraphs}} could not be translated.",
@@ -164,12 +173,26 @@
     }
   },
   "site": {
-    "claimedBy": "claimed by @{handle}",
+    "claimedByName": "✓ Claimed by {name}",
+    "visit": "Visit site ↗",
+    "writtenIn": "Written in {lang}",
+    "cadence": "{key, select, daily {Posts daily} weekly {Posts weekly} biweekly {Posts twice a month} monthly {Posts monthly} other {Quiet lately}}",
+    "readersOnTela": "{n, plural, one {# reader on Tela} other {# readers on Tela}}",
     "claimLink": "Is this your site? Claim it",
     "yourTopics": "Your topics",
     "saveTopics": "Save",
-    "latestPosts": "Latest posts",
-    "noPosts": "No posts fetched yet."
+    "posts": "Posts",
+    "minutes": "{n} min",
+    "noPosts": "No posts fetched yet.",
+    "about": "About",
+    "readersYouFollow": "Readers you follow",
+    "readersText": {
+      "one": "{a} reads this blog.",
+      "two": "{a} and {b} read this blog.",
+      "more": "{a}, {b} and {n, plural, one {# other} other {# others}} read this blog."
+    },
+    "fromReaders": "From readers",
+    "noteOn": "<person></person> on <post></post>"
   },
   "claim": {
     "title": "Claim your feed",
@@ -198,11 +221,45 @@
     }
   },
   "profile": {
-    "memberSince": "joined {when}",
+    "joined": "Joined {when}",
+    "editProfile": "Edit profile",
+    "follow": "Follow",
+    "following": "Following",
+    "stats": {
+      "following": "<b>{n}</b> following",
+      "followers": "<b>{n}</b> {n, plural, one {follower} other {followers}}",
+      "recommendations": "<b>{n}</b> {n, plural, one {recommendation} other {recommendations}}"
+    },
     "writes": "Writes",
-    "recommendations": "Recommendations",
-    "noRecommendations": "Nothing recommended yet.",
-    "reads": "Reads"
+    "tabs": {
+      "recommendations": "Recommendations",
+      "liked": "Liked",
+      "subscriptions": "Subscriptions"
+    },
+    "nothing": "Nothing to show yet."
+  },
+  "following": {
+    "title": "Following",
+    "intro": "What the people you follow are reading, liking and passing on.",
+    "tabs": {
+      "all": "All",
+      "recs": "Recommendations",
+      "likes": "Likes"
+    },
+    "recommended": "recommended",
+    "liked": "{n, plural, one {liked a post} other {liked # posts}}",
+    "subscribed": "{n, plural, one {subscribed to} other {subscribed to # blogs, including}}",
+    "minutes": "{n} min",
+    "read": "Read →",
+    "empty": "Nothing here yet. Follow a few readers to see what they pass on.",
+    "failed": "The activity could not be loaded.",
+    "retry": "Try again",
+    "older": "Older activity",
+    "peopleYouFollow": "People you follow",
+    "noOneYet": "No one yet. Follow readers from their profiles.",
+    "readersToFollow": "Readers to follow",
+    "follow": "Follow",
+    "followingButton": "Following"
   },
   "dashboard": {
     "title": "Your sites",
@@ -222,24 +279,64 @@
   },
   "settings": {
     "title": "Settings",
-    "profileLink": "Your public profile:",
+    "sections": {
+      "profile": "Profile",
+      "reading": "Reading",
+      "translation": "Translation",
+      "subscriptions": "Subscriptions",
+      "privacy": "Privacy"
+    },
+    "profileIntro": "How you appear to readers and authors on Tela.",
+    "name": "Name",
     "handle": "Handle",
     "handleHint": "3–30 lowercase letters, digits, or underscores. Used in your profile URL.",
-    "displayName": "Display name",
     "bio": "Bio",
-    "publicSubscriptions": "Show my subscriptions on my profile",
-    "save": "Save",
+    "charsLeft": "{n, plural, one {# character} other {# characters}} left",
+    "saveChanges": "Save changes",
     "saved": "Saved.",
-    "reading": "Reading",
-    "readingLang": "Posts are translated into {lang}.",
-    "data": "Your data",
-    "opmlHint": "Take your subscriptions anywhere: export them as OPML.",
-    "opmlExport": "Export OPML",
+    "viewProfile": "View profile",
     "errors": {
       "invalid_handle": "Handles are 3–30 lowercase letters, digits, or underscores, and some words are reserved.",
       "handle_taken": "That handle is already taken."
     },
-    "appearance": "Appearance"
+    "readingIntro": "How articles look and behave in Reading.",
+    "textSize": "Text size",
+    "textSizeHint": "Applies to article bodies.",
+    "measure": "Line length",
+    "measureHint": "How wide an article's column may grow.",
+    "theme": "Theme",
+    "themeHint": "Auto follows your system.",
+    "markOnOpen": "Mark as read when opened",
+    "markOnOpenHint": "Otherwise, a post stays unread until you mark it.",
+    "hideRead": "Hide read articles",
+    "hideReadHint": "Lists show unread posts only. Liked posts are always kept.",
+    "translationIntro": "Tela translates posts written in other languages. The original is always one click away.",
+    "translateInto": "Translate into",
+    "translateIntoHint": "Your main reading language.",
+    "autoTranslate": "Translate automatically",
+    "autoTranslateHint": "If off, foreign posts open in the original with a Translate button.",
+    "defaultView": "Default view",
+    "defaultViewHint": "How translated posts first open.",
+    "never": "Never translate",
+    "neverHint": "Languages you read comfortably: their posts open in the original, titles included.",
+    "addLanguage": "+ Add language",
+    "add": "Add",
+    "removeLanguage": "Remove {lang}",
+    "subscriptionsIntro": "{n, plural, one {# blog} other {# blogs}}. Bring feeds from another reader with OPML.",
+    "importOpml": "Import OPML",
+    "opmlExport": "Export",
+    "unsubscribe": "Unsubscribe",
+    "subscribe": "Subscribe",
+    "noSubscriptions": "No subscriptions yet.",
+    "privacyIntro": "Choose what others see on your profile.",
+    "showLikes": "Show liked posts",
+    "showLikesHint": "On your profile, and to people who follow you. Authors see how many likes a post has, never who liked it.",
+    "showSubscriptions": "Show subscriptions",
+    "showSubscriptionsHint": "List the blogs you read on your profile.",
+    "privacyDelay": "Your public profile can take a few minutes to catch up with a change.",
+    "yourData": "Your data",
+    "yourDataHint": "Your profile, subscriptions, likes, recommendations, highlights and the people you follow, as one file.",
+    "download": "Download"
   },
   "search": {
     "title": "Search",

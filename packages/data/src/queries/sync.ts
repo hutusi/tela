@@ -4,7 +4,7 @@
  *
  * What a member holds:
  * - their own rows: profile, prefs, subscriptions, read/like states, recommendations, highlights,
- *   claims;
+ *   claims, and the members they follow, with how those members appear (ADR 0031);
  * - the shared rows of the feeds they subscribe to: feeds, sites, articles, titles, and the body
  *   translations of those articles;
  * - articles they liked, recommended or highlighted, wherever those came from, with the
@@ -35,6 +35,7 @@ export type PullTables =
   | 'highlights'
   | 'claims'
   | 'translations'
+  | 'follows'
 
 export type PullRead = {
   /** The newest seq in this snapshot of the database. */
@@ -47,7 +48,7 @@ export type PullRead = {
 
 const PROFILE = sql.raw(`p.handle, p.display_name as "displayName", p.bio,
   p.ui_locale as "uiLocale", p.reading_lang as "readingLang",
-  p.public_subscriptions as "publicSubscriptions", p.seq`)
+  p.public_subscriptions as "publicSubscriptions", p.public_likes as "publicLikes", p.seq`)
 const PREF = sql.raw(`key, value_json as "valueJson", updated_at as "updatedAt", seq`)
 const SUBSCRIPTION = sql.raw(`feed_id as "feedId", watermark_id as "watermarkId",
   created_at as "createdAt", deleted_at as "deletedAt", seq`)
@@ -70,6 +71,16 @@ const HIGHLIGHT = sql.raw(`id, article_id as "articleId", content_key as "conten
   updated_at as "updatedAt", deleted_at as "deletedAt", seq`)
 const CLAIM = sql.raw(`id, site_id as "siteId", method, token, status, error,
   verified_at as "verifiedAt", seq`)
+/**
+ * The seq a follow row is sent, selected and paged by: for a live follow, the later of the follow's
+ * and the followee's profile's, so a rename sends the row again; for an unfollow, its own. One
+ * expression for all three, or a deletion whose followee renamed after it could be cut from one
+ * page by the profile's seq and never selected by the next (ADR 0031).
+ */
+const FOLLOW_SEQ = sql.raw(`(case when f.deleted_at is null then max(f.seq, p.seq) else f.seq end)`)
+/** A follow with how the followed member appears, from `follows f join profiles p`. */
+const FOLLOW = sql`f.followee_id as "userId", p.handle, p.display_name as "displayName",
+  f.created_at as "createdAt", f.deleted_at as "deletedAt", ${FOLLOW_SEQ} as seq`
 const TRANSLATION = sql.raw(`b.content_key as "contentKey", b.lang, b.state,
   b.chunk_keys as "chunkKeys", b.object_key as "objectKey", b.failed_leaves as "failedLeaves",
   b.seq`)
@@ -161,6 +172,14 @@ export async function readPull(
       : sql`select ${HIGHLIGHT} from highlights where user_id = ${userId} and seq > ${cursor} ${bySeq}`,
     claims: sql`select ${CLAIM} from site_claims where user_id = ${userId}
       ${snapshot ? sql`` : sql`and seq > ${cursor} ${bySeq}`}`,
+    // The people the member follows. A delta also sends a live follow whose followee's profile
+    // changed since the cursor: the device shows their handle and name.
+    follows: snapshot
+      ? sql`select ${FOLLOW} from follows f join profiles p on p.user_id = f.followee_id
+          where f.follower_id = ${userId} and f.deleted_at is null`
+      : sql`select ${FOLLOW} from follows f join profiles p on p.user_id = f.followee_id
+          where f.follower_id = ${userId} and ${FOLLOW_SEQ} > ${cursor}
+          order by ${FOLLOW_SEQ} limit ${over}`,
 
     // Shared rows: the fresh part is unbounded (a horizon is bounded by itself); the changed part
     // is cut at `limit` like every other delta table.
@@ -236,6 +255,7 @@ export async function readPull(
         'recommendations',
         'highlights',
         'claims',
+        'follows',
         'feeds',
         'articles',
         'titles',
@@ -295,6 +315,7 @@ export async function readPull(
       recommendations: within(got.recommendations),
       highlights: within(got.highlights),
       claims: within(got.claims),
+      follows: within(got.follows),
       feeds: merge(
         got.freshFeeds.filter((f) => isFresh(f.id) || freshArticleFeeds.has(Number(f.id))),
         got.feeds,
