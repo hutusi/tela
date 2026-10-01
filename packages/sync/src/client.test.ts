@@ -176,6 +176,7 @@ describe('follows and privacy flags on the device (ADR 0031)', () => {
     userId: ID,
     handle,
     displayName: 'Anna',
+    avatar: null,
     createdAt: 5,
     deletedAt,
     seq,
@@ -188,6 +189,8 @@ describe('follows and privacy flags on the device (ADR 0031)', () => {
     readingLang: null,
     publicSubscriptions: true,
     publicLikes: false,
+    gravatar: false,
+    avatar: null,
     seq: 1,
   }
 
@@ -232,6 +235,36 @@ describe('follows and privacy flags on the device (ADR 0031)', () => {
   })
 })
 
+describe('the Gravatar switch on the device (ADR 0032)', () => {
+  const profile: ProfileRow = {
+    handle: 'me',
+    displayName: null,
+    bio: null,
+    uiLocale: null,
+    readingLang: null,
+    publicSubscriptions: false,
+    publicLikes: false,
+    gravatar: true,
+    avatar: '/avatar/member-me-0000001?v=5',
+    seq: 1,
+  }
+  const held = applyPull(start, pull(3, { profile: [profile] }))
+
+  test('off takes the picture away at once', () => {
+    const off = view(held, [
+      { mutation: { mid: 'g-off', at: 10, type: 'setAvatar', gravatar: false } },
+    ])
+    expect(off.profile).toMatchObject({ gravatar: false, avatar: null })
+  })
+
+  test('on, or Refresh, keeps what it has until the server names the new address', () => {
+    const again = view(held, [
+      { mutation: { mid: 'g-on', at: 11, type: 'setAvatar', gravatar: true } },
+    ])
+    expect(again.profile).toMatchObject({ gravatar: true, avatar: '/avatar/member-me-0000001?v=5' })
+  })
+})
+
 describe('a pull from a tela-api of an earlier release', () => {
   test("reads as having no rows of the tables it does not know, and keeps the device's flags", () => {
     const profile: ProfileRow = {
@@ -242,20 +275,30 @@ describe('a pull from a tela-api of an earlier release', () => {
       readingLang: null,
       publicSubscriptions: false,
       publicLikes: true,
+      gravatar: false,
+      avatar: null,
       seq: 1,
     }
     const follow: FollowRow = {
       userId: 'member-anna-0000001',
       handle: 'anna',
       displayName: null,
+      avatar: null,
       createdAt: 1,
       deletedAt: null,
       seq: 2,
     }
-    const held = applyPull(start, pull(4, { profile: [profile], follows: [follow] }))
-    // What the previous release sends: no `follows`, and a profile without `publicLikes`.
+    const pictured = { ...profile, gravatar: true, avatar: '/avatar/member-me-0000001?v=3' }
+    const held = applyPull(start, pull(4, { profile: [pictured], follows: [follow] }))
+    // What the previous release sends: no `follows`, and a profile without `publicLikes` or the
+    // picture's fields.
     const { follows: _f, ...rows } = emptyRows()
-    const { publicLikes: _p, ...oldProfile } = { ...profile, handle: 'me_renamed', seq: 5 }
+    const {
+      publicLikes: _p,
+      gravatar: _g,
+      avatar: _a,
+      ...oldProfile
+    } = { ...pictured, handle: 'me_renamed', seq: 5 }
     const old = {
       cursor: 5,
       more: false,
@@ -265,7 +308,12 @@ describe('a pull from a tela-api of an earlier release', () => {
     } as unknown as PullResponse
     const next = applyPull(held, old)
     expect(next.tables.follows.get(follow.userId)?.handle).toBe('anna')
-    expect(next.tables.profile).toMatchObject({ handle: 'me_renamed', publicLikes: true })
+    expect(next.tables.profile).toMatchObject({
+      handle: 'me_renamed',
+      publicLikes: true,
+      gravatar: true,
+      avatar: '/avatar/member-me-0000001?v=3',
+    })
   })
 
   test('a change of a type this build does not know changes nothing it shows', () => {

@@ -136,6 +136,20 @@ function statementsFor(
         `),
       ]
     }
+    case 'setAvatar': {
+      // To the later `at`, like a privacy switch; the `at` is also the picture's version, so the
+      // switch sent on again (Refresh) moves its address past every cache (ADR 0032).
+      const later = sql`${at} >= gravatar_at`
+      return [
+        db.run(sql`
+          update profiles set
+            gravatar = case when ${later} then ${m.gravatar ? 1 : 0} else gravatar end,
+            gravatar_at = case when ${later} then ${at} else gravatar_at end,
+            updated_at = ${now}, seq = ${currentSeq}
+          where user_id = ${userId} and ${fresh}
+        `),
+      ]
+    }
     case 'recommend':
       return [
         db.run(sql`

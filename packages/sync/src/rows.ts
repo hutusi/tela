@@ -13,6 +13,10 @@ export type ProfileRow = {
   publicSubscriptions: boolean
   /** Whether the member's liked posts show on their profile and to their followers (ADR 0031). */
   publicLikes: boolean
+  /** Whether the member shows their Gravatar (ADR 0032). */
+  gravatar: boolean
+  /** Their picture's address (`/avatar/…`), or null: the server's to say, never built here. */
+  avatar: string | null
   seq: number
 }
 
@@ -158,6 +162,8 @@ export type FollowRow = {
   /** Null only in a prediction, until the pull brings the row. */
   handle: string | null
   displayName: string | null
+  /** Their picture's address, or null (ADR 0032). */
+  avatar: string | null
   createdAt: number
   deletedAt: number | null
   seq: number

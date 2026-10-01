@@ -685,6 +685,38 @@ describe('follows (ADR 0031)', () => {
     expect(await flags()).toMatchObject({ publicLikes: true, publicSubscriptions: true })
   })
 
+  test('the Gravatar switch goes to the later choice, and on again is a new address (ADR 0032)', async () => {
+    const t = now - 1000
+    const shown = async () => (await pull(0)).rows.profile[0]
+    expect(await shown()).toMatchObject({ gravatar: false, avatar: null })
+    await push([{ type: 'setAvatar', gravatar: true, at: t }])
+    const first = await shown()
+    expect(first?.gravatar).toBe(true)
+    expect(first?.avatar).toBe(`/avatar/${reader.userId}?v=${t}`)
+    // Refresh: the switch sent on again moves the address past every cache.
+    await push([{ type: 'setAvatar', gravatar: true, at: t + 100 }])
+    expect((await shown())?.avatar).toBe(`/avatar/${reader.userId}?v=${t + 100}`)
+    // An older "off" from another device, arriving late, changes nothing.
+    await push([{ type: 'setAvatar', gravatar: false, at: t + 50 }])
+    expect(await shown()).toMatchObject({ gravatar: true })
+    // A later one takes the picture away.
+    await push([{ type: 'setAvatar', gravatar: false, at: t + 200 }])
+    expect(await shown()).toMatchObject({ gravatar: false, avatar: null })
+  })
+
+  test("a followee's picture comes with the follow, and turning it on sends the row again", async () => {
+    await push([{ type: 'follow', userId: ANNA }])
+    const snap = await pull(0)
+    expect(snap.rows.follows).toMatchObject([{ userId: ANNA, avatar: null }])
+    await write(
+      db.run(
+        sql`update profiles set gravatar = 1, gravatar_at = 7, seq = ${currentSeq} where user_id = ${ANNA}`,
+      ),
+    )
+    const delta = await pull(snap.cursor)
+    expect(delta.rows.follows).toMatchObject([{ userId: ANNA, avatar: `/avatar/${ANNA}?v=7` }])
+  })
+
   test('a profile save from a shell before the switches may hide subscriptions, never show them', async () => {
     await push([{ type: 'setPrivacy', publicSubscriptions: false, at: now - 10 }])
     // The old form sends what it loaded with every save.

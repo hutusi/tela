@@ -54,5 +54,7 @@ export const profile = {
   readingLang: null,
   publicSubscriptions: false,
   publicLikes: false,
+  gravatar: false,
+  avatar: null,
   seq: 1,
 }

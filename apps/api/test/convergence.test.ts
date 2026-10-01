@@ -72,6 +72,7 @@ function live(t: Tables) {
     flags: {
       publicSubscriptions: t.profile?.publicSubscriptions,
       publicLikes: t.profile?.publicLikes,
+      gravatar: t.profile?.gravatar,
     },
   }
 }
@@ -151,7 +152,7 @@ async function scenario(seed: number, steps: number) {
     const at = api.clock.now()
     api.clock.advance(1 + Math.floor(random() * 5))
     const mid = `seed${seed}-m${++mids}-pad`
-    const choice = Math.floor(random() * 15)
+    const choice = Math.floor(random() * 16)
     const article = pick(articleIds)
     const feed = pick(FEEDS) as number
     let m: Mutation | null = null
@@ -208,6 +209,7 @@ async function scenario(seed: number, steps: number) {
         random() < 0.5
           ? { mid, at, type: 'setPrivacy', publicSubscriptions: random() < 0.5 }
           : { mid, at, type: 'setPrivacy', publicLikes: random() < 0.5 }
+    if (choice === 15) m = { mid, at, type: 'setAvatar', gravatar: random() < 0.5 }
     if (m) pending.push({ mutation: m })
   }
 

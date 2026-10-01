@@ -113,6 +113,12 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        (made offline, or pushed as the tab closed) boots blank under it, and stays blank until
        tela-web rolls forward or the browser's site data is cleared. This release's reducer
        ignores types it does not know, so rolling back *to* it from a later one is safe.
+   - Gravatar pictures (ADR 0032, migration 0003) are additive and keep protocol 2: apply the
+     migration before deploying tela-api, and deploy tela-api before tela-web.
+     - **Either Worker may go back alone.** An older tela-api refuses `setAvatar` as invalid, so
+       the switch visibly goes back; its profile rows carry no picture, and a device keeps the
+       one it held; `/avatar/…` answers 404, which shows the letter. An older tela-web (not
+       before the follows release) ignores an unsent `setAvatar` in its reducer.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
