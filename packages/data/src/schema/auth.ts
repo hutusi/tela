@@ -116,6 +116,12 @@ export const profiles = sqliteTable(
      */
     publicSubscriptionsAt: ms().notNull().default(0),
     publicLikesAt: ms().notNull().default(0),
+    /**
+     * Whether the member shows their Gravatar, and the `at` that last set it (ADR 0032). That clock
+     * is also the picture's version: the `v` of `/avatar/<userId>`, so Refresh is a new address.
+     */
+    gravatar: integer({ mode: 'boolean' }).notNull().default(false),
+    gravatarAt: ms().notNull().default(0),
     isAdmin: integer({ mode: 'boolean' }).notNull().default(false),
     createdAt: ms().notNull(),
     updatedAt: ms().notNull(),

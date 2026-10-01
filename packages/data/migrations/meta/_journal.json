@@ -22,6 +22,13 @@
       "when": 1790813410404,
       "tag": "0002_sour_wonder_man",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790871678680,
+      "tag": "0003_spicy_speedball",
+      "breakpoints": true
     }
   ]
 }
