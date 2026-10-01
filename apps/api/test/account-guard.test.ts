@@ -177,11 +177,16 @@ type MemberRoute = {
   method?: string
   /** Built as the test runs, since some name the fixture server's address. */
   body?: () => unknown
-  raw?: string
+  raw?: string | Uint8Array<ArrayBuffer>
   /** What the request does when it runs: writes (a refused one must not), or only reads. */
   effect: 'writes' | 'reads'
 }
 
+/** The header of a 256 px square PNG: all a picture upload is checked by (ADR 0033). */
+const SQUARE_PNG = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 1, 0,
+  0, 0, 1, 0, 8, 6, 0, 0, 0,
+])
 const OPML = `<?xml version="1.0"?><opml version="2.0"><head><title>s</title></head><body>
   <outline text="x" xmlUrl="https://imported.example/feed"/></body></opml>`
 
@@ -255,6 +260,15 @@ const MEMBER_ROUTES: MemberRoute[] = [
     body: () => ({ topics: ['tech'] }),
     effect: 'writes',
   },
+  {
+    route: 'PUT /api/v1/avatar',
+    path: '/api/v1/avatar',
+    method: 'PUT',
+    raw: SQUARE_PNG,
+    effect: 'writes',
+  },
+  // Nothing to remove for b, and still a write: the batch moves the sync sequence.
+  { route: 'DELETE /api/v1/avatar', path: '/api/v1/avatar', method: 'DELETE', effect: 'writes' },
   {
     route: 'PUT /api/v1/sites/:siteId/translation',
     path: '/api/v1/sites/1/translation',

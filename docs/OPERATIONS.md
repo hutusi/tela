@@ -12,7 +12,7 @@ How Tela is provisioned, deployed and kept running: three Cloudflare Workers, D1
 | tela-api | Worker pinned to `aws:ap-southeast-1` (`apps/api`) | Sign-in, sync, mutations, every reader RPC. No public route: tela-web reaches it over a service binding |
 | tela-jobs | Worker pinned to `aws:ap-southeast-1` (`apps/jobs`) | Crons, queue consumers, the `Ingest` RPC. No public route |
 | D1 `tela` | Primary in Singapore (`--location apac`) | 6–10 ms from the pinned Workers; Time Travel keeps 30 days |
-| R2 `tela-content` | Private | Content, translation and chunk objects (served by tela-web to members), raw item HTML, and the nightly `backup/` |
+| R2 `tela-content` | Private | Content, translation and chunk objects (served by tela-web to members), raw item HTML, members' uploaded pictures (`avatars/`, served by tela-api at `/avatar/…`, ADR 0033), and the nightly `backup/`. The pictures are member data the D1 export does not hold: a move off Cloudflare copies `avatars/` too |
 | R2 `tela-assets` | Public at `assets.tela.ainaive.com` | Favicons |
 | Queues | `tela-fetch`, `tela-extract`, `tela-translate`, `tela-misc`, DLQ `tela-dlq` | Accelerators only: every job is also found from state by the minute sweep |
 | Relay | Not provisioned (`apps/relay`) | A Node box in HK, only once a feed times out from Cloudflare; see *The relay* |
@@ -120,6 +120,13 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        the switch visibly goes back; its profile rows carry no picture, and a device keeps the
        one it held; `/avatar/…` answers 404, which shows the letter. An older tela-web (not
        before the follows release) ignores an unsent `setAvatar` in its reducer.
+   - Uploaded pictures and Gravatar on by default (ADR 0033, migration 0004) are additive and keep
+     protocol 2: apply the migration, then deploy tela-jobs (the `member.gravatar` kind), tela-api,
+     tela-web.
+     - **Any Worker may go back alone.** Without the new tela-jobs nobody's Gravatar is checked,
+       so a member with no upload shows their letter. An older tela-api has no `/api/v1/avatar`
+       (Settings' upload fails visibly) and serves only Gravatars at `/avatar/…`; uploaded objects
+       stay in R2 for when it returns. An older tela-web shows no upload controls.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way

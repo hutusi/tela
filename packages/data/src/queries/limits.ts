@@ -22,6 +22,8 @@ export const ACTION_LIMITS = {
   translate: { limit: 30, windowSec: 3600 },
   /** A member's whole history in one response (ADR 0031's "Your data"). */
   export: { limit: 10, windowSec: 3600 },
+  /** A picture of their own (ADR 0033): each one is an object in R2 and a new address. */
+  avatarUpload: { limit: 20, windowSec: 3600 },
 } as const satisfies Record<string, ActionLimit>
 
 export type LimitedAction = keyof typeof ACTION_LIMITS

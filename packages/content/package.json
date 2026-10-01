@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./hash": "./src/hash.ts",
+    "./picture": "./src/picture.ts",
     "./images": "./src/images.ts",
     "./split": "./src/split.ts",
     "./tagged": "./src/tagged.ts",

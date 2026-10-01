@@ -4,7 +4,7 @@
  * ever sees Tela. Public, like the profiles it appears on, and only while the member shows it.
  */
 import { sha256Hex } from '@tela/content/hash'
-import { first } from '@tela/data'
+import { first, gravatarOn } from '@tela/data'
 import { GRAVATAR_URL } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -66,14 +66,29 @@ export function avatarRoutes(deps: ApiDeps) {
     const userId = c.req.param('userId')
     const version = c.req.query('v') ?? ''
     if (!MEMBER_ID.test(userId) || !VERSION.test(version)) return none(300)
-    // Only the version the member's switch is at: a made-up one is a 404 here, never another
-    // request to Gravatar, and an old one stops answering once the member moves on.
-    const row = await first<{ email: string }>(
+    // Only the version the member's picture is at: a made-up one is a 404 here, never another
+    // request to Gravatar, and an old one stops answering once the member moves on. Their upload
+    // comes first (ADR 0033); a Gravatar only while shown and once Gravatar said it has one: the
+    // same rule as the address itself (`avatarSql`), so nothing unpublished is fetched.
+    const row = await first<{ email: string; avatarKey: string | null }>(
       db,
-      sql`select u.email from profiles p join "user" u on u.id = p.user_id
-        where p.user_id = ${userId} and p.gravatar = 1 and p.avatar_version = ${Number(version)}`,
+      sql`select u.email, p.avatar_key as "avatarKey" from profiles p join "user" u on u.id = p.user_id
+        where p.user_id = ${userId} and p.avatar_version = ${Number(version)}
+          and (p.avatar_key is not null or (${gravatarOn('p')} and p.gravatar_found = 1))`,
     )
     if (!row) return none(300)
+    if (row.avatarKey) {
+      const stored = await deps.blobs.get(row.avatarKey)
+      if (!stored) return none(300)
+      return new Response(await stored.arrayBuffer(), {
+        headers: {
+          'content-type': stored.contentType ?? 'application/octet-stream',
+          'cache-control': AVATAR_CACHE,
+          'x-content-type-options': 'nosniff',
+          'content-security-policy': "default-src 'none'; sandbox",
+        },
+      })
+    }
     const hash = await sha256Hex(row.email.trim().toLowerCase())
     let upstream: Response
     try {
