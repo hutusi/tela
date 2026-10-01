@@ -1,8 +1,9 @@
-import { languageBadge, READING_LANGUAGES } from '@tela/shared'
+import { READING_LANGUAGES } from '@tela/shared'
 import { useTranslations } from 'use-intl'
+import { pillLabel } from '../lib/format'
 import { useStore } from '../store/hooks'
 
-/** "Read in EN / ZH": the language posts are translated into. Separate from the UI locale. */
+/** "Read in 中文 EN": the language posts are translated into. The UI locale is in Settings. */
 export function ReadInMenu({ readingLang }: { readingLang: string }) {
   const t = useTranslations('nav')
   const { store } = useStore()
@@ -20,7 +21,7 @@ export function ReadInMenu({ readingLang }: { readingLang: string }) {
           aria-pressed={code === readingLang}
           className={`rounded-full px-2 py-1 ${code === readingLang ? 'bg-ink text-paper' : 'text-ink-2 hover:bg-hover'}`}
         >
-          {languageBadge(code)}
+          {pillLabel(code)}
         </button>
       ))}
     </div>

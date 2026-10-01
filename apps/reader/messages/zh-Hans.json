@@ -282,7 +282,7 @@
     "sections": {
       "profile": "个人资料",
       "reading": "阅读",
-      "translation": "翻译",
+      "translation": "语言",
       "subscriptions": "订阅",
       "privacy": "隐私"
     },
@@ -310,7 +310,9 @@
     "markOnOpenHint": "关掉的话，文章会一直是未读，直到你手动标记。",
     "hideRead": "隐藏已读文章",
     "hideReadHint": "列表只显示未读文章，喜欢的文章始终保留。",
-    "translationIntro": "Tela 会翻译用其他语言写的文章，原文随时一键可见。",
+    "translationIntro": "Tela 界面用的语言，以及文章翻译成的语言。原文随时一键可见。",
+    "uiLocale": "界面语言",
+    "uiLocaleHint": "菜单、按钮和提示文字。",
     "translateInto": "翻译成",
     "translateIntoHint": "你主要的阅读语言。",
     "autoTranslate": "自动翻译",

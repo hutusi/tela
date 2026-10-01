@@ -1,9 +1,11 @@
 import { UI_LOCALES } from '@tela/shared'
+import { pillLabel } from '../lib/format'
 import { useUi } from '../ui'
 
-const LABELS: Record<string, string> = { en: 'EN', 'zh-Hans': '中文' }
-
-/** Switches the UI locale (a cookie, and the profile for members); reading language is separate. */
+/**
+ * Switches the UI locale (a cookie, and the profile for members); reading language is separate.
+ * Only the sign-in page shows it: a member changes it in Settings, and a visitor's browser decides.
+ */
 export function LocaleSwitcher() {
   const { locale, setLocale } = useUi()
   return (
@@ -19,7 +21,7 @@ export function LocaleSwitcher() {
           aria-pressed={code === locale}
           className={`rounded-full px-2.5 py-1 ${code === locale ? 'bg-ink text-paper' : 'text-ink-2 hover:bg-hover'}`}
         >
-          {LABELS[code] ?? code}
+          {pillLabel(code)}
         </button>
       ))}
     </div>

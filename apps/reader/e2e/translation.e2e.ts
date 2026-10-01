@@ -146,8 +146,8 @@ test.describe('translation', () => {
   test('switching the reading language changes what gets translated', async ({ page }) => {
     await page.goto('/reading')
     await synced(page)
-    await page.getByTestId('read-in').getByRole('button', { name: 'ZH' }).click()
-    await expect(page.getByTestId('read-in').getByRole('button', { name: 'ZH' })).toHaveAttribute(
+    await page.getByTestId('read-in').getByRole('button', { name: '中文' }).click()
+    await expect(page.getByTestId('read-in').getByRole('button', { name: '中文' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )

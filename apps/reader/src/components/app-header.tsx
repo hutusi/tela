@@ -4,7 +4,6 @@ import { useSession } from '../session'
 import { useReadingLang } from '../store/hooks'
 import { useUi } from '../ui'
 import { AccountMenu } from './account-menu'
-import { LocaleSwitcher } from './locale-switcher'
 import { LogoMark } from './logo'
 import { ReadInMenu } from './read-in-menu'
 import { SearchField } from './search-field'
@@ -71,8 +70,8 @@ export function AppHeader() {
         testId="search-input"
         className="hidden w-60 min-w-0 items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] text-muted focus-within:border-muted xl:flex"
       />
+      {/* The UI locale is in Settings for a member; a visitor's comes from their browser. */}
       {member ? <ReadInMenu readingLang={readingLang} /> : null}
-      <LocaleSwitcher />
       {member ? (
         <AccountMenu />
       ) : status === 'guest' ? (

@@ -66,8 +66,10 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 ## Layout rules
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
-  Reading/Discover/Following pills (Following for members), search, Read-in menu, locale
-  switcher, and the member's avatar (accent circle with initial, 30px). Pills are ink in every state: the active one is distinguished by its
+  Reading/Discover/Following pills (Following for members), search, the Read-in menu ("Read in
+  中文 EN", for members), and the member's avatar (accent circle with initial, 30px). The UI
+  locale is not in the header: a member sets it in Settings → Language, and a visitor gets their
+  browser's, with a switch on the sign-in page. Pills are ink in every state: the active one is distinguished by its
   `hover` background alone, never by colour.
 - The avatar opens the account menu (Tela v2): a 220px `surface` panel under it with the member's
   name and @handle, then Your profile, Subscriptions (`/settings/subscriptions`), Dashboard,
@@ -157,7 +159,9 @@ renders the pill filled (`bg-ink`), and clicking it again removes the recommenda
 Settings (Tela v2): a 1040 px page, a 200 px section nav on the left (sticky from `md`, one row
 that scrolls below it) holding the serif "Settings" heading, and the section in a 640 px column.
 Each section is an address (`/settings`, `/settings/reading`, `/translation`, `/subscriptions`,
-`/privacy`), so Back and a shared link land on it. A section opens with a 30 px serif heading and a
+`/privacy`), so Back and a shared link land on it. `/translation` is labelled Language: the
+interface language comes first, each choice in its own name (English, 简体中文) so it can be found
+whatever the page is in, then what posts are translated into. A section opens with a 30 px serif heading and a
 muted intro; below, rows (`SettingRow`) separated by `line` rules: the label and a muted hint on the
 left, the control on the right. Controls are `Segmented` (the choices on the `hover` ground, the
 chosen one lifted on `surface`), `Switch` (40 × 24, `accent` on / `thumb` off, `knob`), a native

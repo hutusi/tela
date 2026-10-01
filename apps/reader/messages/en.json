@@ -282,7 +282,7 @@
     "sections": {
       "profile": "Profile",
       "reading": "Reading",
-      "translation": "Translation",
+      "translation": "Language",
       "subscriptions": "Subscriptions",
       "privacy": "Privacy"
     },
@@ -310,7 +310,9 @@
     "markOnOpenHint": "Otherwise, a post stays unread until you mark it.",
     "hideRead": "Hide read articles",
     "hideReadHint": "Lists show unread posts only. Liked posts are always kept.",
-    "translationIntro": "Tela translates posts written in other languages. The original is always one click away.",
+    "translationIntro": "The language Tela itself speaks, and the one it translates posts into. The original is always one click away.",
+    "uiLocale": "Interface language",
+    "uiLocaleHint": "Menus, buttons and messages.",
     "translateInto": "Translate into",
     "translateIntoHint": "Your main reading language.",
     "autoTranslate": "Translate automatically",

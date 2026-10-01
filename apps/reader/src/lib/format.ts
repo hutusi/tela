@@ -1,3 +1,5 @@
+import { languageBadge } from '@tela/shared'
+
 /** Short relative time such as "2h ago" / "2 小时前", or a date beyond 30 days. */
 export function relativeTime(at: number | null, locale: string, now = Date.now()): string {
   if (at === null) return ''
@@ -19,6 +21,15 @@ export function relativeTime(at: number | null, locale: string, now = Date.now()
 export function swatchColor(id: number): string {
   const hue = (id * 137.508) % 360
   return `oklch(0.55 0.11 ${hue.toFixed(1)})`
+}
+
+/**
+ * A language in the header's pills: Chinese in its own script, English as EN. Anything else falls
+ * back to the badge ("JA"), which is what the article list calls it too.
+ */
+const PILL_LABELS: Record<string, string> = { 'zh-Hans': '中文', en: 'EN' }
+export function pillLabel(tag: string): string {
+  return PILL_LABELS[tag] ?? languageBadge(tag)
 }
 
 export function initialOf(title: string): string {
