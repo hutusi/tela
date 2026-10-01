@@ -4,7 +4,7 @@
  * cost no request to tela-api or the object store.
  */
 import { expect, test } from '@playwright/test'
-import { synced } from './helpers'
+import { heldOnDevice, synced } from './helpers'
 
 test('after sync, five opens, a filter change and Back make no request to /api or /o', async ({
   page,
@@ -19,17 +19,18 @@ test('after sync, five opens, a filter change and Back make no request to /api o
   const unread = page.getByTestId('article-row').filter({ has: page.getByTestId('unread-dot') })
   await expect(unread.nth(4)).toBeVisible()
   const hrefs = await Promise.all([0, 1, 2, 3, 4].map((i) => unread.nth(i).getAttribute('href')))
-  // Let the idle prefetch of bodies finish: it is what makes the opens free.
-  await page.waitForLoadState('networkidle')
-  await page.waitForTimeout(2500)
-  await page.waitForLoadState('networkidle')
+  const ids = hrefs.map((href) => Number(/article=(\d+)/.exec(href ?? '')?.[1]))
+  // The idle prefetch of bodies is what makes the opens free: wait until the device holds all
+  // five, not for time to pass, which a slow runner can outlast.
+  await expect.poll(() => heldOnDevice(page, ids), { timeout: 30_000 }).toEqual(ids)
 
   const requests: string[] = []
   page.on('request', (r) => {
     const path = new URL(r.url()).pathname
     // Pushes of the reads themselves, and the pulls after them, are the store writing behind:
-    // never something a render waits on. Nor is the idle prefetch, which re-arms after every
-    // open and may fetch another post's translation meanwhile; its requests say so.
+    // never something a render waits on. Nor is the idle prefetch, which plans again after every
+    // open (it marks a post read) and may fetch another post's translation meanwhile; its
+    // requests say so.
     if (path === '/api/v1/mutations' || path === '/api/v1/sync') return
     if (r.headers()['x-tela-prefetch']) return
     if (path.startsWith('/api/') || path.startsWith('/o/')) requests.push(`${r.method()} ${path}`)
