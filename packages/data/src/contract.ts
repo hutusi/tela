@@ -26,7 +26,7 @@ import {
   mergeFeed,
   updateArticles,
 } from './queries/ingest'
-import { avatarOf } from './queries/people'
+import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates } from './queries/reader'
 import { readPull } from './queries/sync'
 import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
@@ -147,7 +147,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       )
     })
 
-    it("gives a member's picture only while their Gravatar is on, versioned by its switch (ADR 0032)", async () => {
+    it("gives a member's picture: their upload, else a Gravatar they show and have, else none (ADR 0033)", async () => {
       const db = await makeDb()
       await db.run(
         sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 0, 0, 0)`,
@@ -155,21 +155,55 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       await db.run(
         sql`insert into profiles (user_id, handle, created_at, updated_at) values ('u1', 'pic', 1, 1)`,
       )
+      const set = (assignments: string) =>
+        db.run(sql.raw(`update profiles set ${assignments} where user_id = 'u1'`))
       const picture = async () =>
         (
           (await db.all(
             sql`select ${avatarOf('p')} as avatar from profiles p where p.user_id = 'u1'`,
-          )) as {
-            avatar: string | null
-          }[]
+          )) as { avatar: string | null }[]
         )[0]?.avatar
+      // On by default, but nobody has asked Gravatar yet: no address, so no request.
       expect(await picture()).toBe(null)
-      await db.run(sql`update profiles set gravatar = 1, avatar_version = 1 where user_id = 'u1'`)
-      expect(await picture()).toBe('/avatar/u1?v=1')
-      await db.run(sql`update profiles set avatar_version = 2 where user_id = 'u1'`)
-      expect(await picture()).toBe('/avatar/u1?v=2')
-      await db.run(sql`update profiles set gravatar = 0 where user_id = 'u1'`)
+      await set('gravatar_found = 1')
+      expect(await picture()).toBe('/avatar/u1?v=0')
+      await set('gravatar_found = 0')
       expect(await picture()).toBe(null)
+      // Turned off, a Gravatar that exists is not shown.
+      await set('gravatar_found = 1, gravatar = 0, gravatar_at = 5')
+      expect(await picture()).toBe(null)
+      // An upload comes first, whatever the switch says.
+      await set(`avatar_key = 'avatars/u1/0123456789abcdef.webp', avatar_version = 3`)
+      expect(await picture()).toBe('/avatar/u1?v=3')
+      await set('avatar_key = null, gravatar = 1, gravatar_at = 6, avatar_version = 4')
+      expect(await picture()).toBe('/avatar/u1?v=4')
+    })
+
+    it('asks about a Gravatar that is shown, when never asked or when the answer has run out', async () => {
+      const db = await makeDb()
+      const now = 100 * 24 * 60 * 60 * 1000
+      const day = 24 * 60 * 60 * 1000
+      const people: [string, string][] = [
+        ['never', 'gravatar_checked_at = null'],
+        ['found-fresh', `gravatar_found = 1, gravatar_checked_at = ${now - 29 * day}`],
+        ['found-stale', `gravatar_found = 1, gravatar_checked_at = ${now - 31 * day}`],
+        ['missing-fresh', `gravatar_found = 0, gravatar_checked_at = ${now - 6 * day}`],
+        ['missing-stale', `gravatar_found = 0, gravatar_checked_at = ${now - 8 * day}`],
+        ['turned-off', 'gravatar = 0, gravatar_at = 5, gravatar_checked_at = null'],
+      ]
+      for (const [id, assignments] of people) {
+        await db.run(
+          sql`insert into user (id, name, email, email_verified, created_at, updated_at) values (${id}, ${id}, ${`${id}@x.y`}, 0, 0, 0)`,
+        )
+        await db.run(
+          sql`insert into profiles (user_id, handle, created_at, updated_at) values (${id}, ${id.replace('-', '_')}, 1, 1)`,
+        )
+        await db.run(sql.raw(`update profiles set ${assignments} where user_id = '${id}'`))
+      }
+      const due = (await db.all(sql`select key from (${dueGravatarChecks(now)}) order by key`)) as {
+        key: string
+      }[]
+      expect(due.map((r) => r.key)).toEqual(['found-stale', 'missing-stale', 'never'])
     })
 
     it('refuses a member following themselves, or someone who does not exist (ADR 0031)', async () => {

@@ -116,9 +116,17 @@ export const profiles = sqliteTable(
      */
     publicSubscriptionsAt: ms().notNull().default(0),
     publicLikesAt: ms().notNull().default(0),
-    /** Whether the member shows their Gravatar, and the `at` that last set it: the later wins. */
+    /**
+     * Whether the member shows their Gravatar, and the `at` that last set it: the later wins. Never
+     * set (`gravatar_at` 0) counts as on (ADR 0033); `gravatarOnSql` says so in one place.
+     */
     gravatar: integer({ mode: 'boolean' }).notNull().default(false),
     gravatarAt: ms().notNull().default(0),
+    /** Whether Gravatar has a picture for their email (null: not asked yet), and when it was asked. */
+    gravatarFound: integer({ mode: 'boolean' }),
+    gravatarCheckedAt: ms(),
+    /** The R2 key of the picture they uploaded (ADR 0033), which comes before any Gravatar. */
+    avatarKey: text(),
     /**
      * The picture's version, the `v` of `/avatar/<userId>` (ADR 0032): one more on every accepted
      * "on", Refresh included, so each is a new address past the 30-day caches. A counter of its

@@ -54,7 +54,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | Table | Role |
 |---|---|
 | `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024) |
-| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it), and whether they show their Gravatar (`gravatar`, with its `gravatar_at`, and `avatar_version`, the picture's version, counted up by every "on", ADR 0032) |
+| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it), their picture (ADR 0032, 0033): the R2 key of one they uploaded (`avatar_key`), whether they show their Gravatar (`gravatar`, with its `gravatar_at`; never set counts as on), whether Gravatar has one for them (`gravatar_found`, asked at `gravatar_checked_at`), and `avatar_version`, the picture's version, which every change of picture counts up |
 | `user_prefs` | Synced preferences, one row per key: reading mode, text size, measure, theme (`lib/typography.ts`), and the Reading and Translation settings `reader.mark_on_open`, `reader.hide_read`, `translate.auto`, `translate.never` (`lib/prefs.ts`) |
 | `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out` |
 | `site_topics`, `site_claims` | A blog's topics; claim attempts (meta or `rel="me"`) |

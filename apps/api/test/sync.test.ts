@@ -690,6 +690,12 @@ describe('follows (ADR 0031)', () => {
     const shown = async () => (await pull(0)).rows.profile[0]
     const at = (v: number) => `/avatar/${reader.userId}?v=${v}`
     expect(await shown()).toMatchObject({ gravatar: false, avatar: null })
+    // Gravatar has a picture for them, as the check found (ADR 0033).
+    await write(
+      db.run(
+        sql`update profiles set gravatar_found = 1, seq = ${currentSeq} where user_id = ${reader.userId}`,
+      ),
+    )
     await push([{ type: 'setAvatar', gravatar: true, at: t }])
     expect(await shown()).toMatchObject({ gravatar: true, avatar: at(1) })
     // Refresh: the switch sent on again moves the address past every cache, whatever its `at`:
@@ -721,7 +727,7 @@ describe('follows (ADR 0031)', () => {
     expect(snap.rows.follows).toMatchObject([{ userId: ANNA, avatar: null }])
     await write(
       db.run(
-        sql`update profiles set gravatar = 1, avatar_version = 7, seq = ${currentSeq} where user_id = ${ANNA}`,
+        sql`update profiles set gravatar = 1, gravatar_found = 1, avatar_version = 7, seq = ${currentSeq} where user_id = ${ANNA}`,
       ),
     )
     const delta = await pull(snap.cursor)
