@@ -143,6 +143,41 @@ test.describe('settings', () => {
 })
 
 test.describe('the interface language', () => {
+  test('chosen before the first sync lands, is kept and saved', async ({ browser, request }) => {
+    // The account says English; this device has never synced.
+    await setPrefs(request, {}, { uiLocale: 'en' })
+    const fresh = await browser.newContext({ storageState: STATE_FILE })
+    try {
+      const page = await fresh.newPage()
+      let release = () => {}
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      await page.route('**/api/v1/sync**', async (route) => {
+        await held
+        await route.continue()
+      })
+      await page.goto('/settings/translation')
+      const pushed = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+      await page.getByTestId('ui-locale-zh-Hans').click()
+      await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+      // Now the profile arrives, with the account's older English, and the choice stands.
+      release()
+      await pushed
+      await page.goto('/reading')
+      await synced(page)
+      await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+      const snapshot = await request.get(`${BASE}/api/v1/sync?cursor=0`, {
+        headers: await memberHeaders(request),
+      })
+      const body = (await snapshot.json()) as { rows: { profile: { uiLocale: string }[] } }
+      expect(body.rows.profile[0]?.uiLocale).toBe('zh-Hans')
+    } finally {
+      await fresh.close()
+      await setPrefs(request, {}, { uiLocale: 'en' })
+    }
+  })
+
   test('follows the member to a device that was in English', async ({ page, browser, request }) => {
     try {
       await page.goto('/settings/translation')

@@ -86,10 +86,14 @@ function Routed() {
     document.cookie = localeCookie(next)
     setLocaleState(next)
   }, [])
+  // A member's choice is a mutation even before their first sync has brought the profile: it
+  // waits with the others, and lands on the row when that arrives. Skipping it then left only the
+  // cookie, and the row's older choice, applied below, took the page back. A visitor has no owner,
+  // and `mutate` keeps nothing for no one.
   const setLocale = useCallback(
     (next: UiLocale) => {
       applyLocale(next)
-      if (store.hasData) store.mutate({ type: 'setProfile', uiLocale: next })
+      store.mutate({ type: 'setProfile', uiLocale: next })
     },
     [store, applyLocale],
   )
