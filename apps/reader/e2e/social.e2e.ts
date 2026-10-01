@@ -95,6 +95,12 @@ test.describe('following', () => {
     await page.getByTestId('following-tab-recs').click()
     await expect(items.first()).toHaveAttribute('data-kind', 'recommended')
 
+    // Back to her profile: the count still has the follow, from the copy held or a fresh one.
+    await page.goBack()
+    await expect(page.getByTestId('profile-count-followers')).toContainText('1 follower')
+    await page.goForward()
+    await expect(items.first()).toHaveAttribute('data-kind', 'recommended')
+
     // A recommended post opens in the reader, whatever the device syncs.
     await items.first().getByRole('link', { name: /.+/ }).last().click()
     await expect(page).toHaveURL(/\/reading\?.*article=\d+/)
