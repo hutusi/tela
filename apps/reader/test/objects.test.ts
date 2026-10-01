@@ -67,6 +67,16 @@ function network() {
   }
 }
 
+/** The promise, or a failure after `ms`: a request that never gives up would hang the run. */
+function within<T>(promise: Promise<T>, ms = 1000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`still waiting after ${ms} ms`)), ms),
+    ),
+  ])
+}
+
 /** Let promise chains run until `check` holds. */
 async function until(check: () => boolean) {
   for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 0))
@@ -202,5 +212,22 @@ describe('one download per object, however many ask while it is on its way', () 
     net.answer('/o/bundle?k=k1,k2', { k1: { blocks: [] }, k2: { blocks: [] } })
     expect(await second).toBe(2)
     expect(await objects.missing(['k1', 'k2'])).toEqual([])
+  })
+
+  test('a request that stalls gives up, and the next ask tries again', async () => {
+    const net = network()
+    const objects = new Objects(memoryPersistence(), Date.now, 20)
+    await expect(within(objects.body('k1'))).rejects.toMatchObject({ name: 'TimeoutError' })
+    const again = objects.body('k1')
+    await until(() => net.sent.length === 2)
+    net.answer('/o/c/k1.json', { blocks: [] })
+    expect(await again).toEqual({ blocks: [] } as never)
+  })
+
+  test('a bundle that stalls ends the prefetch, its bodies still missing', async () => {
+    network()
+    const objects = new Objects(memoryPersistence(), Date.now, 20)
+    expect(await within(objects.prefetch(['k1', 'k2']))).toBe(0)
+    expect(await objects.missing(['k1', 'k2'])).toEqual(['k1', 'k2'])
   })
 })

@@ -46,6 +46,12 @@ export const BODY_KEEP_MS = 7 * 24 * 60 * 60 * 1000
 export const BODY_CAP_BYTES = 50 * 1024 * 1024
 const BUNDLE = 25
 const PARALLEL = 2
+/**
+ * A request for an object gives up after this long, its answer read in full included: a stalled
+ * connection (some mainland routes stall at TLS) would otherwise hold a download, everyone
+ * waiting on it, and a prefetch run, for as long as the browser lets it hang.
+ */
+export const REQUEST_TIMEOUT_MS = 30_000
 
 /**
  * Wait for a download several callers may share, until this caller's signal says to stop: the
@@ -88,7 +94,35 @@ export class Objects {
   constructor(
     private readonly persistence: Persistence,
     private readonly now: () => number = Date.now,
+    private readonly timeoutMs = REQUEST_TIMEOUT_MS,
   ) {}
+
+  /** `fetch` within `timeoutMs`, the answer read whole; `outer` still cancels it at once. */
+  private async request(
+    url: string,
+    init: RequestInit,
+    outer?: AbortSignal,
+  ): Promise<{ ok: boolean; text: string }> {
+    const controller = new AbortController()
+    const timer = setTimeout(
+      () => controller.abort(new DOMException('The request timed out', 'TimeoutError')),
+      this.timeoutMs,
+    )
+    const stop = () => controller.abort(outer?.reason)
+    if (outer?.aborted) stop()
+    outer?.addEventListener('abort', stop, { once: true })
+    try {
+      const res = await fetch(url, {
+        ...init,
+        credentials: 'same-origin',
+        signal: controller.signal,
+      })
+      return { ok: res.ok, text: res.ok ? await res.text() : '' }
+    } finally {
+      clearTimeout(timer)
+      outer?.removeEventListener('abort', stop)
+    }
+  }
 
   private remember(key: string, value: unknown) {
     this.recent.delete(key)
@@ -142,9 +176,8 @@ export class Objects {
       this.remember(cacheKey, stored.object)
       return stored.object as ContentObject
     }
-    const res = await fetch(`/o/c/${key}.json`, { credentials: 'same-origin' })
-    if (!res.ok) return null
-    const text = await res.text()
+    const { ok, text } = await this.request(`/o/c/${key}.json`, {})
+    if (!ok) return null
     const object = JSON.parse(text) as ContentObject
     await this.store(key, object, text.length)
     this.remember(cacheKey, object)
@@ -170,12 +203,12 @@ export class Objects {
         this.remember(key, stored.object)
         return stored.object
       }
-      const res = await fetch(`/o/${key}`, {
-        credentials: 'same-origin',
-        ...(background ? { headers: { [PREFETCH_HEADER]: '1' } } : {}),
-      })
-      if (!res.ok) return null
-      const object: unknown = await res.json()
+      const { ok, text } = await this.request(
+        `/o/${key}`,
+        background ? { headers: { [PREFETCH_HEADER]: '1' } } : {},
+      )
+      if (!ok) return null
+      const object: unknown = JSON.parse(text)
       // Waited for before anyone is answered: until it is written, a second ask would miss it.
       await this.persistence.putObject({ key, object, at: this.now() })
       this.remember(key, object)
@@ -213,13 +246,13 @@ export class Objects {
         const next = nextBundle()
         if (next.length === 0) return
         try {
-          const res = await fetch(`/o/bundle?k=${next.join(',')}`, {
-            credentials: 'same-origin',
-            headers: { [PREFETCH_HEADER]: '1' },
-            ...(signal ? { signal } : {}),
-          })
-          if (!res.ok) return
-          const objects = (await res.json()) as Record<string, ContentObject | undefined>
+          const { ok, text } = await this.request(
+            `/o/bundle?k=${next.join(',')}`,
+            { headers: { [PREFETCH_HEADER]: '1' } },
+            signal,
+          )
+          if (!ok) return
+          const objects = JSON.parse(text) as Record<string, ContentObject | undefined>
           const arrived = next.filter((key) => objects[key] !== undefined)
           for (const key of arrived) this.landing.set(key, objects[key] as ContentObject)
           try {

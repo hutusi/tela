@@ -152,7 +152,8 @@ and the URL.
   request and two requests at a time, and then finished translations in the reading language.
   Each pull also looks at what the device holds, and asks again when a body in the plan is missing
   and no run is under way: a run fell short (the network went, a request failed), or the body was
-  evicted since. Nothing is prefetched under Save-Data. Bodies not opened for seven days are
+  evicted since. Every object request gives up after 30 s, so a stalled connection ends its run
+  rather than holding it. Nothing is prefetched under Save-Data. Bodies not opened for seven days are
   evicted, unread ones too (the prefetch fetches those again), and the oldest once the store
   passes 50 MB.
 - **Streamed translation** (ADR 0023): a foreign post asks for one when it opens. While it runs,
