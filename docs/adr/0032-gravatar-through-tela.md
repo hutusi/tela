@@ -44,7 +44,10 @@ nothing to keep fresh or delete.
 **Cached for 30 days, versioned by the switch.** The answer is immutable for 30 days in the colo
 and the browser, because the address changes whenever the picture should: *Refresh* sends the
 switch on again, so `gravatar_at` and the address move and the next request goes to Gravatar.
-tela-api answers only the current version, so a made-up one is a 404 and never another fetch.
+Every accepted Refresh moves the version, by at least a millisecond when its `at` is no later than
+the last (two clicks in one millisecond, or a device whose clock is behind), while the switch itself
+still goes to the later choice. tela-api answers only the current version, so a made-up one is a
+404 and never another fetch.
 
 **One place decides the address.** The queries that return a person select it from one SQL
 fragment, and the client renders whatever path it is given (`/avatar/…` only), never building one.

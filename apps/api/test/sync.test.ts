@@ -696,11 +696,19 @@ describe('follows (ADR 0031)', () => {
     // Refresh: the switch sent on again moves the address past every cache.
     await push([{ type: 'setAvatar', gravatar: true, at: t + 100 }])
     expect((await shown())?.avatar).toBe(`/avatar/${reader.userId}?v=${t + 100}`)
+    // Refresh always moves it: twice in one millisecond, or from a device whose clock is behind.
+    await push([{ type: 'setAvatar', gravatar: true, at: t + 100 }])
+    expect((await shown())?.avatar).toBe(`/avatar/${reader.userId}?v=${t + 101}`)
+    await push([{ type: 'setAvatar', gravatar: true, at: t + 20 }])
+    expect((await shown())?.avatar).toBe(`/avatar/${reader.userId}?v=${t + 102}`)
     // An older "off" from another device, arriving late, changes nothing.
     await push([{ type: 'setAvatar', gravatar: false, at: t + 50 }])
     expect(await shown()).toMatchObject({ gravatar: true })
-    // A later one takes the picture away.
+    expect((await shown())?.avatar).toBe(`/avatar/${reader.userId}?v=${t + 102}`)
+    // A later one takes the picture away, and an older "on" arriving late leaves it away.
     await push([{ type: 'setAvatar', gravatar: false, at: t + 200 }])
+    expect(await shown()).toMatchObject({ gravatar: false, avatar: null })
+    await push([{ type: 'setAvatar', gravatar: true, at: t + 150 }])
     expect(await shown()).toMatchObject({ gravatar: false, avatar: null })
   })
 

@@ -137,14 +137,21 @@ function statementsFor(
       ]
     }
     case 'setAvatar': {
-      // To the later `at`, like a privacy switch; the `at` is also the picture's version, so the
-      // switch sent on again (Refresh) moves its address past every cache (ADR 0032).
+      // The switch goes to the later `at`, like a privacy switch. Its clock is also the picture's
+      // version, so the switch sent on again (Refresh) moves the address past every cache (ADR
+      // 0032), and it always moves: by at least a millisecond when the `at` is no later than the
+      // last one, which two clicks in one millisecond, or a device whose clock is behind the one
+      // that turned it on, would otherwise send. SQLite reads the row as it was in every SET.
       const later = sql`${at} >= gravatar_at`
+      const refresh = m.gravatar ? sql`gravatar = 1` : sql`false`
       return [
         db.run(sql`
           update profiles set
             gravatar = case when ${later} then ${m.gravatar ? 1 : 0} else gravatar end,
-            gravatar_at = case when ${later} then ${at} else gravatar_at end,
+            gravatar_at = case
+              when ${later} then max(${at}, gravatar_at + 1)
+              when ${refresh} then gravatar_at + 1
+              else gravatar_at end,
             updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and ${fresh}
         `),
