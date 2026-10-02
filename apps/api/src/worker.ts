@@ -8,6 +8,7 @@ import { schema } from '@tela/data'
 import { type Mail, memoryMail, resendMail, systemClock } from '@tela/platform'
 import { d1Db, queueJobs, r2Blobs } from '@tela/platform/cloudflare'
 import { createApp } from './app'
+import type { OAuthClient } from './deps'
 import type { Env } from './env'
 
 let cached: { env: Env; app: ReturnType<typeof createApp>['app'] } | undefined
@@ -25,8 +26,15 @@ function mailFor(env: Env): Mail {
   return resendMail({ apiKey: env.RESEND_API_KEY, from: env.MAIL_FROM })
 }
 
+/** A provider's app, when both its secrets are set: either one alone offers nothing (ADR 0036). */
+function oauthClient(clientId?: string, clientSecret?: string): OAuthClient | undefined {
+  return clientId && clientSecret ? { clientId, clientSecret } : undefined
+}
+
 function appFor(env: Env) {
   if (cached?.env === env) return cached.app
+  const google = oauthClient(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET)
+  const github = oauthClient(env.GITHUB_CLIENT_ID, env.GITHUB_CLIENT_SECRET)
   const { app } = createApp({
     db: d1Db(env.DB, schema),
     blobs: r2Blobs(env.BLOBS),
@@ -47,6 +55,7 @@ function appFor(env: Env) {
       mailFrom: env.MAIL_FROM,
       testMode: env.ENV === 'test',
       ...(env.GRAVATAR_URL ? { gravatarUrl: env.GRAVATAR_URL } : {}),
+      oauth: { ...(google ? { google } : {}), ...(github ? { github } : {}) },
     },
   })
   cached = { env, app }

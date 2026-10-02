@@ -76,6 +76,24 @@ export async function livePlaces(db: TelaDb, code: string): Promise<number | nul
 }
 
 /**
+ * A code's places, and whether others have taken them all, while it is not revoked; null for an
+ * unknown or revoked code. A provider's sign-in asks before it sends the visitor away (ADR 0036),
+ * so a code that cannot admit them is refused before the provider is, not after; its return is
+ * admitted only by `claimByCode`, which asks again.
+ */
+export async function liveCode(
+  db: TelaDb,
+  code: string,
+): Promise<{ places: number; full: boolean } | null> {
+  const row = await first<{ max_uses: number; full: number }>(
+    db,
+    sql`select c.max_uses, not (${open}) as full from invite_codes c
+      where c.code = ${code} and c.revoked_at is null`,
+  )
+  return row ? { places: row.max_uses, full: Boolean(row.full) } : null
+}
+
+/**
  * Hold `email` beside `code` for a day (ADR 0034). The hold takes no place; a repeated join
  * refreshes it. On a single-use code the later join moves the hold, so only the last address
  * asked for can finish. Nothing is written for an address that has an account, but its join

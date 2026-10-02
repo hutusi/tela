@@ -37,6 +37,7 @@ import {
   inviteAddress,
   listMemberCodes,
   listOperatorCodes,
+  liveCode,
   pruneInvites,
   revokeCode,
   revokeOperatorCode,
@@ -1196,6 +1197,19 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         [A, 'p@x.y', 1],
         ['WELCOME', 'r@x.y', 1],
       ])
+      // What the sign-in asks before it sends anyone to the provider: places, and whether they
+      // are taken. A hold takes none, so it never fills a code.
+      await hold(db, 'WELCOME', 't@x.y')
+      expect(await liveCode(db, 'WELCOME')).toEqual({ places: 3, full: false })
+      for (const who of ['u', 'v']) {
+        expect(await claimByCode(db, { code: 'WELCOME', email: `${who}@x.y`, now: T0 })).not.toBe(
+          null,
+        )
+      }
+      expect(await liveCode(db, 'WELCOME')).toEqual({ places: 3, full: true })
+      expect(await liveCode(db, A)).toEqual({ places: 1, full: true })
+      expect(await liveCode(db, B)).toBe(null)
+      expect(await liveCode(db, 'NOSUCH')).toBe(null)
     })
 
     it('settles the member, and drops every hold the address still had', async () => {

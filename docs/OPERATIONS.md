@@ -28,6 +28,8 @@ directory.
 | `AUTH_SECRET` | tela-api, tela-web (secret) | 32+ random bytes (`openssl rand -base64 48`). Signs sessions and the five-minute cookie cache; **the same value on both**, or every content request falls back to a session read. Rotating it signs everyone out |
 | `ADMIN_TOKEN` | tela-api (secret); the admin script | Bearer token for `/api/admin/*`. Unset, those routes answer 403 |
 | `RESEND_API_KEY` | tela-api, tela-jobs (secret) | Sending-only Resend key for the verified domain: sign-in codes (api) and the weekly digest (jobs). Without it, api fails a code loudly and jobs skips the digest |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | tela-api (secret) | Tela's Google OAuth client (ADR 0036), a Web client whose redirect URI is `PUBLIC_URL/api/auth/callback/google`. Google sign-in is offered only while both are set |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | tela-api (secret) | Tela's GitHub OAuth app (ADR 0036), its callback URL `PUBLIC_URL/api/auth/callback/github`. GitHub sign-in is offered only while both are set |
 | `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@ainaive.com>` |
 | `PUBLIC_URL` | tela-api, tela-jobs | The one public origin: better-auth's base URL and trusted origin, claim `rel="me"` targets, the WebSub callback |
 | `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var |
@@ -75,7 +77,9 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
    `bun run db:generate`; review the SQL and commit it.
 5. **Secrets:** `AUTH_SECRET` on tela-api and tela-web (the same value); `ADMIN_TOKEN` and
    `RESEND_API_KEY` on tela-api; `BAILIAN_API_KEY`, `RESEND_API_KEY`, `DIGEST_TO` and `DEADMAN_URL`
-   on tela-jobs.
+   on tela-jobs. Google and GitHub sign-in stay off until their two secrets each are set on
+   tela-api (`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID` and
+   `GITHUB_CLIENT_SECRET`).
 6. **The dead-man's switch:** a healthchecks.io check with a 5-minute period and a 15-minute grace
    (a cron tick is occasionally skipped), alerting the owner by email. Its ping URL is
    `DEADMAN_URL`.
@@ -225,6 +229,10 @@ Then:
    http://localhost:5173' localhost:5173/api/test/cycle` runs the sweeps to completion (fetches,
    extraction, titles, claims), which is what the minute tick does in production.
 
+To try Google or GitHub, register a dev OAuth app with the callback
+`http://localhost:5173/api/auth/callback/google` (or `/github`) and add its `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` (or `GITHUB_…`) to `apps/api/.dev.vars`; join with a code from `admin code`.
+
 `.dev.vars` is gitignored. Unit tests need nothing: `bun run test` runs on libSQL in memory, and
 `bun run test:workers` runs the D1 half in workerd.
 
@@ -345,6 +353,17 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
     hold to another address.
     `INVITE_USED` means its hold is on a code that others filled after its code was mailed.
     `select * from invite_redemptions where email = '<address>'` shows what it holds.
+  - **Google and GitHub** (ADR 0036) are offered once both of a provider's secrets are set, which
+    `GET /api/v1/public/auth` reports. An account is made only with the invite code the sign-in
+    started with: it is checked at the start (`400 INVALID_CODE`, `409 INVITE_USED`, counted with
+    joins, below), rides in the OAuth state row (a `verification` row, ten minutes), and is claimed
+    at the return. A return that signs nobody in redirects to the page it started from with
+    `?error=`: `invite_required` (no code), `invite_unavailable` (the code filled up or was
+    withdrawn meanwhile), `account_not_linked` (a member who has not linked that provider, which is
+    done only from Settings, or an address the provider has not verified: one answer for both),
+    `state_mismatch` (it came back without its cookie, after ten minutes, or twice). An account a
+    provider made mails its address a notice (`provider notice not sent` in the logs if it fails).
+    No token, name or picture is kept: the `account` row's token columns stay null.
   - A member whose `/api/v1/me` has `profile: null`, or whose invitation is redeemed but not
     settled, is repaired at their next sign-in. The Worker logs `invitation not settled` or
     `member not repaired` when writing either failed.
@@ -380,6 +399,10 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   "too many tries" at their first join is most likely sharing an address, or an IP (a venue's
   wifi), with someone who tried before. Lift one early:
   `delete from action_limits where key = 'joinCode:WELCOME'`.
+  A Google or GitHub sign-in that starts with an invite code spends the same per-IP and per-code
+  counts (answered with better-auth's 429): checking its code there is a guess like a join's, and
+  better-auth's own limit on `/api/auth/sign-in/social`, three every ten seconds per IP, would
+  allow a thousand an hour.
 
 ## tela-jobs
 

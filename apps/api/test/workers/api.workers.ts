@@ -46,6 +46,7 @@ function stack() {
       authSecret: 'a-test-secret-that-is-long-enough-for-hmac',
       adminToken: 'admin',
       mailFrom: 'Tela <noreply@tela.test>',
+      oauth: { github: { clientId: 'github-client', clientSecret: 'github-secret' } },
     },
   })
   const call = (
@@ -343,4 +344,78 @@ it('sets a password and logs in with it, hashed by scrypt in workerd, on D1', as
       sql`select count from action_limits where key = ${`passwordSignIn:${email}`}`,
     ),
   ).toEqual([{ count: 2 }])
+})
+
+it('makes an account with GitHub, admitted by the invite code its OAuth state carried, on D1', async () => {
+  const { db, mail, call, cookiesOf } = stack()
+  const made = await call('/api/admin/codes', {
+    body: { code: 'WELCOME', uses: 2 },
+    headers: { authorization: 'Bearer admin' },
+  })
+  expect(made.status).toBe(200)
+  // GitHub, stood in for: better-auth's fetch reads the global at every call.
+  const real = globalThis.fetch
+  const answer = (body: unknown) =>
+    new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
+  globalThis.fetch = (async (input: Request | URL | string) => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    if (url.pathname === '/login/oauth/access_token') {
+      return answer({ access_token: 'gho_token', token_type: 'bearer', scope: 'user:email' })
+    }
+    if (url.pathname === '/user') return answer({ id: 4242, login: 'octo', email: null })
+    if (url.pathname === '/user/emails') {
+      return answer([{ email: 'octo@x.test', primary: true, verified: true }])
+    }
+    throw new Error(`unexpected fetch ${url}`)
+  }) as typeof fetch
+  try {
+    // The start checks the code and writes it into the state row (a verification row in D1),
+    // through the server context better-auth keeps in AsyncLocalStorage under workerd.
+    const started = await call('/api/auth/sign-in/social', {
+      body: {
+        provider: 'github',
+        callbackURL: '/reading',
+        newUserCallbackURL: '/discover',
+        errorCallbackURL: '/join',
+        disableRedirect: true,
+        additionalData: { invite: 'WELCOME' },
+      },
+      headers: { 'cf-connecting-ip': '198.51.100.30' },
+    })
+    expect(started.status).toBe(200)
+    const { url } = (await started.json()) as { url: string }
+    const state = new URL(url).searchParams.get('state') ?? ''
+    const back = await call(`/api/auth/callback/github?code=x&state=${state}`, {
+      cookie: cookiesOf(started),
+      headers: { 'cf-connecting-ip': '198.51.100.31' },
+    })
+    expect(back.status).toBe(302)
+    expect(back.headers.get('location')).toBe('/discover')
+    const me = (await (await call('/api/v1/me', { cookie: cookiesOf(back) })).json()) as {
+      id: string
+      profile: { handle: string }
+    }
+    expect(me.profile.handle).toMatch(/^u_[0-9a-f]{10}$/)
+    // Claimed by one insert…select…on conflict…returning inside better-auth's hook, settled once
+    // the user existed; the account row keeps the identity and no token.
+    expect(
+      await db.all(sql`select code, user_id, settled_at is not null as settled
+        from invite_redemptions where email = 'octo@x.test'`),
+    ).toEqual([{ code: 'WELCOME', user_id: me.id, settled: 1 }])
+    expect(
+      await db.all(sql`select provider_id, account_id, access_token, refresh_token, id_token
+        from account where user_id = ${me.id}`),
+    ).toEqual([
+      {
+        provider_id: 'github',
+        account_id: '4242',
+        access_token: null,
+        refresh_token: null,
+        id_token: null,
+      },
+    ])
+    expect(mail.outbox.map((m) => m.to)).toEqual(['octo@x.test'])
+  } finally {
+    globalThis.fetch = real
+  }
 })

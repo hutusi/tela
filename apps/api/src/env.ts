@@ -28,4 +28,10 @@ export type Env = {
   ENV?: string
   /** Where Gravatar serves pictures; unset is gravatar.com. The e2e points it at its fixtures. */
   GRAVATAR_URL?: string
+  /** Secrets: Tela's Google app (ADR 0036). Google sign-in is offered only when both are set. */
+  GOOGLE_CLIENT_ID?: string
+  GOOGLE_CLIENT_SECRET?: string
+  /** Secrets: Tela's GitHub OAuth app (ADR 0036). GitHub sign-in is offered only when both are set. */
+  GITHUB_CLIENT_ID?: string
+  GITHUB_CLIENT_SECRET?: string
 }

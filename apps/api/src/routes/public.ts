@@ -53,6 +53,18 @@ export function publicRoutes(deps: ApiDeps) {
       },
     })
 
+  /**
+   * Which providers the sign-in sheet may offer (ADR 0036): each only once its app is configured.
+   * A browser may keep the answer five minutes, so a provider switched on shows within that.
+   */
+  routes.get('/auth', (c) =>
+    c.json(
+      { google: Boolean(deps.config.oauth?.google), github: Boolean(deps.config.oauth?.github) },
+      200,
+      { 'cache-control': 'public, max-age=300' },
+    ),
+  )
+
   routes.get('/discover', async (c) => {
     const topic = c.req.query('topic')
     const lang = c.req.query('lang')

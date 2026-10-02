@@ -1,31 +1,42 @@
 /**
- * Sign-in (ADR 0024): better-auth with email codes and passwords, through its Drizzle adapter over
- * the same `TelaDb` everything else uses, so it runs on D1 in production and libSQL in tests. An
- * account is made at an address's first code sign-in, or by the operator's invite, and only for an
- * address that holds an invitation (ADR 0034): `user.create.before` is the gate, and the code mail
- * is sent to nobody else. A password is never how an account starts: it is set on a member a code
- * has proved, and a forgotten one is reset by code (ADR 0036).
+ * Sign-in (ADR 0024): better-auth with email codes, passwords, Google and GitHub, through its
+ * Drizzle adapter over the same `TelaDb` everything else uses, so it runs on D1 in production and
+ * libSQL in tests. An account is made at an address's first code sign-in, at a provider's return,
+ * or by the operator's invite, and only for an address that holds an invitation (ADR 0034):
+ * `user.create.before` is the gate, and the code mail is sent to nobody else. A provider's return
+ * is admitted only by the invite code its sign-in carried. A password is never how an account
+ * starts: it is set on a member a code has proved, and a forgotten one is reset by code (ADR 0036).
  */
 import {
+  ACTION_LIMITS,
   bumpSeq,
+  claimByCode,
   claimInvite,
   consumeLimit,
   currentSeq,
   first,
   holdsInvite,
   type LimitedAction,
+  liveCode,
   schema,
   settleInvite,
   type TelaDb,
   waitsOnFullCode,
 } from '@tela/data'
+import { normalizeInviteCode } from '@tela/shared'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { APIError, createAuthMiddleware } from 'better-auth/api'
+import {
+  APIError,
+  addOAuthServerContext,
+  createAuthMiddleware,
+  getIP,
+  getOAuthState,
+} from 'better-auth/api'
 import { emailOTP } from 'better-auth/plugins'
 import { sql } from 'drizzle-orm'
-import type { ApiDeps } from './deps'
-import { passwordResetMail, signInMail } from './mail'
+import type { ApiConfig, ApiDeps } from './deps'
+import { passwordResetMail, providerAccountMail, signInMail } from './mail'
 
 /** Cookie names start `tela.`; tela-web reads `tela.session_data` to authorize /o and /img. */
 export const COOKIE_PREFIX = 'tela'
@@ -59,6 +70,28 @@ export const PER_ADDRESS = new Map<string, LimitedAction>([
 const ADDRESS_MAX = 254
 /** What better-auth's own limiter answers, so a 429 does not say which limit it was. */
 const TOO_MANY = 'Too many requests. Please try again later.'
+const tooMany = (retryAfterSec: number) =>
+  new APIError(
+    'TOO_MANY_REQUESTS',
+    { message: TOO_MANY },
+    { 'X-Retry-After': String(retryAfterSec) },
+  )
+
+/** The endpoints that may make an account: the code sign-in, and a provider's return. */
+const CODE_SIGN_IN = '/sign-in/email-otp'
+const PROVIDER_RETURN = '/callback/:id'
+/** Where a provider's sign-in starts, and all it may be sent (ADR 0036). */
+const PROVIDER_START = '/sign-in/social'
+const PROVIDER_START_FIELDS = new Set([
+  'provider',
+  'callbackURL',
+  'newUserCallbackURL',
+  'errorCallbackURL',
+  'disableRedirect',
+  'additionalData',
+])
+/** better-auth's bucket for a request whose IP it cannot tell, which all such requests share. */
+const NO_IP = 'no-trusted-ip'
 
 /** A fresh handle for a new member, changed later in settings: `u_` and ten hex digits. */
 export function provisionalHandle(): string {
@@ -87,16 +120,129 @@ async function createProfile(db: TelaDb, userId: string, now: number) {
   ])
 }
 
-/** Why the gate turns an address away, in the `code` of its 403. */
+/**
+ * Why the gate turns an address away, in the `code` of its 403, and why a provider's sign-in will
+ * not start with the code it carried (400 `INVALID_CODE`, 409 `INVITE_USED`, as `/api/v1/join`
+ * answers).
+ */
 const REFUSALS = {
   /** Nothing the address holds admits it, or it came a way that makes no account. */
   INVITE_REQUIRED: 'An account is made only for an address that holds an invitation.',
   /** Its hold is on a code that others filled since its code was mailed. */
   INVITE_USED: 'Everyone this invite code was for has joined.',
+  /** A provider's sign-in carried a code that is unknown or revoked: one answer for both. */
+  INVALID_CODE: 'No such invite code, or it was withdrawn.',
 } as const
 
 const refuse = (code: keyof typeof REFUSALS) =>
   new APIError('FORBIDDEN', { code, message: REFUSALS[code] })
+
+/**
+ * Why a provider's return makes no account, as the `error` of its redirect to the page that
+ * started it: lowercase, like better-auth's own codes there. `invite_required`: the sign-in carried
+ * no invite code. `invite_unavailable`: its code was filled or revoked while the visitor was at the
+ * provider. `account_not_linked`: the provider has not verified the address, which is also what
+ * better-auth answers a member whose provider is not linked, so the redirect says nothing of who
+ * is a member; for that reason none carries a description, as better-auth's does not. The sheet
+ * words each.
+ */
+type ReturnRefusal = 'invite_required' | 'invite_unavailable' | 'account_not_linked'
+const refuseReturn = (code: ReturnRefusal) => new APIError('FORBIDDEN', { code })
+
+/**
+ * What a provider's sign-in may start with (ADR 0036): only the provider, the three return URLs
+ * (better-auth checks they are Tela's), `disableRedirect`, and an invite code in
+ * `additionalData.invite`. Anything else is refused rather than passed on: `scopes`,
+ * `additionalParams` and `loginHint` would widen what the provider is asked for, and `idToken`
+ * signs in with no state at all. An invite is checked here, before the visitor is sent away, and
+ * handed to the callback in the OAuth state's server context, which only the server writes and
+ * the callback alone reads. A check is a guess at a code like a join's, so it spends a join's
+ * limits: per IP before the code is looked up, then per code for a live one.
+ */
+async function startWithProvider(
+  db: TelaDb,
+  body: Record<string, unknown>,
+  ip: string | null,
+  now: number,
+): Promise<void> {
+  const extra = body.additionalData
+  const unexpected = Object.keys(body).filter((key) => !PROVIDER_START_FIELDS.has(key))
+  if (extra !== undefined) {
+    if (typeof extra !== 'object' || extra === null || Array.isArray(extra)) {
+      unexpected.push('additionalData')
+    } else {
+      for (const key of Object.keys(extra))
+        if (key !== 'invite') unexpected.push(`additionalData.${key}`)
+    }
+  }
+  const invite = (extra as { invite?: unknown } | undefined)?.invite
+  if (invite !== undefined && typeof invite !== 'string') unexpected.push('additionalData.invite')
+  if (unexpected.length > 0) {
+    throw new APIError('BAD_REQUEST', {
+      code: 'VALIDATION_ERROR',
+      message: `Not accepted: ${unexpected.join(', ')}`,
+    })
+  }
+  if (invite === undefined) return
+  const code = normalizeInviteCode(invite)
+  const invalid = () =>
+    new APIError('BAD_REQUEST', { code: 'INVALID_CODE', message: REFUSALS.INVALID_CODE })
+  if (!code) throw invalid()
+  if (ip !== null) {
+    const { allowed, retryAfterSec } = await consumeLimit(db, 'joinIp', ip, now)
+    if (!allowed) throw tooMany(retryAfterSec)
+  }
+  const live = await liveCode(db, code)
+  if (!live) throw invalid()
+  if (ip !== null) {
+    const limit = Math.max(ACTION_LIMITS.joinCode.limit, live.places)
+    const { allowed, retryAfterSec } = await consumeLimit(db, 'joinCode', code, now, limit)
+    if (!allowed) throw tooMany(retryAfterSec)
+  }
+  if (live.full)
+    throw new APIError('CONFLICT', { code: 'INVITE_USED', message: REFUSALS.INVITE_USED })
+  await addOAuthServerContext({ invite: code })
+}
+
+/**
+ * Google and GitHub (ADR 0036), each only while its app is configured, asking for no more than an
+ * address: Tela keeps neither the name nor the picture. No ID-token sign-in, which has no state,
+ * and Google asks which account rather than taking whichever is signed in.
+ */
+function socialProviders(oauth: ApiConfig['oauth']) {
+  return {
+    ...(oauth?.google
+      ? {
+          google: {
+            ...oauth.google,
+            disableDefaultScope: true,
+            scope: ['openid', 'email'],
+            prompt: 'select_account' as const,
+            disableIdTokenSignIn: true,
+          },
+        }
+      : {}),
+    ...(oauth?.github
+      ? {
+          github: {
+            ...oauth.github,
+            disableDefaultScope: true,
+            scope: ['user:email'],
+            disableIdTokenSignIn: true,
+          },
+        }
+      : {}),
+  }
+}
+
+/** Every token a provider hands back, which Tela never uses and so never keeps. */
+const NO_TOKENS = {
+  accessToken: null,
+  refreshToken: null,
+  idToken: null,
+  accessTokenExpiresAt: null,
+  refreshTokenExpiresAt: null,
+}
 
 /**
  * What a sign-in finds missing from what making the account should have written, written now: a
@@ -125,6 +271,30 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
     secret: config.authSecret,
     trustedOrigins: [config.publicUrl],
     database: drizzleAdapter(db, { provider: 'sqlite', schema: schema.authTables }),
+    // An error before a flow's own return URL is known lands on the sign-in page, not on
+    // better-auth's error page, which `/api/auth` does not serve.
+    onAPIError: { errorURL: `${config.publicUrl}/login` },
+    socialProviders: socialProviders(config.oauth),
+    /**
+     * Linking is explicit only (ADR 0036): a member adds a provider from Settings. A provider's
+     * verification says the address was proved once, not who holds it now, so a provider whose
+     * address matches a member's is answered `account_not_linked` rather than let in; and no
+     * provider is trusted, since a trusted one links without a verified address at all. An
+     * explicit link may use another address, and a member may unlink everything: the code is
+     * always a way back in. Nothing a provider returns is kept but the identity: tokens are
+     * dropped as every account row is written, and never refreshed at a sign-in.
+     */
+    account: {
+      storeStateStrategy: 'database',
+      updateAccountOnSignIn: false,
+      accountLinking: {
+        enabled: true,
+        disableImplicitLinking: true,
+        trustedProviders: [],
+        allowDifferentEmails: true,
+        allowUnlinkingAll: true,
+      },
+    },
     session: {
       expiresIn: 60 * DAY,
       updateAge: DAY,
@@ -157,6 +327,13 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       // Behind Cloudflare every request arrives from Cloudflare; without this every visitor
       // shares one rate-limit bucket (spike S4).
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
+      // The cookie that ties a provider's return to the browser that left, as long as the state
+      // row it names (ten minutes): at better-auth's five, a provider's own sign-up or 2FA can
+      // outlast it.
+      cookies: { state: { attributes: { maxAge: 600 } } },
+      // The origin and return-URL checks. better-auth turns them off when it thinks it runs under
+      // test; said here so the suite runs them as production does.
+      disableOriginCheck: false,
     },
     // Per-isolate memory is useless on Workers: limits live in D1. A password try costs a hash,
     // known address or not, so the password sign-in gets five a minute per IP rather than
@@ -167,24 +344,24 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       customRules: { '/sign-in/email': { window: 60, max: 5 } },
     },
     hooks: {
-      // Counted for any address, member or not, keyed as better-auth keys the code (the lowercased
-      // address), and refused the same way for all of them, so a 429 says nothing about who has an
-      // account. Only requests from outside are counted. tela-api's own calls through `auth.api`
-      // carry no request: the operator's invite needs no limit, and a route that lets anyone
-      // trigger one must count for itself.
+      // A provider's sign-in is checked before it starts (`startWithProvider`). Everything that
+      // mails or checks a code, or tries a password, is counted for any address, member or not,
+      // keyed as better-auth keys the code (the lowercased address), and refused the same way for
+      // all of them, so a 429 says nothing about who has an account. Only requests from outside
+      // are counted. tela-api's own calls through `auth.api` carry no request: the operator's
+      // invite needs no limit, and a route that lets anyone trigger one must count for itself.
       before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path === PROVIDER_START) {
+          const ip = ctx.request ? (getIP(ctx.request, ctx.context.options) ?? NO_IP) : null
+          const body = typeof ctx.body === 'object' && ctx.body !== null ? ctx.body : {}
+          return startWithProvider(db, body, ip, clock.now())
+        }
         const action = PER_ADDRESS.get(ctx.path)
         const email: unknown = ctx.body?.email
         if (!action || !ctx.request || typeof email !== 'string') return
         const address = email.toLowerCase().slice(0, ADDRESS_MAX)
         const { allowed, retryAfterSec } = await consumeLimit(db, action, address, clock.now())
-        if (!allowed) {
-          throw new APIError(
-            'TOO_MANY_REQUESTS',
-            { message: TOO_MANY },
-            { 'X-Retry-After': String(retryAfterSec) },
-          )
-        }
+        if (!allowed) throw tooMany(retryAfterSec)
       }),
     },
     databaseHooks: {
@@ -194,19 +371,40 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
            * The gate (ADR 0034): every path that makes a user runs it, and it admits one only by
            * claiming an invitation, in one statement. better-auth passes the endpoint it runs in
            * through AsyncLocalStorage. Inside one, only the code sign-in, which proved the
-           * address, may make an account; any other, and an address not verified, is refused
-           * rather than trusted, so a way in better-auth adds later makes nobody. Outside one is
-           * the admin route, which has written the operator's invitation first: a missing context
-           * grants nothing by itself, since a refactor or a background task loses it as easily. It
-           * refuses by throwing; a `false` would make `createUser` return null, and the sign-in
-           * fail on it with an empty 500. Whatever the client sent as a name or picture is
-           * dropped, so neither rides in the session cookie: a profile is the member's to fill.
+           * address, and a provider's return, whose provider verified it, may make an account;
+           * any other, and an address not verified, is refused rather than trusted, so a way in
+           * better-auth adds later makes nobody. Outside one is the admin route, which has written
+           * the operator's invitation first: a missing context grants nothing by itself, since a
+           * refactor or a background task loses it as easily. It refuses by throwing; a `false`
+           * would make `createUser` return null, and the sign-in fail on it with an empty 500. On
+           * a provider's return better-auth turns the throw into a redirect carrying its code.
+           * Whatever the client or the provider sent as a name or picture is dropped, so neither
+           * rides in the session cookie, nor reaches a public profile: a profile is the member's
+           * to fill.
            */
           before: async (user, context) => {
-            if (context && (user.emailVerified !== true || context.path !== '/sign-in/email-otp'))
+            const fromProvider = context?.path === PROVIDER_RETURN
+            if (context && user.emailVerified !== true) {
+              throw fromProvider ? refuseReturn('account_not_linked') : refuse('INVITE_REQUIRED')
+            }
+            if (context && !fromProvider && context.path !== CODE_SIGN_IN) {
               throw refuse('INVITE_REQUIRED')
+            }
             const email = user.email.toLowerCase()
             const now = clock.now()
+            if (fromProvider) {
+              // Admitted by the code its sign-in carried, and nothing else (ADR 0036): a hold or
+              // an operator's invitation is for the code sign-in, which proves the address
+              // itself. Someone else may have placed the hold, and only a code from that mailbox
+              // should spend it.
+              const state = await getOAuthState().catch(() => null)
+              const invite = state?.serverContext?.invite
+              if (typeof invite !== 'string') throw refuseReturn('invite_required')
+              if (!(await claimByCode(db, { code: invite, email, now }))) {
+                throw refuseReturn('invite_unavailable')
+              }
+              return { data: { name: '', image: null } }
+            }
             if (!(await claimInvite(db, { email, now }))) {
               throw refuse(
                 (await waitsOnFullCode(db, { email, now })) ? 'INVITE_USED' : 'INVITE_REQUIRED',
@@ -217,15 +415,30 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
           // The profile comes in the same step that creates the account (the Postgres stack did
           // this with a trigger on auth.users). The invitation is settled on its own: a failure
           // there costs the inviter's list a handle for a while, never the member their account,
-          // and the next sign-in settles it.
-          after: async (user) => {
+          // and the next sign-in settles it. An account a provider made is told to its address
+          // (ADR 0036), and a notice that fails to go is logged rather than fail the sign-in.
+          after: async (user, context) => {
             const now = clock.now()
             await settleInvite(db, { email: user.email, userId: user.id, now }).catch((err) =>
               console.error('invitation not settled', user.id, err),
             )
             await createProfile(db, user.id, now)
+            const provider: unknown = context?.params?.id
+            if (context?.path === PROVIDER_RETURN && typeof provider === 'string') {
+              await mail
+                .send(
+                  providerAccountMail({ to: user.email, provider, publicUrl: config.publicUrl }),
+                )
+                .catch((err) => console.error('provider notice not sent', user.id, err))
+            }
           },
         },
+      },
+      // No provider's tokens are kept (ADR 0036): Tela never calls a provider's API, and a token at
+      // rest is one more thing to leak.
+      account: {
+        create: { before: async () => ({ data: NO_TOKENS }) },
+        update: { before: async () => ({ data: NO_TOKENS }) },
       },
       session: {
         create: {
