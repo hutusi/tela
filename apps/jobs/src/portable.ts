@@ -53,24 +53,34 @@ export function runPortable(ctx: PortableContext, intervalMs = 60_000): () => vo
  * titles) runs in the same call, and so does work a lease elsewhere was holding up — a fetch a
  * queue consumer is doing keeps its host's other feeds waiting, since one host has one live lease.
  * For tests; `limit` stops a kind that keeps finding work, `waitMs` a lease that is never let go.
+ *
+ * Only a cycle that did something counts toward `limit`. Waiting on a lease held elsewhere is
+ * bounded by `waitMs` alone, on the wall clock the waits are slept on: counted as cycles, twenty
+ * polls 250 ms apart gave up after five seconds, while a host's feeds were still being fetched
+ * one after another through the local queue (each hop waits out its batch), and the e2e saw the
+ * last of four curated feeds arrive after the cycle meant to fetch it had returned.
  */
 export async function settle(
   ctx: PortableContext,
-  options: { limit?: number; waitMs?: number } = {},
+  options: { limit?: number; waitMs?: number; pollMs?: number } = {},
 ): Promise<TickReport[]> {
-  const { limit = 20, waitMs = 25_000 } = options
-  const deadline = ctx.clock.now() + waitMs
+  const { limit = 20, waitMs = 25_000, pollMs = 250 } = options
+  const deadline = Date.now() + waitMs
   const reports: TickReport[] = []
-  for (let i = 0; i < limit; i++) {
+  let working = 0
+  while (working < limit) {
     const { tick: report, outcomes } = await cycle(ctx)
     reports.push(report)
-    if (outcomes.length > 0 || Object.values(report).some((n) => n)) continue
+    if (outcomes.length > 0 || Object.values(report).some((n) => n)) {
+      working++
+      continue
+    }
     const live = await first<{ n: number }>(
       ctx.db,
       sql`select count(*) as n from leases where until > ${ctx.clock.now()}`,
     )
-    if (!live?.n || ctx.clock.now() > deadline) break
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    if (!live?.n || Date.now() > deadline) break
+    await new Promise((resolve) => setTimeout(resolve, pollMs))
   }
   return reports
 }

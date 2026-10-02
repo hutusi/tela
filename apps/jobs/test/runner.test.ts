@@ -8,7 +8,7 @@ import { fakeClock, memoryBlobs, memoryJobs } from '@tela/platform/portable'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, longHtml, rss } from '../../../packages/ingest/test/fixture-server'
 import { type JobQueues, KINDS } from '../src/kinds'
-import { cycle, drain, type PortableContext } from '../src/portable'
+import { cycle, drain, type PortableContext, settle } from '../src/portable'
 import { runJob, SAME_HOST_GAP_SECONDS, tick } from '../src/runner'
 
 const NOW = Date.UTC(2026, 8, 4, 10)
@@ -221,5 +221,35 @@ describe('tick and runJob', () => {
     expect(await count('leases')).toBe(0)
     const feed = await first<{ next_fetch_at: number }>(db, sql`select next_fetch_at from feeds`)
     expect(feed?.next_fetch_at).toBe(clock.now() + 24 * 60 * MIN)
+  })
+})
+
+describe('settle', () => {
+  test('waits out a lease held elsewhere however many polls that takes, not only `limit` of them', async () => {
+    // A queue consumer's fetch, let go a second from now: three cycles' worth of polls (the old
+    // bound, 250 ms apart) would have returned with it still held.
+    await db.run(sql`
+      insert into leases (kind, key, owner, until, host)
+      values ('feed.fetch', '1', 'queue', ${clock.now() + 5 * MIN}, 'blog.example')
+    `)
+    const release = setTimeout(async () => {
+      await db.run(sql`delete from leases`)
+    }, 1000)
+    try {
+      await settle(ctx, { limit: 3, pollMs: 20 })
+    } finally {
+      clearTimeout(release)
+    }
+    expect(await count('leases')).toBe(0)
+  })
+
+  test('gives up on a lease that is never let go once `waitMs` has passed', async () => {
+    await db.run(sql`
+      insert into leases (kind, key, owner, until, host)
+      values ('feed.fetch', '1', 'queue', ${clock.now() + 5 * MIN}, 'blog.example')
+    `)
+    const reports = await settle(ctx, { waitMs: 20, pollMs: 1 })
+    expect(reports.length).toBeGreaterThan(1)
+    expect(await count('leases')).toBe(1)
   })
 })
