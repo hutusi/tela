@@ -287,7 +287,21 @@ test.describe("the member's picture (ADR 0032, 0033)", () => {
     }
   })
 
-  test('an upload, cropped in the dialog, comes first; removed, it is gone', async ({ page }) => {
+  test('an upload, cropped in the dialog, comes first; removed, it is gone', async ({
+    page,
+    request,
+  }) => {
+    try {
+      await upload(page)
+    } finally {
+      // Every spec signs in as this member: none should inherit a picture from this one.
+      await request.delete(`${BASE}/api/v1/avatar`, {
+        headers: { origin: BASE, ...(await memberHeaders(request)) },
+      })
+    }
+  })
+
+  async function upload(page: Page) {
     await page.goto('/settings')
     const picture = page.getByTestId('account-menu').locator('img')
     await page.getByTestId('profile-picture-input').setInputFiles({
@@ -326,6 +340,13 @@ test.describe("the member's picture (ADR 0032, 0033)", () => {
       )
       .toBe(256)
     await expect(page.getByTestId('profile-picture-upload')).toHaveText('Change picture')
+    // One picture at a time: the Gravatar switch decides nothing now, so it is not offered, and
+    // the page says what removing the upload goes back to (the Gravatar the last check found, if
+    // an earlier spec left one, else the letter).
+    await expect(page.getByTestId('profile-gravatar')).toHaveCount(0)
+    await expect(page.getByTestId('profile-picture-fallback')).toHaveText(
+      /^Shown everywhere\. Remove it to go back to your (Gravatar|initial)\.$/,
+    )
 
     const removed = page.waitForResponse(
       (r) => r.url().endsWith('/api/v1/avatar') && r.request().method() === 'DELETE',
@@ -334,7 +355,10 @@ test.describe("the member's picture (ADR 0032, 0033)", () => {
     expect((await removed).status()).toBe(200)
     await expect(picture).toHaveCount(0)
     await expect(page.getByTestId('profile-picture-remove')).toHaveCount(0)
-  })
+    // Without an upload, the Gravatar's switch is back, as it was left.
+    await expect(page.getByTestId('profile-gravatar')).toHaveAttribute('aria-checked', 'true')
+    await expect(page.getByTestId('profile-picture-fallback')).toHaveCount(0)
+  }
 
   test('the crop dialog cancels with Esc, and keeps nothing', async ({ page }) => {
     await page.goto('/settings')

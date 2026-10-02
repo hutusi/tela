@@ -170,10 +170,12 @@ left, the control on the right. Controls are `Segmented` (the choices on the `ho
 chosen one lifted on `surface`), `Switch` (40 × 24, `accent` on / `thumb` off, `knob`), a native
 select, or a quiet pill button. Settings that change what others see say so, and that the public
 profile can take a few minutes to catch up. Profile opens with the member's avatar at 64 px beside
-*Upload a picture* (*Change picture* once there is one) and *Remove*, quiet pills, then a
-`SettingRow` *Use my Gravatar*: the switch, on by default, and while it is on a quiet *Refresh*. Its
-hint says which picture the member has and why: their Gravatar, their upload in front of it, none
-found for their email, still asking, or off (ADR 0033). The design's Notifications section,
+*Upload a picture* (*Change picture* once there is one) and *Remove*, quiet pills. One picture at
+a time, and only the control that decides it: while there is an upload, a muted line under the
+pills says what removing it goes back to (their Gravatar, or their initial), and the Gravatar switch
+is not shown, since it decides nothing then. Without one, a `SettingRow` *Use my Gravatar* follows:
+the switch, on by default, and while it is on a quiet *Refresh*, with a hint saying whether
+Gravatar has a picture for their email, is still being asked, or is off (ADR 0033). The design's Notifications section,
 "Who can follow you" and "Delete account" are not built (ADR 0031), so they are not shown.
 
 The crop dialog (`AvatarCrop`) is a native modal `<dialog>` on the `surface` ground: a serif title,

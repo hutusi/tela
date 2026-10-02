@@ -293,9 +293,10 @@
     "pictureUpload": "Upload a picture",
     "pictureReplace": "Change picture",
     "pictureRemove": "Remove",
+    "pictureFallbackGravatar": "Shown everywhere. Remove it to go back to your Gravatar.",
+    "pictureFallbackInitial": "Shown everywhere. Remove it to go back to your initial.",
     "gravatarHints": {
       "shown": "From the email you sign in with, wherever your name appears; others see a change within minutes. Changed it on Gravatar? Refresh.",
-      "behind": "Your uploaded picture comes first; your Gravatar stands in if you remove it.",
       "none": "Gravatar has no picture for the email you sign in with, so your initial is shown.",
       "checking": "Asking Gravatar about the email you sign in with…",
       "off": "Off: your initial is shown unless you upload a picture."

@@ -129,13 +129,15 @@ function ProfileSection() {
 const PILL =
   'rounded-full border border-thumb px-3.5 py-[7px] text-[13px] font-medium whitespace-nowrap text-ink hover:border-ink disabled:opacity-60'
 
-type GravatarHint = 'shown' | 'behind' | 'none' | 'checking' | 'off'
+type GravatarHint = 'shown' | 'none' | 'checking' | 'off'
 
 /**
  * The member's picture (ADR 0033): one they upload, cropped in a dialog here, else their Gravatar
- * (on until they turn it off), else their initial. Refresh sends the switch on again: a new
- * address past the 30-day caches, and Gravatar asked again at once. The hint says which of them
- * the member has, and why.
+ * (on until they turn it off), else their initial. One picture at a time, and only the control that
+ * decides it: while there is an upload, the Gravatar switch decides nothing, so it is not shown,
+ * and a line says what removing the upload goes back to. Without one, the switch and Refresh (the
+ * switch sent on again: a new address past the 30-day caches, and Gravatar asked again at once),
+ * with a hint saying whether there is a Gravatar and why not.
  */
 function PictureSettings({ profile }: { profile: ProfileRow }) {
   const t = useTranslations('settings')
@@ -147,11 +149,11 @@ function PictureSettings({ profile }: { profile: ProfileRow }) {
     ? 'off'
     : profile.gravatarFound === null
       ? 'checking'
-      : !profile.gravatarFound
-        ? 'none'
-        : profile.avatarUploaded
-          ? 'behind'
-          : 'shown'
+      : profile.gravatarFound
+        ? 'shown'
+        : 'none'
+  // What removing an upload goes back to: the Gravatar only if it is on and Gravatar has one.
+  const fallback = hint === 'shown' ? 'pictureFallbackGravatar' : 'pictureFallbackInitial'
 
   async function remove() {
     setBusy(true)
@@ -177,35 +179,42 @@ function PictureSettings({ profile }: { profile: ProfileRow }) {
           size={64}
           me
         />
-        <div className="flex flex-wrap items-center gap-2">
-          <label
-            className={`${PILL} cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent`}
-            data-testid="profile-picture-upload"
-          >
-            {profile.avatarUploaded ? t('pictureReplace') : t('pictureUpload')}
-            <input
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                // Cleared, so choosing the same file again opens the dialog again.
-                e.target.value = ''
-                if (file) setCropping(file)
-              }}
-              data-testid="profile-picture-input"
-            />
-          </label>
-          {profile.avatarUploaded ? (
-            <button
-              type="button"
-              onClick={() => void remove()}
-              disabled={busy}
-              className={PILL}
-              data-testid="profile-picture-remove"
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label
+              className={`${PILL} cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent`}
+              data-testid="profile-picture-upload"
             >
-              {t('pictureRemove')}
-            </button>
+              {profile.avatarUploaded ? t('pictureReplace') : t('pictureUpload')}
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  // Cleared, so choosing the same file again opens the dialog again.
+                  e.target.value = ''
+                  if (file) setCropping(file)
+                }}
+                data-testid="profile-picture-input"
+              />
+            </label>
+            {profile.avatarUploaded ? (
+              <button
+                type="button"
+                onClick={() => void remove()}
+                disabled={busy}
+                className={PILL}
+                data-testid="profile-picture-remove"
+              >
+                {t('pictureRemove')}
+              </button>
+            ) : null}
+          </div>
+          {profile.avatarUploaded ? (
+            <p className="m-0 text-[12.5px] text-muted" data-testid="profile-picture-fallback">
+              {t(fallback)}
+            </p>
           ) : null}
         </div>
       </div>
@@ -214,30 +223,32 @@ function PictureSettings({ profile }: { profile: ProfileRow }) {
           {t('pictureErrors.failed')}
         </p>
       ) : null}
-      <SettingRow label={t('gravatar')} hint={t(`gravatarHints.${hint}`)}>
-        <div
-          className="flex items-center gap-3"
-          data-testid="profile-gravatar-row"
-          data-hint={hint}
-        >
-          {profile.gravatar ? (
-            <button
-              type="button"
-              onClick={() => store.mutate({ type: 'setAvatar', gravatar: true })}
-              className={PILL}
-              data-testid="profile-gravatar-refresh"
-            >
-              {t('gravatarRefresh')}
-            </button>
-          ) : null}
-          <Switch
-            checked={profile.gravatar}
-            onChange={(on) => store.mutate({ type: 'setAvatar', gravatar: on })}
-            label={t('gravatar')}
-            testId="profile-gravatar"
-          />
-        </div>
-      </SettingRow>
+      {profile.avatarUploaded ? null : (
+        <SettingRow label={t('gravatar')} hint={t(`gravatarHints.${hint}`)}>
+          <div
+            className="flex items-center gap-3"
+            data-testid="profile-gravatar-row"
+            data-hint={hint}
+          >
+            {profile.gravatar ? (
+              <button
+                type="button"
+                onClick={() => store.mutate({ type: 'setAvatar', gravatar: true })}
+                className={PILL}
+                data-testid="profile-gravatar-refresh"
+              >
+                {t('gravatarRefresh')}
+              </button>
+            ) : null}
+            <Switch
+              checked={profile.gravatar}
+              onChange={(on) => store.mutate({ type: 'setAvatar', gravatar: on })}
+              label={t('gravatar')}
+              testId="profile-gravatar"
+            />
+          </div>
+        </SettingRow>
+      )}
       {cropping ? <AvatarCrop file={cropping} onClose={() => setCropping(null)} /> : null}
     </>
   )
