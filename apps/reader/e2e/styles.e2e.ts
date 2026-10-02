@@ -1,4 +1,4 @@
-import { expect, type Locator, test } from '@playwright/test'
+import { expect, type Locator, type Page, test } from '@playwright/test'
 import { ensureFeeds, expectHeaderFits, measureHeader, resetReading, synced } from './helpers'
 
 /**
@@ -13,8 +13,26 @@ import { ensureFeeds, expectHeaderFits, measureHeader, resetReading, synced } fr
 
 const INK = 'rgb(31, 28, 24)'
 
-const colour = (l: Locator) => l.evaluate((el) => getComputedStyle(el).color)
 const decoration = (l: Locator) => l.evaluate((el) => getComputedStyle(el).textDecorationLine)
+
+/**
+ * The lockup and the header's pills are ink in every state: the design carries the active pill on
+ * its background alone, so a colour difference here would be a second signal for the same thing.
+ * `toHaveCSS` finds the link again on each try, so a header rendered anew in between is measured
+ * as it is now, never as a detached element (whose computed style is empty).
+ */
+async function expectInkLinks(page: Page, pills: string[]): Promise<void> {
+  const links: [string, Locator][] = [
+    ['lockup', page.getByRole('banner').getByRole('link', { name: 'Tela' })],
+    ...pills.map((key): [string, Locator] => [key, page.getByTestId(`nav-${key}`)]),
+  ]
+  for (const [name, link] of links) {
+    await expect(link, name).toHaveCSS('color', INK)
+    await expect(link, name).toHaveCSS('text-decoration-line', 'none')
+    await link.hover()
+    await expect(link, name).toHaveCSS('text-decoration-line', 'none')
+  }
+}
 
 // The bilingual measurements need a Japanese blog; adding one the member follows is a no-op.
 test.beforeAll(async () => {
@@ -29,21 +47,27 @@ test.beforeEach(async ({ page }) => {
 test.describe('stylesheet', () => {
   test('the header renders in ink and never underlines', async ({ page }) => {
     await page.goto('/reading')
+    // A device holding no rows yet shows the visitor's header until /me answers (ADR 0035), and
+    // the member's replaces it whole: wait for the member's, and let every check find its link
+    // again, as an element read once may be the one just taken out of the page.
+    await expect(page.getByTestId('nav-reading')).toBeVisible()
+    await expectInkLinks(page, ['reading', 'discover', 'following'])
+  })
 
-    const brand = page.getByRole('banner').getByRole('link', { name: 'Tela' })
-    expect(await colour(brand)).toBe(INK)
-    expect(await decoration(brand)).toBe('none')
-    await brand.hover()
-    expect(await decoration(brand)).toBe('none')
-
-    // Ink in every state: the design carries the active pill on its background alone, so a colour
-    // difference here would be a second signal for the same thing.
-    for (const key of ['reading', 'discover', 'following']) {
-      const pill = page.getByTestId(`nav-${key}`)
-      expect(await colour(pill), key).toBe(INK)
-      expect(await decoration(pill), key).toBe('none')
-      await pill.hover()
-      expect(await decoration(pill), key).toBe('none')
+  test("the visitor's header renders in ink and never underlines too", async ({ browser }) => {
+    const visitor = await browser.newContext({ storageState: { cookies: [], origins: [] } })
+    try {
+      const page = await visitor.newPage()
+      await page.goto('/')
+      await expect(page.getByTestId('nav-join')).toBeVisible()
+      await expectInkLinks(page, ['discover', 'writers', 'login'])
+      // Join is the one filled pill, so not ink; it never underlines either.
+      const join = page.getByTestId('nav-join')
+      await expect(join).toHaveCSS('text-decoration-line', 'none')
+      await join.hover()
+      await expect(join).toHaveCSS('text-decoration-line', 'none')
+    } finally {
+      await visitor.close()
     }
   })
 
