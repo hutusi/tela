@@ -3,7 +3,11 @@
 Status: accepted (2026-09-28). Supersedes 0012 (Supabase providers and dev-auth), 0013's
 mechanism (its rule stands: the mail carries the code) and 0014 (Supabase settings as code); the
 old ADRs' status lines change at cutover. 0015's policy stands: registration stays closed and the
-site stays hidden from crawlers, with the mechanism below.
+site stays hidden from crawlers, with the mechanism below. Amended by 0034 and 0036 (2026-10-02):
+an account is created at its first sign-in for an address that holds an invitation (a member's
+code, an operator's code or `admin invite`), checked by one gate in `user.create.before` (0034);
+and passwords, Google and GitHub join the email code (0036), superseding "Email codes only" and
+"OAuth is deferred". The rest stands.
 
 ## Context
 

@@ -5,7 +5,9 @@ Status: accepted (2026-09-28): the protocol, which tela-api implements, and the 
 more) and 0017 (the client-owned pane), keeping 0017's rule that the URL alone says which article
 is open. Amends 0010: still no i18n routing and a locale cookie, now read by use-intl in the SPA
 and by the edge renderer. Amended by 0031 (2026-09-30): a member also holds the people they
-follow, and `follow`, `unfollow` and `setPrivacy` join the mutations.
+follow, and `follow`, `unfollow` and `setPrivacy` join the mutations. Amended by 0035
+(2026-10-02): `/` and the info pages join the public pages the edge renders, for visitors only, and
+the service worker takes its shell from `/__tela/shell` rather than `/`.
 
 ## Context
 

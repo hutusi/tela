@@ -8,7 +8,7 @@ Tela is a multilingual reader and gathering place for independent blogs: readers
 
 Decisions that look odd but are deliberate:
 
-- **Tela is in private beta.** Registration is closed (better-auth's `disableSignUp`), the site is `noindex` while `TELA_PRIVATE_BETA` is set in `apps/reader/wrangler.jsonc`, and the way in is `bun run admin invite`. Invite codes were deliberately not built — their design should follow how we decide to open up (ADR 0015).
+- **Tela is in private beta, and every new account needs an invitation.** A member's invite code (five people each, ever), an operator's code with as many uses as it was given, or `bun run admin invite`: one gate, better-auth's `user.create.before`, admits all three by claiming the invitation in one statement, and refuses by throwing (ADR 0034). The site is `noindex` while `TELA_PRIVATE_BETA` is set in `apps/reader/wrangler.jsonc`. Members sign in by email code, password, Google or GitHub; a password is set only once a code has proved the address, a provider makes an account only with the code its own sign-in carried, and a provider is linked to a member only from Settings, never by a matching address (ADR 0036). Opening up is a large operator code, then lifting the gate, then that var.
 - **The reader never waits on the network.** Every screen renders from the rows the device holds in IndexedDB, and a seq-cursor sync keeps them current behind it; an RPC is only for an answer the member is waiting for (ADR 0025).
 - **Reading languages are a fixed launch set**, never "every language a subscriber speaks": translation cost is bounded by the set, not by the audience (ADR 0006).
 - **Titles translate eagerly, bodies lazily and streamed**, so a reader never pays for a post they do not open and sees the first paragraphs in seconds (ADRs 0006, 0023).
@@ -140,7 +140,7 @@ Defects that already cost time here, not hypotheticals.
 Update whichever covers what you changed, in the same change:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the living system map. Tracks: schema changes, new kinds of work, new routes, new safeguards.
-- [docs/adr/](docs/adr/) — decision records 0001–0033. A reversed decision gets a superseding ADR, not a silent edit.
+- [docs/adr/](docs/adr/) — decision records 0001–0036. A reversed decision gets a superseding ADR, not a silent edit.
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — provisioning, deploys and day-2 runbooks. Anything touching env vars, secrets, deploys, rate limits or failure signatures lands here.
 - [docs/DESIGN.md](docs/DESIGN.md) — tokens, layout rules, components, the i18n string convention.
 - [packages/content/README.md](packages/content/README.md) — the normative spec for sanitization, blocks and hashing. Changing a rule here means bumping `NORM_VERSION`.
