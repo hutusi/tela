@@ -17,7 +17,8 @@
     "settings": "Settings",
     "account": "Your account",
     "yourProfile": "Your profile",
-    "subscriptions": "Subscriptions"
+    "subscriptions": "Subscriptions",
+    "invites": "Invite friends"
   },
   "front": {
     "description": "Independent blogs from around the world, each in its own language, with their titles translated into yours.",
@@ -357,7 +358,9 @@
       "reading": "Reading",
       "translation": "Language",
       "subscriptions": "Subscriptions",
-      "privacy": "Privacy"
+      "privacy": "Privacy",
+      "invites": "Invites",
+      "account": "Account"
     },
     "profileIntro": "How you appear to readers and authors on Tela.",
     "gravatar": "Use my Gravatar",
@@ -438,6 +441,69 @@
     "yourData": "Your data",
     "yourDataHint": "Your profile, subscriptions, likes, recommendations, highlights and the people you follow, as one file.",
     "download": "Download"
+  },
+  "invites": {
+    "intro": "Tela is invite-only for now. You can invite five people: a code lets one person in, and once used it counts for good. Revoke a code nobody has used to get its place back.",
+    "left": "{n, plural, =0 {You have invited everyone you can.} one {You can invite # more person.} other {You can invite # more people.}}",
+    "create": "Create a code",
+    "none": "No codes yet. Create one, then send its link to a friend.",
+    "copy": "Copy link",
+    "copied": "Copied",
+    "revoke": "Revoke",
+    "joined": "Joined",
+    "joinedBy": "<who>{handle}</who> joined",
+    "errors": {
+      "allowance_used": "You have invited five people already.",
+      "rate_limited": "Too many codes in an hour. Try again later.",
+      "failed": "That did not work. Try again.",
+      "load": "Your codes could not be loaded. Try again later."
+    }
+  },
+  "account": {
+    "intro": "How you sign in to Tela. Each change is mailed to you, and adding a way to sign in signs out your other devices.",
+    "email": "Email",
+    "emailHint": "Sign-in codes are sent here.",
+    "password": "Password",
+    "passwordSet": "Set. You can still sign in with an emailed code.",
+    "passwordNone": "Not set. You sign in with an emailed code.",
+    "passwordAdd": "Set a password",
+    "passwordChange": "Change password",
+    "passwordCurrent": "Current password",
+    "passwordNew": "New password",
+    "passwordHint": "At least {min} characters.",
+    "passwordSave": "Save password",
+    "passwordSaved": "Password saved.",
+    "cancel": "Cancel",
+    "providers": {
+      "google": "Google",
+      "github": "GitHub"
+    },
+    "linkedSince": "Linked since {date}.",
+    "notLinked": "Not linked.",
+    "link": "Link",
+    "unlink": "Unlink",
+    "everywhere": "Sign out everywhere",
+    "everywhereHint": "Ends every session on every device, this one included.",
+    "everywhereButton": "Sign out everywhere",
+    "confirmTitle": "Confirm it's you",
+    "confirmHint": "To change how you sign in, confirm it's you with a code sent to your email.",
+    "confirmSent": "We sent a code to {email}. Enter it here.",
+    "confirm": "Email me a code",
+    "confirmCode": "6-digit code",
+    "confirmSubmit": "Confirm",
+    "confirmErrors": {
+      "rate_limited": "Too many tries. Wait a minute and try again.",
+      "bad_code": "That code is wrong or has expired.",
+      "send_failed": "The code could not be sent. Try again."
+    },
+    "errors": {
+      "not_fresh": "Confirm it's you first.",
+      "rejected": "That was not accepted. Check the password and try again.",
+      "rate_limited": "Too many changes. Try again later.",
+      "failed": "That did not work. Try again.",
+      "link_failed": "That account could not be linked. Try again.",
+      "load": "Your sign-in methods could not be loaded. Try again later."
+    }
   },
   "search": {
     "title": "Search",

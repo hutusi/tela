@@ -82,7 +82,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   page once the script runs (a modified click still opens the page).
 - The avatar opens the account menu (Tela v2): a 220px `surface` panel under it with the member's
   name and @handle, then Your profile, Subscriptions (`/settings/subscriptions`), Dashboard,
-  Settings, a rule, and Sign out in `muted`. A disclosure, not an ARIA menu: Tab reaches its items.
+  Settings, Invite friends (`/settings/invites`), a rule, and Sign out in `muted`. A disclosure, not an ARIA menu: Tab reaches its items.
   Esc closes it and returns focus to the avatar, before the reader's own Esc can close an article;
   a click elsewhere or any navigation closes it too. The avatar is `shrink-0` at every width,
   since it is the only way to Settings, the Dashboard and signing out, and `styles.e2e.ts` holds it
@@ -171,7 +171,20 @@ renders the pill filled (`bg-ink`), and clicking it again removes the recommenda
 Settings (Tela v2): a 1040 px page, a 200 px section nav on the left (sticky from `md`, one row
 that scrolls below it) holding the serif "Settings" heading, and the section in a 640 px column.
 Each section is an address (`/settings`, `/settings/reading`, `/settings/translation`,
-`/settings/subscriptions`, `/settings/privacy`), so Back and a shared link land on it.
+`/settings/subscriptions`, `/settings/privacy`, `/settings/invites`, `/settings/account`), so Back
+and a shared link land on it. Invites and Account are the two sections that read live answers from
+tela-api instead of the synced tables, on purpose: an invite list is counted by the server and holds
+other people's state, and how a member signs in is security state. Invites says how many of the
+five places are left, with *Create a code* (the filled button, disabled once none are left) beside
+it, then the codes, newest first: each in its groups of four, with its link
+(`/join?code=ABCD-EFGH-JKMN`, selectable), *Copy link* and a muted *Revoke* while unused, and
+"@handle joined" (the handle a link to the profile) once used. A revoked code leaves the list and
+gives its place back. Account has rows for the email, the password (*Set a password* or *Change
+password*, which opens the fields under the row), Google and GitHub (only those tela-api has keys
+for, or one already linked: *Link* or *Unlink*, and since when), and *Sign out everywhere*. A session
+older than a day cannot change how its member signs in, so the section then opens with a `surface`
+box, *Confirm it's you*, which mails a code to the member's own address and takes it right there,
+since the login page sends a member straight on.
 `/settings/translation` is labelled Language: the
 interface language comes first, each choice in its own name (English, 简体中文) so it can be found
 whatever the page is in, then what posts are translated into. The interface language is the

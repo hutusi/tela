@@ -2,7 +2,8 @@
  * Settings, in sections the URL names (`/settings`, `/settings/reading`, …), so Back and a link
  * both land on the section meant (Tela v2). Everything here is the synced tables: a change made on
  * another device shows here. Most settings are mutations and take effect at once; the handle,
- * name and bio are an RPC, since a handle has to be unique.
+ * name and bio are an RPC, since a handle has to be unique. Invites and Account are the exception,
+ * live answers on purpose (`settings-account.tsx`).
  */
 import {
   LANGUAGE_NAMES,
@@ -39,8 +40,17 @@ import { api, apiJson } from '../store/api'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { feedTitle } from '../store/selectors'
 import { useUi } from '../ui'
+import { AccountSection, InvitesSection } from './settings-account'
 
-export const SECTIONS = ['profile', 'reading', 'translation', 'subscriptions', 'privacy'] as const
+export const SECTIONS = [
+  'profile',
+  'reading',
+  'translation',
+  'subscriptions',
+  'privacy',
+  'invites',
+  'account',
+] as const
 export type Section = (typeof SECTIONS)[number]
 
 const hrefOf = (section: Section) => (section === 'profile' ? '/settings' : `/settings/${section}`)
@@ -87,6 +97,8 @@ export function SettingsPage() {
         {section === 'translation' ? <TranslationSection /> : null}
         {section === 'subscriptions' ? <SubscriptionsSection /> : null}
         {section === 'privacy' ? <PrivacySection /> : null}
+        {section === 'invites' ? <InvitesSection /> : null}
+        {section === 'account' ? <AccountSection /> : null}
       </div>
     </main>
   )

@@ -275,7 +275,7 @@ A Vite + React SPA that renders from the device.
 | `/following?tab=` | What the people a member follows did, by RPC; whom they follow, from the device (ADR 0031) |
 | `/search?q=` | The device first, then blogs and older posts from the server |
 | `/add`, `/claim`, `/sites/:id/claim` | Add feeds and OPML; claim a blog |
-| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out), Privacy (with "Your data") |
+| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out), Privacy (with "Your data"); Invites and Account read `/api/v1/invites` and `/api/v1/account` live, not synced rows (`lib/account-api.ts`) |
 | `/dashboard` | The author's view |
 
 ## Sync (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025)
