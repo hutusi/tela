@@ -90,6 +90,14 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     profile: { handle: string }
   }
   expect(me.profile.handle).toMatch(/^u_[0-9a-f]{10}$/)
+  // The account came through the invitation gate (ADR 0034): the operator's invitation, claimed by
+  // one `update … returning` inside better-auth's hook and settled once the user existed.
+  expect(
+    await db.all(
+      sql`select code, user_id, redeemed_at is not null and settled_at is not null as spent
+        from invite_redemptions where email = 'reader@x.test'`,
+    ),
+  ).toEqual([{ code: null, user_id: me.id, spent: 1 }])
   // Every other member call names the member, as the reader does from what /me told it.
   const member = { cookie, headers: { [MEMBER_HEADER]: me.id } }
 

@@ -1,16 +1,22 @@
 /**
- * Sign-in (ADR 0024): better-auth with email codes only, through its Drizzle adapter over the same
- * `TelaDb` everything else uses, so it runs on D1 in production and libSQL in tests. Registration
- * is closed: an account exists only because an operator invited it (ADR 0015's policy).
+ * Sign-in (ADR 0024): better-auth with email codes, through its Drizzle adapter over the same
+ * `TelaDb` everything else uses, so it runs on D1 in production and libSQL in tests. An account is
+ * made at an address's first code sign-in, or by the operator's invite, and only for an address
+ * that holds an invitation (ADR 0034): `user.create.before` is the gate, and the code mail is
+ * sent to nobody else.
  */
 import {
   bumpSeq,
+  claimInvite,
   consumeLimit,
   currentSeq,
   first,
+  holdsInvite,
   type LimitedAction,
   schema,
+  settleInvite,
   type TelaDb,
+  waitsOnFullCode,
 } from '@tela/data'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
@@ -57,6 +63,11 @@ export function provisionalHandle(): string {
   return `u_${[...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')}`
 }
 
+/**
+ * A member's profile, with a provisional handle. Idempotent per member: written when the account is
+ * made and again by a sign-in that finds none. Only a second profile for the member is ignored; a
+ * handle that clashes still fails, rather than leave the member with none.
+ */
 async function createProfile(db: TelaDb, userId: string, now: number) {
   await db.batch([
     bumpSeq(db),
@@ -69,8 +80,38 @@ async function createProfile(db: TelaDb, userId: string, now: number) {
         updatedAt: now,
         seq: currentSeq,
       })
-      .onConflictDoNothing(),
+      .onConflictDoNothing({ target: schema.profiles.userId }),
   ])
+}
+
+/** Why the gate turns an address away, in the `code` of its 403. */
+const REFUSALS = {
+  /** Nothing the address holds admits it, or it came a way that makes no account. */
+  INVITE_REQUIRED: 'An account is made only for an address that holds an invitation.',
+  /** Its hold is on a code that others filled since its code was mailed. */
+  INVITE_USED: 'Everyone this invite code was for has joined.',
+} as const
+
+const refuse = (code: keyof typeof REFUSALS) =>
+  new APIError('FORBIDDEN', { code, message: REFUSALS[code] })
+
+/**
+ * What a sign-in finds missing from what making the account should have written, written now: a
+ * profile, when the insert that follows the user's failed, and the settlement of the invitation
+ * that admitted them. One read when nothing is.
+ */
+async function repairMember(db: TelaDb, userId: string, now: number) {
+  const found = await first<{ email: string; profiled: number; unsettled: number }>(
+    db,
+    sql`select u.email,
+      exists (select 1 from profiles p where p.user_id = u.id) as profiled,
+      exists (select 1 from invite_redemptions r where r.email = u.email
+        and r.redeemed_at is not null and r.settled_at is null) as unsettled
+    from user u where u.id = ${userId}`,
+  )
+  if (!found) return
+  if (!found.profiled) await createProfile(db, userId, now)
+  if (found.unsettled) await settleInvite(db, { email: found.email, userId, now })
 }
 
 export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config'>) {
@@ -120,31 +161,87 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
     databaseHooks: {
       user: {
         create: {
-          // Every account gets its profile in the same step that creates it (the Postgres stack
-          // did this with a trigger on auth.users).
-          after: async (user) => createProfile(db, user.id, clock.now()),
+          /**
+           * The gate (ADR 0034): every path that makes a user runs it, and it admits one only by
+           * claiming an invitation, in one statement. better-auth passes the endpoint it runs in
+           * through AsyncLocalStorage. Inside one, only the code sign-in, which proved the
+           * address, may make an account; any other, and an address not verified, is refused
+           * rather than trusted, so a way in better-auth adds later makes nobody. Outside one is
+           * the admin route, which has written the operator's invitation first: a missing context
+           * grants nothing by itself, since a refactor or a background task loses it as easily. It
+           * refuses by throwing; a `false` would make `createUser` return null, and the sign-in
+           * fail on it with an empty 500. Whatever the client sent as a name or picture is
+           * dropped, so neither rides in the session cookie: a profile is the member's to fill.
+           */
+          before: async (user, context) => {
+            if (context && (user.emailVerified !== true || context.path !== '/sign-in/email-otp'))
+              throw refuse('INVITE_REQUIRED')
+            const email = user.email.toLowerCase()
+            const now = clock.now()
+            if (!(await claimInvite(db, { email, now }))) {
+              throw refuse(
+                (await waitsOnFullCode(db, { email, now })) ? 'INVITE_USED' : 'INVITE_REQUIRED',
+              )
+            }
+            return { data: { name: '', image: null } }
+          },
+          // The profile comes in the same step that creates the account (the Postgres stack did
+          // this with a trigger on auth.users). The invitation is settled on its own: a failure
+          // there costs the inviter's list a handle for a while, never the member their account,
+          // and the next sign-in settles it.
+          after: async (user) => {
+            const now = clock.now()
+            await settleInvite(db, { email: user.email, userId: user.id, now }).catch((err) =>
+              console.error('invitation not settled', user.id, err),
+            )
+            await createProfile(db, user.id, now)
+          },
+        },
+      },
+      session: {
+        create: {
+          // A user whose profile insert failed is never created again, so a sign-in repairs it.
+          // A repair that fails does not fail the sign-in: a member without a profile is better
+          // off than one who cannot sign in to be given one.
+          after: async (session) =>
+            repairMember(db, session.userId, clock.now()).catch((err) =>
+              console.error('member not repaired', session.userId, err),
+            ),
         },
       },
     },
     plugins: [
       emailOTP({
-        disableSignUp: true,
+        // Sign-up is on so the code sign-in can make an account; the gate above decides whose.
+        disableSignUp: false,
         otpLength: 6,
         expiresIn: CODE_SECONDS,
         allowedAttempts: 3,
         storeOTP: 'hashed',
-        async sendVerificationOTP({ email, otp }) {
+        async sendVerificationOTP({ email, otp, type }, ctx) {
+          const address = email.toLowerCase()
           const member = await first<{ email_verified: number }>(
             db,
-            sql`select email_verified from user where email = ${email.toLowerCase()}`,
+            sql`select email_verified from user where email = ${address}`,
           )
+          // better-auth calls this for an address with no account only for a sign-in code, and
+          // with sign-up on would mail one to any address it is given. Only an address the gate
+          // would admit is mailed; for any other the code just stored (the plugin's row
+          // `sign-in-otp-<address>`) is deleted, and the endpoint answers as it does for everyone.
+          // A throw here would refuse nothing: better-auth logs it and answers the same, with the
+          // code left in place.
+          let invited = member !== undefined && !member.email_verified
+          if (type === 'sign-in' && member === undefined) {
+            if (!(await holdsInvite(db, { email: address, now: clock.now() }))) {
+              await ctx?.context.internalAdapter.deleteVerificationByIdentifier(
+                `sign-in-otp-${address}`,
+              )
+              return
+            }
+            invited = true
+          }
           await mail.send(
-            signInMail({
-              to: email,
-              code: otp,
-              publicUrl: config.publicUrl,
-              invited: member !== undefined && !member.email_verified,
-            }),
+            signInMail({ to: email, code: otp, publicUrl: config.publicUrl, invited }),
           )
         },
       }),

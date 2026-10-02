@@ -179,8 +179,8 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 
 | Route | Purpose |
 |---|---|
-| `/api/auth/*` | better-auth, only the endpoints Tela uses (`AUTH_ENDPOINTS` in `src/app.ts`, ADR 0036) and the guarded sign-out; every other is a 404 before better-auth sees it. Email codes only, registration closed, codes hashed, three tries; limited per IP by better-auth and per email address by Tela (`action_limits`) |
-| `POST /api/admin/invite`, `POST /api/admin/curate` | Bearer `ADMIN_TOKEN`: invite a member; add and feature a curated blog |
+| `/api/auth/*` | better-auth, only the endpoints Tela uses (`AUTH_ENDPOINTS` in `src/app.ts`, ADR 0036) and the guarded sign-out; every other is a 404 before better-auth sees it. Email codes, hashed, three tries; an account is made at an address's first code sign-in, only by claiming an invitation it holds, and a code is mailed to no address with neither an account nor an invitation (ADR 0034); limited per IP by better-auth and per email address by Tela (`action_limits`) |
+| `POST /api/admin/invite`, `POST /api/admin/curate` | Bearer `ADMIN_TOKEN`: invite a member (the operator's invitation to the address, then the account, through the same gate as every other); add and feature a curated blog |
 | `GET /api/v1/sync?cursor=` | The pull: a horizon snapshot at cursor 0, deltas by seq in pages ending on a seq boundary |
 | `POST /api/v1/mutations` | The push: up to 50 idempotent, last-writer-wins mutations in one batch |
 | `/api/v1/translations` | Request a body translation; poll its streamed state |
@@ -284,6 +284,10 @@ A Vite + React SPA that renders from the device.
 - **Outbound fetches** refuse private ranges by name and address; on Cloudflare
   `global_fetch_strictly_public` refuses them at the socket too.
 - **Model output is never trusted as HTML:** placeholders must match, text is re-escaped.
+- **Every new account claims an invitation:** better-auth's `user.create.before` admits a user only
+  by claiming, in one statement, an invitation its address holds, refuses by throwing, and treats a
+  missing endpoint context as no permission at all (ADR 0034). A sign-in writes whatever making
+  the account missed: the profile, and the invitation's settlement.
 - **Knowing it runs:** the dead-man's switch, the Monday digest, a verified nightly export, and
   D1's Time Travel (`docs/OPERATIONS.md`).
 

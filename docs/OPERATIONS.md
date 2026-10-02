@@ -277,9 +277,10 @@ is tela-api.
 `apps/api/wrangler.jsonc`: sign-in, sync, mutations and every reader RPC (ADR 0024). It shares the
 D1 database and `tela-content` with tela-jobs, and only produces to the jobs queues.
 
-- **Invite a member:** `ADMIN_TOKEN=… bun run admin invite reader@example.com`. It creates the
-  account and its profile, and mails a code; inviting an existing address only mails a fresh
-  code. Registration is otherwise closed (ADR 0015's policy).
+- **Invite a member:** `ADMIN_TOKEN=… bun run admin invite reader@example.com`. It writes the
+  operator's invitation to the address, creates the account and its profile through the same gate
+  as every other (ADR 0034), and mails a code that says the address is invited; inviting an
+  existing address only mails a fresh code. No account is made without an invitation.
 - **Sign-in trouble:**
   - Codes last an hour and allow three attempts. The sign-in endpoint allows three tries a
     minute per IP; past that the login page says "Too many tries", not "wrong code".
@@ -294,7 +295,16 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   - `select key, count, last_request from rate_limit` shows better-auth's windows, and
     `select * from action_limits where key like 'otp%'` Tela's.
   - A code that never arrives: check Resend's log for the address first, then the Worker's logs
-    for the send error.
+    for the send error. An address with no account is mailed only while it holds an invitation
+    (a hold from a join lasts a day); otherwise the request answers as usual and nothing is sent.
+  - A code sign-in refused `403 INVITE_REQUIRED` found no invitation for the address: it never had
+    one, its hold lapsed or went with its revoked code, or a later join moved a single-use code's
+    hold to another address.
+    `INVITE_USED` means its hold is on a code that others filled after its code was mailed.
+    `select * from invite_redemptions where email = '<address>'` shows what it holds.
+  - A member whose `/api/v1/me` has `profile: null`, or whose invitation is redeemed but not
+    settled, is repaired at their next sign-in. The Worker logs `invitation not settled` or
+    `member not repaired` when writing either failed.
   - `404 {"error":"not_found"}` from a `/api/auth/*` path is tela-api, not better-auth: only the
     endpoints in `AUTH_ENDPOINTS` (`apps/api/src/app.ts`) and the sign-out are served (ADR 0036).
     A better-auth feature turned on later answers 404 until its endpoint is added there.

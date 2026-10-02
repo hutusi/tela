@@ -11,7 +11,10 @@ export function signInMail(options: {
   to: string
   code: string
   publicUrl: string
-  /** First sign-in of an invited member: the mail says so. */
+  /**
+   * A first sign-in, which the mail calls an invitation: an address joining with an invite, or an
+   * account the operator made that has not signed in yet.
+   */
   invited: boolean
 }): MailMessage {
   const { to, code, publicUrl, invited } = options

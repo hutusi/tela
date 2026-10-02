@@ -2,7 +2,7 @@
  * tela-api's routes (ADR 0024). Portable: built from `ApiDeps`, so the Cloudflare entry and the
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
-import { schema } from '@tela/data'
+import { inviteAddress, schema } from '@tela/data'
 import { CLIENT_HEADER, MEMBER_HEADER, MIN_CLIENT, pushSchema } from '@tela/sync'
 import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -98,9 +98,11 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   })
 
   /**
-   * Invite a member: create the account (registration is otherwise closed) and mail a sign-in
-   * code. Operators call it with `bun run admin invite <email>`; D1 credentials never leave
-   * Cloudflare.
+   * Invite a member: create the account and mail a sign-in code. Operators call it with
+   * `bun run admin invite <email>`; D1 credentials never leave Cloudflare. The account passes the
+   * same gate as everyone's (ADR 0034): the route writes the operator's invitation to the address,
+   * an hour long, and creating the user claims it. An address that has an account is only mailed
+   * a fresh code, and given no invitation it could keep.
    */
   app.post('/api/admin/invite', async (c) => {
     const token = deps.config.adminToken
@@ -111,12 +113,14 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     if (!EMAIL.test(email)) return c.json({ error: 'invalid_email' }, 400)
     const ctx = await auth.$context
     const existing = await ctx.internalAdapter.findUserByEmail(email)
-    const user =
-      existing?.user ??
-      (await ctx.internalAdapter.createUser(
-        { email, name: email.split('@')[0] ?? email, emailVerified: false },
+    let user = existing?.user
+    if (!user) {
+      await inviteAddress(deps.db, { email, now: deps.clock.now() })
+      user = await ctx.internalAdapter.createUser(
+        { email, name: '', emailVerified: false },
         { method: 'admin' },
-      ))
+      )
+    }
     await auth.api.sendVerificationOTP({ body: { email, type: 'sign-in' } })
     return c.json({ userId: user.id, created: !existing })
   })

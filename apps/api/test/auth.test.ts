@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test'
-import { first } from '@tela/data'
+import { describe, expect, spyOn, test } from 'bun:test'
+import { createOperatorCode, first, headSeq, holdJoin, inviteAddress } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { PER_ADDRESS } from '../src/auth'
 import { ADMIN_TOKEN, codeFor, cookiesOf, createTestApi, signedIn, type TestApi } from './helpers'
@@ -28,7 +28,16 @@ describe('invites', () => {
     const api = await createTestApi()
     const res = await invite(api, ' New@X.test ')
     expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({ created: true })
+    const answer = (await res.json()) as { userId: string; created: boolean }
+    expect(answer).toEqual({ userId: expect.any(String), created: true })
+    // Through the gate like anyone's: the operator's invitation to the address, claimed and
+    // settled by the account it made.
+    expect(
+      await api.db.all(
+        sql`select code, email, user_id, redeemed_at is not null and settled_at is not null as spent
+          from invite_redemptions`,
+      ),
+    ).toEqual([{ code: null, email: 'new@x.test', user_id: answer.userId, spent: 1 }])
     const [mail] = api.mail.outbox
     expect(mail?.to).toBe('new@x.test')
     expect(mail?.subject).toContain('invited')
@@ -51,6 +60,216 @@ describe('invites', () => {
     expect(await first<{ n: number }>(api.db, sql`select count(*) as n from user`)).toEqual({
       n: 1,
     })
+    // …and writes no second invitation, which would wait for an account that already exists.
+    expect(
+      await first<{ n: number }>(api.db, sql`select count(*) as n from invite_redemptions`),
+    ).toEqual({ n: 1 })
+  })
+})
+
+describe('the invitation gate', () => {
+  /**
+   * A code asked for and tried as the reader's browser does, each request from an IP of its own,
+   * so better-auth's three a minute per IP stays out of the way.
+   */
+  const door = (api: TestApi) => {
+    let n = 0
+    const ip = () => `198.51.100.${++n}`
+    return {
+      ask: (email: string) =>
+        api.request('/api/auth/email-otp/send-verification-otp', {
+          body: { email, type: 'sign-in' },
+          headers: { 'cf-connecting-ip': ip() },
+        }),
+      signIn: (email: string, otp: string, extra: Record<string, unknown> = {}) =>
+        api.request('/api/auth/sign-in/email-otp', {
+          body: { email, otp, ...extra },
+          headers: { 'cf-connecting-ip': ip() },
+        }),
+    }
+  }
+  const count = async (api: TestApi, table: 'user' | 'profiles') =>
+    (await first<{ n: number }>(api.db, sql`select count(*) as n from ${sql.raw(table)}`))?.n
+  /** A code of the operator's with `uses` places, and a hold on it for each address. */
+  const held = async (api: TestApi, emails: string[], uses = 5) => {
+    const now = api.clock.now()
+    await createOperatorCode(api.db, { code: 'WELCOME', maxUses: uses, now })
+    for (const email of emails)
+      expect(await holdJoin(api.db, { code: 'WELCOME', email, now })).toBe('held')
+  }
+
+  test('a right code for an address with no invitation makes no account', async () => {
+    const api = await createTestApi()
+    // A code made on the server, since none is ever mailed to this address: the gate itself is
+    // what stands in the way.
+    const otp = await api.auth.api.createVerificationOTP({
+      body: { email: 'stranger@x.test', type: 'sign-in' },
+    })
+    const res = await door(api).signIn('stranger@x.test', otp)
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ code: 'INVITE_REQUIRED' })
+    expect(res.headers.getSetCookie()).toEqual([])
+    expect(await count(api, 'user')).toBe(0)
+    expect(await count(api, 'profiles')).toBe(0)
+  })
+
+  test('a hold is mailed an invitation, and its sign-in makes the account, its profile and its place', async () => {
+    const api = await createTestApi()
+    await held(api, ['new@x.test'])
+    const d = door(api)
+    expect((await d.ask('New@X.test')).status).toBe(200)
+    const otp = codeFor(api, 'new@x.test')
+    // The code still ends the subject, which the e2e reads it from.
+    expect(api.mail.outbox.at(-1)?.subject).toBe(
+      `You are invited to Tela · 邀请你加入 Tela: ${otp}`,
+    )
+    // A name and a picture sent with the code are dropped: the profile is the member's to fill,
+    // and nothing of a stranger's rides in the session cookie.
+    const res = await d.signIn('new@x.test', otp, {
+      name: 'Someone else',
+      image: 'https://tracker.example/pixel.png',
+    })
+    expect(res.status).toBe(200)
+    const { user } = (await res.json()) as { user: { id: string } }
+    expect(
+      await first<{ name: string; image: string | null; email_verified: number }>(
+        api.db,
+        sql`select name, image, email_verified from user where id = ${user.id}`,
+      ),
+    ).toEqual({ name: '', image: null, email_verified: 1 })
+    const me = await api.request('/api/v1/me', { cookie: cookiesOf(res) })
+    expect(await me.json()).toMatchObject({ profile: { handle: expect.stringMatching(/^u_/) } })
+    const now = api.clock.now()
+    expect(
+      await api.db.all(sql`select code, user_id, redeemed_at, settled_at from invite_redemptions`),
+    ).toEqual([{ code: 'WELCOME', user_id: user.id, redeemed_at: now, settled_at: now }])
+    // From now on the address is a member's, mailed a plain sign-in code.
+    await d.ask('new@x.test')
+    expect(api.mail.outbox.at(-1)?.subject).toContain('sign-in code')
+  })
+
+  test('a hold on a code that others filled after its code was mailed is told so, and given no account', async () => {
+    const api = await createTestApi()
+    const emails = ['a@x.test', 'b@x.test', 'c@x.test']
+    await held(api, emails, 2)
+    const d = door(api)
+    for (const email of emails) await d.ask(email)
+    const [a, b, c] = emails.map((email) => codeFor(api, email))
+    expect((await d.signIn('a@x.test', a ?? '')).status).toBe(200)
+    expect((await d.signIn('b@x.test', b ?? '')).status).toBe(200)
+    const late = await d.signIn('c@x.test', c ?? '')
+    expect(late.status).toBe(403)
+    expect(await late.json()).toMatchObject({ code: 'INVITE_USED' })
+    expect(await count(api, 'user')).toBe(2)
+    // And it is mailed no more codes: nothing would admit it.
+    const mailed = api.mail.outbox.length
+    expect((await d.ask('c@x.test')).status).toBe(200)
+    expect(api.mail.outbox).toHaveLength(mailed)
+  })
+
+  test('a hold a day old admits nobody', async () => {
+    const api = await createTestApi()
+    await held(api, ['new@x.test'])
+    const d = door(api)
+    await d.ask('new@x.test')
+    api.clock.advance(24 * 60 * 60 * 1000)
+    const res = await d.signIn('new@x.test', codeFor(api, 'new@x.test'))
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ code: 'INVITE_REQUIRED' })
+  })
+
+  test('refuses every way in but the code sign-in, and an address not verified', async () => {
+    const api = await createTestApi()
+    const gate = api.auth.options.databaseHooks?.user?.create?.before
+    if (!gate) throw new Error('no gate')
+    // An address the operator invited, so only the way it came can be why it is turned away.
+    await inviteAddress(api.db, { email: 'new@x.test', now: api.clock.now() })
+    const user = (emailVerified: boolean, email = 'new@x.test') => ({
+      id: 'someone',
+      email,
+      name: '',
+      emailVerified,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    const inside = (path: string) => ({ path }) as unknown as Parameters<typeof gate>[1]
+    const refused = { body: { code: 'INVITE_REQUIRED' } }
+    // A password sign-up and an ID token at the social sign-in would each make a user, were they
+    // ever reached. They are refused, as is an address not verified, before anything is claimed.
+    await expect(gate(user(true), inside('/sign-up/email'))).rejects.toMatchObject(refused)
+    await expect(gate(user(true), inside('/sign-in/social'))).rejects.toMatchObject(refused)
+    await expect(gate(user(false), inside('/sign-in/email-otp'))).rejects.toMatchObject(refused)
+    expect(await api.db.all(sql`select redeemed_at from invite_redemptions`)).toEqual([
+      { redeemed_at: null },
+    ])
+    // No context at all, as on the admin route, grants nothing by itself: an address the operator
+    // did not invite is refused there too.
+    await expect(gate(user(false, 'other@x.test'), null)).rejects.toMatchObject(refused)
+    // The invited address, from the code sign-in, is admitted.
+    expect(await gate(user(true), inside('/sign-in/email-otp'))).toEqual({
+      data: { name: '', image: null },
+    })
+  })
+
+  test('an account whose invitation could not be settled is made, and settled at the next sign-in', async () => {
+    const api = await createTestApi()
+    await held(api, ['new@x.test'])
+    const d = door(api)
+    await api.db.run(sql`create trigger refuse_settling before update of settled_at
+      on invite_redemptions begin select raise(abort, 'refused by the test'); end`)
+    const logged = spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await d.ask('new@x.test')
+      const res = await d.signIn('new@x.test', codeFor(api, 'new@x.test'))
+      expect(res.status).toBe(200)
+      expect(logged.mock.calls.map(([what]) => what)).toContain('invitation not settled')
+    } finally {
+      logged.mockRestore()
+    }
+    expect(
+      await api.db.all(
+        sql`select redeemed_at is not null as redeemed, user_id from invite_redemptions`,
+      ),
+    ).toEqual([{ redeemed: 1, user_id: null }])
+    await api.db.run(sql`drop trigger refuse_settling`)
+    await d.ask('new@x.test')
+    const again = await d.signIn('new@x.test', codeFor(api, 'new@x.test'))
+    const { user } = (await again.json()) as { user: { id: string } }
+    expect(
+      await api.db.all(
+        sql`select user_id, settled_at is not null as settled from invite_redemptions`,
+      ),
+    ).toEqual([{ user_id: user.id, settled: 1 }])
+  })
+
+  test('a member whose profile was never written is given one at their next sign-in', async () => {
+    const api = await createTestApi()
+    await held(api, ['new@x.test'])
+    const d = door(api)
+    await api.db.run(sql`create trigger refuse_profiles before insert on profiles
+      begin select raise(abort, 'refused by the test'); end`)
+    const logged = spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await d.ask('new@x.test')
+      // The user row is written before the profile, and stays: the sign-in fails after it, and
+      // better-auth never makes that user again, so its own hook can never retry the profile.
+      const failed = await d.signIn('new@x.test', codeFor(api, 'new@x.test'))
+      expect(failed.status).toBe(500)
+    } finally {
+      logged.mockRestore()
+    }
+    expect([await count(api, 'user'), await count(api, 'profiles')]).toEqual([1, 0])
+    await api.db.run(sql`drop trigger refuse_profiles`)
+    await d.ask('new@x.test')
+    const res = await d.signIn('new@x.test', codeFor(api, 'new@x.test'))
+    expect(res.status).toBe(200)
+    const me = await api.request('/api/v1/me', { cookie: cookiesOf(res) })
+    expect(await me.json()).toMatchObject({ profile: { handle: expect.stringMatching(/^u_/) } })
+    // A sign-in that finds the profile writes nothing: the sync sequence stays where it was.
+    const seq = await headSeq(api.db)
+    await d.ask('new@x.test')
+    expect((await d.signIn('new@x.test', codeFor(api, 'new@x.test'))).status).toBe(200)
+    expect(await headSeq(api.db)).toBe(seq)
   })
 })
 
@@ -72,18 +291,25 @@ describe('signing in with a code', () => {
     expect(api.mail.outbox.at(-1)?.subject).toContain('sign-in code')
   })
 
-  test('registration is closed: an unknown address gets the same answer and no mail', async () => {
+  test('an address with neither an account nor an invitation gets the same answer, no mail and no code', async () => {
     const api = await createTestApi()
     await invite(api, 'known@x.test')
     const known = await api.request('/api/auth/email-otp/send-verification-otp', {
       body: { email: 'known@x.test', type: 'sign-in' },
     })
     const unknown = await api.request('/api/auth/email-otp/send-verification-otp', {
-      body: { email: 'stranger@x.test', type: 'sign-in' },
+      body: { email: 'Stranger@x.test', type: 'sign-in' },
     })
     expect(unknown.status).toBe(known.status)
     expect(await unknown.json()).toEqual(await known.json())
     expect(api.mail.outbox.filter((m) => m.to === 'stranger@x.test')).toHaveLength(0)
+    // The code better-auth stored before it asked whether to mail it is gone too.
+    expect(
+      await first(
+        api.db,
+        sql`select 1 as x from verification where identifier like '%stranger@x.test'`,
+      ),
+    ).toBeUndefined()
     const signIn = await api.request('/api/auth/sign-in/email-otp', {
       body: { email: 'stranger@x.test', otp: '123456' },
     })
@@ -385,7 +611,7 @@ describe('/api/auth', () => {
         api.db,
         sql`select name, image from user where id = ${as.userId}`,
       ),
-    ).toEqual({ name: 'reader', image: null })
+    ).toEqual({ name: '', image: null })
     const signUp = await api.request('/api/auth/sign-up/email', {
       body: { email: 'new@x.test', password: 'a-long-enough-password', name: 'New' },
     })

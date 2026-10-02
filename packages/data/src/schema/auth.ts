@@ -107,8 +107,9 @@ export const rateLimit = sqliteTable('rate_limit', {
 export const authTables = { user, session, account, verification, rateLimit }
 
 /**
- * One per member, created with the account by the invite command (there is no trigger on a user
- * table any more). The handle rule used to be a Postgres regex; SQLite has GLOB.
+ * One per member, written when the account is made (better-auth's `user.create.after`; there is no
+ * trigger on a user table any more), and by a sign-in that finds it missing. The handle rule used
+ * to be a Postgres regex; SQLite has GLOB.
  */
 export const profiles = sqliteTable(
   'profiles',

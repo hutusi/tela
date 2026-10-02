@@ -164,6 +164,23 @@ export async function claimInvite(
 }
 
 /**
+ * Why `claimInvite` admitted nothing for `email`: true when it still has a live hold, which can
+ * only be on a code whose places others took since its code was mailed (revoking a code deletes its
+ * holds). The gate then says the code is used up, rather than that an invitation is needed.
+ */
+export async function waitsOnFullCode(
+  db: TelaDb,
+  input: { email: string; now: number },
+): Promise<boolean> {
+  const row = await first<{ held: number }>(
+    db,
+    sql`select exists (select 1 from invite_redemptions r where r.email = ${input.email.toLowerCase()}
+      and r.code is not null and r.redeemed_at is null and r.expires_at > ${input.now}) as held`,
+  )
+  return Boolean(row?.held)
+}
+
+/**
  * Admit a new account for `email` by the code its provider sign-in carried (ADR 0036): the
  * address's row for that code redeemed, or, when it has none, a redeemed row written, in one
  * statement guarded like a join by the code's room. An address that already claimed a row whose
