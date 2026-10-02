@@ -48,6 +48,9 @@ everything so far sits under `[Unreleased]`.
   private; Refresh shows a picture changed on Gravatar (ADR 0032). The interface language moved
   from the header to Settings → Language and follows the member to every device; the header keeps
   *Read in 中文 EN*. A Manage link beside Subscriptions opens their list in Settings.
+- **Pictures of their own.** A member can upload a picture, cropped and zoomed in a dialog, and it
+  comes before their Gravatar; the Gravatar is now on by default, shown once Gravatar is known to
+  have one, and members without one keep their letter with no request made (ADR 0033).
 
 - **Running unattended.** A dead-man's switch pinged by the sweeps while they are healthy, a
   Monday digest to the owner, and a nightly export verified against its manifest, which the suite
