@@ -10,9 +10,11 @@
  * - `/avatar/<userId>?v=` is a member's picture (ADR 0032), from tela-api, cached per colo.
  * - Sessions are read from better-auth's signed five-minute cookie cache with the shared secret.
  *   Only when that has lapsed does it ask tela-api, and passes on the refreshed cookie.
- * - `/discover`, `/s/:id` and `/@handle` are rendered here from tela-api's public JSON, poured into
- *   the SPA's index.html and cached per colo, locale and deploy for five minutes. Every other path
- *   is the SPA's static assets, which answer without running this Worker at all.
+ * - `/` (for visitors), `/discover`, `/s/:id` and `/@handle` are rendered here from tela-api's
+ *   public JSON, poured into the SPA's index.html and cached per colo, locale and deploy for five
+ *   minutes. A request to `/` that carries a session cookie is a member's: the plain shell, from
+ *   the assets, never cached, and tela-api is not asked (ADR 0035). Every other path is the SPA's
+ *   static assets, which answer without running this Worker at all.
  * - A write to `/api/*` must come from this origin: cookies are `SameSite=Lax`, and this closes
  *   what Lax leaves open to a sibling subdomain.
  *
@@ -49,11 +51,21 @@ export type EdgeDeps = {
 
 type Waiter = { waitUntil(promise: Promise<unknown>): void }
 
-export type PublicPages<R extends { api: string; key?: string } = { api: string; key?: string }> = {
-  /**
-   * The page a URL names, with the tela-api endpoint its data comes from, and the key it is
-   * cached under when that endpoint serves more than one page (a profile's tabs).
-   */
+/**
+ * A public page: the tela-api endpoint its data comes from, and the key it is cached under when
+ * that endpoint serves more than one page (a profile's tabs). `visitorsOnly`: a request with a
+ * session cookie gets the plain shell. `alwaysExists`: a 404 from tela-api is not the page's
+ * answer either, so it is the plain shell, uncached, like an outage.
+ */
+export type PublicPageRoute = {
+  api: string
+  key?: string
+  visitorsOnly?: boolean
+  alwaysExists?: boolean
+}
+
+export type PublicPages<R extends PublicPageRoute = PublicPageRoute> = {
+  /** The page a URL names, or null. */
   route(url: URL): R | null
   /** The UI language to render in, from the locale cookie and Accept-Language. */
   locale(request: Request): string
@@ -279,6 +291,31 @@ export function createEdge(deps: EdgeDeps) {
     const route = request.method === 'GET' ? pages.route(url) : null
     // Not a public page after all (`/s/x/y`): the SPA's index.html, which says so itself.
     if (!route) return assets.fetch(request)
+    if (!route.visitorsOnly) return renderPublic(request, url, route, waiter)
+    // A member's `/` is the app, which takes them to their reading. Told by the cookie alone,
+    // before the cache and without asking tela-api: a lapsed session gets the plain shell too,
+    // whose app shows the front page once /me says so. Each copy is for one kind of request, so
+    // the browser keys it by the cookie; the colo's copy needs no Vary (workerd ignores it), since
+    // only a visitor's is ever stored.
+    const cookie = request.headers.get('cookie') ?? ''
+    let response: Response
+    if (cookie.includes('tela.session_token')) {
+      const app = await assets.fetch(request)
+      response = new Response(app.body, app)
+      response.headers.set('cache-control', PAGE_CACHE)
+    } else {
+      response = await renderPublic(request, url, route, waiter)
+    }
+    response.headers.append('vary', 'cookie')
+    return response
+  }
+
+  async function renderPublic(
+    request: Request,
+    url: URL,
+    route: PublicPageRoute,
+    waiter?: Waiter,
+  ): Promise<Response> {
     const shell = await assets.fetch(new Request(new URL('/', url).toString()))
     const template = await shell.text()
     const locale = pages.locale(request)
@@ -295,8 +332,10 @@ export function createEdge(deps: EdgeDeps) {
       return cached
     }
     const res = await api.fetch(new Request(new URL(route.api, url).toString()))
-    // tela-api is down or slow: the plain shell, which asks again from the browser.
-    if (res.status !== 200 && res.status !== 404) {
+    // tela-api is down or slow, or (for a page that always exists) has no such endpoint yet: the
+    // plain shell, uncached, which asks again from the browser. A cached 404 at `/` would be the
+    // front page for five minutes.
+    if (res.status !== 200 && (res.status !== 404 || route.alwaysExists)) {
       return new Response(template, {
         headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': PAGE_CACHE },
       })

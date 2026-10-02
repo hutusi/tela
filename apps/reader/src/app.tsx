@@ -40,10 +40,17 @@ function Members({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+/**
+ * `/`: a member's reading, and the front page for anyone else (ADR 0035). A device that holds no
+ * account shows the front page while /me is still out, so the edge's copy is not replaced by a
+ * blank page; a member signing in on a new device sees it for that one round trip.
+ */
 function Home() {
   const { status } = useSession()
-  if (status === 'unknown') return null
-  return status === 'member' ? <Navigate to="/reading" replace /> : <LandingPage />
+  const { store } = useStore()
+  if (status === 'member') return <Navigate to="/reading" replace />
+  if (status === 'guest' || store.userId === null) return <LandingPage />
+  return null
 }
 
 /** `/@handle` shares a segment with every other top-level path, so it is told apart here. */

@@ -222,6 +222,14 @@ The only public Worker, unpinned, with no D1.
 - `/discover`, `/s/:id` and `/@handle` are rendered here (`src/ssr.tsx`) with the SPA's own views,
   from tela-api's public JSON, into the built `index.html`, cached per colo, locale and deploy for
   five minutes, with the data handed to the SPA in `#tela-data`.
+- `/` is the front page (ADR 0035), rendered the same way for visitors from
+  `/api/v1/public/front`, one page for each title mode (`?titles=translated`), and from its own
+  key, never the address asked. A request whose cookie holds `tela.session_token` is a member's:
+  the plain shell from the assets, before the cache lookup, with no call to tela-api, never
+  cached. Any answer but a 200 from tela-api, a 404 included, is the plain shell, uncached, never
+  a 404 page at `/`. Every browser response for `/` carries `Vary: cookie`; the colo's copy
+  carries none (workerd ignores Vary), since only a visitor's copy is stored. A test
+  (`apps/reader/test/routes.test.ts`) holds every public page to `run_worker_first`.
 - Everything else is the SPA's static assets, which answer without running the Worker. A path
   with no file is answered 200 with `index.html`, a missing `/assets/*` script included:
   `run_worker_first` is a list, and then the fallback applies to every request, not only
@@ -241,7 +249,9 @@ A Vite + React SPA that renders from the device.
 - `store/selectors.ts` answers the reading view: unread, lists, counts, the title to show.
 - The URL alone says which article is open (ADR 0017's rule, kept): a click, a filter change or
   Back is a render, not a request.
-- `views/` are Discover, a blog's page and a profile as pure components the edge renders too.
+- `views/` are the front page, Discover, a blog's page and a profile as pure components the edge
+  renders too. `/` renders the front page while the session is unknown on a device that holds
+  no account, so the edge's copy is never replaced by a blank page.
 - Highlights: `lib/anchor.ts` finds a highlight again by leaf, quote and context;
   `lib/use-highlights.ts` paints them over the rendered text with the CSS Custom Highlight API and
   writes back an anchor the post moved. Typography and theme are synced prefs
@@ -255,7 +265,7 @@ A Vite + React SPA that renders from the device.
 
 | Route | Purpose |
 |---|---|
-| `/` | Landing for visitors; members go to `/reading` |
+| `/`, `/?titles=translated` | The front page for visitors (ADR 0035), rendered at the edge: the count of public blogs, this week's edition (one post a blog; the latest when the week has none), titles as written or in the reader's language; members go to `/reading` |
 | `/login` | Email code; the mail's sign-in and reset links fill their code in and ask before using it (ADR 0036) |
 | `/reading?filter=&feed=&article=&mode=` | Sidebar, list and the open article |
 | `/discover?topic=&lang=`, `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart |

@@ -19,10 +19,32 @@
     "yourProfile": "Your profile",
     "subscriptions": "Subscriptions"
   },
-  "home": {
-    "title": "Independent blogs, in any language.",
-    "intro": "Blogs and personal websites with a feed, claimed by their authors. Subscribe in one click; Tela translates as you read.",
-    "cta": "Start reading"
+  "front": {
+    "description": "Independent blogs from around the world, each in its own language, with their titles translated into yours.",
+    "hero": "A <em>confluence</em> of {count, plural, one {# independent blog} other {# independent blogs}}.",
+    "heroPlain": "A <em>confluence</em> of independent blogs.",
+    "intro": "Personal blogs from around the world, each in its own language. Tela gathers them in one place and translates their titles, so you can tell what is worth reading before you open it. Members read whole posts beside a translation, paragraph by paragraph.",
+    "join": "Join Tela",
+    "logIn": "Log in",
+    "week": "This week, {blogs, plural, one {# blog} other {# blogs}} wrote in {languages, plural, one {# language} other {# languages}}",
+    "latest": "The latest from {n, plural, one {# blog} other {# blogs}}",
+    "titlesIn": "Titles in",
+    "original": "Original language",
+    "minutes": "{n} min",
+    "by": "by {name}",
+    "empty": "No posts yet. The blogs Tela gathers will show here as they write.",
+    "writers": {
+      "title": "Write a blog? <em>Make it your calling card.</em>",
+      "intro": "Claim it on Tela: your profile shows it, and readers in other languages see its titles in theirs.",
+      "cta": "For writers"
+    }
+  },
+  "footer": {
+    "label": "About Tela",
+    "made": "Tela © {year} · Made by <maker>AI Naive</maker>",
+    "about": "About",
+    "privacy": "Privacy",
+    "terms": "Terms"
   },
   "login": {
     "title": "Log in to Tela"

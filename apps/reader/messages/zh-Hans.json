@@ -19,10 +19,32 @@
     "yourProfile": "我的主页",
     "subscriptions": "订阅"
   },
-  "home": {
-    "title": "独立博客，任何语言。",
-    "intro": "有订阅源、由作者本人认领的博客与个人网站。一键订阅，Tela 边读边翻译。",
-    "cta": "开始阅读"
+  "front": {
+    "description": "来自世界各地的独立博客，各用各的语言，标题译成你的语言。",
+    "hero": "{count} 个独立博客，在此<em>汇流</em>。",
+    "heroPlain": "独立博客，在此<em>汇流</em>。",
+    "intro": "来自世界各地的个人博客，各用各的语言。Tela 把它们汇在一处，并翻译标题，让你打开之前就知道值不值得读。会员还能逐段对照译文阅读全文。",
+    "join": "加入 Tela",
+    "logIn": "登录",
+    "week": "本周，{blogs} 个博客用 {languages} 种语言写作",
+    "latest": "来自 {n} 个博客的最新文章",
+    "titlesIn": "标题语言",
+    "original": "原文",
+    "minutes": "{n} 分钟",
+    "by": "作者 {name}",
+    "empty": "还没有文章。Tela 汇集的博客一有新作，就会出现在这里。",
+    "writers": {
+      "title": "你写博客吗？<em>让它成为你的名片。</em>",
+      "intro": "在 Tela 认领你的博客：你的主页会展示它，用其他语言阅读的读者也能看到译成他们语言的标题。",
+      "cta": "写作者"
+    }
+  },
+  "footer": {
+    "label": "关于 Tela",
+    "made": "Tela © {year} · 由 <maker>AI Naive</maker> 制作",
+    "about": "关于",
+    "privacy": "隐私",
+    "terms": "条款"
   },
   "login": {
     "title": "登录 Tela"

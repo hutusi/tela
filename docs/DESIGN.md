@@ -154,9 +154,10 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 `AppHeader`, `VisitorLocale`, `FrontDoor` (the sheet and `DoorForm`), `ReadInMenu`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
 `PairedBody`, `TranslationBar`, `Untranslated`, `LikeButton`, `RecommendPopover`, `EmptyState`,
-`LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `TypographyMenu`, the highlight
-toolbar, note and list (`highlights.tsx`), and `Shortcuts`. Discover, a blog's page and a profile
-are pure views in `apps/reader/src/views`, rendered by the SPA and by the edge alike. Anything
+`LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `SiteFooter`, `TypographyMenu`, the
+highlight toolbar, note and list (`highlights.tsx`), and `Shortcuts`. The front page, Discover, a
+blog's page and a profile are pure views in `apps/reader/src/views`, rendered by the SPA and by
+the edge alike. Anything
 interactive in them must work without JavaScript or degrade to a link: Discover's language menu
 is a native `<details>`, and a visitor's Subscribe is a link to sign in. The store marks read,
 requests translations and follows background work itself, so no component polls or refreshes.
@@ -261,6 +262,30 @@ dedicated design for it, so it follows the Discover page's spacing and the site 
 Discover card (from the design): 40 px avatar (favicon or initial), name with a green ✓ when
 claimed, host, language chip, serif tagline, "Latest: …", "N readers · cadence", and a
 Subscribe/Subscribed pill. Cadence is derived from posts in the last 30 days.
+
+Front page (`views/landing.tsx`, from `Tela Landing.dc.html` Turn 2, ADR 0035): a 1120 px page.
+The hero is a serif h1 (42 px, 64 px from `md`), "A confluence of N independent blogs.", the word
+"confluence" in `accent`, in the 400 italic Garamond ships (the h1 is 500, which has no
+italic), then an `ink-2` intro and two pills, "Join Tela" (filled `ink`) and "Log in"
+(outlined), plain links to `/join` and `/login`. Under it a strip
+between two `line` rules: the date and "This week, N blogs wrote in M languages" (or "The latest
+from N blogs" when the week has none) on the left, and "Titles in: Original language | English"
+on the right, two links in a `hover` track whose active one is `surface` with a shadow, so the
+toggle works without JavaScript and the edge caches each mode apart (`?titles=translated`;
+Original is the default). The edition is a grid (two columns from `md`, three from `lg`) whose
+lead spans two: 18 px site avatar, blog name, the post's language (its own name, "Español", while
+titles are as written; the reader's name for it, "Spanish", while they are translated), the big
+serif title, the other title small and `muted` beneath, the lead's excerpt in serif `ink-2`, and
+time · minutes · author. Every title and excerpt carries its `lang`. A visitor's title opens the
+post on the blog (`PostLink`). The lead is the first post of three minutes or more with an
+excerpt. Only the edition has a skeleton; the copy renders at once. The page's root never
+fades in: the edge's copy is already on screen when the SPA replaces it. Then the writers strip
+("Write a blog? *Make it your calling card.*", outlined pill to `/writers`), on `surface` like
+Discover's claim strip. Day is the light tokens exactly; night is the existing dark tokens.
+
+Footer (`components/site-footer.tsx`): under the public pages that end in one, a `line` rule,
+13 px `muted`: "Tela © year · Made by AI Naive" (linking https://ainaive.com) on the left, About,
+Privacy and Terms on the right.
 
 ## Strings
 

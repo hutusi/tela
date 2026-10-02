@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { discoverApiPath, discoverHref, parseDiscoverParams } from '../src/lib/discover-href'
 import { canonicalReadingHref, parseReadingParams, readingHref } from '../src/lib/href'
 import { addError } from '../src/lib/opml'
@@ -73,6 +75,49 @@ describe('public pages at the edge', () => {
     for (const path of ['/s/12/x', '/s/abc', '/@', '/@a/b', '/reading'])
       expect(route(path)).toBeNull()
     expect(handleFrom('/%40someone')).toBe('someone')
+  })
+
+  test("the front page is a visitor's, one page for each title mode, and nothing beside it", () => {
+    const route = (path: string) => publicRoute(new URL(path, 'https://tela.test'))
+    expect(route('/')).toMatchObject({
+      kind: 'landing',
+      titles: 'original',
+      api: '/api/v1/public/front',
+      key: '/',
+      visitorsOnly: true,
+      alwaysExists: true,
+    })
+    expect(route('/?titles=translated&utm_source=x')).toMatchObject({
+      titles: 'translated',
+      api: '/api/v1/public/front',
+      key: '/?titles=translated',
+    })
+    // Anything else in the address is the default mode, under the default key.
+    expect(route('/?titles=nope')).toMatchObject({ titles: 'original', key: '/' })
+    // SPA-only: a code in `/join?code=` must never reach a cached page, or Workers Logs.
+    for (const path of ['/join', '/join?code=ABCD', '/writers', '/__tela/shell'])
+      expect(route(path)).toBeNull()
+  })
+
+  test('every public page runs the Worker first, or the edge never renders it', () => {
+    const config = JSON.parse(
+      readFileSync(join(import.meta.dir, '..', 'wrangler.jsonc'), 'utf8')
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('//'))
+        .join('\n'),
+    ) as { assets: { run_worker_first: string[] } }
+    const patterns = config.assets.run_worker_first
+    const runsFirst = (path: string) =>
+      patterns.some((p) => (p.endsWith('*') ? path.startsWith(p.slice(0, -1)) : path === p))
+    const pages = ['/', '/?titles=translated', '/discover?topic=tech', '/s/12', '/@reader_1']
+    for (const page of pages) {
+      const url = new URL(page, 'https://tela.test')
+      expect(publicRoute(url)).not.toBeNull()
+      expect(runsFirst(url.pathname)).toBe(true)
+    }
+    // The shell the service worker keeps is fetched from a path the Worker never runs for.
+    expect(runsFirst('/__tela/shell')).toBe(false)
+    expect(patterns).not.toContain('/*')
   })
 })
 

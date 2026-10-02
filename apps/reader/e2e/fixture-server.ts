@@ -6,6 +6,7 @@ import { createHmac, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
+import { FRESH_LANGS, freshFeed, freshPost } from './fresh'
 
 const port = Number(process.argv[2] ?? process.env.E2E_FIXTURE_PORT ?? 4790)
 const feeds = join(import.meta.dir, '..', '..', '..', 'packages', 'content', 'fixtures', 'feeds')
@@ -194,6 +195,22 @@ const routes: Record<string, () => { body: Buffer | string; type: string }> = {
       </channel></rss>`,
     type: 'application/rss+xml; charset=utf-8',
   }),
+  // This week's posts in four languages, each blog with a home of its own (`./fresh.ts`).
+  ...Object.fromEntries(
+    FRESH_LANGS.flatMap((lang) => [
+      [
+        `/fresh/${lang}.xml`,
+        () => ({ body: freshFeed(lang, port), type: 'application/rss+xml; charset=utf-8' }),
+      ],
+      ...[1, 2, 3].map((n) => [
+        `/fresh/${lang}/${n}`,
+        () => ({
+          body: `<html lang="${lang}"><head><meta charset="utf-8"></head><body><article>${freshPost(lang, n)}</article></body></html>`,
+          type: 'text/html; charset=utf-8',
+        }),
+      ]),
+    ]),
+  ),
   '/summary': () => ({
     body: `<html><head><title>Summary fixture</title>
       <link rel="alternate" type="application/rss+xml" href="/summary.xml"></head>

@@ -454,9 +454,7 @@ test.describe('the mail link on a new device while /me misses', () => {
     // home page and the header render nothing. It is a guest meanwhile.
     await page.getByRole('link', { name: 'Tela' }).first().click()
     await expect(page).toHaveURL(/\/$/)
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-      'Independent blogs, in any language.',
-    )
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('A confluence of')
     await expect(
       page.getByRole('banner').getByRole('link', { name: 'Log in', exact: true }),
     ).toBeVisible()

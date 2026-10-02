@@ -1,24 +1,36 @@
-import { Link } from 'react-router'
-import { useTranslations } from 'use-intl'
+/**
+ * The front page for visitors (ADR 0035). The edge renders it with the edition handed over; a
+ * returning visitor's service worker answers with the plain shell instead, so the edition loads
+ * here, and only it shows a skeleton meanwhile.
+ */
+import { useState } from 'react'
+import { useSearchParams } from 'react-router'
+import { FRONT_PATH, titlesMode } from '../lib/edition'
+import { useMemberControls } from '../lib/member'
 import { useTitle } from '../lib/title'
+import { usePublic } from '../lib/use-public'
+import { useReadingLang } from '../store/hooks'
+import { useUi } from '../ui'
+import { LandingView } from '../views/landing'
+import type { FrontData } from '../views/types'
 
 export function LandingPage() {
-  const t = useTranslations('home')
+  const [search] = useSearchParams()
+  const loaded = usePublic<FrontData>(FRONT_PATH)
+  const member = useMemberControls()
+  const { locale } = useUi()
+  const reading = useReadingLang(locale)
+  const [now] = useState(() => Date.now())
   useTitle(null)
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-16 animate-fade md:px-12">
-      <h1 className="max-w-2xl font-serif text-[40px] font-medium leading-[1.1] tracking-tight">
-        {t('title')}
-      </h1>
-      <p className="max-w-xl text-base leading-relaxed text-ink-2">{t('intro')}</p>
-      <div>
-        <Link
-          to="/login"
-          className="inline-block rounded-full bg-ink px-5 py-2.5 font-medium text-paper hover:no-underline hover:brightness-125"
-        >
-          {t('cta')}
-        </Link>
-      </div>
-    </main>
+    <LandingView
+      data={loaded.status === 'ready' ? loaded.data : null}
+      loading={loaded.status === 'loading'}
+      titles={titlesMode(search)}
+      reading={reading}
+      locale={locale}
+      now={now}
+      member={member}
+    />
   )
 }

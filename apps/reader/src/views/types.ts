@@ -30,6 +30,33 @@ export type DiscoverSite = {
 export type DiscoverData = { sites: DiscoverSite[]; languages: { lang: string; count: number }[] }
 
 /**
+ * A post in the front page's edition: the newest of one public blog, with its excerpt translated
+ * into the launch languages it has one in, beside its titles.
+ */
+export type FrontPost = {
+  article: PublicArticle & { excerpts?: Partial<Record<string, string>> }
+  site: {
+    id: number
+    title: string | null
+    homeUrl: string
+    faviconKey: string | null
+    primaryLang: string | null
+  }
+  claimant: { handle: string; displayName: string | null } | null
+}
+
+/**
+ * The front page (`/api/v1/public/front`): how many public blogs there are, what the last seven
+ * days held, and the edition: one post a blog, from the week when the week has any, else the
+ * latest there are.
+ */
+export type FrontData = {
+  counts: { blogs: number }
+  week: { blogs: number; languages: number; posts: number }
+  edition: { span: 'week' | 'latest'; posts: FrontPost[] }
+}
+
+/**
  * A member as a page names them: their handle, their name if they gave one, and their picture's
  * address while they show one (ADR 0032; absent from a tela-api before it).
  */

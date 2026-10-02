@@ -32,7 +32,7 @@ directory.
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | tela-api (secret) | Tela's GitHub OAuth app (ADR 0036), its callback URL `PUBLIC_URL/api/auth/callback/github`. GitHub sign-in is offered only while both are set |
 | `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@ainaive.com>` |
 | `PUBLIC_URL` | tela-api, tela-jobs | The one public origin: better-auth's base URL and trusted origin, claim `rel="me"` targets, the WebSub callback |
-| `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var |
+| `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var. `/` now passes the Worker (the front page, ADR 0035), so both of its answers, a visitor's page and a member's plain shell, carry the header too |
 | `GRAVATAR_URL` | tela-api, tela-jobs | Where members' pictures are fetched from (tela-api, ADR 0032) and asked about (tela-jobs, ADR 0033), default `https://gravatar.com/avatar`. The e2e points it at its fixture server. A picture is cached for 30 days in each colo and browser under an address with its version, and turning the switch off cannot purge a colo: a copy already held stays, at an address nothing links to any more |
 | `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, and fetches to private addresses. Never deployed |
 | `WORKER_USER_AGENT` | tela-jobs | Sent on every fetch; keep a contact URL in it |
@@ -262,10 +262,12 @@ is tela-api.
 - **Images:** `/img/<contentKey>/<i>` fetches only what a content object names, over
   `global_fetch_strictly_public`. A broken image is the origin's answer, which the Worker logs
   show; nothing is signed, so there is no secret to rotate.
-- **Public pages** (Discover, `/s/:id`, `/@handle`) are rendered here and kept in each colo's
-  cache for five minutes, keyed by locale and by the build. So a deploy never serves a page that
-  names scripts it removed, and a blog's change shows within five minutes. There is nothing to
-  purge.
+- **Public pages** (the front page `/`, Discover, `/s/:id`, `/@handle`) are rendered here and
+  kept in each colo's cache for five minutes, keyed by locale and by the build. So a deploy never
+  serves a page that names scripts it removed, and a blog's change shows within five minutes.
+  There is nothing to purge. `/` is rendered only for a request without `tela.session_token`; a
+  member's is the plain shell. If `/` shows the plain shell to signed-out visitors, tela-api's
+  `/api/v1/public/front` is not answering 200 (deploy tela-api before tela-web when it is new).
 - **Writes to `/api/*` without this origin get 403** `cross-origin write refused`. Hubs
   (`/api/websub/*`) and the admin script (`/api/admin/*`) are exempt. A browser always sends
   `Origin` on a POST, so seeing this from the app means something is proxying it.
