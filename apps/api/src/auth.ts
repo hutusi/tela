@@ -1,9 +1,10 @@
 /**
- * Sign-in (ADR 0024): better-auth with email codes, through its Drizzle adapter over the same
- * `TelaDb` everything else uses, so it runs on D1 in production and libSQL in tests. An account is
- * made at an address's first code sign-in, or by the operator's invite, and only for an address
- * that holds an invitation (ADR 0034): `user.create.before` is the gate, and the code mail is
- * sent to nobody else.
+ * Sign-in (ADR 0024): better-auth with email codes and passwords, through its Drizzle adapter over
+ * the same `TelaDb` everything else uses, so it runs on D1 in production and libSQL in tests. An
+ * account is made at an address's first code sign-in, or by the operator's invite, and only for an
+ * address that holds an invitation (ADR 0034): `user.create.before` is the gate, and the code mail
+ * is sent to nobody else. A password is never how an account starts: it is set on a member a code
+ * has proved, and a forgotten one is reset by code (ADR 0036).
  */
 import {
   bumpSeq,
@@ -24,7 +25,7 @@ import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { emailOTP } from 'better-auth/plugins'
 import { sql } from 'drizzle-orm'
 import type { ApiDeps } from './deps'
-import { signInMail } from './mail'
+import { passwordResetMail, signInMail } from './mail'
 
 /** Cookie names start `tela.`; tela-web reads `tela.session_data` to authorize /o and /img. */
 export const COOKIE_PREFIX = 'tela'
@@ -34,14 +35,15 @@ const CODE_SECONDS = 60 * 60
 const DAY = 24 * 60 * 60
 
 /**
- * Every endpoint that mails a code to an address or checks one against it, counted per email
- * address as well as per IP (ADR 0036): better-auth's limiter keys on the IP and the path alone.
- * All kinds of code share the two counts, so an address is mailed five codes and has ten guesses
- * checked an hour, whatever the codes are for. The reset steps count like sign-in: they work
- * whether or not passwords are on, and a right reset code gives the account a password. The
- * plugin's change-email pair needs a session and is off; `auth.test.ts` fails on any other. The
- * endpoints `/api/auth` does not serve (`AUTH_ENDPOINTS` in `app.ts`) are counted all the same, so
- * serving one later cannot open it uncounted.
+ * Every endpoint that mails a code to an address or checks one against it, and the password
+ * sign-in, counted per email address as well as per IP (ADR 0036): better-auth's limiter keys on
+ * the IP and the path alone. All kinds of code share the two counts, so an address is mailed five
+ * codes and has ten guesses checked an hour, whatever the codes are for. The reset steps count
+ * like sign-in: a right reset code gives the account a password. The plugin's change-email pair
+ * needs a session and is off; `auth.test.ts` fails on any other. The endpoints `/api/auth` does
+ * not serve (`AUTH_ENDPOINTS` in `app.ts`) are counted all the same, so serving one later cannot
+ * open it uncounted. Passwords have a count of their own, so guessing one never locks the member
+ * out of their code.
  */
 export const PER_ADDRESS = new Map<string, LimitedAction>([
   ['/email-otp/send-verification-otp', 'otpSend'],
@@ -51,6 +53,7 @@ export const PER_ADDRESS = new Map<string, LimitedAction>([
   ['/email-otp/check-verification-otp', 'otpVerify'],
   ['/email-otp/verify-email', 'otpVerify'],
   ['/email-otp/reset-password', 'otpVerify'],
+  ['/sign-in/email', 'passwordSignIn'],
 ])
 /** No deliverable address is longer (RFC 5321), and the key is written before anything checks it. */
 const ADDRESS_MAX = 254
@@ -128,6 +131,26 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       // A signed copy of the session in a cookie: tela-api reads no session row for 5 minutes,
       // and tela-web authorizes content objects without D1 at all.
       cookieCache: { enabled: true, maxAge: COOKIE_CACHE_SECONDS, strategy: 'compact' },
+      // How recent a sign-in must be for what needs one (adding a way in, ADR 0036). better-auth's
+      // default too, said here because the account routes rest on it.
+      freshAge: DAY,
+    },
+    /**
+     * Passwords (ADR 0036), for members only: a password is set on a member whose address a code
+     * proved, or by a reset code, never at sign-up. Signing up with one would make the account,
+     * and spend its invitation, before the address was proved, and leave a stranger's password on
+     * the row for the address's owner to inherit; `disableSignUp` closes `/sign-up/email`, which
+     * `/api/auth` does not serve either. Both ways to a password verify the address, so
+     * `requireEmailVerification` never fires; it is there should that ever stop being true. A
+     * reset ends every session, as someone else may hold one.
+     */
+    emailAndPassword: {
+      enabled: true,
+      disableSignUp: true,
+      requireEmailVerification: true,
+      minPasswordLength: 10,
+      maxPasswordLength: 128,
+      revokeSessionsOnPasswordReset: true,
     },
     advanced: {
       cookiePrefix: COOKIE_PREFIX,
@@ -135,8 +158,14 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       // shares one rate-limit bucket (spike S4).
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
     },
-    // Per-isolate memory is useless on Workers: limits live in D1.
-    rateLimit: { enabled: true, storage: 'database' },
+    // Per-isolate memory is useless on Workers: limits live in D1. A password try costs a hash,
+    // known address or not, so the password sign-in gets five a minute per IP rather than
+    // better-auth's three every ten seconds.
+    rateLimit: {
+      enabled: true,
+      storage: 'database',
+      customRules: { '/sign-in/email': { window: 60, max: 5 } },
+    },
     hooks: {
       // Counted for any address, member or not, keyed as better-auth keys the code (the lowercased
       // address), and refused the same way for all of them, so a 429 says nothing about who has an
@@ -224,6 +253,23 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
             db,
             sql`select email_verified from user where email = ${address}`,
           )
+          // Two kinds of code are mailed: a sign-in code, and a reset code, which better-auth
+          // makes only for an address that has an account. Any other kind (an address check,
+          // which nothing in Tela asks for) is deleted unsent; mailed as a sign-in code it would
+          // only fail at the sign-in.
+          if (type === 'forget-password') {
+            if (member)
+              await mail.send(
+                passwordResetMail({ to: email, code: otp, publicUrl: config.publicUrl }),
+              )
+            return
+          }
+          if (type !== 'sign-in') {
+            await ctx?.context.internalAdapter.deleteVerificationByIdentifier(
+              `${type}-otp-${address}`,
+            )
+            return
+          }
           // better-auth calls this for an address with no account only for a sign-in code, and
           // with sign-up on would mail one to any address it is given. Only an address the gate
           // would admit is mailed; for any other the code just stored (the plugin's row
@@ -231,7 +277,7 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
           // A throw here would refuse nothing: better-auth logs it and answers the same, with the
           // code left in place.
           let invited = member !== undefined && !member.email_verified
-          if (type === 'sign-in' && member === undefined) {
+          if (member === undefined) {
             if (!(await holdsInvite(db, { email: address, now: clock.now() }))) {
               await ctx?.context.internalAdapter.deleteVerificationByIdentifier(
                 `sign-in-otp-${address}`,

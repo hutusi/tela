@@ -1,9 +1,9 @@
 /**
  * Tela's own limits: per member, for actions that create rows, fetch on a member's behalf or spend
- * model tokens; per email address, on the codes better-auth mails and checks; per IP, code and
- * address, on joins with an invite code. Fixed windows in D1 (`action_limits`), one upsert per
- * check, because nothing in an isolate's memory survives to the next request. better-auth limits
- * its own endpoints per IP, separately (`rate_limit`).
+ * model tokens; per email address, on the codes better-auth mails and checks and on password
+ * sign-ins; per IP, code and address, on joins with an invite code. Fixed windows in D1
+ * (`action_limits`), one upsert per check, because nothing in an isolate's memory survives to the
+ * next request. better-auth limits its own endpoints per IP, separately (`rate_limit`).
  */
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
@@ -37,6 +37,11 @@ export const ACTION_LIMITS = {
    * minutes.
    */
   otpVerify: { limit: 10, windowSec: 3600 },
+  /**
+   * Passwords tried against one address from anywhere (ADR 0036), beside better-auth's five a
+   * minute per IP. A locked-out address still has its code, which these never count.
+   */
+  passwordSignIn: { limit: 10, windowSec: 900 },
   /**
    * Joins with an invite code (ADR 0034). Each mails a code through tela-api's own call to
    * better-auth, which its limiter never sees, so `/api/v1/join` counts them here: per IP (an

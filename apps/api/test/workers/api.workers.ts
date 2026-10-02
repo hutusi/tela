@@ -28,7 +28,7 @@ function stack() {
     send: async (_q, body) => void sent.push(body),
     sendBatch: async (_q, messages) => void sent.push(...messages),
   }
-  const { app } = createApp({
+  const { app, auth } = createApp({
     db,
     blobs: {
       get: unused,
@@ -79,7 +79,7 @@ function stack() {
       .getSetCookie()
       .map((c) => c.split(';')[0])
       .join('; ')
-  return { db, mail, call, codeFor, cookiesOf }
+  return { db, auth, mail, call, codeFor, cookiesOf }
 }
 
 it('invites, signs in, pushes and pulls on D1', async () => {
@@ -304,4 +304,43 @@ it("joins with a code, signs in, and shows on the inviter's list, on D1", async 
   })
   expect(again.status).toBe(409)
   expect((await call(`/api/v1/invites/${code}`, { method: 'DELETE', ...inviter })).status).toBe(404)
+})
+
+it('sets a password and logs in with it, hashed by scrypt in workerd, on D1', async () => {
+  const { db, auth, call, codeFor, cookiesOf } = stack()
+  const email = 'password@x.test'
+  await call('/api/admin/invite', { body: { email }, headers: { authorization: 'Bearer admin' } })
+  const signIn = await call('/api/auth/sign-in/email-otp', {
+    body: { email, otp: codeFor(email) },
+    headers: { 'cf-connecting-ip': '198.51.100.20' },
+  })
+  expect(signIn.status).toBe(200)
+  // Set as Settings will set it, through tela-api's own call: `@better-auth/utils/password` under
+  // the workerd condition, which is node:crypto's scrypt (ADR 0036). It writes the credential
+  // account through the Drizzle adapter.
+  const set = await auth.api.setPassword({
+    headers: new Headers({ cookie: cookiesOf(signIn) }),
+    body: { newPassword: 'correct horse battery' },
+  })
+  expect(set).toEqual({ status: true })
+  const stored = await db.all<{ password: string }>(
+    sql`select a.password from account a join user u on u.id = a.user_id
+      where u.email = ${email} and a.provider_id = 'credential'`,
+  )
+  expect(stored).toEqual([{ password: expect.stringMatching(/^[0-9a-f]{32}:[0-9a-f]{128}$/) }])
+  const logIn = (password: string, ip: string) =>
+    call('/api/auth/sign-in/email', {
+      body: { email, password },
+      headers: { 'cf-connecting-ip': ip },
+    })
+  expect((await logIn('not the password', '198.51.100.21')).status).toBe(401)
+  const res = await logIn('correct horse battery', '198.51.100.22')
+  expect(res.status).toBe(200)
+  expect((await call('/api/v1/me', { cookie: cookiesOf(res) })).status).toBe(200)
+  // Both tries counted against the address, from two IPs.
+  expect(
+    await db.all<{ count: number }>(
+      sql`select count from action_limits where key = ${`passwordSignIn:${email}`}`,
+    ),
+  ).toEqual([{ count: 2 }])
 })

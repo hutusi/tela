@@ -486,10 +486,26 @@ describe('signing in with a code', () => {
       askSignIn,
     ]
     for (const send of sends) expect((await send('a@x.test')).status).toBe(200)
-    // The invitation, then the five.
-    expect(api.mail.outbox).toHaveLength(6)
+    // The invitation, then the five but the address check, which is counted and mailed to nobody.
+    // (Until its first sign-in, the account's sign-in codes come as invitations.)
+    const invited = 'You are invited to Tela · 邀请你加入 Tela'
+    const reset = 'Reset your Tela password · 重置 Tela 密码'
+    expect(api.mail.outbox.map((m) => m.subject.split(':')[0])).toEqual([
+      invited,
+      invited,
+      reset,
+      reset,
+      invited,
+    ])
+    // …and the address check's code is not kept either.
+    expect(
+      await first(
+        api.db,
+        sql`select 1 as x from verification where identifier like 'email-verification-otp-%'`,
+      ),
+    ).toBeUndefined()
     for (const send of sends) expect((await send('A@X.test')).status).toBe(429)
-    expect(api.mail.outbox).toHaveLength(6)
+    expect(api.mail.outbox).toHaveLength(5)
     // The same for an address no one has, so the limit says nothing about who is a member.
     for (const send of sends) await send('stranger@x.test')
     const stranger = await askReset('stranger@x.test')
@@ -509,7 +525,9 @@ describe('signing in with a code', () => {
       '/email-otp/change-email',
       '/email-otp/request-email-change',
     ])
-    expect([...PER_ADDRESS.keys()].filter((p) => !paths.includes(p))).toEqual([])
+    // The password sign-in is the one better-auth's own, with a count of its own.
+    expect([...PER_ADDRESS.keys()].filter((p) => !paths.includes(p))).toEqual(['/sign-in/email'])
+    expect(PER_ADDRESS.get('/sign-in/email')).toBe('passwordSignIn')
   })
 
   test('codes are stored hashed, never as sent', async () => {

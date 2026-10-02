@@ -323,8 +323,20 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
     address lowercased) with
     `delete from action_limits where key in ('otpSend:<address>', 'otpVerify:<address>')`.
     The operator's `admin invite` is not counted.
+  - Passwords (ADR 0036) are tried at `/api/auth/sign-in/email`: five tries a minute per IP
+    (better-auth's `customRules`), and ten in fifteen minutes per address from anywhere
+    (`passwordSignIn`), counted and refused like the code counts, which they never touch: an
+    address locked out of its password still signs in by code. Clear it early with
+    `delete from action_limits where key = 'passwordSignIn:<address>'`.
+  - `401 INVALID_EMAIL_OR_PASSWORD` is the one answer for an unknown address, an account with no
+    password and a wrong one. A member who never set a password, or forgot it, asks for a reset
+    code (`/api/auth/email-otp/request-password-reset`): a mail `Reset your Tela password`, its
+    link `/login?reset=1&…`, to an address that has an account and nothing to any other, from the
+    same five sends an hour as the sign-in codes. The reset sets the password, adding one if there was none, and ends every
+    session the member had; the five-minute signed copy keeps one alive elsewhere until it runs
+    out. A password is never set at sign-up (`/sign-up/email` is closed).
   - `select key, count, last_request from rate_limit` shows better-auth's windows, and
-    `select * from action_limits where key like 'otp%'` Tela's.
+    `select * from action_limits where key like 'otp%' or key like 'password%'` Tela's.
   - A code that never arrives: check Resend's log for the address first, then the Worker's logs
     for the send error. An address with no account is mailed only while it holds an invitation
     (a hold from a join lasts a day); otherwise the request answers as usual and nothing is sent.
@@ -341,12 +353,19 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
     A better-auth feature turned on later answers 404 until its endpoint is added there.
 - **Sessions** last 60 days. A signed copy is trusted for five minutes, so a signed-out session
   can linger that long on a device that kept the cookie.
+- **Password hashing** is better-auth's scrypt (N=16384, r=16), native `node:crypto` under workerd:
+  every password sign-in, reset or new password is one hash of about 32 MiB that blocks the
+  isolate while it runs, and an unknown address is hashed too. Read its CPU time for
+  `/api/auth/sign-in/email` in the Worker's logs after the first deploy that serves passwords; if
+  it is too dear, the fallback is a `node:crypto` scrypt with r=8 behind a versioned prefix
+  (ADR 0036).
 - **Rate limits** on reader actions are `ACTION_LIMITS` (`packages/data/src/queries/limits.ts`):
   discover 30/h, subscribe 120/h, OPML import 5/h, claim start 10/h, claim verify 30/h, translate
   30/h, data export 10/h, new invite codes 20/h. Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
-  Sign-in has better-auth's per-IP limits and two of Tela's per email address, counted for any
-  address in a `hooks.before` (`apps/api/src/auth.ts`) on every endpoint that sends or checks a
-  code: code sends 5/h, code tries 10/h.
+  Sign-in has better-auth's per-IP limits (password sign-ins 5/min) and three of Tela's per email
+  address, counted for any address in a `hooks.before` (`apps/api/src/auth.ts`): on every
+  endpoint that sends or checks a code, code sends 5/h and code tries 10/h; on the password
+  sign-in, tries 10 per 15 minutes.
   Joins with an invite code mail through tela-api's own call to better-auth, which its limiter
   never counts, so `/api/v1/join` counts its own, in this order, and stops at the first that is
   spent: per IP 10/h (`joinIp:<ip>`, an IPv6 address by its /64), counted before the code is
