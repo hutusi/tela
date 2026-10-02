@@ -258,6 +258,35 @@ describe('an uploaded picture (ADR 0033)', () => {
     expect((await picture(now[0]?.v ?? -1)).status).toBe(200)
   })
 
+  test('a body sent without a length is read no further than the limit, and counts', async () => {
+    let pulled = 0
+    const chunk = new Uint8Array(64 * 1024)
+    const stream = () =>
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (pulled >= 4 * 1024 * 1024) return controller.close()
+          pulled += chunk.byteLength
+          controller.enqueue(chunk)
+        },
+      })
+    const streamed = () =>
+      api.app.request(`${ORIGIN}/api/v1/avatar`, {
+        method: 'PUT',
+        headers: { origin: ORIGIN, cookie: reader.cookie, ...reader.headers },
+        body: stream(),
+        duplex: 'half',
+      } as RequestInit)
+    expect((await streamed()).status).toBe(413)
+    // Stopped at the limit, not after the 4 MB the stream had to give.
+    expect(pulled).toBeLessThanOrEqual(640 * 1024)
+    // Each counts against the hour's uploads, so they cannot be sent without end.
+    for (let i = 0; i < 19; i++) {
+      pulled = 0
+      await streamed()
+    }
+    expect((await send(png(256))).status).toBe(429)
+  })
+
   test('is limited to twenty an hour, and needs a member', async () => {
     for (let i = 0; i < 20; i++) expect((await send(png(256, 256, i))).status).toBe(200)
     expect((await send(png(256, 256, 99))).status).toBe(429)

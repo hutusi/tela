@@ -13,6 +13,7 @@ import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
+import { readAtMost } from '../read-at-most'
 
 /** The reader sends 256 px squares, a few dozen KB; this leaves room and no more. */
 export const PICTURE_MAX_BYTES = 512 * 1024
@@ -64,20 +65,29 @@ export function pictureRoutes(deps: ApiDeps) {
 
   routes.put('/avatar', async (c) => {
     const member = c.get('member')
+    // A length too long is refused before anything is read or spent.
     if (Number(c.req.header('content-length') ?? '0') > PICTURE_MAX_BYTES) {
       return c.json({ error: 'too_large' }, 413)
     }
-    const bytes = new Uint8Array(await c.req.arrayBuffer())
-    if (bytes.byteLength > PICTURE_MAX_BYTES) return c.json({ error: 'too_large' }, 413)
+    // Spent before the body is read, so an upload refused for what it is still counts: twenty an
+    // hour, whatever they hold.
+    const now = deps.clock.now()
+    if (!(await consumeLimit(db, 'avatarUpload', member.id, now)).allowed) {
+      return c.json({ error: 'rate_limited' }, 429)
+    }
+    // Read no further than the limit: a body sent without a length is cut off there, not held.
+    let bytes: Uint8Array<ArrayBuffer> | null
+    try {
+      bytes = await readAtMost(c.req.raw.body, PICTURE_MAX_BYTES)
+    } catch {
+      return c.json({ error: 'unreadable' }, 400)
+    }
+    if (!bytes) return c.json({ error: 'too_large' }, 413)
     // What the bytes are, never what the request said they were.
     const info = pictureInfo(bytes)
     if (!info) return c.json({ error: 'not_a_picture' }, 415)
     if (info.width !== info.height || info.width < MIN_SIDE || info.width > MAX_SIDE) {
       return c.json({ error: 'wrong_size' }, 422)
-    }
-    const now = deps.clock.now()
-    if (!(await consumeLimit(db, 'avatarUpload', member.id, now)).allowed) {
-      return c.json({ error: 'rate_limited' }, 429)
     }
     const key = `avatars/${member.id}/${crypto.randomUUID()}.${EXT[info.type]}`
     await deps.blobs.put(key, bytes, { contentType: info.type })

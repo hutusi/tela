@@ -188,7 +188,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `GET /api/v1/export` | "Your data": the member's own rows as one JSON file |
 | `/api/v1/public/*` | Discover, a blog's page (with its claimant and readers' notes), a profile (with follow counts, and liked posts only if shown): listed and featured blogs only, edge-cacheable |
 | `GET /api/v1/public/avatars/:userId?v=` | A member's picture, only at the version it is at (ADR 0032, 0033): the one they uploaded, from R2, else their Gravatar while they show it and the check found one, fetched here by the hash of their email, which never leaves tela-api; raster types only, 512 KB, immutable for 30 days; none is a 404 the letter stands in for |
-| `PUT`, `DELETE /api/v1/avatar` | A member's own picture (ADR 0033): its bytes say what it is (PNG, JPEG or WebP, square, 64–1024 px, 512 KB), kept in R2 `tela-content` under `avatars/<userId>/<random id>.<ext>`, a key never used twice, so a deletion can only take the object its own change replaced, twenty an hour; each change moves the version and deletes the object it replaces |
+| `PUT`, `DELETE /api/v1/avatar` | A member's own picture (ADR 0033): its bytes say what it is (PNG, JPEG or WebP, square, 64–1024 px, 512 KB), kept in R2 `tela-content` under `avatars/<userId>/<random id>.<ext>`, a key never used twice, so a deletion can only take the object its own change replaced; the body is read no further than 512 KB, and twenty an hour are counted before any is read; each change moves the version and deletes the object it replaces |
 | `/api/websub/:feedId` | The hub callback: intent checks, and signed pings that make the feed due |
 | `/api/health` | Liveness and D1 latency |
 

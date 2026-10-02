@@ -10,6 +10,7 @@ import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
+import { readAtMost } from '../read-at-most'
 
 /** The address carries the version, so an answer never changes under it: 30 days, everywhere. */
 export const AVATAR_CACHE = 'public, max-age=2592000, immutable'
@@ -21,30 +22,6 @@ const MAX_BYTES = 512 * 1024
 const TIMEOUT_MS = 5000
 // SVG can carry script; only raster types a browser renders in an <img>, as the image proxy says.
 const TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
-
-/** The body, or null past `max` bytes, without reading further than that. */
-async function readAtMost(body: ReadableStream<Uint8Array>, max: number) {
-  const reader = body.getReader()
-  const parts: Uint8Array[] = []
-  let size = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    size += value.byteLength
-    if (size > max) {
-      await reader.cancel()
-      return null
-    }
-    parts.push(value)
-  }
-  const out = new Uint8Array(size)
-  let at = 0
-  for (const part of parts) {
-    out.set(part, at)
-    at += part.byteLength
-  }
-  return out
-}
 
 export function avatarRoutes(deps: ApiDeps) {
   const { db } = deps
