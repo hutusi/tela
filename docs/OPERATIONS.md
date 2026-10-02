@@ -269,9 +269,11 @@ is tela-api.
 - **Writes to `/api/*` without this origin get 403** `cross-origin write refused`. Hubs
   (`/api/websub/*`) and the admin script (`/api/admin/*`) are exempt. A browser always sends
   `Origin` on a POST, so seeing this from the app means something is proxying it.
-- **The app shell** is cached by a service worker (`public/sw.js`), for fast repeat visits. If a
-  bad shell ships and a fix does not reach readers, because their cached shell never asks, use
-  the kill switch:
+- **The app shell** is cached by a service worker (`public/sw.js`), for fast repeat visits. It
+  fetches the shell from `/__tela/shell`, which tela-web never runs for, so the single-page
+  fallback answers it with `index.html`; it keeps it under `/`. Keep `/*` and `/__tela/*` out of
+  `run_worker_first` (ADR 0035). If a bad shell ships and a fix does not reach readers, because
+  their cached shell never asks, use the kill switch:
   1. `cp apps/reader/shell/kill-sw.js apps/reader/public/sw.js`, then build and deploy.
   2. On their next visit, browsers install it. It drops every cached shell, unregisters itself,
      and reloads open tabs from the network.
@@ -279,15 +281,20 @@ is tela-api.
 
   A shell older than the sync protocol clears itself anyway: tela-api answers it 409 `upgrade`.
 
-  Bump `SHELL` in `public/sw.js` (`tela-shell-v2` now) whenever a released worker may have cached
+  Bump `SHELL` in `public/sw.js` (`tela-shell-v3` now) whenever a released worker may have cached
   something wrong. The new worker's activation deletes every other cache and warms its own from
   the network, holding the open tabs' requests until it has, for at most 3 s (`WARM_MS`); if the
   warm fails, the first navigation goes to the network like a first visit. v2 exists because v1 could keep `index.html`
   under a script's name: a blank page after a deploy, and in the console "Expected a
   JavaScript-or-Wasm module script but the server responded with a MIME type of "text/html"" for
-  `/assets/index-*.js`. A cached shell changes only once every file it loads is cached, so a
-  refresh that cannot get one (the network gone halfway, a proxy's page) leaves readers on the
-  shell before, and the next navigation tries again.
+  `/assets/index-*.js`. v3 exists because v2 took its shell from `/`, which the edge renders for
+  visitors (ADR 0035): in the minutes between the deploy and a browser installing v3, a v2
+  worker could keep the landing, with its `#tela-data`, and paint it on every page. v3's
+  activation drops it.
+  A cached shell changes only once every file it loads is cached, and only to the plain shell
+  (an empty `#root`, no `#tela-data`, not reached by a redirect), so a refresh that cannot get
+  one (the network gone halfway, a proxy's or a captive portal's page, a rendered page) leaves
+  readers on the shell before, and the next navigation tries again.
 
 ## tela-api
 

@@ -248,7 +248,10 @@ A Vite + React SPA that renders from the device.
   (`lib/typography.ts`); which panes show is this device's, in localStorage (`lib/layout.ts`,
   ADR 0029). `j`/`k`/`Esc`/`h`/`[`/`f`/`?` work on `/reading`.
 - `public/sw.js` caches the app shell only, and swaps to a new shell only once every file it
-  loads is cached; `shell/kill-sw.js` replaces it in an emergency.
+  loads is cached; `shell/kill-sw.js` replaces it in an emergency. It fetches the shell from
+  `/__tela/shell`, a path tela-web never runs for, because `/` is the landing the edge renders
+  for visitors (ADR 0035), and keeps it under `/` only if it is the plain shell: an empty
+  `#root`, and no `#tela-data`.
 
 | Route | Purpose |
 |---|---|

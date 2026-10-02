@@ -1,14 +1,17 @@
 /**
  * The app-shell service worker (`public/sw.js`), run as the browser would run it: its source
- * evaluated against a CacheStorage in memory and a scripted network that deploys, answers a file
- * a deploy lacks with the app (as tela-web's asset router does), and goes offline.
+ * evaluated against a CacheStorage in memory and a scripted network that deploys, renders `/` for
+ * a visitor as tela-web does, answers a file a deploy lacks with the app (as tela-web's asset
+ * router does), and goes offline.
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 
 const ORIGIN = 'https://tela.test'
 const SOURCE = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8')
-const SHELL = 'tela-shell-v2'
+const SHELL = 'tela-shell-v3'
+/** Where the worker takes its shell from: a path the edge never renders (ADR 0035). */
+const SHELL_URL = '/__tela/shell'
 
 type File = { body: string; type: string }
 type Deploy = ReturnType<typeof build>
@@ -16,7 +19,11 @@ type Req = { method: string; url: string; mode: string }
 type Handler = (event: unknown) => void
 type Worker = { handlers: Map<string, Handler> }
 
-/** A build as Vite emits it: index.html naming its script and stylesheet, which names a font. */
+/**
+ * A build as Vite emits it: index.html naming its script and stylesheet, which names a font. `/`
+ * is the landing a visitor gets, rendered into that index.html as `src/ssr.tsx` does, with its
+ * data handed over in `#tela-data`; any path the deploy has no file for is the plain shell.
+ */
 function build(id: string, font = 'figtree-1') {
   const js = `/assets/index-${id}.js`
   const css = `/assets/index-${id}.css`
@@ -32,8 +39,16 @@ function build(id: string, font = 'figtree-1') {
     <div id="root"></div>
   </body>
 </html>`
+  const handover = `<script id="tela-data" type="application/json">${JSON.stringify({
+    path: '/api/v1/public/front',
+    body: { blogs: 35, deploy: id },
+  })}</script>`
+  const landing = html.replace(
+    '<div id="root"></div>',
+    `<div id="root"><main><h1>A confluence of 35 independent blogs.</h1></main></div>${handover}`,
+  )
   const files = new Map<string, File>([
-    ['/', { body: html, type: 'text/html; charset=utf-8' }],
+    ['/', { body: landing, type: 'text/html; charset=utf-8' }],
     [js, { body: `console.log(${JSON.stringify(id)})`, type: 'text/javascript' }],
     [
       css,
@@ -44,7 +59,7 @@ function build(id: string, font = 'figtree-1') {
     ],
     [woff2, { body: `font ${font}`, type: 'font/woff2' }],
   ])
-  return { id, html, js, css, woff2, files }
+  return { id, html, landing, js, css, woff2, files }
 }
 
 const keyOf = (key: string | { url: string }) =>
@@ -103,6 +118,8 @@ let live: Deploy
 let offline: boolean
 /** A network that takes every request and never answers. */
 let hanging: boolean
+/** Paths the network answers with a redirect, which `fetch` follows, and where to. */
+let moved: Map<string, string>
 /** Every path the network was asked for, and when the worker claimed its clients. */
 let log: string[]
 
@@ -115,12 +132,17 @@ async function network(input: string | { url: string }): Promise<Response> {
   // The network is slower than the cache: whatever the page asks the cache for comes first.
   await new Promise((r) => setTimeout(r, 1))
   if (down) throw new TypeError('Failed to fetch')
-  const file = deploy.files.get(url.pathname)
-  if (file) return new Response(file.body, { headers: { 'content-type': file.type } })
-  // A path this deploy has no file for: the app, 200. The asset router answers a missing hashed
-  // file so too (run_worker_first is a list, so its fallback covers every request), and a
-  // captive portal or proxy may say the same.
-  return new Response(deploy.html, { headers: { 'content-type': 'text/html; charset=utf-8' } })
+  const path = moved.get(url.pathname) ?? url.pathname
+  const file = deploy.files.get(path)
+  // A path this deploy has no file for: the app, 200. That is how `/__tela/shell` gets the
+  // shell, and the asset router answers a missing hashed file so too (run_worker_first is a list,
+  // so its fallback covers every request); a captive portal or proxy may say the same.
+  const res = file
+    ? new Response(file.body, { headers: { 'content-type': file.type } })
+    : new Response(deploy.html, { headers: { 'content-type': 'text/html; charset=utf-8' } })
+  // What `fetch` says of a response it followed a redirect to; no constructor can say it.
+  if (path !== url.pathname) Object.defineProperty(res, 'redirected', { value: true })
+  return res
 }
 
 /** Evaluate sw.js, install it and let it activate, as a browser does after registering it. */
@@ -203,10 +225,17 @@ async function visit(sw: Worker, path = '/reading') {
 /** A file as the deploy built it. */
 const asBuilt = (deploy: Deploy, path: string) => deploy.files.get(path) ?? null
 
+/** The plain shell of a deploy, as the network answers a path it has no file for. */
+const shellOf = (deploy: Deploy): File => ({
+  body: deploy.html,
+  type: 'text/html; charset=utf-8',
+})
+
 beforeEach(() => {
   caches = memoryCaches()
   hanging = false
   offline = false
+  moved = new Map()
   log = []
 })
 
@@ -225,7 +254,7 @@ describe('the app-shell service worker', () => {
     for (const path of [A.js, A.css, A.woff2])
       expect(second.files.get(path)).toEqual(asBuilt(A, path))
     // The refresh behind it cached what B loads before it made B the shell, and kept A's files.
-    expect(await caches.file('/')).toEqual(asBuilt(B, '/'))
+    expect(await caches.file('/')).toEqual(shellOf(B))
     for (const path of [B.js, B.css]) expect(await caches.file(path)).toEqual(asBuilt(B, path))
     for (const path of [A.js, A.css, A.woff2])
       expect(await caches.file(path)).toEqual(asBuilt(A, path))
@@ -250,7 +279,7 @@ describe('the app-shell service worker', () => {
 
     live = B
     await visit(sw)
-    expect(await caches.file('/')).toEqual(asBuilt(A, '/'))
+    expect(await caches.file('/')).toEqual(shellOf(A))
     expect(await caches.file(B.js)).toBeNull()
     for (const path of [A.js, A.css]) expect(await caches.file(path)).toEqual(asBuilt(A, path))
 
@@ -265,7 +294,7 @@ describe('the app-shell service worker', () => {
     // Once the network has the file, the next refresh swaps.
     B.files.set(B.js, { body: 'console.log("B")', type: 'text/javascript' })
     await visit(sw)
-    expect(await caches.file('/')).toEqual(asBuilt(B, '/'))
+    expect(await caches.file('/')).toEqual(shellOf(B))
     expect(await caches.file(B.js)).toEqual(asBuilt(B, B.js))
   })
 
@@ -284,7 +313,7 @@ describe('the app-shell service worker', () => {
 
       live = B
       await visit(sw)
-      expect([wrong, await caches.file('/')]).toEqual([wrong, asBuilt(A, '/')])
+      expect([wrong, await caches.file('/')]).toEqual([wrong, shellOf(A)])
       expect(await caches.file(path)).toBeNull()
       await dispatch(sw, request(path)).response
       expect(await caches.file(path)).toBeNull()
@@ -344,7 +373,7 @@ describe('the app-shell service worker', () => {
     expect(third.html).toBe(B.html)
     for (const path of [B.js, B.css, B.woff2])
       expect(third.files.get(path)).toEqual(asBuilt(B, path))
-    expect(await caches.file('/')).toEqual(asBuilt(C, '/'))
+    expect(await caches.file('/')).toEqual(shellOf(C))
     for (const path of [C.js, C.css]) expect(await caches.file(path)).toEqual(asBuilt(C, path))
     for (const path of [B.js, B.css, B.woff2])
       expect(await caches.file(path)).toEqual(asBuilt(B, path))
@@ -364,8 +393,84 @@ describe('the app-shell service worker', () => {
     expect(await (await nav.response).text()).toBe(A.files.get('/discover')?.body ?? '')
     // The browser may stop the worker once the event's promises settle: the refresh is one.
     await nav.settled()
-    expect(await caches.file('/')).toEqual(asBuilt(A, '/'))
+    expect(await caches.file('/')).toEqual(shellOf(A))
     for (const path of [A.js, A.css]) expect(await caches.file(path)).toEqual(asBuilt(A, path))
+  })
+
+  test('a page rendered for a visitor is never kept as the shell', async () => {
+    // ADR 0035: tela-web renders `/` for a visitor, with the edition handed over in `#tela-data`.
+    // A worker that took its shell from `/` kept that landing and painted it, its data days old,
+    // on every page until the app replaced it.
+    const A = build('A')
+    live = A
+    // What a v2 worker could take from `/` between the deploy that renders it and its successor.
+    const v2 = await caches.open('tela-shell-v2')
+    await v2.put('/', new Response(A.landing, { headers: { 'content-type': 'text/html' } }))
+
+    const sw = await start()
+    expect(await caches.keys()).toEqual([SHELL])
+    expect(await caches.file('/')).toEqual(shellOf(A))
+    expect(log).not.toContain('/')
+
+    // `/` itself is answered with the plain shell, and its refresh asks the shell's path.
+    log = []
+    const home = await visit(sw, '/')
+    expect(home.html).toBe(A.html)
+    expect(log).toContain(SHELL_URL)
+    expect(log).not.toContain('/')
+
+    // With no shell cached, a visitor at `/` gets the landing from the network, and the shell
+    // kept behind it is the plain one.
+    for (const key of await caches.keys()) await caches.delete(key)
+    const first = await visit(sw, '/')
+    expect(first.html).toBe(A.landing)
+    expect(await caches.file('/')).toEqual(shellOf(A))
+
+    // A rendered page at the shell's own path (what `/*` or `/__tela/*` in run_worker_first could
+    // give) is refused, with a handover or with only its root filled, and so is a captive
+    // portal's page, which has no root: the shell and its files stay.
+    const B = build('B')
+    live = B
+    const root = '<div id="root"></div>'
+    const pages = {
+      landing: B.landing,
+      handover: B.html.replace(
+        root,
+        `${root}<script id="tela-data" type="application/json">{}</script>`,
+      ),
+      rendered: B.html.replace(root, '<div id="root"><article>About Tela</article></div>'),
+      portal: '<!doctype html><title>Sign in to the Wi-Fi</title><form method="post"></form>',
+    }
+    for (const [name, body] of Object.entries(pages)) {
+      B.files.set(SHELL_URL, { body, type: 'text/html; charset=utf-8' })
+      await visit(sw)
+      expect([name, await caches.file('/')]).toEqual([name, shellOf(A)])
+    }
+    for (const path of [A.js, A.css]) expect(await caches.file(path)).toEqual(asBuilt(A, path))
+
+    // Once the path answers with the plain shell again, the next refresh swaps.
+    B.files.delete(SHELL_URL)
+    await visit(sw)
+    expect(await caches.file('/')).toEqual(shellOf(B))
+  })
+
+  test('a shell that came by a redirect is never kept: a navigation answered with it fails', async () => {
+    const A = build('A')
+    live = A
+    const sw = await start()
+    await visit(sw)
+
+    // The plain shell, but at the end of a redirect: the browser refuses a redirected response
+    // for a navigation, so kept, it would fail every page.
+    const B = build('B')
+    live = B
+    moved.set(SHELL_URL, '/__tela/elsewhere')
+    await visit(sw)
+    expect(await caches.file('/')).toEqual(shellOf(A))
+
+    moved.clear()
+    await visit(sw)
+    expect(await caches.file('/')).toEqual(shellOf(B))
   })
 
   test('two navigations at once fetch the shell once', async () => {
@@ -381,7 +486,7 @@ describe('the app-shell service worker', () => {
     expect(await (await first.response).text()).toBe(A.html)
     expect(await (await second.response).text()).toBe(A.html)
     await Promise.all([first.settled(), second.settled()])
-    expect(log.filter((p) => p === '/')).toEqual(['/'])
+    expect(log.filter((p) => p === SHELL_URL)).toEqual([SHELL_URL])
   })
 
   test('the same shell, with a file it loads missing from the cache, fetches that file', async () => {
@@ -406,8 +511,8 @@ describe('the app-shell service worker', () => {
     const sw = await start()
     expect(await caches.keys()).toEqual([SHELL])
     // It claims the open tabs first, then warms.
-    expect(log.slice(0, 2)).toEqual(['claim', '/'])
-    expect(await caches.file('/')).toEqual(asBuilt(A, '/'))
+    expect(log.slice(0, 2)).toEqual(['claim', SHELL_URL])
+    expect(await caches.file('/')).toEqual(shellOf(A))
     for (const path of [A.js, A.css]) expect(await caches.file(path)).toEqual(asBuilt(A, path))
 
     // So the first navigation after it already boots without the network.
@@ -425,7 +530,7 @@ describe('the app-shell service worker', () => {
     await start()
     expect(Date.now() - began).toBeLessThan(4500)
     // The tabs were claimed, and are let through; the next navigation tries the warm again.
-    expect(log).toEqual(['claim', '/'])
+    expect(log).toEqual(['claim', SHELL_URL])
   }, 10_000)
   test("what the edge serves itself, pictures included, is never the worker's to answer", async () => {
     live = build('A')
