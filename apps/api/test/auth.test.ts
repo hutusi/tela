@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { first } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { PER_ADDRESS } from '../src/auth'
-import { ADMIN_TOKEN, codeFor, cookiesOf, createTestApi, signedIn } from './helpers'
+import { ADMIN_TOKEN, codeFor, cookiesOf, createTestApi, signedIn, type TestApi } from './helpers'
 
 const invite = (
   api: Awaited<ReturnType<typeof createTestApi>>,
@@ -205,23 +205,16 @@ describe('signing in with a code', () => {
         { email, otp, password: 'a-guessed-password' },
         ip(),
       )
-    // Every endpoint that checks a code, in turn, each try from an IP that never tried.
+    // Both endpoints served that check a code, in turn, each try from an IP that never tried. The
+    // plugin's others are closed (see /api/auth below) and counted all the same.
     const checks = [
       (email: string) => tryCode(api, '000000', ip(), email),
       (email: string) => reset(email, '000000'),
-      (email: string) =>
-        authCall(
-          api,
-          'email-otp/check-verification-otp',
-          { email, type: 'sign-in', otp: '000000' },
-          ip(),
-        ),
-      (email: string) => authCall(api, 'email-otp/verify-email', { email, otp: '000000' }, ip()),
     ]
-    const tenTries = [...checks, ...checks, ...checks].slice(0, 10)
+    const tenTries = [...checks, ...checks, ...checks, ...checks, ...checks]
     for (const check of tenTries) expect((await check('a@x.test')).status).not.toBe(429)
     // A reset code asked for now (one of the address's five sends) is refused, right as it is, and
-    // the account gets no password. So is a try on every other endpoint that checks a code.
+    // the account gets no password. So is a sign-in code.
     const asked = await authCall(
       api,
       'email-otp/request-password-reset',
@@ -249,9 +242,11 @@ describe('signing in with a code', () => {
     const ip = () => `198.51.100.${++n}`
     const askReset = (email: string) =>
       authCall(api, 'email-otp/request-password-reset', { email }, ip())
-    // Every endpoint that mails a code, and every kind of code they mail.
+    // Both endpoints served that mail a code, every kind of code they mail, and a sign-in code
+    // again: five sends. The plugin's deprecated `forget-password/email-otp` is closed.
+    const askSignIn = (email: string) => askCode(api, email, ip())
     const sends = [
-      (email: string) => askCode(api, email, ip()),
+      askSignIn,
       (email: string) =>
         authCall(api, 'email-otp/send-verification-otp', { email, type: 'forget-password' }, ip()),
       (email: string) =>
@@ -262,7 +257,7 @@ describe('signing in with a code', () => {
           ip(),
         ),
       askReset,
-      (email: string) => authCall(api, 'forget-password/email-otp', { email }, ip()),
+      askSignIn,
     ]
     for (const send of sends) expect((await send('a@x.test')).status).toBe(200)
     // The invitation, then the five.
@@ -282,7 +277,8 @@ describe('signing in with a code', () => {
     const paths = Object.values(plugin?.endpoints ?? {}).flatMap((e) => (e.path ? [e.path] : []))
     // A better-auth upgrade that adds a way to mail or check a code fails here until it is counted,
     // and one that drops an endpoint fails here until the map drops it. Server-only endpoints have
-    // no path, and the change-email pair needs a session and is off.
+    // no path, and the change-email pair needs a session and is off. Endpoints /api/auth does not
+    // serve are counted too, so serving one later cannot open it uncounted.
     expect(paths.filter((p) => !PER_ADDRESS.has(p)).sort()).toEqual([
       '/email-otp/change-email',
       '/email-otp/request-email-change',
@@ -315,6 +311,111 @@ describe('signing in with a code', () => {
     expect((await api.request('/api/v1/me', { cookie: cookiesOf(out) || 'none=1' })).status).toBe(
       401,
     )
+  })
+})
+
+describe('/api/auth', () => {
+  // What tela-api serves, as better-auth names its endpoints; `/callback/:id` only for Google and
+  // GitHub. Written out here rather than read from the app, so the test is a second opinion.
+  const SERVED = new Set([
+    'GET /get-session',
+    'POST /email-otp/send-verification-otp',
+    'POST /sign-in/email-otp',
+    'POST /sign-in/email',
+    'POST /email-otp/request-password-reset',
+    'POST /email-otp/reset-password',
+    'POST /sign-in/social',
+    'GET /callback/:id',
+    'POST /sign-out',
+  ])
+  const endpoints = (api: TestApi) =>
+    Object.values(api.auth.api).flatMap((e) =>
+      e.path ? [e.options.method].flat().map((method) => ({ method, path: e.path })) : [],
+    )
+  /** Whatever better-auth writes for any request that reaches it, or that it counts per address. */
+  const traces = (api: TestApi) =>
+    first<{ limited: number; counted: number; codes: number }>(
+      api.db,
+      sql`select (select coalesce(sum(count), 0) from rate_limit) as limited,
+        (select coalesce(sum(count), 0) from action_limits) as counted,
+        (select count(*) from verification) as codes`,
+    )
+
+  test('every endpoint Tela does not use is a 404, even to a member, and reaches nothing', async () => {
+    const api = await createTestApi()
+    const as = await signedIn(api)
+    const before = await traces(api)
+    const mailed = api.mail.outbox.length
+    const closed = endpoints(api).filter((e) => !SERVED.has(`${e.method} ${e.path}`))
+    // Some forty, and any a better-auth upgrade adds is asked too, with no change here.
+    expect(closed.length).toBeGreaterThan(30)
+    const asked = [
+      ...closed,
+      { method: 'GET', path: '/callback/twitter' },
+      { method: 'GET', path: '/get-session/' },
+      { method: 'GET', path: '' },
+    ]
+    for (const { method, path } of asked) {
+      const res = await api.request(`/api/auth${path.replace(/:\w+/, 'google')}`, {
+        method,
+        as,
+        ...(method === 'GET' ? {} : { body: { email: 'reader@x.test', otp: '000000' } }),
+      })
+      expect({ method, path, status: res.status }).toEqual({ method, path, status: 404 })
+      expect(await res.json()).toEqual({ error: 'not_found' })
+    }
+    // No request got as far as better-auth's limiter, Tela's count per address, or a code.
+    expect(await traces(api)).toEqual(before)
+    expect(api.mail.outbox).toHaveLength(mailed)
+    // The same measure sees one that does.
+    await api.request('/api/auth/sign-in/social', { body: {} })
+    expect(await traces(api)).not.toEqual(before)
+  })
+
+  test('a member cannot rename themselves or set a picture, and nobody can sign up', async () => {
+    const api = await createTestApi()
+    const as = await signedIn(api)
+    const updated = await api.request('/api/auth/update-user', {
+      as,
+      body: { name: 'Someone else', image: 'https://tracker.example/pixel.png' },
+    })
+    expect(updated.status).toBe(404)
+    expect(
+      await first<{ name: string; image: string | null }>(
+        api.db,
+        sql`select name, image from user where id = ${as.userId}`,
+      ),
+    ).toEqual({ name: 'reader', image: null })
+    const signUp = await api.request('/api/auth/sign-up/email', {
+      body: { email: 'new@x.test', password: 'a-long-enough-password', name: 'New' },
+    })
+    expect(signUp.status).toBe(404)
+    expect(await first<{ n: number }>(api.db, sql`select count(*) as n from user`)).toEqual({
+      n: 1,
+    })
+  })
+
+  test('every endpoint Tela uses reaches better-auth', async () => {
+    const api = await createTestApi()
+    const as = await signedIn(api)
+    const served = endpoints(api).filter((e) => SERVED.has(`${e.method} ${e.path}`))
+    expect(served.map((e) => `${e.method} ${e.path}`).sort()).toEqual([...SERVED].sort())
+    for (const { method, path } of served) {
+      // Signing out last, so every other call is made with a session.
+      if (path === '/sign-out') continue
+      for (const provider of path === '/callback/:id' ? ['google', 'github'] : ['']) {
+        const res = await api.request(`/api/auth${path.replace(':id', provider)}`, {
+          method,
+          as,
+          ...(method === 'GET' ? {} : { body: {} }),
+        })
+        // better-auth's own answer: the session, a refused body, or a callback's redirect.
+        const answered = [200, 302, 400].includes(res.status)
+        expect({ path, provider, answered }).toEqual({ path, provider, answered: true })
+      }
+    }
+    const out = await api.request('/api/auth/sign-out', { as, body: {} })
+    expect(out.status).toBe(200)
   })
 })
 

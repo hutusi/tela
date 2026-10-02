@@ -295,6 +295,9 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
     `select * from action_limits where key like 'otp%'` Tela's.
   - A code that never arrives: check Resend's log for the address first, then the Worker's logs
     for the send error.
+  - `404 {"error":"not_found"}` from a `/api/auth/*` path is tela-api, not better-auth: only the
+    endpoints in `AUTH_ENDPOINTS` (`apps/api/src/app.ts`) and the sign-out are served (ADR 0036).
+    A better-auth feature turned on later answers 404 until its endpoint is added there.
 - **Sessions** last 60 days. A signed copy is trusted for five minutes, so a signed-out session
   can linger that long on a device that kept the cookie.
 - **Rate limits** on reader actions are `ACTION_LIMITS` (`packages/data/src/queries/limits.ts`):

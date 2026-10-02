@@ -33,7 +33,9 @@ const DAY = 24 * 60 * 60
  * All kinds of code share the two counts, so an address is mailed five codes and has ten guesses
  * checked an hour, whatever the codes are for. The reset steps count like sign-in: they work
  * whether or not passwords are on, and a right reset code gives the account a password. The
- * plugin's change-email pair needs a session and is off; `auth.test.ts` fails on any other.
+ * plugin's change-email pair needs a session and is off; `auth.test.ts` fails on any other. The
+ * endpoints `/api/auth` does not serve (`AUTH_ENDPOINTS` in `app.ts`) are counted all the same, so
+ * serving one later cannot open it uncounted.
  */
 export const PER_ADDRESS = new Map<string, LimitedAction>([
   ['/email-otp/send-verification-otp', 'otpSend'],

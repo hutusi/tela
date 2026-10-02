@@ -36,6 +36,25 @@ function sameSecret(given: string, expected: string): boolean {
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+/**
+ * The better-auth endpoints Tela uses, under `/api/auth` (ADR 0036): the session tela-web asks
+ * for, a code mailed and signed in with, a password sign-in, the two reset steps, and a provider's
+ * start and return. Signing out is served on its own, guarded, below. Everything else better-auth
+ * mounts is a 404, because several of its endpoints act for a member in ways Tela never offers:
+ * `/update-user` would let a member put any URL in `user.image`, and so in the signed session
+ * cookie tela-web trusts.
+ */
+export const AUTH_ENDPOINTS = [
+  ['GET', '/get-session'],
+  ['POST', '/email-otp/send-verification-otp'],
+  ['POST', '/sign-in/email-otp'],
+  ['POST', '/sign-in/email'],
+  ['POST', '/email-otp/request-password-reset'],
+  ['POST', '/email-otp/reset-password'],
+  ['POST', '/sign-in/social'],
+  ['GET', '/callback/:provider{google|github}'],
+] as const
+
 /** A client older than the protocol is told to reload, not left misreading rows. */
 function tooOld(version: string | undefined): boolean {
   const n = Number(version ?? '0')
@@ -60,7 +79,10 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     }
     return auth.handler(c.req.raw)
   })
-  app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
+  for (const [method, path] of AUTH_ENDPOINTS) {
+    app.on(method, `/api/auth${path}`, (c) => auth.handler(c.req.raw))
+  }
+  app.all('/api/auth/*', (c) => c.json({ error: 'not_found' }, 404))
 
   app.get('/api/health', async (c) => {
     const started = Date.now()

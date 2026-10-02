@@ -179,7 +179,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 
 | Route | Purpose |
 |---|---|
-| `/api/auth/*` | better-auth: email codes only, registration closed, codes hashed, three tries; limited per IP by better-auth and per email address by Tela (`action_limits`) |
+| `/api/auth/*` | better-auth, only the endpoints Tela uses (`AUTH_ENDPOINTS` in `src/app.ts`, ADR 0036) and the guarded sign-out; every other is a 404 before better-auth sees it. Email codes only, registration closed, codes hashed, three tries; limited per IP by better-auth and per email address by Tela (`action_limits`) |
 | `POST /api/admin/invite`, `POST /api/admin/curate` | Bearer `ADMIN_TOKEN`: invite a member; add and feature a curated blog |
 | `GET /api/v1/sync?cursor=` | The pull: a horizon snapshot at cursor 0, deltas by seq in pages ending on a seq boundary |
 | `POST /api/v1/mutations` | The push: up to 50 idempotent, last-writer-wins mutations in one batch |
