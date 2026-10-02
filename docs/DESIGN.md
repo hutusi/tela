@@ -169,13 +169,22 @@ muted intro; below, rows (`SettingRow`) separated by `line` rules: the label and
 left, the control on the right. Controls are `Segmented` (the choices on the `hover` ground, the
 chosen one lifted on `surface`), `Switch` (40 × 24, `accent` on / `thumb` off, `knob`), a native
 select, or a quiet pill button. Settings that change what others see say so, and that the public
-profile can take a few minutes to catch up. Profile opens with the member's avatar at 64 px
-beside *Show my Gravatar*: a switch, and while it is on a quiet *Refresh* that sends it on again
-(ADR 0032). The design's Notifications section, avatar upload,
+profile can take a few minutes to catch up. Profile opens with the member's avatar at 64 px beside
+*Upload a picture* (*Change picture* once there is one) and *Remove*, quiet pills, then a
+`SettingRow` *Use my Gravatar*: the switch, on by default, and while it is on a quiet *Refresh*. Its
+hint says which picture the member has and why: their Gravatar, their upload in front of it, none
+found for their email, still asking, or off (ADR 0033). The design's Notifications section,
 "Who can follow you" and "Delete account" are not built (ADR 0031), so they are not shown.
 
+The crop dialog (`AvatarCrop`) is a native modal `<dialog>` on the `surface` ground: a serif title,
+a muted hint, a 280 px square frame with the picture under a round mask (outside the circle dimmed),
+then a zoom slider (1–4×) and Cancel / Save. Drag moves the picture, and so do the arrow keys while
+the frame has focus (Shift for bigger steps); Esc cancels. Save draws the circle's square at 256 px,
+as WebP where the browser encodes it and JPEG where not, and uploads that.
+
 A person's avatar (`PersonAvatar`) is their initial in a circle of their colour, the accent for
-one's own, with their picture over it when they show their Gravatar (ADR 0032). The initial
+one's own, with their picture over it: the one they uploaded, else their Gravatar, which is on until
+they turn it off and shown only once Gravatar is known to have one (ADR 0032, 0033). The initial
 always renders and the picture covers it only once it has loaded, so a slow, failed or offline
 load still shows a face of sorts; the picture's address comes from the server (`/avatar/…`),
 never from the page.

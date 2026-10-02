@@ -60,6 +60,7 @@ function context(env: Env): JobsContext {
     blobs: r2Blobs(env.BLOBS),
     ...(env.ASSETS ? { assets: r2Blobs(env.ASSETS) } : {}),
     publicUrl: env.PUBLIC_URL ?? 'https://tela.ainaive.com',
+    ...(env.GRAVATAR_URL ? { gravatarUrl: env.GRAVATAR_URL } : {}),
     jobs: queueJobs<JobQueues>({
       fetch: env.FETCH_QUEUE,
       extract: env.EXTRACT_QUEUE,

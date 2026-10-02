@@ -288,9 +288,31 @@
       "privacy": "隐私"
     },
     "profileIntro": "读者和作者在 Tela 上看到的你。",
-    "gravatar": "显示我的 Gravatar 头像",
-    "gravatarHint": "Gravatar 上与你登录邮箱对应的头像，会出现在你名字出现的地方。在那边换了头像？点「刷新」。别人那里可能要过几分钟才更新。",
+    "gravatar": "使用我的 Gravatar 头像",
     "gravatarRefresh": "刷新",
+    "pictureUpload": "上传头像",
+    "pictureReplace": "更换头像",
+    "pictureRemove": "删除",
+    "gravatarHints": {
+      "shown": "来自你登录邮箱对应的 Gravatar，出现在你名字出现的地方；别人几分钟内看到变化。在 Gravatar 换了头像？点「刷新」。",
+      "behind": "优先显示你上传的头像；删掉它后改用 Gravatar。",
+      "none": "Gravatar 上没有你登录邮箱对应的头像，所以显示你的首字母。",
+      "checking": "正在向 Gravatar 查询你的登录邮箱……",
+      "off": "已关闭：除非上传头像，否则显示你的首字母。"
+    },
+    "pictureErrors": {
+      "unreadable": "浏览器读不了这个文件。",
+      "too_large": "文件超过 20 MB。",
+      "rate_limited": "一小时内改得太多了，请稍后再试。",
+      "failed": "头像没能保存，请再试一次。"
+    },
+    "cropTitle": "你的头像",
+    "cropHint": "拖动调整位置，缩放来取景。",
+    "cropArea": "头像取景框，显示在圆形里。方向键可以移动它。",
+    "cropZoom": "缩放",
+    "cropCancel": "取消",
+    "cropSave": "保存",
+    "cropSaving": "保存中……",
     "name": "名字",
     "handle": "用户名",
     "handleHint": "3–30 个小写字母、数字或下划线，用于你的个人页地址。",

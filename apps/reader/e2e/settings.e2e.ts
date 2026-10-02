@@ -3,8 +3,17 @@
  * subscriptions left and taken back where they were left, and "Your data" as one file.
  */
 import { readFile } from 'node:fs/promises'
-import { type APIRequestContext, expect, test } from '@playwright/test'
-import { BASE, FIXTURES, memberHeaders, STATE_FILE, setPrefs, synced } from './helpers'
+import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
+import {
+  BASE,
+  FIXTURES,
+  keepCycling,
+  memberHeaders,
+  pngFile,
+  STATE_FILE,
+  setPrefs,
+  synced,
+} from './helpers'
 
 /** The member's profile row as the server has it, through a snapshot pull. */
 async function serverProfile(request: APIRequestContext) {
@@ -207,7 +216,7 @@ test.describe('the interface language', () => {
   })
 })
 
-test.describe("the member's picture (ADR 0032)", () => {
+test.describe("the member's picture (ADR 0032, 0033)", () => {
   /** The switch, through the API, as the page's own push sends it. */
   async function setGravatar(request: APIRequestContext, on: boolean) {
     const res = await request.post(`${BASE}/api/v1/mutations`, {
@@ -218,42 +227,125 @@ test.describe("the member's picture (ADR 0032)", () => {
     })
     expect(res.ok()).toBe(true)
   }
+  /** Whether the fixture standing in for gravatar.com has a picture for every address. */
+  const gravatars = async (request: APIRequestContext, on: boolean) => {
+    const res = await request.post(`${FIXTURES}/__gravatar?on=${on ? 1 : 0}`)
+    expect(res.ok()).toBe(true)
+  }
+  const pushed = (page: Page) =>
+    page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+  /** The hint once the check has answered: the page pulls on `online`, as after a reconnect. */
+  const hintBecomes = async (page: Page, hint: string) =>
+    expect
+      .poll(
+        async () => {
+          await page.evaluate(() => window.dispatchEvent(new Event('online')))
+          return page.getByTestId('profile-gravatar-row').getAttribute('data-hint')
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(hint)
 
-  test('is their Gravatar from Tela once turned on; Refresh moves it; off leaves the initial', async ({
+  test('is their Gravatar by default, once Gravatar has one; off, their letter', async ({
     page,
     request,
   }) => {
+    const stop = keepCycling(page)
     try {
+      await gravatars(request, false)
       await page.goto('/settings')
       const picture = page.getByTestId('account-menu').locator('img')
-      await expect(picture).toHaveCount(0)
-      const pushed = () =>
-        page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
-
-      let push = pushed()
-      await page.getByTestId('profile-gravatar').click()
+      // On by default; Refresh asks Gravatar now, and it has nothing: the letter, and why.
+      let push = pushed(page)
+      await page.getByTestId('profile-gravatar-refresh').click()
       await push
-      // Tela's own address, at the switch's version: never gravatar.com, and it loads.
+      await hintBecomes(page, 'none')
+      await expect(picture).toHaveCount(0)
+
+      // Gravatar has one now; asked again, it shows, from Tela's own address, and loads.
+      await gravatars(request, true)
+      push = pushed(page)
+      await page.getByTestId('profile-gravatar-refresh').click()
+      await push
+      await hintBecomes(page, 'shown')
       await expect(picture).toHaveAttribute('src', /^\/avatar\/[A-Za-z0-9_-]+\?v=\d+$/)
       await expect
         .poll(() => picture.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth))
         .toBeGreaterThan(0)
-      const first = (await picture.getAttribute('src')) ?? ''
 
-      push = pushed()
-      await page.getByTestId('profile-gravatar-refresh').click()
-      await push
-      await expect(picture).not.toHaveAttribute('src', first)
-      await expect(picture).toHaveAttribute('src', /^\/avatar\/[A-Za-z0-9_-]+\?v=\d+$/)
-
-      push = pushed()
+      // Off: the letter, at once.
+      push = pushed(page)
       await page.getByTestId('profile-gravatar').click()
       await push
       await expect(picture).toHaveCount(0)
-      await expect(page.getByTestId('profile-gravatar-refresh')).toHaveCount(0)
+      await expect(page.getByTestId('profile-gravatar-row')).toHaveAttribute('data-hint', 'off')
     } finally {
-      // Every spec signs in as this member: the next one starts from the initial.
-      await setGravatar(request, false)
+      stop()
+      // Every spec signs in as this member: the next one starts from the letter.
+      await gravatars(request, false)
+      await setGravatar(request, true)
     }
+  })
+
+  test('an upload, cropped in the dialog, comes first; removed, it is gone', async ({ page }) => {
+    await page.goto('/settings')
+    const picture = page.getByTestId('account-menu').locator('img')
+    await page.getByTestId('profile-picture-input').setInputFiles({
+      name: 'me.png',
+      mimeType: 'image/png',
+      buffer: pngFile(600, 400),
+    })
+    const dialog = page.getByTestId('avatar-crop')
+    await expect(dialog).toBeVisible()
+    // Move it, then zoom all the way in, with the keyboard as well as the pointer.
+    const frame = page.getByTestId('avatar-crop-frame')
+    const box = await frame.boundingBox()
+    if (!box) throw new Error('no crop frame')
+    await page.mouse.move(box.x + 140, box.y + 140)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 90, box.y + 140, { steps: 5 })
+    await page.mouse.up()
+    await page.getByTestId('avatar-crop-zoom').focus()
+    await page.keyboard.press('End')
+    await frame.focus()
+    await page.keyboard.press('ArrowLeft')
+
+    const saved = page.waitForResponse(
+      (r) => r.url().endsWith('/api/v1/avatar') && r.request().method() === 'PUT',
+    )
+    await page.getByTestId('avatar-crop-save').click()
+    const res = await saved
+    expect(res.status()).toBe(200)
+    // What the canvas drew, not the file chosen: a 256 px square, WebP in Chromium.
+    expect(res.request().headers()['content-type']).toBe('image/webp')
+    await expect(dialog).toHaveCount(0)
+    await expect(picture).toHaveAttribute('src', /^\/avatar\/[A-Za-z0-9_-]+\?v=\d+$/)
+    await expect
+      .poll(() =>
+        picture.evaluate((img: HTMLImageElement) => (img.complete ? img.naturalWidth : 0)),
+      )
+      .toBe(256)
+    await expect(page.getByTestId('profile-picture-upload')).toHaveText('Change picture')
+
+    const removed = page.waitForResponse(
+      (r) => r.url().endsWith('/api/v1/avatar') && r.request().method() === 'DELETE',
+    )
+    await page.getByTestId('profile-picture-remove').click()
+    expect((await removed).status()).toBe(200)
+    await expect(picture).toHaveCount(0)
+    await expect(page.getByTestId('profile-picture-remove')).toHaveCount(0)
+  })
+
+  test('the crop dialog cancels with Esc, and keeps nothing', async ({ page }) => {
+    await page.goto('/settings')
+    await page.getByTestId('profile-picture-input').setInputFiles({
+      name: 'me.png',
+      mimeType: 'image/png',
+      buffer: pngFile(300, 300),
+    })
+    await expect(page.getByTestId('avatar-crop')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('avatar-crop')).toHaveCount(0)
+    await expect(page.getByTestId('profile-picture-remove')).toHaveCount(0)
   })
 })

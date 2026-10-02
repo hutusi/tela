@@ -19,7 +19,7 @@ export function ReadInMenu({ readingLang }: { readingLang: string }) {
           type="button"
           onClick={() => store.mutate({ type: 'setProfile', readingLang: code })}
           aria-pressed={code === readingLang}
-          className={`rounded-full px-2 py-1 ${code === readingLang ? 'bg-ink text-paper' : 'text-ink-2 hover:bg-hover'}`}
+          className={`rounded-full px-2 py-1 whitespace-nowrap ${code === readingLang ? 'bg-ink text-paper' : 'text-ink-2 hover:bg-hover'}`}
         >
           {pillLabel(code)}
         </button>

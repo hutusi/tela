@@ -42,8 +42,8 @@ export function bindApi(next: ApiBinding): void {
 export type ApiInit = {
   method?: string
   body?: unknown
-  /** Sent as the body verbatim (OPML), instead of JSON. */
-  raw?: string
+  /** Sent as the body verbatim, instead of JSON: OPML as text, a picture as a Blob of its type. */
+  raw?: string | Blob
   signal?: AbortSignal
   /** Outlive the page: a push sent as the tab goes away still arrives. */
   keepalive?: boolean
@@ -55,6 +55,7 @@ export async function api(path: string, init: ApiInit = {}): Promise<Response> {
   const member = init.member === undefined ? binding.member() : init.member
   const headers: Record<string, string> = { [CLIENT_HEADER]: String(CLIENT_VERSION) }
   if (init.body !== undefined) headers['content-type'] = 'application/json'
+  if (init.raw instanceof Blob && init.raw.type) headers['content-type'] = init.raw.type
   if (member) headers[MEMBER_HEADER] = member
   const res = await fetch(path, {
     method: init.method ?? (init.body === undefined && init.raw === undefined ? 'GET' : 'POST'),

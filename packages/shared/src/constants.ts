@@ -74,3 +74,6 @@ export const HIGHLIGHT_NOTE_MAX = 2000
 
 /** Unread horizon: articles older than this never count as unread. */
 export const UNREAD_HORIZON_DAYS = 30
+
+/** Where Gravatar serves pictures (ADR 0032); `GRAVATAR_URL` in tela-api and tela-jobs overrides it. */
+export const GRAVATAR_URL = 'https://gravatar.com/avatar'

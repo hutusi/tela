@@ -389,6 +389,8 @@ describe('public pages', () => {
       body: { handle: 'pictured' },
       as: reader,
     })
+    // Gravatar has a picture for them, as the check found (ADR 0033).
+    await api.db.run(sql`update profiles set gravatar_found = 1 where user_id = ${reader.userId}`)
     await api.request('/api/v1/mutations', {
       body: { mutations: [{ mid: 'gravatar-on-edge', at: 77, type: 'setAvatar', gravatar: true }] },
       as: reader,

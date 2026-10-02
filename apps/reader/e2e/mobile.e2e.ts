@@ -44,6 +44,17 @@ test.describe('mobile fallback', () => {
     )
   })
 
+  test('中文 in the Read-in pill stays on one line on a phone', async ({ page }) => {
+    await page.goto('/reading')
+    const pill = page.getByTestId('read-in')
+    await pill.waitFor()
+    // Two characters can break between them where "ZH" never could: each choice is one line.
+    const heights = await pill
+      .getByRole('button')
+      .evaluateAll((buttons) => buttons.map((b) => Math.round(b.getBoundingClientRect().height)))
+    expect(new Set(heights).size, `button heights ${heights}`).toBe(1)
+  })
+
   test('the account menu opens on a phone, and holds the way to Settings', async ({ page }) => {
     await page.goto('/reading')
     await page.getByTestId('account-menu').click()

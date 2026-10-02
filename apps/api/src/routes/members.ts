@@ -3,7 +3,15 @@
  * handle must be unique, so the answer matters), their blogs' settings, their author dashboard,
  * search past what their device holds, and everything they have done, as one file.
  */
-import { ARTICLE_COLUMNS, bumpSeq, consumeLimit, currentSeq, first } from '@tela/data'
+import {
+  ARTICLE_COLUMNS,
+  avatarOf,
+  bumpSeq,
+  consumeLimit,
+  currentSeq,
+  first,
+  gravatarOn,
+} from '@tela/data'
 import { isReadingLanguage, isTopic } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -27,6 +35,7 @@ const RESERVED_HANDLES = new Set([
   's',
   'o',
   'img',
+  'avatar',
   'u',
   'auth',
   'about',
@@ -200,10 +209,12 @@ export function memberRoutes(deps: ApiDeps) {
     const [profiles, prefs, subscriptions, likes, recommendations, highlights, following] =
       (await db.batch([
         db.all(sql`
-          select handle, display_name as "displayName", bio, reading_lang as "readingLang",
-            ui_locale as "uiLocale", public_subscriptions as "publicSubscriptions",
-            public_likes as "publicLikes", gravatar as "showsGravatar", created_at as "memberSince"
-          from profiles where user_id = ${id}
+          select p.handle, p.display_name as "displayName", p.bio, p.reading_lang as "readingLang",
+            p.ui_locale as "uiLocale", p.public_subscriptions as "publicSubscriptions",
+            p.public_likes as "publicLikes", ${gravatarOn('p')} as "showsGravatar",
+            (p.avatar_key is not null) as "pictureUploaded", ${avatarOf('p')} as "picture",
+            p.created_at as "memberSince"
+          from profiles p where p.user_id = ${id}
         `),
         db.all(
           sql`select key, value_json as "valueJson" from user_prefs where user_id = ${id} order by key`,
@@ -243,6 +254,7 @@ export function memberRoutes(deps: ApiDeps) {
             publicSubscriptions: profile.publicSubscriptions === 1,
             publicLikes: profile.publicLikes === 1,
             showsGravatar: profile.showsGravatar === 1,
+            pictureUploaded: profile.pictureUploaded === 1,
           }
         : null,
       prefs: (prefs ?? []).map((p) => ({ key: p.key, value: JSON.parse(String(p.valueJson)) })),

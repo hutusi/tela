@@ -241,6 +241,8 @@ describe('public', () => {
     const avatar = async () =>
       ((await page()) as { profile: { avatar: string | null } }).profile.avatar
     expect(await avatar()).toBeNull()
+    // Gravatar has a picture for them, as the check found (ADR 0033).
+    await db.run(sql`update profiles set gravatar_found = 1 where user_id = ${reader.userId}`)
     await api.request('/api/v1/mutations', {
       body: { mutations: [{ mid: 'gravatar-on-0001', at: 42, type: 'setAvatar', gravatar: true }] },
       as: reader,

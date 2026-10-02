@@ -16,6 +16,9 @@ const PNG = Buffer.from(
   'base64',
 )
 
+/** Whether every address has a Gravatar; off until a spec turns it on (POST /__gravatar?on=1). */
+let gravatars = false
+
 /** Set by the e2e test through POST /__claim-token?token=…; rendered on the home page. */
 let claimToken = ''
 
@@ -222,8 +225,20 @@ createServer(async (req, res) => {
     res.end()
     return
   }
-  // Stands in for gravatar.com (tela-api's GRAVATAR_URL in the e2e): every address has a picture.
+  // Stands in for gravatar.com (GRAVATAR_URL for tela-api and tela-jobs in the e2e). Nobody has a
+  // picture until a spec says so (POST /__gravatar?on=1), so every other spec sees the letter.
+  if (req.method === 'POST' && path === '/__gravatar') {
+    gravatars = url.searchParams.get('on') === '1'
+    res.writeHead(204)
+    res.end()
+    return
+  }
   if (req.method === 'GET' && /^\/gravatar\/[0-9a-f]{64}$/.test(path)) {
+    if (!gravatars) {
+      res.writeHead(404, { 'content-type': 'text/plain' })
+      res.end('no picture')
+      return
+    }
     res.writeHead(200, { 'content-type': 'image/png' })
     res.end(PNG)
     return

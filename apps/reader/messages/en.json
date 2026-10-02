@@ -288,9 +288,31 @@
       "privacy": "Privacy"
     },
     "profileIntro": "How you appear to readers and authors on Tela.",
-    "gravatar": "Show my Gravatar",
-    "gravatarHint": "The picture Gravatar has for the email you sign in with, wherever your name appears. Changed it there? Refresh. Others may see it a few minutes later.",
+    "gravatar": "Use my Gravatar",
     "gravatarRefresh": "Refresh",
+    "pictureUpload": "Upload a picture",
+    "pictureReplace": "Change picture",
+    "pictureRemove": "Remove",
+    "gravatarHints": {
+      "shown": "From the email you sign in with, wherever your name appears; others see a change within minutes. Changed it on Gravatar? Refresh.",
+      "behind": "Your uploaded picture comes first; your Gravatar stands in if you remove it.",
+      "none": "Gravatar has no picture for the email you sign in with, so your initial is shown.",
+      "checking": "Asking Gravatar about the email you sign in with…",
+      "off": "Off: your initial is shown unless you upload a picture."
+    },
+    "pictureErrors": {
+      "unreadable": "That file is not a picture this browser can read.",
+      "too_large": "That file is over 20 MB.",
+      "rate_limited": "Too many changes in an hour. Try again later.",
+      "failed": "The picture could not be saved. Try again."
+    },
+    "cropTitle": "Your picture",
+    "cropHint": "Drag to move it, and zoom to frame it.",
+    "cropArea": "The picture, in the circle it is shown in. The arrow keys move it.",
+    "cropZoom": "Zoom",
+    "cropCancel": "Cancel",
+    "cropSave": "Save",
+    "cropSaving": "Saving…",
     "name": "Name",
     "handle": "Handle",
     "handleHint": "3–30 lowercase letters, digits, or underscores. Used in your profile URL.",

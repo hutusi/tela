@@ -15,6 +15,7 @@ import type { ProfileRow } from '@tela/sync'
 import { useRef, useState } from 'react'
 import { Link, Navigate, NavLink, useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { AvatarCrop } from '../components/avatar-crop'
 import { PersonAvatar } from '../components/person-avatar'
 import { Segmented } from '../components/segmented'
 import { SettingRow } from '../components/setting-row'
@@ -34,7 +35,7 @@ import {
   THEMES,
   typographyOf,
 } from '../lib/typography'
-import { apiJson } from '../store/api'
+import { api, apiJson } from '../store/api'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { feedTitle } from '../store/selectors'
 import { useUi } from '../ui'
@@ -124,6 +125,124 @@ function ProfileSection() {
   )
 }
 
+/** The quiet pill the Settings buttons share. */
+const PILL =
+  'rounded-full border border-thumb px-3.5 py-[7px] text-[13px] font-medium whitespace-nowrap text-ink hover:border-ink disabled:opacity-60'
+
+type GravatarHint = 'shown' | 'behind' | 'none' | 'checking' | 'off'
+
+/**
+ * The member's picture (ADR 0033): one they upload, cropped in a dialog here, else their Gravatar
+ * (on until they turn it off), else their initial. Refresh sends the switch on again: a new
+ * address past the 30-day caches, and Gravatar asked again at once. The hint says which of them
+ * the member has, and why.
+ */
+function PictureSettings({ profile }: { profile: ProfileRow }) {
+  const t = useTranslations('settings')
+  const { store, engine } = useStore()
+  const [cropping, setCropping] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const hint: GravatarHint = !profile.gravatar
+    ? 'off'
+    : profile.gravatarFound === null
+      ? 'checking'
+      : !profile.gravatarFound
+        ? 'none'
+        : profile.avatarUploaded
+          ? 'behind'
+          : 'shown'
+
+  async function remove() {
+    setBusy(true)
+    setFailed(false)
+    try {
+      const res = await api('/api/v1/avatar', { method: 'DELETE' })
+      if (res.ok) void engine.pull()
+      else setFailed(true)
+    } catch {
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-[18px] pb-6">
+        <PersonAvatar
+          handle={profile.handle}
+          displayName={profile.displayName}
+          avatar={profile.avatar}
+          size={64}
+          me
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <label
+            className={`${PILL} cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent`}
+            data-testid="profile-picture-upload"
+          >
+            {profile.avatarUploaded ? t('pictureReplace') : t('pictureUpload')}
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                // Cleared, so choosing the same file again opens the dialog again.
+                e.target.value = ''
+                if (file) setCropping(file)
+              }}
+              data-testid="profile-picture-input"
+            />
+          </label>
+          {profile.avatarUploaded ? (
+            <button
+              type="button"
+              onClick={() => void remove()}
+              disabled={busy}
+              className={PILL}
+              data-testid="profile-picture-remove"
+            >
+              {t('pictureRemove')}
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {failed ? (
+        <p role="alert" className="-mt-3 pb-4 text-[13px] text-danger">
+          {t('pictureErrors.failed')}
+        </p>
+      ) : null}
+      <SettingRow label={t('gravatar')} hint={t(`gravatarHints.${hint}`)}>
+        <div
+          className="flex items-center gap-3"
+          data-testid="profile-gravatar-row"
+          data-hint={hint}
+        >
+          {profile.gravatar ? (
+            <button
+              type="button"
+              onClick={() => store.mutate({ type: 'setAvatar', gravatar: true })}
+              className={PILL}
+              data-testid="profile-gravatar-refresh"
+            >
+              {t('gravatarRefresh')}
+            </button>
+          ) : null}
+          <Switch
+            checked={profile.gravatar}
+            onChange={(on) => store.mutate({ type: 'setAvatar', gravatar: on })}
+            label={t('gravatar')}
+            testId="profile-gravatar"
+          />
+        </div>
+      </SettingRow>
+      {cropping ? <AvatarCrop file={cropping} onClose={() => setCropping(null)} /> : null}
+    </>
+  )
+}
+
 const BIO_MAX = 280
 
 function ProfileForm({
@@ -136,7 +255,7 @@ function ProfileForm({
   onState: (state: SaveState) => void
 }) {
   const t = useTranslations('settings')
-  const { engine, store } = useStore()
+  const { engine } = useStore()
   const [handle, setHandle] = useState(profile.handle)
   const [displayName, setDisplayName] = useState(profile.displayName ?? '')
   const [bio, setBio] = useState(profile.bio ?? '')
@@ -170,40 +289,7 @@ function ProfileForm({
 
   return (
     <form onSubmit={(e) => void submit(e)} className="flex flex-col" data-testid="settings-form">
-      {/* The picture: their Gravatar, through Tela, or their initial (ADR 0032). Refresh sends the
-          switch on again, which is a new address, so a picture changed on Gravatar shows now
-          rather than when the 30-day cache lets go of the old one. */}
-      <div className="flex items-center gap-[18px] pb-6">
-        <PersonAvatar
-          handle={profile.handle}
-          displayName={profile.displayName}
-          avatar={profile.avatar}
-          size={64}
-          me
-        />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="font-medium">{t('gravatar')}</span>
-          <span className="text-[12.5px] leading-[1.45] text-muted">{t('gravatarHint')}</span>
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          {profile.gravatar ? (
-            <button
-              type="button"
-              onClick={() => store.mutate({ type: 'setAvatar', gravatar: true })}
-              className="rounded-full border border-thumb px-3.5 py-[7px] text-[13px] font-medium whitespace-nowrap text-ink hover:border-ink"
-              data-testid="profile-gravatar-refresh"
-            >
-              {t('gravatarRefresh')}
-            </button>
-          ) : null}
-          <Switch
-            checked={profile.gravatar}
-            onChange={(on) => store.mutate({ type: 'setAvatar', gravatar: on })}
-            label={t('gravatar')}
-            testId="profile-gravatar"
-          />
-        </div>
-      </div>
+      <PictureSettings profile={profile} />
       <div className="flex flex-col gap-5 border-t border-line pt-6">
         <label className="flex flex-col gap-1.5">
           <span className="font-medium">{t('name')}</span>

@@ -12,7 +12,7 @@ How Tela is provisioned, deployed and kept running: three Cloudflare Workers, D1
 | tela-api | Worker pinned to `aws:ap-southeast-1` (`apps/api`) | Sign-in, sync, mutations, every reader RPC. No public route: tela-web reaches it over a service binding |
 | tela-jobs | Worker pinned to `aws:ap-southeast-1` (`apps/jobs`) | Crons, queue consumers, the `Ingest` RPC. No public route |
 | D1 `tela` | Primary in Singapore (`--location apac`) | 6–10 ms from the pinned Workers; Time Travel keeps 30 days |
-| R2 `tela-content` | Private | Content, translation and chunk objects (served by tela-web to members), raw item HTML, and the nightly `backup/` |
+| R2 `tela-content` | Private | Content, translation and chunk objects (served by tela-web to members), raw item HTML, members' uploaded pictures (`avatars/`, served by tela-api at `/avatar/…`, ADR 0033), and the nightly `backup/`. The pictures are member data the D1 export does not hold: a move off Cloudflare copies `avatars/` too |
 | R2 `tela-assets` | Public at `assets.tela.ainaive.com` | Favicons |
 | Queues | `tela-fetch`, `tela-extract`, `tela-translate`, `tela-misc`, DLQ `tela-dlq` | Accelerators only: every job is also found from state by the minute sweep |
 | Relay | Not provisioned (`apps/relay`) | A Node box in HK, only once a feed times out from Cloudflare; see *The relay* |
@@ -31,7 +31,7 @@ directory.
 | `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@ainaive.com>` |
 | `PUBLIC_URL` | tela-api, tela-jobs | The one public origin: better-auth's base URL and trusted origin, claim `rel="me"` targets, the WebSub callback |
 | `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var |
-| `GRAVATAR_URL` | tela-api | Where members' pictures are fetched from (ADR 0032), default `https://gravatar.com/avatar`. The e2e points it at its fixture server. A picture is cached for 30 days in each colo and browser under an address with its version, and turning the switch off cannot purge a colo: a copy already held stays, at an address nothing links to any more |
+| `GRAVATAR_URL` | tela-api, tela-jobs | Where members' pictures are fetched from (tela-api, ADR 0032) and asked about (tela-jobs, ADR 0033), default `https://gravatar.com/avatar`. The e2e points it at its fixture server. A picture is cached for 30 days in each colo and browser under an address with its version, and turning the switch off cannot purge a colo: a copy already held stays, at an address nothing links to any more |
 | `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, and fetches to private addresses. Never deployed |
 | `WORKER_USER_AGENT` | tela-jobs | Sent on every fetch; keep a contact URL in it |
 | `FETCH_TIMEOUT_MS` | tela-jobs, the relay | Per-request timeout, default 20000 |
@@ -120,6 +120,13 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        the switch visibly goes back; its profile rows carry no picture, and a device keeps the
        one it held; `/avatar/…` answers 404, which shows the letter. An older tela-web (not
        before the follows release) ignores an unsent `setAvatar` in its reducer.
+   - Uploaded pictures and Gravatar on by default (ADR 0033, migration 0004) are additive and keep
+     protocol 2: apply the migration, then deploy tela-jobs (the `member.gravatar` kind), tela-api,
+     tela-web.
+     - **Any Worker may go back alone.** Without the new tela-jobs nobody's Gravatar is checked,
+       so a member with no upload shows their letter. An older tela-api has no `/api/v1/avatar`
+       (Settings' upload fails visibly) and serves only Gravatars at `/avatar/…`; uploaded objects
+       stay in R2 for when it returns. An older tela-web shows no upload controls.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -293,6 +300,7 @@ says who holds it:
 | `feed.fetch` | `next_fetch_at` has passed, or a WebSub ping asked |
 | `article.extract` | `extract_state = 'due'`: a summary-only post waiting for its page |
 | `site.assets` | a site's favicon has never been checked |
+| `member.gravatar` | a member shows their Gravatar and it was never asked about, or the answer has run out: 30 days after a picture, 7 after none (ADR 0033). Refresh asks again at once |
 | `site.claim` | a member asked for their claim to be checked |
 | `websub.subscribe` | a hub subscription is new, failed, or near its lease's end |
 | `translate.title` | a feed has articles without titles in every launch language |

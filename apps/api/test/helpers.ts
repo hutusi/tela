@@ -60,8 +60,8 @@ export async function createTestApi(
     init: {
       method?: string
       body?: unknown
-      /** Sent as the body verbatim (OPML), instead of JSON. */
-      raw?: string
+      /** Sent as the body verbatim (OPML, a picture), instead of JSON. */
+      raw?: string | Uint8Array<ArrayBuffer>
       as?: SignedIn
       cookie?: string
       headers?: Record<string, string | undefined>

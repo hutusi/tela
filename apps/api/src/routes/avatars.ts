@@ -4,13 +4,14 @@
  * ever sees Tela. Public, like the profiles it appears on, and only while the member shows it.
  */
 import { sha256Hex } from '@tela/content/hash'
-import { first } from '@tela/data'
+import { first, gravatarOn } from '@tela/data'
+import { GRAVATAR_URL } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
+import { readAtMost } from '../read-at-most'
 
-export const GRAVATAR_URL = 'https://gravatar.com/avatar'
 /** The address carries the version, so an answer never changes under it: 30 days, everywhere. */
 export const AVATAR_CACHE = 'public, max-age=2592000, immutable'
 const MEMBER_ID = /^[A-Za-z0-9_-]{8,64}$/
@@ -21,30 +22,6 @@ const MAX_BYTES = 512 * 1024
 const TIMEOUT_MS = 5000
 // SVG can carry script; only raster types a browser renders in an <img>, as the image proxy says.
 const TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
-
-/** The body, or null past `max` bytes, without reading further than that. */
-async function readAtMost(body: ReadableStream<Uint8Array>, max: number) {
-  const reader = body.getReader()
-  const parts: Uint8Array[] = []
-  let size = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    size += value.byteLength
-    if (size > max) {
-      await reader.cancel()
-      return null
-    }
-    parts.push(value)
-  }
-  const out = new Uint8Array(size)
-  let at = 0
-  for (const part of parts) {
-    out.set(part, at)
-    at += part.byteLength
-  }
-  return out
-}
 
 export function avatarRoutes(deps: ApiDeps) {
   const { db } = deps
@@ -66,14 +43,29 @@ export function avatarRoutes(deps: ApiDeps) {
     const userId = c.req.param('userId')
     const version = c.req.query('v') ?? ''
     if (!MEMBER_ID.test(userId) || !VERSION.test(version)) return none(300)
-    // Only the version the member's switch is at: a made-up one is a 404 here, never another
-    // request to Gravatar, and an old one stops answering once the member moves on.
-    const row = await first<{ email: string }>(
+    // Only the version the member's picture is at: a made-up one is a 404 here, never another
+    // request to Gravatar, and an old one stops answering once the member moves on. Their upload
+    // comes first (ADR 0033); a Gravatar only while shown and once Gravatar said it has one: the
+    // same rule as the address itself (`avatarSql`), so nothing unpublished is fetched.
+    const row = await first<{ email: string; avatarKey: string | null }>(
       db,
-      sql`select u.email from profiles p join "user" u on u.id = p.user_id
-        where p.user_id = ${userId} and p.gravatar = 1 and p.avatar_version = ${Number(version)}`,
+      sql`select u.email, p.avatar_key as "avatarKey" from profiles p join "user" u on u.id = p.user_id
+        where p.user_id = ${userId} and p.avatar_version = ${Number(version)}
+          and (p.avatar_key is not null or (${gravatarOn('p')} and p.gravatar_found = 1))`,
     )
     if (!row) return none(300)
+    if (row.avatarKey) {
+      const stored = await deps.blobs.get(row.avatarKey)
+      if (!stored) return none(300)
+      return new Response(await stored.arrayBuffer(), {
+        headers: {
+          'content-type': stored.contentType ?? 'application/octet-stream',
+          'cache-control': AVATAR_CACHE,
+          'x-content-type-options': 'nosniff',
+          'content-security-policy': "default-src 'none'; sandbox",
+        },
+      })
+    }
     const hash = await sha256Hex(row.email.trim().toLowerCase())
     let upstream: Response
     try {

@@ -190,6 +190,8 @@ describe('follows and privacy flags on the device (ADR 0031)', () => {
     publicSubscriptions: true,
     publicLikes: false,
     gravatar: false,
+    gravatarFound: null,
+    avatarUploaded: false,
     avatar: null,
     seq: 1,
   }
@@ -245,6 +247,8 @@ describe('the Gravatar switch on the device (ADR 0032)', () => {
     publicSubscriptions: false,
     publicLikes: false,
     gravatar: true,
+    gravatarFound: null,
+    avatarUploaded: false,
     avatar: '/avatar/member-me-0000001?v=5',
     seq: 1,
   }
@@ -255,6 +259,14 @@ describe('the Gravatar switch on the device (ADR 0032)', () => {
       { mutation: { mid: 'g-off', at: 10, type: 'setAvatar', gravatar: false } },
     ])
     expect(off.profile).toMatchObject({ gravatar: false, avatar: null })
+  })
+
+  test('off leaves an uploaded picture, which comes before any Gravatar (ADR 0033)', () => {
+    const uploaded = applyPull(start, pull(4, { profile: [{ ...profile, avatarUploaded: true }] }))
+    const off = view(uploaded, [
+      { mutation: { mid: 'g-off-2', at: 12, type: 'setAvatar', gravatar: false } },
+    ])
+    expect(off.profile).toMatchObject({ gravatar: false, avatar: '/avatar/member-me-0000001?v=5' })
   })
 
   test('on, or Refresh, keeps what it has until the server names the new address', () => {
@@ -276,6 +288,8 @@ describe('a pull from a tela-api of an earlier release', () => {
       publicSubscriptions: false,
       publicLikes: true,
       gravatar: false,
+      gravatarFound: null,
+      avatarUploaded: false,
       avatar: null,
       seq: 1,
     }
@@ -312,6 +326,8 @@ describe('a pull from a tela-api of an earlier release', () => {
       handle: 'me_renamed',
       publicLikes: true,
       gravatar: true,
+      gravatarFound: null,
+      avatarUploaded: false,
       avatar: '/avatar/member-me-0000001?v=3',
     })
   })
