@@ -3,7 +3,7 @@ import { discoverApiPath, discoverHref, parseDiscoverParams } from '../src/lib/d
 import { canonicalReadingHref, parseReadingParams, readingHref } from '../src/lib/href'
 import { addError } from '../src/lib/opml'
 import { claimError } from '../src/pages/claim'
-import { safeNext } from '../src/pages/login'
+import { loginPath, mailLink, safeNext } from '../src/pages/login'
 import { handleFrom } from '../src/pages/profile'
 import { publicRoute } from '../src/ssr'
 
@@ -73,6 +73,28 @@ describe('answers the pages turn into messages', () => {
     for (const next of [null, 'https://evil.example', '//evil.example', '/\\evil.example']) {
       expect(safeNext(next)).toBe('/reading')
     }
+  })
+  test("a mailed link's code is read, and nothing but where to go next stays in the address", () => {
+    const link = (query: string) => new URLSearchParams(query)
+    expect(mailLink(link('email=a%40x.test&otp=123456&next=%2Fsettings'))).toEqual({
+      email: 'a@x.test',
+      otp: '123456',
+      reset: false,
+    })
+    expect(mailLink(link('reset=1&email=a%40x.test&otp=123456'))).toEqual({
+      email: 'a@x.test',
+      otp: '123456',
+      reset: true,
+    })
+    for (const query of ['email=a%40x.test', 'otp=123456', 'email=&otp=123456', 'next=%2Fs%2F1'])
+      expect(mailLink(link(query))).toBeNull()
+    expect(loginPath(link('email=a%40x.test&otp=123456&next=%2Fsettings'))).toBe(
+      '/login?next=%2Fsettings',
+    )
+    expect(loginPath(link('reset=1&email=a%40x.test&otp=123456'))).toBe('/login')
+    expect(loginPath(link('email=a%40x.test&otp=1&next=%2F%2Fevil.example'))).toBe(
+      '/login?next=%2Freading',
+    )
   })
   test("ingest errors become the page's own", () => {
     expect(addError('not_a_feed')).toBe('fetch_failed')

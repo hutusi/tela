@@ -256,7 +256,7 @@ A Vite + React SPA that renders from the device.
 | Route | Purpose |
 |---|---|
 | `/` | Landing for visitors; members go to `/reading` |
-| `/login` | Email code, and the mail's link that submits the same code |
+| `/login` | Email code; the mail's sign-in and reset links fill their code in and ask before using it (ADR 0036) |
 | `/reading?filter=&feed=&article=&mode=` | Sidebar, list and the open article |
 | `/discover?topic=&lang=`, `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart |
 | `/following?tab=` | What the people a member follows did, by RPC; whom they follow, from the device (ADR 0031) |

@@ -33,6 +33,14 @@
     "verify": "继续",
     "connecting": "已登录，正在连接 Tela…",
     "or": "或",
+    "linkAs": "以 <b>{email}</b> 登录？",
+    "linkHint": "只有在这个链接是你本人申请的时候才继续：别人发来的链接会让你登录到他们的账号。",
+    "linkConfirm": "登录",
+    "resetAs": "为 <b>{email}</b> 设置新密码。",
+    "resetHint": "只有在你本人申请了重置密码时才继续。",
+    "newPassword": "新密码，至少 8 个字符",
+    "resetConfirm": "设置密码并登录",
+    "linkOther": "使用其他邮箱",
     "errors": {
       "invalid_email": "这不像是一个邮箱地址。",
       "not_configured": "此服务器尚未配置登录。",
@@ -40,7 +48,9 @@
       "bad_code": "验证码错误或已过期。",
       "link_failed": "登录链接无效或已过期，请重新获取验证码。",
       "not_invited": "Tela 正在内测中，该邮箱还没有账号。",
-      "rate_limited": "尝试次数过多。请稍等一分钟再试。"
+      "rate_limited": "尝试次数过多。请稍等一分钟再试。",
+      "reset_failed": "重置链接无效或已过期，请重新申请。",
+      "password_set": "新密码已设置，但用它登录失败。请用验证码登录。"
     }
   },
   "sidebar": {

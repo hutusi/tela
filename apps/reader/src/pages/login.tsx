@@ -1,10 +1,12 @@
 /**
- * Sign in with an emailed code (ADR 0024). The mail's link, `/login?email=…&otp=…`, submits the
- * same code on arrival, so it signs in whichever device opens it. Registration is closed: an
- * address without an account gets the same answer and no mail, so nothing here can say "no such
- * member".
+ * Sign in with an emailed code (ADR 0024). The mail's link, `/login?email=…&otp=…`, carries the
+ * same code but only fills it in: the page names the account and waits for a press (ADR 0036). A
+ * link that signed in by itself would put whoever opened it into the account of whoever sent it,
+ * a login CSRF. The reset link, `/login?reset=1&email=…&otp=…`, waits the same way, with the new
+ * password to choose. Registration is closed: an address without an account gets the same answer
+ * and no mail, so nothing here can say "no such member".
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { LocaleSwitcher } from '../components/locale-switcher'
@@ -17,8 +19,30 @@ export function safeNext(next: string | null, fallback = '/reading'): string {
   return next
 }
 
-type Step = { kind: 'email' } | { kind: 'code'; email: string }
-type LoginError = 'invalid_email' | 'send_failed' | 'bad_code' | 'rate_limited'
+/** What a mailed link carries: a sign-in code, or with `reset=1` a password reset's code. */
+export type MailLink = { email: string; otp: string; reset: boolean }
+
+export function mailLink(search: URLSearchParams): MailLink | null {
+  const email = search.get('email')
+  const otp = search.get('otp')
+  if (!email || !otp) return null
+  return { email, otp, reset: search.get('reset') === '1' }
+}
+
+/** The address bar once a link's code is out of it: only where to go afterwards stays. */
+export function loginPath(search: URLSearchParams): string {
+  const next = search.get('next')
+  return next ? `/login?next=${encodeURIComponent(safeNext(next))}` : '/login'
+}
+
+type Step = { kind: 'email' } | { kind: 'code'; email: string } | { kind: 'link'; link: MailLink }
+type LoginError =
+  | 'invalid_email'
+  | 'send_failed'
+  | 'bad_code'
+  | 'rate_limited'
+  | 'reset_failed'
+  | 'password_set'
 
 const post = (path: string, body: unknown) =>
   fetch(path, {
@@ -34,14 +58,23 @@ export function LoginPage() {
   const navigate = useNavigate()
   const [search] = useSearchParams()
   const next = safeNext(search.get('next'))
-  const [step, setStep] = useState<Step>({ kind: 'email' })
+  // A link is read on the first render too, so a member's tab shows it rather than leave at once.
+  const [step, setStep] = useState<Step>(() => {
+    const link = mailLink(search)
+    return link ? { kind: 'link', link } : { kind: 'email' }
+  })
   const [error, setError] = useState<LoginError | null>(null)
   const [busy, setBusy] = useState(false)
   // Signed in, and waiting for /me to say as whom: the code is spent, so the form stays shut.
   const [signedInWaiting, setSignedInWaiting] = useState(false)
   const connecting = signedInWaiting && retrying
   const [value, setValue] = useState('')
-  const linked = useRef(false)
+
+  const enter = async () => {
+    const outcome = await signedIn(next)
+    if (outcome === 'waiting') setSignedInWaiting(true)
+    else if (outcome !== 'reloading') navigate(next, { replace: true })
+  }
 
   const verify = async (email: string, otp: string) => {
     setBusy(true)
@@ -54,32 +87,60 @@ export function LoginPage() {
         setError(res.status === 429 ? 'rate_limited' : 'bad_code')
         return
       }
-      const outcome = await signedIn(next)
-      if (outcome === 'waiting') setSignedInWaiting(true)
-      else if (outcome !== 'reloading') navigate(next, { replace: true })
+      await enter()
     } finally {
       setBusy(false)
     }
   }
 
-  // The mail's link: take the code out of the address bar first, then sign in with it.
-  useEffect(() => {
-    const email = search.get('email')
-    const otp = search.get('otp')
-    if (!email || !otp || linked.current) return
-    linked.current = true
-    window.history.replaceState(
-      null,
-      '',
-      `/login${search.get('next') ? `?next=${encodeURIComponent(next)}` : ''}`,
-    )
-    void verify(email, otp)
-  })
+  /** The reset link's code sets the new password; then that password signs in. */
+  const resetPassword = async (email: string, otp: string, password: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const reset = await post('/api/auth/email-otp/reset-password', { email, otp, password })
+      if (!reset.ok) {
+        setError(reset.status === 429 ? 'rate_limited' : 'reset_failed')
+        return
+      }
+      const res = await post('/api/auth/sign-in/email', { email, password })
+      if (!res.ok) {
+        // The code is spent and the password set: what is left is signing in, by code for now.
+        setStep({ kind: 'email' })
+        setValue('')
+        setError('password_set')
+        return
+      }
+      await enter()
+    } finally {
+      setBusy(false)
+    }
+  }
 
-  if (status === 'member' && !busy) return <Navigate to={next} replace />
+  // The mail's link: take the code out of the address bar at once, and keep it here until the
+  // member presses the button. A link followed inside a page already open here comes through too.
+  useEffect(() => {
+    const link = mailLink(search)
+    if (!link) return
+    window.history.replaceState(window.history.state, '', loginPath(search))
+    setStep({ kind: 'link', link })
+    setValue('')
+    setError(null)
+  }, [search])
+
+  // A member shown a link stays to answer it: it may be for another account, which is how one
+  // switches. Once its code is spent and /me is slow to answer, they go on as before.
+  if (status === 'member' && !busy && (step.kind !== 'link' || signedInWaiting)) {
+    return <Navigate to={next} replace />
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (step.kind === 'link') {
+      const { email, otp, reset } = step.link
+      await (reset ? resetPassword(email, otp, value) : verify(email, otp))
+      return
+    }
     if (step.kind === 'code') {
       await verify(step.email, value.trim())
       return
@@ -133,7 +194,37 @@ export function LoginPage() {
           className="flex flex-col gap-3"
           data-testid="login-form"
         >
-          {step.kind === 'code' ? (
+          {step.kind === 'link' ? (
+            <>
+              <p className="text-[17px] leading-snug text-ink" data-testid="login-link-as">
+                {t.rich(step.link.reset ? 'resetAs' : 'linkAs', {
+                  email: step.link.email,
+                  b: (chunks) => <b className="font-medium break-all">{chunks}</b>,
+                })}
+              </p>
+              {connecting ? null : (
+                <p className="text-sm leading-relaxed text-ink-2">
+                  {t(step.link.reset ? 'resetHint' : 'linkHint')}
+                </p>
+              )}
+              {step.link.reset ? (
+                <input
+                  key="new-password"
+                  name="new-password"
+                  type="password"
+                  required
+                  minLength={8}
+                  maxLength={128}
+                  autoComplete="new-password"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder={t('newPassword')}
+                  data-testid="login-new-password"
+                  className="rounded-lg border border-line bg-surface px-3 py-2.5 outline-none focus:border-muted"
+                />
+              ) : null}
+            </>
+          ) : step.kind === 'code' ? (
             <>
               <p className="text-sm text-ink-2">{t('codeSent', { email: step.email })}</p>
               <input
@@ -176,8 +267,27 @@ export function LoginPage() {
             data-testid="login-submit"
             className="rounded-full bg-ink px-4 py-2.5 font-medium text-paper hover:brightness-125 disabled:opacity-60"
           >
-            {step.kind === 'code' ? t('verify') : t('sendCode')}
+            {step.kind === 'link'
+              ? t(step.link.reset ? 'resetConfirm' : 'linkConfirm')
+              : step.kind === 'code'
+                ? t('verify')
+                : t('sendCode')}
           </button>
+          {step.kind === 'link' && !connecting ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setStep({ kind: 'email' })
+                setValue('')
+                setError(null)
+              }}
+              data-testid="login-link-other"
+              className="self-center text-sm text-ink-2 hover:text-ink disabled:opacity-60"
+            >
+              {t('linkOther')}
+            </button>
+          ) : null}
         </form>
       </main>
     </>

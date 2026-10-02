@@ -1,10 +1,12 @@
 /**
  * Signing in with an emailed code (ADR 0024), in a browser, from nothing: the code typed into the
- * form, and the mail's link opened on another device. There is no other way in.
+ * form, and the mail's link opened on another device, which names the account and waits for a
+ * press before it signs in (ADR 0036).
  */
 import { type BrowserContext, expect, type Page, test } from '@playwright/test'
 import {
   addFeed,
+  BASE,
   cycle,
   FIXTURES,
   fromAccountMenu,
@@ -57,16 +59,65 @@ test.describe('by code', () => {
 
 test.describe('by link', () => {
   test.use(visitor(2))
-  test("the mail's link signs in whichever browser opens it, and leaves no code in the address bar", async ({
+  test("the mail's link signs in whichever browser opens it, once asked, and leaves no code in the address bar", async ({
     page,
     request,
   }) => {
     const email = `linked-${Date.now()}@e2e.test`
     const code = await inviteAndReadCode(request, email)
     await page.goto(`/login?email=${encodeURIComponent(email)}&otp=${code}&next=%2Fsettings`)
+
+    // Found in review: a link that signed in on arrival was a login CSRF, since anyone could send
+    // a link to their own code and put the reader in their account. It names the account and waits.
+    await expect(page.getByTestId('login-link-as')).toHaveText(`Sign in as ${email}?`)
+    await expect(page).toHaveURL(/\/login\?next=%2Fsettings$/)
+    expect((await page.request.get('/api/v1/me')).status()).toBe(401)
+
+    await page.getByTestId('login-submit').click()
     await expect(page).toHaveURL(/\/settings$/)
     await expect(page.getByTestId('settings-form')).toBeVisible()
     expect(page.url()).not.toContain('otp=')
+  })
+
+  test('declined, it leaves the reader signed out at the email form', async ({ page }) => {
+    // Any code will do: declining sends nothing.
+    await page.goto(`/login?email=${encodeURIComponent('someone@e2e.test')}&otp=123456`)
+    await expect(page.getByTestId('login-link-as')).toBeVisible()
+    await expect(page).toHaveURL(/\/login$/)
+    await page.getByTestId('login-link-other').click()
+    await expect(page.getByTestId('login-email')).toBeVisible()
+    expect((await page.request.get('/api/v1/me')).status()).toBe(401)
+  })
+})
+
+test.describe('by reset link', () => {
+  test.use(visitor(30))
+  test('asks for the new password, then signs in with it', async ({ page, request }) => {
+    const email = `reset-${Date.now()}@e2e.test`
+    await signInRequest(request, email)
+    const asked = await request.post(`${BASE}/api/auth/email-otp/request-password-reset`, {
+      headers: { origin: BASE },
+      data: { email },
+    })
+    expect(asked.ok()).toBe(true)
+    const code = await latestCode(request, email)
+
+    await page.goto(`/login?reset=1&email=${encodeURIComponent(email)}&otp=${code}`)
+    await expect(page.getByTestId('login-link-as')).toHaveText(
+      `Choose a new password for ${email}.`,
+    )
+    await expect(page).toHaveURL(/\/login$/)
+    const password = `correct horse ${Date.now()}`
+    await page.getByTestId('login-new-password').fill(password)
+    await page.getByTestId('login-submit').click()
+    await expect(page).toHaveURL(/\/reading$/)
+
+    // The password is the member's now, from any browser.
+    const signedIn = await request.post(`${BASE}/api/auth/sign-in/email`, {
+      headers: { origin: BASE },
+      data: { email, password },
+    })
+    expect(signedIn.ok()).toBe(true)
   })
 })
 
@@ -215,6 +266,9 @@ test.describe('the mail link for another account, opened in a signed-in tab', ()
       },
       { email: second, otp: code },
     )
+    // A member's tab answers the link too: it may be for another account, which is how one switches.
+    await expect(page.getByTestId('login-link-as')).toContainText(second)
+    await page.getByTestId('login-submit').click()
     await expect(page).toHaveURL(/\/reading$/)
     await showsSessionAccount(page, context)
     await expect(page.getByTestId('subscription')).toHaveCount(0)
@@ -344,6 +398,9 @@ test.describe('the mail link while /me misses', () => {
       },
       { email: second, otp: code },
     )
+    // A member's tab answers the link too: it may be for another account, which is how one switches.
+    await expect(page.getByTestId('login-link-as')).toContainText(second)
+    await page.getByTestId('login-submit').click()
     // Found in review: the retry claimed the second account on the first account's page, with
     // no fresh page and no pull, so an empty reader showed until the next minute's sync.
     await expect(page).toHaveURL(/\/reading$/, { timeout: 15_000 })
@@ -386,6 +443,7 @@ test.describe('the mail link on a new device while /me misses', () => {
       (r) => new URL(r.url()).pathname === '/api/v1/me' && r.status() !== 503,
     )
     await page.goto(`/login?email=${encodeURIComponent(email)}&otp=${code}&next=%2Fsettings`)
+    await page.getByTestId('login-submit').click()
 
     // The code is spent: the form says why nothing moves, and cannot send it again.
     await expect(page.getByTestId('login-connecting')).toBeVisible()
@@ -457,6 +515,9 @@ test.describe('the mail link while the device refuses the claim once', () => {
       },
       { email: second, otp: code },
     )
+    // A member's tab answers the link too: it may be for another account, which is how one switches.
+    await expect(page.getByTestId('login-link-as')).toContainText(second)
+    await page.getByTestId('login-submit').click()
     // Found in review: the refused claim had already moved the store to the second account, so
     // the retry's claim compared it with itself, and pulled instead of loading a fresh page.
     await expect
