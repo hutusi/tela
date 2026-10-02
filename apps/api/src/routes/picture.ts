@@ -2,7 +2,10 @@
  * A member's own picture (ADR 0033): uploaded already cropped and drawn by the reader, checked by
  * its bytes here, kept in R2 `tela-content`, and served at `/avatar/<userId>` before any Gravatar.
  * Every upload and every removal moves the picture's version, so its address is new past every
- * cache; the object it replaces is deleted.
+ * cache; the object it replaces is deleted. Every upload is an object of its own, under a key never
+ * used before, so a deletion can only ever take the object its own change replaced: with keys
+ * named by content, a removal that paused before deleting took the same picture uploaded again
+ * meanwhile.
  */
 import { type PictureType, pictureInfo } from '@tela/content/picture'
 import { avatarOf, bumpSeq, consumeLimit, currentSeq } from '@tela/data'
@@ -20,11 +23,6 @@ const EXT: Record<PictureType, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
-}
-
-async function hex16(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
-  return [...digest.slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 export function pictureRoutes(deps: ApiDeps) {
@@ -81,7 +79,7 @@ export function pictureRoutes(deps: ApiDeps) {
     if (!(await consumeLimit(db, 'avatarUpload', member.id, now)).allowed) {
       return c.json({ error: 'rate_limited' }, 429)
     }
-    const key = `avatars/${member.id}/${await hex16(bytes)}.${EXT[info.type]}`
+    const key = `avatars/${member.id}/${crypto.randomUUID()}.${EXT[info.type]}`
     await deps.blobs.put(key, bytes, { contentType: info.type })
     const { before, avatar } = await swap(member.id, key, now)
     await forget(before, key)

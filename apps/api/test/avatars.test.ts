@@ -186,7 +186,7 @@ describe('an uploaded picture (ADR 0033)', () => {
     const res = await send(file)
     expect(res.status).toBe(200)
     expect(await answer(res)).toBe(`/avatar/${reader.userId}?v=1`)
-    expect(await stored()).toEqual([expect.stringMatching(/^avatars\/.+\/[0-9a-f]{16}\.png$/)])
+    expect(await stored()).toEqual([expect.stringMatching(/^avatars\/.+\/[0-9a-f-]{36}\.png$/)])
     const served = await picture(1)
     expect(served.status).toBe(200)
     expect(served.headers.get('content-type')).toBe('image/png')
@@ -234,6 +234,28 @@ describe('an uploaded picture (ADR 0033)', () => {
     huge.set(png(256))
     expect((await send(huge)).status).toBe(413)
     expect(await stored()).toEqual([])
+  })
+
+  test('a removal that pauses before deleting never takes a newer upload of the same picture', async () => {
+    const file = png(256)
+    await send(file)
+    // The same picture, uploaded again while the removal waits to delete the old object.
+    const deleteObject = api.blobs.delete.bind(api.blobs)
+    let raced = false
+    api.blobs.delete = async (key) => {
+      if (!raced) {
+        raced = true
+        expect((await send(file)).status).toBe(200)
+      }
+      return deleteObject(key)
+    }
+    expect((await send(new Uint8Array(), 'DELETE')).status).toBe(200)
+    // The upload is the member's picture, and its object is there.
+    const now = await api.db.all<{ v: number; key: string | null }>(
+      sql`select avatar_version as v, avatar_key as key from profiles where user_id = ${reader.userId}`,
+    )
+    expect(now[0]?.key).not.toBeNull()
+    expect((await picture(now[0]?.v ?? -1)).status).toBe(200)
   })
 
   test('is limited to twenty an hour, and needs a member', async () => {

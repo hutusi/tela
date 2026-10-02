@@ -42,9 +42,11 @@ stands.
 dialog crops a square (drag and zoom) and draws it at 256 px, since a Worker cannot resize an
 image. tela-api reads the type and size from the file's own header, never the declared one: PNG,
 JPEG or WebP only, never SVG, at most 512 KB, square, at most 1024 px. It is stored in R2
-`tela-content` under `avatars/<userId>/<the first 16 hex of its SHA-256>.<ext>`, which the edge's
-`/o/*` never serves. Every upload and every removal moves the version; removal and replacement
-delete the object they leave behind.
+`tela-content` under
+`avatars/<userId>/<a random id>.<ext>`, which the edge's `/o/*` never serves. Every upload and
+every removal moves the version; removal and replacement delete the object they leave behind. No
+key is used twice, so a deletion can only take the object its own change replaced: keys named by
+content let a removal that paused before deleting take the same picture uploaded again meanwhile.
 
 ## Consequences
 
