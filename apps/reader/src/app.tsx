@@ -22,6 +22,7 @@ import { ReadingPage } from './pages/reading'
 import { SearchPage } from './pages/search'
 import { SettingsPage } from './pages/settings'
 import { SitePage } from './pages/site'
+import { WritersPage } from './pages/writers'
 import { SessionProvider, useSession } from './session'
 import type { SyncEngine } from './store/engine'
 import { StoreProvider, useStore, useTables } from './store/hooks'
@@ -152,6 +153,7 @@ function Routed() {
                         }
                       />
                       <Route path="/discover" element={<DiscoverPage />} />
+                      <Route path="/writers" element={<WritersPage />} />
                       <Route
                         path="/following"
                         element={

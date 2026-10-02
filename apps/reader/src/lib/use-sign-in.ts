@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useSession } from '../session'
 import { api } from '../store/api'
+import { type CardClaim, finishCard, keepClaim, takeClaim } from './claim-card'
 
 /** A password's length, as tela-api's better-auth checks it (ADR 0036). */
 export const PASSWORD_MIN = 10
@@ -216,6 +217,11 @@ export type SignInOptions = {
   replace?: boolean | undefined
   /** Signed in, and about to leave for `next`: the sheet closes. */
   onDone?: (() => void) | undefined
+  /**
+   * For writers' card, made once signed in (`lib/claim-card.ts`): the handle and name while the
+   * member's are provisional, then on to claim the blog, wherever `next` said.
+   */
+  claim?: CardClaim | undefined
 }
 
 const post = (path: string, body: unknown) =>
@@ -262,11 +268,15 @@ export function useSignIn(options: SignInOptions) {
   const latest = useRef(options)
   latest.current = options
 
-  const leave = () => {
+  const leave = async () => {
     if (left.current) return
     left.current = true
+    const { claim } = latest.current
+    // A card is this form's to finish while it is open; a copy kept for the app goes.
+    if (claim) takeClaim()
+    const to = claim ? await finishCard(claim) : latest.current.next
     latest.current.onDone?.()
-    navigate(latest.current.next, { replace: latest.current.replace ?? false })
+    navigate(to, { replace: latest.current.replace ?? false })
   }
 
   /** Signed in as the member: save the password they chose, if any, then go on. */
@@ -277,22 +287,28 @@ export function useSignIn(options: SignInOptions) {
       setStep({ kind: 'unsaved' })
       return
     }
-    leave()
+    await leave()
   }
   const finishing = useRef(finish)
   finishing.current = finish
 
   const enter = async () => {
     const outcome = await signedIn(latest.current.next)
+    // The page may go before the session is known (a reload at `next`), or the sheet be closed
+    // while it waits: the card is kept for the app to finish once it is the member's.
+    const { claim } = latest.current
+    if (claim && (outcome === 'waiting' || outcome === 'reloading')) keepClaim(claim)
     if (outcome === 'waiting') setWaiting(true)
     else if (outcome !== 'reloading') await finish()
   }
 
-  // /me answered at last, on the session's own retry: carry on as the sign-in would have.
+  // /me answered at last, on the session's own retry: carry on as the sign-in would have. Busy
+  // meanwhile, so the form cannot start again and the sheet stays open under what is left.
   useEffect(() => {
     if (!waiting || status !== 'member') return
     setWaiting(false)
-    void finishing.current()
+    setBusy(true)
+    void finishing.current().finally(() => setBusy(false))
   }, [waiting, status])
 
   // A member has nothing to do at the start: they go on (a member shown a link stays to answer it,
@@ -300,7 +316,7 @@ export function useSignIn(options: SignInOptions) {
   const settled = status === 'member' && !busy && !waiting && step.kind === 'start'
   // biome-ignore lint/correctness/useExhaustiveDependencies: `leave` reads the latest options through a ref
   useEffect(() => {
-    if (settled) leave()
+    if (settled) void leave()
   }, [settled])
 
   const run = async (work: () => Promise<void>, fallback: SignInError = 'failed') => {
@@ -441,6 +457,7 @@ export function useSignIn(options: SignInOptions) {
         return
       }
       if (code) keepInvite(code)
+      if (latest.current.claim) keepClaim(latest.current.claim)
       // Busy until the page is gone: a second press would start a second flow.
       window.location.assign(url)
     } catch {
@@ -473,6 +490,6 @@ export function useSignIn(options: SignInOptions) {
     provider,
     restart,
     /** Past an unsaved password: go on to `next` anyway. */
-    goOn: leave,
+    goOn: () => void leave(),
   }
 }

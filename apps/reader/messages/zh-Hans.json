@@ -18,7 +18,8 @@
     "account": "你的账户",
     "yourProfile": "我的主页",
     "subscriptions": "订阅",
-    "invites": "邀请朋友"
+    "invites": "邀请朋友",
+    "writers": "写作者"
   },
   "front": {
     "description": "来自世界各地的独立博客，各用各的语言，标题译成你的语言。",
@@ -44,6 +45,7 @@
     "label": "关于 Tela",
     "made": "Tela © {year} · 由 <maker>AI Naive</maker> 制作",
     "about": "关于",
+    "writers": "写作者",
     "privacy": "隐私",
     "terms": "条款"
   },
@@ -114,7 +116,9 @@
       "provider_expired": "等待时间过长，请重试。",
       "provider_failed": "无法连接服务商。请重试，或用邮箱登录。",
       "failed": "出了点问题，请稍后再试。"
-    }
+    },
+    "claimTitle": "认领 @{handle}",
+    "claimCard": "认领你的名片"
   },
   "sidebar": {
     "library": "资料库",
@@ -292,6 +296,100 @@
       "fetch_failed": "无法访问该地址。",
       "no_feed": "该地址下没有找到订阅源。Tela 只收录发布订阅源的网站。",
       "rate_limited": "认领尝试太频繁，请稍后再试。"
+    },
+    "taken": "你选的用户名在你加入时已被占用，所以目前用的还是临时用户名。可以在<link>设置</link>里另选一个。"
+  },
+  "writers": {
+    "title": "写作者",
+    "kicker": "写作者",
+    "hero": {
+      "title": "独立写作者的<em>名片</em>。",
+      "lede": "在 Tela 上的一个页面：你的名字、你写的博客、你推荐的文章。读者在这里找到你、关注你，一键订阅你的博客。"
+    },
+    "form": {
+      "title": "制作你的名片",
+      "name": "你的名字",
+      "blog": "你的博客地址",
+      "blogPlaceholder": "yourblog.com",
+      "submit": "认领你的名片",
+      "hint": "免费。名字和用户名之后都可以在设置里修改。"
+    },
+    "availability": {
+      "available": "✓ @{handle} 可以使用",
+      "taken": "@{handle} 已被占用。",
+      "reserved": "@{handle} 是保留名。",
+      "invalid": "@{handle} 不能用作用户名。",
+      "try": "试试 <pick>@{suggestion}</pick>。",
+      "none": "用户名取自你的名字或博客名。"
+    },
+    "member": {
+      "intro": "你已经在 Tela 上了。认领你的博客，把它放到名片上。",
+      "claim": "认领你的博客",
+      "card": "你的名片"
+    },
+    "card": {
+      "writes": "写作",
+      "followers": "<b>{n}</b> 位关注者",
+      "recommendations": "<b>{n}</b> 条推荐",
+      "reads": "在读 <b>{n}</b> 个博客",
+      "recommends": "最近推荐",
+      "yourName": "你的名字",
+      "yourHandle": "yourname",
+      "later": "你推荐的文章，以及你选择公开的在读博客，会随着你使用 Tela 出现在这里。"
+    },
+    "find": {
+      "title": "写作者在这里彼此发现。",
+      "intro": "在 Tela 上推荐文章时可以附一句话，它会显示在推荐者的名片上。以下是 {name} 的推荐，实时来自 Tela。"
+    },
+    "does": {
+      "title": "名片能做什么",
+      "link": {
+        "title": "一个链接，汇集你写的一切",
+        "body": "你的名片在 /@用户名，列出你认领的每个博客，还有你的名字和一句简介。"
+      },
+      "blogroll": {
+        "title": "你的博客链",
+        "body": "推荐你喜欢的文章，附上一句话。愿意的话，也可以公开你在读的博客：在设置里打开一个开关即可。"
+      },
+      "readers": {
+        "title": "读者",
+        "body": "读者可以关注你，一键订阅你的博客，还能对照原文读译文。仪表盘会告诉你有多少人在读、他们喜欢哪些文章、留下了什么话。"
+      }
+    },
+    "how": {
+      "title": "怎么做",
+      "name": {
+        "title": "选一个名字",
+        "body": "你的名字，以及名片地址里的用户名。之后都可以在设置里修改。"
+      },
+      "connect": {
+        "title": "连接你的博客",
+        "body": "在你的网站上加一行，证明它属于你：一个 meta 标签，或一个指向你名片的链接。任何有 RSS 或 Atom 订阅源的博客都可以。"
+      },
+      "follow": {
+        "title": "关注你喜欢的写作者",
+        "body": "关注其他写作者和读者：他们推荐的文章会出现在你的「关注」页。"
+      }
+    },
+    "yours": {
+      "title": "你的网站还是你的",
+      "nothing": {
+        "title": "什么都不用搬",
+        "body": "Tela 读取你已经在发布的订阅源。每篇文章都链接回你的网站。"
+      },
+      "ads": {
+        "title": "没有广告",
+        "body": "Tela 不放广告：你的文章旁边没有，别处也没有。"
+      },
+      "translation": {
+        "title": "翻译由你决定",
+        "body": "读者可以读到你文章的译文。如果你不希望这样，可以在仪表盘里为你的博客关闭翻译。"
+      }
+    },
+    "cta": {
+      "count": "已有 {n} 个博客在 Tela 上。你的呢？",
+      "title": "你的博客在哪里？",
+      "make": "制作你的名片"
     }
   },
   "profile": {

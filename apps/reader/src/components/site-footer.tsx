@@ -1,5 +1,6 @@
 /**
- * The public pages' footer: who makes Tela, and the pages that say what it is and what it keeps.
+ * The public pages' footer: who makes Tela, and the pages that say what it is, what it offers
+ * writers and what it keeps.
  * Pure, like the views it closes: the edge renders it too.
  */
 import { Link } from 'react-router'
@@ -30,6 +31,9 @@ export function SiteFooter({ year }: { year: number }) {
         <nav aria-label={t('label')} className="flex flex-wrap gap-x-5 gap-y-2">
           <Link to="/about" className={LINK}>
             {t('about')}
+          </Link>
+          <Link to="/writers" className={LINK}>
+            {t('writers')}
           </Link>
           <Link to="/privacy" className={LINK}>
             {t('privacy')}

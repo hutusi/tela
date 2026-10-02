@@ -11,10 +11,16 @@
  *
  * Google and GitHub are offered only once tela-api says they are configured
  * (`/api/v1/public/auth`, remembered on the device so the next sheet shows them at once).
+ *
+ * A claim (For writers) is a join or a log-in that makes the visitor's card on the way in
+ * (`lib/claim-card.ts`). Where signing in outlives the sheet (Google's or GitHub's round trip, a
+ * session not yet known), `FrontDoorProvider` finishes the card once the tab is the member's, and
+ * a refusal reopens the sheet with the card as it was.
  */
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { type CardClaim, claimPath, finishCard, takeClaim } from '../lib/claim-card'
 import {
   type DoorMode,
   errorReturn,
@@ -31,16 +37,25 @@ import {
   useSignIn,
   withoutDoor,
 } from '../lib/use-sign-in'
+import { useSession } from '../session'
 import { LogoMark } from './logo'
 
 /**
- * What the sheet opens for. `claim` is a join that goes on to claim a blog (For writers); it
- * lands on `/claim?url=…`.
+ * What the sheet opens for. `claim` is a join (or, switched, a log-in) that makes the card For
+ * writers showed and goes on to claim its blog: it lands on `/claim?url=…`.
  */
 export type DoorRequest = (
   | { mode: 'login'; next?: string | undefined }
   | { mode: 'join'; code?: string | undefined }
-  | { mode: 'claim'; handle: string; name: string; blog: string; code?: string | undefined }
+  | {
+      mode: 'claim'
+      handle: string
+      name: string
+      blog: string
+      code?: string | undefined
+      /** The door it opens on: join, unless it comes back from a log-in a provider refused. */
+      start?: DoorMode | undefined
+    }
 ) & {
   /** What the page arrived saying: a provider's refusal. */
   error?: SignInError | undefined
@@ -140,6 +155,8 @@ export type DoorFormProps = {
   onSwitch?: (mode: DoorMode) => void
   /** Told whether a request is out, so the sheet does not close under it. */
   busyRef?: { current: boolean }
+  /** For writers' card, made on the way in. */
+  claim?: CardClaim | undefined
 }
 
 export function DoorForm(props: DoorFormProps) {
@@ -153,6 +170,7 @@ export function DoorForm(props: DoorFormProps) {
     error: props.error,
     replace: props.replace,
     onDone: props.onDone,
+    claim: props.claim,
   })
   const providers = useProviders()
   const [email, setEmail] = useState(props.link?.email ?? '')
@@ -466,7 +484,12 @@ function Sheet({
   const dialog = useRef<HTMLDialogElement>(null)
   const busy = useRef(false)
   const titleId = useId()
-  const first: DoorMode = request.mode === 'login' ? 'login' : 'join'
+  const first: DoorMode =
+    request.mode === 'login'
+      ? 'login'
+      : request.mode === 'claim'
+        ? (request.start ?? 'join')
+        : 'join'
   const [mode, setMode] = useState<DoorMode>(first)
 
   useEffect(() => {
@@ -481,7 +504,11 @@ function Sheet({
     dialog.current?.querySelector<HTMLElement>('[data-autofocus]')?.focus()
   }, [mode])
 
-  const claim = request.mode === 'claim' ? `/claim?url=${encodeURIComponent(request.blog)}` : null
+  const card: CardClaim | undefined =
+    request.mode === 'claim'
+      ? { handle: request.handle, name: request.name, url: request.blog }
+      : undefined
+  const claim = card ? claimPath(card.url) : null
   const next =
     claim ??
     (mode === 'login'
@@ -506,6 +533,9 @@ function Sheet({
         key={mode}
         mode={mode}
         place="sheet"
+        {...(card
+          ? { title: card.handle ? t('claimTitle', { handle: card.handle }) : t('claimCard') }
+          : {})}
         titleId={titleId}
         next={next}
         newcomer={claim ?? NEWCOMER}
@@ -518,6 +548,7 @@ function Sheet({
         onDone={onDone}
         onSwitch={setMode}
         busyRef={busy}
+        claim={card}
       />
       {/* After the form, so the dialog's first focus is a field, not this. */}
       <button
@@ -540,6 +571,10 @@ function Sheet({
  */
 export function FrontDoorProvider({ children }: { children: React.ReactNode }) {
   const location = useLocation()
+  const { status } = useSession()
+  const navigate = useNavigate()
+  const go = useRef(navigate)
+  go.current = navigate
   // The page as rendered, which a page's own effect opening the sheet is on.
   const here = useRef(location.pathname)
   here.current = location.pathname
@@ -567,10 +602,30 @@ export function FrontDoorProvider({ children }: { children: React.ReactNode }) {
       withoutDoor(location.pathname, location.search),
     )
     const said = error ? { error: providerError(error) } : {}
-    open(mode === 'join' ? { mode, code: takeInvite() ?? undefined, ...said } : { mode, ...said })
+    // A card on its way in comes back as it was, whichever door the provider was tried from.
+    const card = takeClaim()
+    const code = mode === 'join' ? (takeInvite() ?? undefined) : undefined
+    if (card) {
+      const { url: blog, ...named } = card
+      open({ mode: 'claim', ...named, blog, start: mode, code, ...said })
+    } else open(mode === 'join' ? { mode, code, ...said } : { mode, ...said })
   }, [location.pathname, location.search, open])
 
   const shown = request && request.at === location.pathname ? request : null
+
+  // A card whose sign-in outlived its sheet: back from Google or GitHub, reloaded as another
+  // account, or the sheet closed while /me could not be reached. Finished once the tab is the
+  // member's; an open claim sheet finishes its own.
+  const claiming = shown?.mode === 'claim'
+  useEffect(() => {
+    if (status !== 'member' || claiming) return
+    const card = takeClaim()
+    if (!card) return
+    void finishCard(card).then((to) => {
+      const here = window.location.pathname + window.location.search
+      if (to !== here) go.current(to, { replace: window.location.pathname === '/claim' })
+    })
+  }, [status, claiming])
   return (
     <DoorContext.Provider value={open}>
       {children}

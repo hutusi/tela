@@ -10,12 +10,13 @@ import { ReadInMenu } from './read-in-menu'
 import { SearchField } from './search-field'
 import { VisitorLocale } from './visitor-locale'
 
-type NavKey = 'reading' | 'discover' | 'following'
+type NavKey = 'reading' | 'discover' | 'following' | 'writers'
 
 const ACTIVE: [NavKey, RegExp][] = [
   ['reading', /^\/reading/],
   ['discover', /^\/(discover|s\/)/],
   ['following', /^\/following/],
+  ['writers', /^\/writers/],
 ]
 
 const HEADER =
@@ -65,8 +66,9 @@ function usePill() {
 }
 
 /**
- * From `sm` up: the lockup, Discover, then Read in, Log in and Join; below `sm` only Join is left
- * beside the nav, which stays the one item that shrinks. No Reading and no search: both are a
+ * From `sm` up: the lockup, Discover and For writers, then Read in, Log in and Join; below `sm`
+ * only Join is left beside the nav, which stays the one item that shrinks. At 360px the two pills
+ * and Join fit with some 35px to spare (Figtree, measured). No Reading and no search: both are a
  * member's. Log in and Join are links, so they work before the script does, and open the sheet
  * over the page once it runs.
  */
@@ -82,7 +84,10 @@ function VisitorHeader() {
   return (
     <header className={HEADER}>
       <Lockup />
-      <nav className={NAV}>{pill('discover', '/discover')}</nav>
+      <nav className={NAV}>
+        {pill('discover', '/discover')}
+        {pill('writers', '/writers')}
+      </nav>
       <div className="flex-1" />
       <VisitorLocale className="hidden shrink-0 sm:block" />
       <div className="flex shrink-0 items-center gap-1.5">

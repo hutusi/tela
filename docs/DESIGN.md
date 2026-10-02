@@ -72,8 +72,9 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   `hover` background alone, never by colour.
 - A visitor's header (ADR 0035) is its own, shown as soon as the device is known to hold no
   member (a guest, or a session still `unknown` with no stored account), so it never waits for
-  `/me`. From `sm` up: the lockup, Discover, then "Read in EN ▾" (`VisitorLocale`), *Log in* as a
-  quiet pill and *Join* filled in `primary`; below `sm` the lockup, the nav and Join. No Reading
+  `/me`. From `sm` up: the lockup, the Discover and *For writers* pills, then "Read in EN ▾"
+  (`VisitorLocale`), *Log in* as a quiet pill and *Join* filled in `primary`; below `sm` the
+  lockup, the nav and Join, which at 360px leaves the two pills some 35px to spare. No Reading
   pill and no search, both a member's. "Read in" sets the interface language and with it the
   language titles are translated into, which reverses the rule of 2026-10-01 that a visitor
   changed it only on the sign-in page: the first thing a visitor needs to know is whether they can
@@ -152,7 +153,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 ## Components (`apps/reader/src/components`)
 
-`AppHeader`, `VisitorLocale`, `FrontDoor` (the sheet and `DoorForm`), `ReadInMenu`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
+`AppHeader`, `VisitorLocale`, `FrontDoor` (the sheet and `DoorForm`), `WriterCard`, `ReadInMenu`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
 `PairedBody`, `TranslationBar`, `Untranslated`, `LikeButton`, `RecommendPopover`, `EmptyState`,
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `SiteFooter`, `TypographyMenu`, the
 highlight toolbar, note and list (`highlights.tsx`), and `Shortcuts`. The front page, Discover, a
@@ -229,6 +230,35 @@ sheet unless a request is out; `/join` closes to `/`. Each error has its own wor
 a provider's code nobody listed still says the provider failed. A refused Google or GitHub
 sign-in comes back to the page it started on, which opens the sheet again saying why.
 
+For writers (`/writers`, from the design's *For writers v2*): a 1120 px page. The hero is two
+columns from `lg`: on the left the kicker in accent capitals, the serif title at 58 px (42 px on a
+phone) with *calling card* in accent italic, a lede, and the *Make your card* form (the name, the
+blog behind a muted `https://`, a line saying whether the handle is free, the `primary` *Claim your
+card*); on the right the card (`WriterCard`, a `surface` card with 16 px corners), sticky. Before
+the visitor types, the card is a real member's live public profile, `@hutusi` (`lib/example.ts`,
+the one place it is named): picture, name, @handle, the blogs they claimed, bio, followers and
+recommendations, "reads N blogs" only when their subscriptions are public, and their latest
+recommendation where the design had a pinned post; with no such profile (a fresh stack), an empty
+dashed outline. As they type it becomes theirs: the name, the handle suggested from it
+(`lib/suggest-handle.ts`: the first name folded to `[a-z0-9_]`, the whole name when that is too
+short, the blog's own name for a name with nothing Latin in it), the blog's host, and a dashed note
+that recommendations and blogs read come as they use Tela. Typing pauses 400 ms before the page asks
+`/api/v1/public/handles/:handle`: "✓ @x is available" in accent, or "@x is taken. Try @y." with
+the suggestion a button; no answer says nothing and never holds the button back. Then *Writers find
+each other here.* (the example's recommendations that carry a note, as cards; gone when there are
+none), *What your card does* (01–03 under an ink rule), *How it works* (1–3 in thumb-ringed
+circles), *Your site stays yours* on the `hover` ground, and the closing line with the live count
+of public blogs (`/api/v1/public/front`; without it, "Where's your blog?"), whose *Make your card*
+scrolls to the form and focuses the name. The copy says only what Tela does today: no pinned post,
+no named readers, no "reads you too", and translation is turned off from the Dashboard, not by
+removing the card. A member sees *Claim your blog* and *Your card* instead of the form.
+*Claim your card* opens the sheet in claim mode, titled "Claim @handle": a join (or a log-in) that,
+once the session is the member's and their handle is still the provisional `u_…`, sets the handle
+and display name, then lands on `/claim?url=…` with the blog filled in, and with a note when the
+handle was taken meanwhile. Where signing in outlives the sheet (Google or GitHub, a session not
+yet known), the card waits in sessionStorage and the app finishes it; a refused provider reopens
+the sheet with the card as it was.
+
 A person's avatar (`PersonAvatar`) is their initial in a circle of their colour, the accent for
 one's own, with their picture over it: the one they uploaded, else their Gravatar, which is on until
 they turn it off and shown only once Gravatar is known to have one (ADR 0032, 0033). The initial
@@ -300,7 +330,7 @@ Discover's claim strip. Day is the light tokens exactly; night is the existing d
 
 Footer (`components/site-footer.tsx`): under the front page and About, Privacy and Terms, in the
 SPA and in the edge's copy alike, a `line` rule, 13 px `muted`: "Tela © year · Made by AI Naive"
-(linking https://ainaive.com) on the left, About, Privacy and Terms on the right.
+(linking https://ainaive.com) on the left, About, For writers, Privacy and Terms on the right.
 
 ## Strings
 

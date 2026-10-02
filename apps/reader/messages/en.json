@@ -18,7 +18,8 @@
     "account": "Your account",
     "yourProfile": "Your profile",
     "subscriptions": "Subscriptions",
-    "invites": "Invite friends"
+    "invites": "Invite friends",
+    "writers": "For writers"
   },
   "front": {
     "description": "Independent blogs from around the world, each in its own language, with their titles translated into yours.",
@@ -44,6 +45,7 @@
     "label": "About Tela",
     "made": "Tela © {year} · Made by <maker>AI Naive</maker>",
     "about": "About",
+    "writers": "For writers",
     "privacy": "Privacy",
     "terms": "Terms"
   },
@@ -114,7 +116,9 @@
       "provider_expired": "That took too long. Try again.",
       "provider_failed": "We could not reach the provider. Try again, or log in by email.",
       "failed": "Something went wrong. Try again in a minute."
-    }
+    },
+    "claimTitle": "Claim @{handle}",
+    "claimCard": "Claim your card"
   },
   "sidebar": {
     "library": "Library",
@@ -292,6 +296,100 @@
       "fetch_failed": "Could not reach that address.",
       "no_feed": "No feed found at that address. Tela lists sites that publish a feed.",
       "rate_limited": "Too many claim attempts. Please wait a little and try again."
+    },
+    "taken": "The handle you picked was taken while you joined, so yours is still a temporary one. Choose another in <link>Settings</link>."
+  },
+  "writers": {
+    "title": "For writers",
+    "kicker": "For writers",
+    "hero": {
+      "title": "Your <em>calling card</em> as an independent writer.",
+      "lede": "One page on Tela with your name, the blogs you write and the posts you recommend. Readers find you there, follow you, and subscribe to your blog in one click."
+    },
+    "form": {
+      "title": "Make your card",
+      "name": "Your name",
+      "blog": "Your blog's address",
+      "blogPlaceholder": "yourblog.com",
+      "submit": "Claim your card",
+      "hint": "Free, and you can change your name and handle later in Settings."
+    },
+    "availability": {
+      "available": "✓ @{handle} is available",
+      "taken": "@{handle} is taken.",
+      "reserved": "@{handle} is reserved.",
+      "invalid": "@{handle} cannot be a handle.",
+      "try": "Try <pick>@{suggestion}</pick>.",
+      "none": "Your handle comes from your name, or your blog's."
+    },
+    "member": {
+      "intro": "You're on Tela. Claim your blog to put it on your card.",
+      "claim": "Claim your blog",
+      "card": "Your card"
+    },
+    "card": {
+      "writes": "Writes",
+      "followers": "<b>{n}</b> {n, plural, one {follower} other {followers}}",
+      "recommendations": "<b>{n}</b> {n, plural, one {recommendation} other {recommendations}}",
+      "reads": "reads <b>{n}</b> {n, plural, one {blog} other {blogs}}",
+      "recommends": "Latest recommendation",
+      "yourName": "Your name",
+      "yourHandle": "yourname",
+      "later": "Your recommendations, and the blogs you read if you choose to show them, appear here as you use Tela."
+    },
+    "find": {
+      "title": "Writers find each other here.",
+      "intro": "A recommendation on Tela can carry a note, and it shows on the recommender's card. These are {name}'s, live from Tela."
+    },
+    "does": {
+      "title": "What your card does",
+      "link": {
+        "title": "One link for everything you write",
+        "body": "Your card at /@handle lists every blog you claim, with your name and a line about you."
+      },
+      "blogroll": {
+        "title": "Your blogroll",
+        "body": "Recommend the posts you liked, with a note. Show the blogs you read as well, if you like: it is one switch in Settings."
+      },
+      "readers": {
+        "title": "Readers",
+        "body": "Readers follow you, subscribe to your blog in one click, and can read it translated beside the original. Your Dashboard shows how many read you, which posts they liked, and the notes they left."
+      }
+    },
+    "how": {
+      "title": "How it works",
+      "name": {
+        "title": "Pick your name",
+        "body": "Your name, and a handle for your card's address. Both can change later in Settings."
+      },
+      "connect": {
+        "title": "Connect your blog",
+        "body": "Add one line to your site to show it is yours: a meta tag, or a link to your card. Any blog with an RSS or Atom feed works."
+      },
+      "follow": {
+        "title": "Follow writers you like",
+        "body": "Follow other writers and readers: what they recommend shows on your Following page."
+      }
+    },
+    "yours": {
+      "title": "Your site stays yours",
+      "nothing": {
+        "title": "Nothing moves",
+        "body": "Tela reads the feed you already publish. Every post links back to your site."
+      },
+      "ads": {
+        "title": "No ads",
+        "body": "Tela shows no ads: not next to your writing, and not anywhere else."
+      },
+      "translation": {
+        "title": "Translation is yours to turn off",
+        "body": "Readers can read your posts translated. If you would rather they didn't, turn it off for your blog from the Dashboard."
+      }
+    },
+    "cta": {
+      "count": "{n, plural, one {# blog is} other {# blogs are}} already on Tela. Where's yours?",
+      "title": "Where's your blog?",
+      "make": "Make your card"
     }
   },
   "profile": {
