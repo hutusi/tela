@@ -527,6 +527,12 @@ subscribers on an unclaimed site.
   already right. A rejected blog is left alone; a claimed one keeps its owner's topics.
 - **Feature or hide a blog by hand:** `update sites set listing = 'featured' where id = …`, or
   `'rejected'`, which curation then leaves alone.
+- **Take a blog off Tela when its writer asks** (Terms, "Writers' work"): hide it as above, which
+  takes it out of Discover and makes its page a 404, and stop fetching it with
+  `update feeds set status = 'paused', updated_at = <now ms> where site_id = …`. Fetching, page
+  extraction and WebSub renewal all read only `status = 'active'` feeds, and nothing revives a
+  paused one (the weekly retry is for `'dead'`). Posts already fetched stay with their
+  subscribers.
 - **Release a claim** so another member can claim the site: `update sites set claimed_by = null,
   claimed_at = null where id = …; delete from site_claims where site_id = …`.
 

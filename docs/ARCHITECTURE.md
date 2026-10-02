@@ -230,6 +230,8 @@ The only public Worker, unpinned, with no D1.
   a 404 page at `/`. Every browser response for `/` carries `Vary: cookie`; the colo's copy
   carries none (workerd ignores Vary), since only a visitor's copy is stored. A test
   (`apps/reader/test/routes.test.ts`) holds every public page to `run_worker_first`.
+- `/about`, `/privacy` and `/terms` are rendered the same way from the bundle alone: their route
+  has `api: null`, so the edge asks tela-api nothing and hands nothing over (ADR 0035).
 - Everything else is the SPA's static assets, which answer without running the Worker. A path
   with no file is answered 200 with `index.html`, a missing `/assets/*` script included:
   `run_worker_first` is a list, and then the fallback applies to every request, not only
@@ -249,9 +251,9 @@ A Vite + React SPA that renders from the device.
 - `store/selectors.ts` answers the reading view: unread, lists, counts, the title to show.
 - The URL alone says which article is open (ADR 0017's rule, kept): a click, a filter change or
   Back is a render, not a request.
-- `views/` are the front page, Discover, a blog's page and a profile as pure components the edge
-  renders too. `/` renders the front page while the session is unknown on a device that holds
-  no account, so the edge's copy is never replaced by a blank page.
+- `views/` are the front page, Discover, a blog's page, a profile and the info pages as pure
+  components the edge renders too. `/` renders the front page while the session is unknown on a
+  device that holds no account, so the edge's copy is never replaced by a blank page.
 - Highlights: `lib/anchor.ts` finds a highlight again by leaf, quote and context;
   `lib/use-highlights.ts` paints them over the rendered text with the CSS Custom Highlight API and
   writes back an anchor the post moved. Typography and theme are synced prefs
@@ -269,6 +271,7 @@ A Vite + React SPA that renders from the device.
 | `/login` | Email code; the mail's sign-in and reset links fill their code in and ask before using it (ADR 0036) |
 | `/reading?filter=&feed=&article=&mode=` | Sidebar, list and the open article |
 | `/discover?topic=&lang=`, `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart |
+| `/about`, `/privacy`, `/terms` | The info pages, for anyone; copy from `src/content/info`, rendered at the edge too, with no data |
 | `/following?tab=` | What the people a member follows did, by RPC; whom they follow, from the device (ADR 0031) |
 | `/search?q=` | The device first, then blogs and older posts from the server |
 | `/add`, `/claim`, `/sites/:id/claim` | Add feeds and OPML; claim a blog |

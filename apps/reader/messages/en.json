@@ -211,7 +211,7 @@
   },
   "discover": {
     "title": "Independent blogs, in any language.",
-    "intro": "Blogs and personal websites with a feed, claimed by their authors. Subscribe in one click; Tela translates as you read.",
+    "intro": "Blogs and personal websites with a feed, chosen by Tela, by their writers and by readers. Subscribe in one click; Tela translates as you read.",
     "allTopics": "All",
     "language": "Language",
     "allLanguages": "All languages",
@@ -241,7 +241,7 @@
     "empty": "No blogs listed here yet. Claim yours to be the first.",
     "claim": {
       "title": "Have a blog?",
-      "intro": "Claim your feed to see who reads you, which posts they liked, and what they said when recommending them.",
+      "intro": "Claim your feed to see how many read you, how your posts landed, and what readers said recommending them.",
       "cta": "Claim your feed"
     }
   },
@@ -336,7 +336,7 @@
   },
   "dashboard": {
     "title": "Your sites",
-    "intro": "Who reads you, which posts they liked, and what they said when recommending them.",
+    "intro": "How many read you, how your posts landed, and what readers said recommending them.",
     "noSites": "You have not claimed a site yet.",
     "post": "Post",
     "notes": "What readers said",
@@ -431,9 +431,9 @@
     "noSubscriptions": "No subscriptions yet.",
     "privacyIntro": "Choose what others see on your profile.",
     "showLikes": "Show liked posts",
-    "showLikesHint": "On your profile, and to people who follow you. Authors see how many likes a post has, never who liked it.",
+    "showLikesHint": "On your profile, and to people who follow you. A writer's Dashboard shows how many liked a post, not who.",
     "showSubscriptions": "Show subscriptions",
-    "showSubscriptionsHint": "List the blogs you read on your profile.",
+    "showSubscriptionsHint": "On your profile, and to people who follow you.",
     "privacyDelay": "Your public profile can take a few minutes to catch up with a change.",
     "yourData": "Your data",
     "yourDataHint": "Your profile, subscriptions, likes, recommendations, highlights and the people you follow, as one file.",
@@ -492,5 +492,16 @@
     "focus": "Hide the list while reading",
     "help": "Show or hide this list",
     "dismiss": "Close"
+  },
+  "info": {
+    "pages": "About Tela",
+    "tabs": {
+      "about": "About",
+      "privacy": "Privacy",
+      "terms": "Terms"
+    },
+    "onThisPage": "On this page",
+    "short": "The short version",
+    "updated": "Last updated {date}"
   }
 }

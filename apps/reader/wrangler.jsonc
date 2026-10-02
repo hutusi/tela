@@ -25,7 +25,10 @@
       "/robots.txt",
       "/discover",
       "/s/*",
-      "/@*"
+      "/@*",
+      "/about",
+      "/privacy",
+      "/terms"
     ]
   },
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content" }],

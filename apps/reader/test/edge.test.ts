@@ -506,6 +506,42 @@ describe('public pages', () => {
     expect(await other.text()).toBe(TEMPLATE)
   })
 
+  test('About, Privacy and Terms ask tela-api nothing, hand nothing over, and are never indexed in the beta', async () => {
+    for (const path of ['/about', '/privacy', '/terms']) {
+      const res = await page(path)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+      expect(res.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
+      const html = await res.text()
+      expect(html).toContain('data-testid="info-page"')
+      expect(html).not.toContain('id="tela-data"')
+      expect(html).not.toContain('name="robots"')
+      expect(html).toContain('/assets/index-abc123.js')
+    }
+    const privacy = await (await page('/privacy')).text()
+    expect(privacy).toContain('<title>Privacy · Tela</title>')
+    expect(privacy).toMatch(/<meta name="description" content="Tela keeps what it needs/)
+    expect(privacy).toContain('id="cookies"')
+    expect(privacy).toContain('href="#cookies"')
+    expect(privacy).toContain('Last updated 2 October 2026')
+    expect(apiCalls).toEqual([])
+    // Three pages, once each: the second visit to Privacy came from the cache.
+    expect(cache.size).toBe(3)
+  })
+
+  test("an info page renders in the reader's language, cached apart", async () => {
+    const zh = await (await page('/terms', { cookie: 'tela_locale=zh-Hans' })).text()
+    expect(zh).toContain('<html lang="zh-Hans"')
+    expect(zh).toContain('<title>条款 · Tela</title>')
+    expect(zh).toContain('id="writers"')
+    expect(zh).toContain('最后更新：2026年10月2日')
+    const en = await (await page('/terms')).text()
+    expect(en).toContain('<html lang="en"')
+    expect(en).toContain('<title>Terms · Tela</title>')
+    expect(cache.size).toBe(2)
+    expect(apiCalls).toEqual([])
+  })
+
   test('nothing a blog says can close the handover script or become markup', async () => {
     await listedBlog(3, "</script><script>alert(1)</script> $& $'")
     const html = await (await page('/s/3')).text()

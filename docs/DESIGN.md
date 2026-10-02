@@ -293,6 +293,21 @@ Every user-facing string lives in `apps/reader/messages/en.json` and `zh-Hans.js
 keys (`apps/reader/test/messages.test.ts` checks); components read them with use-intl (next-intl's
 framework-free core). Placeholders use ICU plural syntax.
 
+The one exception is the prose of About, Privacy and Terms, which lives in typed modules, one per
+locale: `apps/reader/src/content/info/{en,zh-Hans}.ts`. It is long, it carries links, and it is
+reviewed as one document per language; as message keys it would be some 150 keys of ICU-escaped
+prose loaded by every screen. Each module `satisfies InfoContent` (`types.ts`), so the compiler
+holds both locales to every section. Section ids are fixed English anchors (`/privacy#cookies`)
+in either language. Links are written `[text](href)` and drawn by `lib/inline-links.tsx`, which
+keeps only https, a path on this site or an anchor, and leaves anything else as text. The chrome
+around the prose (tabs, "On this page", "The short version", "Last updated {date}") is ordinary
+`info.*` messages. Change the copy with the code it describes, and `INFO_UPDATED` with the copy.
+
+The info pages (`views/info.tsx`): tabs About · Privacy · Terms as links (the current one
+`aria-current`), the kicker, the serif title and lede, "Last updated" in the locale's long date,
+then an "On this page" list that sticks beside the text from `lg`, "The short version" in a
+`surface` box, and the sections with serif headings that clear the 56px header (`scroll-mt-20`).
+
 ## States the reader adds
 
 - A skeleton pane while the first sync has not landed: the article is on its way, not gone.

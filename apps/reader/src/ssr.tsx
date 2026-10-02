@@ -1,14 +1,16 @@
 /**
- * Public pages, rendered at the edge (ADR 0025, 0035): the front page, Discover, a blog's page and
- * a member's profile, for visitors who have no shell cached yet and for link previews. The same views the SPA renders,
- * with a guest session and an empty store; the page's data is handed over in `#tela-data`, so the
- * SPA's first render needs no request of its own.
+ * Public pages, rendered at the edge (ADR 0025, 0035): the front page, Discover, a blog's page, a
+ * member's profile, and About, Privacy and Terms, for visitors who have no shell cached yet and for
+ * link previews. The same views the SPA renders, with a guest session and an empty store; the
+ * page's data is handed over in `#tela-data`, so the SPA's first render needs no request of its
+ * own. About, Privacy and Terms take no data at all (ADR 0035): their copy is in the bundle.
  */
 import type { UiLocale } from '@tela/shared'
 import { renderToString } from 'react-dom/server'
 import { StaticRouter } from 'react-router'
 import { createTranslator } from 'use-intl'
 import { AppHeader } from './components/app-header'
+import { type InfoPageId, isInfoPage } from './content/info/types'
 import { I18n, MESSAGES } from './i18n'
 import { type DiscoverParams, discoverApiPath, parseDiscoverParams } from './lib/discover-href'
 import { FRONT_PATH, frontHref, type TitlesMode, titlesMode } from './lib/edition'
@@ -25,6 +27,7 @@ import { LocalStore } from './store/local'
 import { Objects } from './store/objects'
 import { UiContext } from './ui'
 import { DiscoverView } from './views/discover'
+import { InfoView, infoDescription } from './views/info'
 import { LandingView } from './views/landing'
 import { ProfileView, profileTab } from './views/profile'
 import { profileDataOf, siteDataOf } from './views/public-data'
@@ -33,7 +36,8 @@ import type { DiscoverData, FrontData, ProfileData, SiteData } from './views/typ
 
 /**
  * `key` is what the edge caches the page under when it is not `api` alone: a profile's tabs share
- * one endpoint and are different pages, and so are the front page's two title modes.
+ * one endpoint and are different pages, and so are the front page's two title modes. `api` null:
+ * the page needs nothing from tela-api.
  * `visitorsOnly`: a member is sent the plain shell, whose app takes them on (the front page sends
  * them to their reading). `alwaysExists`: no answer from tela-api makes it a 404 page; one that
  * is not the page's data is the plain shell, which asks again from the browser.
@@ -50,6 +54,7 @@ export type PublicRoute =
   | { kind: 'discover'; params: DiscoverParams; api: string }
   | { kind: 'site'; siteId: number; api: string }
   | { kind: 'profile'; handle: string; tab: string | null; api: string; key: string }
+  | { kind: 'info'; page: InfoPageId; api: null; key: string }
 
 /** The public page a URL names, and the endpoint its data comes from; null for anything else. */
 export function publicRoute(url: URL): PublicRoute | null {
@@ -68,6 +73,8 @@ export function publicRoute(url: URL): PublicRoute | null {
     const params = parseDiscoverParams(url.searchParams)
     return { kind: 'discover', params, api: discoverApiPath(params) }
   }
+  const info = url.pathname.slice(1)
+  if (isInfoPage(info)) return { kind: 'info', page: info, api: null, key: `/info/${info}` }
   const site = url.pathname.match(/^\/s\/(\d{1,12})$/)
   if (site) return { kind: 'site', siteId: Number(site[1]), api: sitePath(Number(site[1])) }
   const handle = handleFrom(url.pathname)
@@ -97,6 +104,8 @@ function titleOf(
   const t = createTranslator({ locale, messages: MESSAGES[locale] })
   // The front page is Tela's own: titled by its name alone, whatever its data said.
   if (route.kind === 'landing') return { title: null, description: t('front.description') }
+  if (route.kind === 'info')
+    return { title: t(`info.tabs.${route.page}`), description: infoDescription(locale, route.page) }
   if (data === null) return { title: t('notFound.title'), description: null }
   if (route.kind === 'discover')
     return { title: t('nav.discover'), description: t('discover.intro') }
@@ -137,6 +146,8 @@ export function renderPublicPage(input: {
         locale={locale}
         now={now}
       />
+    ) : route.kind === 'info' ? (
+      <InfoView page={route.page} locale={locale} />
     ) : data === null ? (
       <NotFoundPage />
     ) : route.kind === 'discover' ? (
@@ -187,8 +198,9 @@ export function renderPublicPage(input: {
         ]
       : []),
   ].join('\n    ')
+  // A page without data (About, Privacy, Terms) hands nothing over.
   const handover =
-    data === null
+    data === null || route.api === null
       ? ''
       : `<script id="tela-data" type="application/json">${inScript({ path: route.api, body: data })}</script>`
   return (

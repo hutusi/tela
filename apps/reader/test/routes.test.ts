@@ -49,7 +49,7 @@ describe('Discover URLs', () => {
 })
 
 describe('public pages at the edge', () => {
-  test('are Discover, a blog by id and a profile by handle, and nothing else', () => {
+  test('are Discover, a blog by id, a profile by handle and the info pages, and nothing else', () => {
     const route = (path: string) => publicRoute(new URL(path, 'https://tela.test'))
     expect(route('/discover?topic=tech')).toMatchObject({
       kind: 'discover',
@@ -72,7 +72,20 @@ describe('public pages at the edge', () => {
       key: '/api/v1/public/profiles/reader_1?tab=liked',
     })
     expect(route('/@reader_1?tab=nope')).toMatchObject({ tab: null })
-    for (const path of ['/s/12/x', '/s/abc', '/@', '/@a/b', '/reading'])
+    // About, Privacy and Terms need nothing from tela-api, and are cached by page.
+    for (const page of ['about', 'privacy', 'terms'] as const)
+      expect(route(`/${page}`)).toEqual({ kind: 'info', page, api: null, key: `/info/${page}` })
+    for (const path of [
+      '/s/12/x',
+      '/s/abc',
+      '/@',
+      '/@a/b',
+      '/reading',
+      '/about/',
+      '/about/x',
+      '/About',
+      '/info/about',
+    ])
       expect(route(path)).toBeNull()
     expect(handleFrom('/%40someone')).toBe('someone')
   })

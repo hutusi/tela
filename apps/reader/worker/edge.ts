@@ -12,8 +12,9 @@
  *   Only when that has lapsed does it ask tela-api, and passes on the refreshed cookie.
  * - `/` (for visitors), `/discover`, `/s/:id` and `/@handle` are rendered here from tela-api's
  *   public JSON, poured into the SPA's index.html and cached per colo, locale and deploy for five
- *   minutes. A request to `/` that carries a session cookie is a member's: the plain shell, from
- *   the assets, never cached, and tela-api is not asked (ADR 0035). Every other path is the SPA's
+ *   minutes; `/about`, `/privacy` and `/terms` the same way, from the bundle alone. A request to
+ *   `/` that carries a session cookie is a member's: the plain shell, from the assets, never
+ *   cached, and tela-api is not asked (ADR 0035). Every other path is the SPA's
  *   static assets, which answer without running this Worker at all.
  * - A write to `/api/*` must come from this origin: cookies are `SameSite=Lax`, and this closes
  *   what Lax leaves open to a sibling subdomain.
@@ -52,13 +53,14 @@ export type EdgeDeps = {
 type Waiter = { waitUntil(promise: Promise<unknown>): void }
 
 /**
- * A public page: the tela-api endpoint its data comes from, and the key it is cached under when
- * that endpoint serves more than one page (a profile's tabs). `visitorsOnly`: a request with a
- * session cookie gets the plain shell. `alwaysExists`: a 404 from tela-api is not the page's
- * answer either, so it is the plain shell, uncached, like an outage.
+ * A public page: the tela-api endpoint its data comes from (null: it needs none, as About,
+ * Privacy and Terms), and the key it is cached under when that is not the endpoint (a profile's
+ * tabs, a page with no endpoint). `visitorsOnly`: a request with a session cookie gets the plain
+ * shell. `alwaysExists`: a 404 from tela-api is not the page's answer either, so it is the plain
+ * shell, uncached, like an outage.
  */
 export type PublicPageRoute = {
-  api: string
+  api: string | null
   key?: string
   visitorsOnly?: boolean
   alwaysExists?: boolean
@@ -324,23 +326,29 @@ export function createEdge(deps: EdgeDeps) {
     const build = [...new Uint8Array(digest).slice(0, 6)]
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('')
-    const cacheKey = new Request(`${CACHE_ORIGIN}/page/${build}/${locale}${route.key ?? route.api}`)
+    const cacheKey = new Request(
+      `${CACHE_ORIGIN}/page/${build}/${locale}${route.key ?? route.api ?? url.pathname}`,
+    )
     const hit = await cache.match(cacheKey)
     if (hit) {
       const cached = new Response(hit.body, hit)
       cached.headers.set('cache-control', PAGE_CACHE)
       return cached
     }
-    const res = await api.fetch(new Request(new URL(route.api, url).toString()))
-    // tela-api is down or slow, or (for a page that always exists) has no such endpoint yet: the
-    // plain shell, uncached, which asks again from the browser. A cached 404 at `/` would be the
-    // front page for five minutes.
-    if (res.status !== 200 && (res.status !== 404 || route.alwaysExists)) {
-      return new Response(template, {
-        headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': PAGE_CACHE },
-      })
+    // A page with no endpoint (About, Privacy, Terms) renders from the bundle alone.
+    let data: unknown = {}
+    if (route.api !== null) {
+      const res = await api.fetch(new Request(new URL(route.api, url).toString()))
+      // tela-api is down or slow, or (for a page that always exists) has no such endpoint yet: the
+      // plain shell, uncached, which asks again from the browser. A cached 404 at `/` would be the
+      // front page for five minutes.
+      if (res.status !== 200 && (res.status !== 404 || route.alwaysExists)) {
+        return new Response(template, {
+          headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': PAGE_CACHE },
+        })
+      }
+      data = res.status === 404 ? null : ((await res.json()) as unknown)
     }
-    const data = res.status === 404 ? null : ((await res.json()) as unknown)
     let html: string
     try {
       html = pages.render({ route, url, data, locale, template })

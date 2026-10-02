@@ -12,6 +12,7 @@ import { ClaimPage, ClaimSitePage } from './pages/claim'
 import { DashboardPage } from './pages/dashboard'
 import { DiscoverPage } from './pages/discover'
 import { FollowingPage } from './pages/following'
+import { InfoPage } from './pages/info'
 import { JoinPage } from './pages/join'
 import { LandingPage } from './pages/landing'
 import { LoginPage } from './pages/login'
@@ -160,6 +161,9 @@ function Routed() {
                         }
                       />
                       <Route path="/s/:siteId" element={<SitePage />} />
+                      <Route path="/about" element={<InfoPage page="about" />} />
+                      <Route path="/privacy" element={<InfoPage page="privacy" />} />
+                      <Route path="/terms" element={<InfoPage page="terms" />} />
                       <Route
                         path="/search"
                         element={
