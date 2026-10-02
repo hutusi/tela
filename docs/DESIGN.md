@@ -67,10 +67,19 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
   Reading/Discover/Following pills (Following for members), search, the Read-in menu ("Read in
-  中文 EN", for members), and the member's avatar (30px: their picture, or their initial on the accent). The UI
-  locale is not in the header: a member sets it in Settings → Language, and a visitor gets their
-  browser's, with a switch on the sign-in page. Pills are ink in every state: the active one is distinguished by its
+  中文 EN", for members), and the member's avatar (30px: their picture, or their initial on the accent). A
+  member's interface language is in Settings → Language, not the header. Pills are ink in every state: the active one is distinguished by its
   `hover` background alone, never by colour.
+- A visitor's header (ADR 0035) is its own, shown as soon as the device is known to hold no
+  member (a guest, or a session still `unknown` with no stored account), so it never waits for
+  `/me`. From `sm` up: the lockup, Discover, then "Read in EN ▾" (`VisitorLocale`), *Log in* as a
+  quiet pill and *Join* filled in `primary`; below `sm` the lockup, the nav and Join. No Reading
+  pill and no search, both a member's. "Read in" sets the interface language and with it the
+  language titles are translated into, which reverses the rule of 2026-10-01 that a visitor
+  changed it only on the sign-in page: the first thing a visitor needs to know is whether they can
+  read the page. It is a `<details>`, so it opens in the edge's page before the script runs; choosing
+  needs the script. Log in and Join are links to `/login` and `/join`, which open the sheet over the
+  page once the script runs (a modified click still opens the page).
 - The avatar opens the account menu (Tela v2): a 220px `surface` panel under it with the member's
   name and @handle, then Your profile, Subscriptions (`/settings/subscriptions`), Dashboard,
   Settings, a rule, and Sign out in `muted`. A disclosure, not an ARIA menu: Tab reaches its items.
@@ -93,7 +102,9 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   header has no room to spare, and a wrapped pill beats a nav with nothing left to scroll.
   `styles.e2e.ts` measures this at 640, 768, 800, 1024 and 1280: at most one pill may be clipped
   from 800 up, and none at all from 1024. The tolerance is in pills rather than pixels because the
-  row measures 335px on macOS and 341px in CI's Linux Chromium.
+  row measures 335px on macOS and 341px in CI's Linux Chromium. `door.e2e.ts` measures the
+  visitor's header at 360, 412, 640, 768, 800, 1024 and 1280 with the same helper
+  (`measureHeader` in `e2e/helpers.ts`): its nav is never clipped, and no control wraps.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
   list are sticky and scroll independently. The sidebar collapses to a 48px rail from a toggle in
@@ -141,7 +152,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 ## Components (`apps/reader/src/components`)
 
-`AppHeader`, `LocaleSwitcher`, `ReadInMenu`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
+`AppHeader`, `VisitorLocale`, `FrontDoor` (the sheet and `DoorForm`), `ReadInMenu`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
 `PairedBody`, `TranslationBar`, `Untranslated`, `LikeButton`, `RecommendPopover`, `EmptyState`,
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `TypographyMenu`, the highlight
 toolbar, note and list (`highlights.tsx`), and `Shortcuts`. Discover, a blog's page and a profile
@@ -183,6 +194,25 @@ a muted hint, a 280 px square frame with the picture under a round mask (outside
 then a zoom slider (1–4×) and Cancel / Save. Drag moves the picture, and so do the arrow keys while
 the frame has focus (Shift for bigger steps); Esc cancels. Save draws the circle's square at 256 px,
 as WebP where the browser encodes it and JPEG where not, and uploads that.
+
+The front door (`FrontDoor`, ADRs 0034–0036) is one form for logging in and joining: a native
+modal `<dialog>` like the crop's, 420 px on `surface` with 16 px corners, and the same form as the
+page at `/login`, where a members-only page sends a visitor and the mails' links land. From the
+top: the 34 px mark (in the sheet; the page has its header), a serif title (*Welcome back*, *Join
+Tela*) and a line under it; when joining, the invite code; *Continue with Google* and *Continue
+with GitHub*, quiet 44 px pills, only once tela-api says they are configured, then a rule with
+"or"; the email; in password mode the password and *Forgot password?*; the `primary` button
+(*Email me a code*, or *Log in*); and to log in, a toggle between *Log in with a password* and
+*Email me a code instead*. Inputs are 44 px, 10 px corners, a `thumb` border that turns `ink` on
+focus, on `paper` inside the sheet and `surface` on the page. The code step asks for the 6-digit
+code, and when joining an optional *Choose a password*, set once the code has made the account.
+Joining says "No code? Tela is invite-only for now: ask a member for one." and "By joining you
+agree to the Terms; see Privacy."; a rule then offers the other door (*New to Tela? Join*,
+*Already have an account? Log in*), which the sheet switches to in place. Esc and ✕ close the
+sheet unless a request is out; `/join` closes to `/`. Each error has its own words
+(`door.errors.*`): too many tries is never a wrong code, the gate's refusal is never a typo, and
+a provider's code nobody listed still says the provider failed. A refused Google or GitHub
+sign-in comes back to the page it started on, which opens the sheet again saying why.
 
 A person's avatar (`PersonAvatar`) is their initial in a circle of their colour, the accent for
 one's own, with their picture over it: the one they uploaded, else their Gravatar, which is on until
@@ -243,7 +273,7 @@ framework-free core). Placeholders use ICU plural syntax.
 - A skeleton pane while the first sync has not landed: the article is on its way, not gone.
 - "Older articles" under a list longer than 200.
 - A not-found page (`notFound.*`).
-- A sign-in message for too many tries (`login.errors.rate_limited`), which is not a wrong code.
+- A sign-in message for too many tries (`door.errors.rate_limited`), which is not a wrong code.
 
 ## New tokens, and the dark ground (ADR 0026)
 
@@ -256,6 +286,12 @@ Tokens the Next app did not need, because it hard-coded them (and `knob`, which 
 | `highlight` | `oklch(0.91 0.10 95)` | `oklch(0.50 0.09 90 / 0.55)` | a highlight's paint |
 | `highlight-strong` | `oklch(0.80 0.14 90)` | `oklch(0.70 0.12 90)` | the highlight being edited |
 | `knob` | `#fff` | `#ede7db` | a switch's knob, light on either track in both themes (Tela v2) |
+| `primary` | `#1f1c18` | `oklch(0.68 0.14 150)` | the one filled call to action: *Join*, the sheet's button (ADR 0035) |
+| `on-primary` | `#f6f2ea` | `#16140f` | text on `primary` |
+
+`primary` is ink by day, as the design's Day page has it, and the lifted green by night, as its
+Night page has it: a filled ink button on the dark ground would be a pale slab, louder than
+anything else on the page. `door.e2e.ts` checks the pair's computed colours in both themes.
 
 Dark mode redefines every token on a warm near-black ground rather than adding `dark:` variants:
 

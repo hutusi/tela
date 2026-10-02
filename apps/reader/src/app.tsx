@@ -3,6 +3,7 @@ import { isUiLocale, type UiLocale } from '@tela/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { AppHeader } from './components/app-header'
+import { FrontDoorProvider } from './components/front-door'
 import { detectLocale, I18n, localeCookie } from './i18n'
 import { applyTheme, typographyOf } from './lib/typography'
 import { forgetPublic } from './lib/use-public'
@@ -11,6 +12,7 @@ import { ClaimPage, ClaimSitePage } from './pages/claim'
 import { DashboardPage } from './pages/dashboard'
 import { DiscoverPage } from './pages/discover'
 import { FollowingPage } from './pages/following'
+import { JoinPage } from './pages/join'
 import { LandingPage } from './pages/landing'
 import { LoginPage } from './pages/login'
 import { NotFoundPage } from './pages/not-found'
@@ -121,97 +123,100 @@ function Routed() {
   return (
     <UiContext.Provider value={ui}>
       <I18n locale={locale}>
-        <div className="flex min-h-full flex-col">
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="*"
-              element={
-                <>
-                  <AppHeader />
-                  <Routes>
-                    <Route path="/" element={<Home />} />
-                    <Route
-                      path="/reading"
-                      element={
-                        <Members>
-                          <ReadingPage />
-                        </Members>
-                      }
-                    />
-                    <Route path="/discover" element={<DiscoverPage />} />
-                    <Route
-                      path="/following"
-                      element={
-                        <Members>
-                          <FollowingPage />
-                        </Members>
-                      }
-                    />
-                    <Route path="/s/:siteId" element={<SitePage />} />
-                    <Route
-                      path="/search"
-                      element={
-                        <Members>
-                          <SearchPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/add"
-                      element={
-                        <Members>
-                          <AddPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/settings"
-                      element={
-                        <Members>
-                          <SettingsPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/settings/:section"
-                      element={
-                        <Members>
-                          <SettingsPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/dashboard"
-                      element={
-                        <Members>
-                          <DashboardPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/claim"
-                      element={
-                        <Members>
-                          <ClaimPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/sites/:siteId/claim"
-                      element={
-                        <Members>
-                          <ClaimSitePage />
-                        </Members>
-                      }
-                    />
-                    <Route path="*" element={<HandleOrMissing />} />
-                  </Routes>
-                </>
-              }
-            />
-          </Routes>
-        </div>
+        <FrontDoorProvider>
+          <div className="flex min-h-full flex-col">
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="*"
+                element={
+                  <>
+                    <AppHeader />
+                    <Routes>
+                      <Route path="/" element={<Home />} />
+                      <Route path="/join" element={<JoinPage />} />
+                      <Route
+                        path="/reading"
+                        element={
+                          <Members>
+                            <ReadingPage />
+                          </Members>
+                        }
+                      />
+                      <Route path="/discover" element={<DiscoverPage />} />
+                      <Route
+                        path="/following"
+                        element={
+                          <Members>
+                            <FollowingPage />
+                          </Members>
+                        }
+                      />
+                      <Route path="/s/:siteId" element={<SitePage />} />
+                      <Route
+                        path="/search"
+                        element={
+                          <Members>
+                            <SearchPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/add"
+                        element={
+                          <Members>
+                            <AddPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/settings"
+                        element={
+                          <Members>
+                            <SettingsPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/settings/:section"
+                        element={
+                          <Members>
+                            <SettingsPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/dashboard"
+                        element={
+                          <Members>
+                            <DashboardPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/claim"
+                        element={
+                          <Members>
+                            <ClaimPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/sites/:siteId/claim"
+                        element={
+                          <Members>
+                            <ClaimSitePage />
+                          </Members>
+                        }
+                      />
+                      <Route path="*" element={<HandleOrMissing />} />
+                    </Routes>
+                  </>
+                }
+              />
+            </Routes>
+          </div>
+        </FrontDoorProvider>
       </I18n>
     </UiContext.Provider>
   )

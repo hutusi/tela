@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import en from '../messages/en.json'
 import zhHans from '../messages/zh-Hans.json'
 
-/** Every string's path in a catalogue, such as `login.errors.rate_limited`. */
+/** Every string's path in a catalogue, such as `door.errors.rate_limited`. */
 function keys(messages: object, prefix = ''): string[] {
   return Object.entries(messages).flatMap(([key, value]) =>
     value !== null && typeof value === 'object'

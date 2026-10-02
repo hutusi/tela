@@ -1,5 +1,5 @@
 import { expect, type Locator, test } from '@playwright/test'
-import { ensureFeeds, resetReading, synced } from './helpers'
+import { ensureFeeds, expectHeaderFits, measureHeader, resetReading, synced } from './helpers'
 
 /**
  * What the class strings claim, checked against what the browser computes.
@@ -101,37 +101,10 @@ test.describe('stylesheet', () => {
       // passes when it shouldn't.
       await page.getByTestId('read-in').waitFor({ state: 'attached' })
 
-      const m = await page.evaluate(() => {
-        const doc = document.documentElement
-        const nav = document.querySelector('header nav') as HTMLElement
-        const pill = nav.querySelector('a') as HTMLElement
-        const account = (
-          document.querySelector('[data-testid="account-menu"]') as HTMLElement
-        ).getBoundingClientRect()
-        return {
-          overflow: doc.scrollWidth - doc.clientWidth,
-          client: nav.clientWidth,
-          scroll: nav.scrollWidth,
-          pill: Math.round(pill.getBoundingClientRect().width),
-          account: { width: Math.round(account.width), right: account.right },
-          viewport: doc.clientWidth,
-        }
-      })
-      expect(m.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)
+      const m = await measureHeader(page, ['account-menu'])
+      expectHeaderFits(m, width)
       // The one way to Settings, the Dashboard and signing out: whole, and on screen.
-      expect(m.account.width, 'account menu squeezed').toBe(30)
-      expect(m.account.right, 'account menu off screen').toBeLessThanOrEqual(m.viewport)
-      // The pill row may scroll here; being squeezed below one pill is the failure. There is no
-      // other route to Dashboard or Settings, and a 4px nav — which is what main renders at 768 —
-      // leaves nothing to grab and nothing to read.
-      expect(m.client, 'nav narrower than a single pill').toBeGreaterThanOrEqual(m.pill)
-      // Tolerances in the nav's own units, not pixels: the pill row measures 335px on macOS and
-      // 341px in CI's Linux Chromium — text metrics differ by a few px — and 800px fits it with
-      // less than that to spare. One pill's worth of slack at 800, none at all by 1024.
-      if (width >= 800) {
-        expect(m.client, 'more than one pill clipped').toBeGreaterThanOrEqual(m.scroll - m.pill)
-      }
-      if (width >= 1024) expect(m.client, 'nav is clipped').toBe(m.scroll)
+      expect(m.controls['account-menu']?.width, 'account menu squeezed').toBe(30)
     })
   }
 

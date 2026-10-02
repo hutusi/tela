@@ -19,7 +19,18 @@ test.describe('for a visitor', () => {
     await expect(page.locator('meta[name="robots"]')).toHaveCount(0)
     await expect(page).toHaveTitle('Discover · Tela')
     await expect(page.getByTestId('topic-chips')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible()
+    // The visitor's header (ADR 0035): Log in and Join are links, so they work without a script.
+    const banner = page.getByRole('banner')
+    await expect(banner.getByRole('link', { name: 'Log in', exact: true })).toHaveAttribute(
+      'href',
+      '/login',
+    )
+    await expect(banner.getByRole('link', { name: 'Join', exact: true })).toHaveAttribute(
+      'href',
+      '/join',
+    )
+    await expect(page.getByTestId('visitor-locale')).toBeVisible()
+    await expect(page.getByTestId('nav-reading')).toHaveCount(0)
 
     const robots = await request.get('/robots.txt')
     expect(await robots.text()).toBe('User-agent: *\nDisallow: /\n')

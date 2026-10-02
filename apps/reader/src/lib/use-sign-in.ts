@@ -1,0 +1,478 @@
+/**
+ * Signing in and joining, wherever the form is (the sheet, `/login`): ADRs 0024, 0034 and 0036.
+ * Four ways in, behind one gate on tela-api:
+ *
+ * - **An emailed code**, which is also how an account starts. Joining first holds an invite code
+ *   beside the address (`/api/v1/join`), and the code's sign-in claims it.
+ * - **A password**, chosen at that code step or set by a reset code: never before a code has
+ *   proved the address.
+ * - **Google or GitHub**, started here and finished by tela-api's callback, which sends a refusal
+ *   back to the page with `?error=`.
+ * - **The mail's link**, which fills the code in and waits for a press. A link that signed in by
+ *   itself would put whoever opened it into the account of whoever sent it, a login CSRF.
+ *
+ * Nothing here can say whether an address has an account: a code, a reset and a wrong password
+ * are answered the same for a member and for a stranger.
+ */
+import { normalizeInviteCode } from '@tela/shared'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
+import { useSession } from '../session'
+import { api } from '../store/api'
+
+/** A password's length, as tela-api's better-auth checks it (ADR 0036). */
+export const PASSWORD_MIN = 10
+export const PASSWORD_MAX = 128
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Where a new member goes first: something to subscribe to. */
+export const NEWCOMER = '/discover'
+
+/** Only same-site paths: `//evil.example` and `/\evil.example` are absolute in a browser. */
+export function safeNext(next: string | null, fallback = '/reading'): string {
+  if (!next?.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return fallback
+  return next
+}
+
+/** What a mailed link carries: a sign-in code, or with `reset=1` a password reset's code. */
+export type MailLink = { email: string; otp: string; reset: boolean }
+
+export function mailLink(search: URLSearchParams): MailLink | null {
+  const email = search.get('email')
+  const otp = search.get('otp')
+  if (!email || !otp) return null
+  return { email, otp, reset: search.get('reset') === '1' }
+}
+
+/** The address bar once a link's code or an error is out of it: only where to go next stays. */
+export function loginPath(search: URLSearchParams): string {
+  const next = search.get('next')
+  return next ? `/login?next=${encodeURIComponent(safeNext(next))}` : '/login'
+}
+
+export const PROVIDERS = ['google', 'github'] as const
+export type Provider = (typeof PROVIDERS)[number]
+
+/** Log in to an account, or make one with an invitation. */
+export type DoorMode = 'login' | 'join'
+
+/** What the form can say went wrong; each is a `door.errors.*` string. */
+export type SignInError =
+  | 'invalid_email'
+  | 'send_failed'
+  | 'bad_code'
+  | 'rate_limited'
+  | 'reset_failed'
+  | 'password_set'
+  | 'password_short'
+  | 'bad_password'
+  | 'not_invited'
+  | 'invite_used'
+  | 'missing_code'
+  | 'invalid_code'
+  | 'code_used'
+  | 'provider_unlinked'
+  | 'provider_no_email'
+  | 'provider_cancelled'
+  | 'provider_expired'
+  | 'provider_failed'
+  | 'failed'
+
+/** The gate's refusals (ADR 0034), as an email-code sign-in or a provider names them. */
+function inviteRefusal(code: unknown): SignInError | null {
+  if (typeof code !== 'string') return null
+  const known = code.toLowerCase()
+  if (known === 'invite_required') return 'not_invited'
+  if (known === 'invite_used' || known === 'invite_unavailable') return 'invite_used'
+  return null
+}
+
+/**
+ * A refused code: too many tries, the gate's refusal (the address holds no invitation, or the
+ * one it held is full), or else the code itself. Saying "wrong code" for either of the first two
+ * would send the visitor hunting for a typo.
+ */
+export function codeError(status: number, code: unknown): SignInError {
+  if (status === 429) return 'rate_limited'
+  return inviteRefusal(code) ?? 'bad_code'
+}
+
+/** What `/api/v1/join` answered: 400 `invalid_code` or `invalid_email`, 409 `code_used`, 429. */
+export function joinError(status: number, error: unknown): SignInError {
+  if (status === 429) return 'rate_limited'
+  if (error === 'invalid_code') return 'invalid_code'
+  if (error === 'invalid_email') return 'invalid_email'
+  if (status === 409 || error === 'code_used') return 'code_used'
+  return 'send_failed'
+}
+
+/**
+ * A Google or GitHub sign-in's `?error=`, named by the gate, by better-auth or by the provider
+ * itself. Any code not listed is the provider's failure in general: the list is better-auth's,
+ * and a new one must still say something.
+ */
+export function providerError(code: string): SignInError {
+  const refused = inviteRefusal(code)
+  if (refused) return refused
+  switch (code.toLowerCase()) {
+    case 'email_not_verified':
+    case 'account_not_linked':
+      return 'provider_unlinked'
+    case 'email_not_found':
+      return 'provider_no_email'
+    case 'access_denied':
+      return 'provider_cancelled'
+    case 'state_mismatch':
+    case 'state_not_found':
+    case 'state_security_mismatch':
+    case 'please_restart_the_process':
+      return 'provider_expired'
+    case 'too_many_requests':
+      return 'rate_limited'
+    default:
+      return 'provider_failed'
+  }
+}
+
+/** What a page's query says about the door, and is taken out of the address bar once read. */
+const DOOR_PARAMS = ['door', 'via', 'error', 'error_description'] as const
+
+/**
+ * Where tela-api sends a refused Google or GitHub sign-in: the page it started on, which opens the
+ * sheet again in `mode` and says why. Root-relative, since better-auth checks it against the
+ * trusted origins.
+ */
+export function errorReturn(
+  pathname: string,
+  search: string,
+  mode: DoorMode,
+  provider: Provider,
+): string {
+  const params = new URLSearchParams(search)
+  for (const name of DOOR_PARAMS) params.delete(name)
+  params.set('door', mode)
+  params.set('via', provider)
+  return `${pathname}?${params}`
+}
+
+/** A page's query without what the door put in it, for `history.replaceState`. */
+export function withoutDoor(pathname: string, search: string): string {
+  const params = new URLSearchParams(search)
+  for (const name of DOOR_PARAMS) params.delete(name)
+  const rest = params.toString()
+  return rest ? `${pathname}?${rest}` : pathname
+}
+
+/**
+ * The invite code a Google or GitHub join carried, kept for this tab while the provider has the
+ * page, so a refusal comes back with it filled in. tela-api has its own copy in the OAuth state.
+ */
+const INVITE_KEY = 'tela.invite'
+
+function keepInvite(code: string): void {
+  try {
+    sessionStorage.setItem(INVITE_KEY, code)
+  } catch {
+    // No sessionStorage: a refusal comes back without the code, which is typed again.
+  }
+}
+
+export function takeInvite(): string | null {
+  try {
+    const code = sessionStorage.getItem(INVITE_KEY)
+    sessionStorage.removeItem(INVITE_KEY)
+    return code
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Where the form is. `start`: the address (with a password, or an invite code to join). `code`:
+ * the emailed code, and when joining an optional password. `reset`: a reset code and the new
+ * password. `link`: a mailed link waiting for a press. `unsaved`: signed in, but the password
+ * chosen at the code step was not saved.
+ */
+export type SignInStep =
+  | { kind: 'start' }
+  | { kind: 'code'; email: string; joining: boolean }
+  | { kind: 'reset'; email: string }
+  | { kind: 'link'; link: MailLink }
+  | { kind: 'unsaved' }
+
+export type SignInOptions = {
+  /** Where to go once signed in. */
+  next: string
+  /** Where an account made by Google or GitHub goes first. */
+  newcomer: string
+  /** Where tela-api sends a refused Google or GitHub sign-in back to. */
+  errorReturn: (provider: Provider) => string
+  /** A mailed link to answer first. */
+  link?: MailLink | null | undefined
+  /** What a page arrived saying (a provider's refusal). */
+  error?: SignInError | null | undefined
+  /** Leave by replacing this page's history entry rather than adding one. */
+  replace?: boolean | undefined
+  /** Signed in, and about to leave for `next`: the sheet closes. */
+  onDone?: (() => void) | undefined
+}
+
+const post = (path: string, body: unknown) =>
+  fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(body),
+  })
+
+/** An answer's JSON fields, or none: better-auth's errors are `{code, message}`, Tela's `{error}`. */
+async function fields(res: Response): Promise<Record<string, unknown>> {
+  const body: unknown = await res.json().catch(() => null)
+  return typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {}
+}
+
+const clean = (email: string) => email.trim().toLowerCase()
+
+/** Set the new member's password: a member call, so it names them (AGENTS invariant 8). */
+async function savePassword(newPassword: string): Promise<boolean> {
+  try {
+    const res = await api('/api/v1/account/password', { body: { newPassword } })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+export function useSignIn(options: SignInOptions) {
+  const { status, retrying, signedIn } = useSession()
+  const navigate = useNavigate()
+  // A link is read on the first render too, so a member's tab shows it rather than leave at once.
+  const [step, setStep] = useState<SignInStep>(() =>
+    options.link ? { kind: 'link', link: options.link } : { kind: 'start' },
+  )
+  const [error, setError] = useState<SignInError | null>(options.error ?? null)
+  const [busy, setBusy] = useState(false)
+  // Signed in, and waiting for /me to say as whom: the code is spent, so the form stays shut.
+  const [waiting, setWaiting] = useState(false)
+  // The password chosen at a join's code step, saved once the session is the new member's. Held
+  // in memory only, for as long as that takes.
+  const chosen = useRef<string | null>(null)
+  const left = useRef(false)
+  const latest = useRef(options)
+  latest.current = options
+
+  const leave = () => {
+    if (left.current) return
+    left.current = true
+    latest.current.onDone?.()
+    navigate(latest.current.next, { replace: latest.current.replace ?? false })
+  }
+
+  /** Signed in as the member: save the password they chose, if any, then go on. */
+  const finish = async () => {
+    const password = chosen.current
+    chosen.current = null
+    if (password && !(await savePassword(password))) {
+      setStep({ kind: 'unsaved' })
+      return
+    }
+    leave()
+  }
+  const finishing = useRef(finish)
+  finishing.current = finish
+
+  const enter = async () => {
+    const outcome = await signedIn(latest.current.next)
+    if (outcome === 'waiting') setWaiting(true)
+    else if (outcome !== 'reloading') await finish()
+  }
+
+  // /me answered at last, on the session's own retry: carry on as the sign-in would have.
+  useEffect(() => {
+    if (!waiting || status !== 'member') return
+    setWaiting(false)
+    void finishing.current()
+  }, [waiting, status])
+
+  // A member has nothing to do at the start: they go on (a member shown a link stays to answer it,
+  // since it may be for another account, which is how one switches).
+  const settled = status === 'member' && !busy && !waiting && step.kind === 'start'
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `leave` reads the latest options through a ref
+  useEffect(() => {
+    if (settled) leave()
+  }, [settled])
+
+  const run = async (work: () => Promise<void>, fallback: SignInError = 'failed') => {
+    setBusy(true)
+    setError(null)
+    try {
+      await work()
+    } catch {
+      setError(fallback)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const sendCode = (input: string) =>
+    run(async () => {
+      const email = clean(input)
+      if (!EMAIL.test(email)) return setError('invalid_email')
+      const res = await post('/api/auth/email-otp/send-verification-otp', {
+        email,
+        type: 'sign-in',
+      })
+      if (!res.ok) return setError(res.status === 429 ? 'rate_limited' : 'send_failed')
+      setStep({ kind: 'code', email, joining: false })
+    }, 'send_failed')
+
+  /** Hold the invite beside the address, which mails it a code (ADR 0034). */
+  const join = (invite: string, input: string) =>
+    run(async () => {
+      const code = normalizeInviteCode(invite)
+      if (!code) return setError(invite.trim() ? 'invalid_code' : 'missing_code')
+      const email = clean(input)
+      if (!EMAIL.test(email)) return setError('invalid_email')
+      const res = await post('/api/v1/join', { code, email })
+      if (!res.ok) return setError(joinError(res.status, (await fields(res)).error))
+      setStep({ kind: 'code', email, joining: true })
+    }, 'send_failed')
+
+  const verify = (email: string, otp: string, password = '') =>
+    run(async () => {
+      if (password && password.length < PASSWORD_MIN) return setError('password_short')
+      const res = await post('/api/auth/sign-in/email-otp', { email, otp: otp.trim() })
+      if (!res.ok) {
+        const why = codeError(res.status, (await fields(res)).code)
+        // The gate's refusal has spent the code: only a fresh start can go on.
+        const refused = why === 'not_invited' || why === 'invite_used'
+        const joining = step.kind === 'code' && step.joining
+        setStep(refused ? { kind: 'start' } : { kind: 'code', email, joining })
+        return setError(why)
+      }
+      chosen.current = password || null
+      await enter()
+    })
+
+  const logIn = (input: string, password: string) =>
+    run(async () => {
+      const email = clean(input)
+      if (!EMAIL.test(email)) return setError('invalid_email')
+      const res = await post('/api/auth/sign-in/email', { email, password })
+      // One answer for an unknown address, an account without a password and a wrong one.
+      if (!res.ok) {
+        return setError(
+          res.status === 429 ? 'rate_limited' : res.status >= 500 ? 'failed' : 'bad_password',
+        )
+      }
+      await enter()
+    })
+
+  /** Ask for a reset code: mailed only to an account, answered the same for any address. */
+  const forgot = (input: string) =>
+    run(async () => {
+      const email = clean(input)
+      if (!EMAIL.test(email)) return setError('invalid_email')
+      const res = await post('/api/auth/email-otp/request-password-reset', { email })
+      if (!res.ok) return setError(res.status === 429 ? 'rate_limited' : 'send_failed')
+      setStep({ kind: 'reset', email })
+    }, 'send_failed')
+
+  /** A reset code sets the new password; then that password signs in. */
+  const reset = (email: string, otp: string, password: string) =>
+    run(async () => {
+      if (password.length < PASSWORD_MIN) return setError('password_short')
+      const done = await post('/api/auth/email-otp/reset-password', {
+        email,
+        otp: otp.trim(),
+        password,
+      })
+      if (!done.ok) return setError(done.status === 429 ? 'rate_limited' : 'reset_failed')
+      const res = await post('/api/auth/sign-in/email', { email, password })
+      if (!res.ok) {
+        // The code is spent and the password set: what is left is signing in, by code for now.
+        setStep({ kind: 'start' })
+        return setError('password_set')
+      }
+      await enter()
+    })
+
+  /** Answer a mailed link: its code signs in, or with a reset link sets `password` first. */
+  const confirmLink = (password: string) => {
+    if (step.kind !== 'link') return Promise.resolve()
+    const { email, otp, reset: resetting } = step.link
+    return resetting ? reset(email, otp, password) : verify(email, otp)
+  }
+
+  /**
+   * Off to Google or GitHub (ADR 0036). tela-api answers with the provider's address rather than
+   * a redirect, so the start is an ordinary same-origin POST the edge lets through. A join's invite
+   * code rides in the OAuth state, which only tela-api writes.
+   */
+  const provider = async (which: Provider, invite = '') => {
+    setBusy(true)
+    setError(null)
+    const code = invite.trim() ? normalizeInviteCode(invite) : null
+    if (invite.trim() && !code) {
+      setError('invalid_code')
+      setBusy(false)
+      return
+    }
+    const { next, newcomer } = latest.current
+    try {
+      const res = await post('/api/auth/sign-in/social', {
+        provider: which,
+        callbackURL: next,
+        newUserCallbackURL: newcomer,
+        errorCallbackURL: latest.current.errorReturn(which),
+        disableRedirect: true,
+        ...(code ? { additionalData: { invite: code } } : {}),
+      })
+      const body = await fields(res)
+      const url = typeof body.url === 'string' ? body.url : ''
+      if (!res.ok || !url.startsWith('https://')) {
+        setError(
+          res.status === 429
+            ? 'rate_limited'
+            : providerError(typeof body.code === 'string' ? body.code : ''),
+        )
+        setBusy(false)
+        return
+      }
+      if (code) keepInvite(code)
+      // Busy until the page is gone: a second press would start a second flow.
+      window.location.assign(url)
+    } catch {
+      setError('provider_failed')
+      setBusy(false)
+    }
+  }
+
+  /** Back to the start, with nothing said. */
+  const restart = () => {
+    setStep({ kind: 'start' })
+    setError(null)
+  }
+
+  return {
+    step,
+    error,
+    busy,
+    /** Signed in, and /me cannot be reached yet: the form says so and stays shut. */
+    connecting: waiting && retrying,
+    /** A member at the start, leaving for `next`: nothing to show. */
+    settled,
+    sendCode,
+    join,
+    verify,
+    logIn,
+    forgot,
+    reset,
+    confirmLink,
+    provider,
+    restart,
+    /** Past an unsaved password: go on to `next` anyway. */
+    goOn: leave,
+  }
+}

@@ -457,7 +457,9 @@ test.describe('the mail link on a new device while /me misses', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(
       'Independent blogs, in any language.',
     )
-    await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible()
+    await expect(
+      page.getByRole('banner').getByRole('link', { name: 'Log in', exact: true }),
+    ).toBeVisible()
 
     // A retry misses too before tela-api is back, and the one after it carries on.
     await expect.poll(() => asked, { timeout: 10_000 }).toBeGreaterThanOrEqual(3)
@@ -529,15 +531,25 @@ test.describe('the mail link while the device refuses the claim once', () => {
 })
 
 test.describe("a visitor's language", () => {
-  test('is chosen on the sign-in page, not in the header', async ({ page }) => {
+  test('is chosen in the header, and sets the page and its titles together', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible()
-    await expect(page.getByTestId('locale-switcher')).toHaveCount(0)
-    await page.goto('/login')
-    await page.getByTestId('locale-switcher').getByRole('button', { name: '中文' }).click()
+    const banner = page.getByRole('banner')
+    await expect(banner.getByRole('link', { name: 'Log in', exact: true })).toBeVisible()
+    // Reversed on 2026-10-02 (ADR 0035): a visitor needs to know at once whether they can read
+    // the page, so the pill is in the header rather than on the sign-in page alone.
+    await expect(page.getByTestId('visitor-locale')).toContainText('Read in')
+    await page.getByTestId('visitor-locale').locator('summary').click()
+    await page.getByTestId('visitor-locale-zh-Hans').click()
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+    await expect(banner.getByRole('link', { name: '登录', exact: true })).toBeVisible()
+    await expect(page.getByTestId('visitor-locale')).toContainText('中文')
     // The choice is the cookie the edge reads, so a public page arrives in Chinese too.
     await page.goto('/discover')
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+    // The sign-in page has the same pill.
+    await page.goto('/login')
+    await page.getByTestId('visitor-locale').locator('summary').click()
+    await page.getByTestId('visitor-locale-en').click()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   })
 })

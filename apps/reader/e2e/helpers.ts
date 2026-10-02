@@ -4,7 +4,7 @@
  */
 import { resolve } from 'node:path'
 import { deflateSync } from 'node:zlib'
-import { type APIRequestContext, type Page, request } from '@playwright/test'
+import { type APIRequestContext, expect, type Page, request } from '@playwright/test'
 
 export const BASE = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:8811'
 export const FIXTURES = process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'
@@ -40,6 +40,35 @@ export async function latestCode(request: APIRequestContext, email: string): Pro
   const code = outbox.at(-1)?.subject.match(/(\d{6})$/)?.[1]
   if (!code) throw new Error(`no code in the outbox for ${email}`)
   return code
+}
+
+/**
+ * An operator's invite code with `uses` places (ADR 0034), as `bun run admin code` makes one: its
+ * own text, never a member code's shape.
+ */
+export async function adminCode(request: APIRequestContext, uses = 1): Promise<string> {
+  const code =
+    `E2E${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`.toUpperCase()
+  const made = await request.post(`${BASE}/api/admin/codes`, {
+    headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+    data: { code, uses },
+  })
+  if (!made.ok()) throw new Error(`code failed: ${made.status()} ${await made.text()}`)
+  return code
+}
+
+/** Join with an invite code, as the sheet does, and return the sign-in code the mail carries. */
+export async function joinAndReadCode(
+  request: APIRequestContext,
+  code: string,
+  email: string,
+): Promise<string> {
+  const joined = await request.post(`${BASE}/api/v1/join`, {
+    headers: ORIGIN,
+    data: { code, email },
+  })
+  if (!joined.ok()) throw new Error(`join failed: ${joined.status()} ${await joined.text()}`)
+  return latestCode(request, email)
 }
 
 /** Sign an API context in, the way the login page does. */
@@ -321,4 +350,57 @@ export function pngFile(width: number, height: number): Buffer {
     pngChunk('IDAT', deflateSync(pixels)),
     pngChunk('IEND', Buffer.alloc(0)),
   ])
+}
+
+/**
+ * The header at the page's width (DESIGN.md: the nav is the one control allowed to shrink): what
+ * scrolls sideways, the nav's room against its first pill, and the box of each control named.
+ */
+export async function measureHeader(page: Page, controls: string[]) {
+  return page.evaluate((ids) => {
+    const doc = document.documentElement
+    const nav = document.querySelector('header nav') as HTMLElement
+    const pill = nav.querySelector('a') as HTMLElement
+    const boxes = Object.fromEntries(
+      ids.map((id) => {
+        const el = document.querySelector(`header [data-testid="${id}"]`) as HTMLElement | null
+        const box = el?.getBoundingClientRect()
+        return [
+          id,
+          {
+            width: Math.round(box?.width ?? 0),
+            height: Math.round(box?.height ?? 0),
+            right: box?.right ?? Number.POSITIVE_INFINITY,
+          },
+        ]
+      }),
+    )
+    return {
+      overflow: doc.scrollWidth - doc.clientWidth,
+      client: nav.clientWidth,
+      scroll: nav.scrollWidth,
+      pill: Math.round(pill.getBoundingClientRect().width),
+      viewport: doc.clientWidth,
+      controls: boxes,
+    }
+  }, controls)
+}
+
+/**
+ * What every header must hold at `width`. The page never scrolls sideways, and the nav is never
+ * squeezed below one pill (a 4px nav was what `md` once rendered). Tolerances are in the nav's own
+ * units, not pixels: the member's pill row measures 335px on macOS and 341px in CI's Linux
+ * Chromium, and 800px fits it with less than that to spare. One pill's worth of slack at 800,
+ * none at all by 1024.
+ */
+export function expectHeaderFits(m: Awaited<ReturnType<typeof measureHeader>>, width: number) {
+  expect(m.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)
+  expect(m.client, 'nav narrower than a single pill').toBeGreaterThanOrEqual(m.pill)
+  if (width >= 800) {
+    expect(m.client, 'more than one pill clipped').toBeGreaterThanOrEqual(m.scroll - m.pill)
+  }
+  if (width >= 1024) expect(m.client, 'nav is clipped').toBe(m.scroll)
+  for (const [id, box] of Object.entries(m.controls)) {
+    expect(box.right, `${id} off screen`).toBeLessThanOrEqual(m.viewport)
+  }
 }

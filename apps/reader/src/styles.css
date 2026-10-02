@@ -39,6 +39,10 @@
   /* A highlight is a marker's stroke over the text, never a box around it. */
   --color-highlight: oklch(0.91 0.1 95);
   --color-highlight-strong: oklch(0.8 0.14 90);
+  /* The one filled call to action on a page (Join, the sheet's button): ink on paper by day,
+     the lifted green on a dark ground, where a filled ink button would be a pale slab. */
+  --color-primary: #1f1c18;
+  --color-on-primary: #f6f2ea;
 
   --font-serif: "EB Garamond", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
   --font-sans: "Figtree", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
@@ -84,6 +88,8 @@
     --color-danger: oklch(0.72 0.15 25);
     --color-highlight: oklch(0.5 0.09 90 / 0.55);
     --color-highlight-strong: oklch(0.7 0.12 90);
+    --color-primary: oklch(0.68 0.14 150);
+    --color-on-primary: #16140f;
   }
 }
 :root[data-theme="dark"] {
@@ -103,6 +109,8 @@
   --color-danger: oklch(0.72 0.15 25);
   --color-highlight: oklch(0.5 0.09 90 / 0.55);
   --color-highlight-strong: oklch(0.7 0.12 90);
+  --color-primary: oklch(0.68 0.14 150);
+  --color-on-primary: #16140f;
 }
 
 /*

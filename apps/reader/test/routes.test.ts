@@ -2,8 +2,17 @@ import { describe, expect, test } from 'bun:test'
 import { discoverApiPath, discoverHref, parseDiscoverParams } from '../src/lib/discover-href'
 import { canonicalReadingHref, parseReadingParams, readingHref } from '../src/lib/href'
 import { addError } from '../src/lib/opml'
+import {
+  codeError,
+  errorReturn,
+  joinError,
+  loginPath,
+  mailLink,
+  providerError,
+  safeNext,
+  withoutDoor,
+} from '../src/lib/use-sign-in'
 import { claimError } from '../src/pages/claim'
-import { loginPath, mailLink, safeNext } from '../src/pages/login'
 import { handleFrom } from '../src/pages/profile'
 import { publicRoute } from '../src/ssr'
 
@@ -95,6 +104,39 @@ describe('answers the pages turn into messages', () => {
     expect(loginPath(link('email=a%40x.test&otp=1&next=%2F%2Fevil.example'))).toBe(
       '/login?next=%2Freading',
     )
+  })
+  test("the gate's refusal of a code is never called a wrong code", () => {
+    expect(codeError(429, undefined)).toBe('rate_limited')
+    expect(codeError(403, 'INVITE_REQUIRED')).toBe('not_invited')
+    expect(codeError(400, 'INVITE_USED')).toBe('invite_used')
+    expect(codeError(400, 'INVALID_OTP')).toBe('bad_code')
+    expect(codeError(400, undefined)).toBe('bad_code')
+  })
+  test("a join's answers", () => {
+    expect(joinError(400, 'invalid_code')).toBe('invalid_code')
+    expect(joinError(400, 'invalid_email')).toBe('invalid_email')
+    expect(joinError(409, 'code_used')).toBe('code_used')
+    expect(joinError(429, 'rate_limited')).toBe('rate_limited')
+    expect(joinError(500, undefined)).toBe('send_failed')
+  })
+  test("a provider's refusal, in either case, and any code nobody listed", () => {
+    expect(providerError('invite_required')).toBe('not_invited')
+    expect(providerError('INVITE_REQUIRED')).toBe('not_invited')
+    expect(providerError('invite_unavailable')).toBe('invite_used')
+    expect(providerError('account_not_linked')).toBe('provider_unlinked')
+    expect(providerError('email_not_verified')).toBe('provider_unlinked')
+    expect(providerError('email_not_found')).toBe('provider_no_email')
+    expect(providerError('access_denied')).toBe('provider_cancelled')
+    expect(providerError('state_mismatch')).toBe('provider_expired')
+    expect(providerError('unable_to_create_user')).toBe('provider_failed')
+    expect(providerError('something_new')).toBe('provider_failed')
+  })
+  test('a refused provider comes back to the page it started on, and leaves it as it was', () => {
+    const back = errorReturn('/discover', '?topic=tech&door=join&error=x', 'login', 'github')
+    expect(back).toBe('/discover?topic=tech&door=login&via=github')
+    const query = `${new URL(back, 'https://tela.test').search}&error=access_denied&error_description=no`
+    expect(withoutDoor('/discover', query)).toBe('/discover?topic=tech')
+    expect(withoutDoor('/', '?door=join&via=google&error=access_denied')).toBe('/')
   })
   test("ingest errors become the page's own", () => {
     expect(addError('not_a_feed')).toBe('fetch_failed')
