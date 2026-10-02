@@ -9,6 +9,7 @@ import { Hono } from 'hono'
 import { type Auth, createAuth } from './auth'
 import type { ApiDeps } from './deps'
 import { fromOperator } from './operator'
+import { accountRoutes } from './routes/account'
 import { avatarRoutes } from './routes/avatars'
 import { claimRoutes } from './routes/claims'
 import { curate } from './routes/curate'
@@ -215,6 +216,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1', pictureRoutes(deps))
   app.route('/api/v1', socialRoutes(deps))
   app.route('/api/v1', inviteRoutes(deps, auth))
+  app.route('/api/v1/account', accountRoutes(deps, auth))
 
   return { app, auth }
 }

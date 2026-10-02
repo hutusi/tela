@@ -1,7 +1,8 @@
 /**
  * Passwords (ADR 0036): set only on a member whose address a code proved, tried at
  * `/api/auth/sign-in/email` under limits per IP and per address, and reset by a code of its own.
- * Setting one is tela-api's own call (`setPassword` is server-only); Settings will make it.
+ * Setting one is tela-api's own call (`setPassword` is server-only), which Settings makes through
+ * `/api/v1/account/password` (`account.test.ts`).
  */
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { createOperatorCode, first } from '@tela/data'
@@ -33,7 +34,7 @@ function door(api: TestApi) {
   }
 }
 
-/** A password set as Settings will set it: tela-api's own call, with the member's session. */
+/** A password set as `/api/v1/account/password` sets it: tela-api's own call, with the session. */
 const setPassword = (api: TestApi, as: SignedIn, newPassword: string) =>
   api.auth.api.setPassword({ headers: new Headers({ cookie: as.cookie }), body: { newPassword } })
 

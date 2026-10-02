@@ -365,14 +365,31 @@ it('sets a password and logs in with it, hashed by scrypt in workerd, on D1', as
     headers: { 'cf-connecting-ip': '198.51.100.20' },
   })
   expect(signIn.status).toBe(200)
-  // Set as Settings will set it, through tela-api's own call: `@better-auth/utils/password` under
-  // the workerd condition, which is node:crypto's scrypt (ADR 0036). It writes the credential
-  // account through the Drizzle adapter.
-  const set = await auth.api.setPassword({
-    headers: new Headers({ cookie: cookiesOf(signIn) }),
-    body: { newPassword: 'correct horse battery' },
+  const { user } = (await signIn.json()) as { user: { id: string } }
+  await call('/api/auth/email-otp/send-verification-otp', {
+    body: { email, type: 'sign-in' },
+    headers: { 'cf-connecting-ip': '198.51.100.23' },
   })
-  expect(set).toEqual({ status: true })
+  const elsewhere = await call('/api/auth/sign-in/email-otp', {
+    body: { email, otp: codeFor(email) },
+    headers: { 'cf-connecting-ip': '198.51.100.24' },
+  })
+  expect(elsewhere.status).toBe(200)
+  // Set as Settings sets it (ADR 0036): the session read from D1, then tela-api's own call, which
+  // is `@better-auth/utils/password` under the workerd condition, node:crypto's scrypt. It writes
+  // the credential account through the Drizzle adapter, and ends the member's other session.
+  const set = await call('/api/v1/account/password', {
+    body: { newPassword: 'correct horse battery' },
+    cookie: cookiesOf(signIn),
+    headers: { [MEMBER_HEADER]: user.id },
+  })
+  expect(set.status).toBe(200)
+  expect(
+    await auth.api.getSession({
+      headers: new Headers({ cookie: cookiesOf(elsewhere) }),
+      query: { disableCookieCache: true },
+    }),
+  ).toBeNull()
   const stored = await db.all<{ password: string }>(
     sql`select a.password from account a join user u on u.id = a.user_id
       where u.email = ${email} and a.provider_id = 'credential'`,

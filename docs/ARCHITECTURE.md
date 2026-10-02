@@ -184,6 +184,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `POST`, `GET /api/admin/codes`, `DELETE /api/admin/codes/:code` | Bearer `ADMIN_TOKEN`: the operator's invite codes (ADR 0034), text of their choosing that no member code's shape matches, with up to 100,000 places; listed with places taken and live holds; revoked whether used or not, which cancels its holds and keeps who joined |
 | `POST /api/v1/join` | A visitor's join with an invite code, no session (ADR 0034): a day's hold beside the code, which takes no place, then a sign-in code that says the address is invited. An address with an account gets a plain code and leaves the code alone, with the same 200. 400 `invalid_code` (unknown or revoked, one answer), 409 `code_used`. It mails through `auth.api`, which better-auth's limiter never counts, so it counts its own in `action_limits`: per IP (an IPv6 /64) before it looks the code up; then, for a live code only, per address (with the sign-in codes mailed to it) and per code (its places an hour, at least 20) |
 | `GET`, `POST /api/v1/invites`, `DELETE /api/v1/invites/:code` | A member's five codes (ADR 0034), live answers like the dashboard, not synced rows: the codes that count (unrevoked, or used) and who joined with each, by handle, never a pending address; a new one while fewer than five count; revoking an unused one frees its place and cancels its holds |
+| `GET /api/v1/account`, `POST /api/v1/account/password`, `/link`, `/unlink`, `/sign-out-everywhere` | A member's ways in (ADR 0036), live answers, not synced rows: their address, whether they have a password, the providers linked, and whether the session is fresh (made within the day); the first password set on a fresh session, or changed given the current one; Google or GitHub linked from a fresh session, returning to `/settings?linked=<provider>` or `/settings?error=<code>`, URLs fixed on the server; a provider unlinked on a fresh session (a password is not removed); every other session ended. Every call reads the session from D1 again, not its signed copy. A password set or changed, or a provider linked (at its return), ends the member's other sessions; every change, and a reset by code, mails the member a notice. Counted per member: passwords 5 per 15 minutes, links and unlinks 10 an hour each |
 | `GET /api/v1/sync?cursor=` | The pull: a horizon snapshot at cursor 0, deltas by seq in pages ending on a seq boundary |
 | `POST /api/v1/mutations` | The push: up to 50 idempotent, last-writer-wins mutations in one batch |
 | `/api/v1/translations` | Request a body translation; poll its streamed state |
@@ -202,7 +203,8 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `/api/health` | Liveness and D1 latency |
 
 Every `/api/v1/*` route but the public ones and `/api/v1/join` needs a session, read from the
-signed five-minute cookie cache. Reader actions are rate-limited per member (`action_limits`).
+signed five-minute cookie cache; `/api/v1/account/*` reads it from D1 again, so a session ended
+elsewhere changes nothing there. Reader actions are rate-limited per member (`action_limits`).
 
 ## The edge (`apps/reader/worker`, tela-web)
 

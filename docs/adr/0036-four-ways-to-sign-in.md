@@ -119,7 +119,9 @@ when it matters. Every call reads the session from D1 (`disableCookieCache`), be
 reset or "sign out everywhere" revoked lives on in the five-minute signed cookie elsewhere. Adding a
 method needs a session made within the last day (`freshAge`) and revokes the member's other
 sessions; changing the password needs the current one. Every change mails the member a security
-notice, so a method someone else added does not go unnoticed. Each call is limited per member.
+notice, so a method someone else added does not go unnoticed. Each change is limited per member;
+ending the other sessions is not, since anyone holding one of the member's sessions could spend the
+count, and so keep the member from ending it.
 
 **Why `create.before` and not `validateUserInfo`.** better-auth 1.7.6 has a hook made for this:
 `user.validateUserInfo` is told the method (`oauth`) and the action (`create-user`, `link-account`

@@ -19,6 +19,8 @@ const oldShell = { [CLIENT_HEADER]: '1' }
 const nameless = { [MEMBER_HEADER]: undefined }
 /** b's invite code, in the shape of a member's (ADR 0034). */
 const B_CODE = 'BCDEFGHJKMNP'
+/** b's GitHub, linked, for b to unlink (ADR 0036). */
+const B_GITHUB = 'b-github-account'
 
 let server: FixtureServer
 let api: TestApi
@@ -47,7 +49,9 @@ beforeEach(async () => {
       `<html><head><link rel="alternate" type="application/rss+xml" href="${server.url('/feed.xml')}"></head></html>`,
     )
   })
-  api = await createTestApi()
+  api = await createTestApi({
+    oauth: { github: { clientId: 'github-client', clientSecret: 'github-secret' } },
+  })
   db = api.db
   a = await signedIn(api, 'a@x.test')
   b = await signedIn(api, 'b@x.test')
@@ -73,6 +77,8 @@ beforeEach(async () => {
   ] as never)
   // An invite code of b's that nobody has used, for b to revoke.
   await createMemberCode(db, { userId: b.userId, now: 0, code: B_CODE })
+  await db.run(sql`insert into account (id, account_id, provider_id, user_id, created_at, updated_at)
+    values (${B_GITHUB}, '4242', 'github', ${b.userId}, 0, 0)`)
 })
 
 const subsOf = (userId: string) =>
@@ -287,6 +293,32 @@ const MEMBER_ROUTES: MemberRoute[] = [
     path: `/api/v1/invites/${B_CODE}`,
     method: 'DELETE',
     effect: 'writes',
+  },
+  { route: 'GET /api/v1/account', path: '/api/v1/account', effect: 'reads' },
+  {
+    route: 'POST /api/v1/account/password',
+    path: '/api/v1/account/password',
+    body: () => ({ newPassword: 'correct horse battery' }),
+    effect: 'writes',
+  },
+  {
+    route: 'POST /api/v1/account/link',
+    path: '/api/v1/account/link',
+    body: () => ({ provider: 'github' }),
+    effect: 'writes', // the OAuth state, and its rate limit
+  },
+  {
+    route: 'POST /api/v1/account/unlink',
+    path: '/api/v1/account/unlink',
+    body: () => ({ accountId: B_GITHUB }),
+    effect: 'writes',
+  },
+  // b's only session is the one asking, so there is no other to end.
+  {
+    route: 'POST /api/v1/account/sign-out-everywhere',
+    path: '/api/v1/account/sign-out-everywhere',
+    body: () => ({}),
+    effect: 'reads',
   },
 ]
 

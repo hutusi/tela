@@ -34,9 +34,9 @@ import {
   getOAuthState,
 } from 'better-auth/api'
 import { emailOTP } from 'better-auth/plugins'
-import { sql } from 'drizzle-orm'
+import { and, eq, ne, sql } from 'drizzle-orm'
 import type { ApiConfig, ApiDeps } from './deps'
-import { passwordResetMail, providerAccountMail, signInMail } from './mail'
+import { accountChangeMail, passwordResetMail, providerAccountMail, signInMail } from './mail'
 
 /** Cookie names start `tela.`; tela-web reads `tela.session_data` to authorize /o and /img. */
 export const COOKIE_PREFIX = 'tela'
@@ -44,6 +44,13 @@ export const COOKIE_PREFIX = 'tela'
 export const COOKIE_CACHE_SECONDS = 5 * 60
 const CODE_SECONDS = 60 * 60
 const DAY = 24 * 60 * 60
+/**
+ * How recent a sign-in must be for what needs one (ADR 0036): adding a way in, or taking one away.
+ * better-auth's default too, said here because the account routes rest on it.
+ */
+export const FRESH_SECONDS = DAY
+/** How long a password may be (ADR 0036): checked by better-auth, and by Tela before counting. */
+export const PASSWORD_LENGTH = { min: 10, max: 128 } as const
 
 /**
  * Every endpoint that mails a code to an address or checks one against it, and the password
@@ -245,6 +252,23 @@ const NO_TOKENS = {
 }
 
 /**
+ * End every session a member has but the one whose token is kept (none when `keep` is null), and
+ * say how many ended (ADR 0036). Each device's signed five-minute copy of an ended session still
+ * works where only that copy is read (ADR 0024); `/api/v1/account` reads past it.
+ */
+export async function endOtherSessions(
+  db: TelaDb,
+  userId: string,
+  keep: string | null,
+): Promise<number> {
+  const ended = await db
+    .delete(schema.session)
+    .where(and(eq(schema.session.userId, userId), ne(schema.session.token, keep ?? '')))
+    .returning({ id: schema.session.id })
+  return ended.length
+}
+
+/**
  * What a sign-in finds missing from what making the account should have written, written now: a
  * profile, when the insert that follows the user's failed, and the settlement of the invitation
  * that admitted them. One read when nothing is.
@@ -301,9 +325,7 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       // A signed copy of the session in a cookie: tela-api reads no session row for 5 minutes,
       // and tela-web authorizes content objects without D1 at all.
       cookieCache: { enabled: true, maxAge: COOKIE_CACHE_SECONDS, strategy: 'compact' },
-      // How recent a sign-in must be for what needs one (adding a way in, ADR 0036). better-auth's
-      // default too, said here because the account routes rest on it.
-      freshAge: DAY,
+      freshAge: FRESH_SECONDS,
     },
     /**
      * Passwords (ADR 0036), for members only: a password is set on a member whose address a code
@@ -318,9 +340,22 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       enabled: true,
       disableSignUp: true,
       requireEmailVerification: true,
-      minPasswordLength: 10,
-      maxPasswordLength: 128,
+      minPasswordLength: PASSWORD_LENGTH.min,
+      maxPasswordLength: PASSWORD_LENGTH.max,
       revokeSessionsOnPasswordReset: true,
+      // The member is told, as at every change to their ways in. A notice that fails to go is
+      // logged rather than fail the reset, which has set the password by then.
+      onPasswordReset: async ({ user }) => {
+        await mail
+          .send(
+            accountChangeMail({
+              to: user.email,
+              change: { kind: 'password-reset' },
+              publicUrl: config.publicUrl,
+            }),
+          )
+          .catch((err) => console.error('account notice not sent', user.id, err))
+      },
     },
     advanced: {
       cookiePrefix: COOKIE_PREFIX,
@@ -437,7 +472,38 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       // No provider's tokens are kept (ADR 0036): Tela never calls a provider's API, and a token at
       // rest is one more thing to leak.
       account: {
-        create: { before: async () => ({ data: NO_TOKENS }) },
+        create: {
+          before: async () => ({ data: NO_TOKENS }),
+          /**
+           * A provider linked from Settings (`/api/v1/account/link`) is a way in added, and it is
+           * added here, at the provider's return: the member's other sessions end, the browser's
+           * own is kept, and their address is told (ADR 0036). The OAuth state names the member
+           * the link was started for, as only the server writes it; an account a provider makes
+           * for a new member has no link in its state, and is told in `user.create.after`.
+           * Neither failure undoes the link, which is written by then: each is logged.
+           */
+          after: async (account, context) => {
+            if (context?.path !== PROVIDER_RETURN) return
+            const link = (await getOAuthState().catch(() => null))?.link
+            if (!link) return
+            const token = await context.getSignedCookie(
+              context.context.authCookies.sessionToken.name,
+              context.context.secret,
+            )
+            await endOtherSessions(db, link.userId, typeof token === 'string' ? token : null).catch(
+              (err) => console.error('sessions not ended', link.userId, err),
+            )
+            await mail
+              .send(
+                accountChangeMail({
+                  to: link.email,
+                  change: { kind: 'linked', provider: account.providerId },
+                  publicUrl: config.publicUrl,
+                }),
+              )
+              .catch((err) => console.error('account notice not sent', link.userId, err))
+          },
+        },
         update: { before: async () => ({ data: NO_TOKENS }) },
       },
       session: {

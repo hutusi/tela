@@ -376,11 +376,22 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   - A member whose `/api/v1/me` has `profile: null`, or whose invitation is redeemed but not
     settled, is repaired at their next sign-in. The Worker logs `invitation not settled` or
     `member not repaired` when writing either failed.
+  - **Settings → Account** (`/api/v1/account`, ADR 0036) reads the session from D1 at every call.
+    `403 session_not_fresh` is a session made more than a day ago, asked to add a way in or take
+    one away: the member signs in again, by code or password, and tries from that session.
+    Setting or changing a password, or linking a provider, ends every other session the member
+    has; each change, and a reset by code, mails the member a notice (`account notice not sent` or
+    `sessions not ended` in the logs when either fails; neither undoes the change). A link that
+    fails comes back to `/settings?error=<code>`, better-auth's: `account_already_linked_to_different_user`
+    for a provider identity another member has linked, `unable_to_link_account` for an address the
+    provider has not verified.
   - `404 {"error":"not_found"}` from a `/api/auth/*` path is tela-api, not better-auth: only the
     endpoints in `AUTH_ENDPOINTS` (`apps/api/src/app.ts`) and the sign-out are served (ADR 0036).
     A better-auth feature turned on later answers 404 until its endpoint is added there.
 - **Sessions** last 60 days. A signed copy is trusted for five minutes, so a signed-out session
-  can linger that long on a device that kept the cookie.
+  can linger that long on a device that kept the cookie, everywhere but `/api/v1/account`, which
+  reads D1. "Sign out everywhere" in Settings → Account ends every session but the member's own;
+  an operator ends all of a member's with `delete from session where user_id = '<user id>'`.
 - **Password hashing** is better-auth's scrypt (N=16384, r=16), native `node:crypto` under workerd:
   every password sign-in, reset or new password is one hash of about 32 MiB that blocks the
   isolate while it runs, and an unknown address is hashed too. Read its CPU time for
@@ -389,7 +400,9 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   (ADR 0036).
 - **Rate limits** on reader actions are `ACTION_LIMITS` (`packages/data/src/queries/limits.ts`):
   discover 30/h, subscribe 120/h, OPML import 5/h, claim start 10/h, claim verify 30/h, translate
-  30/h, data export 10/h, new invite codes 20/h. Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
+  30/h, data export 10/h, new invite codes 20/h; a password set or changed 5 per 15 minutes,
+  provider links and unlinks 10/h each (`passwordChange`, `accountLink`, `accountUnlink`: tela-api
+  calls better-auth for these itself, which its limiter never counts). Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
   Sign-in has better-auth's per-IP limits (password sign-ins 5/min) and three of Tela's per email
   address, counted for any address in a `hooks.before` (`apps/api/src/auth.ts`): on every
   endpoint that sends or checks a code, code sends 5/h and code tries 10/h; on the password

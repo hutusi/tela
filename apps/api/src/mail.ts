@@ -143,3 +143,96 @@ export function providerAccountMail(options: {
     ],
   })
 }
+
+/** A change to a member's ways in (ADR 0036): a password, or a provider linked or removed. */
+export type AccountChange =
+  | { kind: 'password-set' | 'password-changed' | 'password-reset' }
+  | { kind: 'linked' | 'unlinked'; provider: string }
+
+/**
+ * A change to the ways into a member's account (ADR 0036), told to their address whoever made it,
+ * so a way in that someone else added, or one of the member's they took away, does not go
+ * unnoticed. What to do if it was not the member depends on what changed: a password is replaced
+ * by a reset code, which ends every session; a provider is removed after signing in by code, which
+ * proves the address today. Like every notice, it carries no code and signs nobody in.
+ */
+export function accountChangeMail(options: {
+  to: string
+  change: AccountChange
+  publicUrl: string
+}): MailMessage {
+  const { to, change, publicUrl } = options
+  const provider = 'provider' in change ? (PROVIDER_NAMES[change.provider] ?? change.provider) : ''
+  const login = `${publicUrl}/login`
+  const othersOut: Both = ['Every other device was signed out.', '其他设备都已退出登录。']
+  const byCode: Both = [
+    `sign in at ${login} with a code sent to this address`,
+    `在 ${login} 用发到此邮箱的验证码登录`,
+  ]
+  const newPassword: Both = [
+    `If it was not you, choose a new password from the sign-in page, ${login}: a code comes to this address, and the new password signs everyone else out.`,
+    `如果不是你本人，请在登录页 ${login} 重新设置密码：验证码会发到此邮箱，设置新密码后其他人都会退出登录。`,
+  ]
+  const notes: Record<AccountChange['kind'], { subject: string; what: Both; ifNot: Both }> = {
+    'password-set': {
+      subject: 'A password was added to your Tela account · 你的 Tela 账号已设置密码',
+      what: [
+        `The Tela account for ${to} now has a password. ${othersOut[0]}`,
+        `${to} 的 Tela 账号已设置密码。${othersOut[1]}`,
+      ],
+      ifNot: newPassword,
+    },
+    'password-changed': {
+      subject: 'Your Tela password was changed · 你的 Tela 密码已更改',
+      what: [
+        `The password of the Tela account for ${to} was changed. ${othersOut[0]}`,
+        `${to} 的 Tela 账号密码已更改。${othersOut[1]}`,
+      ],
+      ifNot: newPassword,
+    },
+    'password-reset': {
+      subject: 'Your Tela password was reset · 你的 Tela 密码已重置',
+      what: [
+        `A new password was chosen for the Tela account for ${to}, with a code sent to this address, and every device was signed out.`,
+        `${to} 的 Tela 账号已用发到此邮箱的验证码设置了新密码，所有设备都已退出登录。`,
+      ],
+      ifNot: [
+        `If it was not you, someone can read this mailbox: secure it first, then choose a new password again at ${login}.`,
+        `如果不是你本人，说明有人能读取这个邮箱：请先保护好邮箱，再到 ${login} 重新设置密码。`,
+      ],
+    },
+    linked: {
+      subject: `${provider} was linked to your Tela account · ${provider} 已关联到你的 Tela 账号`,
+      what: [
+        `${provider} now signs in to the Tela account for ${to}. ${othersOut[0]}`,
+        `现在可以用 ${provider} 登录 ${to} 的 Tela 账号。${othersOut[1]}`,
+      ],
+      ifNot: [
+        `If it was not you, ${byCode[0]}, then remove ${provider} and sign out everywhere in Settings → Account.`,
+        `如果不是你本人，请${byCode[1]}，然后在“设置 → 账号”中移除 ${provider}，并退出所有设备。`,
+      ],
+    },
+    unlinked: {
+      subject: `${provider} was removed from your Tela account · ${provider} 已从你的 Tela 账号移除`,
+      what: [
+        `${provider} no longer signs in to the Tela account for ${to}.`,
+        `${provider} 不能再登录 ${to} 的 Tela 账号。`,
+      ],
+      ifNot: [
+        `If it was not you, someone is signed in as you: ${byCode[0]}, then sign out everywhere in Settings → Account, and link ${provider} again.`,
+        `如果不是你本人，说明有人以你的身份登录了：请${byCode[1]}，然后在“设置 → 账号”中退出所有设备，并重新关联 ${provider}。`,
+      ],
+    },
+  }
+  const { subject, what, ifNot } = notes[change.kind]
+  return noticeMail({
+    to,
+    subject,
+    heading: 'How you sign in to Tela changed · 你的 Tela 登录方式有变动',
+    what: [
+      `${what[0]} If that was you, there is nothing to do.`,
+      `${what[1]}如果是你本人，无需任何操作。`,
+    ],
+    ifNot,
+  })
+}
