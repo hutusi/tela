@@ -19,7 +19,7 @@ export function LocaleSwitcher() {
           type="button"
           onClick={() => setLocale(code)}
           aria-pressed={code === locale}
-          className={`rounded-full px-2.5 py-1 ${code === locale ? 'bg-ink text-paper' : 'text-ink-2 hover:bg-hover'}`}
+          className={`rounded-full px-2.5 py-1 whitespace-nowrap ${code === locale ? 'bg-ink text-paper' : 'text-ink-2 hover:bg-hover'}`}
         >
           {pillLabel(code)}
         </button>
