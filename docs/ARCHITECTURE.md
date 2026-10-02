@@ -72,7 +72,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `leases`, `lease_fence` | Who holds which piece of background work, and the fence that aborts a stale holder's batch |
 | `dead_letters`, `ops_heartbeats` | Work that gave up; the tick's last run |
 | `llm_calls`, `usage_daily` | Every model call; reserved and used tokens per member and day (`'*'` is background) |
-| `action_limits`, `applied_mutations`, `tombstones`, `counters` | Reader action limits; pushed mutation ids (replays change nothing); hard deletes for sync; the `seq` counter |
+| `action_limits`, `applied_mutations`, `tombstones`, `counters` | Reader action limits, and sign-in limits per email address; pushed mutation ids (replays change nothing); hard deletes for sync; the `seq` counter |
 
 ## Content pipeline
 
@@ -179,7 +179,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 
 | Route | Purpose |
 |---|---|
-| `/api/auth/*` | better-auth: email codes only, registration closed, codes hashed, three tries |
+| `/api/auth/*` | better-auth: email codes only, registration closed, codes hashed, three tries; limited per IP by better-auth and per email address by Tela (`action_limits`) |
 | `POST /api/admin/invite`, `POST /api/admin/curate` | Bearer `ADMIN_TOKEN`: invite a member; add and feature a curated blog |
 | `GET /api/v1/sync?cursor=` | The pull: a horizon snapshot at cursor 0, deltas by seq in pages ending on a seq boundary |
 | `POST /api/v1/mutations` | The push: up to 50 idempotent, last-writer-wins mutations in one batch |

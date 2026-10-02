@@ -103,9 +103,12 @@ Everything else is a 404. That also closes `/update-user`, which today lets a me
 `user.image`, and so in the session cookie.
 
 **Limits per address, not only per IP.** Tela adds its own, keyed on the lowercased address, in a
-`hooks.before` over `action_limits`: five code sends and ten code sign-ins an hour, and ten password
-sign-ins in fifteen minutes, beside five a minute per IP. They count for any address, so a 429 says
-nothing about who is a member. Calls Tela makes through `auth.api.*` (`/api/v1/join`,
+`hooks.before` over `action_limits`: five codes mailed and ten codes checked an hour, and ten
+password sign-ins in fifteen minutes, beside five a minute per IP. The code counts cover every
+endpoint that sends or checks one, whatever it is for: a reset code is as good as a sign-in code
+to someone guessing, since the right one gives the account a password, so both reset steps count
+against the same five and ten as sign-in. They count for any address, so a 429 says nothing about
+who is a member. Calls Tela makes through `auth.api.*` (`/api/v1/join`,
 `/api/v1/account/*`) never pass better-auth's limiter, so those routes carry limits of their own.
 
 **A member manages their ways in under `/api/v1/account`**: what they have (their address, whether

@@ -282,8 +282,17 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   code. Registration is otherwise closed (ADR 0015's policy).
 - **Sign-in trouble:**
   - Codes last an hour and allow three attempts. The sign-in endpoint allows three tries a
-    minute per address; past that the login page says "Too many tries", not "wrong code".
-  - `select key, count, last_request from rate_limit` shows better-auth's windows.
+    minute per IP; past that the login page says "Too many tries", not "wrong code".
+  - Each email address, from however many IPs, is also mailed at most five codes an hour and has
+    at most ten guesses checked (`otpSend`, `otpVerify`), whatever the codes are for: sign-in,
+    password reset and the address check share both counts, and so do all the endpoints that send
+    or check one (`PER_ADDRESS` in `apps/api/src/auth.ts`). The 429 is the same whether or not the
+    address has an account. A member who sees "Too many tries" on their first attempt is most likely someone
+    else asking for their address; it clears on the hour, or at once (the address lowercased) with
+    `delete from action_limits where key in ('otpSend:<address>', 'otpVerify:<address>')`.
+    The operator's `admin invite` is not counted.
+  - `select key, count, last_request from rate_limit` shows better-auth's windows, and
+    `select * from action_limits where key like 'otp%'` Tela's.
   - A code that never arrives: check Resend's log for the address first, then the Worker's logs
     for the send error.
 - **Sessions** last 60 days. A signed copy is trusted for five minutes, so a signed-out session
@@ -291,6 +300,9 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
 - **Rate limits** on reader actions are `ACTION_LIMITS` (`packages/data/src/queries/limits.ts`):
   discover 30/h, subscribe 120/h, OPML import 5/h, claim start 10/h, claim verify 30/h, translate
   30/h, data export 10/h. Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
+  Sign-in has better-auth's per-IP limits and two of Tela's per email address, counted for any
+  address in a `hooks.before` (`apps/api/src/auth.ts`) on every endpoint that sends or checks a
+  code: code sends 5/h, code tries 10/h.
 
 ## tela-jobs
 

@@ -3,9 +3,18 @@
  * `TelaDb` everything else uses, so it runs on D1 in production and libSQL in tests. Registration
  * is closed: an account exists only because an operator invited it (ADR 0015's policy).
  */
-import { bumpSeq, currentSeq, first, schema, type TelaDb } from '@tela/data'
+import {
+  bumpSeq,
+  consumeLimit,
+  currentSeq,
+  first,
+  type LimitedAction,
+  schema,
+  type TelaDb,
+} from '@tela/data'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { emailOTP } from 'better-auth/plugins'
 import { sql } from 'drizzle-orm'
 import type { ApiDeps } from './deps'
@@ -17,6 +26,28 @@ export const COOKIE_PREFIX = 'tela'
 export const COOKIE_CACHE_SECONDS = 5 * 60
 const CODE_SECONDS = 60 * 60
 const DAY = 24 * 60 * 60
+
+/**
+ * Every endpoint that mails a code to an address or checks one against it, counted per email
+ * address as well as per IP (ADR 0036): better-auth's limiter keys on the IP and the path alone.
+ * All kinds of code share the two counts, so an address is mailed five codes and has ten guesses
+ * checked an hour, whatever the codes are for. The reset steps count like sign-in: they work
+ * whether or not passwords are on, and a right reset code gives the account a password. The
+ * plugin's change-email pair needs a session and is off; `auth.test.ts` fails on any other.
+ */
+export const PER_ADDRESS = new Map<string, LimitedAction>([
+  ['/email-otp/send-verification-otp', 'otpSend'],
+  ['/email-otp/request-password-reset', 'otpSend'],
+  ['/forget-password/email-otp', 'otpSend'],
+  ['/sign-in/email-otp', 'otpVerify'],
+  ['/email-otp/check-verification-otp', 'otpVerify'],
+  ['/email-otp/verify-email', 'otpVerify'],
+  ['/email-otp/reset-password', 'otpVerify'],
+])
+/** No deliverable address is longer (RFC 5321), and the key is written before anything checks it. */
+const ADDRESS_MAX = 254
+/** What better-auth's own limiter answers, so a 429 does not say which limit it was. */
+const TOO_MANY = 'Too many requests. Please try again later.'
 
 /** A fresh handle for a new member, changed later in settings: `u_` and ten hex digits. */
 export function provisionalHandle(): string {
@@ -63,6 +94,27 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
     },
     // Per-isolate memory is useless on Workers: limits live in D1.
     rateLimit: { enabled: true, storage: 'database' },
+    hooks: {
+      // Counted for any address, member or not, keyed as better-auth keys the code (the lowercased
+      // address), and refused the same way for all of them, so a 429 says nothing about who has an
+      // account. Only requests from outside are counted. tela-api's own calls through `auth.api`
+      // carry no request: the operator's invite needs no limit, and a route that lets anyone
+      // trigger one must count for itself.
+      before: createAuthMiddleware(async (ctx) => {
+        const action = PER_ADDRESS.get(ctx.path)
+        const email: unknown = ctx.body?.email
+        if (!action || !ctx.request || typeof email !== 'string') return
+        const address = email.toLowerCase().slice(0, ADDRESS_MAX)
+        const { allowed, retryAfterSec } = await consumeLimit(db, action, address, clock.now())
+        if (!allowed) {
+          throw new APIError(
+            'TOO_MANY_REQUESTS',
+            { message: TOO_MANY },
+            { 'X-Retry-After': String(retryAfterSec) },
+          )
+        }
+      }),
+    },
     databaseHooks: {
       user: {
         create: {

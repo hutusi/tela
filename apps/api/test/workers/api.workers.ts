@@ -75,6 +75,12 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     body: { email: 'reader@x.test', otp: code },
   })
   expect(signIn.status).toBe(200)
+  // The try counted against the address too (ADR 0036), in the hook before better-auth's endpoint.
+  expect(
+    await db.all<{ count: number }>(
+      sql`select count from action_limits where key = 'otpVerify:reader@x.test'`,
+    ),
+  ).toEqual([{ count: 1 }])
   const cookie = signIn.headers
     .getSetCookie()
     .map((c) => c.split(';')[0])

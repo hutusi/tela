@@ -1,15 +1,15 @@
 /**
- * Tela's own per-member limits, for actions that create rows, fetch on a member's behalf or spend
- * model tokens. Fixed windows in D1 (`action_limits`), one upsert per check, because nothing in
- * an isolate's memory survives to the next request. better-auth limits its own endpoints
- * separately (`rate_limit`).
+ * Tela's own limits: per member, for actions that create rows, fetch on a member's behalf or spend
+ * model tokens; per email address, on the codes better-auth mails and checks. Fixed windows in D1
+ * (`action_limits`), one upsert per check, because nothing in an isolate's memory survives to the
+ * next request. better-auth limits its own endpoints per IP, separately (`rate_limit`).
  */
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
 
 export type ActionLimit = { limit: number; windowSec: number }
 
-/** The Postgres stack's limits, unchanged. */
+/** The Postgres stack's member limits, unchanged; then the sign-in ones (ADR 0036). */
 export const ACTION_LIMITS = {
   /** Discovery fetches arbitrary URLs on the member's behalf. */
   discover: { limit: 30, windowSec: 3600 },
@@ -24,6 +24,18 @@ export const ACTION_LIMITS = {
   export: { limit: 10, windowSec: 3600 },
   /** A picture of their own (ADR 0033): each one is an object in R2 and a new address. */
   avatarUpload: { limit: 20, windowSec: 3600 },
+  /**
+   * Codes mailed to one address, from any IP and of any kind (sign-in, password reset, address
+   * check). Each new code also brings three fresh tries, so this bounds the guesses as much as
+   * the mail.
+   */
+  otpSend: { limit: 5, windowSec: 3600 },
+  /**
+   * Codes tried against one address from anywhere, on any endpoint that checks one. better-auth
+   * counts per IP, and an IPv6 /48 is 65,536 of its buckets: enough to guess six digits within
+   * minutes.
+   */
+  otpVerify: { limit: 10, windowSec: 3600 },
 } as const satisfies Record<string, ActionLimit>
 
 export type LimitedAction = keyof typeof ACTION_LIMITS

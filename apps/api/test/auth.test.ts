@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { first } from '@tela/data'
 import { sql } from 'drizzle-orm'
+import { PER_ADDRESS } from '../src/auth'
 import { ADMIN_TOKEN, codeFor, cookiesOf, createTestApi, signedIn } from './helpers'
 
 const invite = (
@@ -92,10 +93,20 @@ describe('signing in with a code', () => {
     })
   })
 
-  // Each try from its own address, so the per-address rate limit below stays out of the way.
-  const tryCode = (api: Awaited<ReturnType<typeof createTestApi>>, otp: string, ip: string) =>
+  // Each try from its own IP, so better-auth's per-IP rate limit below stays out of the way.
+  const tryCode = (
+    api: Awaited<ReturnType<typeof createTestApi>>,
+    otp: string,
+    ip: string,
+    email = 'a@x.test',
+  ) =>
     api.request('/api/auth/sign-in/email-otp', {
-      body: { email: 'a@x.test', otp },
+      body: { email, otp },
+      headers: { 'cf-connecting-ip': ip },
+    })
+  const askCode = (api: Awaited<ReturnType<typeof createTestApi>>, email: string, ip: string) =>
+    api.request('/api/auth/email-otp/send-verification-otp', {
+      body: { email, type: 'sign-in' },
       headers: { 'cf-connecting-ip': ip },
     })
 
@@ -120,6 +131,163 @@ describe('signing in with a code', () => {
     expect((await tryCode(api, '000000', '203.0.113.9')).status).toBe(429)
     // Another reader behind the same Cloudflare edge is not throttled with them.
     expect((await tryCode(api, '000000', '203.0.113.10')).status).not.toBe(429)
+  })
+
+  test('one address is tried ten times an hour at most, however many IPs try it', async () => {
+    const api = await createTestApi()
+    await invite(api, 'a@x.test')
+    for (let i = 1; i <= 10; i++)
+      expect((await tryCode(api, '000000', `198.51.100.${i}`)).status).not.toBe(429)
+    // A fresh code, from the operator (tela-api's own call, which is not counted), is no help: the
+    // eleventh try is refused from an IP that never tried, right code or not.
+    await invite(api, 'a@x.test')
+    const code = codeFor(api, 'a@x.test')
+    const refused = await tryCode(api, code, '198.51.100.11', 'A@X.test')
+    expect(refused.status).toBe(429)
+    expect(refused.headers.get('x-retry-after')).toBe('3600')
+    // An address with no account is refused the same way, and so is a client over the per-IP
+    // limit: the answer tells none of the three apart.
+    for (let i = 1; i <= 11; i++)
+      await tryCode(api, '000000', `198.51.100.${20 + i}`, 'stranger@x.test')
+    const stranger = await tryCode(api, '000000', '198.51.100.40', 'stranger@x.test')
+    expect(stranger.status).toBe(429)
+    for (let i = 0; i < 3; i++) await tryCode(api, '000000', '203.0.113.9', 'b@x.test')
+    const perIp = await tryCode(api, '000000', '203.0.113.9', 'b@x.test')
+    expect(perIp.status).toBe(429)
+    const answer = await refused.json()
+    expect(await stranger.json()).toEqual(answer)
+    expect(await perIp.json()).toEqual(answer)
+    // Another address from the eleventh IP is tried as usual, and the next hour starts afresh.
+    expect((await tryCode(api, '000000', '198.51.100.11', 'c@x.test')).status).toBe(400)
+    api.clock.advance(60 * 60 * 1000)
+    expect((await tryCode(api, code, '198.51.100.12')).status).toBe(200)
+  })
+
+  test('one address is mailed five codes an hour at most, however many IPs ask', async () => {
+    const api = await createTestApi()
+    await invite(api, 'a@x.test')
+    await invite(api, 'b@x.test')
+    for (let i = 1; i <= 5; i++)
+      expect((await askCode(api, 'a@x.test', `198.51.100.${i}`)).status).toBe(200)
+    const mailed = api.mail.outbox.length
+    const refused = await askCode(api, 'A@X.test', '198.51.100.6')
+    expect(refused.status).toBe(429)
+    expect(api.mail.outbox).toHaveLength(mailed)
+    // The same for an address no one has, so the limit says nothing about who is a member.
+    for (let i = 1; i <= 5; i++) await askCode(api, 'stranger@x.test', `198.51.100.${10 + i}`)
+    const stranger = await askCode(api, 'stranger@x.test', '198.51.100.16')
+    expect(stranger.status).toBe(429)
+    expect(await stranger.json()).toEqual(await refused.json())
+    // Another address from the same IP is mailed, and the operator's invite still goes out.
+    expect((await askCode(api, 'b@x.test', '198.51.100.6')).status).toBe(200)
+    expect((await invite(api, 'a@x.test')).status).toBe(200)
+    expect(api.mail.outbox).toHaveLength(mailed + 2)
+  })
+
+  // A right reset code gives the account a password, passwords on or not, so it is as good as a
+  // sign-in code to someone guessing: every way to mail or check a code shares the address's counts.
+  const authCall = (
+    api: Awaited<ReturnType<typeof createTestApi>>,
+    path: string,
+    body: Record<string, string>,
+    ip: string,
+  ) => api.request(`/api/auth/${path}`, { body, headers: { 'cf-connecting-ip': ip } })
+
+  test('a reset code is checked against the same ten tries an hour as a sign-in code', async () => {
+    const api = await createTestApi()
+    await invite(api, 'a@x.test')
+    let n = 0
+    const ip = () => `198.51.100.${++n}`
+    const reset = (email: string, otp: string) =>
+      authCall(
+        api,
+        'email-otp/reset-password',
+        { email, otp, password: 'a-guessed-password' },
+        ip(),
+      )
+    // Every endpoint that checks a code, in turn, each try from an IP that never tried.
+    const checks = [
+      (email: string) => tryCode(api, '000000', ip(), email),
+      (email: string) => reset(email, '000000'),
+      (email: string) =>
+        authCall(
+          api,
+          'email-otp/check-verification-otp',
+          { email, type: 'sign-in', otp: '000000' },
+          ip(),
+        ),
+      (email: string) => authCall(api, 'email-otp/verify-email', { email, otp: '000000' }, ip()),
+    ]
+    const tenTries = [...checks, ...checks, ...checks].slice(0, 10)
+    for (const check of tenTries) expect((await check('a@x.test')).status).not.toBe(429)
+    // A reset code asked for now (one of the address's five sends) is refused, right as it is, and
+    // the account gets no password. So is a try on every other endpoint that checks a code.
+    const asked = await authCall(
+      api,
+      'email-otp/request-password-reset',
+      { email: 'a@x.test' },
+      ip(),
+    )
+    expect(asked.status).toBe(200)
+    const refused = await reset('A@X.test', codeFor(api, 'a@x.test'))
+    expect(refused.status).toBe(429)
+    expect(
+      await first(api.db, sql`select 1 as x from account where provider_id = 'credential'`),
+    ).toBeUndefined()
+    for (const check of checks) expect((await check('a@x.test')).status).toBe(429)
+    // An address with no account is refused the same way.
+    for (const check of tenTries) await check('stranger@x.test')
+    const stranger = await reset('stranger@x.test', '000000')
+    expect(stranger.status).toBe(429)
+    expect(await stranger.json()).toEqual(await refused.json())
+  })
+
+  test('a reset code is mailed from the same five an hour as a sign-in code', async () => {
+    const api = await createTestApi()
+    await invite(api, 'a@x.test')
+    let n = 0
+    const ip = () => `198.51.100.${++n}`
+    const askReset = (email: string) =>
+      authCall(api, 'email-otp/request-password-reset', { email }, ip())
+    // Every endpoint that mails a code, and every kind of code they mail.
+    const sends = [
+      (email: string) => askCode(api, email, ip()),
+      (email: string) =>
+        authCall(api, 'email-otp/send-verification-otp', { email, type: 'forget-password' }, ip()),
+      (email: string) =>
+        authCall(
+          api,
+          'email-otp/send-verification-otp',
+          { email, type: 'email-verification' },
+          ip(),
+        ),
+      askReset,
+      (email: string) => authCall(api, 'forget-password/email-otp', { email }, ip()),
+    ]
+    for (const send of sends) expect((await send('a@x.test')).status).toBe(200)
+    // The invitation, then the five.
+    expect(api.mail.outbox).toHaveLength(6)
+    for (const send of sends) expect((await send('A@X.test')).status).toBe(429)
+    expect(api.mail.outbox).toHaveLength(6)
+    // The same for an address no one has, so the limit says nothing about who is a member.
+    for (const send of sends) await send('stranger@x.test')
+    const stranger = await askReset('stranger@x.test')
+    expect(stranger.status).toBe(429)
+    expect(await stranger.json()).toEqual(await (await askReset('a@x.test')).json())
+  })
+
+  test('every endpoint that mails or checks a code is counted per address', async () => {
+    const api = await createTestApi()
+    const plugin = api.auth.options.plugins.find((p) => p.id === 'email-otp')
+    const paths = Object.values(plugin?.endpoints ?? {}).flatMap((e) => (e.path ? [e.path] : []))
+    // A better-auth upgrade that adds a way to mail or check a code fails here until it is counted,
+    // and one that drops an endpoint fails here until the map drops it. Server-only endpoints have
+    // no path, and the change-email pair needs a session and is off.
+    expect(paths.filter((p) => !PER_ADDRESS.has(p)).sort()).toEqual([
+      '/email-otp/change-email',
+      '/email-otp/request-email-change',
+    ])
+    expect([...PER_ADDRESS.keys()].filter((p) => !paths.includes(p))).toEqual([])
   })
 
   test('codes are stored hashed, never as sent', async () => {
