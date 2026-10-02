@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router'
 import { useTranslations } from 'use-intl'
 import type { InfoPageId } from '../content/info/types'
@@ -9,6 +9,7 @@ import { InfoView } from '../views/info'
 /** About, Privacy or Terms, for anyone: the copy is in the bundle, so nothing is fetched. */
 export function InfoPage({ page }: { page: InfoPageId }) {
   const { locale } = useUi()
+  const [year] = useState(() => new Date().getFullYear())
   useTitle(useTranslations('info')(`tabs.${page}`))
   // The browser scrolls to an anchor only in a page it loaded; arriving at `/privacy#cookies`
   // from another screen of the app is a render, so the section is found here.
@@ -19,5 +20,5 @@ export function InfoPage({ page }: { page: InfoPageId }) {
     if (id) document.getElementById(id)?.scrollIntoView()
     else window.scrollTo(0, 0)
   }, [hash, page])
-  return <InfoView page={page} locale={locale} />
+  return <InfoView page={page} locale={locale} year={year} />
 }

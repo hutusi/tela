@@ -108,7 +108,7 @@
       "missing_code": "请输入邀请码。",
       "invalid_code": "没有这个邀请码，或它已被撤回。",
       "code_used": "这个邀请码的名额已经用完。",
-      "provider_unlinked": "请先在服务商那里验证这个邮箱，或用邮箱登录后在设置中关联。",
+      "provider_unlinked": "请先在服务商那里验证这个邮箱，或用邮箱登录后在 设置 → 账户 里关联。",
       "provider_no_email": "服务商没有提供邮箱地址。请改用邮箱登录。",
       "provider_cancelled": "登录已取消。",
       "provider_expired": "等待时间过长，请重试。",
@@ -489,13 +489,7 @@
     "confirmHint": "要更改登录方式，请先用发到你邮箱的验证码确认是你本人。",
     "confirmSent": "验证码已发送到 {email}，请在这里输入。",
     "confirm": "给我发验证码",
-    "confirmCode": "6 位验证码",
     "confirmSubmit": "确认",
-    "confirmErrors": {
-      "rate_limited": "尝试次数太多，请等一分钟再试。",
-      "bad_code": "验证码错误或已过期。",
-      "send_failed": "验证码没能发出，请重试。"
-    },
     "errors": {
       "not_fresh": "请先确认是你本人。",
       "rejected": "没有被接受。请检查密码后重试。",

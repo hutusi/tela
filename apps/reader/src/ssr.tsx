@@ -147,7 +147,7 @@ export function renderPublicPage(input: {
         now={now}
       />
     ) : route.kind === 'info' ? (
-      <InfoView page={route.page} locale={locale} />
+      <InfoView page={route.page} locale={locale} year={new Date(now).getFullYear()} />
     ) : data === null ? (
       <NotFoundPage />
     ) : route.kind === 'discover' ? (

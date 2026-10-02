@@ -24,6 +24,9 @@ test.describe('without JavaScript', () => {
       await expect(page.getByTestId('info-short')).toBeVisible()
       await expect(page.getByTestId('info-updated')).toHaveText('Last updated 2 October 2026')
       await expect(page).toHaveTitle(title)
+      await expect(
+        page.getByTestId('site-footer').getByRole('link', { name: 'Privacy' }),
+      ).toHaveAttribute('href', '/privacy')
     }
     // The anchor is in the page the edge sent, so the browser lands on it by itself.
     await page.goto('/privacy#cookies')

@@ -184,7 +184,8 @@ password*, which opens the fields under the row), Google and GitHub (only those 
 for, or one already linked: *Link* or *Unlink*, and since when), and *Sign out everywhere*. A session
 older than a day cannot change how its member signs in, so the section then opens with a `surface`
 box, *Confirm it's you*, which mails a code to the member's own address and takes it right there,
-since the login page sends a member straight on.
+since the login page sends a member straight on. Its code field and its refusals are the sheet's
+(`door.codePlaceholder`, `door.errors.*`): a 429 says "too many tries" here too, never "wrong code".
 `/settings/translation` is labelled Language: the
 interface language comes first, each choice in its own name (English, 简体中文) so it can be found
 whatever the page is in, then what posts are translated into. The interface language is the
@@ -279,8 +280,9 @@ Subscribe/Subscribed pill. Cadence is derived from posts in the last 30 days.
 Front page (`views/landing.tsx`, from `Tela Landing.dc.html` Turn 2, ADR 0035): a 1120 px page.
 The hero is a serif h1 (42 px, 64 px from `md`), "A confluence of N independent blogs.", the word
 "confluence" in `accent`, in the 400 italic Garamond ships (the h1 is 500, which has no
-italic), then an `ink-2` intro and two pills, "Join Tela" (filled `ink`) and "Log in"
-(outlined), plain links to `/join` and `/login`. Under it a strip
+italic), then an `ink-2` intro and two pills, "Join Tela" (filled `primary`) and "Log in"
+(outlined): links to `/join` and `/login` in the edge's page, which open the header's sheet once
+the app runs, as the header's own Join and Log in do. Under it a strip
 between two `line` rules: the date and "This week, N blogs wrote in M languages" (or "The latest
 from N blogs" when the week has none) on the left, and "Titles in: Original language | English"
 on the right, two links in a `hover` track whose active one is `surface` with a shadow, so the
@@ -296,9 +298,9 @@ fades in: the edge's copy is already on screen when the SPA replaces it. Then th
 ("Write a blog? *Make it your calling card.*", outlined pill to `/writers`), on `surface` like
 Discover's claim strip. Day is the light tokens exactly; night is the existing dark tokens.
 
-Footer (`components/site-footer.tsx`): under the public pages that end in one, a `line` rule,
-13 px `muted`: "Tela © year · Made by AI Naive" (linking https://ainaive.com) on the left, About,
-Privacy and Terms on the right.
+Footer (`components/site-footer.tsx`): under the front page and About, Privacy and Terms, in the
+SPA and in the edge's copy alike, a `line` rule, 13 px `muted`: "Tela © year · Made by AI Naive"
+(linking https://ainaive.com) on the left, About, Privacy and Terms on the right.
 
 ## Strings
 
@@ -339,7 +341,7 @@ Tokens the Next app did not need, because it hard-coded them (and `knob`, which 
 | `highlight` | `oklch(0.91 0.10 95)` | `oklch(0.50 0.09 90 / 0.55)` | a highlight's paint |
 | `highlight-strong` | `oklch(0.80 0.14 90)` | `oklch(0.70 0.12 90)` | the highlight being edited |
 | `knob` | `#fff` | `#ede7db` | a switch's knob, light on either track in both themes (Tela v2) |
-| `primary` | `#1f1c18` | `oklch(0.68 0.14 150)` | the one filled call to action: *Join*, the sheet's button (ADR 0035) |
+| `primary` | `#1f1c18` | `oklch(0.68 0.14 150)` | the one filled call to action: *Join* (the header's, and the front page's *Join Tela*), the sheet's button (ADR 0035) |
 | `on-primary` | `#f6f2ea` | `#16140f` | text on `primary` |
 
 `primary` is ink by day, as the design's Day page has it, and the lifted green by night, as its

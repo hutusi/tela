@@ -9,6 +9,7 @@
  */
 import { groupInviteCode } from '@tela/shared'
 import { api, apiJson } from '../store/api'
+import { PROVIDERS, type Provider, type SignInError } from './use-sign-in'
 
 // ---------------------------------------------------------------------------------------------
 // Invites
@@ -57,8 +58,8 @@ export function inviteLink(code: string, origin = window.location.origin): strin
 // ---------------------------------------------------------------------------------------------
 // Account
 
-export type Provider = 'google' | 'github'
-export const PROVIDERS: readonly Provider[] = ['google', 'github']
+/** The sheet's providers: Settings links the same two it offers. */
+export { PROVIDERS, type Provider }
 
 export type LinkedAccount = { id: string; provider: Provider; since: number }
 
@@ -151,7 +152,8 @@ const authPost = (path: string, body: unknown) =>
     body: JSON.stringify(body),
   })
 
-export type ConfirmError = 'rate_limited' | 'bad_code' | 'send_failed'
+/** The sheet's words for the same refusals (`door.errors.*`): a 429 is never a wrong code. */
+export type ConfirmError = Extract<SignInError, 'rate_limited' | 'bad_code' | 'send_failed'>
 
 export async function sendConfirmCode(email: string): Promise<ConfirmError | null> {
   const res = await authPost('/api/auth/email-otp/send-verification-otp', {

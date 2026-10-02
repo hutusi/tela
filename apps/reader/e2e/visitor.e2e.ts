@@ -68,6 +68,13 @@ test.describe('with JavaScript', () => {
     page,
   }) => {
     await page.goto('/')
+    // The hero's doors are the header's: once the app runs, Join opens the sheet over the page.
+    await page.getByTestId('front-join').click()
+    const sheet = page.getByTestId('front-door')
+    await expect(sheet.getByTestId('join-code')).toBeFocused()
+    await expect(page).toHaveURL(/\/$/)
+    await page.keyboard.press('Escape')
+    await expect(sheet).toHaveCount(0)
     await expect(page.getByTestId('front-strip')).toContainText(
       /This week, \d+ blogs? wrote in \d+ languages?/,
     )

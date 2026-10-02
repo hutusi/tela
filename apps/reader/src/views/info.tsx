@@ -5,6 +5,7 @@
 import type { UiLocale } from '@tela/shared'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { SiteFooter } from '../components/site-footer'
 import { en } from '../content/info/en'
 import {
   type Block,
@@ -87,108 +88,120 @@ function BlockView({ block }: { block: Block }) {
   )
 }
 
-export function InfoView({ page, locale }: { page: InfoPageId; locale: UiLocale }) {
+export function InfoView({
+  page,
+  locale,
+  year,
+}: {
+  page: InfoPageId
+  locale: UiLocale
+  /** The footer's year: the edge's clock, or the browser's. */
+  year: number
+}) {
   const t = useTranslations('info')
   const content = infoContent(locale)[page]
   const ids = INFO_SECTIONS[page]
   const sections = content.sections as Record<string, Section>
   return (
-    <main
-      className="mx-auto w-full max-w-[1040px] flex-1 px-4 pb-20 pt-10 animate-fade md:px-12"
-      data-testid="info-page"
-      data-page={page}
-    >
-      <nav aria-label={t('pages')} className="mb-9 flex flex-wrap gap-2" data-testid="info-tabs">
-        {INFO_PAGES.map((p) => (
-          <Link
-            key={p}
-            to={`/${p}`}
-            className={tab(p === page)}
-            aria-current={p === page ? 'page' : undefined}
-          >
-            {t(`tabs.${p}`)}
-          </Link>
-        ))}
-      </nav>
-
-      <header className="mb-10 max-w-[680px]">
-        {'kicker' in content && content.kicker ? (
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-            {content.kicker}
-          </p>
-        ) : null}
-        <h1 className="mb-3 font-serif text-[40px] font-medium leading-[1.1] tracking-tight">
-          {content.title}
-        </h1>
-        {'lede' in content && content.lede ? (
-          <p className="mb-3 text-[17px] leading-relaxed text-ink-2">
-            <Inline text={content.lede} />
-          </p>
-        ) : null}
-        <p className="m-0 text-[13px] text-muted" data-testid="info-updated">
-          {t('updated', { date: updatedOn(locale) })}
-        </p>
-      </header>
-
-      <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-12">
-        <nav
-          aria-labelledby="info-toc-title"
-          className="mb-10 lg:sticky lg:top-20 lg:self-start"
-          data-testid="info-toc"
-        >
-          <p
-            id="info-toc-title"
-            className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted"
-          >
-            {t('onThisPage')}
-          </p>
-          <ol className="m-0 flex list-none flex-col gap-1.5 p-0 text-[13px]">
-            {ids.map((id) => (
-              <li key={id}>
-                <a href={`#${id}`} className="text-ink-2 hover:text-ink">
-                  {sections[id]?.heading}
-                </a>
-              </li>
-            ))}
-          </ol>
+    <>
+      <main
+        className="mx-auto w-full max-w-[1040px] flex-1 px-4 pb-20 pt-10 animate-fade md:px-12"
+        data-testid="info-page"
+        data-page={page}
+      >
+        <nav aria-label={t('pages')} className="mb-9 flex flex-wrap gap-2" data-testid="info-tabs">
+          {INFO_PAGES.map((p) => (
+            <Link
+              key={p}
+              to={`/${p}`}
+              className={tab(p === page)}
+              aria-current={p === page ? 'page' : undefined}
+            >
+              {t(`tabs.${p}`)}
+            </Link>
+          ))}
         </nav>
 
-        <div className="max-w-[680px] text-[15px]">
-          <section
-            aria-labelledby="info-short-title"
-            className="mb-10 rounded-xl border border-line bg-surface px-5 py-4"
-            data-testid="info-short"
+        <header className="mb-10 max-w-[680px]">
+          {'kicker' in content && content.kicker ? (
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+              {content.kicker}
+            </p>
+          ) : null}
+          <h1 className="mb-3 font-serif text-[40px] font-medium leading-[1.1] tracking-tight">
+            {content.title}
+          </h1>
+          {'lede' in content && content.lede ? (
+            <p className="mb-3 text-[17px] leading-relaxed text-ink-2">
+              <Inline text={content.lede} />
+            </p>
+          ) : null}
+          <p className="m-0 text-[13px] text-muted" data-testid="info-updated">
+            {t('updated', { date: updatedOn(locale) })}
+          </p>
+        </header>
+
+        <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-12">
+          <nav
+            aria-labelledby="info-toc-title"
+            className="mb-10 lg:sticky lg:top-20 lg:self-start"
+            data-testid="info-toc"
           >
-            <h2 id="info-short-title" className="mb-2 text-[15px] font-semibold text-ink">
-              {t('short')}
-            </h2>
-            <ul className="m-0 flex list-disc flex-col gap-1.5 pl-5 leading-relaxed text-body marker:text-muted">
-              {content.short.map((line) => (
-                <li key={line}>
-                  <Inline text={line} />
+            <p
+              id="info-toc-title"
+              className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted"
+            >
+              {t('onThisPage')}
+            </p>
+            <ol className="m-0 flex list-none flex-col gap-1.5 p-0 text-[13px]">
+              {ids.map((id) => (
+                <li key={id}>
+                  <a href={`#${id}`} className="text-ink-2 hover:text-ink">
+                    {sections[id]?.heading}
+                  </a>
                 </li>
               ))}
-            </ul>
-          </section>
+            </ol>
+          </nav>
 
-          {ids.map((id) => {
-            const section = sections[id]
-            if (!section) return null
-            return (
-              <section key={id} id={id} className="mb-10 scroll-mt-20">
-                <h2 className="mb-2 font-serif text-[26px] font-medium leading-tight tracking-tight">
-                  {section.heading}
-                </h2>
-                {section.blocks.map((block, i) => (
-                  // Blocks never move: the copy is fixed, so their place is who they are.
-                  // biome-ignore lint/suspicious/noArrayIndexKey: static copy, never reordered
-                  <BlockView key={i} block={block} />
+          <div className="max-w-[680px] text-[15px]">
+            <section
+              aria-labelledby="info-short-title"
+              className="mb-10 rounded-xl border border-line bg-surface px-5 py-4"
+              data-testid="info-short"
+            >
+              <h2 id="info-short-title" className="mb-2 text-[15px] font-semibold text-ink">
+                {t('short')}
+              </h2>
+              <ul className="m-0 flex list-disc flex-col gap-1.5 pl-5 leading-relaxed text-body marker:text-muted">
+                {content.short.map((line) => (
+                  <li key={line}>
+                    <Inline text={line} />
+                  </li>
                 ))}
-              </section>
-            )
-          })}
+              </ul>
+            </section>
+
+            {ids.map((id) => {
+              const section = sections[id]
+              if (!section) return null
+              return (
+                <section key={id} id={id} className="mb-10 scroll-mt-20">
+                  <h2 className="mb-2 font-serif text-[26px] font-medium leading-tight tracking-tight">
+                    {section.heading}
+                  </h2>
+                  {section.blocks.map((block, i) => (
+                    // Blocks never move: the copy is fixed, so their place is who they are.
+                    // biome-ignore lint/suspicious/noArrayIndexKey: static copy, never reordered
+                    <BlockView key={i} block={block} />
+                  ))}
+                </section>
+              )
+            })}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+      <SiteFooter year={year} />
+    </>
   )
 }

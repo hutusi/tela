@@ -31,6 +31,7 @@ import {
   unlinkProvider,
 } from '../lib/account-api'
 import { monthYear } from '../lib/format'
+import { PASSWORD_MAX, PASSWORD_MIN } from '../lib/use-sign-in'
 import { useSession } from '../session'
 import { useUi } from '../ui'
 
@@ -421,9 +422,6 @@ export function AccountSection() {
   )
 }
 
-const PASSWORD_MIN = 10
-const PASSWORD_MAX = 128
-
 function PasswordRow({
   has,
   busy,
@@ -547,6 +545,8 @@ function PasswordRow({
  */
 function ConfirmIt({ email, onConfirmed }: { email: string; onConfirmed: () => void }) {
   const t = useTranslations('account')
+  // The code and its refusals read as they do in the sheet, where the same code signs in.
+  const door = useTranslations('door')
   const [sent, setSent] = useState(false)
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -598,9 +598,9 @@ function ConfirmIt({ email, onConfirmed }: { email: string; onConfirmed: () => v
             value={code}
             onChange={(e) => setCode(e.target.value)}
             required
-            aria-label={t('confirmCode')}
-            placeholder={t('confirmCode')}
-            className={`${FIELD} max-w-[180px] tracking-widest`}
+            aria-label={door('codePlaceholder')}
+            placeholder={door('codePlaceholder')}
+            className={`${FIELD} max-w-[180px] font-mono tracking-widest`}
             data-testid="account-confirm-code"
           />
           <button
@@ -625,7 +625,7 @@ function ConfirmIt({ email, onConfirmed }: { email: string; onConfirmed: () => v
       )}
       {error ? (
         <p role="alert" className="mt-3 text-[13px] text-danger">
-          {t(`confirmErrors.${error}`)}
+          {door(`errors.${error}`)}
         </p>
       ) : null}
     </div>

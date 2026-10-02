@@ -514,6 +514,9 @@ describe('public pages', () => {
       expect(res.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
       const html = await res.text()
       expect(html).toContain('data-testid="info-page"')
+      // The front page's footer closes them too, its links whole without a script.
+      expect(html).toContain('data-testid="site-footer"')
+      expect(html).toContain('href="/terms"')
       expect(html).not.toContain('id="tela-data"')
       expect(html).not.toContain('name="robots"')
       expect(html).toContain('/assets/index-abc123.js')

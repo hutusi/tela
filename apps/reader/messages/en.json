@@ -108,7 +108,7 @@
       "missing_code": "Enter your invite code.",
       "invalid_code": "There is no such invite code, or it was withdrawn.",
       "code_used": "Everyone this invite code was for has joined.",
-      "provider_unlinked": "Verify this address with the provider, or log in by email and link it in Settings.",
+      "provider_unlinked": "Verify this address with the provider, or log in by email and link it in Settings → Account.",
       "provider_no_email": "The provider did not share an email address. Log in by email instead.",
       "provider_cancelled": "Sign-in was cancelled.",
       "provider_expired": "That took too long. Try again.",
@@ -489,13 +489,7 @@
     "confirmHint": "To change how you sign in, confirm it's you with a code sent to your email.",
     "confirmSent": "We sent a code to {email}. Enter it here.",
     "confirm": "Email me a code",
-    "confirmCode": "6-digit code",
     "confirmSubmit": "Confirm",
-    "confirmErrors": {
-      "rate_limited": "Too many tries. Wait a minute and try again.",
-      "bad_code": "That code is wrong or has expired.",
-      "send_failed": "The code could not be sent. Try again."
-    },
     "errors": {
       "not_fresh": "Confirm it's you first.",
       "rejected": "That was not accepted. Check the password and try again.",

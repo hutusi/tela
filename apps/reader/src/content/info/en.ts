@@ -287,6 +287,8 @@ export const en = {
               'Export your subscriptions as OPML in Settings → Subscriptions.',
               "Download everything you've done as one file in Settings → Privacy → Your data.",
               'Choose what others see in Settings → Privacy. Your picture and Gravatar are in Settings → Profile; an uploaded picture you remove is deleted.',
+              'Set or change a password, link or unlink Google and GitHub, and sign out everywhere in Settings → Account.',
+              'See the invite codes you made and who joined with them in Settings → Invites, and revoke one nobody has used.',
               'Change your handle, name and bio whenever you like.',
               'Remove a recommendation, highlight, like or follow at any time. It disappears from Tela at once, and from public pages within a few minutes.',
               'For anything else about your data, [get in touch](#contact).',

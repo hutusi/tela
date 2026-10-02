@@ -6,6 +6,7 @@
  */
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { type DoorRequest, opensSheet, useFrontDoor } from '../components/front-door'
 import { SiteAvatar } from '../components/site-avatar'
 import { SiteFooter } from '../components/site-footer'
 import { editionTitles, frontHref, pickLead, type TitlesMode } from '../lib/edition'
@@ -36,6 +37,14 @@ export function LandingView({
   member?: MemberControls | undefined
 }) {
   const t = useTranslations('front')
+  // The doors are links, so they work in the edge's page before any script runs; once the app
+  // runs they open the header's sheet over the page, as the header's own Log in and Join do.
+  const door = useFrontDoor()
+  const opens = (request: DoorRequest) => (e: React.MouseEvent) => {
+    if (!door || !opensSheet(e)) return
+    e.preventDefault()
+    door(request)
+  }
   const posts = data?.edition.posts ?? []
   const lead = pickLead(posts)
   const rest = posts.filter((p) => p !== lead)
@@ -60,13 +69,15 @@ export function LandingView({
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link
               to="/join"
-              className="rounded-full bg-ink px-5 py-2.5 font-medium text-paper hover:no-underline"
+              onClick={opens({ mode: 'join' })}
+              className="rounded-full bg-primary px-5 py-2.5 font-medium text-on-primary hover:no-underline hover:brightness-125"
               data-testid="front-join"
             >
               {t('join')}
             </Link>
             <Link
               to="/login"
+              onClick={opens({ mode: 'login' })}
               className="rounded-full border border-line px-5 py-2.5 font-medium text-ink hover:border-ink hover:no-underline"
               data-testid="front-login"
             >
