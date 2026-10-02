@@ -1,16 +1,19 @@
 /**
- * What anyone may see, signed in or not: Discover, a blog's page, a member's public profile. JSON
- * here; tela-web renders it into server-side pages and caches them at the edge (ADR 0024; the
- * pages come with the SPA's components in Phase 6).
+ * What anyone may see, signed in or not: the front page's edition, Discover, a blog's page, a
+ * member's public profile, and whether a handle is free. JSON here; tela-web renders it into
+ * server-side pages and caches them at the edge (ADR 0024; the pages come with the SPA's
+ * components in Phase 6).
  *
  * Only listed and featured blogs appear. The Postgres app rendered a private or rejected site's
  * page for anyone with its id, which on a cached public page would be a leak.
  */
-import { ARTICLE_COLUMNS, avatarOf, first } from '@tela/data'
-import { isTopic } from '@tela/shared'
+import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first } from '@tela/data'
+import { HANDLE, isTopic, RESERVED_HANDLES } from '@tela/shared'
+import { getIP } from 'better-auth/api'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
+import type { Auth } from '../auth'
 import type { ApiDeps } from '../deps'
 
 /** Five minutes at the edge, a day of serving stale while it refreshes. */
@@ -30,17 +33,35 @@ const PUBLIC_LISTING = sql.raw(`('listed', 'featured')`)
  */
 const TITLES = sql.raw(`(select json_group_object(t.lang, t.title) from article_titles t
   where t.article_id = a.id and t.title is not null) as "titles"`)
+/**
+ * Beside `TITLES`, a post's excerpts in the launch languages it has one in: the front page's lead
+ * shows the translated one when the visitor reads titles translated.
+ */
+const EXCERPTS = sql.raw(`(select json_group_object(t.lang, t.excerpt) from article_titles t
+  where t.article_id = a.id and t.excerpt is not null) as "excerpts"`)
+/** An object SQLite's `json_group_object` handed back as text; anything unreadable is none. */
+function parseLangMap(value: unknown): Record<string, string> {
+  if (typeof value !== 'string') return {}
+  try {
+    return JSON.parse(value) as Record<string, string>
+  } catch {
+    return {}
+  }
+}
 /** The titles object SQLite handed back as text. */
 function withTitles<T extends Record<string, unknown>>(row: T): T {
   if (typeof row.titles !== 'string') return row
-  try {
-    return { ...row, titles: JSON.parse(row.titles) as Record<string, string> }
-  } catch {
-    return { ...row, titles: {} }
-  }
+  return { ...row, titles: parseLangMap(row.titles) }
 }
 
-export function publicRoutes(deps: ApiDeps) {
+/** The front page's edition: the week's newest post from each blog, at most this many. */
+export const EDITION_POSTS = 11
+/** better-auth's bucket for a request whose IP it cannot tell, which all such requests share. */
+const NO_IP = 'no-trusted-ip'
+/** Suffixes tried, in order, for a free handle near one that is taken or reserved. */
+const HANDLE_SUFFIXES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '_writes']
+
+export function publicRoutes(deps: ApiDeps, auth: Auth) {
   const { db } = deps
   const routes = new Hono<ApiEnv>()
   const cached = { 'cache-control': PUBLIC_CACHE }
@@ -299,6 +320,130 @@ export function publicRoutes(deps: ApiDeps) {
       200,
       { 'cache-control': PROFILE_CACHE },
     )
+  })
+
+  /**
+   * The front page's edition (ADR 0035): the newest post of each public blog, newest first, from
+   * the last seven days, or the latest ones when nobody wrote that week; and the counts its copy
+   * states. Cached as a profile is, so the counts a visitor reads are minutes old at most.
+   *
+   * Each blog's newest post is a seek per live feed down `articles_feed_sort_idx`, then the newest
+   * of those: ordering a join of feeds and articles before the limit reads every article the blog
+   * has. Future-dated posts wait for their date.
+   */
+  routes.get('/front', async (c) => {
+    const now = deps.clock.now()
+    const since = now - 7 * DAY
+    const [rows, counts] = (await db.batch([
+      db.all(sql`
+        select ${ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS},
+          s.id as "siteId", s.title as "siteTitle", s.home_url as "homeUrl",
+          s.favicon_key as "faviconKey", s.primary_lang as "primaryLang",
+          p.handle as "claimantHandle", p.display_name as "claimantName"
+        from sites s
+        join articles a on a.id = (
+          select a1.id from feeds f
+          join articles a1 on a1.id = (
+            select a2.id from articles a2 where a2.feed_id = f.id and a2.sort_at <= ${now}
+            order by a2.sort_at desc, a2.id desc limit 1
+          )
+          where f.site_id = s.id and f.merged_into is null
+          order by a1.sort_at desc, a1.id desc limit 1
+        )
+        left join profiles p on p.user_id = s.claimed_by
+        where s.listing in ${PUBLIC_LISTING}
+        order by a.sort_at desc, a.id desc
+        limit 60
+      `),
+      db.all(sql`
+        select (select count(*) from sites where listing in ${PUBLIC_LISTING}) as blogs,
+          count(distinct f.site_id) as "weekBlogs",
+          count(distinct a.source_lang) as "weekLanguages",
+          count(a.id) as "weekPosts"
+        from sites s join feeds f on f.site_id = s.id and f.merged_into is null
+        join articles a on a.feed_id = f.id and a.sort_at >= ${since} and a.sort_at <= ${now}
+        where s.listing in ${PUBLIC_LISTING}
+      `),
+    ] as never)) as unknown as [Record<string, unknown>[], Record<string, unknown>[]]
+    const week = rows.filter((r) => Number(r.sortAt) >= since)
+    const span = week.length > 0 ? 'week' : 'latest'
+    const count = counts[0] ?? {}
+    return c.json(
+      {
+        counts: { blogs: Number(count.blogs ?? 0) },
+        week: {
+          blogs: Number(count.weekBlogs ?? 0),
+          languages: Number(count.weekLanguages ?? 0),
+          posts: Number(count.weekPosts ?? 0),
+        },
+        edition: {
+          span,
+          posts: (span === 'week' ? week : rows).slice(0, EDITION_POSTS).map((r) => {
+            const {
+              siteId,
+              siteTitle,
+              homeUrl,
+              faviconKey,
+              primaryLang,
+              claimantHandle,
+              claimantName,
+              excerpts,
+              ...article
+            } = r
+            return {
+              article: { ...withTitles(article), excerpts: parseLangMap(excerpts) },
+              site: { id: siteId, title: siteTitle, homeUrl, faviconKey, primaryLang },
+              claimant: claimantHandle
+                ? { handle: claimantHandle, displayName: claimantName }
+                : null,
+            }
+          }),
+        },
+      },
+      200,
+      { 'cache-control': PROFILE_CACHE },
+    )
+  })
+
+  /**
+   * Whether a handle is free, for For writers' card as it is typed: `invalid` (the shape
+   * `HANDLE` refuses), `reserved` (an app path), `taken`, or `available`; and, unless it is
+   * invalid, the first free handle among it and a few made from it. Never cached: the answer
+   * changes the moment someone takes one. Counted per IP. The profile save it comes before checks
+   * the same rules again, in the statement that takes the handle.
+   */
+  routes.get('/handles/:handle', async (c) => {
+    const handle = c.req.param('handle').trim().toLowerCase()
+    const noStore = { 'cache-control': 'no-store' }
+    // A shape the rules refuse costs no query, so it spends none of the IP's checks.
+    if (!HANDLE.test(handle)) {
+      return c.json({ handle, status: 'invalid', suggestion: null }, 200, noStore)
+    }
+    const ip = getIP(c.req.raw, auth.options) ?? NO_IP
+    const limited = await consumeLimit(db, 'handleCheck', ip, deps.clock.now())
+    if (!limited.allowed) {
+      return c.json({ error: 'rate_limited' }, 429, {
+        ...noStore,
+        'retry-after': String(limited.retryAfterSec),
+      })
+    }
+    const reserved = RESERVED_HANDLES.has(handle)
+    // Free ones only, in order: the handle itself first, so the first free one says whether it is.
+    const candidates = [
+      ...(reserved ? [] : [handle]),
+      ...HANDLE_SUFFIXES.map((suffix) => `${handle}${suffix}`).filter(
+        (h) => HANDLE.test(h) && !RESERVED_HANDLES.has(h),
+      ),
+    ]
+    const free = await first<{ value: string }>(
+      db,
+      sql`select j.value from json_each(${JSON.stringify(candidates)}) j
+        where not exists (select 1 from profiles p where p.handle = j.value)
+        order by j.key limit 1`,
+    )
+    const suggestion = free?.value ?? null
+    const status = reserved ? 'reserved' : suggestion === handle ? 'available' : 'taken'
+    return c.json({ handle, status, suggestion }, 200, noStore)
   })
 
   return routes

@@ -243,6 +243,55 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   expect(older.items.map((i) => i.kind)).toEqual(['recommended'])
 })
 
+it("reads the front page's edition and checks a handle, on D1", async () => {
+  const { db, call } = stack()
+  const now = Date.now()
+  const hour = 60 * 60 * 1000
+  await db.batch([
+    bumpSeq(db),
+    db.run(sql`insert into sites (id, home_url, title, listing, primary_lang, created_at, updated_at, seq)
+      values (901, 'https://front1.example', 'Front 1', 'listed', 'en', 0, 0, ${currentSeq}),
+        (902, 'https://front2.example', 'Front 2', 'featured', 'ja', 0, 0, ${currentSeq})`),
+    db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at, updated_at, seq)
+      values (901, 901, 'https://front1.example/feed', 'front1.example', 0, 0, 0, ${currentSeq}),
+        (902, 902, 'https://front2.example/feed', 'front2.example', 0, 0, 0, ${currentSeq})`),
+    db.run(sql`insert into articles (id, feed_id, dedup_key, title, source_lang, fetched_at, sort_at, seq)
+      values (9001, 901, 'f1', 'Older', 'en', ${now}, ${now - 3 * hour}, ${currentSeq}),
+        (9002, 901, 'f2', 'Newest', 'en', ${now}, ${now - hour}, ${currentSeq}),
+        (9003, 902, 'f3', 'Japanese', 'ja', ${now}, ${now - 2 * hour}, ${currentSeq})`),
+    db.run(sql`insert into article_titles (article_id, lang, feed_id, title, excerpt, status,
+        source_hash, updated_at, seq)
+      values (9003, 'en', 902, 'In English', 'An excerpt', 'done', 'h', 0, ${currentSeq})`),
+  ] as never)
+  const res = await call('/api/v1/public/front')
+  expect(res.status).toBe(200)
+  const body = (await res.json()) as {
+    counts: { blogs: number }
+    week: { blogs: number; languages: number; posts: number }
+    edition: {
+      span: string
+      posts: { article: { id: number; titles: object; excerpts: object }; site: { id: number } }[]
+    }
+  }
+  expect(body.counts).toEqual({ blogs: 2 })
+  expect(body.week).toEqual({ blogs: 2, languages: 2, posts: 3 })
+  expect(body.edition.span).toBe('week')
+  expect(body.edition.posts.map((p) => [p.site.id, p.article.id])).toEqual([
+    [901, 9002],
+    [902, 9003],
+  ])
+  expect(body.edition.posts[1]?.article).toMatchObject({
+    titles: { en: 'In English' },
+    excerpts: { en: 'An excerpt' },
+  })
+  // The handle check's free list is one json_each over D1.
+  const handle = await call('/api/v1/public/handles/Front', {
+    headers: { 'cf-connecting-ip': '198.51.100.30' },
+  })
+  expect(handle.headers.get('cache-control')).toBe('no-store')
+  expect(await handle.json()).toEqual({ handle: 'front', status: 'available', suggestion: 'front' })
+})
+
 it("joins with a code, signs in, and shows on the inviter's list, on D1", async () => {
   const { db, call, codeFor, cookiesOf } = stack()
   // A member, made by the operator, who makes a code: the five are counted in one insert…select.

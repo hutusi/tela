@@ -150,7 +150,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
 
   // Anyone may read these; tela-web caches them at the edge.
   app.route('/api/v1/public/avatars', avatarRoutes(deps))
-  app.route('/api/v1/public', publicRoutes(deps))
+  app.route('/api/v1/public', publicRoutes(deps, auth))
   // Hubs, not members, call this; the signature is the authorization.
   app.route('/api/websub', websubRoutes(deps))
 

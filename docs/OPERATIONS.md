@@ -403,6 +403,9 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   counts (answered with better-auth's 429): checking its code there is a guess like a join's, and
   better-auth's own limit on `/api/auth/sign-in/social`, three every ten seconds per IP, would
   allow a thousand an hour.
+  The handle check (`GET /api/v1/public/handles/:handle`, For writers' card) is counted per IP,
+  300/h (`handleCheck:<ip>`), only for a handle of a valid shape; it answers `429 rate_limited`
+  with `retry-after`.
 
 ## tela-jobs
 

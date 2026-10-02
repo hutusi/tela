@@ -1,9 +1,10 @@
 /**
  * Tela's own limits: per member, for actions that create rows, fetch on a member's behalf or spend
  * model tokens; per email address, on the codes better-auth mails and checks and on password
- * sign-ins; per IP, code and address, on joins with an invite code. Fixed windows in D1
- * (`action_limits`), one upsert per check, because nothing in an isolate's memory survives to the
- * next request. better-auth limits its own endpoints per IP, separately (`rate_limit`).
+ * sign-ins; per IP, code and address, on joins with an invite code; per IP, on handle checks.
+ * Fixed windows in D1 (`action_limits`), one upsert per check, because nothing in an isolate's
+ * memory survives to the next request. better-auth limits its own endpoints per IP, separately
+ * (`rate_limit`).
  */
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
@@ -56,6 +57,11 @@ export const ACTION_LIMITS = {
   joinCode: { limit: 20, windowSec: 3600 },
   /** A member's new invite codes: five count at once, but every revoked one stays a row. */
   inviteCreate: { limit: 20, windowSec: 3600 },
+  /**
+   * Whether a handle is free, per IP, asked as For writers' card is typed: a name takes a few dozen
+   * debounced checks, so this is room for anyone choosing one, not for walking the namespace.
+   */
+  handleCheck: { limit: 300, windowSec: 3600 },
 } as const satisfies Record<string, ActionLimit>
 
 export type LimitedAction = keyof typeof ACTION_LIMITS
