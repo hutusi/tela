@@ -8,10 +8,12 @@ import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type Auth, createAuth } from './auth'
 import type { ApiDeps } from './deps'
+import { fromOperator } from './operator'
 import { avatarRoutes } from './routes/avatars'
 import { claimRoutes } from './routes/claims'
 import { curate } from './routes/curate'
 import { feedRoutes } from './routes/feeds'
+import { inviteRoutes, operatorCodeRoutes } from './routes/invites'
 import { memberRoutes } from './routes/members'
 import { pictureRoutes } from './routes/picture'
 import { publicRoutes } from './routes/public'
@@ -24,15 +26,6 @@ import { applyPush, asksGravatar } from './sync/push'
 
 export type Member = { id: string; email: string }
 export type ApiEnv = { Variables: { member: Member } }
-
-/** Constant-time comparison, so a wrong token takes as long as a nearly right one. */
-function sameSecret(given: string, expected: string): boolean {
-  const a = new TextEncoder().encode(given)
-  const b = new TextEncoder().encode(expected)
-  let diff = a.length ^ b.length
-  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0)
-  return diff === 0
-}
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -105,9 +98,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
    * a fresh code, and given no invitation it could keep.
    */
   app.post('/api/admin/invite', async (c) => {
-    const token = deps.config.adminToken
-    const given = c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
-    if (!token || !sameSecret(given, token)) return c.json({ error: 'forbidden' }, 403)
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
     const body = await c.req.json<{ email?: unknown }>().catch(() => ({}) as { email?: unknown })
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
     if (!EMAIL.test(email)) return c.json({ error: 'invalid_email' }, 400)
@@ -127,9 +118,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
 
   /** Add a curated blog's feed and feature it in Discover (`bun run admin curate`). */
   app.post('/api/admin/curate', async (c) => {
-    const token = deps.config.adminToken
-    const given = c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
-    if (!token || !sameSecret(given, token)) return c.json({ error: 'forbidden' }, 403)
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
     const body = await c.req
       .json<{ feedUrl?: unknown; topics?: unknown }>()
       .catch(() => ({}) as { feedUrl?: unknown; topics?: unknown })
@@ -140,6 +129,9 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     const result = await curate(deps, body.feedUrl, topics)
     return 'error' in result ? c.json(result, 422) : c.json(result)
   })
+
+  /** The operator's invite codes (`bun run admin code|codes|revoke`, ADR 0034). */
+  app.route('/api/admin/codes', operatorCodeRoutes(deps))
 
   if (deps.config.testMode) {
     // e2e reads sign-in codes here instead of from a real inbox. Test mode only.
@@ -163,6 +155,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/websub', websubRoutes(deps))
 
   /**
+   * Joining with an invite code is a visitor's: `/api/v1/join` needs no session (ADR 0034).
+   *
    * Every other /api/v1 route acts for the session's member, and runs only for a client that
    * names that member. Tabs share the cookie, so after another tab signs in as someone else the
    * cookie is theirs while this tab's screen, rows and unsent changes are still the first
@@ -177,7 +171,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
    *    reload into the same state.
    */
   app.use('/api/v1/*', async (c, next) => {
-    if (c.req.path.startsWith('/api/v1/public/')) return next()
+    if (c.req.path.startsWith('/api/v1/public/') || c.req.path === '/api/v1/join') return next()
     const session = await auth.api.getSession({ headers: c.req.raw.headers })
     if (!session) return c.json({ error: 'unauthorized' }, 401)
     const member = { id: session.user.id, email: session.user.email }
@@ -220,6 +214,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1', memberRoutes(deps))
   app.route('/api/v1', pictureRoutes(deps))
   app.route('/api/v1', socialRoutes(deps))
+  app.route('/api/v1', inviteRoutes(deps, auth))
 
   return { app, auth }
 }

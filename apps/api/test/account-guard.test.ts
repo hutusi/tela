@@ -7,7 +7,7 @@
  * upgrade: it knows no other 409, and it reloads into a shell that does name the member.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { bumpSeq, currentSeq, type TelaDb } from '@tela/data'
+import { bumpSeq, createMemberCode, currentSeq, type TelaDb } from '@tela/data'
 import { CLIENT_HEADER, MEMBER_HEADER, type PullResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
@@ -17,6 +17,8 @@ import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 const oldShell = { [CLIENT_HEADER]: '1' }
 /** A current client that names no member. */
 const nameless = { [MEMBER_HEADER]: undefined }
+/** b's invite code, in the shape of a member's (ADR 0034). */
+const B_CODE = 'BCDEFGHJKMNP'
 
 let server: FixtureServer
 let api: TestApi
@@ -69,6 +71,8 @@ beforeEach(async () => {
     db.run(sql`insert into body_translations (content_key, lang, state, updated_at, seq)
       values ('ckey1', 'en', 'done', 0, ${currentSeq})`),
   ] as never)
+  // An invite code of b's that nobody has used, for b to revoke.
+  await createMemberCode(db, { userId: b.userId, now: 0, code: B_CODE })
 })
 
 const subsOf = (userId: string) =>
@@ -276,6 +280,14 @@ const MEMBER_ROUTES: MemberRoute[] = [
     body: () => ({ optOut: true }),
     effect: 'writes',
   },
+  { route: 'GET /api/v1/invites', path: '/api/v1/invites', effect: 'reads' },
+  { route: 'POST /api/v1/invites', path: '/api/v1/invites', method: 'POST', effect: 'writes' },
+  {
+    route: 'DELETE /api/v1/invites/:code',
+    path: `/api/v1/invites/${B_CODE}`,
+    method: 'DELETE',
+    effect: 'writes',
+  },
 ]
 
 describe('every member route', () => {
@@ -283,6 +295,8 @@ describe('every member route', () => {
     const registered = api.app.routes
       .filter((r) => r.method !== 'ALL' && r.path.startsWith('/api/v1/'))
       .filter((r) => !r.path.startsWith('/api/v1/public/') && r.path !== '/api/v1/me')
+      // A visitor's, with no session to check (ADR 0034).
+      .filter((r) => r.path !== '/api/v1/join')
       .map((r) => `${r.method} ${r.path}`)
     expect(MEMBER_ROUTES.map((r) => r.route).sort()).toEqual(registered.sort())
   })

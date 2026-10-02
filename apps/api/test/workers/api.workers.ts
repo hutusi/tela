@@ -19,7 +19,8 @@ const unused = () => {
   throw new Error('not used here')
 }
 
-it('invites, signs in, pushes and pulls on D1', async () => {
+/** tela-api on the D1 binding, and a request as tela-web forwards one. */
+function stack() {
   const db = d1Db(env.DB, schema)
   const mail = memoryMail()
   const sent: unknown[] = []
@@ -49,10 +50,15 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   })
   const call = (
     path: string,
-    init: { body?: unknown; cookie?: string; headers?: Record<string, string> } = {},
+    init: {
+      method?: string
+      body?: unknown
+      cookie?: string
+      headers?: Record<string, string>
+    } = {},
   ) =>
     app.request(`${ORIGIN}${path}`, {
-      method: init.body === undefined ? 'GET' : 'POST',
+      method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
       headers: {
         origin: ORIGIN,
         'content-type': 'application/json',
@@ -62,6 +68,22 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       },
       ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
     })
+  /** The code in the newest mail to `email`. */
+  const codeFor = (email: string) =>
+    [...mail.outbox]
+      .reverse()
+      .find((m) => m.to === email)
+      ?.text.match(/^\d{6}$/m)?.[0]
+  const cookiesOf = (res: Response) =>
+    res.headers
+      .getSetCookie()
+      .map((c) => c.split(';')[0])
+      .join('; ')
+  return { db, mail, call, codeFor, cookiesOf }
+}
+
+it('invites, signs in, pushes and pulls on D1', async () => {
+  const { db, mail, call, cookiesOf } = stack()
 
   // Sign-in through better-auth's Drizzle adapter, on D1.
   const invited = await call('/api/admin/invite', {
@@ -81,10 +103,7 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       sql`select count from action_limits where key = 'otpVerify:reader@x.test'`,
     ),
   ).toEqual([{ count: 1 }])
-  const cookie = signIn.headers
-    .getSetCookie()
-    .map((c) => c.split(';')[0])
-    .join('; ')
+  const cookie = cookiesOf(signIn)
   const me = (await (await call('/api/v1/me', { cookie })).json()) as {
     id: string
     profile: { handle: string }
@@ -221,4 +240,68 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     )
   ).json()) as { items: { kind: string }[] }
   expect(older.items.map((i) => i.kind)).toEqual(['recommended'])
+})
+
+it("joins with a code, signs in, and shows on the inviter's list, on D1", async () => {
+  const { db, call, codeFor, cookiesOf } = stack()
+  // A member, made by the operator, who makes a code: the five are counted in one insert…select.
+  await call('/api/admin/invite', {
+    body: { email: 'inviter@x.test' },
+    headers: { authorization: 'Bearer admin' },
+  })
+  // Each sign-in from an IP of its own, clear of better-auth's three a minute per IP.
+  const inviterIn = await call('/api/auth/sign-in/email-otp', {
+    body: { email: 'inviter@x.test', otp: codeFor('inviter@x.test') },
+    headers: { 'cf-connecting-ip': '198.51.100.6' },
+  })
+  const inviterId = ((await inviterIn.json()) as { user: { id: string } }).user.id
+  const inviter = { cookie: cookiesOf(inviterIn), headers: { [MEMBER_HEADER]: inviterId } }
+  const made = await call('/api/v1/invites', { method: 'POST', ...inviter })
+  expect(made.status).toBe(200)
+  const { code } = (await made.json()) as { code: string }
+
+  // A visitor joins: the limits, then the hold, in one batch with the state it answers from.
+  // The address's mails count with the login page's (`otpSend`), though better-auth's hook never
+  // sees tela-api's own call.
+  const joined = await call('/api/v1/join', {
+    body: { code, email: 'joiner@x.test' },
+    headers: { 'cf-connecting-ip': '198.51.100.7' },
+  })
+  expect(joined.status).toBe(200)
+  expect(
+    await db.all<{ key: string; count: number }>(
+      sql`select key, count from action_limits where key like 'join%' or key like 'otpSend:%'
+        order by key`,
+    ),
+  ).toEqual([
+    { key: 'joinAddress:joiner@x.test', count: 1 },
+    { key: `joinCode:${code}`, count: 1 },
+    { key: 'joinIp:198.51.100.7', count: 1 },
+    { key: 'otpSend:joiner@x.test', count: 1 },
+  ])
+  // The code sign-in makes the account: the gate claims the hold, `create.after` settles it.
+  const signIn = await call('/api/auth/sign-in/email-otp', {
+    body: { email: 'joiner@x.test', otp: codeFor('joiner@x.test') },
+    headers: { 'cf-connecting-ip': '198.51.100.7' },
+  })
+  expect(signIn.status).toBe(200)
+  const me = (await (await call('/api/v1/me', { cookie: cookiesOf(signIn) })).json()) as {
+    id: string
+    profile: { handle: string }
+  }
+  expect(
+    await db.all(sql`select code, user_id, settled_at is not null as settled
+      from invite_redemptions where email = 'joiner@x.test'`),
+  ).toEqual([{ code, user_id: me.id, settled: 1 }])
+  const listed = (await (await call('/api/v1/invites', inviter)).json()) as {
+    codes: { code: string; handle: string | null }[]
+  }
+  expect(listed.codes).toMatchObject([{ code, handle: me.profile.handle }])
+  // Full now: the next join is told so, and the used code cannot be revoked.
+  const again = await call('/api/v1/join', {
+    body: { code, email: 'late@x.test' },
+    headers: { 'cf-connecting-ip': '198.51.100.8' },
+  })
+  expect(again.status).toBe(409)
+  expect((await call(`/api/v1/invites/${code}`, { method: 'DELETE', ...inviter })).status).toBe(404)
 })

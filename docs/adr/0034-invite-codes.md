@@ -107,7 +107,10 @@ would anyone's.
 
 **Limits.** `/api/v1/join` mails through `auth.api.sendVerificationOTP`, a server-side call that
 better-auth's limiter never sees, so the route counts its own in `action_limits`: per IP (10 an
-hour), per code (10 an hour) and per address (3 an hour).
+hour) before the code is looked up, then, only for a live code, per address (3 an hour, and the
+five codes an hour mailed to it from anywhere) and per code (as many an hour as it has places,
+and at least 20). The shared counts are spent only by a join that can mail, and the code's always
+outlasts one client, so nobody holds a code shut, or a word before it is a code, from one IP.
 
 **The invite routes are RPCs, not synced data.** `GET` and `POST /api/v1/invites` and
 `DELETE /api/v1/invites/:code` are member calls, like `/api/v1/dashboard`, not rows a pull brings

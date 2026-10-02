@@ -130,9 +130,16 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
    - Invite codes (ADR 0034, migration 0005): apply the migration, then deploy tela-jobs,
      tela-api, tela-web. tela-jobs needs the new tables before its next cron: the daily batch
      prunes lapsed holds and the nightly export reads both tables, so without them the whole
-     batch fails at 03:17, and that night's export with it.
+     batch fails at 03:17, and that night's export with it. **tela-api needs them before it
+     serves:** its gate claims an invitation for every new account, the operator's `admin invite`
+     included, and `/api/v1/join`, `/api/v1/invites` and `/api/admin/codes` read and write them,
+     so a tela-api deployed first answers each of those 500 until the migration lands.
      - **tela-jobs may go back alone.** The older one neither prunes holds nor exports the two
        tables.
+     - **tela-api may go back alone.** The older one makes no account at a code sign-in, so a
+       joiner's code is refused until it returns, and `/api/v1/join` and `/api/v1/invites` answer
+       401 or 404. Codes, holds and redemptions wait in their tables, and a hold still lapses
+       after its day.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -210,7 +217,9 @@ bun run dev   # http://localhost:5173
 ```
 
 Then:
-1. Invite: `TELA_URL=http://localhost:5173 ADMIN_TOKEN=local bun run admin invite you@x.test`.
+1. Invite: `TELA_URL=http://localhost:5173 ADMIN_TOKEN=local bun run admin invite you@x.test`, or
+   make a code to join with: `TELA_URL=http://localhost:5173 ADMIN_TOKEN=local bun run admin code
+   TEST --uses 2`.
 2. Sign in at `/login`, reading the code from `/api/test/outbox?email=you@x.test`.
 3. Add a feed on `/add`. The crons do not fire in dev: `curl -X POST -H 'origin:
    http://localhost:5173' localhost:5173/api/test/cycle` runs the sweeps to completion (fetches,
@@ -281,15 +290,37 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   operator's invitation to the address, creates the account and its profile through the same gate
   as every other (ADR 0034), and mails a code that says the address is invited; inviting an
   existing address only mails a fresh code. No account is made without an invitation.
+- **Invite codes** (ADR 0034). Every member may invite five people, ever, from Settings → Invites
+  (`/api/v1/invites`): a code counts while unrevoked and for good once used, and revoking an
+  unused one frees its place. The operator's codes are their own text:
+  - `ADMIN_TOKEN=… bun run admin code WELCOME --uses 20` makes one for twenty people (one when
+    `--uses` is left out; up to 100,000) and prints its link, `/join?code=WELCOME`. The text is
+    normalized like any code typed in (capitals, no spaces or dashes, 4–32 letters and digits),
+    and may not be twelve of a member code's symbols, which is how a code says whose it is. A word
+    is guessable: keep `--uses` small, and revoke it when its moment has passed.
+  - `bun run admin codes` lists them: places taken of places given, live holds, when it was made
+    and revoked.
+  - `bun run admin revoke WELCOME` withdraws one, used or not: nobody else joins with it, its
+    holds are cancelled, and those who joined keep their accounts.
+  - A join (`POST /api/v1/join`) holds the address beside the code for a day and mails a code that
+    says it is invited. The hold takes no place; signing in takes one. On a single-use code a
+    later join moves the hold to the later address. `400 invalid_code` is a code that is unknown
+    or revoked, `409 code_used` one whose places are all taken, by a newcomer or a member alike.
+    An address that has an account gets a plain sign-in code, and the code is untouched.
+  - What a code holds: `select * from invite_redemptions where code = '<CODE>'` (no `redeemed_at`:
+    a hold; `redeemed_at`: a place; `settled_at`, `user_id`: the account it made), and who made
+    it: `select created_by, max_uses, revoked_at from invite_codes where code = '<CODE>'`.
 - **Sign-in trouble:**
   - Codes last an hour and allow three attempts. The sign-in endpoint allows three tries a
     minute per IP; past that the login page says "Too many tries", not "wrong code".
   - Each email address, from however many IPs, is also mailed at most five codes an hour and has
     at most ten guesses checked (`otpSend`, `otpVerify`), whatever the codes are for: sign-in,
     password reset and the address check share both counts, and so do all the endpoints that send
-    or check one (`PER_ADDRESS` in `apps/api/src/auth.ts`). The 429 is the same whether or not the
-    address has an account. A member who sees "Too many tries" on their first attempt is most likely someone
-    else asking for their address; it clears on the hour, or at once (the address lowercased) with
+    or check one (`PER_ADDRESS` in `apps/api/src/auth.ts`) and a join with an invite code, which
+    counts `otpSend` itself (`apps/api/src/routes/invites.ts`). The 429 is the same whether or
+    not the address has an account. A member who sees "Too many tries" on their first attempt is
+    most likely someone else asking for their address; it clears on the hour, or at once (the
+    address lowercased) with
     `delete from action_limits where key in ('otpSend:<address>', 'otpVerify:<address>')`.
     The operator's `admin invite` is not counted.
   - `select key, count, last_request from rate_limit` shows better-auth's windows, and
@@ -312,10 +343,24 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   can linger that long on a device that kept the cookie.
 - **Rate limits** on reader actions are `ACTION_LIMITS` (`packages/data/src/queries/limits.ts`):
   discover 30/h, subscribe 120/h, OPML import 5/h, claim start 10/h, claim verify 30/h, translate
-  30/h, data export 10/h. Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
+  30/h, data export 10/h, new invite codes 20/h. Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
   Sign-in has better-auth's per-IP limits and two of Tela's per email address, counted for any
   address in a `hooks.before` (`apps/api/src/auth.ts`) on every endpoint that sends or checks a
   code: code sends 5/h, code tries 10/h.
+  Joins with an invite code mail through tela-api's own call to better-auth, which its limiter
+  never counts, so `/api/v1/join` counts its own, in this order, and stops at the first that is
+  spent: per IP 10/h (`joinIp:<ip>`, an IPv6 address by its /64), counted before the code is
+  looked up; then, only for a code that exists and is not revoked, per address 3/h
+  (`joinAddress:<address>`) and its codes mailed with the sign-in ones (`otpSend:<address>`, 5/h),
+  then per code (`joinCode:<CODE>`), as many an hour as the code has places and never fewer
+  than 20. Each answers the same `429 rate_limited`. So junk spends no address's or code's hour,
+  nor a word's before it is made a code, and no one client can spend a code's: that takes two at
+  least, and one for every ten places a large code has. Many clients can (an IPv6 /56 is 256 of
+  them): a public code refused hour after hour, with `joinCode:<CODE>` at its limit and holds from
+  addresses that never sign in, is being held shut; revoke it and post another. A visitor told
+  "too many tries" at their first join is most likely sharing an address, or an IP (a venue's
+  wifi), with someone who tried before. Lift one early:
+  `delete from action_limits where key = 'joinCode:WELCOME'`.
 
 ## tela-jobs
 

@@ -63,6 +63,19 @@ export type JoinOutcome =
   | 'used'
 
 /**
+ * A code's places while it is not revoked, which set the join's limit on it; null for an unknown or
+ * revoked code, which a join refuses before it spends any count but the client's own. A full code
+ * has its places all the same: `holdJoin` says it is used.
+ */
+export async function livePlaces(db: TelaDb, code: string): Promise<number | null> {
+  const row = await first<{ max_uses: number }>(
+    db,
+    sql`select max_uses from invite_codes where code = ${code} and revoked_at is null`,
+  )
+  return row?.max_uses ?? null
+}
+
+/**
  * Hold `email` beside `code` for a day (ADR 0034). The hold takes no place; a repeated join
  * refreshes it. On a single-use code the later join moves the hold, so only the last address
  * asked for can finish. Nothing is written for an address that has an account, but its join
