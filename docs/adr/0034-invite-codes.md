@@ -35,8 +35,8 @@ hooks have run.
   it (null for the operator's), `max_uses` (default 1, at most 100,000), when it was made and
   revoked.
 - `invite_redemptions`: a code (null for an operator's invitation to one address), the address,
-  when it expires, when it was redeemed, the member it made, and when it was written. One row per
-  code and address.
+  when it expires, when it was redeemed, the member it made and when it was settled, and when it
+  was written. One row per code and address.
 
 A code never references its redemptions: the nightly export orders tables by their foreign keys,
 and a cycle has no order. Neither table has a `seq`, nothing is pulled, and `MIN_CLIENT` stays 2.
@@ -49,7 +49,10 @@ real invitee never meets "used" while nobody has joined. On a single-use code a 
 the hold: the same batch deletes the code's other pending holds, so only the last address asked
 for can finish. The route answers 400 `invalid_code` for a code that is unknown or revoked (one
 answer for both), 409 `code_used` for a full one, and 200 otherwise. An address that already has
-an account gets an ordinary sign-in code, and the code it brought is untouched.
+an account gets an ordinary sign-in code, and takes neither a hold nor a place from the code it
+brought. Its join still moves a single-use hold like anyone's: a hold that outlived a join with
+another address, which its holder can test by asking for a sign-in code, would say that address
+has an account.
 
 **Admission is a claim, in one statement.** The gate is better-auth's
 `databaseHooks.user.create.before`, which every path that creates a user runs. It admits only by
@@ -65,16 +68,20 @@ inserted in one statement, guarded the same way and idempotent per code and addr
 sign-in that carried no code is refused, even while a hold for its address waits for the six
 digits. A row already claimed but never settled, for an address that still has no user, is
 admitted again, on a path that may claim it, without spending a second place: the user insert that
-follows the hook can fail, and the place would otherwise be gone for nothing.
+follows the hook can fail, and the place would otherwise be gone for nothing. A provider's sign-in
+takes that row whichever code it is on, when its own code could have admitted it alone, so a retry
+by another method, or two sign-ins racing, spend one place between them.
 
 **It refuses by throwing.** An `APIError('FORBIDDEN', {code})`. A hook that returns `false` makes
 `createUser` return null, and the code sign-in then fails on `newUser.id` with an empty 500, after
 the six digits have been spent.
 
-**Once the account exists**, the redemption is settled: it records the member and deletes the
-address's other pending holds. The profile is written idempotently (`on conflict (user_id) do
-nothing`), when the user is created and again whenever a session is, so a member whose profile
-insert failed is repaired at their next sign-in.
+**Once the account exists**, the redemption is settled: it records the member and when, and
+deletes the address's other pending holds. The stamp is what ends re-admission, not the member's
+id, which goes null if the member is ever deleted: their place stays spent and admits nobody. The
+profile is written idempotently (`on conflict (user_id) do nothing`), when the user is created and
+again whenever a session is, so a member whose profile insert failed is repaired at their next
+sign-in.
 
 **The mail gate.** With `disableSignUp` off, better-auth would mail a code to any address it is
 given. `sendVerificationOTP` mails a sign-in code only to an address that has an account or a live

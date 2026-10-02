@@ -2,7 +2,7 @@
  * The daily cron (03:17 UTC). Each step is one statement over domain state, so the whole thing is
  * one batch and a missed day is simply caught up by the next.
  */
-import { bumpSeq, compactReadStates, currentSeq, type TelaDb } from '@tela/data'
+import { bumpSeq, compactReadStates, currentSeq, pruneInvites, type TelaDb } from '@tela/data'
 import { RELAY_REPROBE_DAYS } from '@tela/ingest/region-policy'
 import { DEAD_AFTER_ERRORS } from '@tela/ingest/schedule'
 import { sql } from 'drizzle-orm'
@@ -17,10 +17,14 @@ export type DailyReport = {
   prunedRateLimits: number
   prunedMutations: number
   compacted: number
+  prunedHolds: number
+  prunedSessions: number
+  prunedAuthLimits: number
+  prunedVerifications: number
 }
 
 export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
-  const [, reprobed, revived, limits, mutations, compacted] = await db.batch([
+  const results = await db.batch([
     bumpSeq(db),
     // A feed on the relay for a week is tried directly again; if it still times out, it flips back.
     db.all(sql`
@@ -44,7 +48,16 @@ export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
     // A read state under a member's watermark that never held a like says nothing the watermark
     // does not (ADR 0009). One that did keeps when the like last changed, so it stays.
     compactReadStates(db),
+    // Personal data with no further use: an address that held an invite and never joined (ADR
+    // 0034), a session that has ended (it keeps an IP and a browser), better-auth's per-IP
+    // counters, and sign-in codes and OAuth states past their use.
+    pruneInvites(db, now),
+    db.all(sql`delete from session where expires_at < ${now} returning id`),
+    db.all(sql`delete from rate_limit where last_request < ${now - DAY} returning id`),
+    db.all(sql`delete from verification where expires_at < ${now} returning id`),
   ])
+  const [, reprobed, revived, limits, mutations, compacted, holds, sessions, authLimits, codes] =
+    results
   const n = (rows: unknown) => (rows as unknown[]).length
   return {
     reprobed: n(reprobed),
@@ -52,5 +65,9 @@ export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
     prunedRateLimits: n(limits),
     prunedMutations: n(mutations),
     compacted: n(compacted),
+    prunedHolds: n(holds),
+    prunedSessions: n(sessions),
+    prunedAuthLimits: n(authLimits),
+    prunedVerifications: n(codes),
   }
 }

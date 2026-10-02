@@ -28,6 +28,9 @@ const TABLES = [
   'account',
   'verification',
   'rate_limit',
+  // An operator's code and invitations outlive any user, so the cascade from `user` misses them.
+  'invite_redemptions',
+  'invite_codes',
   'user',
   'leases',
   'lease_fence',

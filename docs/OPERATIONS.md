@@ -127,6 +127,12 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        so a member with no upload shows their letter. An older tela-api has no `/api/v1/avatar`
        (Settings' upload fails visibly) and serves only Gravatars at `/avatar/…`; uploaded objects
        stay in R2 for when it returns. An older tela-web shows no upload controls.
+   - Invite codes (ADR 0034, migration 0005): apply the migration, then deploy tela-jobs,
+     tela-api, tela-web. tela-jobs needs the new tables before its next cron: the daily batch
+     prunes lapsed holds and the nightly export reads both tables, so without them the whole
+     batch fails at 03:17, and that night's export with it.
+     - **tela-jobs may go back alone.** The older one neither prunes holds nor exports the two
+       tables.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way

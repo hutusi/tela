@@ -53,7 +53,8 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 
 | Table | Role |
 |---|---|
-| `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024) |
+| `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024). `account` is also unique on `(provider_id, account_id)`, which `auth generate` leaves out: better-auth refuses an identity it finds twice (ADR 0036) |
+| `invite_codes`, `invite_redemptions` | Invite codes, not synced (ADR 0034). A code is a member's (`created_by`, one place) or the operator's (null, `max_uses` places), until `revoked_at`. A redemption is an address beside a code, or the operator's invitation to one address (code null): a hold until `redeemed_at`, lapsing at `expires_at` without taking a place, then a place for good, settled once the account it made exists (`user_id`, and `settled_at`, which outlives a deleted member). A claim never settled admits the same address again. A code's places are its redeemed rows; every claim is one statement (`packages/data/src/queries/invites.ts`) |
 | `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it), their picture (ADR 0032, 0033): the R2 key of one they uploaded (`avatar_key`), whether they show their Gravatar (`gravatar`, with its `gravatar_at`; never set counts as on), whether Gravatar has one for them (`gravatar_found`, asked at `gravatar_checked_at`), and `avatar_version`, the picture's version, which every change of picture counts up |
 | `user_prefs` | Synced preferences, one row per key: reading mode, text size, measure, theme (`lib/typography.ts`), and the Reading and Translation settings `reader.mark_on_open`, `reader.hide_read`, `translate.auto`, `translate.never` (`lib/prefs.ts`) |
 | `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out` |
@@ -145,7 +146,9 @@ and hashes as the `NORM_VERSION` contract.
 - The cron and queue handlers only call `SELF.fetch()`, whose handler placement pins beside D1.
 - Nightly (`17 3 * * *`): upkeep in one batch (relay re-probes, dead-feed revival, pruning,
   compacting read state under watermarks, `compactReadStates`, which keeps any row that ever held
-  a like), then the export and its verification (`backUp`).
+  a like), then the export and its verification (`backUp`). The pruning takes old limits and
+  mutation ids, and personal data with no further use: invite holds a day past their expiry,
+  ended sessions, better-auth's counters after a day, and spent sign-in codes and OAuth states.
 - Mondays (`0 8 * * 1`): the digest. Every five minutes after the tick: the health check and the
   dead-man's ping (`src/ops.ts`).
 - `src/portable.ts` runs the same tick and jobs on a timer with an in-process queue: the exit path,
