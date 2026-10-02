@@ -36,7 +36,7 @@ packages/sync     the sync protocol: row types, pull response, mutation schemas,
 packages/content  the content contract: sanitize, blocks, tagged text, hashing, objects
 packages/ingest   fetching: HTTP client, discovery, the ingest pipeline, WebSub, relay client
 packages/llm      translation adapter, prompts, output validation
-packages/shared   constants: languages, topics, NORM_VERSION, limits
+packages/shared   constants: languages, topics, NORM_VERSION, limits, handles, invite codes
 packages/config   shared tsconfig bases
 ```
 

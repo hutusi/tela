@@ -12,42 +12,11 @@ import {
   first,
   gravatarOn,
 } from '@tela/data'
-import { isReadingLanguage, isTopic } from '@tela/shared'
+import { isReadingLanguage, isTopic, isValidHandle } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
-
-/** Handles are URLs (`/@handle`), so the app's own paths are taken. */
-const RESERVED_HANDLES = new Set([
-  'admin',
-  'tela',
-  'settings',
-  'dashboard',
-  'login',
-  'logout',
-  'api',
-  'reading',
-  'discover',
-  'add',
-  'claim',
-  'sites',
-  's',
-  'o',
-  'img',
-  'avatar',
-  'u',
-  'auth',
-  'about',
-  'help',
-  'support',
-  'me',
-  'profile',
-  'search',
-  'following',
-])
-const HANDLE = /^[a-z0-9_]{3,30}$/
-export const isValidHandle = (h: string) => HANDLE.test(h) && !RESERVED_HANDLES.has(h)
 
 /** A search query as SQL LIKE sees it: trimmed, whitespace collapsed, wildcards escaped. */
 export function likePattern(query: string): string | null {

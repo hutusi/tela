@@ -235,8 +235,8 @@ Subscribe/Subscribed pill. Cadence is derived from posts in the last 30 days.
 ## Strings
 
 Every user-facing string lives in `apps/reader/messages/en.json` and `zh-Hans.json` under the same
-keys; components read them with use-intl (next-intl's framework-free core). Placeholders use ICU
-plural syntax.
+keys (`apps/reader/test/messages.test.ts` checks); components read them with use-intl (next-intl's
+framework-free core). Placeholders use ICU plural syntax.
 
 ## States the reader adds
 
