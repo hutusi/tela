@@ -149,6 +149,19 @@ export function providerError(code: string): SignInError {
   }
 }
 
+/**
+ * Why a Google or GitHub sign-in would not start (tela-api's `startWithProvider`): the invite code
+ * it carried, checked before the visitor leaves (400 `INVALID_CODE`, 409 `INVITE_USED`, as a join
+ * by email answers), a limit, or the provider in general. Not `providerError`, which reads the
+ * return: there better-auth's `invalid_code` is a failed token exchange, not an invite.
+ */
+export function startError(status: number, code: unknown): SignInError {
+  if (status === 429) return 'rate_limited'
+  if (code === 'INVALID_CODE') return 'invalid_code'
+  if (code === 'INVITE_USED') return 'code_used'
+  return providerError(typeof code === 'string' ? code : '')
+}
+
 /** What a page's query says about the door, and is taken out of the address bar once read. */
 const DOOR_PARAMS = ['door', 'via', 'error', 'error_description'] as const
 
@@ -465,11 +478,7 @@ export function useSignIn(options: SignInOptions) {
       const body = await fields(res)
       const url = typeof body.url === 'string' ? body.url : ''
       if (!res.ok || !url.startsWith('https://')) {
-        setError(
-          res.status === 429
-            ? 'rate_limited'
-            : providerError(typeof body.code === 'string' ? body.code : ''),
-        )
+        setError(startError(res.status, body.code))
         setBusy(false)
         return
       }

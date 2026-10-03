@@ -12,6 +12,7 @@ import {
   mailLink,
   providerError,
   safeNext,
+  startError,
   withoutDoor,
 } from '../src/lib/use-sign-in'
 import { claimError } from '../src/pages/claim'
@@ -208,6 +209,15 @@ describe('answers the pages turn into messages', () => {
     expect(providerError('state_mismatch')).toBe('provider_expired')
     expect(providerError('unable_to_create_user')).toBe('provider_failed')
     expect(providerError('something_new')).toBe('provider_failed')
+  })
+  test("a provider's start refused for its invite code says so, not that the provider failed", () => {
+    expect(startError(400, 'INVALID_CODE')).toBe('invalid_code')
+    expect(startError(409, 'INVITE_USED')).toBe('code_used')
+    expect(startError(429, 'TOO_MANY_REQUESTS')).toBe('rate_limited')
+    expect(startError(400, 'VALIDATION_ERROR')).toBe('provider_failed')
+    expect(startError(500, undefined)).toBe('provider_failed')
+    // At the return, better-auth's own invalid_code is a failed token exchange: the provider's.
+    expect(providerError('invalid_code')).toBe('provider_failed')
   })
   test('a refused provider comes back to the page it started on, and leaves it as it was', () => {
     const back = errorReturn('/discover', '?topic=tech&door=join&error=x', 'login', 'github')
