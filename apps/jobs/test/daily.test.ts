@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import { first } from '@tela/data'
+import { createOperatorCode, first, holdJoin, inviteAddress } from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
-import { sql } from 'drizzle-orm'
+import { type SQL, sql } from 'drizzle-orm'
 import { daily } from '../src/daily'
 
 const NOW = Date.UTC(2026, 8, 20, 3, 17)
@@ -46,6 +46,10 @@ describe('daily', () => {
       prunedRateLimits: 1,
       prunedMutations: 1,
       compacted: 1,
+      prunedHolds: 0,
+      prunedSessions: 0,
+      prunedAuthLimits: 0,
+      prunedVerifications: 0,
     })
     const feeds = await db.all<{
       feed_url: string
@@ -68,5 +72,42 @@ describe('daily', () => {
     )
     expect(states.map((s) => s.article_id)).toEqual([2, 3, 4])
     expect(await first(db, sql`select 1 as x from action_limits where key = 'old'`)).toBeUndefined()
+  })
+
+  test('prunes what has no further use: lapsed holds, ended sessions, old counters, spent codes', async () => {
+    const { db } = await createTestDb()
+    await addTestUser(db, 'u')
+    await createOperatorCode(db, { code: 'WELCOME', maxUses: 5, now: NOW - 3 * DAY })
+    // Held three days ago, a day past its expiry, like the operator's invitation of two days ago;
+    // held yesterday, lapsed but still within the day after.
+    await holdJoin(db, { code: 'WELCOME', email: 'old@x.test', now: NOW - 3 * DAY })
+    await holdJoin(db, { code: 'WELCOME', email: 'recent@x.test', now: NOW - DAY })
+    await inviteAddress(db, { email: 'op@x.test', now: NOW - 2 * DAY })
+    await db.run(sql`
+      insert into session (id, expires_at, token, created_at, updated_at, ip_address, user_agent, user_id)
+      values ('ended', ${NOW - 1}, 't1', 0, 0, '192.0.2.1', 'ua', 'u'),
+        ('live', ${NOW + DAY}, 't2', 0, 0, '192.0.2.1', 'ua', 'u')
+    `)
+    await db.run(sql`
+      insert into rate_limit (id, key, count, last_request)
+      values ('a', '192.0.2.1/sign-in', 3, ${NOW - DAY - 1}), ('b', '192.0.2.2/sign-in', 1, ${NOW - 1})
+    `)
+    await db.run(sql`
+      insert into verification (id, identifier, value, expires_at, created_at, updated_at)
+      values ('spent', 'sign-in-otp-a@x.test', '123456:0', ${NOW - 1}, 0, 0),
+        ('fresh', 'sign-in-otp-b@x.test', '654321:0', ${NOW + 60_000}, 0, 0)
+    `)
+
+    expect(await daily(db, NOW)).toMatchObject({
+      prunedHolds: 2,
+      prunedSessions: 1,
+      prunedAuthLimits: 1,
+      prunedVerifications: 1,
+    })
+    const left = async (query: SQL) => (await db.all<{ k: string }>(query)).map((r) => r.k)
+    expect(await left(sql`select email as k from invite_redemptions`)).toEqual(['recent@x.test'])
+    expect(await left(sql`select id as k from session`)).toEqual(['live'])
+    expect(await left(sql`select id as k from rate_limit`)).toEqual(['b'])
+    expect(await left(sql`select id as k from verification`)).toEqual(['fresh'])
   })
 })

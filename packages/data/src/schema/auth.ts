@@ -6,7 +6,15 @@
  * `bunx auth@<version> generate` when better-auth is upgraded, and compare.
  */
 import { sql } from 'drizzle-orm'
-import { check, index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import {
+  check,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core'
 import { ms, seq } from './columns'
 
 const stamp = (name: string) => integer(name, { mode: 'timestamp_ms' })
@@ -63,7 +71,13 @@ export const account = sqliteTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (t) => [index('account_userId_idx').on(t.userId)],
+  (t) => [
+    index('account_userId_idx').on(t.userId),
+    // Not from `auth generate`, which makes no unique key here (ADR 0036). better-auth finds a
+    // provider identity by these two columns and refuses one it finds twice, so a duplicate,
+    // which two links at once could write, would lock that identity out for good.
+    uniqueIndex('account_provider_account_idx').on(t.providerId, t.accountId),
+  ],
 )
 
 export const verification = sqliteTable(
@@ -93,8 +107,9 @@ export const rateLimit = sqliteTable('rate_limit', {
 export const authTables = { user, session, account, verification, rateLimit }
 
 /**
- * One per member, created with the account by the invite command (there is no trigger on a user
- * table any more). The handle rule used to be a Postgres regex; SQLite has GLOB.
+ * One per member, written when the account is made (better-auth's `user.create.after`; there is no
+ * trigger on a user table any more), and by a sign-in that finds it missing. The handle rule used
+ * to be a Postgres regex; SQLite has GLOB.
  */
 export const profiles = sqliteTable(
   'profiles',

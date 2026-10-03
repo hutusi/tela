@@ -2,16 +2,19 @@
  * tela-api's routes (ADR 0024). Portable: built from `ApiDeps`, so the Cloudflare entry and the
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
-import { schema } from '@tela/data'
+import { inviteAddress, schema } from '@tela/data'
 import { CLIENT_HEADER, MEMBER_HEADER, MIN_CLIENT, pushSchema } from '@tela/sync'
 import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type Auth, createAuth } from './auth'
 import type { ApiDeps } from './deps'
+import { fromOperator } from './operator'
+import { accountRoutes } from './routes/account'
 import { avatarRoutes } from './routes/avatars'
 import { claimRoutes } from './routes/claims'
 import { curate } from './routes/curate'
 import { feedRoutes } from './routes/feeds'
+import { inviteRoutes, operatorCodeRoutes } from './routes/invites'
 import { memberRoutes } from './routes/members'
 import { pictureRoutes } from './routes/picture'
 import { publicRoutes } from './routes/public'
@@ -25,16 +28,54 @@ import { applyPush, asksGravatar } from './sync/push'
 export type Member = { id: string; email: string }
 export type ApiEnv = { Variables: { member: Member } }
 
-/** Constant-time comparison, so a wrong token takes as long as a nearly right one. */
-function sameSecret(given: string, expected: string): boolean {
-  const a = new TextEncoder().encode(given)
-  const b = new TextEncoder().encode(expected)
-  let diff = a.length ^ b.length
-  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0)
-  return diff === 0
-}
-
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/**
+ * The better-auth endpoints Tela uses, under `/api/auth` (ADR 0036): the session tela-web asks
+ * for, a code mailed and signed in with, a password sign-in, the two reset steps, and a provider's
+ * start and return. Signing out is served on its own, guarded, below. Everything else better-auth
+ * mounts is a 404, because several of its endpoints act for a member in ways Tela never offers:
+ * `/update-user` would let a member put any URL in `user.image`, and so in the signed session
+ * cookie tela-web trusts.
+ */
+export const AUTH_ENDPOINTS = [
+  ['GET', '/get-session'],
+  ['POST', '/email-otp/send-verification-otp'],
+  ['POST', '/sign-in/email-otp'],
+  ['POST', '/sign-in/email'],
+  ['POST', '/email-otp/request-password-reset'],
+  ['POST', '/email-otp/reset-password'],
+  ['POST', '/sign-in/social'],
+  ['GET', '/callback/:provider{google|github}'],
+] as const
+
+/**
+ * The endpoints that check a mailed code, and the refusals better-auth gives only while a code is
+ * stored for the address: an expired one, and one tried three times. A stranger's code is never
+ * stored (the mail gate deletes it, and a reset makes none), so a stranger only ever hears
+ * `INVALID_OTP`; answered as better-auth answers them, the two would tell a guesser who is a member
+ * after four wrong tries (ADR 0036). Each is answered as that wrong code instead, which is also
+ * what it means to the person typing: ask for a new one.
+ */
+const CODE_CHECKS: ReadonlySet<string> = new Set([
+  '/sign-in/email-otp',
+  '/email-otp/reset-password',
+])
+const ONLY_A_MEMBER_HEARS: ReadonlySet<string> = new Set(['OTP_EXPIRED', 'TOO_MANY_ATTEMPTS'])
+// Byte for byte as better-auth writes it, keys in its order.
+const WRONG_CODE = { message: 'Invalid OTP', code: 'INVALID_OTP' }
+
+async function asWrongCode(answer: Response): Promise<Response> {
+  if (answer.status !== 400 && answer.status !== 403) return answer
+  const body = (await answer
+    .clone()
+    .json()
+    .catch(() => null)) as { code?: unknown } | null
+  if (typeof body?.code !== 'string' || !ONLY_A_MEMBER_HEARS.has(body.code)) return answer
+  const headers = new Headers(answer.headers)
+  headers.delete('content-length')
+  return new Response(JSON.stringify(WRONG_CODE), { status: 400, headers })
+}
 
 /** A client older than the protocol is told to reload, not left misreading rows. */
 function tooOld(version: string | undefined): boolean {
@@ -60,7 +101,13 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     }
     return auth.handler(c.req.raw)
   })
-  app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
+  for (const [method, path] of AUTH_ENDPOINTS) {
+    app.on(method, `/api/auth${path}`, async (c) => {
+      const answer = await auth.handler(c.req.raw)
+      return CODE_CHECKS.has(path) ? asWrongCode(answer) : answer
+    })
+  }
+  app.all('/api/auth/*', (c) => c.json({ error: 'not_found' }, 404))
 
   app.get('/api/health', async (c) => {
     const started = Date.now()
@@ -76,34 +123,34 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   })
 
   /**
-   * Invite a member: create the account (registration is otherwise closed) and mail a sign-in
-   * code. Operators call it with `bun run admin invite <email>`; D1 credentials never leave
-   * Cloudflare.
+   * Invite a member: create the account and mail a sign-in code. Operators call it with
+   * `bun run admin invite <email>`; D1 credentials never leave Cloudflare. The account passes the
+   * same gate as everyone's (ADR 0034): the route writes the operator's invitation to the address,
+   * an hour long, and creating the user claims it. An address that has an account is only mailed
+   * a fresh code, and given no invitation it could keep.
    */
   app.post('/api/admin/invite', async (c) => {
-    const token = deps.config.adminToken
-    const given = c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
-    if (!token || !sameSecret(given, token)) return c.json({ error: 'forbidden' }, 403)
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
     const body = await c.req.json<{ email?: unknown }>().catch(() => ({}) as { email?: unknown })
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
     if (!EMAIL.test(email)) return c.json({ error: 'invalid_email' }, 400)
     const ctx = await auth.$context
     const existing = await ctx.internalAdapter.findUserByEmail(email)
-    const user =
-      existing?.user ??
-      (await ctx.internalAdapter.createUser(
-        { email, name: email.split('@')[0] ?? email, emailVerified: false },
+    let user = existing?.user
+    if (!user) {
+      await inviteAddress(deps.db, { email, now: deps.clock.now() })
+      user = await ctx.internalAdapter.createUser(
+        { email, name: '', emailVerified: false },
         { method: 'admin' },
-      ))
+      )
+    }
     await auth.api.sendVerificationOTP({ body: { email, type: 'sign-in' } })
     return c.json({ userId: user.id, created: !existing })
   })
 
   /** Add a curated blog's feed and feature it in Discover (`bun run admin curate`). */
   app.post('/api/admin/curate', async (c) => {
-    const token = deps.config.adminToken
-    const given = c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
-    if (!token || !sameSecret(given, token)) return c.json({ error: 'forbidden' }, 403)
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
     const body = await c.req
       .json<{ feedUrl?: unknown; topics?: unknown }>()
       .catch(() => ({}) as { feedUrl?: unknown; topics?: unknown })
@@ -114,6 +161,9 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     const result = await curate(deps, body.feedUrl, topics)
     return 'error' in result ? c.json(result, 422) : c.json(result)
   })
+
+  /** The operator's invite codes (`bun run admin code|codes|revoke`, ADR 0034). */
+  app.route('/api/admin/codes', operatorCodeRoutes(deps))
 
   if (deps.config.testMode) {
     // e2e reads sign-in codes here instead of from a real inbox. Test mode only.
@@ -132,11 +182,13 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
 
   // Anyone may read these; tela-web caches them at the edge.
   app.route('/api/v1/public/avatars', avatarRoutes(deps))
-  app.route('/api/v1/public', publicRoutes(deps))
+  app.route('/api/v1/public', publicRoutes(deps, auth))
   // Hubs, not members, call this; the signature is the authorization.
   app.route('/api/websub', websubRoutes(deps))
 
   /**
+   * Joining with an invite code is a visitor's: `/api/v1/join` needs no session (ADR 0034).
+   *
    * Every other /api/v1 route acts for the session's member, and runs only for a client that
    * names that member. Tabs share the cookie, so after another tab signs in as someone else the
    * cookie is theirs while this tab's screen, rows and unsent changes are still the first
@@ -151,7 +203,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
    *    reload into the same state.
    */
   app.use('/api/v1/*', async (c, next) => {
-    if (c.req.path.startsWith('/api/v1/public/')) return next()
+    if (c.req.path.startsWith('/api/v1/public/') || c.req.path === '/api/v1/join') return next()
     const session = await auth.api.getSession({ headers: c.req.raw.headers })
     if (!session) return c.json({ error: 'unauthorized' }, 401)
     const member = { id: session.user.id, email: session.user.email }
@@ -194,6 +246,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1', memberRoutes(deps))
   app.route('/api/v1', pictureRoutes(deps))
   app.route('/api/v1', socialRoutes(deps))
+  app.route('/api/v1', inviteRoutes(deps, auth))
+  app.route('/api/v1/account', accountRoutes(deps, auth))
 
   return { app, auth }
 }

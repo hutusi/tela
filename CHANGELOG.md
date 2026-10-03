@@ -28,6 +28,27 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Invite codes** (ADR 0034). Every member can bring in five people, ever, from Settings →
+  Invites, which lists the codes they made and who joined with each, and revokes one nobody has
+  used. The operator makes codes of their own text for as many people as they choose
+  (`bun run admin code`, `codes`, `revoke`). A join holds the address beside the code for a day
+  and mails it a code; signing in takes the place. One gate admits every new account, whichever
+  way it comes, by claiming an invitation in a single statement.
+- **Four ways to sign in** (ADR 0036): an emailed code, a password, Google or GitHub. A password
+  is set only once a code has proved the address, at the join's code step or by a reset code; a
+  provider makes an account only with the invite code its own sign-in carried, and is linked to a
+  member only from Settings, never by a matching address. Settings → Account sets or changes the
+  password, links and unlinks Google and GitHub, and signs out everywhere, and every change mails
+  the member a notice. Google and GitHub appear only once their apps are configured.
+- **The front page** (ADR 0035). A visitor at `/` sees how many blogs Tela gathers and this
+  week's edition of them, titles as written or translated, rendered at the edge and cached in
+  each colo for five minutes; a member's `/` is their reading. Log in and Join open one sheet over
+  whatever page the visitor is on, and `/join?code=` opens it with the code filled in.
+- **For writers** (`/writers`): a writer types their name and blog and sees the calling card Tela
+  would make of it, with a free handle suggested as they type; joining from it gives the new
+  member that handle and name, and joining or logging in goes on to claim the blog.
+- **About, Privacy and Terms**, in English and Chinese, rendered at the edge from the bundle;
+  every statement on them is checked against what the code does (ADR 0035).
 - **Highlights and notes**, private, on either side of a translation, and found again when the
   post is edited; text size, line length and a dark theme, synced across devices; `j`/`k`, `Esc`
   and `h` on the reading page (ADR 0026).
@@ -108,10 +129,10 @@ everything so far sits under `[Unreleased]`.
 - **English and Simplified Chinese throughout**, switchable without a page reload, with no locale
   prefix in the URL (ADR 0010).
 
-- **Private testing.** Signup is closed at the platform level and the site is kept out of search
-  indexes while `TELA_PRIVATE_BETA` is set; the way in is an admin invite. Invite codes were
-  deliberately not built — their design should follow the decision about how to open up
-  (ADR 0015).
+- **Private testing.** Every new account needs an invitation, and the site is kept out of search
+  indexes while `TELA_PRIVATE_BETA` is set (ADR 0015). The way in was first an admin invite only;
+  invitations now come from members' codes, the operator's codes and `bun run admin invite`
+  (ADR 0034). Opening up is a large operator code, then lifting the gate, then that var.
 
 - **A logo.** Two mirrored strands crossing at the centre, in the header beside the wordmark and
   on a dark tile as the favicon and app icon — until now browser tabs showed the stock Next.js
@@ -170,6 +191,14 @@ everything so far sits under `[Unreleased]`.
 
 ### Fixed
 
+- **A member's six digits could be guessed without their mail.** Sign-in codes were limited per IP
+  only, and an IPv6 /48 holds 65,536 of better-auth's buckets. Every endpoint that mails or checks
+  a code now also counts per address (five sends and ten checks an hour), for any address, so the
+  limit says nothing about who is a member; and a code tried too often or past its hour is
+  answered like any wrong one (ADR 0036).
+- **A mailed sign-in link no longer signs in by itself.** Opened, `/login?email=&otp=` submitted
+  the code at once: a link to someone else's code put the reader into that account. It now fills
+  the code in and asks "Sign in as …?" first (ADR 0036).
 - **Members could not sign in at all.** Closing signup for private testing set
   `enable_signup = false` under both `[auth]` and `[auth.email]` in `supabase/config.toml`. The
   second is not a signup switch — the CLI maps it to GoTrue's `EXTERNAL_EMAIL_ENABLED` — so it

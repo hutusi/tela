@@ -19,7 +19,8 @@ const unused = () => {
   throw new Error('not used here')
 }
 
-it('invites, signs in, pushes and pulls on D1', async () => {
+/** tela-api on the D1 binding, and a request as tela-web forwards one. */
+function stack() {
   const db = d1Db(env.DB, schema)
   const mail = memoryMail()
   const sent: unknown[] = []
@@ -27,7 +28,7 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     send: async (_q, body) => void sent.push(body),
     sendBatch: async (_q, messages) => void sent.push(...messages),
   }
-  const { app } = createApp({
+  const { app, auth } = createApp({
     db,
     blobs: {
       get: unused,
@@ -45,14 +46,20 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       authSecret: 'a-test-secret-that-is-long-enough-for-hmac',
       adminToken: 'admin',
       mailFrom: 'Tela <noreply@tela.test>',
+      oauth: { github: { clientId: 'github-client', clientSecret: 'github-secret' } },
     },
   })
   const call = (
     path: string,
-    init: { body?: unknown; cookie?: string; headers?: Record<string, string> } = {},
+    init: {
+      method?: string
+      body?: unknown
+      cookie?: string
+      headers?: Record<string, string>
+    } = {},
   ) =>
     app.request(`${ORIGIN}${path}`, {
-      method: init.body === undefined ? 'GET' : 'POST',
+      method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
       headers: {
         origin: ORIGIN,
         'content-type': 'application/json',
@@ -62,6 +69,22 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       },
       ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
     })
+  /** The code in the newest mail to `email`. */
+  const codeFor = (email: string) =>
+    [...mail.outbox]
+      .reverse()
+      .find((m) => m.to === email)
+      ?.text.match(/^\d{6}$/m)?.[0]
+  const cookiesOf = (res: Response) =>
+    res.headers
+      .getSetCookie()
+      .map((c) => c.split(';')[0])
+      .join('; ')
+  return { db, auth, mail, call, codeFor, cookiesOf }
+}
+
+it('invites, signs in, pushes and pulls on D1', async () => {
+  const { db, mail, call, cookiesOf } = stack()
 
   // Sign-in through better-auth's Drizzle adapter, on D1.
   const invited = await call('/api/admin/invite', {
@@ -75,15 +98,26 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     body: { email: 'reader@x.test', otp: code },
   })
   expect(signIn.status).toBe(200)
-  const cookie = signIn.headers
-    .getSetCookie()
-    .map((c) => c.split(';')[0])
-    .join('; ')
+  // The try counted against the address too (ADR 0036), in the hook before better-auth's endpoint.
+  expect(
+    await db.all<{ count: number }>(
+      sql`select count from action_limits where key = 'otpVerify:reader@x.test'`,
+    ),
+  ).toEqual([{ count: 1 }])
+  const cookie = cookiesOf(signIn)
   const me = (await (await call('/api/v1/me', { cookie })).json()) as {
     id: string
     profile: { handle: string }
   }
   expect(me.profile.handle).toMatch(/^u_[0-9a-f]{10}$/)
+  // The account came through the invitation gate (ADR 0034): the operator's invitation, claimed by
+  // one `update … returning` inside better-auth's hook and settled once the user existed.
+  expect(
+    await db.all(
+      sql`select code, user_id, redeemed_at is not null and settled_at is not null as spent
+        from invite_redemptions where email = 'reader@x.test'`,
+    ),
+  ).toEqual([{ code: null, user_id: me.id, spent: 1 }])
   // Every other member call names the member, as the reader does from what /me told it.
   const member = { cookie, headers: { [MEMBER_HEADER]: me.id } }
 
@@ -207,4 +241,247 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     )
   ).json()) as { items: { kind: string }[] }
   expect(older.items.map((i) => i.kind)).toEqual(['recommended'])
+})
+
+it("reads the front page's edition and checks a handle, on D1", async () => {
+  const { db, call } = stack()
+  const now = Date.now()
+  const hour = 60 * 60 * 1000
+  await db.batch([
+    bumpSeq(db),
+    db.run(sql`insert into sites (id, home_url, title, listing, primary_lang, created_at, updated_at, seq)
+      values (901, 'https://front1.example', 'Front 1', 'listed', 'en', 0, 0, ${currentSeq}),
+        (902, 'https://front2.example', 'Front 2', 'featured', 'ja', 0, 0, ${currentSeq})`),
+    db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at, updated_at, seq)
+      values (901, 901, 'https://front1.example/feed', 'front1.example', 0, 0, 0, ${currentSeq}),
+        (902, 902, 'https://front2.example/feed', 'front2.example', 0, 0, 0, ${currentSeq})`),
+    db.run(sql`insert into articles (id, feed_id, dedup_key, title, source_lang, fetched_at, sort_at, seq)
+      values (9001, 901, 'f1', 'Older', 'en', ${now}, ${now - 3 * hour}, ${currentSeq}),
+        (9002, 901, 'f2', 'Newest', 'en', ${now}, ${now - hour}, ${currentSeq}),
+        (9003, 902, 'f3', 'Japanese', 'ja', ${now}, ${now - 2 * hour}, ${currentSeq})`),
+    db.run(sql`insert into article_titles (article_id, lang, feed_id, title, excerpt, status,
+        source_hash, updated_at, seq)
+      values (9003, 'en', 902, 'In English', 'An excerpt', 'done', 'h', 0, ${currentSeq})`),
+  ] as never)
+  const res = await call('/api/v1/public/front')
+  expect(res.status).toBe(200)
+  const body = (await res.json()) as {
+    counts: { blogs: number }
+    week: { blogs: number; languages: number; posts: number }
+    edition: {
+      span: string
+      posts: { article: { id: number; titles: object; excerpts: object }; site: { id: number } }[]
+    }
+  }
+  expect(body.counts).toEqual({ blogs: 2 })
+  expect(body.week).toEqual({ blogs: 2, languages: 2, posts: 3 })
+  expect(body.edition.span).toBe('week')
+  expect(body.edition.posts.map((p) => [p.site.id, p.article.id])).toEqual([
+    [901, 9002],
+    [902, 9003],
+  ])
+  expect(body.edition.posts[1]?.article).toMatchObject({
+    titles: { en: 'In English' },
+    excerpts: { en: 'An excerpt' },
+  })
+  // The handle check's free list is one json_each over D1.
+  const handle = await call('/api/v1/public/handles/Front', {
+    headers: { 'cf-connecting-ip': '198.51.100.30' },
+  })
+  expect(handle.headers.get('cache-control')).toBe('no-store')
+  expect(await handle.json()).toEqual({ handle: 'front', status: 'available', suggestion: 'front' })
+})
+
+it("joins with a code, signs in, and shows on the inviter's list, on D1", async () => {
+  const { db, call, codeFor, cookiesOf } = stack()
+  // A member, made by the operator, who makes a code: the five are counted in one insert…select.
+  await call('/api/admin/invite', {
+    body: { email: 'inviter@x.test' },
+    headers: { authorization: 'Bearer admin' },
+  })
+  // Each sign-in from an IP of its own, clear of better-auth's three a minute per IP.
+  const inviterIn = await call('/api/auth/sign-in/email-otp', {
+    body: { email: 'inviter@x.test', otp: codeFor('inviter@x.test') },
+    headers: { 'cf-connecting-ip': '198.51.100.6' },
+  })
+  const inviterId = ((await inviterIn.json()) as { user: { id: string } }).user.id
+  const inviter = { cookie: cookiesOf(inviterIn), headers: { [MEMBER_HEADER]: inviterId } }
+  const made = await call('/api/v1/invites', { method: 'POST', ...inviter })
+  expect(made.status).toBe(200)
+  const { code } = (await made.json()) as { code: string }
+
+  // A visitor joins: the limits, then the hold, in one batch with the state it answers from.
+  // The address's mails count with the login page's (`otpSend`), though better-auth's hook never
+  // sees tela-api's own call.
+  const joined = await call('/api/v1/join', {
+    body: { code, email: 'joiner@x.test' },
+    headers: { 'cf-connecting-ip': '198.51.100.7' },
+  })
+  expect(joined.status).toBe(200)
+  expect(
+    await db.all<{ key: string; count: number }>(
+      sql`select key, count from action_limits where key like 'join%' or key like 'otpSend:%'
+        order by key`,
+    ),
+  ).toEqual([
+    { key: 'joinAddress:joiner@x.test', count: 1 },
+    { key: `joinCode:${code}`, count: 1 },
+    { key: 'joinIp:198.51.100.7', count: 1 },
+    { key: 'otpSend:joiner@x.test', count: 1 },
+  ])
+  // The code sign-in makes the account: the gate claims the hold, `create.after` settles it.
+  const signIn = await call('/api/auth/sign-in/email-otp', {
+    body: { email: 'joiner@x.test', otp: codeFor('joiner@x.test') },
+    headers: { 'cf-connecting-ip': '198.51.100.7' },
+  })
+  expect(signIn.status).toBe(200)
+  const me = (await (await call('/api/v1/me', { cookie: cookiesOf(signIn) })).json()) as {
+    id: string
+    profile: { handle: string }
+  }
+  expect(
+    await db.all(sql`select code, user_id, settled_at is not null as settled
+      from invite_redemptions where email = 'joiner@x.test'`),
+  ).toEqual([{ code, user_id: me.id, settled: 1 }])
+  const listed = (await (await call('/api/v1/invites', inviter)).json()) as {
+    codes: { code: string; handle: string | null }[]
+  }
+  expect(listed.codes).toMatchObject([{ code, handle: me.profile.handle }])
+  // Full now: the next join is told so, and the used code cannot be revoked.
+  const again = await call('/api/v1/join', {
+    body: { code, email: 'late@x.test' },
+    headers: { 'cf-connecting-ip': '198.51.100.8' },
+  })
+  expect(again.status).toBe(409)
+  expect((await call(`/api/v1/invites/${code}`, { method: 'DELETE', ...inviter })).status).toBe(404)
+})
+
+it('sets a password and logs in with it, hashed by scrypt in workerd, on D1', async () => {
+  const { db, auth, call, codeFor, cookiesOf } = stack()
+  const email = 'password@x.test'
+  await call('/api/admin/invite', { body: { email }, headers: { authorization: 'Bearer admin' } })
+  const signIn = await call('/api/auth/sign-in/email-otp', {
+    body: { email, otp: codeFor(email) },
+    headers: { 'cf-connecting-ip': '198.51.100.20' },
+  })
+  expect(signIn.status).toBe(200)
+  const { user } = (await signIn.json()) as { user: { id: string } }
+  await call('/api/auth/email-otp/send-verification-otp', {
+    body: { email, type: 'sign-in' },
+    headers: { 'cf-connecting-ip': '198.51.100.23' },
+  })
+  const elsewhere = await call('/api/auth/sign-in/email-otp', {
+    body: { email, otp: codeFor(email) },
+    headers: { 'cf-connecting-ip': '198.51.100.24' },
+  })
+  expect(elsewhere.status).toBe(200)
+  // Set as Settings sets it (ADR 0036): the session read from D1, then tela-api's own call, which
+  // is `@better-auth/utils/password` under the workerd condition, node:crypto's scrypt. It writes
+  // the credential account through the Drizzle adapter, and ends the member's other session.
+  const set = await call('/api/v1/account/password', {
+    body: { newPassword: 'correct horse battery' },
+    cookie: cookiesOf(signIn),
+    headers: { [MEMBER_HEADER]: user.id },
+  })
+  expect(set.status).toBe(200)
+  expect(
+    await auth.api.getSession({
+      headers: new Headers({ cookie: cookiesOf(elsewhere) }),
+      query: { disableCookieCache: true },
+    }),
+  ).toBeNull()
+  const stored = await db.all<{ password: string }>(
+    sql`select a.password from account a join user u on u.id = a.user_id
+      where u.email = ${email} and a.provider_id = 'credential'`,
+  )
+  expect(stored).toEqual([{ password: expect.stringMatching(/^[0-9a-f]{32}:[0-9a-f]{128}$/) }])
+  const logIn = (password: string, ip: string) =>
+    call('/api/auth/sign-in/email', {
+      body: { email, password },
+      headers: { 'cf-connecting-ip': ip },
+    })
+  expect((await logIn('not the password', '198.51.100.21')).status).toBe(401)
+  const res = await logIn('correct horse battery', '198.51.100.22')
+  expect(res.status).toBe(200)
+  expect((await call('/api/v1/me', { cookie: cookiesOf(res) })).status).toBe(200)
+  // Both tries counted against the address, from two IPs.
+  expect(
+    await db.all<{ count: number }>(
+      sql`select count from action_limits where key = ${`passwordSignIn:${email}`}`,
+    ),
+  ).toEqual([{ count: 2 }])
+})
+
+it('makes an account with GitHub, admitted by the invite code its OAuth state carried, on D1', async () => {
+  const { db, mail, call, cookiesOf } = stack()
+  const made = await call('/api/admin/codes', {
+    body: { code: 'WELCOME', uses: 2 },
+    headers: { authorization: 'Bearer admin' },
+  })
+  expect(made.status).toBe(200)
+  // GitHub, stood in for: better-auth's fetch reads the global at every call.
+  const real = globalThis.fetch
+  const answer = (body: unknown) =>
+    new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
+  globalThis.fetch = (async (input: Request | URL | string) => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    if (url.pathname === '/login/oauth/access_token') {
+      return answer({ access_token: 'gho_token', token_type: 'bearer', scope: 'user:email' })
+    }
+    if (url.pathname === '/user') return answer({ id: 4242, login: 'octo', email: null })
+    if (url.pathname === '/user/emails') {
+      return answer([{ email: 'octo@x.test', primary: true, verified: true }])
+    }
+    throw new Error(`unexpected fetch ${url}`)
+  }) as typeof fetch
+  try {
+    // The start checks the code and writes it into the state row (a verification row in D1),
+    // through the server context better-auth keeps in AsyncLocalStorage under workerd.
+    const started = await call('/api/auth/sign-in/social', {
+      body: {
+        provider: 'github',
+        callbackURL: '/reading',
+        newUserCallbackURL: '/discover',
+        errorCallbackURL: '/join',
+        disableRedirect: true,
+        additionalData: { invite: 'WELCOME' },
+      },
+      headers: { 'cf-connecting-ip': '198.51.100.30' },
+    })
+    expect(started.status).toBe(200)
+    const { url } = (await started.json()) as { url: string }
+    const state = new URL(url).searchParams.get('state') ?? ''
+    const back = await call(`/api/auth/callback/github?code=x&state=${state}`, {
+      cookie: cookiesOf(started),
+      headers: { 'cf-connecting-ip': '198.51.100.31' },
+    })
+    expect(back.status).toBe(302)
+    expect(back.headers.get('location')).toBe('/discover')
+    const me = (await (await call('/api/v1/me', { cookie: cookiesOf(back) })).json()) as {
+      id: string
+      profile: { handle: string }
+    }
+    expect(me.profile.handle).toMatch(/^u_[0-9a-f]{10}$/)
+    // Claimed by one insert…select…on conflict…returning inside better-auth's hook, settled once
+    // the user existed; the account row keeps the identity and no token.
+    expect(
+      await db.all(sql`select code, user_id, settled_at is not null as settled
+        from invite_redemptions where email = 'octo@x.test'`),
+    ).toEqual([{ code: 'WELCOME', user_id: me.id, settled: 1 }])
+    expect(
+      await db.all(sql`select provider_id, account_id, access_token, refresh_token, id_token
+        from account where user_id = ${me.id}`),
+    ).toEqual([
+      {
+        provider_id: 'github',
+        account_id: '4242',
+        access_token: null,
+        refresh_token: null,
+        id_token: null,
+      },
+    ])
+    expect(mail.outbox.map((m) => m.to)).toEqual(['octo@x.test'])
+  } finally {
+    globalThis.fetch = real
+  }
 })

@@ -95,7 +95,10 @@ describe('asking for a translation', () => {
     await article({ optOut: true })
     expect((await askJson()).status).toBe('unavailable')
     expect(await usage()).toBeUndefined()
-    expect(await first(db, sql`select 1 as x from action_limits`)).toBeUndefined()
+    // Signing in counted a try against the member's address; nothing counted the translation.
+    expect(
+      await first(db, sql`select 1 as x from action_limits where key like 'translate:%'`),
+    ).toBeUndefined()
     expect(api.jobs.sent).toEqual([])
   })
 

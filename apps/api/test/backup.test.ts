@@ -8,12 +8,16 @@ import {
   backUp,
   backupTables,
   bumpSeq,
+  claimInvite,
+  createMemberCode,
   currentSeq,
   exportDatabase,
+  holdJoin,
   latestBackup,
   pruneBackups,
   readManifest,
   restoreDatabase,
+  settleInvite,
   type TelaDb,
   verifyExport,
 } from '@tela/data'
@@ -23,7 +27,10 @@ import type { PullResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { createTestApi, signedIn } from './helpers'
 
-/** A member with a feed, posts, a like and a highlight, all written the way the app writes them. */
+/**
+ * A member with a feed, posts, a like, a highlight and invite codes, all written the way the app
+ * writes them.
+ */
 async function seeded() {
   const api = await createTestApi()
   const { db } = api
@@ -70,6 +77,20 @@ async function seeded() {
     },
   })
   expect(push.status).toBe(200)
+  // The reader's invitations (ADR 0034): one a friend joined with, one held, one unused.
+  for (const code of ['AAAABBBBCCCC', 'DDDDEEEEFFFF', 'GGGGHHHHJJJJ']) {
+    expect(await createMemberCode(db, { userId: reader.userId, code, now })).toMatchObject({
+      ok: true,
+    })
+  }
+  expect(await holdJoin(db, { code: 'AAAABBBBCCCC', email: 'friend@x.test', now })).toBe('held')
+  expect(await holdJoin(db, { code: 'DDDDEEEEFFFF', email: 'later@x.test', now })).toBe('held')
+  expect(await claimInvite(db, { email: 'friend@x.test', now })).toMatchObject({
+    code: 'AAAABBBBCCCC',
+  })
+  await db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+    values ('friend', '', 'friend@x.test', 1, ${now}, ${now})`)
+  expect(await settleInvite(db, { email: 'friend@x.test', userId: 'friend', now })).toHaveLength(1)
   return api
 }
 
@@ -93,6 +114,8 @@ describe('the nightly export', () => {
     expect(at('feeds')).toBeLessThan(at('articles'))
     expect(at('articles')).toBeLessThan(at('highlights'))
     expect(at('user')).toBeLessThan(at('follows'))
+    expect(at('user')).toBeLessThan(at('invite_codes'))
+    expect(at('invite_codes')).toBeLessThan(at('invite_redemptions'))
     expect(names).toContain('counters')
   })
 

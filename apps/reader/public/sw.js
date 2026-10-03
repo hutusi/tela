@@ -3,6 +3,9 @@
  *
  * - a navigation gets the cached index.html at once and refreshes it behind (stale while
  *   revalidate), so a repeat visit paints without waiting on the network;
+ * - the shell is fetched from `/__tela/shell`, never from `/`: the edge renders `/` for visitors
+ *   (ADR 0035), and a landing kept as the shell would paint on every page. Only the plain shell is
+ *   kept, its root empty and with no `#tela-data` handover;
  * - `/assets/*` are content-hashed, so a cached copy is served forever. Only a copy that is what
  *   its name says is kept: the edge answers a hashed file its deploy lacks 200 with the app's
  *   HTML (ARCHITECTURE.md), which kept under a script's name would be served forever too;
@@ -21,7 +24,14 @@
  *
  * Kill switch: `shell/kill-sw.js` (OPERATIONS.md) replaces this file when a bad shell must go.
  */
-const SHELL = 'tela-shell-v2'
+const SHELL = 'tela-shell-v3'
+/**
+ * Where the shell comes from: a path tela-web never runs for (it is not in `run_worker_first`),
+ * so the single-page fallback answers it 200 with index.html. `/` is two pages, the landing for a
+ * visitor and the shell for a member, and `/index.html` redirects to `/`. Whatever it is fetched
+ * as, the shell is kept under `/`.
+ */
+const SHELL_URL = '/__tela/shell'
 /** How long activation waits for its warm before it lets the open tabs' requests through. */
 const WARM_MS = 3000
 const PASS = /^\/(api|o|img|avatar)\//
@@ -51,6 +61,16 @@ function fits(path, res) {
   if (!res.ok || type.includes('text/html')) return false
   const want = TYPES[path.slice(path.lastIndexOf('.') + 1)]
   return !want || type.includes(want)
+}
+
+/**
+ * The plain shell, and nothing else: an empty root, and no handover. A page the edge rendered
+ * (the landing, Discover, an info page) fills the root and may hand its data over in `#tela-data`;
+ * kept as the shell, it would paint on every page, its data days old, until the app replaced it. A
+ * captive portal's page has no root at all.
+ */
+function plain(html) {
+  return html.includes('<div id="root"></div>') && !html.includes('id="tela-data"')
 }
 
 /** The `/assets/…` files a page loads itself: script `src` and link `href` (CSS, modulepreload). */
@@ -101,15 +121,20 @@ function refreshShell() {
 
 /**
  * Fetch the shell, cache every file it loads that is missing, and only then replace the cached
- * one. A file the network cannot give, or answers with something else (the app itself, a
- * captive portal), leaves the old shell and its files as they were: the next refresh tries again.
+ * one. A shell that is not the plain one (a rendered page, a captive portal), or a file the
+ * network cannot give or answers with something else (the app itself, a portal again), leaves the
+ * old shell and its files as they were: the next refresh tries again.
  * The previous shell's files stay, since a tab may be booting it right now (`PREVIOUS`);
  * anything older goes.
  */
 async function swapShell() {
-  const res = await fetch('/', { cache: 'no-cache' })
-  if (!res.ok || !(res.headers.get('content-type') ?? '').includes('text/html')) return
+  const res = await fetch(SHELL_URL, { cache: 'no-cache' })
+  // A redirect means the path is no longer what the asset router answers itself, and a
+  // navigation answered with a redirected response fails outright.
+  if (!res.ok || res.redirected) return
+  if (!(res.headers.get('content-type') ?? '').includes('text/html')) return
   const html = await res.clone().text()
+  if (!plain(html)) return
   const cache = await caches.open(SHELL)
   const ready = await Promise.all(
     [...loads(html)].map(async (path) => {
@@ -151,7 +176,8 @@ self.addEventListener('fetch', (event) => {
         const cached = await cache.match('/')
         event.waitUntil(refreshShell().catch(() => undefined))
         if (cached) return cached
-        // No shell yet: whatever the network says, including the edge's rendered public pages.
+        // No shell yet: whatever the network says, including the edge's rendered public pages and
+        // the landing at `/`. It is passed on, never kept: the refresh keeps the plain shell.
         return fetch(request)
       })(),
     )

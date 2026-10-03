@@ -1,9 +1,12 @@
 /**
  * Claiming a blog (ADR 0011, 0018): give its address, put a proof on the home page, then ask for
  * the check. The check runs in tela-jobs; this page asks how it went every few seconds.
+ *
+ * For writers' card lands here as `/claim?url=…`, the address filled in, and with `&taken=1`
+ * when the handle it chose is another member's.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { useTitle } from '../lib/title'
 import { apiJson } from '../store/api'
@@ -35,7 +38,9 @@ const ERROR = 'text-sm text-danger'
 export function ClaimPage() {
   const t = useTranslations('claim')
   const navigate = useNavigate()
-  const [url, setUrl] = useState('')
+  const [search] = useSearchParams()
+  const [url, setUrl] = useState(() => search.get('url') ?? '')
+  const taken = search.get('taken') === '1'
   const [error, setError] = useState<StartError | null>(null)
   const [busy, setBusy] = useState(false)
   useTitle(t('title'))
@@ -65,6 +70,14 @@ export function ClaimPage() {
         </h1>
         <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{t('intro')}</p>
       </div>
+      {taken ? (
+        <p
+          className="m-0 rounded-xl border border-line bg-surface px-4 py-3 text-[14px] leading-relaxed text-ink-2"
+          data-testid="claim-taken"
+        >
+          {t.rich('taken', { link: (chunks) => <Link to="/settings">{chunks}</Link> })}
+        </p>
+      ) : null}
       <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
         <div className="flex gap-2">
           <input

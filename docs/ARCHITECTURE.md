@@ -36,7 +36,7 @@ packages/sync     the sync protocol: row types, pull response, mutation schemas,
 packages/content  the content contract: sanitize, blocks, tagged text, hashing, objects
 packages/ingest   fetching: HTTP client, discovery, the ingest pipeline, WebSub, relay client
 packages/llm      translation adapter, prompts, output validation
-packages/shared   constants: languages, topics, NORM_VERSION, limits
+packages/shared   constants: languages, topics, NORM_VERSION, limits, handles, invite codes
 packages/config   shared tsconfig bases
 ```
 
@@ -53,7 +53,8 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 
 | Table | Role |
 |---|---|
-| `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024) |
+| `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024). `account` is also unique on `(provider_id, account_id)`, which `auth generate` leaves out: better-auth refuses an identity it finds twice (ADR 0036) |
+| `invite_codes`, `invite_redemptions` | Invite codes, not synced (ADR 0034). A code is a member's (`created_by`, one place) or the operator's (null, `max_uses` places), until `revoked_at`. A redemption is an address beside a code, or the operator's invitation to one address (code null): a hold until `redeemed_at`, lapsing at `expires_at` without taking a place, then a place for good, settled once the account it made exists (`user_id`, and `settled_at`, which outlives a deleted member). A claim never settled admits the same address again. A code's places are its redeemed rows; every claim is one statement (`packages/data/src/queries/invites.ts`) |
 | `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it), their picture (ADR 0032, 0033): the R2 key of one they uploaded (`avatar_key`), whether they show their Gravatar (`gravatar`, with its `gravatar_at`; never set counts as on), whether Gravatar has one for them (`gravatar_found`, asked at `gravatar_checked_at`), and `avatar_version`, the picture's version, which every change of picture counts up |
 | `user_prefs` | Synced preferences, one row per key: reading mode, text size, measure, theme (`lib/typography.ts`), and the Reading and Translation settings `reader.mark_on_open`, `reader.hide_read`, `translate.auto`, `translate.never` (`lib/prefs.ts`) |
 | `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out` |
@@ -71,7 +72,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `leases`, `lease_fence` | Who holds which piece of background work, and the fence that aborts a stale holder's batch |
 | `dead_letters`, `ops_heartbeats` | Work that gave up; the tick's last run |
 | `llm_calls`, `usage_daily` | Every model call; reserved and used tokens per member and day (`'*'` is background) |
-| `action_limits`, `applied_mutations`, `tombstones`, `counters` | Reader action limits; pushed mutation ids (replays change nothing); hard deletes for sync; the `seq` counter |
+| `action_limits`, `applied_mutations`, `tombstones`, `counters` | Reader action limits, and sign-in limits per email address; pushed mutation ids (replays change nothing); hard deletes for sync; the `seq` counter |
 
 ## Content pipeline
 
@@ -145,7 +146,9 @@ and hashes as the `NORM_VERSION` contract.
 - The cron and queue handlers only call `SELF.fetch()`, whose handler placement pins beside D1.
 - Nightly (`17 3 * * *`): upkeep in one batch (relay re-probes, dead-feed revival, pruning,
   compacting read state under watermarks, `compactReadStates`, which keeps any row that ever held
-  a like), then the export and its verification (`backUp`).
+  a like), then the export and its verification (`backUp`). The pruning takes old limits and
+  mutation ids, and personal data with no further use: invite holds a day past their expiry,
+  ended sessions, better-auth's counters after a day, and spent sign-in codes and OAuth states.
 - Mondays (`0 8 * * 1`): the digest. Every five minutes after the tick: the health check and the
   dead-man's ping (`src/ops.ts`).
 - `src/portable.ts` runs the same tick and jobs on a timer with an in-process queue: the exit path,
@@ -176,8 +179,12 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 
 | Route | Purpose |
 |---|---|
-| `/api/auth/*` | better-auth: email codes only, registration closed, codes hashed, three tries |
-| `POST /api/admin/invite`, `POST /api/admin/curate` | Bearer `ADMIN_TOKEN`: invite a member; add and feature a curated blog |
+| `/api/auth/*` | better-auth, only the endpoints Tela uses (`AUTH_ENDPOINTS` in `src/app.ts`, ADR 0036) and the guarded sign-out; every other is a 404 before better-auth sees it. Email codes, hashed, three tries; an account is made at an address's first code sign-in, only by claiming an invitation it holds, and a code is mailed to no address with neither an account nor an invitation (ADR 0034). Passwords (scrypt, 10–128 characters) are set only on a member a code has proved and never at sign-up; a forgotten one is reset by a code of its own, which ends every session (ADR 0036). Google and GitHub, each once its app is configured, ask for an address only: a new account only by the invite code its start carried, checked there and handed to the callback in the OAuth state; a provider is linked to a member only explicitly, never by a matching address; no token, name or picture is kept, and the address is mailed a notice. Limited per IP by better-auth and per email address by Tela (`action_limits`) |
+| `POST /api/admin/invite`, `POST /api/admin/curate` | Bearer `ADMIN_TOKEN`: invite a member (the operator's invitation to the address, then the account, through the same gate as every other); add and feature a curated blog |
+| `POST`, `GET /api/admin/codes`, `DELETE /api/admin/codes/:code` | Bearer `ADMIN_TOKEN`: the operator's invite codes (ADR 0034), text of their choosing that no member code's shape matches, with up to 100,000 places; listed with places taken and live holds; revoked whether used or not, which cancels its holds and keeps who joined |
+| `POST /api/v1/join` | A visitor's join with an invite code, no session (ADR 0034): a day's hold beside the code, which takes no place, then a sign-in code that says the address is invited. An address with an account gets a plain code and leaves the code alone, with the same 200. 400 `invalid_code` (unknown or revoked, one answer), 409 `code_used`. It mails through `auth.api`, which better-auth's limiter never counts, so it counts its own in `action_limits`: per IP (an IPv6 /64) before it looks the code up; then, for a live code only, per address (with the sign-in codes mailed to it) and per code (its places an hour, at least 20) |
+| `GET`, `POST /api/v1/invites`, `DELETE /api/v1/invites/:code` | A member's five codes (ADR 0034), live answers like the dashboard, not synced rows: the codes that count (unrevoked, or used) and who joined with each, by handle, never a pending address; a new one while fewer than five count; revoking an unused one frees its place and cancels its holds |
+| `GET /api/v1/account`, `POST /api/v1/account/password`, `/link`, `/unlink`, `/sign-out-everywhere` | A member's ways in (ADR 0036), live answers, not synced rows: their address, whether they have a password, the providers linked, and whether the session is fresh (made within the day); the first password set on a fresh session, or changed given the current one; Google or GitHub linked from a fresh session, returning to `/settings?linked=<provider>` or `/settings?error=<code>`, URLs fixed on the server, and written at the return only for a browser that still holds a live session of the member's; a provider unlinked on a fresh session (a password is not removed); every other session ended. Every call reads the session from D1 again, not its signed copy. A password set or changed, or a provider linked (at its return), ends the member's other sessions; every change, and a reset by code, mails the member a notice. Counted per member: passwords 5 per 15 minutes, links and unlinks 10 an hour each |
 | `GET /api/v1/sync?cursor=` | The pull: a horizon snapshot at cursor 0, deltas by seq in pages ending on a seq boundary |
 | `POST /api/v1/mutations` | The push: up to 50 idempotent, last-writer-wins mutations in one batch |
 | `/api/v1/translations` | Request a body translation; poll its streamed state |
@@ -186,14 +193,18 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `/api/v1/profile`, `/api/v1/sites/:id/*`, `/api/v1/dashboard`, `/api/v1/search` | Handle and profile, owner-only topics and opt-out, the author dashboard, search past the device's horizon |
 | `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest, with readers to follow; which of them read a blog. Only as far as each shows it (ADR 0031) |
 | `GET /api/v1/export` | "Your data": the member's own rows as one JSON file |
+| `GET /api/v1/public/auth` | Which providers the sign-in sheet may offer, `{google, github}`: each once its app is configured (ADR 0036) |
 | `/api/v1/public/*` | Discover, a blog's page (with its claimant and readers' notes), a profile (with follow counts, and liked posts only if shown): listed and featured blogs only, edge-cacheable |
 | `GET /api/v1/public/avatars/:userId?v=` | A member's picture, only at the version it is at (ADR 0032, 0033): the one they uploaded, from R2, else their Gravatar while they show it and the check found one, fetched here by the hash of their email, which never leaves tela-api; raster types only, 512 KB, immutable for 30 days; none is a 404 the letter stands in for |
+| `GET /api/v1/public/front` | The front page's edition (ADR 0035): each public blog's newest post, newest first, from the last seven days, or the latest ones when nobody wrote that week, eleven at most, with its titles and translated excerpts, its blog and its claimant; and the counts the copy states, public blogs and the week's distinct blogs, languages and posts. Each blog's newest post is one seek per live feed down `articles_feed_sort_idx`; future-dated posts wait. Cached as a profile is |
+| `GET /api/v1/public/handles/:handle` | Whether a handle is free, for For writers' card as it is typed: `invalid`, `reserved`, `taken` or `available` (by `@tela/shared`'s rules, read lowercase), and the first free one among it, it plus a digit and it plus `_writes`. `no-store`; a valid shape is counted per IP (`handleCheck`, 300 an hour) |
 | `PUT`, `DELETE /api/v1/avatar` | A member's own picture (ADR 0033): its bytes say what it is (PNG, JPEG or WebP, square, 64–1024 px, 512 KB), kept in R2 `tela-content` under `avatars/<userId>/<random id>.<ext>`, a key never used twice, so a deletion can only take the object its own change replaced; the body is read no further than 512 KB, and twenty an hour are counted before any is read; each change moves the version and deletes the object it replaces |
 | `/api/websub/:feedId` | The hub callback: intent checks, and signed pings that make the feed due |
 | `/api/health` | Liveness and D1 latency |
 
-Every `/api/v1/*` route but the public ones needs a session, read from the signed five-minute
-cookie cache. Reader actions are rate-limited per member (`action_limits`).
+Every `/api/v1/*` route but the public ones and `/api/v1/join` needs a session, read from the
+signed five-minute cookie cache; `/api/v1/account/*` reads it from D1 again, so a session ended
+elsewhere changes nothing there. Reader actions are rate-limited per member (`action_limits`).
 
 ## The edge (`apps/reader/worker`, tela-web)
 
@@ -213,6 +224,17 @@ The only public Worker, unpinned, with no D1.
 - `/discover`, `/s/:id` and `/@handle` are rendered here (`src/ssr.tsx`) with the SPA's own views,
   from tela-api's public JSON, into the built `index.html`, cached per colo, locale and deploy for
   five minutes, with the data handed to the SPA in `#tela-data`.
+- `/` is the front page (ADR 0035), rendered the same way for visitors from
+  `/api/v1/public/front`, one page for each title mode (`?titles=translated`), and from its own
+  key, never the address asked. A request whose cookie holds `tela.session_token` is a member's:
+  the plain shell from the assets, before the cache lookup, with no call to tela-api, never
+  cached. Any answer but a 200 from tela-api, a 404 included, is the plain shell, uncached, never
+  a 404 page at `/`; so is a call that throws or takes more than three seconds, body included
+  (`PAGE_DEADLINE_MS`), on every public page: a slow D1 never keeps a page blank. Every browser response for `/` carries `Vary: cookie`; the colo's copy
+  carries none (workerd ignores Vary), since only a visitor's copy is stored. A test
+  (`apps/reader/test/routes.test.ts`) holds every public page to `run_worker_first`.
+- `/about`, `/privacy` and `/terms` are rendered the same way from the bundle alone: their route
+  has `api: null`, so the edge asks tela-api nothing and hands nothing over (ADR 0035).
 - Everything else is the SPA's static assets, which answer without running the Worker. A path
   with no file is answered 200 with `index.html`, a missing `/assets/*` script included:
   `run_worker_first` is a list, and then the fallback applies to every request, not only
@@ -232,25 +254,32 @@ A Vite + React SPA that renders from the device.
 - `store/selectors.ts` answers the reading view: unread, lists, counts, the title to show.
 - The URL alone says which article is open (ADR 0017's rule, kept): a click, a filter change or
   Back is a render, not a request.
-- `views/` are Discover, a blog's page and a profile as pure components the edge renders too.
+- `views/` are the front page, Discover, a blog's page, a profile and the info pages as pure
+  components the edge renders too. `/` renders the front page while the session is unknown on a
+  device that holds no account, so the edge's copy is never replaced by a blank page.
 - Highlights: `lib/anchor.ts` finds a highlight again by leaf, quote and context;
   `lib/use-highlights.ts` paints them over the rendered text with the CSS Custom Highlight API and
   writes back an anchor the post moved. Typography and theme are synced prefs
   (`lib/typography.ts`); which panes show is this device's, in localStorage (`lib/layout.ts`,
   ADR 0029). `j`/`k`/`Esc`/`h`/`[`/`f`/`?` work on `/reading`.
 - `public/sw.js` caches the app shell only, and swaps to a new shell only once every file it
-  loads is cached; `shell/kill-sw.js` replaces it in an emergency.
+  loads is cached; `shell/kill-sw.js` replaces it in an emergency. It fetches the shell from
+  `/__tela/shell`, a path tela-web never runs for, because `/` is the landing the edge renders
+  for visitors (ADR 0035), and keeps it under `/` only if it is the plain shell: an empty
+  `#root`, and no `#tela-data`.
 
 | Route | Purpose |
 |---|---|
-| `/` | Landing for visitors; members go to `/reading` |
-| `/login` | Email code, and the mail's link that submits the same code |
+| `/`, `/?titles=translated` | The front page for visitors (ADR 0035), rendered at the edge: the count of public blogs, this week's edition (one post a blog; the latest when the week has none), titles as written or in the reader's language; members go to `/reading` |
+| `/login` | Email code; the mail's sign-in and reset links fill their code in and ask before using it (ADR 0036) |
 | `/reading?filter=&feed=&article=&mode=` | Sidebar, list and the open article |
 | `/discover?topic=&lang=`, `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart |
+| `/about`, `/privacy`, `/terms` | The info pages, for anyone; copy from `src/content/info`, rendered at the edge too, with no data |
 | `/following?tab=` | What the people a member follows did, by RPC; whom they follow, from the device (ADR 0031) |
 | `/search?q=` | The device first, then blogs and older posts from the server |
-| `/add`, `/claim`, `/sites/:id/claim` | Add feeds and OPML; claim a blog |
-| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out), Privacy (with "Your data") |
+| `/add`, `/claim?url=&taken=`, `/sites/:id/claim` | Add feeds and OPML; claim a blog (For writers' card lands on `/claim` with its blog filled in) |
+| `/writers` | For writers: a calling card made as you type, beside `@hutusi`'s live one; SPA-only (ADR 0035) |
+| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out), Privacy (with "Your data"); Invites and Account read `/api/v1/invites` and `/api/v1/account` live, not synced rows (`lib/account-api.ts`) |
 | `/dashboard` | The author's view |
 
 ## Sync (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025)
@@ -281,6 +310,11 @@ A Vite + React SPA that renders from the device.
 - **Outbound fetches** refuse private ranges by name and address; on Cloudflare
   `global_fetch_strictly_public` refuses them at the socket too.
 - **Model output is never trusted as HTML:** placeholders must match, text is re-escaped.
+- **Every new account claims an invitation:** better-auth's `user.create.before` admits a user only
+  by claiming, in one statement, an invitation its address holds, or on a provider's return the
+  invite code its start carried and nothing else, refuses by throwing, and treats a missing endpoint
+  context as no permission at all (ADRs 0034, 0036). A sign-in writes whatever making
+  the account missed: the profile, and the invitation's settlement.
 - **Knowing it runs:** the dead-man's switch, the Monday digest, a verified nightly export, and
   D1's Time Travel (`docs/OPERATIONS.md`).
 

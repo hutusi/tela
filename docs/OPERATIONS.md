@@ -28,9 +28,11 @@ directory.
 | `AUTH_SECRET` | tela-api, tela-web (secret) | 32+ random bytes (`openssl rand -base64 48`). Signs sessions and the five-minute cookie cache; **the same value on both**, or every content request falls back to a session read. Rotating it signs everyone out |
 | `ADMIN_TOKEN` | tela-api (secret); the admin script | Bearer token for `/api/admin/*`. Unset, those routes answer 403 |
 | `RESEND_API_KEY` | tela-api, tela-jobs (secret) | Sending-only Resend key for the verified domain: sign-in codes (api) and the weekly digest (jobs). Without it, api fails a code loudly and jobs skips the digest |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | tela-api (secret) | Tela's Google OAuth client (ADR 0036), a Web client whose redirect URI is `PUBLIC_URL/api/auth/callback/google`. Google sign-in is offered only while both are set |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | tela-api (secret) | Tela's GitHub OAuth app (ADR 0036), its callback URL `PUBLIC_URL/api/auth/callback/github`. GitHub sign-in is offered only while both are set |
 | `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@ainaive.com>` |
 | `PUBLIC_URL` | tela-api, tela-jobs | The one public origin: better-auth's base URL and trusted origin, claim `rel="me"` targets, the WebSub callback |
-| `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var |
+| `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var. `/` now passes the Worker (the front page, ADR 0035), so both of its answers, a visitor's page and a member's plain shell, carry the header too |
 | `GRAVATAR_URL` | tela-api, tela-jobs | Where members' pictures are fetched from (tela-api, ADR 0032) and asked about (tela-jobs, ADR 0033), default `https://gravatar.com/avatar`. The e2e points it at its fixture server. A picture is cached for 30 days in each colo and browser under an address with its version, and turning the switch off cannot purge a colo: a copy already held stays, at an address nothing links to any more |
 | `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, and fetches to private addresses. Never deployed |
 | `WORKER_USER_AGENT` | tela-jobs | Sent on every fetch; keep a contact URL in it |
@@ -75,7 +77,9 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
    `bun run db:generate`; review the SQL and commit it.
 5. **Secrets:** `AUTH_SECRET` on tela-api and tela-web (the same value); `ADMIN_TOKEN` and
    `RESEND_API_KEY` on tela-api; `BAILIAN_API_KEY`, `RESEND_API_KEY`, `DIGEST_TO` and `DEADMAN_URL`
-   on tela-jobs.
+   on tela-jobs. Google and GitHub sign-in stay off until their two secrets each are set on
+   tela-api (`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID` and
+   `GITHUB_CLIENT_SECRET`).
 6. **The dead-man's switch:** a healthchecks.io check with a 5-minute period and a 15-minute grace
    (a cron tick is occasionally skipped), alerting the owner by email. Its ping URL is
    `DEADMAN_URL`.
@@ -127,6 +131,26 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        so a member with no upload shows their letter. An older tela-api has no `/api/v1/avatar`
        (Settings' upload fails visibly) and serves only Gravatars at `/avatar/…`; uploaded objects
        stay in R2 for when it returns. An older tela-web shows no upload controls.
+   - Invite codes (ADR 0034, migration 0005): apply the migration, then deploy tela-jobs,
+     tela-api, tela-web. tela-jobs needs the new tables before its next cron: the daily batch
+     prunes lapsed holds and the nightly export reads both tables, so without them the whole
+     batch fails at 03:17, and that night's export with it. **tela-api needs them before it
+     serves:** its gate claims an invitation for every new account, the operator's `admin invite`
+     included, and `/api/v1/join`, `/api/v1/invites` and `/api/admin/codes` read and write them,
+     so a tela-api deployed first answers each of those 500 until the migration lands.
+     - **tela-jobs may go back alone.** The older one neither prunes holds nor exports the two
+       tables.
+     - **tela-api may go back alone.** The older one makes no account at a code sign-in, so a
+       joiner's code is refused until it returns, and `/api/v1/join` and `/api/v1/invites` answer
+       401 or 404. Codes, holds and redemptions wait in their tables, and a hold still lapses
+       after its day.
+   - The front door (ADRs 0035, 0036) ships with the invite codes, so it goes in the same order:
+     migration 0005 applied, then tela-jobs, tela-api, tela-web. tela-api must be live before
+     tela-web, or `/` finds no `/api/v1/public/front` and shows visitors the plain shell (never
+     cached, so it heals once tela-api is out). tela-web's service worker moves to `SHELL` v3 in
+     the same build that puts `/` in `run_worker_first`: one deploy, never one without the other,
+     since a v2 worker takes its shell from `/`, which the edge now renders for visitors. Then
+     check one browser (below, *The app shell*).
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -204,11 +228,17 @@ bun run dev   # http://localhost:5173
 ```
 
 Then:
-1. Invite: `TELA_URL=http://localhost:5173 ADMIN_TOKEN=local bun run admin invite you@x.test`.
+1. Invite: `TELA_URL=http://localhost:5173 ADMIN_TOKEN=local bun run admin invite you@x.test`, or
+   make a code to join with: `TELA_URL=http://localhost:5173 ADMIN_TOKEN=local bun run admin code
+   TEST --uses 2`.
 2. Sign in at `/login`, reading the code from `/api/test/outbox?email=you@x.test`.
 3. Add a feed on `/add`. The crons do not fire in dev: `curl -X POST -H 'origin:
    http://localhost:5173' localhost:5173/api/test/cycle` runs the sweeps to completion (fetches,
    extraction, titles, claims), which is what the minute tick does in production.
+
+To try Google or GitHub, register a dev OAuth app with the callback
+`http://localhost:5173/api/auth/callback/google` (or `/github`) and add its `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` (or `GITHUB_…`) to `apps/api/.dev.vars`; join with a code from `admin code`.
 
 `.dev.vars` is gitignored. Unit tests need nothing: `bun run test` runs on libSQL in memory, and
 `bun run test:workers` runs the D1 half in workerd.
@@ -239,16 +269,22 @@ is tela-api.
 - **Images:** `/img/<contentKey>/<i>` fetches only what a content object names, over
   `global_fetch_strictly_public`. A broken image is the origin's answer, which the Worker logs
   show; nothing is signed, so there is no secret to rotate.
-- **Public pages** (Discover, `/s/:id`, `/@handle`) are rendered here and kept in each colo's
-  cache for five minutes, keyed by locale and by the build. So a deploy never serves a page that
-  names scripts it removed, and a blog's change shows within five minutes. There is nothing to
-  purge.
+- **Public pages** (the front page `/`, Discover, `/s/:id`, `/@handle`) are rendered here and
+  kept in each colo's cache for five minutes, keyed by locale and by the build. So a deploy never
+  serves a page that names scripts it removed, and a blog's change shows within five minutes.
+  There is nothing to purge. `/` is rendered only for a request without `tela.session_token`; a
+  member's is the plain shell. If `/` shows the plain shell to signed-out visitors, tela-api's
+  `/api/v1/public/front` is not answering 200 within three seconds (deploy tela-api before
+  tela-web when it is new): tela-web logs `public page data late` or `public page data failed`
+  with the endpoint, which says which.
 - **Writes to `/api/*` without this origin get 403** `cross-origin write refused`. Hubs
   (`/api/websub/*`) and the admin script (`/api/admin/*`) are exempt. A browser always sends
   `Origin` on a POST, so seeing this from the app means something is proxying it.
-- **The app shell** is cached by a service worker (`public/sw.js`), for fast repeat visits. If a
-  bad shell ships and a fix does not reach readers, because their cached shell never asks, use
-  the kill switch:
+- **The app shell** is cached by a service worker (`public/sw.js`), for fast repeat visits. It
+  fetches the shell from `/__tela/shell`, which tela-web never runs for, so the single-page
+  fallback answers it with `index.html`; it keeps it under `/`. Keep `/*` and `/__tela/*` out of
+  `run_worker_first` (ADR 0035). If a bad shell ships and a fix does not reach readers, because
+  their cached shell never asks, use the kill switch:
   1. `cp apps/reader/shell/kill-sw.js apps/reader/public/sw.js`, then build and deploy.
   2. On their next visit, browsers install it. It drops every cached shell, unregisters itself,
      and reloads open tabs from the network.
@@ -256,35 +292,193 @@ is tela-api.
 
   A shell older than the sync protocol clears itself anyway: tela-api answers it 409 `upgrade`.
 
-  Bump `SHELL` in `public/sw.js` (`tela-shell-v2` now) whenever a released worker may have cached
+  Bump `SHELL` in `public/sw.js` (`tela-shell-v3` now) whenever a released worker may have cached
   something wrong. The new worker's activation deletes every other cache and warms its own from
   the network, holding the open tabs' requests until it has, for at most 3 s (`WARM_MS`); if the
   warm fails, the first navigation goes to the network like a first visit. v2 exists because v1 could keep `index.html`
   under a script's name: a blank page after a deploy, and in the console "Expected a
   JavaScript-or-Wasm module script but the server responded with a MIME type of "text/html"" for
-  `/assets/index-*.js`. A cached shell changes only once every file it loads is cached, so a
-  refresh that cannot get one (the network gone halfway, a proxy's page) leaves readers on the
-  shell before, and the next navigation tries again.
+  `/assets/index-*.js`. v3 exists because v2 took its shell from `/`, which the edge renders for
+  visitors (ADR 0035): in the minutes between the deploy and a browser installing v3, a v2
+  worker could keep the landing, with its `#tela-data`, and paint it on every page. v3's
+  activation drops it.
+  A cached shell changes only once every file it loads is cached, and only to the plain shell
+  (an empty `#root`, no `#tela-data`, not reached by a redirect), so a refresh that cannot get
+  one (the network gone halfway, a proxy's or a captive portal's page, a rendered page) leaves
+  readers on the shell before, and the next navigation tries again.
+
+  **After a deploy that changes the shell**, check one browser that had the old worker: open
+  tela.ainaive.com, then DevTools → Application → Service workers shows the new one activated,
+  and Cache Storage → `tela-shell-v3` → `/` is the plain shell: its body has an empty
+  `<div id="root"></div>` and no `tela-data`. A `/` holding `tela-data` is a rendered page kept as
+  the shell, which would paint the front page over every screen: bump `SHELL` and deploy again.
 
 ## tela-api
 
 `apps/api/wrangler.jsonc`: sign-in, sync, mutations and every reader RPC (ADR 0024). It shares the
 D1 database and `tela-content` with tela-jobs, and only produces to the jobs queues.
 
-- **Invite a member:** `ADMIN_TOKEN=… bun run admin invite reader@example.com`. It creates the
-  account and its profile, and mails a code; inviting an existing address only mails a fresh
-  code. Registration is otherwise closed (ADR 0015's policy).
+- **Invite a member:** `ADMIN_TOKEN=… bun run admin invite reader@example.com`. It writes the
+  operator's invitation to the address, creates the account and its profile through the same gate
+  as every other (ADR 0034), and mails a code that says the address is invited; inviting an
+  existing address only mails a fresh code. No account is made without an invitation.
+- **Invite codes** (ADR 0034). Every member may invite five people, ever, from Settings → Invites
+  (`/api/v1/invites`): a code counts while unrevoked and for good once used, and revoking an
+  unused one frees its place. The operator's codes are their own text:
+  - `ADMIN_TOKEN=… bun run admin code WELCOME --uses 20` makes one for twenty people (one when
+    `--uses` is left out; up to 100,000) and prints its link, `/join?code=WELCOME`. The text is
+    normalized like any code typed in (capitals, no spaces or dashes, 4–32 letters and digits),
+    and may not be twelve of a member code's symbols, which is how a code says whose it is. A word
+    is guessable: keep `--uses` small, and revoke it when its moment has passed.
+  - `bun run admin codes` lists them: places taken of places given, live holds, when it was made
+    and revoked.
+  - `bun run admin revoke WELCOME` withdraws one, used or not: nobody else joins with it, its
+    holds are cancelled, and those who joined keep their accounts.
+  - A join (`POST /api/v1/join`) holds the address beside the code for a day and mails a code that
+    says it is invited. The hold takes no place; signing in takes one. On a single-use code a
+    later join moves the hold to the later address. `400 invalid_code` is a code that is unknown
+    or revoked, `409 code_used` one whose places are all taken, by a newcomer or a member alike.
+    An address that has an account gets a plain sign-in code, and the code is untouched.
+  - What a code holds: `select * from invite_redemptions where code = '<CODE>'` (no `redeemed_at`:
+    a hold; `redeemed_at`: a place; `settled_at`, `user_id`: the account it made), and who made
+    it: `select created_by, max_uses, revoked_at from invite_codes where code = '<CODE>'`.
+- **Google and GitHub apps** (ADR 0036). Register one app per provider for production and a
+  separate one for development, so a dev secret never signs anything in on tela.ainaive.com:
+  - **Google** (Google Cloud console → APIs & Services): the OAuth consent screen as *External*,
+    with the app name, the support address, the privacy policy URL
+    `https://tela.ainaive.com/privacy`, and `ainaive.com` among the authorized domains; scopes
+    `openid` and `email` only. Then **publish it to production**: while it is in *Testing* only
+    the listed test users can sign in. The credential is a *Web application* client whose
+    authorized redirect URI is `https://tela.ainaive.com/api/auth/callback/google`, nothing else.
+  - **GitHub** (Settings → Developer settings → OAuth Apps): homepage `https://tela.ainaive.com`,
+    authorization callback URL `https://tela.ainaive.com/api/auth/callback/github`.
+  - **Development:** the same, with `http://localhost:5173/api/auth/callback/google` (or
+    `/github`) as the redirect URI, in `apps/api/.dev.vars` (see *Running locally*).
+  - **Secrets**, on tela-api: `cd apps/api`, then `wrangler secret put GOOGLE_CLIENT_ID`,
+    `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. A provider is offered
+    once both of its secrets are set, and gone again when either is deleted. Each `secret put`
+    deploys a new version of tela-api, which uses it from then on.
+  - **Failure signatures:**
+    - `redirect_uri_mismatch` (Google), or GitHub's "The redirect_uri is not associated with this
+      application": the provider's own error page, so nothing comes back to Tela and nothing is
+      in its logs. The app's redirect URI is not exactly `PUBLIC_URL/api/auth/callback/<id>`.
+    - `?error=invalid_code` on the page a provider sign-in started from (`/login?…&via=github&
+      error=invalid_code`, say), and the sheet says it could not reach the provider: better-auth
+      could not exchange the provider's code for a token, so the client secret is wrong, rotated
+      at the provider and not here, or belongs to the other app. It is not an invite code (that
+      one is refused before the visitor leaves, as `400 INVALID_CODE`).
+    - Runs of `state_mismatch` (or `state_not_found`): returns without the state cookie or its
+      row: the provider took more than ten minutes, the browser drops the cookie, or the return
+      was replayed. One now and then is a visitor who walked away; many in a row from different
+      people point at the cookie (`advanced.cookies.state`) or `PUBLIC_URL`.
+    - `account_not_linked`: a member pressed a provider they have not linked (they log in by
+      email and link it in Settings → Account), or a newcomer's provider address is unverified.
+      One answer for both, on purpose.
 - **Sign-in trouble:**
-  - Codes last an hour and allow three attempts. The sign-in endpoint allows three tries a
-    minute per address; past that the login page says "Too many tries", not "wrong code".
-  - `select key, count, last_request from rate_limit` shows better-auth's windows.
+  - Codes last an hour and allow three attempts. A code tried three times, or past its hour, is
+    answered `400 INVALID_OTP` like any wrong code (ADR 0036), so the answer never says the
+    address holds one: the member asks for a new code either way. The sign-in endpoint allows three tries a
+    minute per IP; past that the login page says "Too many tries", not "wrong code".
+  - Each email address, from however many IPs, is also mailed at most five codes an hour and has
+    at most ten guesses checked (`otpSend`, `otpVerify`), whatever the codes are for: sign-in,
+    password reset and the address check share both counts, and so do all the endpoints that send
+    or check one (`PER_ADDRESS` in `apps/api/src/auth.ts`) and a join with an invite code, which
+    counts `otpSend` itself (`apps/api/src/routes/invites.ts`). The 429 is the same whether or
+    not the address has an account. A member who sees "Too many tries" on their first attempt is
+    most likely someone else asking for their address; it clears on the hour, or at once (the
+    address lowercased) with
+    `delete from action_limits where key in ('otpSend:<address>', 'otpVerify:<address>')`.
+    The operator's `admin invite` is not counted.
+  - Passwords (ADR 0036) are tried at `/api/auth/sign-in/email`: five tries a minute per IP
+    (better-auth's `customRules`), and ten in fifteen minutes per address from anywhere
+    (`passwordSignIn`), counted and refused like the code counts, which they never touch: an
+    address locked out of its password still signs in by code. Clear it early with
+    `delete from action_limits where key = 'passwordSignIn:<address>'`.
+  - `401 INVALID_EMAIL_OR_PASSWORD` is the one answer for an unknown address, an account with no
+    password and a wrong one. A member who never set a password, or forgot it, asks for a reset
+    code (`/api/auth/email-otp/request-password-reset`): a mail `Reset your Tela password`, its
+    link `/login?reset=1&…`, to an address that has an account and nothing to any other, from the
+    same five sends an hour as the sign-in codes. The reset sets the password, adding one if there was none, and ends every
+    session the member had; the five-minute signed copy keeps one alive elsewhere until it runs
+    out. A password is never set at sign-up (`/sign-up/email` is closed).
+  - `select key, count, last_request from rate_limit` shows better-auth's windows, and
+    `select * from action_limits where key like 'otp%' or key like 'password%'` Tela's.
   - A code that never arrives: check Resend's log for the address first, then the Worker's logs
-    for the send error.
+    for the send error. An address with no account is mailed only while it holds an invitation
+    (a hold from a join lasts a day); otherwise the request answers as usual and nothing is sent.
+  - A code sign-in refused `403 INVITE_REQUIRED` found no invitation for the address: it never had
+    one, its hold lapsed or went with its revoked code, or a later join moved a single-use code's
+    hold to another address.
+    `INVITE_USED` means its hold is on a code that others filled after its code was mailed.
+    `select * from invite_redemptions where email = '<address>'` shows what it holds.
+  - **Google and GitHub** (ADR 0036) are offered once both of a provider's secrets are set, which
+    `GET /api/v1/public/auth` reports. An account is made only with the invite code the sign-in
+    started with: it is checked at the start (`400 INVALID_CODE`, `409 INVITE_USED`, counted with
+    joins, below), rides in the OAuth state row (a `verification` row, ten minutes), and is claimed
+    at the return. A return that signs nobody in redirects to the page it started from with
+    `?error=`: `invite_required` (no code), `invite_unavailable` (the code filled up or was
+    withdrawn meanwhile), `account_not_linked` (a member who has not linked that provider, which is
+    done only from Settings, or an address the provider has not verified: one answer for both),
+    `state_mismatch` (it came back without its cookie, after ten minutes, or twice). An account a
+    provider made mails its address a notice (`provider notice not sent` in the logs if it fails).
+    No token, name or picture is kept: the `account` row's token columns stay null.
+  - A member whose `/api/v1/me` has `profile: null`, or whose invitation is redeemed but not
+    settled, is repaired at their next sign-in. The Worker logs `invitation not settled` or
+    `member not repaired` when writing either failed.
+  - **Settings → Account** (`/api/v1/account`, ADR 0036) reads the session from D1 at every call.
+    `403 session_not_fresh` is a session made more than a day ago, asked to add a way in or take
+    one away: the member signs in again, by code or password, and tries from that session.
+    Setting or changing a password, or linking a provider, ends every other session the member
+    has; each change, and a reset by code, mails the member a notice (`account notice not sent` or
+    `sessions not ended` in the logs when either fails; neither undoes the change). A link that
+    fails comes back to `/settings?error=<code>`, better-auth's: `account_already_linked_to_different_user`
+    for a provider identity another member has linked, `unable_to_link_account` for an address the
+    provider has not verified, or for a browser that no longer holds a live session of the
+    member's when the provider sends it back (it was signed out meanwhile, or signed in as someone
+    else): nothing is written, and the member links again from a live session.
+  - `404 {"error":"not_found"}` from a `/api/auth/*` path is tela-api, not better-auth: only the
+    endpoints in `AUTH_ENDPOINTS` (`apps/api/src/app.ts`) and the sign-out are served (ADR 0036).
+    A better-auth feature turned on later answers 404 until its endpoint is added there.
 - **Sessions** last 60 days. A signed copy is trusted for five minutes, so a signed-out session
-  can linger that long on a device that kept the cookie.
+  can linger that long on a device that kept the cookie, everywhere but `/api/v1/account`, which
+  reads D1. "Sign out everywhere" in Settings → Account ends every session but the member's own;
+  an operator ends all of a member's with `delete from session where user_id = '<user id>'`.
+- **Password hashing** is better-auth's scrypt (N=16384, r=16), native `node:crypto` under workerd:
+  every password sign-in, reset or new password is one hash of about 32 MiB that blocks the
+  isolate while it runs, and an unknown address is hashed too. Read its CPU time for
+  `/api/auth/sign-in/email` in the Worker's logs after the first deploy that serves passwords; if
+  it is too dear, the fallback is a `node:crypto` scrypt with r=8 behind a versioned prefix
+  (ADR 0036).
 - **Rate limits** on reader actions are `ACTION_LIMITS` (`packages/data/src/queries/limits.ts`):
   discover 30/h, subscribe 120/h, OPML import 5/h, claim start 10/h, claim verify 30/h, translate
-  30/h, data export 10/h. Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
+  30/h, data export 10/h, new invite codes 20/h; a password set or changed 5 per 15 minutes,
+  provider links and unlinks 10/h each (`passwordChange`, `accountLink`, `accountUnlink`: tela-api
+  calls better-auth for these itself, which its limiter never counts). Lift a member's early: `delete from action_limits where key like 'discover:<user id>%'`.
+  Sign-in has better-auth's per-IP limits (password sign-ins 5/min) and three of Tela's per email
+  address, counted for any address in a `hooks.before` (`apps/api/src/auth.ts`): on every
+  endpoint that sends or checks a code, code sends 5/h and code tries 10/h; on the password
+  sign-in, tries 10 per 15 minutes.
+  Joins with an invite code mail through tela-api's own call to better-auth, which its limiter
+  never counts, so `/api/v1/join` counts its own, in this order, and stops at the first that is
+  spent: per IP 10/h (`joinIp:<ip>`, an IPv6 address by its /64), counted before the code is
+  looked up; then, only for a code that exists and is not revoked, per address 3/h
+  (`joinAddress:<address>`) and its codes mailed with the sign-in ones (`otpSend:<address>`, 5/h),
+  then per code (`joinCode:<CODE>`), as many an hour as the code has places and never fewer
+  than 20. Each answers the same `429 rate_limited`. So junk spends no address's or code's hour,
+  nor a word's before it is made a code, and no one client can spend a code's: that takes two at
+  least, and one for every ten places a large code has. Many clients can (an IPv6 /56 is 256 of
+  them): a public code refused hour after hour, with `joinCode:<CODE>` at its limit and holds from
+  addresses that never sign in, is being held shut; revoke it and post another. A visitor told
+  "too many tries" at their first join is most likely sharing an address, or an IP (a venue's
+  wifi), with someone who tried before. Lift one early:
+  `delete from action_limits where key = 'joinCode:WELCOME'`.
+  A Google or GitHub sign-in that starts with an invite code spends the same per-IP and per-code
+  counts (answered with better-auth's 429): checking its code there is a guess like a join's, and
+  better-auth's own limit on `/api/auth/sign-in/social`, three every ten seconds per IP, would
+  allow a thousand an hour.
+  The handle check (`GET /api/v1/public/handles/:handle`, For writers' card) is counted per IP,
+  300/h (`handleCheck:<ip>`), only for a handle of a valid shape; it answers `429 rate_limited`
+  with `retry-after`.
 
 ## tela-jobs
 
@@ -397,6 +591,12 @@ subscribers on an unclaimed site.
   already right. A rejected blog is left alone; a claimed one keeps its owner's topics.
 - **Feature or hide a blog by hand:** `update sites set listing = 'featured' where id = …`, or
   `'rejected'`, which curation then leaves alone.
+- **Take a blog off Tela when its writer asks** (Terms, "Writers' work"): hide it as above, which
+  takes it out of Discover and makes its page a 404, and stop fetching it with
+  `update feeds set status = 'paused', updated_at = <now ms> where site_id = …`. Fetching, page
+  extraction and WebSub renewal all read only `status = 'active'` feeds, and nothing revives a
+  paused one (the weekly retry is for `'dead'`). Posts already fetched stay with their
+  subscribers.
 - **Release a claim** so another member can claim the site: `update sites set claimed_by = null,
   claimed_at = null where id = …; delete from site_claims where site_id = …`.
 
@@ -459,8 +659,19 @@ cannot reach) is the reason to run the box.
 
 ## Later
 
-- **To open Tela up:** decide how invitations work first (ADR 0015); then remove
-  `TELA_PRIVATE_BETA` from `apps/reader/wrangler.jsonc` and deploy tela-web.
+- **To open Tela up**, three steps in this order (ADR 0034):
+  1. **A large operator code**, posted where newcomers will see it:
+     `ADMIN_TOKEN=… bun run admin code <TEXT> --uses 100000`. Everyone with the link can join,
+     the gate still counts them, and `bun run admin revoke <TEXT>` closes it again.
+  2. **Lift the invitation gate**: a code change, with an ADR of its own, to `user.create.before`
+     and the mail gate in `apps/api/src/auth.ts`, so an address with no invitation is mailed a
+     code and given an account. Deploy tela-api.
+  3. **Remove `TELA_PRIVATE_BETA`** from `apps/reader/wrangler.jsonc` and deploy tela-web, which
+     lets search engines in.
+
+  Out of order, the site says the wrong thing: indexed while it still refuses everyone without
+  an invitation (step 3 first), or admitting everyone while it tells search engines to ignore it
+  (stopping before step 3).
 - **The next Node LTS**, for the relay only, **after 2026-10-28**, when Node 26 reaches LTS; Node 24 <!-- node-pin:planned -->
   enters maintenance on 2026-10-20, so the two dates make one clean move. Five pins change <!-- node-pin:planned -->
   together: `.node-version`, `engines`, the relay Dockerfile's runtime stage, the CI

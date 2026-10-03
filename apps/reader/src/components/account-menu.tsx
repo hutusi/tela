@@ -1,7 +1,7 @@
 /**
  * The member's avatar, and the menu it opens (Tela v2): who they are, their profile, their
- * subscriptions, the author's dashboard, settings, and signing out. A disclosure rather than an
- * ARIA menu: its items are links and a button, reached by Tab like any others.
+ * subscriptions, the author's dashboard, settings, inviting friends, and signing out. A disclosure
+ * rather than an ARIA menu: its items are links and a button, reached by Tab like any others.
  */
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
@@ -93,6 +93,9 @@ export function AccountMenu() {
           </Link>
           <Link to="/settings" className={ITEM} onClick={done} data-testid="nav-settings">
             {t('settings')}
+          </Link>
+          <Link to="/settings/invites" className={ITEM} onClick={done} data-testid="nav-invites">
+            {t('invites')}
           </Link>
           <div className="my-1 h-px bg-line" />
           <button

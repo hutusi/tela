@@ -26,6 +26,23 @@ import {
   mergeFeed,
   updateArticles,
 } from './queries/ingest'
+import {
+  claimByCode,
+  claimInvite,
+  createMemberCode,
+  createOperatorCode,
+  drawMemberCode,
+  holdJoin,
+  holdsInvite,
+  inviteAddress,
+  listMemberCodes,
+  listOperatorCodes,
+  liveCode,
+  pruneInvites,
+  revokeCode,
+  revokeOperatorCode,
+  settleInvite,
+} from './queries/invites'
 import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates } from './queries/reader'
 import { readPull } from './queries/sync'
@@ -958,6 +975,355 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { subject: '*', day: utcDay(T0), reserved: 0, used: 300 },
         { subject: 'u1', day, reserved: 5000, used: 800 },
       ])
+    })
+  })
+
+  describe('invite codes (ADR 0034)', () => {
+    const HOUR = 60 * MIN
+    const DAY = 24 * HOUR
+    // Members' codes, shaped as tela-api draws them.
+    const A = 'A'.repeat(12)
+    const B = 'B'.repeat(12)
+    const C = 'C'.repeat(12)
+    const D = 'D'.repeat(12)
+    const E = 'E'.repeat(12)
+    const F = 'F'.repeat(12)
+
+    async function people(db: TelaDb, ...ids: string[]) {
+      for (const id of ids) {
+        await db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+          values (${id}, '', ${`${id}@x.y`}, 1, 0, 0)`)
+      }
+    }
+    /** What the gate and the settlement do once better-auth has inserted the user. */
+    async function joined(db: TelaDb, id: string, now = T0) {
+      await people(db, id)
+      await db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+        values (${id}, ${id}, 0, 0)`)
+      return settleInvite(db, { email: `${id}@x.y`, userId: id, now })
+    }
+    const rows = (db: TelaDb) =>
+      db.all<{ code: string | null; email: string; redeemed: number; user_id: string | null }>(
+        sql`select code, email, redeemed_at is not null as redeemed, user_id
+          from invite_redemptions order by id`,
+      )
+    const member = (db: TelaDb, userId: string, code: string, now = T0) =>
+      createMemberCode(db, { userId, code, now })
+    const hold = (db: TelaDb, code: string, email: string, now = T0) =>
+      holdJoin(db, { code, email, now })
+
+    it('checks what a code may be, and keeps one row per code and address', async () => {
+      const db = await makeDb()
+      const code = (text: string, uses = 1) =>
+        caught(() =>
+          db.run(
+            sql`insert into invite_codes (code, max_uses, created_at) values (${text}, ${uses}, 0)`,
+          ),
+        )
+      for (const bad of ['abcd', 'ABC', 'A'.repeat(33), 'AB-CD']) {
+        expect((await code(bad)) === null).toBe(false)
+      }
+      expect((await code('ABCD', 0)) === null).toBe(false)
+      expect((await code('ABCE', 100_001)) === null).toBe(false)
+      expect(await code('ABCD')).toBe(null)
+      expect(await code('A'.repeat(32), 100_000)).toBe(null)
+      const redemption = (text: string | null) =>
+        caught(() =>
+          db.run(sql`insert into invite_redemptions (code, email, expires_at, created_at)
+            values (${text}, 'a@x.y', 1, 0)`),
+        )
+      expect(await redemption('ABCD')).toBe(null)
+      expect((await redemption('ABCD')) === null).toBe(false)
+      // The operator's invitations to one address have no code, and nulls never collide.
+      expect(await redemption(null)).toBe(null)
+      expect(await redemption(null)).toBe(null)
+      expect((await redemption('WXYZ')) === null).toBe(false)
+    })
+
+    it("holds an address without taking a place; a later join, a member's too, moves a single-use hold", async () => {
+      const db = await makeDb()
+      await people(db, 'inviter', 'member')
+      expect(await member(db, 'inviter', A)).toEqual({ ok: true, code: A })
+      expect(await createOperatorCode(db, { code: 'WELCOME', maxUses: 2, now: T0 })).toBe(true)
+
+      expect(await hold(db, 'NOSUCH', 'a@x.y')).toBe('invalid')
+      expect(await hold(db, A, 'A@X.Y')).toBe('held')
+      expect(await hold(db, A, 'a@x.y', T0 + HOUR)).toBe('held')
+      const expiry = await db.all<{ expires_at: number }>(
+        sql`select expires_at from invite_redemptions where email = 'a@x.y'`,
+      )
+      expect(expiry).toEqual([{ expires_at: T0 + HOUR + DAY }])
+      expect(await holdsInvite(db, { email: 'a@x.y', now: T0 })).toBe(true)
+      // Only the last address asked for can finish.
+      expect(await hold(db, A, 'b@x.y')).toBe('held')
+      expect(await holdsInvite(db, { email: 'a@x.y', now: T0 })).toBe(false)
+      expect(await holdsInvite(db, { email: 'b@x.y', now: T0 })).toBe(true)
+      // On a code with more places, every hold stands, and none of them takes one.
+      for (const who of ['c', 'd', 'e']) {
+        expect(await hold(db, 'WELCOME', `${who}@x.y`)).toBe('held')
+      }
+      // A hold lapses after a day, and the mail gate stops with it.
+      expect(await holdsInvite(db, { email: 'b@x.y', now: T0 + DAY + 1 })).toBe(false)
+      // An address with an account writes nothing, whatever it brought, but its join moves a
+      // single-use hold like anyone's: were b@'s kept, it would say member@ has an account.
+      expect(await hold(db, A, 'member@x.y')).toBe('member')
+      expect(await holdsInvite(db, { email: 'b@x.y', now: T0 })).toBe(false)
+      expect(await hold(db, 'WELCOME', 'member@x.y')).toBe('member')
+      expect(await hold(db, 'NOSUCH', 'member@x.y')).toBe('invalid')
+      expect(await holdsInvite(db, { email: 'member@x.y', now: T0 })).toBe(false)
+      expect((await rows(db)).map((r) => [r.code, r.email, r.redeemed])).toEqual([
+        ['WELCOME', 'c@x.y', 0],
+        ['WELCOME', 'd@x.y', 0],
+        ['WELCOME', 'e@x.y', 0],
+      ])
+    })
+
+    it('admits by a claim: the operator invitation first, then the newest hold, never past the places', async () => {
+      const db = await makeDb()
+      await people(db, 'inviter')
+      await member(db, 'inviter', A)
+      await member(db, 'inviter', B)
+      await createOperatorCode(db, { code: 'WELCOME', maxUses: 2, now: T0 })
+
+      await hold(db, 'WELCOME', 'op@x.y')
+      await inviteAddress(db, { email: 'Op@x.y', now: T0 })
+      expect((await claimInvite(db, { email: 'op@x.y', now: T0 }))?.code).toBe(null)
+
+      await hold(db, A, 'n@x.y', T0)
+      await hold(db, B, 'n@x.y', T0 + MIN)
+      expect((await claimInvite(db, { email: 'n@x.y', now: T0 + MIN }))?.code).toBe(B)
+
+      for (const who of ['c', 'd', 'e']) await hold(db, 'WELCOME', `${who}@x.y`)
+      expect((await claimInvite(db, { email: 'c@x.y', now: T0 }))?.code).toBe('WELCOME')
+      expect((await claimInvite(db, { email: 'd@x.y', now: T0 }))?.code).toBe('WELCOME')
+      // Both places taken: the third hold admits nobody, is not mailed, and a new join is refused.
+      expect(await claimInvite(db, { email: 'e@x.y', now: T0 })).toBe(null)
+      expect(await holdsInvite(db, { email: 'e@x.y', now: T0 })).toBe(false)
+      expect(await hold(db, 'WELCOME', 'f@x.y')).toBe('used')
+      expect(await hold(db, 'WELCOME', 'inviter@x.y')).toBe('used')
+
+      // A lapsed hold, and an operator invitation past its hour, admit nobody.
+      await hold(db, A, 'late@x.y')
+      expect(await claimInvite(db, { email: 'late@x.y', now: T0 + DAY + 1 })).toBe(null)
+      await inviteAddress(db, { email: 'slow@x.y', now: T0 })
+      expect(await claimInvite(db, { email: 'slow@x.y', now: T0 + HOUR + 1 })).toBe(null)
+      expect(await claimInvite(db, { email: 'nobody@x.y', now: T0 })).toBe(null)
+    })
+
+    it('spends the code an address joined with last, a repeated join included', async () => {
+      const db = await makeDb()
+      await people(db, 'p', 'q')
+      await member(db, 'p', A)
+      await member(db, 'q', B)
+      // Two members' codes for one visitor, and the first chosen again last.
+      await hold(db, A, 'v@x.y', T0)
+      await hold(db, B, 'v@x.y', T0 + MIN)
+      expect(await hold(db, A, 'v@x.y', T0 + 2 * MIN)).toBe('held')
+      expect((await claimInvite(db, { email: 'v@x.y', now: T0 + 2 * MIN }))?.code).toBe(A)
+      // The other member's code keeps its place.
+      expect(await hold(db, B, 'w@x.y', T0 + 3 * MIN)).toBe('held')
+    })
+
+    it('admits the same address again after a failed create, and spends no second place', async () => {
+      const db = await makeDb()
+      await people(db, 'inviter')
+      await member(db, 'inviter', A)
+      await hold(db, A, 'xan@x.y')
+      const claim = await claimInvite(db, { email: 'xan@x.y', now: T0 })
+      expect(claim === null).toBe(false)
+      // The user insert after the claim failed: the address may finish, another may not start.
+      expect(await claimInvite(db, { email: 'xan@x.y', now: T0 + 2 * DAY })).toEqual(claim)
+      expect(await holdsInvite(db, { email: 'xan@x.y', now: T0 + 2 * DAY })).toBe(true)
+      expect(await hold(db, A, 'xan@x.y', T0 + 2 * DAY)).toBe('held')
+      expect(await hold(db, A, 'y@x.y', T0 + 2 * DAY)).toBe('used')
+      expect(await claimByCode(db, { code: A, email: 'xan@x.y', now: T0 })).toEqual(claim)
+      // Once the account exists, nothing admits the address again.
+      expect(await joined(db, 'xan')).toEqual([claim])
+      expect(await claimInvite(db, { email: 'xan@x.y', now: T0 })).toBe(null)
+      expect(await claimByCode(db, { code: A, email: 'xan@x.y', now: T0 })).toBe(null)
+      expect(await rows(db)).toEqual([{ code: A, email: 'xan@x.y', redeemed: 1, user_id: 'xan' }])
+      // Deleting the member leaves the place spent, and no way back in by it.
+      await db.run(sql`delete from user where id = 'xan'`)
+      expect(await rows(db)).toEqual([{ code: A, email: 'xan@x.y', redeemed: 1, user_id: null }])
+      expect(await holdsInvite(db, { email: 'xan@x.y', now: T0 })).toBe(false)
+      expect(await claimInvite(db, { email: 'xan@x.y', now: T0 })).toBe(null)
+      expect(await claimByCode(db, { code: A, email: 'xan@x.y', now: T0 })).toBe(null)
+      expect(await hold(db, A, 'xan@x.y')).toBe('used')
+    })
+
+    it('admits a claimed address again by any code that could admit it, spending nothing more', async () => {
+      const db = await makeDb()
+      await people(db, 'p', 'q')
+      for (const code of [A, E]) await member(db, 'p', code)
+      for (const code of [B, C, D]) await member(db, 'q', code)
+      await revokeCode(db, { code: C, userId: 'q', now: T0 })
+      await hold(db, A, 'nan@x.y')
+      const claim = await claimInvite(db, { email: 'nan@x.y', now: T0 })
+      expect(claim?.code).toBe(A)
+      // The create failed, and the retry is a provider sign-in carrying q's code (or it raced the
+      // code sign-in). A code that could not admit the address alone admits nothing.
+      expect(await claimByCode(db, { code: C, email: 'nan@x.y', now: T0 })).toBe(null)
+      expect(await claimByCode(db, { code: 'NOSUCH', email: 'nan@x.y', now: T0 })).toBe(null)
+      expect(await claimByCode(db, { code: B, email: 'nan@x.y', now: T0 })).toEqual(claim)
+      expect(await joined(db, 'nan')).toEqual([claim])
+      // The other way round: a code sign-in after a provider's claim is admitted by that claim.
+      await hold(db, D, 'mia@x.y')
+      const carried = await claimByCode(db, { code: E, email: 'mia@x.y', now: T0 })
+      expect(carried?.code).toBe(E)
+      expect(await claimInvite(db, { email: 'mia@x.y', now: T0 })).toEqual(carried)
+      expect(await joined(db, 'mia')).toEqual([carried])
+      // q's codes kept their places.
+      expect(await hold(db, B, 'o@x.y')).toBe('held')
+      expect(await hold(db, D, 'o@x.y')).toBe('held')
+      expect((await rows(db)).map((r) => [r.code, r.email, r.user_id])).toEqual([
+        [A, 'nan@x.y', 'nan'],
+        [E, 'mia@x.y', 'mia'],
+        [B, 'o@x.y', null],
+        [D, 'o@x.y', null],
+      ])
+    })
+
+    it('claims by the code a provider sign-in carried, once per code and address', async () => {
+      const db = await makeDb()
+      await people(db, 'inviter', 'member')
+      await member(db, 'inviter', A)
+      await member(db, 'inviter', B)
+      await createOperatorCode(db, { code: 'WELCOME', maxUses: 3, now: T0 })
+
+      const first1 = await claimByCode(db, { code: A, email: 'P@x.y', now: T0 })
+      expect(first1?.code).toBe(A)
+      expect(await claimByCode(db, { code: A, email: 'p@x.y', now: T0 + MIN })).toEqual(first1)
+      expect(await claimByCode(db, { code: A, email: 'q@x.y', now: T0 })).toBe(null)
+      // The address's own hold on that code is the row it redeems.
+      await hold(db, 'WELCOME', 'r@x.y')
+      const [held] = await db.all<{ id: number }>(
+        sql`select id from invite_redemptions where email = 'r@x.y'`,
+      )
+      expect((await claimByCode(db, { code: 'WELCOME', email: 'r@x.y', now: T0 }))?.id).toBe(
+        held?.id,
+      )
+      // Revoked, unknown, or an address with an account: nothing.
+      await revokeCode(db, { code: B, userId: 'inviter', now: T0 })
+      expect(await claimByCode(db, { code: B, email: 's@x.y', now: T0 })).toBe(null)
+      expect(await claimByCode(db, { code: 'NOSUCH', email: 's@x.y', now: T0 })).toBe(null)
+      expect(await claimByCode(db, { code: 'WELCOME', email: 'member@x.y', now: T0 })).toBe(null)
+      expect((await rows(db)).map((r) => [r.code, r.email, r.redeemed])).toEqual([
+        [A, 'p@x.y', 1],
+        ['WELCOME', 'r@x.y', 1],
+      ])
+      // What the sign-in asks before it sends anyone to the provider: places, and whether they
+      // are taken. A hold takes none, so it never fills a code.
+      await hold(db, 'WELCOME', 't@x.y')
+      expect(await liveCode(db, 'WELCOME')).toEqual({ places: 3, full: false })
+      for (const who of ['u', 'v']) {
+        expect(await claimByCode(db, { code: 'WELCOME', email: `${who}@x.y`, now: T0 })).not.toBe(
+          null,
+        )
+      }
+      expect(await liveCode(db, 'WELCOME')).toEqual({ places: 3, full: true })
+      expect(await liveCode(db, A)).toEqual({ places: 1, full: true })
+      expect(await liveCode(db, B)).toBe(null)
+      expect(await liveCode(db, 'NOSUCH')).toBe(null)
+    })
+
+    it('settles the member, and drops every hold the address still had', async () => {
+      const db = await makeDb()
+      await people(db, 'inviter')
+      await member(db, 'inviter', A)
+      await createOperatorCode(db, { code: 'WELCOME', maxUses: 5, now: T0 })
+      await hold(db, A, 'zoe@x.y')
+      await hold(db, 'WELCOME', 'zoe@x.y')
+      await hold(db, 'WELCOME', 'w@x.y')
+      await inviteAddress(db, { email: 'zoe@x.y', now: T0 })
+      const claim = await claimInvite(db, { email: 'zoe@x.y', now: T0 })
+      expect(await joined(db, 'zoe')).toEqual([claim])
+      expect((await rows(db)).map((r) => [r.code, r.email, r.user_id])).toEqual([
+        ['WELCOME', 'w@x.y', null],
+        [null, 'zoe@x.y', 'zoe'],
+      ])
+      // The operator's invitation admitted her, so the code she also held has its place still.
+      expect(await hold(db, A, 'w@x.y', T0 + MIN)).toBe('held')
+      expect((await claimInvite(db, { email: 'w@x.y', now: T0 + MIN }))?.code).toBe(A)
+    })
+
+    it('keeps a member to five codes, unrevoked or used, and lists who joined by handle', async () => {
+      const db = await makeDb()
+      await people(db, 'inviter', 'other')
+      for (const code of [A, B, C, D, E]) {
+        expect(await member(db, 'inviter', code)).toEqual({ ok: true, code })
+      }
+      expect(await member(db, 'inviter', F)).toEqual({ ok: false, reason: 'allowance' })
+      // Someone else's code taken already is a clash, worth another draw.
+      expect(await member(db, 'other', A)).toEqual({ ok: false, reason: 'clash' })
+
+      // A revoked unused code frees its place, and cancels its holds.
+      await hold(db, A, 'gone@x.y')
+      expect(await revokeCode(db, { code: A, userId: 'other', now: T0 })).toBe(false)
+      expect(await revokeCode(db, { code: A, userId: 'inviter', now: T0 })).toBe(true)
+      expect(await revokeCode(db, { code: A, userId: 'inviter', now: T0 })).toBe(false)
+      expect(await holdsInvite(db, { email: 'gone@x.y', now: T0 })).toBe(false)
+      expect(await hold(db, A, 'gone@x.y')).toBe('invalid')
+      expect(await member(db, 'inviter', F, T0 + MIN)).toEqual({ ok: true, code: F })
+
+      // A used code counts for good, and cannot be revoked.
+      await hold(db, B, 'friend@x.y')
+      await claimInvite(db, { email: 'friend@x.y', now: T0 })
+      await joined(db, 'friend')
+      await hold(db, C, 'pending@x.y')
+      expect(await revokeCode(db, { code: B, userId: 'inviter', now: T0 })).toBe(false)
+      expect(await member(db, 'inviter', 'G'.repeat(12))).toEqual({
+        ok: false,
+        reason: 'allowance',
+      })
+      expect(await listMemberCodes(db, 'inviter')).toEqual([
+        { code: B, createdAt: T0, joinedAt: T0, handle: 'friend' },
+        { code: C, createdAt: T0, joinedAt: null, handle: null },
+        { code: D, createdAt: T0, joinedAt: null, handle: null },
+        { code: E, createdAt: T0, joinedAt: null, handle: null },
+        { code: F, createdAt: T0 + MIN, joinedAt: null, handle: null },
+      ])
+
+      const drawn = drawMemberCode()
+      expect(/^[23456789ABCDEFGHJKMNPQRSTVWXYZ]{12}$/.test(drawn)).toBe(true)
+      expect(drawMemberCode() === drawn).toBe(false)
+    })
+
+    it('lets the operator make, list and withdraw codes of their own, used or not', async () => {
+      const db = await makeDb()
+      await people(db, 'inviter')
+      await member(db, 'inviter', A)
+      expect(await createOperatorCode(db, { code: 'WELCOME', maxUses: 3, now: T0 })).toBe(true)
+      expect(await createOperatorCode(db, { code: 'WELCOME', maxUses: 9, now: T0 })).toBe(false)
+      expect(await createOperatorCode(db, { code: A, maxUses: 9, now: T0 })).toBe(false)
+      await hold(db, 'WELCOME', 'one@x.y')
+      await claimInvite(db, { email: 'one@x.y', now: T0 })
+      await hold(db, 'WELCOME', 'two@x.y')
+      await hold(db, 'WELCOME', 'old@x.y', T0 - 2 * DAY)
+      expect(await listOperatorCodes(db, T0)).toEqual([
+        { code: 'WELCOME', maxUses: 3, uses: 1, holds: 1, createdAt: T0, revokedAt: null },
+      ])
+      expect(await revokeOperatorCode(db, { code: A, now: T0 })).toBe(false)
+      expect(await revokeOperatorCode(db, { code: 'WELCOME', now: T0 + MIN })).toBe(true)
+      expect(await revokeOperatorCode(db, { code: 'WELCOME', now: T0 + MIN })).toBe(false)
+      expect(await hold(db, 'WELCOME', 'three@x.y')).toBe('invalid')
+      // Whoever joined keeps their place; the holds are gone.
+      expect((await rows(db)).map((r) => [r.email, r.redeemed])).toEqual([['one@x.y', 1]])
+      expect(await listOperatorCodes(db, T0)).toEqual([
+        { code: 'WELCOME', maxUses: 3, uses: 1, holds: 0, createdAt: T0, revokedAt: T0 + MIN },
+      ])
+    })
+
+    it('prunes holds a day past their expiry, and never a place', async () => {
+      const db = await makeDb()
+      await createOperatorCode(db, { code: 'WELCOME', maxUses: 5, now: T0 })
+      await hold(db, 'WELCOME', 'stale@x.y', T0 - 3 * DAY)
+      await hold(db, 'WELCOME', 'lapsed@x.y', T0 - DAY - HOUR)
+      await hold(db, 'WELCOME', 'kept@x.y', T0 - 2 * DAY)
+      await claimInvite(db, { email: 'kept@x.y', now: T0 - 2 * DAY })
+      await inviteAddress(db, { email: 'op@x.y', now: T0 - 3 * DAY })
+      const [pruned] = await db.batch([pruneInvites(db, T0)])
+      expect(pruned).toHaveLength(2)
+      expect((await rows(db)).map((r) => r.email)).toEqual(['lapsed@x.y', 'kept@x.y'])
     })
   })
 

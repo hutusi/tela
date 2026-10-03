@@ -9,39 +9,117 @@
     "following": "关注",
     "readIn": "阅读语言",
     "search": "搜索博客、文章、人",
-    "signIn": "登录",
+    "logIn": "登录",
+    "join": "加入",
     "signOut": "退出登录",
     "addFeed": "+ 添加订阅",
     "dashboard": "仪表盘",
     "settings": "设置",
     "account": "你的账户",
     "yourProfile": "我的主页",
-    "subscriptions": "订阅"
+    "subscriptions": "订阅",
+    "invites": "邀请朋友",
+    "writers": "写作者"
   },
-  "home": {
-    "title": "独立博客，任何语言。",
-    "intro": "有订阅源、由作者本人认领的博客与个人网站。一键订阅，Tela 边读边翻译。",
-    "cta": "开始阅读"
+  "front": {
+    "description": "来自世界各地的独立博客，各用各的语言，标题译成你的语言。",
+    "hero": "{count} 个独立博客，在此<em>汇流</em>。",
+    "heroPlain": "独立博客，在此<em>汇流</em>。",
+    "intro": "来自世界各地的个人博客，各用各的语言。Tela 把它们汇在一处，并翻译标题，让你打开之前就知道值不值得读。会员还能逐段对照译文阅读全文。",
+    "join": "加入 Tela",
+    "logIn": "登录",
+    "week": "本周，{blogs} 个博客用 {languages} 种语言写作",
+    "latest": "来自 {n} 个博客的最新文章",
+    "titlesIn": "标题语言",
+    "original": "原文",
+    "minutes": "{n} 分钟",
+    "by": "作者 {name}",
+    "empty": "还没有文章。Tela 汇集的博客一有新作，就会出现在这里。",
+    "writers": {
+      "title": "你写博客吗？<em>让它成为你的名片。</em>",
+      "intro": "在 Tela 认领你的博客：你的主页会展示它，用其他语言阅读的读者也能看到译成他们语言的标题。",
+      "cta": "写作者"
+    }
+  },
+  "footer": {
+    "label": "关于 Tela",
+    "made": "Tela © {year} · 由 <maker>AI Naive</maker> 制作",
+    "about": "关于",
+    "writers": "写作者",
+    "privacy": "隐私",
+    "terms": "条款"
   },
   "login": {
-    "title": "登录 Tela",
-    "intro": "通过邮箱验证码登录，无需密码。",
-    "emailPlaceholder": "you@example.com",
-    "sendCode": "发送验证码",
-    "codeSent": "验证码已发送到 {email}。输入验证码，或直接打开邮件中的链接。",
-    "codePlaceholder": "6 位验证码",
-    "verify": "继续",
-    "connecting": "已登录，正在连接 Tela…",
+    "title": "登录 Tela"
+  },
+  "door": {
+    "close": "关闭",
+    "login": {
+      "title": "欢迎回来",
+      "intro": "登录，从上次读到的地方继续。"
+    },
+    "join": {
+      "title": "加入 Tela",
+      "intro": "订阅任何语言的任何博客。没有广告，订阅随时可以导出。"
+    },
+    "google": "使用 Google 继续",
+    "github": "使用 GitHub 继续",
     "or": "或",
+    "email": "邮箱",
+    "emailPlaceholder": "you@example.com",
+    "password": "密码",
+    "forgot": "忘记密码？",
+    "sendCode": "给我发验证码",
+    "logIn": "登录",
+    "usePassword": "用密码登录",
+    "useCode": "改用邮箱验证码",
+    "invite": "邀请码",
+    "noCode": "没有邀请码？Tela 目前仅限受邀加入：请向已加入的成员要一个。",
+    "agree": "加入即表示你同意<terms>使用条款</terms>；另见<privacy>隐私政策</privacy>。",
+    "newHere": "第一次来 Tela？",
+    "toJoin": "加入",
+    "haveAccount": "已经有账号？",
+    "toLogin": "登录",
+    "codeSent": "如果 {email} 有 Tela 账号或邀请，验证码已在路上。输入验证码，或直接打开邮件中的链接。",
+    "joinSent": "验证码已发送到 {email}。输入验证码，或直接打开邮件中的链接。",
+    "codePlaceholder": "6 位验证码",
+    "choosePassword": "设置密码（可选）",
+    "passwordHint": "至少 {min} 个字符。不设密码，也随时可以用验证码登录。",
+    "verify": "继续",
+    "otherAddress": "使用其他邮箱",
+    "resetSent": "如果 {email} 有 Tela 账号，我们已向它发送验证码。输入验证码，并设置新密码。",
+    "newPassword": "新密码，至少 {min} 个字符",
+    "resetConfirm": "设置密码并登录",
+    "connecting": "已登录，正在连接 Tela…",
+    "unsaved": "你已登录，但密码没有保存。随时可以用“忘记密码？”设置一个。",
+    "linkAs": "以 <b>{email}</b> 登录？",
+    "linkHint": "只有在这个链接是你本人申请的时候才继续：别人发来的链接会让你登录到他们的账号。",
+    "linkConfirm": "登录",
+    "resetAs": "为 <b>{email}</b> 设置新密码。",
+    "resetHint": "只有在你本人申请了重置密码时才继续。",
     "errors": {
       "invalid_email": "这不像是一个邮箱地址。",
-      "not_configured": "此服务器尚未配置登录。",
       "send_failed": "验证码发送失败，请稍后再试。",
       "bad_code": "验证码错误或已过期。",
-      "link_failed": "登录链接无效或已过期，请重新获取验证码。",
-      "not_invited": "Tela 正在内测中，该邮箱还没有账号。",
-      "rate_limited": "尝试次数过多。请稍等一分钟再试。"
-    }
+      "rate_limited": "尝试次数过多。请稍等一分钟再试。",
+      "reset_failed": "重置验证码错误或已过期，请重新申请。",
+      "password_set": "新密码已设置，但用它登录失败。请用验证码登录。",
+      "password_short": "密码至少需要 {min} 个字符。",
+      "bad_password": "邮箱和密码不匹配。",
+      "not_invited": "没有 Tela 账号使用这个邮箱。请用你加入时的邮箱登录，或用邀请码加入。",
+      "invite_used": "这个邀请的名额已经用完，或已被撤回。请再要一个。",
+      "missing_code": "请输入邀请码。",
+      "invalid_code": "没有这个邀请码，或它已被撤回。",
+      "code_used": "这个邀请码的名额已经用完。",
+      "provider_unlinked": "请先在服务商那里验证这个邮箱，或用邮箱登录后在 设置 → 账户 里关联。",
+      "provider_no_email": "服务商没有提供邮箱地址。请改用邮箱登录。",
+      "provider_cancelled": "登录已取消。",
+      "provider_expired": "等待时间过长，请重试。",
+      "provider_failed": "无法连接服务商。请重试，或用邮箱登录。",
+      "failed": "出了点问题，请稍后再试。"
+    },
+    "claimTitle": "认领 @{handle}",
+    "claimCard": "认领你的名片"
   },
   "sidebar": {
     "library": "资料库",
@@ -139,7 +217,7 @@
   },
   "discover": {
     "title": "独立博客，任何语言。",
-    "intro": "有订阅源、由作者本人认领的博客与个人网站。一键订阅，Tela 边读边翻译。",
+    "intro": "有订阅源的博客与个人网站，由 Tela、作者和读者一起挑选。一键订阅，Tela 边读边翻译。",
     "allTopics": "全部",
     "language": "语言",
     "allLanguages": "所有语言",
@@ -169,7 +247,7 @@
     "empty": "这里还没有收录博客。认领你的博客，成为第一个。",
     "claim": {
       "title": "你有博客吗？",
-      "intro": "认领你的订阅源，看看谁在读你的文章、他们喜欢哪些、推荐时说了什么。",
+      "intro": "认领你的订阅源，看看有多少人在读你、你的文章反响如何，以及读者推荐时说了什么。",
       "cta": "认领你的订阅源"
     }
   },
@@ -219,6 +297,100 @@
       "fetch_failed": "无法访问该地址。",
       "no_feed": "该地址下没有找到订阅源。Tela 只收录发布订阅源的网站。",
       "rate_limited": "认领尝试太频繁，请稍后再试。"
+    },
+    "taken": "你选的用户名已经属于别人，所以目前用的还是临时用户名。可以在<link>设置</link>里另选一个。"
+  },
+  "writers": {
+    "title": "写作者",
+    "kicker": "写作者",
+    "hero": {
+      "title": "独立写作者的<em>名片</em>。",
+      "lede": "在 Tela 上的一个页面：你的名字、你写的博客、你推荐的文章。读者在这里找到你、关注你，一键订阅你的博客。"
+    },
+    "form": {
+      "title": "制作你的名片",
+      "name": "你的名字",
+      "blog": "你的博客地址",
+      "blogPlaceholder": "yourblog.com",
+      "submit": "认领你的名片",
+      "hint": "免费。名字和用户名之后都可以在设置里修改。"
+    },
+    "availability": {
+      "available": "✓ @{handle} 可以使用",
+      "taken": "@{handle} 已被占用。",
+      "reserved": "@{handle} 是保留名。",
+      "invalid": "@{handle} 不能用作用户名。",
+      "try": "试试 <pick>@{suggestion}</pick>。",
+      "none": "用户名取自你的名字或博客名。"
+    },
+    "member": {
+      "intro": "你已经在 Tela 上了。认领你的博客，把它放到名片上。",
+      "claim": "认领你的博客",
+      "card": "你的名片"
+    },
+    "card": {
+      "writes": "写作",
+      "followers": "<b>{n}</b> 位关注者",
+      "recommendations": "<b>{n}</b> 条推荐",
+      "reads": "在读 <b>{n}</b> 个博客",
+      "recommends": "最近推荐",
+      "yourName": "你的名字",
+      "yourHandle": "yourname",
+      "later": "你推荐的文章，以及你选择公开的在读博客，会随着你使用 Tela 出现在这里。"
+    },
+    "find": {
+      "title": "写作者在这里彼此发现。",
+      "intro": "在 Tela 上推荐文章时可以附一句话，它会显示在推荐者的名片上。以下是 {name} 的推荐，实时来自 Tela。"
+    },
+    "does": {
+      "title": "名片能做什么",
+      "link": {
+        "title": "一个链接，汇集你写的一切",
+        "body": "你的名片在 /@用户名，列出你认领的每个博客，还有你的名字和一句简介。"
+      },
+      "blogroll": {
+        "title": "你的博客链",
+        "body": "推荐你喜欢的文章，附上一句话。愿意的话，也可以公开你在读的博客：在设置里打开一个开关即可。"
+      },
+      "readers": {
+        "title": "读者",
+        "body": "读者可以关注你，一键订阅你的博客，还能对照原文读译文。仪表盘会告诉你有多少人在读、他们喜欢哪些文章、留下了什么话。"
+      }
+    },
+    "how": {
+      "title": "怎么做",
+      "name": {
+        "title": "选一个名字",
+        "body": "你的名字，以及名片地址里的用户名。之后都可以在设置里修改。"
+      },
+      "connect": {
+        "title": "连接你的博客",
+        "body": "在你的网站上加一行，证明它属于你：一个 meta 标签，或一个指向你名片的链接。任何有 RSS 或 Atom 订阅源的博客都可以。"
+      },
+      "follow": {
+        "title": "关注你喜欢的写作者",
+        "body": "关注其他写作者和读者：他们推荐的文章会出现在你的「关注」页。"
+      }
+    },
+    "yours": {
+      "title": "你的网站还是你的",
+      "nothing": {
+        "title": "什么都不用搬",
+        "body": "Tela 读取你已经在发布的订阅源。每篇文章都链接回你的网站。"
+      },
+      "ads": {
+        "title": "没有广告",
+        "body": "Tela 不放广告：你的文章旁边没有，别处也没有。"
+      },
+      "translation": {
+        "title": "翻译由你决定",
+        "body": "读者可以读到你文章的译文。如果你不希望这样，可以在仪表盘里为你的博客关闭翻译。"
+      }
+    },
+    "cta": {
+      "count": "已有 {n} 个博客在 Tela 上。你的呢？",
+      "title": "你的博客在哪里？",
+      "make": "制作你的名片"
     }
   },
   "profile": {
@@ -264,7 +436,7 @@
   },
   "dashboard": {
     "title": "你的站点",
-    "intro": "谁在读你，他们喜欢哪些文章，推荐时说了什么。",
+    "intro": "有多少人在读你，你的文章反响如何，读者推荐时说了什么。",
     "noSites": "你还没有认领站点。",
     "post": "文章",
     "notes": "读者说",
@@ -285,7 +457,9 @@
       "reading": "阅读",
       "translation": "语言",
       "subscriptions": "订阅",
-      "privacy": "隐私"
+      "privacy": "隐私",
+      "invites": "邀请",
+      "account": "账户"
     },
     "profileIntro": "读者和作者在 Tela 上看到的你。",
     "gravatar": "使用我的 Gravatar 头像",
@@ -359,13 +533,70 @@
     "noSubscriptions": "还没有订阅。",
     "privacyIntro": "选择别人在你的个人页上能看到什么。",
     "showLikes": "展示喜欢的文章",
-    "showLikesHint": "展示在你的个人页上，也给关注你的人看。作者能看到一篇文章有多少人喜欢，但看不到是谁。",
+    "showLikesHint": "展示在你的个人页上，也给关注你的人看。作者的仪表盘只显示一篇文章有多少人喜欢，不显示是谁。",
     "showSubscriptions": "展示订阅",
-    "showSubscriptionsHint": "在个人页上列出你读的博客。",
+    "showSubscriptionsHint": "展示在你的个人页上，也给关注你的人看。",
     "privacyDelay": "公开个人页可能要几分钟才会跟上改动。",
     "yourData": "你的数据",
     "yourDataHint": "你的资料、订阅、喜欢、推荐、划线和关注的人，打包成一个文件。",
     "download": "下载"
+  },
+  "invites": {
+    "intro": "Tela 目前仅限邀请加入。你可以邀请五个人：一个邀请码只能让一个人加入，用过后永久计入名额。撤销一个还没人用过的邀请码，可以收回它的名额。",
+    "left": "{n, plural, =0 {你的邀请名额已经用完。} other {你还可以邀请 # 个人。}}",
+    "create": "生成邀请码",
+    "none": "还没有邀请码。生成一个，再把链接发给朋友。",
+    "copy": "复制链接",
+    "copied": "已复制",
+    "revoke": "撤销",
+    "joined": "已加入",
+    "joinedBy": "<who>{handle}</who> 已加入",
+    "errors": {
+      "allowance_used": "你已经邀请了五个人。",
+      "rate_limited": "一小时内生成的邀请码太多，请稍后再试。",
+      "failed": "操作没有成功，请重试。",
+      "load": "无法载入你的邀请码，请稍后再试。"
+    }
+  },
+  "account": {
+    "intro": "你登录 Tela 的方式。每次更改都会发邮件通知你；添加新的登录方式会让你的其他设备退出登录。",
+    "email": "邮箱",
+    "emailHint": "登录验证码会发到这里。",
+    "password": "密码",
+    "passwordSet": "已设置。你仍然可以用邮件验证码登录。",
+    "passwordNone": "未设置。你用邮件验证码登录。",
+    "passwordAdd": "设置密码",
+    "passwordChange": "修改密码",
+    "passwordCurrent": "当前密码",
+    "passwordNew": "新密码",
+    "passwordHint": "至少 {min} 个字符。",
+    "passwordSave": "保存密码",
+    "passwordSaved": "密码已保存。",
+    "cancel": "取消",
+    "providers": {
+      "google": "Google",
+      "github": "GitHub"
+    },
+    "linkedSince": "自 {date} 起已关联。",
+    "notLinked": "未关联。",
+    "link": "关联",
+    "unlink": "取消关联",
+    "everywhere": "在所有设备上退出",
+    "everywhereHint": "结束所有设备上的登录，包括这一台。",
+    "everywhereButton": "在所有设备上退出",
+    "confirmTitle": "确认是你本人",
+    "confirmHint": "要更改登录方式，请先用发到你邮箱的验证码确认是你本人。",
+    "confirmSent": "验证码已发送到 {email}，请在这里输入。",
+    "confirm": "给我发验证码",
+    "confirmSubmit": "确认",
+    "errors": {
+      "not_fresh": "请先确认是你本人。",
+      "rejected": "没有被接受。请检查密码后重试。",
+      "rate_limited": "更改太频繁，请稍后再试。",
+      "failed": "操作没有成功，请重试。",
+      "link_failed": "没能关联这个账号，请重试。",
+      "load": "无法载入你的登录方式，请稍后再试。"
+    }
   },
   "search": {
     "title": "搜索",
@@ -420,5 +651,16 @@
     "focus": "阅读时隐藏列表",
     "help": "显示或隐藏此列表",
     "dismiss": "关闭"
+  },
+  "info": {
+    "pages": "关于 Tela",
+    "tabs": {
+      "about": "关于",
+      "privacy": "隐私",
+      "terms": "条款"
+    },
+    "onThisPage": "本页内容",
+    "short": "简而言之",
+    "updated": "最后更新：{date}"
   }
 }

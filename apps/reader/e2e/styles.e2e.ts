@@ -1,5 +1,5 @@
-import { expect, type Locator, test } from '@playwright/test'
-import { ensureFeeds, resetReading, synced } from './helpers'
+import { expect, type Locator, type Page, test } from '@playwright/test'
+import { ensureFeeds, expectHeaderFits, measureHeader, resetReading, synced } from './helpers'
 
 /**
  * What the class strings claim, checked against what the browser computes.
@@ -13,8 +13,26 @@ import { ensureFeeds, resetReading, synced } from './helpers'
 
 const INK = 'rgb(31, 28, 24)'
 
-const colour = (l: Locator) => l.evaluate((el) => getComputedStyle(el).color)
 const decoration = (l: Locator) => l.evaluate((el) => getComputedStyle(el).textDecorationLine)
+
+/**
+ * The lockup and the header's pills are ink in every state: the design carries the active pill on
+ * its background alone, so a colour difference here would be a second signal for the same thing.
+ * `toHaveCSS` finds the link again on each try, so a header rendered anew in between is measured
+ * as it is now, never as a detached element (whose computed style is empty).
+ */
+async function expectInkLinks(page: Page, pills: string[]): Promise<void> {
+  const links: [string, Locator][] = [
+    ['lockup', page.getByRole('banner').getByRole('link', { name: 'Tela' })],
+    ...pills.map((key): [string, Locator] => [key, page.getByTestId(`nav-${key}`)]),
+  ]
+  for (const [name, link] of links) {
+    await expect(link, name).toHaveCSS('color', INK)
+    await expect(link, name).toHaveCSS('text-decoration-line', 'none')
+    await link.hover()
+    await expect(link, name).toHaveCSS('text-decoration-line', 'none')
+  }
+}
 
 // The bilingual measurements need a Japanese blog; adding one the member follows is a no-op.
 test.beforeAll(async () => {
@@ -29,21 +47,27 @@ test.beforeEach(async ({ page }) => {
 test.describe('stylesheet', () => {
   test('the header renders in ink and never underlines', async ({ page }) => {
     await page.goto('/reading')
+    // A device holding no rows yet shows the visitor's header until /me answers (ADR 0035), and
+    // the member's replaces it whole: wait for the member's, and let every check find its link
+    // again, as an element read once may be the one just taken out of the page.
+    await expect(page.getByTestId('nav-reading')).toBeVisible()
+    await expectInkLinks(page, ['reading', 'discover', 'following'])
+  })
 
-    const brand = page.getByRole('banner').getByRole('link', { name: 'Tela' })
-    expect(await colour(brand)).toBe(INK)
-    expect(await decoration(brand)).toBe('none')
-    await brand.hover()
-    expect(await decoration(brand)).toBe('none')
-
-    // Ink in every state: the design carries the active pill on its background alone, so a colour
-    // difference here would be a second signal for the same thing.
-    for (const key of ['reading', 'discover', 'following']) {
-      const pill = page.getByTestId(`nav-${key}`)
-      expect(await colour(pill), key).toBe(INK)
-      expect(await decoration(pill), key).toBe('none')
-      await pill.hover()
-      expect(await decoration(pill), key).toBe('none')
+  test("the visitor's header renders in ink and never underlines too", async ({ browser }) => {
+    const visitor = await browser.newContext({ storageState: { cookies: [], origins: [] } })
+    try {
+      const page = await visitor.newPage()
+      await page.goto('/')
+      await expect(page.getByTestId('nav-join')).toBeVisible()
+      await expectInkLinks(page, ['discover', 'writers', 'login'])
+      // Join is the one filled pill, so not ink; it never underlines either.
+      const join = page.getByTestId('nav-join')
+      await expect(join).toHaveCSS('text-decoration-line', 'none')
+      await join.hover()
+      await expect(join).toHaveCSS('text-decoration-line', 'none')
+    } finally {
+      await visitor.close()
     }
   })
 
@@ -101,37 +125,10 @@ test.describe('stylesheet', () => {
       // passes when it shouldn't.
       await page.getByTestId('read-in').waitFor({ state: 'attached' })
 
-      const m = await page.evaluate(() => {
-        const doc = document.documentElement
-        const nav = document.querySelector('header nav') as HTMLElement
-        const pill = nav.querySelector('a') as HTMLElement
-        const account = (
-          document.querySelector('[data-testid="account-menu"]') as HTMLElement
-        ).getBoundingClientRect()
-        return {
-          overflow: doc.scrollWidth - doc.clientWidth,
-          client: nav.clientWidth,
-          scroll: nav.scrollWidth,
-          pill: Math.round(pill.getBoundingClientRect().width),
-          account: { width: Math.round(account.width), right: account.right },
-          viewport: doc.clientWidth,
-        }
-      })
-      expect(m.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)
+      const m = await measureHeader(page, ['account-menu'])
+      expectHeaderFits(m, width)
       // The one way to Settings, the Dashboard and signing out: whole, and on screen.
-      expect(m.account.width, 'account menu squeezed').toBe(30)
-      expect(m.account.right, 'account menu off screen').toBeLessThanOrEqual(m.viewport)
-      // The pill row may scroll here; being squeezed below one pill is the failure. There is no
-      // other route to Dashboard or Settings, and a 4px nav — which is what main renders at 768 —
-      // leaves nothing to grab and nothing to read.
-      expect(m.client, 'nav narrower than a single pill').toBeGreaterThanOrEqual(m.pill)
-      // Tolerances in the nav's own units, not pixels: the pill row measures 335px on macOS and
-      // 341px in CI's Linux Chromium — text metrics differ by a few px — and 800px fits it with
-      // less than that to spare. One pill's worth of slack at 800, none at all by 1024.
-      if (width >= 800) {
-        expect(m.client, 'more than one pill clipped').toBeGreaterThanOrEqual(m.scroll - m.pill)
-      }
-      if (width >= 1024) expect(m.client, 'nav is clipped').toBe(m.scroll)
+      expect(m.controls['account-menu']?.width, 'account menu squeezed').toBe(30)
     })
   }
 

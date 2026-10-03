@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 import { useMemberControls } from '../lib/member'
 import { readingPrefsOf } from '../lib/prefs'
+import { safeDecode } from '../lib/safe-decode'
 import { useTitle } from '../lib/title'
 import { usePublic } from '../lib/use-public'
 import { useConfirmedFollowees, useNow, useReadingLang, useStore, useTables } from '../store/hooks'
@@ -11,9 +12,12 @@ import { profileDataOf } from '../views/public-data'
 import type { ProfileData } from '../views/types'
 import { NotFoundPage } from './not-found'
 
-/** `/@handle`: the first segment is the literal "@handle"; anything else is not a profile. */
+/**
+ * `/@handle`: the first segment is the literal "@handle"; anything else, one that does not decode
+ * included (`/@%`), is not a profile. The edge asks this of every `/@*` too.
+ */
 export function handleFrom(pathname: string): string | null {
-  const segment = decodeURIComponent(pathname.split('/')[1] ?? '')
+  const segment = safeDecode(pathname.split('/')[1] ?? '') ?? ''
   const handle = segment.startsWith('@') ? segment.slice(1).toLowerCase() : ''
   return /^[a-z0-9_]{1,30}$/.test(handle) && pathname.split('/').length === 2 ? handle : null
 }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { bumpSeq, currentSeq } from '@tela/data'
 import type { Blobs } from '@tela/platform'
 import { memoryBlobs } from '@tela/platform/portable'
@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm'
 import { createTestApi, signedIn, type TestApi } from '../../api/test/helpers'
 import { detectLocale } from '../src/i18n'
 import { type PublicRoute, publicRoute, renderPublicPage } from '../src/ssr'
+import type { FrontData } from '../src/views/types'
 import { createEdge, type EdgeCache, type PublicPages } from '../worker/edge'
 
 const KEY = 'a'.repeat(32)
@@ -137,6 +138,14 @@ describe('content objects', () => {
     expect((await get('/o/r/abc.html')).status).toBe(404)
     expect((await get('/o/c/../r/abc.html')).status).toBe(404)
     expect((await get(`/o/c/${OTHER}.json`)).status).toBe(404) // allowed shape, missing object
+  })
+
+  test('a key that does not decode is not found, not an error', async () => {
+    for (const path of ['/o/%', '/o/c/%E4.json', `/o/c/${KEY}%.json`]) {
+      expect((await get(path)).status).toBe(404)
+      expect((await get(path, null)).status).toBe(404)
+    }
+    expect(gets).toEqual([])
   })
 
   test('a bundle carries the objects that exist, keyed, capped at 25', async () => {
@@ -505,12 +514,266 @@ describe('public pages', () => {
     expect(await other.text()).toBe(TEMPLATE)
   })
 
+  test('a profile address or a language cookie that does not decode is no page and no choice', async () => {
+    const shell = await page('/@%')
+    expect(shell.status).toBe(200)
+    expect(await shell.text()).toBe(TEMPLATE)
+    // The browser's language decides, as with no cookie at all.
+    const zh = await page('/terms', { cookie: 'tela_locale=%', 'accept-language': 'zh-CN' })
+    expect(zh.status).toBe(200)
+    expect(await zh.text()).toContain('<html lang="zh-Hans"')
+    const en = await page('/terms', { cookie: 'a=1; tela_locale=%E4' })
+    expect(en.status).toBe(200)
+    expect(await en.text()).toContain('<html lang="en"')
+    expect(apiCalls).toEqual([])
+  })
+
+  test('About, Privacy and Terms ask tela-api nothing, hand nothing over, and are never indexed in the beta', async () => {
+    for (const path of ['/about', '/privacy', '/terms']) {
+      const res = await page(path)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+      expect(res.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
+      const html = await res.text()
+      expect(html).toContain('data-testid="info-page"')
+      // The front page's footer closes them too, its links whole without a script.
+      expect(html).toContain('data-testid="site-footer"')
+      expect(html).toContain('href="/terms"')
+      expect(html).not.toContain('id="tela-data"')
+      expect(html).not.toContain('name="robots"')
+      expect(html).toContain('/assets/index-abc123.js')
+    }
+    const privacy = await (await page('/privacy')).text()
+    expect(privacy).toContain('<title>Privacy · Tela</title>')
+    expect(privacy).toMatch(/<meta name="description" content="Tela keeps what it needs/)
+    expect(privacy).toContain('id="cookies"')
+    expect(privacy).toContain('href="#cookies"')
+    expect(privacy).toContain('Last updated 3 October 2026')
+    expect(apiCalls).toEqual([])
+    // Three pages, once each: the second visit to Privacy came from the cache.
+    expect(cache.size).toBe(3)
+  })
+
+  test("an info page renders in the reader's language, cached apart", async () => {
+    const zh = await (await page('/terms', { cookie: 'tela_locale=zh-Hans' })).text()
+    expect(zh).toContain('<html lang="zh-Hans"')
+    expect(zh).toContain('<title>条款 · Tela</title>')
+    expect(zh).toContain('id="writers"')
+    expect(zh).toContain('最后更新：2026年10月3日')
+    const en = await (await page('/terms')).text()
+    expect(en).toContain('<html lang="en"')
+    expect(en).toContain('<title>Terms · Tela</title>')
+    expect(cache.size).toBe(2)
+    expect(apiCalls).toEqual([])
+  })
+
   test('nothing a blog says can close the handover script or become markup', async () => {
     await listedBlog(3, "</script><script>alert(1)</script> $& $'")
     const html = await (await page('/s/3')).text()
     expect(html).not.toContain('<script>alert(1)')
     expect(html).toContain('\\u003c/script>')
     expect(html).toContain('$&amp; $&#39;')
+  })
+})
+
+/** The front page's answer, as tela-api gives it (`/api/v1/public/front`). */
+const FRONT: FrontData = {
+  counts: { blogs: 35 },
+  week: { blogs: 17, languages: 4, posts: 70 },
+  edition: {
+    span: 'week',
+    posts: [
+      {
+        article: {
+          id: 7,
+          feedId: 3,
+          url: 'https://ciudad.example/noche',
+          title: 'La ciudad de noche',
+          author: null,
+          publishedAt: 0,
+          fetchedAt: 0,
+          sortAt: 0,
+          sourceLang: 'es',
+          excerpt: 'Un paseo largo por la ciudad.',
+          contentKey: null,
+          wordCount: 900,
+          readingMinutes: 4,
+          extractState: 'done',
+          likeCount: 0,
+          recommendCount: 0,
+          seq: 1,
+          titles: { en: 'The city at night', 'zh-Hans': '夜晚的城市' },
+          excerpts: { en: 'A long walk through the city.' },
+        },
+        site: {
+          id: 3,
+          title: 'Ciudad',
+          homeUrl: 'https://ciudad.example',
+          faviconKey: null,
+          primaryLang: 'es',
+        },
+        claimant: { handle: 'ana', displayName: 'Ana' },
+      },
+    ],
+  },
+}
+
+describe('the front page (ADR 0035)', () => {
+  let stored: { url: string; headers: Headers }[]
+  /** tela-web with tela-api's front page answering `answer`, and every other path as it does. */
+  function frontEdge(answer: () => Response | Promise<Response>, pageDeadlineMs?: number) {
+    stored = []
+    const colo = memoryCache()
+    const recording: EdgeCache = {
+      match: (key) => colo.match(key),
+      put: async (key, response) => {
+        stored.push({ url: key.url, headers: new Headers(response.headers) })
+        await colo.put(key, response)
+      },
+    }
+    return createEdge({
+      blobs,
+      api: {
+        fetch: async (req) => {
+          apiCalls.push(new URL(req.url).pathname)
+          return new URL(req.url).pathname === '/api/v1/public/front'
+            ? answer()
+            : api.app.fetch(req)
+        },
+      },
+      assets: {
+        fetch: async () => new Response(TEMPLATE, { headers: { 'content-type': 'text/html' } }),
+      },
+      pages: pages as unknown as PublicPages,
+      cache: recording,
+      fetchImage: async () => new Response('nope', { status: 404 }),
+      config: {
+        authSecret: 'a-test-secret-that-is-long-enough-for-hmac',
+        privateBeta: true,
+        ...(pageDeadlineMs === undefined ? {} : { pageDeadlineMs }),
+      },
+    })
+  }
+  const json = () => Response.json(FRONT)
+  const visit = (e: ReturnType<typeof createEdge>, path: string, headers = {}) =>
+    e.fetch(new Request(`${ORIGIN}${path}`, { headers }))
+
+  test("renders for a visitor with the edition handed over, and comes from the colo's cache after", async () => {
+    const front = frontEdge(json)
+    const res = await visit(front, '/')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
+    expect(res.headers.get('vary')).toBe('cookie')
+    expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+    const html = await res.text()
+    expect(html).toContain('<title>Tela</title>')
+    expect(html).toContain('35 independent blogs')
+    expect(html).toContain('This week, 17 blogs wrote in 4 languages')
+    expect(html).toMatch(/<h2 lang="es"[^>]*>.*La ciudad de noche/s)
+    expect(html).toContain('Español')
+    expect(html).toContain('href="/?titles=translated"')
+    expect(html).toContain('data-testid="site-footer"')
+    expect(html).not.toContain('name="robots"')
+    // The view does not fade in over the copy the visitor is already reading.
+    expect(html).not.toMatch(/<main[^>]*animate-fade/)
+    const handed = JSON.parse(
+      html.match(/<script id="tela-data" type="application\/json">(.*?)<\/script>/s)?.[1] ?? '',
+    )
+    expect(handed).toEqual({ path: '/api/v1/public/front', body: FRONT })
+
+    // A campaign's query string is the same page, and the cache's; the browser still keys by cookie.
+    const again = await visit(front, '/?utm_source=x')
+    expect(again.headers.get('vary')).toBe('cookie')
+    expect(await again.text()).not.toContain('utm_source')
+    expect(apiCalls).toEqual(['/api/v1/public/front'])
+    // workerd ignores Vary on what it stores, and refuses `*`: the colo's copy carries none.
+    expect(stored).toHaveLength(1)
+    expect(stored[0]?.headers.get('vary')).toBeNull()
+  })
+
+  test("a member's request is the plain shell: tela-api is not asked, and nothing is cached", async () => {
+    const front = frontEdge(json)
+    for (const name of ['tela.session_token', '__Secure-tela.session_token']) {
+      const res = await visit(front, '/', { cookie: `tela_locale=en; ${name}=abc.def` })
+      expect(res.status).toBe(200)
+      expect(await res.text()).toBe(TEMPLATE)
+      expect(res.headers.get('vary')).toBe('cookie')
+      expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+    }
+    expect(apiCalls).toEqual([])
+    expect(stored).toEqual([])
+  })
+
+  test('each title mode is a page of its own, cached apart', async () => {
+    const front = frontEdge(json)
+    const translated = await (await visit(front, '/?titles=translated')).text()
+    expect(translated).toMatch(/<h2 lang="en"[^>]*>.*The city at night/s)
+    expect(translated).toContain('Spanish')
+    expect(translated).toContain('A long walk through the city.')
+    const original = await (await visit(front, '/')).text()
+    expect(original).toMatch(/<h2 lang="es"[^>]*>.*La ciudad de noche/s)
+    await visit(front, '/?titles=translated')
+    await visit(front, '/')
+    expect(apiCalls).toHaveLength(2)
+    expect(stored.map((s) => s.url.replace(/\/page\/[0-9a-f]+\//, '/page/'))).toEqual([
+      'https://tela-edge.cache/page/en/?titles=translated',
+      'https://tela-edge.cache/page/en/',
+    ])
+  })
+
+  test('no front page from tela-api, a 404 included, is the plain shell, never kept', async () => {
+    for (const status of [404, 503]) {
+      const front = frontEdge(() => new Response('no', { status }))
+      const res = await visit(front, '/')
+      expect(res.status).toBe(200)
+      expect(await res.text()).toBe(TEMPLATE)
+      expect(res.headers.get('vary')).toBe('cookie')
+      expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+      expect(stored).toEqual([])
+    }
+  })
+
+  test('an empty edition says so, and counts nothing it does not have', async () => {
+    const empty: FrontData = {
+      counts: { blogs: 0 },
+      week: { blogs: 0, languages: 0, posts: 0 },
+      edition: { span: 'latest', posts: [] },
+    }
+    const html = await (
+      await visit(
+        frontEdge(() => Response.json(empty)),
+        '/',
+      )
+    ).text()
+    expect(html).toContain('No posts yet.')
+    expect(html).toContain('of independent blogs.')
+    expect(html).not.toMatch(/\b0 independent blogs/)
+    expect(html).not.toContain('The latest from')
+    expect(html).not.toContain(' · </span>')
+  })
+
+  test('a tela-api that hangs or throws is the plain shell too, in time, never kept', async () => {
+    const errors = spyOn(console, 'error').mockImplementation(() => {})
+    const answers = {
+      hangs: () => new Promise<Response>(() => {}),
+      throws: () => Promise.reject(new Error('the binding is gone')),
+      'sends no JSON': async () => new Response('<html>', { status: 200 }),
+    }
+    try {
+      for (const [how, answer] of Object.entries(answers)) {
+        const front = frontEdge(answer, 50)
+        const started = Date.now()
+        const res = await visit(front, '/')
+        expect(Date.now() - started, how).toBeLessThan(1_000)
+        expect(res.status, how).toBe(200)
+        expect(await res.text(), how).toBe(TEMPLATE)
+        expect(res.headers.get('cache-control'), how).toBe('public, max-age=0, must-revalidate')
+        expect(stored, how).toEqual([])
+      }
+      expect(errors).toHaveBeenCalledTimes(3)
+    } finally {
+      errors.mockRestore()
+    }
   })
 })
 

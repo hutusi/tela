@@ -7,7 +7,7 @@
  * upgrade: it knows no other 409, and it reloads into a shell that does name the member.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { bumpSeq, currentSeq, type TelaDb } from '@tela/data'
+import { bumpSeq, createMemberCode, currentSeq, type TelaDb } from '@tela/data'
 import { CLIENT_HEADER, MEMBER_HEADER, type PullResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
@@ -17,6 +17,10 @@ import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 const oldShell = { [CLIENT_HEADER]: '1' }
 /** A current client that names no member. */
 const nameless = { [MEMBER_HEADER]: undefined }
+/** b's invite code, in the shape of a member's (ADR 0034). */
+const B_CODE = 'BCDEFGHJKMNP'
+/** b's GitHub, linked, for b to unlink (ADR 0036). */
+const B_GITHUB = 'b-github-account'
 
 let server: FixtureServer
 let api: TestApi
@@ -45,7 +49,9 @@ beforeEach(async () => {
       `<html><head><link rel="alternate" type="application/rss+xml" href="${server.url('/feed.xml')}"></head></html>`,
     )
   })
-  api = await createTestApi()
+  api = await createTestApi({
+    oauth: { github: { clientId: 'github-client', clientSecret: 'github-secret' } },
+  })
   db = api.db
   a = await signedIn(api, 'a@x.test')
   b = await signedIn(api, 'b@x.test')
@@ -69,6 +75,10 @@ beforeEach(async () => {
     db.run(sql`insert into body_translations (content_key, lang, state, updated_at, seq)
       values ('ckey1', 'en', 'done', 0, ${currentSeq})`),
   ] as never)
+  // An invite code of b's that nobody has used, for b to revoke.
+  await createMemberCode(db, { userId: b.userId, now: 0, code: B_CODE })
+  await db.run(sql`insert into account (id, account_id, provider_id, user_id, created_at, updated_at)
+    values (${B_GITHUB}, '4242', 'github', ${b.userId}, 0, 0)`)
 })
 
 const subsOf = (userId: string) =>
@@ -276,6 +286,40 @@ const MEMBER_ROUTES: MemberRoute[] = [
     body: () => ({ optOut: true }),
     effect: 'writes',
   },
+  { route: 'GET /api/v1/invites', path: '/api/v1/invites', effect: 'reads' },
+  { route: 'POST /api/v1/invites', path: '/api/v1/invites', method: 'POST', effect: 'writes' },
+  {
+    route: 'DELETE /api/v1/invites/:code',
+    path: `/api/v1/invites/${B_CODE}`,
+    method: 'DELETE',
+    effect: 'writes',
+  },
+  { route: 'GET /api/v1/account', path: '/api/v1/account', effect: 'reads' },
+  {
+    route: 'POST /api/v1/account/password',
+    path: '/api/v1/account/password',
+    body: () => ({ newPassword: 'correct horse battery' }),
+    effect: 'writes',
+  },
+  {
+    route: 'POST /api/v1/account/link',
+    path: '/api/v1/account/link',
+    body: () => ({ provider: 'github' }),
+    effect: 'writes', // the OAuth state, and its rate limit
+  },
+  {
+    route: 'POST /api/v1/account/unlink',
+    path: '/api/v1/account/unlink',
+    body: () => ({ accountId: B_GITHUB }),
+    effect: 'writes',
+  },
+  // b's only session is the one asking, so there is no other to end.
+  {
+    route: 'POST /api/v1/account/sign-out-everywhere',
+    path: '/api/v1/account/sign-out-everywhere',
+    body: () => ({}),
+    effect: 'reads',
+  },
 ]
 
 describe('every member route', () => {
@@ -283,6 +327,8 @@ describe('every member route', () => {
     const registered = api.app.routes
       .filter((r) => r.method !== 'ALL' && r.path.startsWith('/api/v1/'))
       .filter((r) => !r.path.startsWith('/api/v1/public/') && r.path !== '/api/v1/me')
+      // A visitor's, with no session to check (ADR 0034).
+      .filter((r) => r.path !== '/api/v1/join')
       .map((r) => `${r.method} ${r.path}`)
     expect(MEMBER_ROUTES.map((r) => r.route).sort()).toEqual(registered.sort())
   })

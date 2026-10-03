@@ -81,6 +81,12 @@ const configs = {
     PUBLIC_URL: baseUrl,
     // The fixture server stands in for gravatar.com (ADR 0032).
     GRAVATAR_URL: `${process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'}/gravatar`,
+    // Apps that exist nowhere, so the sheet offers both providers (ADR 0036). tela-api only
+    // builds the provider's authorize URL from them; no spec lets the browser reach a provider.
+    GOOGLE_CLIENT_ID: 'e2e-google-client',
+    GOOGLE_CLIENT_SECRET: 'e2e-google-secret',
+    GITHUB_CLIENT_ID: 'e2e-github-client',
+    GITHUB_CLIENT_SECRET: 'e2e-github-secret',
   }),
   jobs: relocate(join(root, 'apps/jobs/wrangler.jsonc'), {
     ENV: 'test',

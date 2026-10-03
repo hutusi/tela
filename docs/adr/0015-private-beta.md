@@ -2,7 +2,9 @@
 
 Status: accepted (2026-09-06). Amended 2026-09-07: the decision stands, its mechanism was wrong.
 `enable_signup = false` under `[auth.email]` is the email *provider* switch, and setting it there
-locked every existing member out of the live site; only `[auth]` closes registration.
+locked every existing member out of the live site; only `[auth]` closes registration. Invite
+codes, deliberately not built here, are built by ADR 0034 (2026-10-02): every new account needs an
+invitation from a member or the operator. The crawler rule and `TELA_PRIVATE_BETA` stand.
 
 ## Context
 

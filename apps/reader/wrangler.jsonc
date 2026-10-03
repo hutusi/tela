@@ -11,11 +11,13 @@
   "routes": [{ "pattern": "tela.ainaive.com", "custom_domain": true }],
   "observability": { "enabled": true },
   // The SPA's static assets answer every other path for free, without running the Worker; a
-  // path with no asset is the app itself. The Worker runs first only where it has work to do.
+  // path with no asset is the app itself. The Worker runs first only where it has work to do:
+  // "/" is the front page it renders for visitors (ADR 0035), and exactly "/", never "/*".
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": [
+      "/",
       "/api/*",
       "/o/*",
       "/img/*",
@@ -23,7 +25,10 @@
       "/robots.txt",
       "/discover",
       "/s/*",
-      "/@*"
+      "/@*",
+      "/about",
+      "/privacy",
+      "/terms"
     ]
   },
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "tela-content" }],

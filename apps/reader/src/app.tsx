@@ -3,6 +3,7 @@ import { isUiLocale, type UiLocale } from '@tela/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { AppHeader } from './components/app-header'
+import { FrontDoorProvider, ToReading } from './components/front-door'
 import { detectLocale, I18n, localeCookie } from './i18n'
 import { applyTheme, typographyOf } from './lib/typography'
 import { forgetPublic } from './lib/use-public'
@@ -11,6 +12,8 @@ import { ClaimPage, ClaimSitePage } from './pages/claim'
 import { DashboardPage } from './pages/dashboard'
 import { DiscoverPage } from './pages/discover'
 import { FollowingPage } from './pages/following'
+import { InfoPage } from './pages/info'
+import { JoinPage } from './pages/join'
 import { LandingPage } from './pages/landing'
 import { LoginPage } from './pages/login'
 import { NotFoundPage } from './pages/not-found'
@@ -19,6 +22,7 @@ import { ReadingPage } from './pages/reading'
 import { SearchPage } from './pages/search'
 import { SettingsPage } from './pages/settings'
 import { SitePage } from './pages/site'
+import { WritersPage } from './pages/writers'
 import { SessionProvider, useSession } from './session'
 import type { SyncEngine } from './store/engine'
 import { StoreProvider, useStore, useTables } from './store/hooks'
@@ -38,10 +42,22 @@ function Members({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+/**
+ * `/`: a member's reading, and the front page for anyone else (ADR 0035). A device that holds no
+ * account shows the front page while /me is still out, so the edge's copy is not replaced by a
+ * blank page; a member signing in on a new device sees it for that one round trip.
+ */
 function Home() {
   const { status } = useSession()
-  if (status === 'unknown') return null
-  return status === 'member' ? <Navigate to="/reading" replace /> : <LandingPage />
+  const { store } = useStore()
+  if (status === 'member')
+    return (
+      <ToReading>
+        <LandingPage />
+      </ToReading>
+    )
+  if (status === 'guest' || store.userId === null) return <LandingPage />
+  return null
 }
 
 /** `/@handle` shares a segment with every other top-level path, so it is told apart here. */
@@ -121,97 +137,104 @@ function Routed() {
   return (
     <UiContext.Provider value={ui}>
       <I18n locale={locale}>
-        <div className="flex min-h-full flex-col">
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="*"
-              element={
-                <>
-                  <AppHeader />
-                  <Routes>
-                    <Route path="/" element={<Home />} />
-                    <Route
-                      path="/reading"
-                      element={
-                        <Members>
-                          <ReadingPage />
-                        </Members>
-                      }
-                    />
-                    <Route path="/discover" element={<DiscoverPage />} />
-                    <Route
-                      path="/following"
-                      element={
-                        <Members>
-                          <FollowingPage />
-                        </Members>
-                      }
-                    />
-                    <Route path="/s/:siteId" element={<SitePage />} />
-                    <Route
-                      path="/search"
-                      element={
-                        <Members>
-                          <SearchPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/add"
-                      element={
-                        <Members>
-                          <AddPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/settings"
-                      element={
-                        <Members>
-                          <SettingsPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/settings/:section"
-                      element={
-                        <Members>
-                          <SettingsPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/dashboard"
-                      element={
-                        <Members>
-                          <DashboardPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/claim"
-                      element={
-                        <Members>
-                          <ClaimPage />
-                        </Members>
-                      }
-                    />
-                    <Route
-                      path="/sites/:siteId/claim"
-                      element={
-                        <Members>
-                          <ClaimSitePage />
-                        </Members>
-                      }
-                    />
-                    <Route path="*" element={<HandleOrMissing />} />
-                  </Routes>
-                </>
-              }
-            />
-          </Routes>
-        </div>
+        <FrontDoorProvider>
+          <div className="flex min-h-full flex-col">
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="*"
+                element={
+                  <>
+                    <AppHeader />
+                    <Routes>
+                      <Route path="/" element={<Home />} />
+                      <Route path="/join" element={<JoinPage />} />
+                      <Route
+                        path="/reading"
+                        element={
+                          <Members>
+                            <ReadingPage />
+                          </Members>
+                        }
+                      />
+                      <Route path="/discover" element={<DiscoverPage />} />
+                      <Route path="/writers" element={<WritersPage />} />
+                      <Route
+                        path="/following"
+                        element={
+                          <Members>
+                            <FollowingPage />
+                          </Members>
+                        }
+                      />
+                      <Route path="/s/:siteId" element={<SitePage />} />
+                      <Route path="/about" element={<InfoPage page="about" />} />
+                      <Route path="/privacy" element={<InfoPage page="privacy" />} />
+                      <Route path="/terms" element={<InfoPage page="terms" />} />
+                      <Route
+                        path="/search"
+                        element={
+                          <Members>
+                            <SearchPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/add"
+                        element={
+                          <Members>
+                            <AddPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/settings"
+                        element={
+                          <Members>
+                            <SettingsPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/settings/:section"
+                        element={
+                          <Members>
+                            <SettingsPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/dashboard"
+                        element={
+                          <Members>
+                            <DashboardPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/claim"
+                        element={
+                          <Members>
+                            <ClaimPage />
+                          </Members>
+                        }
+                      />
+                      <Route
+                        path="/sites/:siteId/claim"
+                        element={
+                          <Members>
+                            <ClaimSitePage />
+                          </Members>
+                        }
+                      />
+                      <Route path="*" element={<HandleOrMissing />} />
+                    </Routes>
+                  </>
+                }
+              />
+            </Routes>
+          </div>
+        </FrontDoorProvider>
       </I18n>
     </UiContext.Provider>
   )

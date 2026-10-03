@@ -6,6 +6,9 @@ import type { JobQueues, TelaDb } from '@tela/data'
 import type { Ingest } from '@tela/ingest/pipeline'
 import type { Blobs, Clock, Jobs, Mail } from '@tela/platform'
 
+/** An app registered with a sign-in provider (ADR 0036). */
+export type OAuthClient = { clientId: string; clientSecret: string }
+
 export type ApiConfig = {
   /** The public origin readers use (the only one: workers.dev is off). better-auth's base URL. */
   publicUrl: string
@@ -19,6 +22,11 @@ export type ApiConfig = {
   testMode?: boolean
   /** Where Gravatar serves pictures (ADR 0032); tests point it at a fixture. */
   gravatarUrl?: string
+  /**
+   * Tela's apps at Google and GitHub (ADR 0036). A provider is offered, and its sign-in served,
+   * only while its app is here.
+   */
+  oauth?: { google?: OAuthClient; github?: OAuthClient }
 }
 
 export type ApiDeps = {
