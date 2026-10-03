@@ -106,7 +106,7 @@ export const en = {
       'Tela keeps what it needs to run your reading list, and nothing for advertising.',
       "We don't sell your data, show ads or use analytics.",
       'What you read, like and highlight stays private unless you choose to show it. Your profile, your recommendations and the blogs you claim are public.',
-      "You can export your subscriptions as OPML, and download everything you've done as one file, whenever you like.",
+      'You can export your subscriptions as OPML, and download your profile, settings, subscriptions, likes, recommendations, highlights and follows as one file, whenever you like.',
     ],
     sections: {
       collect: {
@@ -140,7 +140,7 @@ export const en = {
           {
             list: [
               'Each signed-in session keeps the IP address and browser it started from.',
-              'Sign-in attempts are counted per IP address, and some actions per account, to stop abuse.',
+              'To stop abuse, sign-in attempts, codes and joins are counted per IP address and per email address, whether or not that address has an account, and some actions per account.',
               'Cloudflare, which runs Tela, logs each request: the address asked for, the time, your browser, and network details such as your IP address.',
               'Tela uses no analytics.',
             ],
@@ -271,7 +271,7 @@ export const en = {
           {
             list: [
               'When a session ends, its record, with its IP address and browser, is deleted within a day. A session ends when you sign out, or after 60 days without use.',
-              'Sign-in attempt counters, which hold your IP address, are deleted after a day.',
+              'The counters that stop abuse, which hold an IP address, an email address or an account number, are deleted after a day.',
               'Cloudflare keeps its request logs for 7 days.',
               'A recommendation or highlight you remove stays in the database marked as removed, with its text, so your other devices catch up.',
               'Cloudflare keeps a 30-day restore point of the whole database, and Tela copies the database every night, keeping each copy 30 days. Something you change or remove can stay in either that long. The nightly copy leaves out sessions, sign-in codes and abuse counters.',
@@ -285,7 +285,7 @@ export const en = {
           {
             list: [
               'Export your subscriptions as OPML in Settings → Subscriptions.',
-              "Download everything you've done as one file in Settings → Privacy → Your data.",
+              'Download your profile, settings, subscriptions, likes, recommendations, highlights and the people you follow as one file in Settings → Privacy → Your data.',
               'Choose what others see in Settings → Privacy. Your picture and Gravatar are in Settings → Profile; an uploaded picture you remove is deleted.',
               'Set or change a password, link or unlink Google and GitHub, and sign out everywhere in Settings → Account.',
               'See the invite codes you made and who joined with them in Settings → Invites, and revoke one nobody has used.',
@@ -300,7 +300,7 @@ export const en = {
         heading: 'Changes',
         blocks: [
           {
-            p: "The date at the top says when this page last changed. If a change affects how your data is used, we'll say so on Tela before it applies.",
+            p: 'The date at the top changes when this page does.',
           },
         ],
       },
@@ -425,7 +425,7 @@ export const en = {
         heading: 'Changes',
         blocks: [
           {
-            p: "We may update these terms, and the date at the top says when. If a change matters, we'll say so on Tela before it applies.",
+            p: 'We may update these terms. The date at the top changes when they do.',
           },
         ],
       },
