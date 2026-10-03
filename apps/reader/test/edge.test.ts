@@ -526,7 +526,7 @@ describe('public pages', () => {
     expect(privacy).toMatch(/<meta name="description" content="Tela keeps what it needs/)
     expect(privacy).toContain('id="cookies"')
     expect(privacy).toContain('href="#cookies"')
-    expect(privacy).toContain('Last updated 2 October 2026')
+    expect(privacy).toContain('Last updated 3 October 2026')
     expect(apiCalls).toEqual([])
     // Three pages, once each: the second visit to Privacy came from the cache.
     expect(cache.size).toBe(3)
@@ -537,7 +537,7 @@ describe('public pages', () => {
     expect(zh).toContain('<html lang="zh-Hans"')
     expect(zh).toContain('<title>条款 · Tela</title>')
     expect(zh).toContain('id="writers"')
-    expect(zh).toContain('最后更新：2026年10月2日')
+    expect(zh).toContain('最后更新：2026年10月3日')
     const en = await (await page('/terms')).text()
     expect(en).toContain('<html lang="en"')
     expect(en).toContain('<title>Terms · Tela</title>')
