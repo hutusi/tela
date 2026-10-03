@@ -365,7 +365,10 @@ describe('signing in with a code', () => {
       body: await answer.text(),
     })
     // A member's code is stored, a stranger's never is: only the member's could be used up.
-    const fourth = async (check: (email: string) => Promise<Response>, email: string) => {
+    const fourth = async (
+      check: (email: string) => Response | Promise<Response>,
+      email: string,
+    ) => {
       for (let i = 0; i < 3; i++) await check(email)
       return heard(await check(email))
     }
