@@ -384,7 +384,9 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
     `sessions not ended` in the logs when either fails; neither undoes the change). A link that
     fails comes back to `/settings?error=<code>`, better-auth's: `account_already_linked_to_different_user`
     for a provider identity another member has linked, `unable_to_link_account` for an address the
-    provider has not verified.
+    provider has not verified, or for a browser that no longer holds a live session of the
+    member's when the provider sends it back (it was signed out meanwhile, or signed in as someone
+    else): nothing is written, and the member links again from a live session.
   - `404 {"error":"not_found"}` from a `/api/auth/*` path is tela-api, not better-auth: only the
     endpoints in `AUTH_ENDPOINTS` (`apps/api/src/app.ts`) and the sign-out are served (ADR 0036).
     A better-auth feature turned on later answers 404 until its endpoint is added there.

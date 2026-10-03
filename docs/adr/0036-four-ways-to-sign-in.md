@@ -118,7 +118,11 @@ are security state, decided on the server, and a device's copy of them would be 
 when it matters. Every call reads the session from D1 (`disableCookieCache`), because a session a
 reset or "sign out everywhere" revoked lives on in the five-minute signed cookie elsewhere. Adding a
 method needs a session made within the last day (`freshAge`) and revokes the member's other
-sessions; changing the password needs the current one. Every change mails the member a security
+sessions; changing the password needs the current one. A link is written at the provider's return,
+where better-auth trusts the OAuth state and its cookie alone, so Tela writes it only for a browser
+that still holds a live session of the member's, read from D1 (`account.create.before`): a session
+that "sign out everywhere" or a reset ended while the provider was asking must not finish the link
+it started, and then sign out the member who ended it. Every change mails the member a security
 notice, so a method someone else added does not go unnoticed. Each change is limited per member;
 ending the other sessions is not, since anyone holding one of the member's sessions could spend the
 count, and so keep the member from ending it.
@@ -151,9 +155,11 @@ better-auth adds later (One Tap, an ID token) is refused rather than trusted.
   on the first deploy; if it is too dear, the fallback is a `node:crypto` scrypt with r=8 behind a
   versioned prefix. The D1 suite proves a password round trip in workerd. Hashes are written alike
   under workerd, Bun and Node, so they survive leaving Cloudflare (0021).
-- A better-auth upgrade must keep four behaviours, each pinned by a test: a thrown `APIError` in
+- A better-auth upgrade must keep five behaviours, each pinned by a test: a thrown `APIError` in
   `create.before` becomes a callback redirect carrying its code; `addOAuthServerContext` reaches the
-  callback; a reset creates a credential account; `setPassword` stays server-only.
+  callback; a `false` from `account.create.before` at a link's return writes nothing and redirects
+  with `unable_to_link_account`; a reset creates a credential account; `setPassword` stays
+  server-only.
 - `account` gains a unique index on `(provider_id, account_id)`, which `auth generate` does not
   make. Without it two links at once can write a duplicate, and better-auth then refuses that
   identity for good.

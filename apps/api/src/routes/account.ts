@@ -16,9 +16,10 @@
  * five-minute signed copy the other routes trust, so a session that a reset or "sign out
  * everywhere" ended can do nothing here while its copy lives on. Setting or changing the password
  * ends the member's other sessions, and every change mails them a notice; a link does both at the
- * provider's return (`auth.ts`). tela-api's own calls to better-auth pass none of its limits, so
- * each change is counted per member, once it is known to be one: a refusal for a stale session or
- * an account that is not the member's spends nothing.
+ * provider's return (`auth.ts`), and is written there only while the browser that comes back still
+ * holds one of the member's sessions, read from D1 as here. tela-api's own calls to better-auth
+ * pass none of its limits, so each change is counted per member, once it is known to be one: a
+ * refusal for a stale session or an account that is not the member's spends nothing.
  */
 import { consumeLimit, type LimitedAction } from '@tela/data'
 import { isAPIError } from 'better-auth/api'
@@ -143,7 +144,11 @@ export function accountRoutes(deps: ApiDeps, auth: Auth) {
     } catch (err) {
       return refused(c, err)
     }
-    await endOtherSessions(db, member.id, c.get('session').token)
+    // The password is changed by now, and neither failure below undoes it: each is logged, as at
+    // a link's return, and the member is told whether or not the other sessions ended.
+    await endOtherSessions(db, member.id, c.get('session').token).catch((err) =>
+      console.error('sessions not ended', member.id, err),
+    )
     await notify(member, { kind: hasPassword ? 'password-changed' : 'password-set' })
     return c.json({ ok: true })
   })

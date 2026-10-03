@@ -34,7 +34,7 @@ import {
   getOAuthState,
 } from 'better-auth/api'
 import { emailOTP } from 'better-auth/plugins'
-import { and, eq, ne, sql } from 'drizzle-orm'
+import { and, eq, gt, ne, sql } from 'drizzle-orm'
 import type { ApiConfig, ApiDeps } from './deps'
 import { accountChangeMail, passwordResetMail, providerAccountMail, signInMail } from './mail'
 
@@ -269,6 +269,25 @@ export async function endOtherSessions(
 }
 
 /**
+ * Whether `token` is one of the member's sessions and has not ended, read from D1 rather than any
+ * signed copy. better-auth stamps a session's expiry with the wall clock, not tela-api's.
+ */
+async function isLiveSession(db: TelaDb, userId: string, token: string): Promise<boolean> {
+  const found = await db
+    .select({ id: schema.session.id })
+    .from(schema.session)
+    .where(
+      and(
+        eq(schema.session.token, token),
+        eq(schema.session.userId, userId),
+        gt(schema.session.expiresAt, new Date()),
+      ),
+    )
+    .limit(1)
+  return found.length > 0
+}
+
+/**
  * What a sign-in finds missing from what making the account should have written, written now: a
  * profile, when the insert that follows the user's failed, and the settlement of the invitation
  * that admitted them. One read when nothing is.
@@ -473,14 +492,38 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       // rest is one more thing to leak.
       account: {
         create: {
-          before: async () => ({ data: NO_TOKENS }),
+          /**
+           * A provider linked from Settings is written only for a browser that still holds one of
+           * the member's sessions, live in D1 (ADR 0036). The link was started on a fresh session,
+           * but better-auth's callback trusts the OAuth state and its cookie alone, and the
+           * provider may return ten minutes later: a session that "sign out everywhere", a
+           * password change or a reset ended in the meantime would still finish the link it
+           * started, and its return would then end every session the member has, the one that
+           * cleaned up included. A `false` writes no account, so nothing below runs, and
+           * better-auth answers `/settings?error=unable_to_link_account`.
+           */
+          before: async (_account, context) => {
+            if (context?.path !== PROVIDER_RETURN) return { data: NO_TOKENS }
+            const link = (await getOAuthState().catch(() => null))?.link
+            if (link) {
+              const token = await context.getSignedCookie(
+                context.context.authCookies.sessionToken.name,
+                context.context.secret,
+              )
+              if (typeof token !== 'string' || !(await isLiveSession(db, link.userId, token))) {
+                return false
+              }
+            }
+            return { data: NO_TOKENS }
+          },
           /**
            * A provider linked from Settings (`/api/v1/account/link`) is a way in added, and it is
            * added here, at the provider's return: the member's other sessions end, the browser's
-           * own is kept, and their address is told (ADR 0036). The OAuth state names the member
-           * the link was started for, as only the server writes it; an account a provider makes
-           * for a new member has no link in its state, and is told in `user.create.after`.
-           * Neither failure undoes the link, which is written by then: each is logged.
+           * own, which `before` found live, is kept, and their address is told (ADR 0036). The
+           * OAuth state names the member the link was started for, as only the server writes it;
+           * an account a provider makes for a new member has no link in its state, and is told in
+           * `user.create.after`. Neither failure undoes the link, which is written by then: each
+           * is logged.
            */
           after: async (account, context) => {
             if (context?.path !== PROVIDER_RETURN) return

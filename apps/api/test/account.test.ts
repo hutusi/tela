@@ -6,7 +6,7 @@
  * in for by a `fetch` that answers its token and profile endpoints, as in `oauth.test.ts`.
  */
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
-import { consumeLimit, first } from '@tela/data'
+import { consumeLimit, first, schema } from '@tela/data'
 import { MEMBER_HEADER } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import {
@@ -119,12 +119,19 @@ const logIn = (api: TestApi, email: string, password: string) =>
   })
 
 /**
- * Link GitHub as Settings does: start at `/api/v1/account/link`, then come back from GitHub with
- * the browser's cookies, the member's session and the state cookie the start set.
+ * Link GitHub as Settings does: start at `/api/v1/account/link`, then come back from GitHub.
  */
 async function linkGithub(api: TestApi, as: SignedIn) {
   const started = await account(api, as, '/link', { provider: 'github' })
   expect(started.status).toBe(200)
+  return backFromGithub(api, as, started)
+}
+
+/**
+ * Come back from the GitHub a link `started`, with the browser's cookies: the session in `as`, and
+ * the state cookie the start set.
+ */
+async function backFromGithub(api: TestApi, as: SignedIn, started: Response) {
   const { url } = (await started.clone().json()) as { url: string }
   const state = encodeURIComponent(new URL(url).searchParams.get('state') ?? '')
   return api.request(`/api/auth/callback/github?code=from-github&state=${state}`, {
@@ -242,6 +249,31 @@ describe('a password', () => {
     ])
     expect((await quietly(() => logIn(api, 'a@x.test', PASSWORD))).status).toBe(401)
     expect((await logIn(api, 'a@x.test', 'a newer password')).status).toBe(200)
+  })
+
+  test('once set, is told to the member even when the other sessions could not be ended', async () => {
+    const api = await createTestApi()
+    const member = await signedIn(api, 'a@x.test')
+    const other = await anotherSession(api, member, 'a@x.test')
+    const remove = api.db.delete.bind(api.db)
+    const failing = spyOn(api.db, 'delete').mockImplementation(((table) => {
+      if (Object.is(table, schema.session)) throw new Error('D1 is away')
+      return remove(table)
+    }) as typeof api.db.delete)
+    const errors = spyOn(console, 'error').mockImplementation(() => {})
+    const set = await account(api, member, '/password', { newPassword: PASSWORD })
+    const logged = errors.mock.calls.map(([what]) => what)
+    failing.mockRestore()
+    errors.mockRestore()
+
+    // The password is set by then, so it is answered as set, logged, and told all the same.
+    expect(set.status).toBe(200)
+    expect(logged).toEqual(['sessions not ended'])
+    expect(await live(api, other)).toBe(true)
+    expect(notices(api, 'a@x.test')).toEqual([
+      'A password was added to your Tela account · 你的 Tela 账号已设置密码',
+    ])
+    expect((await logIn(api, 'a@x.test', PASSWORD)).status).toBe(200)
   })
 
   test('changes are counted per member, five in fifteen minutes, and a wrong length is not one', async () => {
@@ -374,6 +406,36 @@ describe('a provider', () => {
     expect(returned.headers.get('location')).toBe('/reading')
     const me = await api.request('/api/v1/me', { cookie: cookiesOf(returned) })
     expect(await me.json()).toMatchObject({ id: member.userId })
+  })
+
+  test('is linked only while the browser that returns holds a live session of the member’s', async () => {
+    const api = await createTestApi({ oauth: { github: GITHUB } })
+    const member = await signedIn(api, 'a@x.test')
+    const stranger = await signedIn(api, 'b@x.test')
+
+    // A session someone else holds starts a link, and the member ends it while GitHub is asking.
+    const stolen = await anotherSession(api, member, 'a@x.test')
+    const started = await account(api, stolen, '/link', { provider: 'github' })
+    expect(started.status).toBe(200)
+    expect(await (await account(api, member, '/sign-out-everywhere', {})).json()).toEqual({
+      ended: 1,
+    })
+    const back = await quietly(() => backFromGithub(api, stolen, started))
+    expect(back.headers.get('location')).toBe('/settings?error=unable_to_link_account')
+
+    // Nor does another member's session finish it, live as that one is.
+    const again = await anotherSession(api, member, 'a@x.test')
+    const restarted = await account(api, again, '/link', { provider: 'github' })
+    expect(restarted.status).toBe(200)
+    await account(api, member, '/sign-out-everywhere', {})
+    const crossed = await quietly(() => backFromGithub(api, stranger, restarted))
+    expect(crossed.headers.get('location')).toBe('/settings?error=unable_to_link_account')
+
+    // Nothing linked, nobody signed out, nobody told.
+    expect(await api.db.all(sql`select user_id from account`)).toEqual([])
+    expect([await live(api, member), await live(api, stranger)]).toEqual([true, true])
+    expect(notices(api, 'a@x.test')).toEqual([])
+    expect(notices(api, 'b@x.test')).toEqual([])
   })
 
   test('another member holds is refused at the return, with nothing ended or told', async () => {
