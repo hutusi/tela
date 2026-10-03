@@ -221,9 +221,12 @@ with GitHub*, quiet 44 px pills, only once tela-api says they are configured, th
 (*Email me a code*, or *Log in*); and to log in, a toggle between *Log in with a password* and
 *Email me a code instead*. Inputs are 44 px, 10 px corners, a `thumb` border that turns `ink` on
 focus, on `paper` inside the sheet and `surface` on the page. The code step asks for the 6-digit
-code, and when joining an optional *Choose a password*, set once the code has made the account.
-Joining says "No code? Tela is invite-only for now: ask a member for one." and "By joining you
-agree to the Terms; see Privacy."; a rule then offers the other door (*New to Tela? Join*,
+code, and when joining an optional *Choose a password*, set once the code has made the account. A
+log-in's code step says a code is on its way *if* the address has an account or an invitation,
+since the form never says which; a join's says it was sent. Each new step takes the focus to its
+first field. Joining says "No code? Tela is invite-only for now: ask a member for one." and "By
+joining you agree to the Terms; see Privacy.", whose links open in a new tab so the sheet and its
+invite code stay; a rule then offers the other door (*New to Tela? Join*,
 *Already have an account? Log in*), which the sheet switches to in place. Esc and ✕ close the
 sheet unless a request is out; `/join` closes to `/`. Each error has its own words
 (`door.errors.*`): too many tries is never a wrong code, the gate's refusal is never a typo, and

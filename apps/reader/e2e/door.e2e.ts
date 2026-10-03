@@ -127,7 +127,8 @@ test.describe('the Log in sheet, by code', () => {
     const before = await mails(request, email)
     await sheet.getByTestId('login-email').fill(email)
     await sheet.getByTestId('login-submit').click()
-    await expect(sheet.getByTestId('login-code')).toBeVisible()
+    // The new step takes the focus: the field that held it is gone.
+    await expect(sheet.getByTestId('login-code')).toBeFocused()
     await sheet.getByTestId('login-code').fill(await codeAfter(request, email, before))
     await sheet.getByTestId('login-submit').click()
     await expect(page).toHaveURL(/\/reading$/)
@@ -190,6 +191,10 @@ test.describe('Join, with an invite code', () => {
     await page.getByTestId('nav-join').click()
     const sheet = page.getByTestId('front-door')
     await expect(sheet.getByTestId('join-code')).toBeFocused()
+    // Terms and Privacy open beside the sheet, which keeps the code typed into it.
+    for (const id of ['door-terms', 'door-privacy']) {
+      await expect(sheet.getByTestId(id)).toHaveAttribute('target', '_blank')
+    }
     // A code nobody made: no mail, and the sheet says so.
     await sheet.getByTestId('join-code').fill('NOSUCHCODE')
     await sheet.getByTestId('login-email').fill(email)

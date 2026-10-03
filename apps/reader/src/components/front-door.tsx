@@ -193,12 +193,27 @@ export function DoorForm(props: DoorFormProps) {
   const [otp, setOtp] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const { step, busy, connecting } = door
+  const form = useRef<HTMLFormElement>(null)
+  const sentId = useId()
   // A new step starts with its own fields empty.
   // biome-ignore lint/correctness/useExhaustiveDependencies: on each change of step, by its kind
   useEffect(() => {
     setOtp('')
     setNewPassword('')
   }, [step.kind])
+  // …and takes the focus to its first field, or with none its button, as the sheet does when it
+  // opens: the field that held it is gone, and focus left on the page says nothing to a screen
+  // reader. Once the request is back, since a button is disabled until then.
+  const focused = useRef(step.kind)
+  useEffect(() => {
+    if (busy || focused.current === step.kind) return
+    focused.current = step.kind
+    const el = form.current
+    const target =
+      el?.querySelector<HTMLElement>('[data-autofocus]') ??
+      el?.querySelector<HTMLElement>('button[type="submit"]')
+    target?.focus()
+  }, [step.kind, busy])
   if (props.busyRef) props.busyRef.current = busy
   if (door.settled) return null
 
@@ -259,6 +274,7 @@ export function DoorForm(props: DoorFormProps) {
       onChange={(e) => setOtp(e.target.value)}
       placeholder={t('codePlaceholder')}
       aria-label={t('codePlaceholder')}
+      aria-describedby={sentId}
       data-testid="login-code"
       data-autofocus
       className={`${field} font-mono text-lg tracking-widest`}
@@ -283,7 +299,7 @@ export function DoorForm(props: DoorFormProps) {
           ) : null}
         </div>
       ) : null}
-      <form onSubmit={submit} className="flex flex-col gap-3" data-testid="login-form">
+      <form ref={form} onSubmit={submit} className="flex flex-col gap-3" data-testid="login-form">
         {step.kind === 'start' ? (
           <>
             {joining ? (
@@ -366,7 +382,11 @@ export function DoorForm(props: DoorFormProps) {
           </>
         ) : step.kind === 'code' ? (
           <>
-            <p className="text-sm text-ink-2">{t('codeSent', { email: step.email })}</p>
+            {/* A join always mails a code; a log-in mails one only to an account or an invitation,
+                and says nothing of which. */}
+            <p id={sentId} className="text-sm text-ink-2">
+              {t(step.joining ? 'joinSent' : 'codeSent', { email: step.email })}
+            </p>
             {codeField}
             {step.joining ? (
               <>
@@ -379,7 +399,9 @@ export function DoorForm(props: DoorFormProps) {
           </>
         ) : step.kind === 'reset' ? (
           <>
-            <p className="text-sm text-ink-2">{t('resetSent', { email: step.email })}</p>
+            <p id={sentId} className="text-sm text-ink-2">
+              {t('resetSent', { email: step.email })}
+            </p>
             {codeField}
             {newPasswordField('login-new-password', t('newPassword', { min: PASSWORD_MIN }), true)}
           </>
@@ -453,9 +475,18 @@ export function DoorForm(props: DoorFormProps) {
         <div className="flex flex-col gap-1.5 text-[13px] leading-relaxed text-muted">
           <p>{t('noCode')}</p>
           <p>
+            {/* In a tab of their own: the sheet, and the invite code in it, stay where they are. */}
             {t.rich('agree', {
-              terms: (chunks) => <Link to="/terms">{chunks}</Link>,
-              privacy: (chunks) => <Link to="/privacy">{chunks}</Link>,
+              terms: (chunks) => (
+                <a href="/terms" target="_blank" rel="noopener" data-testid="door-terms">
+                  {chunks}
+                </a>
+              ),
+              privacy: (chunks) => (
+                <a href="/privacy" target="_blank" rel="noopener" data-testid="door-privacy">
+                  {chunks}
+                </a>
+              ),
             })}
           </p>
         </div>

@@ -12,7 +12,7 @@
  *   itself would put whoever opened it into the account of whoever sent it, a login CSRF.
  *
  * Nothing here can say whether an address has an account: a code, a reset and a wrong password
- * are answered the same for a member and for a stranger.
+ * are answered the same for a member and for a stranger (though not in the same time: ADR 0036).
  */
 import { normalizeInviteCode } from '@tela/shared'
 import { useEffect, useRef, useState } from 'react'
