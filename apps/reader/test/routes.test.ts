@@ -8,6 +8,7 @@ import { addError } from '../src/lib/opml'
 import { safeDecode } from '../src/lib/safe-decode'
 import {
   codeError,
+  doorRoutes,
   errorReturn,
   joinError,
   loginPath,
@@ -163,6 +164,28 @@ describe('answers the pages turn into messages', () => {
       '/\r//evil.example',
     ]
     for (const next of elsewhere) expect(safeNext(next)).toBe('/reading')
+  })
+  test('the sheet sends a member it finds already in where a member goes, not to Discover', () => {
+    // Signed in by the sheet: a joiner is a newcomer, a log-in goes where it was asked to.
+    expect(doorRoutes('join', null, null)).toEqual({
+      next: '/discover',
+      newcomer: '/discover',
+      settledNext: '/reading',
+    })
+    expect(doorRoutes('login', '/settings', null)).toEqual({
+      next: '/settings',
+      newcomer: '/discover',
+      settledNext: '/settings',
+    })
+    expect(doorRoutes('login', '//evil.example', null).settledNext).toBe('/reading')
+    // A card is for its claim, whoever opens it.
+    for (const mode of ['join', 'login'] as const) {
+      expect(doorRoutes(mode, null, '/claim?url=x')).toEqual({
+        next: '/claim?url=x',
+        newcomer: '/claim?url=x',
+        settledNext: '/claim?url=x',
+      })
+    }
   })
   test("a mailed link's code is read, and nothing but where to go next stays in the address", () => {
     const link = (query: string) => new URLSearchParams(query)

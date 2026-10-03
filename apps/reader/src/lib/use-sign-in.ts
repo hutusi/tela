@@ -49,6 +49,25 @@ export function safeNext(next: string | null, fallback = '/reading'): string {
   }
 }
 
+/**
+ * Where the sheet sends whoever it lets in. One it signs in goes to `next`: the blog a card claims,
+ * a log-in's own `next`, or for a joiner Discover. One it finds already a member (`/me` answering
+ * while it is open) was not signed in by it, and goes where a member goes: a log-in's `next` still,
+ * but a join has nothing to make, so its reading rather than a newcomer's Discover.
+ */
+export function doorRoutes(
+  mode: DoorMode,
+  asked: string | null,
+  claim: string | null,
+): { next: string; newcomer: string; settledNext: string } {
+  const next = claim ?? (mode === 'login' ? safeNext(asked) : NEWCOMER)
+  return {
+    next,
+    newcomer: claim ?? NEWCOMER,
+    settledNext: mode === 'join' && !claim ? safeNext(null) : next,
+  }
+}
+
 /** What a mailed link carries: a sign-in code, or with `reset=1` a password reset's code. */
 export type MailLink = { email: string; otp: string; reset: boolean }
 
@@ -231,6 +250,11 @@ export type SignInStep =
 export type SignInOptions = {
   /** Where to go once signed in. */
   next: string
+  /**
+   * Where a member the form did not sign in goes, found at the start (`settled`): `next` unless
+   * said otherwise.
+   */
+  settledNext?: string | undefined
   /** Where an account made by Google or GitHub goes first. */
   newcomer: string
   /** Where tela-api sends a refused Google or GitHub sign-in back to. */
@@ -298,13 +322,13 @@ export function useSignIn(options: SignInOptions) {
   const latest = useRef(options)
   latest.current = options
 
-  const leave = async () => {
+  const leave = async (then?: string) => {
     if (left.current) return
     left.current = true
     const { claim } = latest.current
     // A card is this form's to finish while it is open; a copy kept for the app goes.
     if (claim) takeClaim()
-    const to = claim ? await finishCard(claim) : latest.current.next
+    const to = claim ? await finishCard(claim) : (then ?? latest.current.next)
     latest.current.onDone?.()
     navigate(to, { replace: latest.current.replace ?? false })
   }
@@ -341,12 +365,13 @@ export function useSignIn(options: SignInOptions) {
     void finishing.current().finally(() => setBusy(false))
   }, [waiting, status])
 
-  // A member has nothing to do at the start: they go on (a member shown a link stays to answer it,
-  // since it may be for another account, which is how one switches).
+  // A member has nothing to do at the start: they go on, where a member goes rather than where one
+  // this form signs in would (a member shown a link stays to answer it, since it may be for
+  // another account, which is how one switches).
   const settled = status === 'member' && !busy && !waiting && step.kind === 'start'
   // biome-ignore lint/correctness/useExhaustiveDependencies: `leave` reads the latest options through a ref
   useEffect(() => {
-    if (settled) void leave()
+    if (settled) void leave(latest.current.settledNext)
   }, [settled])
 
   const run = async (work: () => Promise<void>, fallback: SignInError = 'failed') => {
@@ -509,7 +534,7 @@ export function useSignIn(options: SignInOptions) {
      * Until the form lets go, it says where a member goes, not the page it is over.
      */
     carrying: busy || waiting || step.kind === 'unsaved',
-    /** A member at the start, leaving for `next`: nothing to show. */
+    /** A member at the start, leaving for `settledNext`: nothing to show. */
     settled,
     sendCode,
     join,

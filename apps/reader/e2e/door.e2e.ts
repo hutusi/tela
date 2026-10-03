@@ -14,6 +14,7 @@ import {
   joinAndReadCode,
   latestCode,
   measureHeader,
+  STATE_FILE,
   signInRequest,
 } from './helpers'
 
@@ -318,6 +319,41 @@ test.describe('Join, while the chosen password saves', () => {
       expect(visited).not.toContain('/reading')
       await expect(page.getByTestId('account-menu')).toBeVisible()
     })
+  })
+})
+
+test.describe('a member at /join', () => {
+  /**
+   * A tab with the member's cookie and nothing on the device does not know whom it holds until /me
+   * answers, so `/join` opens the sheet meanwhile. The sheet did not sign them in: once /me names
+   * them, they go where a member goes, not to the Discover a joiner the sheet signs in lands on.
+   */
+  test('with a code and no copy on the device, goes on to their reading', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: STATE_FILE })
+    try {
+      const page = await context.newPage()
+      const visited: string[] = []
+      page.on('framenavigated', (frame) => {
+        if (frame === page.mainFrame()) visited.push(new URL(frame.url()).pathname)
+      })
+      let release = () => {}
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      await page.route('**/api/v1/me', async (route) => {
+        await held
+        await route.continue()
+      })
+      await page.goto('/join?code=E2EMEMBERCODE')
+      const sheet = page.getByTestId('front-door')
+      await expect(sheet.getByTestId('join-code')).toHaveValue('E2EMEMBERCODE')
+      release()
+      await expect(page).toHaveURL(/\/reading$/)
+      await expect(sheet).toHaveCount(0)
+      expect(visited).not.toContain('/discover')
+    } finally {
+      await context.close()
+    }
   })
 })
 

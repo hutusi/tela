@@ -23,16 +23,15 @@ import { useTranslations } from 'use-intl'
 import { type CardClaim, claimPath, finishCard, takeClaim } from '../lib/claim-card'
 import {
   type DoorMode,
+  doorRoutes,
   errorReturn,
   type MailLink,
-  NEWCOMER,
   PASSWORD_MAX,
   PASSWORD_MIN,
   PROVIDERS,
   type Provider,
   providerError,
   type SignInError,
-  safeNext,
   takeInvite,
   useSignIn,
   withoutDoor,
@@ -168,6 +167,8 @@ export type DoorFormProps = {
   title?: string
   titleId?: string
   next: string
+  /** Where a member found already in goes; `next` without it. */
+  settledNext?: string | undefined
   newcomer: string
   errorReturn: (provider: Provider) => string
   invite?: string | undefined
@@ -193,6 +194,7 @@ export function DoorForm(props: DoorFormProps) {
   const { mode, place } = props
   const door = useSignIn({
     next: props.next,
+    settledNext: props.settledNext,
     newcomer: props.newcomer,
     errorReturn: props.errorReturn,
     link: props.link,
@@ -576,12 +578,11 @@ function Sheet({
     request.mode === 'claim'
       ? { handle: request.handle, name: request.name, url: request.blog }
       : undefined
-  const claim = card ? claimPath(card.url) : null
-  const next =
-    claim ??
-    (mode === 'login'
-      ? safeNext(request.mode === 'login' ? (request.next ?? null) : null)
-      : NEWCOMER)
+  const { next, newcomer, settledNext } = doorRoutes(
+    mode,
+    request.mode === 'login' ? (request.next ?? null) : null,
+    card ? claimPath(card.url) : null,
+  )
   const close = () => {
     if (!busy.current) onClose()
   }
@@ -606,7 +607,8 @@ function Sheet({
           : {})}
         titleId={titleId}
         next={next}
-        newcomer={claim ?? NEWCOMER}
+        settledNext={settledNext}
+        newcomer={newcomer}
         // The address as it is now, not as the router last read it: a page may have taken a code
         // or an error out of it since (`/join?code=`).
         errorReturn={(p) => errorReturn(window.location.pathname, window.location.search, mode, p)}
