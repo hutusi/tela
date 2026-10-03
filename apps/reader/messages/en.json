@@ -298,7 +298,7 @@
       "no_feed": "No feed found at that address. Tela lists sites that publish a feed.",
       "rate_limited": "Too many claim attempts. Please wait a little and try again."
     },
-    "taken": "The handle you picked was taken while you joined, so yours is still a temporary one. Choose another in <link>Settings</link>."
+    "taken": "The handle you picked belongs to someone else, so yours is still a temporary one. Choose another in <link>Settings</link>."
   },
   "writers": {
     "title": "For writers",

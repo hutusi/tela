@@ -3,7 +3,7 @@
  * the check. The check runs in tela-jobs; this page asks how it went every few seconds.
  *
  * For writers' card lands here as `/claim?url=…`, the address filled in, and with `&taken=1`
- * when the handle it chose was someone else's by the time the account was made.
+ * when the handle it chose is another member's.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'

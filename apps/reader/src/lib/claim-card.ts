@@ -25,7 +25,7 @@ const PROVISIONAL = /^u_[0-9a-f]{10}$/
 export const isProvisional = (handle: string | null | undefined) =>
   typeof handle === 'string' && PROVISIONAL.test(handle)
 
-/** Where a card goes on to: claiming its blog, saying so when the handle was someone else's. */
+/** Where a card goes on to: claiming its blog, saying so when the handle is someone else's. */
 export function claimPath(url: string, taken = false): string {
   const params = new URLSearchParams()
   if (url) params.set('url', url)
@@ -86,9 +86,12 @@ async function putProfile(body: Record<string, string>): Promise<number> {
 
 /**
  * Give the member the card's handle and name while theirs is still provisional, and say where to
- * go next. A handle someone took meanwhile (409) or the server refuses (400) still sets the name,
- * and the claim page says the handle was not theirs. Anything else that fails goes on to the claim
- * all the same: the blog is what they came for, and the name can be set in Settings.
+ * go next. A handle another member holds (409 `handle_taken`, whether taken meanwhile or all along,
+ * since For writers lets a taken one through) still sets the name, and the claim page says the
+ * handle is someone else's. One the server refuses (400 `invalid_handle`: reserved, say, which For
+ * writers already said) sets the name and says nothing more: "someone else's" would not be true.
+ * Anything else that fails goes on to the claim all the same: the blog is what they came for, and
+ * the name can be set in Settings.
  */
 export async function finishCard(claim: CardClaim): Promise<string> {
   if (!isProvisional(await currentHandle())) return claimPath(claim.url)
@@ -101,5 +104,5 @@ export async function finishCard(claim: CardClaim): Promise<string> {
   const status = await putProfile({ handle: claim.handle, ...named })
   if (status !== 400 && status !== 409) return claimPath(claim.url)
   if (displayName) await putProfile(named)
-  return claimPath(claim.url, true)
+  return claimPath(claim.url, status === 409)
 }

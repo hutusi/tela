@@ -225,11 +225,18 @@ describe('the card through signing in', () => {
     expect(puts).toEqual([{ handle: 'ada', displayName: 'Ada Lovelace' }])
   })
 
-  test('a handle taken meanwhile still sets the name, and the claim says so', async () => {
+  test('a handle someone else holds still sets the name, and the claim says so', async () => {
     const puts = api('u_0123456789', (body) => (body.handle ? 409 : 200))
     const to = await finishCard({ handle: 'ada', name: 'Ada', url: 'https://ada.dev' })
     expect(to).toBe('/claim?url=https%3A%2F%2Fada.dev&taken=1')
     expect(puts).toEqual([{ handle: 'ada', displayName: 'Ada' }, { displayName: 'Ada' }])
+  })
+
+  test('a handle the server refuses still sets the name, and is not called taken', async () => {
+    const puts = api('u_0123456789', (body) => (body.handle ? 400 : 200))
+    const to = await finishCard({ handle: 'admin', name: 'Ada', url: 'https://ada.dev' })
+    expect(to).toBe('/claim?url=https%3A%2F%2Fada.dev')
+    expect(puts).toEqual([{ handle: 'admin', displayName: 'Ada' }, { displayName: 'Ada' }])
   })
 
   test('a member who chose their handle keeps it', async () => {
