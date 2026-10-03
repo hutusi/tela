@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigationType } from 'react-router'
 import { useTranslations } from 'use-intl'
 import type { InfoPageId } from '../content/info/types'
+import { safeDecode } from '../lib/safe-decode'
 import { useTitle } from '../lib/title'
 import { useUi } from '../ui'
 import { InfoView } from '../views/info'
@@ -20,9 +21,11 @@ export function InfoPage({ page }: { page: InfoPageId }) {
   const navigation = useNavigationType()
   // biome-ignore lint/correctness/useExhaustiveDependencies: on each tab and anchor, as it was reached
   useEffect(() => {
-    const id = decodeURIComponent(hash.slice(1))
-    if (id) document.getElementById(id)?.scrollIntoView()
-    else if (navigation !== 'POP') window.scrollTo(0, 0)
+    if (hash.length > 1) {
+      // One that does not decode (`#%`) names no section, as an unknown one names none.
+      const id = safeDecode(hash.slice(1))
+      if (id) document.getElementById(id)?.scrollIntoView()
+    } else if (navigation !== 'POP') window.scrollTo(0, 0)
   }, [hash, page])
   return <InfoView page={page} locale={locale} year={year} />
 }

@@ -6,6 +6,7 @@ import { UI_LOCALES, type UiLocale } from '@tela/shared'
 import { IntlProvider } from 'use-intl'
 import en from '../messages/en.json'
 import zhHans from '../messages/zh-Hans.json'
+import { safeDecode } from './lib/safe-decode'
 
 export const MESSAGES: Record<UiLocale, typeof en> = { en, 'zh-Hans': zhHans }
 export const LOCALE_COOKIE = 'tela_locale'
@@ -14,10 +15,14 @@ export function isUiLocale(v: unknown): v is UiLocale {
   return typeof v === 'string' && (UI_LOCALES as readonly string[]).includes(v)
 }
 
-/** The cookie wins (so the edge renders public pages in the same language), then the browser. */
+/**
+ * The cookie wins (so the edge renders public pages in the same language), then the browser. A
+ * cookie that does not decode is no choice: it would otherwise fail the app's boot and every page
+ * the edge renders, for as long as the browser keeps it.
+ */
 export function detectLocale(cookie: string, languages: readonly string[]): UiLocale {
   const match = cookie.match(/(?:^|;\s*)tela_locale=([^;]+)/)
-  const chosen = match ? decodeURIComponent(match[1] ?? '') : null
+  const chosen = match ? safeDecode(match[1] ?? '') : null
   if (isUiLocale(chosen)) return chosen
   return languages.some((l) => l.toLowerCase().startsWith('zh')) ? 'zh-Hans' : 'en'
 }

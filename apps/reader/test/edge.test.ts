@@ -140,6 +140,14 @@ describe('content objects', () => {
     expect((await get(`/o/c/${OTHER}.json`)).status).toBe(404) // allowed shape, missing object
   })
 
+  test('a key that does not decode is not found, not an error', async () => {
+    for (const path of ['/o/%', '/o/c/%E4.json', `/o/c/${KEY}%.json`]) {
+      expect((await get(path)).status).toBe(404)
+      expect((await get(path, null)).status).toBe(404)
+    }
+    expect(gets).toEqual([])
+  })
+
   test('a bundle carries the objects that exist, keyed, capped at 25', async () => {
     const res = await get(`/o/bundle?k=${KEY},${OTHER},nothex,${KEY}`)
     expect(Object.keys((await res.json()) as object)).toEqual([KEY])
@@ -504,6 +512,20 @@ describe('public pages', () => {
     const other = await page('/s/2/extra')
     expect(other.status).toBe(200)
     expect(await other.text()).toBe(TEMPLATE)
+  })
+
+  test('a profile address or a language cookie that does not decode is no page and no choice', async () => {
+    const shell = await page('/@%')
+    expect(shell.status).toBe(200)
+    expect(await shell.text()).toBe(TEMPLATE)
+    // The browser's language decides, as with no cookie at all.
+    const zh = await page('/terms', { cookie: 'tela_locale=%', 'accept-language': 'zh-CN' })
+    expect(zh.status).toBe(200)
+    expect(await zh.text()).toContain('<html lang="zh-Hans"')
+    const en = await page('/terms', { cookie: 'a=1; tela_locale=%E4' })
+    expect(en.status).toBe(200)
+    expect(await en.text()).toContain('<html lang="en"')
+    expect(apiCalls).toEqual([])
   })
 
   test('About, Privacy and Terms ask tela-api nothing, hand nothing over, and are never indexed in the beta', async () => {

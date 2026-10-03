@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { detectLocale } from '../src/i18n'
 import { discoverApiPath, discoverHref, parseDiscoverParams } from '../src/lib/discover-href'
 import { canonicalReadingHref, parseReadingParams, readingHref } from '../src/lib/href'
 import { addError } from '../src/lib/opml'
+import { safeDecode } from '../src/lib/safe-decode'
 import {
   codeError,
   errorReturn,
@@ -231,5 +233,29 @@ describe('answers the pages turn into messages', () => {
     expect(addError('rate_limited')).toBe('rate_limited')
     expect(claimError('not_a_feed')).toBe('no_feed')
     expect(claimError('unreachable')).toBe('fetch_failed')
+  })
+})
+
+describe('what a visitor types that does not decode', () => {
+  test('is null, never a throw', () => {
+    expect(safeDecode('%40someone')).toBe('@someone')
+    expect(safeDecode('%E4%B8%AD')).toBe('中')
+    expect(safeDecode('')).toBe('')
+    // A lone `%`, one without two hex digits, and escapes that are not UTF-8.
+    for (const bad of ['%', '%zz', 'a%2', '%E4', '%C0%AF']) expect(safeDecode(bad)).toBeNull()
+  })
+
+  test('is no profile, at the edge or in the app', () => {
+    const route = (path: string) => publicRoute(new URL(path, 'https://tela.test'))
+    for (const path of ['/@%', '/%', '/@a%zz', '/%40%E4']) {
+      expect(handleFrom(path)).toBeNull()
+      expect(route(path)).toBeNull()
+    }
+  })
+
+  test('is no choice of language: the browser decides', () => {
+    expect(detectLocale('tela_locale=%', ['zh-CN'])).toBe('zh-Hans')
+    expect(detectLocale('a=1; tela_locale=%E4; b=2', ['en-US'])).toBe('en')
+    expect(detectLocale('a=1; tela_locale=zh-Hans', ['en-US'])).toBe('zh-Hans')
   })
 })

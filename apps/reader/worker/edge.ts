@@ -24,6 +24,7 @@
 import { isBlockedHost } from '@tela/ingest/net'
 import type { Blobs } from '@tela/platform'
 import { getCookieCache } from 'better-auth/cookies'
+import { safeDecode } from '../src/lib/safe-decode'
 
 export type EdgeCache = {
   match(key: Request): Promise<Response | undefined>
@@ -437,7 +438,9 @@ export function createEdge(deps: EdgeDeps) {
       } else if (path === '/o/bundle') {
         response = await serveBundle(request, waiter)
       } else if (path.startsWith('/o/')) {
-        response = await serveObject(request, decodeURIComponent(path.slice(3)), waiter)
+        // A key that does not decode (`/o/%`) is no object's.
+        const key = safeDecode(path.slice(3))
+        response = key === null ? text('not found', 404) : await serveObject(request, key, waiter)
       } else if (path.startsWith('/avatar/')) {
         const userId = path.slice('/avatar/'.length)
         const version = url.searchParams.get('v') ?? ''

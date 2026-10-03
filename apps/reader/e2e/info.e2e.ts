@@ -84,3 +84,50 @@ test.describe('for a guest', () => {
     await expect(page.locator('#translation')).toContainText('阿里云百炼')
   })
 })
+
+test.describe('an address that does not decode', () => {
+  test('is a section that is not there: the page stays whole, its anchors working', async ({
+    page,
+  }) => {
+    const errors: Error[] = []
+    page.on('pageerror', (err) => errors.push(err))
+    for (const path of ['/about', '/terms', '/privacy']) {
+      // The app's first question, asked once it has taken the page over from the edge and run
+      // the page's own effects.
+      const booted = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/v1/me')
+      await page.goto(`${path}#%`)
+      await booted
+      await expect(page.getByTestId('info-page')).toBeVisible()
+    }
+    await page
+      .getByTestId('info-toc')
+      .getByRole('link', { name: 'Cookies and your device' })
+      .click()
+    await expect(page).toHaveURL(`${BASE}/privacy#cookies`)
+    await expect(page.locator('#cookies')).toBeInViewport()
+    expect(errors).toEqual([])
+  })
+
+  test('is no choice of language, in a cookie: the browser decides', async ({ page, context }) => {
+    const errors: Error[] = []
+    page.on('pageerror', (err) => errors.push(err))
+    await context.addCookies([{ name: 'tela_locale', value: '%E4', url: BASE }])
+    const booted = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/v1/me')
+    const res = await page.goto('/terms')
+    expect(res?.status()).toBe(200)
+    await booted
+    await expect(page.getByTestId('info-page')).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+    expect(errors).toEqual([])
+  })
+
+  test('is a profile that is not there', async ({ page }) => {
+    const errors: Error[] = []
+    page.on('pageerror', (err) => errors.push(err))
+    // The edge has no page for it either, so the app says so.
+    const res = await page.goto('/@%')
+    expect(res?.status()).toBe(200)
+    await expect(page.getByTestId('not-found')).toBeVisible()
+    expect(errors).toEqual([])
+  })
+})
