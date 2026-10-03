@@ -57,7 +57,10 @@ test('a member makes a code, a visitor joins with its link, and the member sees 
   await guest.getByTestId('login-code').fill(await latestCode(request, email))
   await guest.getByTestId('login-submit').click()
   await expect(guest).toHaveURL(/\/discover/)
-  const handle = await guest.getByTestId('account-menu').getAttribute('data-handle')
+  // The menu is drawn once the session is known; its handle comes with the first pull after.
+  const menu = guest.getByTestId('account-menu')
+  await expect(menu).toHaveAttribute('data-handle', /.+/)
+  const handle = await menu.getAttribute('data-handle')
   expect(handle).toBeTruthy()
 
   // The inviter's list says who joined, by handle, and the code still counts.
