@@ -504,6 +504,11 @@ export function useSignIn(options: SignInOptions) {
     busy,
     /** Signed in, and /me cannot be reached yet: the form says so and stays shut. */
     connecting: waiting && retrying,
+    /**
+     * Carrying a sign-in through: a request out, /me awaited, or an unsaved password being told.
+     * Until the form lets go, it says where a member goes, not the page it is over.
+     */
+    carrying: busy || waiting || step.kind === 'unsaved',
     /** A member at the start, leaving for `next`: nothing to show. */
     settled,
     sendCode,

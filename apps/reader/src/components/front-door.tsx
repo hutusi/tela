@@ -66,16 +66,27 @@ export type DoorRequest = (
 type Opened = DoorRequest & { at: string; key: number }
 
 const DoorContext = createContext<((request: DoorRequest) => void) | null>(null)
+/** Whether the open sheet is carrying a sign-in through, and so says where a member goes. */
+const SheetDecides = createContext(false)
 
 /**
- * A member on a page that is only for visitors (`/`, `/join`) goes on to their reading, unless a
- * navigation is already under way. The sheet that has just signed someone in sends them on itself
- * (Discover for a join, `next` for a log-in), and the router renders that as a transition, after
- * the session's own update has made them a member: a redirect rendered in between replaced where
- * the sheet sent them. The address bar has moved by then, and only the router's location lags.
+ * A member on a page that is only for visitors (`/`, `/join`) goes on to their reading, unless the
+ * sheet is still signing them in or a navigation is already under way.
+ *
+ * The sheet sends whoever it signs in on itself (Discover for a join, `next` for a log-in), and
+ * they are a member before it has finished: the password a joiner chose is saved after the
+ * sign-in, and a refusal is told in the sheet. Until the sheet lets go (it leaves, or is closed),
+ * the page under it stays as it was, `children`: a redirect rendered meanwhile closed the sheet,
+ * and the warning with it, and beat the sheet's own destination whenever the save was slow.
+ *
+ * Once the sheet goes, the router renders its navigation as a transition, after the sheet's own
+ * closing: a redirect rendered in between replaced where the sheet sent them. The address bar has
+ * moved by then, and only the router's location lags.
  */
-export function ToReading() {
+export function ToReading({ children }: { children?: React.ReactNode }) {
   const { pathname } = useLocation()
+  const decides = useContext(SheetDecides)
+  if (decides) return <>{children}</>
   if (window.location.pathname !== pathname) return null
   return <Navigate to="/reading" replace />
 }
@@ -168,6 +179,11 @@ export type DoorFormProps = {
   onSwitch?: (mode: DoorMode) => void
   /** Told whether a request is out, so the sheet does not close under it. */
   busyRef?: { current: boolean }
+  /**
+   * Told whether the form is carrying a sign-in through, so the page under the sheet leaves the
+   * member to it meanwhile (`ToReading`).
+   */
+  onCarrying?: ((carrying: boolean) => void) | undefined
   /** For writers' card, made on the way in. */
   claim?: CardClaim | undefined
 }
@@ -215,6 +231,12 @@ export function DoorForm(props: DoorFormProps) {
     target?.focus()
   }, [step.kind, busy])
   if (props.busyRef) props.busyRef.current = busy
+  const { onCarrying } = props
+  const { carrying } = door
+  useEffect(() => {
+    onCarrying?.(carrying)
+    return () => onCarrying?.(false)
+  }, [onCarrying, carrying])
   if (door.settled) return null
 
   const joining = mode === 'join'
@@ -519,10 +541,12 @@ function Sheet({
   request,
   onClose,
   onDone,
+  onCarrying,
 }: {
   request: Opened
   onClose: () => void
   onDone: () => void
+  onCarrying: (carrying: boolean) => void
 }) {
   const t = useTranslations('door')
   const dialog = useRef<HTMLDialogElement>(null)
@@ -592,6 +616,7 @@ function Sheet({
         onDone={onDone}
         onSwitch={setMode}
         busyRef={busy}
+        onCarrying={onCarrying}
         claim={card}
       />
       {/* After the form, so the dialog's first focus is a field, not this. */}
@@ -624,6 +649,8 @@ export function FrontDoorProvider({ children }: { children: React.ReactNode }) {
   here.current = location.pathname
   const opened = useRef(0)
   const [request, setRequest] = useState<Opened | null>(null)
+  // Whether the open sheet's form is carrying a sign-in through (`DoorForm`'s `onCarrying`).
+  const [carrying, setCarrying] = useState(false)
   const open = useCallback((next: DoorRequest) => {
     setRequest({ ...next, at: here.current, key: ++opened.current })
   }, [])
@@ -656,6 +683,8 @@ export function FrontDoorProvider({ children }: { children: React.ReactNode }) {
   }, [location.pathname, location.search, open])
 
   const shown = request && request.at === location.pathname ? request : null
+  // Until the sheet signing someone in lets go, it says where they go, not the page under it.
+  const decides = shown !== null && carrying
 
   // A card whose sign-in outlived its sheet: back from Google or GitHub, reloaded as another
   // account, or the sheet closed while /me could not be reached. Finished once the tab is the
@@ -672,18 +701,21 @@ export function FrontDoorProvider({ children }: { children: React.ReactNode }) {
   }, [status, claiming])
   return (
     <DoorContext.Provider value={open}>
-      {children}
-      {shown ? (
-        <Sheet
-          key={shown.key}
-          request={shown}
-          onClose={() => {
-            setRequest(null)
-            shown.onClose?.()
-          }}
-          onDone={() => setRequest(null)}
-        />
-      ) : null}
+      <SheetDecides.Provider value={decides}>
+        {children}
+        {shown ? (
+          <Sheet
+            key={shown.key}
+            request={shown}
+            onClose={() => {
+              setRequest(null)
+              shown.onClose?.()
+            }}
+            onDone={() => setRequest(null)}
+            onCarrying={setCarrying}
+          />
+        ) : null}
+      </SheetDecides.Provider>
     </DoorContext.Provider>
   )
 }

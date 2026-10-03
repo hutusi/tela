@@ -5,7 +5,7 @@
  * since better-auth and `/api/v1/join` count tries per IP; in production Cloudflare sets the
  * header itself.
  */
-import { type APIRequestContext, expect, test } from '@playwright/test'
+import { type APIRequestContext, expect, type Page, type Route, test } from '@playwright/test'
 import {
   adminCode,
   BASE,
@@ -246,6 +246,78 @@ test.describe('Join, from the front page', () => {
     await expect(page).toHaveURL(/\/discover$/)
     await expect(sheet).toHaveCount(0)
     await expect(page.getByTestId('account-menu')).toBeVisible()
+  })
+})
+
+test.describe('Join, while the chosen password saves', () => {
+  /**
+   * `/` and `/join` send a member to their reading, and the joiner is one before the password they
+   * chose is saved. Until the sheet has finished, it says where they go: the save, held back here
+   * and then answered by `answer`, is still its own. Returns every path the page was at.
+   */
+  async function join(
+    page: Page,
+    request: APIRequestContext,
+    from: 'front' | 'link',
+    answer: (route: Route) => Promise<void>,
+  ) {
+    const visited: string[] = []
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) visited.push(new URL(frame.url()).pathname)
+    })
+    await page.route('**/api/v1/account/password', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await answer(route)
+    })
+    const code = await adminCode(request)
+    const email = `slow-save-${from}-${Date.now()}@e2e.test`
+    const sheet = page.getByTestId('front-door')
+    if (from === 'front') {
+      await page.goto('/')
+      await page.getByTestId('front-join').click()
+      await sheet.getByTestId('join-code').fill(code)
+    } else {
+      await page.goto(`/join?code=${code}`)
+      await expect(sheet.getByTestId('join-code')).toHaveValue(code)
+    }
+    await sheet.getByTestId('login-email').fill(email)
+    await sheet.getByTestId('login-submit').click()
+    await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    await sheet.getByTestId('join-password').fill(`chosen on ${Date.now()}`)
+    await sheet.getByTestId('login-submit').click()
+    return { sheet, visited }
+  }
+
+  test.describe('refused', () => {
+    test.use(visitor(41))
+    test('the sheet says so over the front page, and Continue goes on to Discover', async ({
+      page,
+      request,
+    }) => {
+      const { sheet, visited } = await join(page, request, 'front', (route) =>
+        route.fulfill({ status: 503, body: 'unavailable' }),
+      )
+      await expect(sheet.getByTestId('door-unsaved')).toBeVisible()
+      await expect(page).toHaveURL(`${BASE}/`)
+      await sheet.getByTestId('login-submit').click()
+      await expect(page).toHaveURL(/\/discover$/)
+      await expect(sheet).toHaveCount(0)
+      expect(visited).not.toContain('/reading')
+    })
+  })
+
+  test.describe('slow', () => {
+    test.use(visitor(42))
+    test('the sheet stays until it is saved, then goes straight on to Discover', async ({
+      page,
+      request,
+    }) => {
+      const { sheet, visited } = await join(page, request, 'link', (route) => route.continue())
+      await expect(page).toHaveURL(/\/discover$/)
+      await expect(sheet).toHaveCount(0)
+      expect(visited).not.toContain('/reading')
+      await expect(page.getByTestId('account-menu')).toBeVisible()
+    })
   })
 })
 

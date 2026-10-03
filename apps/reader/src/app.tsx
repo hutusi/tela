@@ -50,7 +50,12 @@ function Members({ children }: { children: React.ReactNode }) {
 function Home() {
   const { status } = useSession()
   const { store } = useStore()
-  if (status === 'member') return <ToReading />
+  if (status === 'member')
+    return (
+      <ToReading>
+        <LandingPage />
+      </ToReading>
+    )
   if (status === 'guest' || store.userId === null) return <LandingPage />
   return null
 }

@@ -75,7 +75,10 @@ blog.
 
 **The SPA keeps the landing on screen while it learns who is there.** `Home` sends a member to
 `/reading`, and shows the landing to a guest and to a device whose session is still `unknown` and
-which holds no member (`store.userId === null`). It used to render nothing until `/me` answered, so
+which holds no member (`store.userId === null`). A visitor the sheet is signing in is a member
+before it has finished (a joiner's password is saved after the sign-in, and a refusal is told in
+the sheet), so while it carries a sign-in through, the landing stays under it and the sheet says
+where they go: Discover, or `/reading` once they close it. It used to render nothing until `/me` answered, so
 the edge's page went blank at the first commit (the SPA mounts with `createRoot`, not hydration) and
 came back. The landing's root has no `animate-fade`, so the copy a visitor is already reading does
 not blink out and fade back when the SPA replaces it. Its static copy needs no data, and only the

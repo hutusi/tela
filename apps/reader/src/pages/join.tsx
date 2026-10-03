@@ -37,7 +37,12 @@ export function JoinPage() {
     })
   }, [search, door, member])
 
-  // Already in: there is nothing to join. One who has just joined here is on their way already.
-  if (member) return <ToReading />
+  // Already in: there is nothing to join. One who has just joined here is the sheet's to send on.
+  if (member)
+    return (
+      <ToReading>
+        <LandingPage />
+      </ToReading>
+    )
   return <LandingPage />
 }
