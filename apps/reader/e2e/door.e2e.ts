@@ -307,6 +307,20 @@ test.describe('Join, while the chosen password saves', () => {
     })
   })
 
+  test.describe('refused, then closed', () => {
+    test.use(visitor(43))
+    test('closing the sheet goes on to Discover, as Continue does', async ({ page, request }) => {
+      const { sheet, visited } = await join(page, request, 'link', (route) =>
+        route.fulfill({ status: 503, body: 'unavailable' }),
+      )
+      await expect(sheet.getByTestId('door-unsaved')).toBeVisible()
+      await sheet.getByTestId('door-close').click()
+      await expect(page).toHaveURL(/\/discover$/)
+      await expect(sheet).toHaveCount(0)
+      expect(visited).not.toContain('/reading')
+    })
+  })
+
   test.describe('slow', () => {
     test.use(visitor(42))
     test('the sheet stays until it is saved, then goes straight on to Discover', async ({

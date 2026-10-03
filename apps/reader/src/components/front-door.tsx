@@ -180,6 +180,8 @@ export type DoorFormProps = {
   onSwitch?: (mode: DoorMode) => void
   /** Told whether a request is out, so the sheet does not close under it. */
   busyRef?: { current: boolean }
+  /** Told what closing the sheet does instead, if anything: past an unsaved password, go on. */
+  closeRef?: { current: (() => void) | null }
   /**
    * Told whether the form is carrying a sign-in through, so the page under the sheet leaves the
    * member to it meanwhile (`ToReading`).
@@ -233,6 +235,7 @@ export function DoorForm(props: DoorFormProps) {
     target?.focus()
   }, [step.kind, busy])
   if (props.busyRef) props.busyRef.current = busy
+  if (props.closeRef) props.closeRef.current = step.kind === 'unsaved' ? door.goOn : null
   const { onCarrying } = props
   const { carrying } = door
   useEffect(() => {
@@ -553,6 +556,7 @@ function Sheet({
   const t = useTranslations('door')
   const dialog = useRef<HTMLDialogElement>(null)
   const busy = useRef(false)
+  const goOn = useRef<(() => void) | null>(null)
   const titleId = useId()
   const first: DoorMode =
     request.mode === 'login'
@@ -584,7 +588,11 @@ function Sheet({
     card ? claimPath(card.url) : null,
   )
   const close = () => {
-    if (!busy.current) onClose()
+    if (busy.current) return
+    // Past a password that was not saved, the member is in: closing goes on as Continue does, not
+    // back to the page under the sheet, which would send them somewhere else.
+    if (goOn.current) goOn.current()
+    else onClose()
   }
   return (
     <dialog
@@ -618,6 +626,7 @@ function Sheet({
         onDone={onDone}
         onSwitch={setMode}
         busyRef={busy}
+        closeRef={goOn}
         onCarrying={onCarrying}
         claim={card}
       />
