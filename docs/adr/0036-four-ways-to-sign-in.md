@@ -110,6 +110,11 @@ to someone guessing, since the right one gives the account a password, so both r
 against the same five and ten as sign-in. They count for any address, so a 429 says nothing about
 who is a member. Calls Tela makes through `auth.api.*` (`/api/v1/join`,
 `/api/v1/account/*`) never pass better-auth's limiter, so those routes carry limits of their own.
+A wrong code is answered alike too. better-auth answers `403 TOO_MANY_ATTEMPTS` for a code tried
+three times and `400 OTP_EXPIRED` for one past its hour, and both need a stored code, which only an
+address the mail gate admits ever has; a stranger hears `400 INVALID_OTP` every time. So tela-api
+answers both as that `INVALID_OTP`, byte for byte, on the sign-in and the reset (`asWrongCode` in
+`app.ts`), and the fourth wrong try no longer says who is a member.
 
 **A member manages their ways in under `/api/v1/account`**: what they have (their address, whether
 they have a password, which providers are linked, whether the session is fresh), set or change a
@@ -166,8 +171,16 @@ better-auth adds later (One Tap, an ID token) is refused rather than trusted.
 - The state cookie, like the session cookies, carries the `__Secure-` prefix, which allows a
   `Domain` attribute, so any `*.ainaive.com` host could plant one. `__Host-` would sign everyone out
   once and change the cookie names the edge reads (0035); it is a follow-up.
-- A code request for a known address answers after Resend has, and one for an unknown address at
-  once. That timing difference exists today, and is left.
+- The answers are alike, the time they take is not. A code or a reset asked for an address the
+  gate admits answers once Resend has taken the mail (better-auth awaits the send, having no
+  background handler), and one for any other address after a single delete in D1: a difference of
+  a Resend round trip, which someone timing many requests can see. Closing it means sending the
+  mail after the answer, through the request's `waitUntil`: better-auth takes one
+  `backgroundTasks.handler` for the whole app, so the Worker entry would hand each request's
+  `ExecutionContext` to it through `AsyncLocalStorage`, and every test and e2e that reads the
+  outbox right after the answer would have to wait for the mail instead. Left for now: the gate
+  admits only members and invited addresses, the per-address limits allow five sends an hour, and
+  the private beta is small.
 - The operator registers the OAuth apps, with the redirect URI
   `https://tela.ainaive.com/api/auth/callback/<id>`; Google's consent screen needs the privacy page
   (0035). A provider stays off until both its secrets are set.

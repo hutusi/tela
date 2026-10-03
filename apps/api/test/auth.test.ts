@@ -349,6 +349,61 @@ describe('signing in with a code', () => {
     expect(late.status).not.toBe(200)
   })
 
+  test('a member and a stranger hear the same wrong code, used up or expired', async () => {
+    const api = await createTestApi()
+    await invite(api, 'a@x.test')
+    let n = 0
+    const ip = () => `198.51.100.${++n}`
+    const wrong = (email: string) => {
+      const code = codeFor(api, email)
+      return code === '000000' ? '111111' : '000000'
+    }
+    /** What a check answers, all of it a guesser could compare. */
+    const heard = async (answer: Response) => ({
+      status: answer.status,
+      type: answer.headers.get('content-type'),
+      body: await answer.text(),
+    })
+    // A member's code is stored, a stranger's never is: only the member's could be used up.
+    const fourth = async (check: (email: string) => Promise<Response>, email: string) => {
+      for (let i = 0; i < 3; i++) await check(email)
+      return heard(await check(email))
+    }
+    expect((await askCode(api, 'stranger@x.test', ip())).status).toBe(200)
+    const signIn = (code: string) => (email: string) => tryCode(api, code, ip(), email)
+    const member = await fourth(signIn(wrong('a@x.test')), 'a@x.test')
+    const stranger = await fourth(signIn('000000'), 'stranger@x.test')
+    expect(member).toEqual(stranger)
+    expect(member.status).toBe(400)
+    expect(JSON.parse(member.body)).toMatchObject({ code: 'INVALID_OTP' })
+
+    // The reset pair, the same way.
+    const askReset = (email: string) =>
+      authCall(api, 'email-otp/request-password-reset', { email }, ip())
+    const reset = (otp: string) => (email: string) =>
+      authCall(
+        api,
+        'email-otp/reset-password',
+        { email, otp, password: 'a-guessed-password' },
+        ip(),
+      )
+    expect((await askReset('a@x.test')).status).toBe(200)
+    expect((await askReset('stranger@x.test')).status).toBe(200)
+    expect(await fourth(reset(wrong('a@x.test')), 'a@x.test')).toEqual(
+      await fourth(reset('000000'), 'stranger@x.test'),
+    )
+
+    // A code past its hour (better-auth reads the wall clock for it, not tela-api's).
+    await api.request('/api/admin/invite', {
+      body: { email: 'a@x.test' },
+      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+    })
+    await api.db.run(sql`update verification set expires_at = 0`)
+    expect(await heard(await tryCode(api, wrong('a@x.test'), ip()))).toEqual(
+      await heard(await tryCode(api, '000000', ip(), 'stranger@x.test')),
+    )
+  })
+
   test("tries are rate limited per reader's address, taken from cf-connecting-ip", async () => {
     const api = await createTestApi()
     await invite(api, 'a@x.test')

@@ -49,6 +49,34 @@ export const AUTH_ENDPOINTS = [
   ['GET', '/callback/:provider{google|github}'],
 ] as const
 
+/**
+ * The endpoints that check a mailed code, and the refusals better-auth gives only while a code is
+ * stored for the address: an expired one, and one tried three times. A stranger's code is never
+ * stored (the mail gate deletes it, and a reset makes none), so a stranger only ever hears
+ * `INVALID_OTP`; answered as better-auth answers them, the two would tell a guesser who is a member
+ * after four wrong tries (ADR 0036). Each is answered as that wrong code instead, which is also
+ * what it means to the person typing: ask for a new one.
+ */
+const CODE_CHECKS: ReadonlySet<string> = new Set([
+  '/sign-in/email-otp',
+  '/email-otp/reset-password',
+])
+const ONLY_A_MEMBER_HEARS: ReadonlySet<string> = new Set(['OTP_EXPIRED', 'TOO_MANY_ATTEMPTS'])
+// Byte for byte as better-auth writes it, keys in its order.
+const WRONG_CODE = { message: 'Invalid OTP', code: 'INVALID_OTP' }
+
+async function asWrongCode(answer: Response): Promise<Response> {
+  if (answer.status !== 400 && answer.status !== 403) return answer
+  const body = (await answer
+    .clone()
+    .json()
+    .catch(() => null)) as { code?: unknown } | null
+  if (typeof body?.code !== 'string' || !ONLY_A_MEMBER_HEARS.has(body.code)) return answer
+  const headers = new Headers(answer.headers)
+  headers.delete('content-length')
+  return new Response(JSON.stringify(WRONG_CODE), { status: 400, headers })
+}
+
 /** A client older than the protocol is told to reload, not left misreading rows. */
 function tooOld(version: string | undefined): boolean {
   const n = Number(version ?? '0')
@@ -74,7 +102,10 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     return auth.handler(c.req.raw)
   })
   for (const [method, path] of AUTH_ENDPOINTS) {
-    app.on(method, `/api/auth${path}`, (c) => auth.handler(c.req.raw))
+    app.on(method, `/api/auth${path}`, async (c) => {
+      const answer = await auth.handler(c.req.raw)
+      return CODE_CHECKS.has(path) ? asWrongCode(answer) : answer
+    })
   }
   app.all('/api/auth/*', (c) => c.json({ error: 'not_found' }, 404))
 
