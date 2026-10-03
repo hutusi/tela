@@ -711,6 +711,25 @@ describe('the front page (ADR 0035)', () => {
     }
   })
 
+  test('an empty edition says so, and counts nothing it does not have', async () => {
+    const empty: FrontData = {
+      counts: { blogs: 0 },
+      week: { blogs: 0, languages: 0, posts: 0 },
+      edition: { span: 'latest', posts: [] },
+    }
+    const html = await (
+      await visit(
+        frontEdge(() => Response.json(empty)),
+        '/',
+      )
+    ).text()
+    expect(html).toContain('No posts yet.')
+    expect(html).toContain('of independent blogs.')
+    expect(html).not.toMatch(/\b0 independent blogs/)
+    expect(html).not.toContain('The latest from')
+    expect(html).not.toContain(' · </span>')
+  })
+
   test('a tela-api that hangs or throws is the plain shell too, in time, never kept', async () => {
     const errors = spyOn(console, 'error').mockImplementation(() => {})
     const answers = {

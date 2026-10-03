@@ -53,13 +53,22 @@ export function LandingView({
     month: 'long',
     day: 'numeric',
   }).format(new Date(now))
+  // What the strip says of the edition: nothing for an empty one, rather than "the latest from 0
+  // blogs" beside "No posts yet".
+  const span =
+    posts.length === 0
+      ? null
+      : data?.edition.span === 'week'
+        ? t('week', { blogs: data.week.blogs, languages: data.week.languages })
+        : t('latest', { n: posts.length })
 
   return (
     <>
       <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 pt-12 pb-20 md:px-12 md:pt-20">
         <section className="max-w-[860px]">
           <h1 className="m-0 font-serif text-[42px] leading-[1.06] font-medium tracking-[-0.02em] md:text-[64px]">
-            {data
+            {/* A count only once there is one: "a confluence of 0 blogs" is no welcome. */}
+            {data && data.counts.blogs > 0
               ? t.rich('hero', { count: data.counts.blogs, em: accent })
               : t.rich('heroPlain', { em: accent })}
           </h1>
@@ -92,15 +101,16 @@ export function LandingView({
         >
           <p className="m-0 min-w-0 flex-1 text-ink-2">
             <span className="font-medium text-ink">{date}</span>
-            <span aria-hidden="true"> · </span>
-            {data ? (
-              data.edition.span === 'week' ? (
-                t('week', { blogs: data.week.blogs, languages: data.week.languages })
-              ) : (
-                t('latest', { n: posts.length })
-              )
-            ) : loading ? (
-              <span className="inline-block h-3 w-48 animate-pulse rounded bg-hover align-middle" />
+            {span ? (
+              <>
+                <span aria-hidden="true"> · </span>
+                {span}
+              </>
+            ) : !data && loading ? (
+              <>
+                <span aria-hidden="true"> · </span>
+                <span className="inline-block h-3 w-48 animate-pulse rounded bg-hover align-middle" />
+              </>
             ) : null}
           </p>
           <nav
