@@ -364,7 +364,7 @@ export function AccountSection() {
         </span>
       </SettingRow>
       <PasswordRow
-        has={account.password}
+        has={account.hasPassword}
         busy={busy}
         onSave={(input) => act(() => setPassword(input))}
       />

@@ -240,8 +240,12 @@ async function fields(res: Response): Promise<Record<string, unknown>> {
 
 const clean = (email: string) => email.trim().toLowerCase()
 
-/** Set the new member's password: a member call, so it names them (AGENTS invariant 8). */
-async function savePassword(newPassword: string): Promise<boolean> {
+/**
+ * Set the new member's password: a member call, so it names them (AGENTS invariant 8). tela-api
+ * takes a first password on the fresh session the code just made (`POST /api/v1/account/password
+ * {newPassword}`); any refusal leaves the member signed in without one.
+ */
+export async function savePassword(newPassword: string): Promise<boolean> {
   try {
     const res = await api('/api/v1/account/password', { body: { newPassword } })
     return res.ok

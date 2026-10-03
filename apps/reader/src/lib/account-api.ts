@@ -63,45 +63,79 @@ export { PROVIDERS, type Provider }
 
 export type LinkedAccount = { id: string; provider: Provider; since: number }
 
+/** `GET /api/v1/account`, as tela-api answers it (`apps/api/src/routes/account.ts`). */
 export type Account = {
   email: string
   /** Whether the member has a password, never the password. */
-  password: boolean
+  hasPassword: boolean
+  /** The providers linked, oldest first. */
   linked: LinkedAccount[]
-  /** Whether the session is recent enough to change how the member signs in. */
+  /** Whether the session is recent enough to add a way in (made within the last day). */
   fresh: boolean
+}
+
+const isLinked = (value: unknown): value is LinkedAccount => {
+  if (typeof value !== 'object' || value === null) return false
+  const { id, provider, since } = value as Record<string, unknown>
+  return (
+    typeof id === 'string' && PROVIDERS.some((p) => p === provider) && typeof since === 'number'
+  )
+}
+
+/**
+ * The account, or null for an answer of another shape: a field read under the wrong name would
+ * otherwise show a member with a password as having none, and offer them the wrong form.
+ */
+export function readAccount(body: unknown): Account | null {
+  if (typeof body !== 'object' || body === null) return null
+  const { email, hasPassword, linked, fresh } = body as Record<string, unknown>
+  if (typeof email !== 'string' || typeof hasPassword !== 'boolean') return null
+  if (typeof fresh !== 'boolean' || !Array.isArray(linked)) return null
+  return { email, hasPassword, linked: linked.filter(isLinked), fresh }
 }
 
 /**
  * Why a change was refused: `not_fresh` asks the member to confirm it is them first, `rejected`
- * is a 400 (a password too short, or the current one wrong), `failed` anything else.
+ * is a 400 (a password of the wrong length, the current one missing or wrong), `rate_limited` a
+ * 429, `failed` anything else (a provider Tela does not offer, an account no longer linked).
  */
 export type AccountError = 'not_fresh' | 'rejected' | 'rate_limited' | 'failed'
 
 type Outcome<T = object> = ({ ok: true } & T) | { ok: false; error: AccountError }
 
-async function accountCall<T extends object>(
-  path: string,
-  body: unknown,
-): Promise<Outcome<{ body: T }>> {
-  const { status, body: answer } = await apiJson<(T & { code?: string; error?: string }) | null>(
-    path,
-    { method: 'POST', body },
-  )
-  if (status >= 200 && status < 300) return { ok: true, body: (answer ?? {}) as T }
-  if (status === 403 && answer?.code === 'SESSION_NOT_FRESH')
-    return { ok: false, error: 'not_fresh' }
+/**
+ * What a change's answer means. tela-api refuses with `{error}`, in lowercase: 403
+ * `session_not_fresh`; 400 `new_password_required`, `password_too_short`, `password_too_long`,
+ * `current_password_required` or better-auth's `invalid_password`; 404 `unknown_provider` or
+ * `not_found`; 429 `rate_limited`.
+ */
+export function accountOutcome<T extends object>(
+  status: number,
+  answer: unknown,
+): Outcome<{ body: T }> {
+  const body = typeof answer === 'object' && answer !== null ? answer : {}
+  if (status >= 200 && status < 300) return { ok: true, body: body as T }
+  const error = (body as { error?: unknown }).error
+  if (status === 403 && error === 'session_not_fresh') return { ok: false, error: 'not_fresh' }
   if (status === 400) return { ok: false, error: 'rejected' }
   if (status === 429) return { ok: false, error: 'rate_limited' }
   return { ok: false, error: 'failed' }
 }
 
-export async function getAccount(signal?: AbortSignal): Promise<Account | null> {
-  const res = await api('/api/v1/account', signal ? { signal } : {})
-  return res.ok ? ((await res.json()) as Account) : null
+async function accountCall<T extends object>(
+  path: string,
+  body: unknown,
+): Promise<Outcome<{ body: T }>> {
+  const { status, body: answer } = await apiJson<unknown>(path, { method: 'POST', body })
+  return accountOutcome<T>(status, answer)
 }
 
-/** Set a first password, or change one (`currentPassword` then required). */
+export async function getAccount(signal?: AbortSignal): Promise<Account | null> {
+  const res = await api('/api/v1/account', signal ? { signal } : {})
+  return res.ok ? readAccount(await res.json().catch(() => null)) : null
+}
+
+/** Set a first password (on a fresh session), or change one (`currentPassword` then required). */
 export async function setPassword(input: {
   newPassword: string
   currentPassword?: string
@@ -109,22 +143,36 @@ export async function setPassword(input: {
   return accountCall('/api/v1/account/password', input)
 }
 
-/** Start linking a provider: the answer is where to send the browser. */
+/** Start linking a provider (on a fresh session): the answer is where to send the browser. */
 export async function linkProvider(provider: Provider): Promise<Outcome<{ url: string }>> {
-  const answer = await accountCall<{ url?: string }>('/api/v1/account/link', { provider })
+  const answer = await accountCall<{ url?: unknown }>('/api/v1/account/link', { provider })
   if (!answer.ok) return answer
   return typeof answer.body.url === 'string'
     ? { ok: true, url: answer.body.url }
     : { ok: false, error: 'failed' }
 }
 
+/** Unlink a provider, by its linked account's id (on a fresh session). */
 export async function unlinkProvider(accountId: string): Promise<Outcome> {
   return accountCall('/api/v1/account/unlink', { accountId })
 }
 
-/** End every session of the member's, this one included. */
+/**
+ * End every other session of the member's, fresh or not; tela-api says how many it ended.
+ * Settings then signs this one out too, which is what "everywhere" promises.
+ */
 export async function signOutEverywhere(): Promise<Outcome> {
   return accountCall('/api/v1/account/sign-out-everywhere', {})
+}
+
+/**
+ * Whether a page's query is a link's return from Google or GitHub: tela-api fixes where that is,
+ * `/settings?linked=<provider>`, or `/settings?error=<code>` when it did not work, and it is the
+ * Account section's to show.
+ */
+export function linkingReturn(search: string): boolean {
+  const params = new URLSearchParams(search)
+  return params.has('linked') || params.has('error')
 }
 
 /** Which providers tela-api has secrets for: a 404 (or anything unreadable) means none. */

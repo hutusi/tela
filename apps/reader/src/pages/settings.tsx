@@ -14,7 +14,7 @@ import {
 } from '@tela/shared'
 import type { ProfileRow } from '@tela/sync'
 import { useRef, useState } from 'react'
-import { Link, Navigate, NavLink, useParams } from 'react-router'
+import { Link, Navigate, NavLink, useLocation, useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { AvatarCrop } from '../components/avatar-crop'
 import { PersonAvatar } from '../components/person-avatar'
@@ -22,6 +22,7 @@ import { Segmented } from '../components/segmented'
 import { SettingRow } from '../components/setting-row'
 import { SiteAvatar } from '../components/site-avatar'
 import { Switch } from '../components/switch'
+import { linkingReturn } from '../lib/account-api'
 import { cadenceKey, displayHost } from '../lib/format'
 import type { ReadingMode } from '../lib/href'
 import { type AddError, importOpml, saveDownload } from '../lib/opml'
@@ -58,8 +59,12 @@ const hrefOf = (section: Section) => (section === 'profile' ? '/settings' : `/se
 export function SettingsPage() {
   const t = useTranslations('settings')
   const { section: asked } = useParams()
+  const { search } = useLocation()
   const section = (asked ?? 'profile') as Section
   useTitle(t('title'))
+  if (asked === undefined && linkingReturn(search)) {
+    return <Navigate to={`/settings/account${search}`} replace />
+  }
   if (asked !== undefined && (asked === 'profile' || !SECTIONS.includes(section))) {
     return <Navigate to="/settings" replace />
   }
