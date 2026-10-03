@@ -122,14 +122,25 @@ describe('public pages at the edge', () => {
     const patterns = config.assets.run_worker_first
     const runsFirst = (path: string) =>
       patterns.some((p) => (p.endsWith('*') ? path.startsWith(p.slice(0, -1)) : path === p))
-    const pages = ['/', '/?titles=translated', '/discover?topic=tech', '/s/12', '/@reader_1']
+    const pages = [
+      '/',
+      '/?titles=translated',
+      '/discover?topic=tech',
+      '/s/12',
+      '/@reader_1',
+      '/about',
+      '/privacy',
+      '/terms',
+    ]
     for (const page of pages) {
       const url = new URL(page, 'https://tela.test')
       expect(publicRoute(url)).not.toBeNull()
       expect(runsFirst(url.pathname)).toBe(true)
     }
-    // The shell the service worker keeps is fetched from a path the Worker never runs for.
-    expect(runsFirst('/__tela/shell')).toBe(false)
+    // The shell the service worker keeps is fetched from a path the Worker never runs for, and
+    // neither are the SPA's own pages: a code in `/join?code=` must never reach a cached page, or
+    // Workers Logs (ADR 0035).
+    for (const path of ['/__tela/shell', '/join', '/writers']) expect(runsFirst(path)).toBe(false)
     expect(patterns).not.toContain('/*')
   })
 })
