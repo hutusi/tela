@@ -18,7 +18,7 @@
  * a refusal reopens the sheet with the card as it was.
  */
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { type CardClaim, claimPath, finishCard, takeClaim } from '../lib/claim-card'
 import {
@@ -66,6 +66,19 @@ export type DoorRequest = (
 type Opened = DoorRequest & { at: string; key: number }
 
 const DoorContext = createContext<((request: DoorRequest) => void) | null>(null)
+
+/**
+ * A member on a page that is only for visitors (`/`, `/join`) goes on to their reading, unless a
+ * navigation is already under way. The sheet that has just signed someone in sends them on itself
+ * (Discover for a join, `next` for a log-in), and the router renders that as a transition, after
+ * the session's own update has made them a member: a redirect rendered in between replaced where
+ * the sheet sent them. The address bar has moved by then, and only the router's location lags.
+ */
+export function ToReading() {
+  const { pathname } = useLocation()
+  if (window.location.pathname !== pathname) return null
+  return <Navigate to="/reading" replace />
+}
 
 /** Open the sheet; null where there is none (the edge's render), so a link stays a link. */
 export function useFrontDoor(): ((request: DoorRequest) => void) | null {

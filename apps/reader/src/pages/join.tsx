@@ -5,8 +5,8 @@
  * a code in its address never reaches a Worker's logs. Closing the sheet leaves for `/`.
  */
 import { useEffect, useRef } from 'react'
-import { Navigate, useNavigate, useSearchParams } from 'react-router'
-import { useFrontDoor } from '../components/front-door'
+import { useNavigate, useSearchParams } from 'react-router'
+import { ToReading, useFrontDoor } from '../components/front-door'
 import { providerError, takeInvite } from '../lib/use-sign-in'
 import { useSession } from '../session'
 import { LandingPage } from './landing'
@@ -37,7 +37,7 @@ export function JoinPage() {
     })
   }, [search, door, member])
 
-  // Already in: there is nothing to join.
-  if (member) return <Navigate to="/reading" replace />
+  // Already in: there is nothing to join. One who has just joined here is on their way already.
+  if (member) return <ToReading />
   return <LandingPage />
 }

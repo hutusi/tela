@@ -3,7 +3,7 @@ import { isUiLocale, type UiLocale } from '@tela/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { AppHeader } from './components/app-header'
-import { FrontDoorProvider } from './components/front-door'
+import { FrontDoorProvider, ToReading } from './components/front-door'
 import { detectLocale, I18n, localeCookie } from './i18n'
 import { applyTheme, typographyOf } from './lib/typography'
 import { forgetPublic } from './lib/use-public'
@@ -50,7 +50,7 @@ function Members({ children }: { children: React.ReactNode }) {
 function Home() {
   const { status } = useSession()
   const { store } = useStore()
-  if (status === 'member') return <Navigate to="/reading" replace />
+  if (status === 'member') return <ToReading />
   if (status === 'guest' || store.userId === null) return <LandingPage />
   return null
 }
