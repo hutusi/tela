@@ -144,6 +144,13 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        joiner's code is refused until it returns, and `/api/v1/join` and `/api/v1/invites` answer
        401 or 404. Codes, holds and redemptions wait in their tables, and a hold still lapses
        after its day.
+   - The front door (ADRs 0035, 0036) ships with the invite codes, so it goes in the same order:
+     migration 0005 applied, then tela-jobs, tela-api, tela-web. tela-api must be live before
+     tela-web, or `/` finds no `/api/v1/public/front` and shows visitors the plain shell (never
+     cached, so it heals once tela-api is out). tela-web's service worker moves to `SHELL` v3 in
+     the same build that puts `/` in `run_worker_first`: one deploy, never one without the other,
+     since a v2 worker takes its shell from `/`, which the edge now renders for visitors. Then
+     check one browser (below, *The app shell*).
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -300,6 +307,12 @@ is tela-api.
   one (the network gone halfway, a proxy's or a captive portal's page, a rendered page) leaves
   readers on the shell before, and the next navigation tries again.
 
+  **After a deploy that changes the shell**, check one browser that had the old worker: open
+  tela.ainaive.com, then DevTools → Application → Service workers shows the new one activated,
+  and Cache Storage → `tela-shell-v3` → `/` is the plain shell: its body has an empty
+  `<div id="root"></div>` and no `tela-data`. A `/` holding `tela-data` is a rendered page kept as
+  the shell, which would paint the front page over every screen: bump `SHELL` and deploy again.
+
 ## tela-api
 
 `apps/api/wrangler.jsonc`: sign-in, sync, mutations and every reader RPC (ADR 0024). It shares the
@@ -329,8 +342,42 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   - What a code holds: `select * from invite_redemptions where code = '<CODE>'` (no `redeemed_at`:
     a hold; `redeemed_at`: a place; `settled_at`, `user_id`: the account it made), and who made
     it: `select created_by, max_uses, revoked_at from invite_codes where code = '<CODE>'`.
+- **Google and GitHub apps** (ADR 0036). Register one app per provider for production and a
+  separate one for development, so a dev secret never signs anything in on tela.ainaive.com:
+  - **Google** (Google Cloud console → APIs & Services): the OAuth consent screen as *External*,
+    with the app name, the support address, the privacy policy URL
+    `https://tela.ainaive.com/privacy`, and `ainaive.com` among the authorized domains; scopes
+    `openid` and `email` only. Then **publish it to production**: while it is in *Testing* only
+    the listed test users can sign in. The credential is a *Web application* client whose
+    authorized redirect URI is `https://tela.ainaive.com/api/auth/callback/google`, nothing else.
+  - **GitHub** (Settings → Developer settings → OAuth Apps): homepage `https://tela.ainaive.com`,
+    authorization callback URL `https://tela.ainaive.com/api/auth/callback/github`.
+  - **Development:** the same, with `http://localhost:5173/api/auth/callback/google` (or
+    `/github`) as the redirect URI, in `apps/api/.dev.vars` (see *Running locally*).
+  - **Secrets**, on tela-api: `cd apps/api`, then `wrangler secret put GOOGLE_CLIENT_ID`,
+    `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. A provider is offered
+    once both of its secrets are set, and gone again when either is deleted. Each `secret put`
+    deploys a new version of tela-api, which uses it from then on.
+  - **Failure signatures:**
+    - `redirect_uri_mismatch` (Google), or GitHub's "The redirect_uri is not associated with this
+      application": the provider's own error page, so nothing comes back to Tela and nothing is
+      in its logs. The app's redirect URI is not exactly `PUBLIC_URL/api/auth/callback/<id>`.
+    - `?error=invalid_code` on the page a provider sign-in started from (`/login?…&via=github&
+      error=invalid_code`, say), and the sheet says it could not reach the provider: better-auth
+      could not exchange the provider's code for a token, so the client secret is wrong, rotated
+      at the provider and not here, or belongs to the other app. It is not an invite code (that
+      one is refused before the visitor leaves, as `400 INVALID_CODE`).
+    - Runs of `state_mismatch` (or `state_not_found`): returns without the state cookie or its
+      row: the provider took more than ten minutes, the browser drops the cookie, or the return
+      was replayed. One now and then is a visitor who walked away; many in a row from different
+      people point at the cookie (`advanced.cookies.state`) or `PUBLIC_URL`.
+    - `account_not_linked`: a member pressed a provider they have not linked (they log in by
+      email and link it in Settings → Account), or a newcomer's provider address is unverified.
+      One answer for both, on purpose.
 - **Sign-in trouble:**
-  - Codes last an hour and allow three attempts. The sign-in endpoint allows three tries a
+  - Codes last an hour and allow three attempts. A code tried three times, or past its hour, is
+    answered `400 INVALID_OTP` like any wrong code (ADR 0036), so the answer never says the
+    address holds one: the member asks for a new code either way. The sign-in endpoint allows three tries a
     minute per IP; past that the login page says "Too many tries", not "wrong code".
   - Each email address, from however many IPs, is also mailed at most five codes an hour and has
     at most ten guesses checked (`otpSend`, `otpVerify`), whatever the codes are for: sign-in,
@@ -612,8 +659,19 @@ cannot reach) is the reason to run the box.
 
 ## Later
 
-- **To open Tela up:** decide how invitations work first (ADR 0015); then remove
-  `TELA_PRIVATE_BETA` from `apps/reader/wrangler.jsonc` and deploy tela-web.
+- **To open Tela up**, three steps in this order (ADR 0034):
+  1. **A large operator code**, posted where newcomers will see it:
+     `ADMIN_TOKEN=… bun run admin code <TEXT> --uses 100000`. Everyone with the link can join,
+     the gate still counts them, and `bun run admin revoke <TEXT>` closes it again.
+  2. **Lift the invitation gate**: a code change, with an ADR of its own, to `user.create.before`
+     and the mail gate in `apps/api/src/auth.ts`, so an address with no invitation is mailed a
+     code and given an account. Deploy tela-api.
+  3. **Remove `TELA_PRIVATE_BETA`** from `apps/reader/wrangler.jsonc` and deploy tela-web, which
+     lets search engines in.
+
+  Out of order, the site says the wrong thing: indexed while it still refuses everyone without
+  an invitation (step 3 first), or admitting everyone while it tells search engines to ignore it
+  (stopping before step 3).
 - **The next Node LTS**, for the relay only, **after 2026-10-28**, when Node 26 reaches LTS; Node 24 <!-- node-pin:planned -->
   enters maintenance on 2026-10-20, so the two dates make one clean move. Five pins change <!-- node-pin:planned -->
   together: `.node-version`, `engines`, the relay Dockerfile's runtime stage, the CI
