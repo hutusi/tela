@@ -1110,6 +1110,20 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       expect(await claimInvite(db, { email: 'nobody@x.y', now: T0 })).toBe(null)
     })
 
+    it('spends the code an address joined with last, a repeated join included', async () => {
+      const db = await makeDb()
+      await people(db, 'p', 'q')
+      await member(db, 'p', A)
+      await member(db, 'q', B)
+      // Two members' codes for one visitor, and the first chosen again last.
+      await hold(db, A, 'v@x.y', T0)
+      await hold(db, B, 'v@x.y', T0 + MIN)
+      expect(await hold(db, A, 'v@x.y', T0 + 2 * MIN)).toBe('held')
+      expect((await claimInvite(db, { email: 'v@x.y', now: T0 + 2 * MIN }))?.code).toBe(A)
+      // The other member's code keeps its place.
+      expect(await hold(db, B, 'w@x.y', T0 + 3 * MIN)).toBe('held')
+    })
+
     it('admits the same address again after a failed create, and spends no second place', async () => {
       const db = await makeDb()
       await people(db, 'inviter')

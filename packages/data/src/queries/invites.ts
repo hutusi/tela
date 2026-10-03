@@ -95,7 +95,8 @@ export async function liveCode(
 
 /**
  * Hold `email` beside `code` for a day (ADR 0034). The hold takes no place; a repeated join
- * refreshes it. On a single-use code the later join moves the hold, so only the last address
+ * refreshes it and makes it the newest, so the code an address joined with last is the one its
+ * sign-in spends (`claimInvite`). On a single-use code the later join moves the hold, so only the last address
  * asked for can finish. Nothing is written for an address that has an account, but its join
  * moves the hold all the same: a hold of one's own that outlived a join with another address
  * would tell that the other address has an account.
@@ -111,7 +112,8 @@ export async function holdJoin(
       insert into invite_redemptions (code, email, expires_at, created_at)
       select c.code, ${email}, ${now + JOIN_HOLD_MS}, ${now} from invite_codes c
       where c.code = ${code} and ${open} and not ${account(email)}
-      on conflict (code, email) do update set expires_at = excluded.expires_at
+      on conflict (code, email) do update
+        set expires_at = excluded.expires_at, created_at = excluded.created_at
       where invite_redemptions.redeemed_at is null
     `),
     // Whoever asked: on an open code the insert above always leaves a newcomer a live hold, and a
