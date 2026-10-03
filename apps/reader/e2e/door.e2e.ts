@@ -224,6 +224,31 @@ test.describe('Join, with an invite code', () => {
   })
 })
 
+test.describe('Join, from the front page', () => {
+  test.use(visitor(15))
+  test("the front page's own Join opens the sheet, and the new member lands on Discover", async ({
+    page,
+    request,
+  }) => {
+    const code = await adminCode(request)
+    const email = `front-joiner-${Date.now()}@e2e.test`
+    await page.goto('/')
+    await page.getByTestId('front-join').click()
+    const sheet = page.getByTestId('front-door')
+    await expect(sheet.getByTestId('join-code')).toBeFocused()
+    await sheet.getByTestId('join-code').fill(code)
+    await sheet.getByTestId('login-email').fill(email)
+    await sheet.getByTestId('login-submit').click()
+    await expect(sheet.getByTestId('login-code')).toBeFocused()
+    await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    await sheet.getByTestId('login-submit').click()
+    // Not the reading the front page sends a member to: a newcomer has nothing to read yet.
+    await expect(page).toHaveURL(/\/discover$/)
+    await expect(sheet).toHaveCount(0)
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+  })
+})
+
 test.describe('a link with an invite code', () => {
   test.use(visitor(14))
   test('fills the code in and takes it out of the address bar; a used code is told so', async ({
