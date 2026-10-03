@@ -26,8 +26,10 @@ Two holes on main get worse with every method that falls back on the code:
 
 ## Decision
 
-**Four methods, one gate.** Email code, password, Google and GitHub. The code stays first, and a
-provider's button appears only once its two secrets are set (`GET /api/v1/public/auth` says which).
+**Four methods, one gate.** Email code, password, Google and GitHub. The email code is always
+offered; the owner's design puts the provider buttons above it, and a provider's button appears
+only once its two secrets are set (`GET /api/v1/public/auth` says which), so with none configured
+the sheet is the code alone.
 Every new account passes 0034's `user.create.before`. Inside a better-auth endpoint, that hook
 also refuses an email that is not verified (`emailVerified !== true`), and any endpoint but the
 code sign-in and the OAuth callback. Only the admin route, which has no endpoint context, creates an
@@ -143,7 +145,9 @@ better-auth adds later (One Tap, an ID token) is refused rather than trusted.
 ## Consequences
 
 - Google is unreachable from mainland China and GitHub is unreliable there. The sheet shows the
-  code first, and it always works.
+  provider buttons first, as the owner's design does, and the email code below them on the same
+  sheet, always there and always working, so a reader who cannot reach Google signs in without
+  leaving it.
 - A provider can still make the account for an address its holder no longer owns. Someone whose
   Google or GitHub account still lists the address as verified, and who has a code (any member's,
   or an operator code guessed), can create that address's account before its owner joins, and
@@ -181,6 +185,14 @@ better-auth adds later (One Tap, an ID token) is refused rather than trusted.
   outbox right after the answer would have to wait for the mail instead. Left for now: the gate
   admits only members and invited addresses, the per-address limits allow five sends an hour, and
   the private beta is small.
+- A provider's start refuses a full code before the visitor leaves (409 `INVITE_USED`), which
+  is right for nearly everyone, but not for the one address whose own claim on a single-use code
+  was written when the account create after it failed: the code counts as full, and the retry
+  with the same provider is refused, though `claimByCode` at the return would re-admit that
+  address by its own row. The start cannot tell, since it does not know the address yet. The way
+  back is the email join, which answers `held` for that row and whose code sign-in re-admits it.
+  Letting the start through on a full code would send every other visitor holding one to the
+  provider only to be refused on return; deferred until a failed create is seen in production.
 - The operator registers the OAuth apps, with the redirect URI
   `https://tela.ainaive.com/api/auth/callback/<id>`; Google's consent screen needs the privacy page
   (0035). A provider stays off until both its secrets are set.
