@@ -11,7 +11,7 @@ import { BASE } from './helpers'
 
 test.use({
   storageState: { cookies: [], origins: [] },
-  extraHTTPHeaders: { 'cf-connecting-ip': '198.51.100.15' },
+  extraHTTPHeaders: { 'cf-connecting-ip': '198.51.100.50' },
 })
 
 test('GitHub: the sheet sends the visitor there with Tela’s callback, and says so when they cancel', async ({
