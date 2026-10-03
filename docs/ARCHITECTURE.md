@@ -229,7 +229,8 @@ The only public Worker, unpinned, with no D1.
   key, never the address asked. A request whose cookie holds `tela.session_token` is a member's:
   the plain shell from the assets, before the cache lookup, with no call to tela-api, never
   cached. Any answer but a 200 from tela-api, a 404 included, is the plain shell, uncached, never
-  a 404 page at `/`. Every browser response for `/` carries `Vary: cookie`; the colo's copy
+  a 404 page at `/`; so is a call that throws or takes more than three seconds, body included
+  (`PAGE_DEADLINE_MS`), on every public page: a slow D1 never keeps a page blank. Every browser response for `/` carries `Vary: cookie`; the colo's copy
   carries none (workerd ignores Vary), since only a visitor's copy is stored. A test
   (`apps/reader/test/routes.test.ts`) holds every public page to `run_worker_first`.
 - `/about`, `/privacy` and `/terms` are rendered the same way from the bundle alone: their route

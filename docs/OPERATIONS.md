@@ -267,7 +267,9 @@ is tela-api.
   serves a page that names scripts it removed, and a blog's change shows within five minutes.
   There is nothing to purge. `/` is rendered only for a request without `tela.session_token`; a
   member's is the plain shell. If `/` shows the plain shell to signed-out visitors, tela-api's
-  `/api/v1/public/front` is not answering 200 (deploy tela-api before tela-web when it is new).
+  `/api/v1/public/front` is not answering 200 within three seconds (deploy tela-api before
+  tela-web when it is new): tela-web logs `public page data late` or `public page data failed`
+  with the endpoint, which says which.
 - **Writes to `/api/*` without this origin get 403** `cross-origin write refused`. Hubs
   (`/api/websub/*`) and the admin script (`/api/admin/*`) are exempt. A browser always sends
   `Origin` on a POST, so seeing this from the app means something is proxying it.

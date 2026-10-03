@@ -45,7 +45,9 @@ does not, because workerd's cache ignores Vary and refuses `*`, and only visitor
 stored at all. The private-beta `x-robots-tag` goes on both branches.
 
 **A failed edition is the plain shell, never a 404.** Any answer from `/api/v1/public/front` but a
-200, a 404 included, gives the plain shell, uncached. A 404 there means tela-web shipped before
+200, a 404 included, gives the plain shell, uncached, and so does a call that throws or has not
+answered within three seconds: before this, `/` was a static asset nothing could slow down, and a
+cold colo now asks D1 in Singapore for it. A 404 there means tela-web shipped before
 tela-api has the route, or tela-api was rolled back; Discover's rule, that a 404 is a page that
 does not exist, would put "not found" on the home page in every colo for five minutes.
 

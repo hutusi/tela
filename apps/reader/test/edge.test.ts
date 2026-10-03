@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { bumpSeq, currentSeq } from '@tela/data'
 import type { Blobs } from '@tela/platform'
 import { memoryBlobs } from '@tela/platform/portable'
@@ -599,7 +599,7 @@ const FRONT: FrontData = {
 describe('the front page (ADR 0035)', () => {
   let stored: { url: string; headers: Headers }[]
   /** tela-web with tela-api's front page answering `answer`, and every other path as it does. */
-  function frontEdge(answer: () => Response) {
+  function frontEdge(answer: () => Response | Promise<Response>, pageDeadlineMs?: number) {
     stored = []
     const colo = memoryCache()
     const recording: EdgeCache = {
@@ -625,7 +625,11 @@ describe('the front page (ADR 0035)', () => {
       pages: pages as unknown as PublicPages,
       cache: recording,
       fetchImage: async () => new Response('nope', { status: 404 }),
-      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+      config: {
+        authSecret: 'a-test-secret-that-is-long-enough-for-hmac',
+        privateBeta: true,
+        ...(pageDeadlineMs === undefined ? {} : { pageDeadlineMs }),
+      },
     })
   }
   const json = () => Response.json(FRONT)
@@ -704,6 +708,30 @@ describe('the front page (ADR 0035)', () => {
       expect(res.headers.get('vary')).toBe('cookie')
       expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
       expect(stored).toEqual([])
+    }
+  })
+
+  test('a tela-api that hangs or throws is the plain shell too, in time, never kept', async () => {
+    const errors = spyOn(console, 'error').mockImplementation(() => {})
+    const answers = {
+      hangs: () => new Promise<Response>(() => {}),
+      throws: () => Promise.reject(new Error('the binding is gone')),
+      'sends no JSON': async () => new Response('<html>', { status: 200 }),
+    }
+    try {
+      for (const [how, answer] of Object.entries(answers)) {
+        const front = frontEdge(answer, 50)
+        const started = Date.now()
+        const res = await visit(front, '/')
+        expect(Date.now() - started, how).toBeLessThan(1_000)
+        expect(res.status, how).toBe(200)
+        expect(await res.text(), how).toBe(TEMPLATE)
+        expect(res.headers.get('cache-control'), how).toBe('public, max-age=0, must-revalidate')
+        expect(stored, how).toEqual([])
+      }
+      expect(errors).toHaveBeenCalledTimes(3)
+    } finally {
+      errors.mockRestore()
     }
   })
 })

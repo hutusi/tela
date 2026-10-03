@@ -47,6 +47,8 @@ export type EdgeDeps = {
     authSecret: string
     /** While set, nothing is indexed (ADR 0015). */
     privateBeta: boolean
+    /** How long a public page waits on tela-api for its data; `PAGE_DEADLINE_MS` unless a test says. */
+    pageDeadlineMs?: number
   }
 }
 
@@ -93,6 +95,12 @@ const CACHE_ORIGIN = 'https://tela-edge.cache'
 /** A rendered public page, at the edge. The browser always asks again: the page is the shell too. */
 const PAGE_EDGE_CACHE = 'public, s-maxage=300'
 const PAGE_CACHE = 'public, max-age=0, must-revalidate'
+/**
+ * How long a public page waits on tela-api before it is the plain shell instead, which asks again
+ * from the browser. `/` is the page most visitors open, and a cold colo asks D1 in Singapore for
+ * it: a slow D1 must not keep the front page blank.
+ */
+const PAGE_DEADLINE_MS = 3_000
 const WRITES = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 /** Called by hubs and by the admin script, with their own authorization and no browser. */
 const CROSS_ORIGIN_WRITERS = /^\/api\/(websub|admin)\//
@@ -312,6 +320,40 @@ export function createEdge(deps: EdgeDeps) {
     return response
   }
 
+  /**
+   * A public page's data from tela-api, within the deadline: `{data}`, null in it when tela-api
+   * says there is no such page; or null for the plain shell, when it answers anything else, throws,
+   * or takes too long (`alwaysExists`: a 404 too). The body is read inside the deadline as well.
+   */
+  async function pageData(
+    path: string,
+    url: URL,
+    alwaysExists: boolean,
+  ): Promise<{ data: unknown } | null> {
+    const ask = async () => {
+      const res = await api.fetch(new Request(new URL(path, url).toString()))
+      if (res.status === 404 && !alwaysExists) return { data: null }
+      if (res.status !== 200) return null
+      return { data: (await res.json()) as unknown }
+    }
+    const deadline = config.pageDeadlineMs ?? PAGE_DEADLINE_MS
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<'late'>((resolve) => {
+      timer = setTimeout(() => resolve('late'), deadline)
+    })
+    try {
+      const answer = await Promise.race([ask(), late])
+      if (answer !== 'late') return answer
+      console.error('public page data late', path, `${deadline}ms`)
+      return null
+    } catch (err) {
+      console.error('public page data failed', path, err)
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   async function renderPublic(
     request: Request,
     url: URL,
@@ -338,16 +380,16 @@ export function createEdge(deps: EdgeDeps) {
     // A page with no endpoint (About, Privacy, Terms) renders from the bundle alone.
     let data: unknown = {}
     if (route.api !== null) {
-      const res = await api.fetch(new Request(new URL(route.api, url).toString()))
-      // tela-api is down or slow, or (for a page that always exists) has no such endpoint yet: the
-      // plain shell, uncached, which asks again from the browser. A cached 404 at `/` would be the
-      // front page for five minutes.
-      if (res.status !== 200 && (res.status !== 404 || route.alwaysExists)) {
+      const answer = await pageData(route.api, url, route.alwaysExists === true)
+      // tela-api is down, slow or failing, or (for a page that always exists) has no such endpoint
+      // yet: the plain shell, uncached, which asks again from the browser. A cached 404 at `/`
+      // would be the front page for five minutes.
+      if (!answer) {
         return new Response(template, {
           headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': PAGE_CACHE },
         })
       }
-      data = res.status === 404 ? null : ((await res.json()) as unknown)
+      data = answer.data
     }
     let html: string
     try {
