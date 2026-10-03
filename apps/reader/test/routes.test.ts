@@ -137,9 +137,18 @@ describe('public pages at the edge', () => {
 describe('answers the pages turn into messages', () => {
   test('sign-in returns only to this site', () => {
     expect(safeNext('/s/1')).toBe('/s/1')
-    for (const next of [null, 'https://evil.example', '//evil.example', '/\\evil.example']) {
-      expect(safeNext(next)).toBe('/reading')
-    }
+    expect(safeNext('/reading?article=7#top')).toBe('/reading?article=7#top')
+    // A browser drops a tab or a newline and reads a backslash as a slash: each is another site.
+    const elsewhere = [
+      null,
+      'https://evil.example',
+      '//evil.example',
+      '/\\evil.example',
+      '/\t/evil.example',
+      '/\n/evil.example',
+      '/\r//evil.example',
+    ]
+    for (const next of elsewhere) expect(safeNext(next)).toBe('/reading')
   })
   test("a mailed link's code is read, and nothing but where to go next stays in the address", () => {
     const link = (query: string) => new URLSearchParams(query)

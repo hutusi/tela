@@ -30,10 +30,23 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /** Where a new member goes first: something to subscribe to. */
 export const NEWCOMER = '/discover'
 
-/** Only same-site paths: `//evil.example` and `/\evil.example` are absolute in a browser. */
+/** Any origin will do for resolving a path against: only whether it stays the same is asked. */
+const HERE = 'https://tela.invalid'
+
+/**
+ * Only a path on this site, as the browser will read it. A browser drops tabs and newlines from a
+ * URL and reads `\` as `/`, so `/\t/evil.example` and `/\evil.example` are `//evil.example`, another
+ * site: a value with any control character or backslash is refused outright, and what is left must
+ * resolve to this origin.
+ */
 export function safeNext(next: string | null, fallback = '/reading'): string {
-  if (!next?.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return fallback
-  return next
+  if (!next?.startsWith('/') || /[\\\p{Cc}]/u.test(next)) return fallback
+  try {
+    const url = new URL(next, HERE)
+    return url.origin === HERE ? `${url.pathname}${url.search}${url.hash}` : fallback
+  } catch {
+    return fallback
+  }
 }
 
 /** What a mailed link carries: a sign-in code, or with `reset=1` a password reset's code. */
