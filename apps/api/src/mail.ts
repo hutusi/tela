@@ -139,7 +139,7 @@ export function providerAccountMail(options: {
     ],
     ifNot: [
       `If it was not you, the account is still yours: sign in at ${publicUrl}/login with a code sent to this address, then remove ${provider} and sign out everywhere in Settings → Account.`,
-      `如果不是你本人，这个账号仍然属于你：在 ${publicUrl}/login 用发到此邮箱的验证码登录，然后在“设置 → 账号”中移除 ${provider}，并退出所有设备。`,
+      `如果不是你本人，这个账号仍然属于你：在 ${publicUrl}/login 用发到此邮箱的验证码登录，然后在“设置 → 账户”中移除 ${provider}，并退出所有设备。`,
     ],
   })
 }
@@ -209,7 +209,7 @@ export function accountChangeMail(options: {
       ],
       ifNot: [
         `If it was not you, ${byCode[0]}, then remove ${provider} and sign out everywhere in Settings → Account.`,
-        `如果不是你本人，请${byCode[1]}，然后在“设置 → 账号”中移除 ${provider}，并退出所有设备。`,
+        `如果不是你本人，请${byCode[1]}，然后在“设置 → 账户”中移除 ${provider}，并退出所有设备。`,
       ],
     },
     unlinked: {
@@ -220,7 +220,7 @@ export function accountChangeMail(options: {
       ],
       ifNot: [
         `If it was not you, someone is signed in as you: ${byCode[0]}, then sign out everywhere in Settings → Account, and link ${provider} again.`,
-        `如果不是你本人，说明有人以你的身份登录了：请${byCode[1]}，然后在“设置 → 账号”中退出所有设备，并重新关联 ${provider}。`,
+        `如果不是你本人，说明有人以你的身份登录了：请${byCode[1]}，然后在“设置 → 账户”中退出所有设备，并重新关联 ${provider}。`,
       ],
     },
   }
