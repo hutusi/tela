@@ -43,7 +43,7 @@ directory.
 | `BAILIAN_API_KEY`, `BAILIAN_BASE_URL` | tela-jobs (key secret) | The key is a mainland one: leave the base URL unset (`dashscope.aliyuncs.com`; the international endpoint refuses it) |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` | tela-jobs (key secret) | Anthropic, if ever used |
 | `LLM_JSON_MODE` | tela-jobs | `text` (parse JSON from the reply; Bailian's default) or `schema` (structured output; Anthropic's) |
-| `LLM_DAILY_BUDGET_TOKENS` | tela-jobs | Day cap for background title translation; `0` = unlimited. Production ran 2,000,000. Reader requests are metered per member instead |
+| `LLM_DAILY_BUDGET_TOKENS` | tela-jobs | Day cap for background title translation; `0` = unlimited. Production sets 2,000,000 in `apps/jobs/wrangler.jsonc`, so every deploy carries it (until 2026-10-04 it was set nowhere, and titles ran uncapped). Reader requests are metered per member instead |
 | `LLM_MAX_ARTICLE_TOKENS` | tela-jobs | Source tokens translated per body (default 40,000); the rest stays as source and the translation is `partial` |
 | `LLM_MOCK_DROP_MARKER` | tela-jobs, tests only | With `LLM_PROVIDER=mock`, the mock drops every block containing this text, so a run can reach `partial` |
 | `RELAY_URL`, `RELAY_SECRET` | tela-jobs (secret) | The relay's origin and shared signing secret. Unset (as now): feeds never change region |
@@ -628,7 +628,8 @@ subscribers on an unclaimed site.
   Cached blocks keep their `model`, so old and new output can be compared.
 - **Add a reading language:** the recipe is in AGENTS.md ("How to"). Deploying one makes every
   article's title due in it at once, since `titleIsDue` has no age limit: the archive is translated
-  over the following days under `LLM_DAILY_BUDGET_TOKENS`. Watch it with `select target_lang,
+  over the following hours or days under `LLM_DAILY_BUDGET_TOKENS` (French, for 1,197 articles,
+  took 91 calls and about 320k tokens over eleven minutes). Watch it with `select target_lang,
   count(*), sum(input_tokens + output_tokens) from llm_calls where job = 'translate.title' and
   created_at > … group by target_lang`. Traditional Chinese costs nothing to backfill: it is
   converted from Simplified, so `llm_calls` never has a `zh-Hant` row (ADR 0038).

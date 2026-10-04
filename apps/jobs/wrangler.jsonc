@@ -72,7 +72,11 @@
     "FETCH_TIMEOUT_MS": "20000",
     "WEBSUB_ENABLED": "0",
     "PUBLIC_URL": "https://tela.ainaive.com",
-    "MAIL_FROM": "Tela <noreply@ainaive.com>"
+    "MAIL_FROM": "Tela <noreply@ainaive.com>",
+    // The day's ceiling on background title translation, kept in the config so every deploy
+    // carries it: until 2026-10-04 it was set nowhere, and titles ran uncapped. A new reading
+    // language's whole-archive backfill cost about 320k tokens in October 2026.
+    "LLM_DAILY_BUDGET_TOKENS": "2000000"
   },
   // Secrets (wrangler secret put): BAILIAN_API_KEY, RESEND_API_KEY, DIGEST_TO, DEADMAN_URL.
   "env": {
