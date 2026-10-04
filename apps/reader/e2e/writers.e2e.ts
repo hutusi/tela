@@ -96,7 +96,7 @@ test.describe('For writers, for a visitor', () => {
     await expect(card.getByTestId('writer-card-name')).toHaveText(NAME)
     await expect(card.getByTestId('writer-card-handle')).toHaveText('@hutusi')
     await expect(card.getByTestId('writer-card-bio')).toHaveText(BIO)
-    await expect(card.getByTestId('writer-card-reads')).toContainText(/reads \d+ blogs?/)
+    await expect(card.getByTestId('writer-card-reads')).toContainText(/Reads \d+ blogs?/)
     // The latest recommendation stands where a pinned post would: Tela has none.
     await expect(card.getByTestId('writer-card-latest')).toContainText(NOTE)
     await expect(page.getByTestId('writers-note').first()).toContainText(NOTE)

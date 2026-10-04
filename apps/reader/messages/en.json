@@ -313,8 +313,7 @@
       "name": "Your name",
       "blog": "Your blog's address",
       "blogPlaceholder": "yourblog.com",
-      "submit": "Claim your card",
-      "hint": "Free, and you can change your name and handle later in Settings."
+      "submit": "Claim your card"
     },
     "availability": {
       "available": "✓ @{handle} is available",
@@ -333,21 +332,34 @@
       "writes": "Writes",
       "followers": "<b>{n}</b> {n, plural, one {follower} other {followers}}",
       "recommendations": "<b>{n}</b> {n, plural, one {recommendation} other {recommendations}}",
-      "reads": "reads <b>{n}</b> {n, plural, one {blog} other {blogs}}",
+      "reads": "Reads <b>{n}</b> {n, plural, one {blog} other {blogs}}",
       "recommends": "Latest recommendation",
       "yourName": "Your name",
       "yourHandle": "yourname",
-      "later": "Your recommendations, and the blogs you read if you choose to show them, appear here as you use Tela."
+      "later": "Your recommendations, and the blogs you read if you choose to show them, appear here as you use Tela.",
+      "follow": "Follow",
+      "claimed": "Claimed",
+      "readsLabel": "Reads",
+      "yourBlog": "Your blog",
+      "bioLater": "A line about what you write. You can change it any time.",
+      "latestLater": "Your latest recommendation shows here.",
+      "captionExample": "@{handle}'s card, live on Tela. Type your name to see yours.",
+      "captionLive": "@{handle}'s card, live on Tela.",
+      "captionDraft": "Your card, as you type."
     },
     "find": {
       "title": "Writers find each other here.",
-      "intro": "A recommendation on Tela can carry a note, and it shows on the recommender's card. These are {name}'s, live from Tela."
+      "intro": "Follow the writers you like and see what they recommend and like, and the blogs they read when they show them. A post someone recommends reaches everyone who follows them, with their note.",
+      "label": "Lately from @{handle}",
+      "recommended": "recommended a post from {source}",
+      "liked": "liked a post from {source}"
     },
     "does": {
       "title": "What your card does",
       "link": {
         "title": "One link for everything you write",
-        "body": "Your card at /@handle lists every blog you claim, with your name and a line about you."
+        "body": "Your card at /@handle lists every blog you claim, with your name and a line about you.",
+        "pill": "Find me on Tela"
       },
       "blogroll": {
         "title": "Your blogroll",
@@ -355,7 +367,9 @@
       },
       "readers": {
         "title": "Readers",
-        "body": "Readers follow you, subscribe to your blog in one click, and can read it translated beside the original. Your Dashboard shows how many read you, which posts they liked, and the notes they left."
+        "body": "Readers follow you, subscribe to your blog in one click, and can read it translated beside the original. Your Dashboard shows how many read you, which posts they liked, and the notes they left.",
+        "blogReaders": "{n, plural, one {# reader} other {# readers}} on Tela",
+        "followers": "{n, plural, one {# follower} other {# followers}}"
       }
     },
     "how": {
@@ -389,8 +403,8 @@
       }
     },
     "cta": {
-      "count": "{n, plural, one {# blog is} other {# blogs are}} already on Tela. Where's yours?",
-      "title": "Where's your blog?",
+      "count": "{n, plural, one {# blog is} other {# blogs are}} already on Tela. <em>Where's yours?</em>",
+      "title": "<em>Where's your blog?</em>",
       "make": "Make your card"
     }
   },

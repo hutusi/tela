@@ -313,8 +313,7 @@
       "name": "你的名字",
       "blog": "你的博客地址",
       "blogPlaceholder": "yourblog.com",
-      "submit": "认领你的名片",
-      "hint": "免费。名字和用户名之后都可以在设置里修改。"
+      "submit": "认领你的名片"
     },
     "availability": {
       "available": "✓ @{handle} 可以使用",
@@ -337,17 +336,30 @@
       "recommends": "最近推荐",
       "yourName": "你的名字",
       "yourHandle": "yourname",
-      "later": "你推荐的文章，以及你选择公开的在读博客，会随着你使用 Tela 出现在这里。"
+      "later": "你推荐的文章，以及你选择公开的在读博客，会随着你使用 Tela 出现在这里。",
+      "follow": "关注",
+      "claimed": "已认领",
+      "readsLabel": "在读",
+      "yourBlog": "你的博客",
+      "bioLater": "一句话介绍你写什么。随时可以修改。",
+      "latestLater": "你最近推荐的文章会显示在这里。",
+      "captionExample": "@{handle} 的名片，实时来自 Tela。输入你的名字，看看你的。",
+      "captionLive": "@{handle} 的名片，实时来自 Tela。",
+      "captionDraft": "你的名片，随输入而变。"
     },
     "find": {
       "title": "写作者在这里彼此发现。",
-      "intro": "在 Tela 上推荐文章时可以附一句话，它会显示在推荐者的名片上。以下是 {name} 的推荐，实时来自 Tela。"
+      "intro": "关注你喜欢的写作者，看他们推荐和喜欢的文章，以及他们公开的在读博客。有人推荐一篇文章，连同附言，会出现在每个关注他的人那里。",
+      "label": "@{handle} 最近",
+      "recommended": "推荐了 {source} 的一篇文章",
+      "liked": "喜欢了 {source} 的一篇文章"
     },
     "does": {
       "title": "名片能做什么",
       "link": {
         "title": "一个链接，汇集你写的一切",
-        "body": "你的名片在 /@用户名，列出你认领的每个博客，还有你的名字和一句简介。"
+        "body": "你的名片在 /@用户名，列出你认领的每个博客，还有你的名字和一句简介。",
+        "pill": "在 Tela 上找到我"
       },
       "blogroll": {
         "title": "你的博客链",
@@ -355,7 +367,9 @@
       },
       "readers": {
         "title": "读者",
-        "body": "读者可以关注你，一键订阅你的博客，还能对照原文读译文。仪表盘会告诉你有多少人在读、他们喜欢哪些文章、留下了什么话。"
+        "body": "读者可以关注你，一键订阅你的博客，还能对照原文读译文。仪表盘会告诉你有多少人在读、他们喜欢哪些文章、留下了什么话。",
+        "blogReaders": "Tela 上有 {n} 位读者",
+        "followers": "{n} 位关注者"
       }
     },
     "how": {
@@ -389,8 +403,8 @@
       }
     },
     "cta": {
-      "count": "已有 {n} 个博客在 Tela 上。你的呢？",
-      "title": "你的博客在哪里？",
+      "count": "已有 {n} 个博客在 Tela 上。<em>你的呢？</em>",
+      "title": "<em>你的博客在哪里？</em>",
       "make": "制作你的名片"
     }
   },
