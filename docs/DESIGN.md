@@ -235,28 +235,41 @@ sheet unless a request is out; `/join` closes to `/`. Each error has its own wor
 a provider's code nobody listed still says the provider failed. A refused Google or GitHub
 sign-in comes back to the page it started on, which opens the sheet again saying why.
 
-For writers (`/writers`, from the design's *For writers v2*): a 1120 px page. The hero is two
-columns from `lg`: on the left the kicker in accent capitals, the serif title at 58 px (42 px on a
-phone) with *calling card* in accent italic, a lede, and the *Make your card* form (the name, the
-blog behind a muted `https://`, a line saying whether the handle is free, the `primary` *Claim your
-card*); on the right the card (`WriterCard`, a `surface` card with 16 px corners), sticky. Before
-the visitor types, the card is a real member's live public profile, `@hutusi` (`lib/example.ts`,
-the one place it is named): picture, name, @handle, the blogs they claimed, bio, followers and
-recommendations, "reads N blogs" only when their subscriptions are public, and their latest
-recommendation where the design had a pinned post; with no such profile (a fresh stack), an empty
-dashed outline. As they type it becomes theirs: the name, the handle suggested from it
-(`lib/suggest-handle.ts`: the first name folded to `[a-z0-9_]`, the whole name when that is too
-short, the blog's own name for a name with nothing Latin in it), the blog's host, and a dashed note
-that recommendations and blogs read come as they use Tela. Typing pauses 400 ms before the page asks
-`/api/v1/public/handles/:handle`: "✓ @x is available" in accent, or "@x is taken. Try @y." with
-the suggestion a button; no answer says nothing and never holds the button back. Then *Writers find
-each other here.* (the example's recommendations that carry a note, as cards; gone when there are
-none), *What your card does* (01–03 under an ink rule), *How it works* (1–3 in thumb-ringed
-circles), *Your site stays yours* on the `hover` ground, and the closing line with the live count
-of public blogs (`/api/v1/public/front`; without it, "Where's your blog?"), whose *Make your card*
-scrolls to the form and focuses the name. The copy says only what Tela does today: no pinned post,
-no named readers, no "reads you too", and translation is turned off from the Dashboard, not by
-removing the card. A member sees *Claim your blog* and *Your card* instead of the form.
+For writers (`/writers`, from the design's *For writers v2*): a 1200 px page, 40 px sides from `md`.
+The hero is two columns once both fit at 460 px with 80 px between them (about 1080 px of window),
+and stacks below that: on the left the kicker in accent capitals, the serif title at 68 px (56 px
+from `sm`, 44 px on a phone) with *calling card* in accent italic, a lede, and the *Make your card*
+form (50 px fields with 12 px corners on the `field` ground, the blog's with an inline muted
+`https://`, then one row holding the line that says whether the handle is free and the `primary`
+*Claim your card*); on the right the card (`WriterCard`) with a caption under it. The card is a
+paper card on either ground (the `.paper` scope below, 18 px corners, 32 px in): a 60 px avatar, the
+name in serif at 34 px, the @handle, a Follow pill in ink that goes to the profile, *Writes* with
+each claimed blog's swatch, name and host and a *✓ Claimed*, the bio in serif italic, the counts
+with 22 px serif numerals, then under a rule the latest recommendation (where the design pins a
+post) with its note, and *Reads* with up to four blogs as chips and a "+N". Before the visitor
+types, it is a real member's live public profile, `@hutusi` (`lib/example.ts`, the one place it is
+named), "Reads N blogs" and the chips only when their subscriptions are public; with no such profile
+(a fresh stack), the card's outline in `hover` bars. As they type it becomes theirs, as the design's
+draft card: the name, the handle suggested from it (`lib/suggest-handle.ts`: the first name folded
+to `[a-z0-9_]`, the whole name when that is too short, the blog's own name for a name with nothing
+Latin in it), a blog name made from the host, a placeholder bio, zero counts, and a dashed note that
+recommendations and blogs read come as they use Tela. Typing pauses 400 ms before the page asks
+`/api/v1/public/handles/:handle`: "✓ @x is available" in accent, or "@x is taken. Try @y." with the
+suggestion a button; no answer says nothing and never holds the button back.
+
+Below the hero, each section under a `line` rule and each only from what Tela has: *Writers find
+each other here.* beside an activity card of the example's latest four recommendations and public
+likes, newest first, a recommendation's note under an accent rule (gone when there are none); *What
+your card does* (01–03 in accent serif), each with a small illustration that shows only when it has
+something true to show: the *Find me on Tela* link pill to the example's card, a blogroll of four
+blogs they read publicly, and a readers card from the claimed blog's reader count and the example's
+followers; *How it works* (1–3 as 56 px accent numerals under 2 px `ink` rules); *Your site stays
+yours* on the page ground, its title and three points in one row from `lg`; and the centred closing
+line with the live count of public blogs and an italic *Where's yours?* (`/api/v1/public/front`;
+without it, "Where's your blog?"), whose *Make your card* scrolls to the form and focuses the name.
+The footer the other public pages carry closes it. The copy says only what Tela does today: no
+pinned post, no named readers, no "reads you too", and translation is turned off from the Dashboard,
+not by removing the card. A member sees *Claim your blog* and *Your card* instead of the form.
 *Claim your card* opens the sheet in claim mode, titled "Claim @handle": a join (or a log-in) that,
 once the session is the member's and their handle is still the provisional `u_…`, sets the handle
 and display name, then lands on `/claim?url=…` with the blog filled in, and with a note when the
@@ -400,12 +413,20 @@ Tokens the Next app did not need, because it hard-coded them (and `knob`, which 
 | `highlight` | `oklch(0.91 0.10 95)` | `oklch(0.50 0.09 90 / 0.55)` | a highlight's paint |
 | `highlight-strong` | `oklch(0.80 0.14 90)` | `oklch(0.70 0.12 90)` | the highlight being edited |
 | `knob` | `#fff` | `#ede7db` | a switch's knob, light on either track in both themes (Tela v2) |
+| `field` | `#fff` | `#171511` | a form field's ground: white on paper, below the ground (not lifted) at night, as *For writers v2* draws its fields |
 | `primary` | `#1f1c18` | `oklch(0.68 0.14 150)` | the one filled call to action: *Join* (the header's, and the front page's *Join Tela*), the sheet's button (ADR 0035) |
 | `on-primary` | `#f6f2ea` | `#1f1c18` | text on `primary` |
 
 `primary` is ink by day, as the design's Day page has it, and the lifted green by night, as its
 Night page has it: a filled ink button on the dark ground would be a pale slab, louder than
 anything else on the page. `door.e2e.ts` checks the pair's computed colours in both themes.
+
+`.paper` is a scope for an element that stays a light card on either ground, as the design draws
+the For writers card at night. It re-declares every light token on the element, so its descendants
+inherit those ahead of the dark values on `:root` and their utilities need no `dark:` variant; a
+token added to `@theme` goes in its list too, or the dark value leaks in. `.paper-card` gives such
+a card its ground and lift: white with a hairline under it by day, the paper itself with a deeper
+shadow at night.
 
 Dark mode redefines every token on a warm near-black ground rather than adding `dark:` variants.
 The values are the Night palette of the design's front page (*Tela Landing*, 2A), so the member's
