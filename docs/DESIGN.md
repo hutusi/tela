@@ -69,26 +69,36 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
   Reading/Discover/Following pills (Following for members), search, the theme menu (from `sm`),
-  the Read-in pill ("Read in 中文 EN"), and the member's avatar (30px: their picture, or their initial on the accent). A
+  the Read-in menu ("Read in EN ▾"), and the member's avatar (30px: their picture, or their initial on the accent). A
   member's interface language is in Settings → Language, not the header. Pills are ink in every state: the active one is distinguished by its
   `hover` background alone, never by colour.
 - A visitor's header (ADR 0035) is its own, shown as soon as the device is known to hold no
   member (a guest, or a session still `unknown` with no stored account), so it never waits for
   `/me`. From `sm` up: the lockup, the Discover and *For writers* pills, then the theme menu,
-  "Read in 中文 EN" (`VisitorLocale`), *Log in* as a quiet pill and *Join* filled in `primary`;
+  "Read in EN ▾" (`VisitorLocale`), *Log in* as a quiet pill and *Join* filled in `primary`;
   below `sm` the lockup, the nav and Join, which at 360px leaves the two pills some 35px to spare.
   No Reading pill and no search, both a member's. "Read in" sets the interface language and with
   it the language titles are translated into, which reverses the rule of 2026-10-01 that a visitor
   changed it only on the sign-in page: the first thing a visitor needs to know is whether they can
-  read the page. It is the member's pill (`ReadInPill`, ADR 0037), both languages in view and one
-  press to change, each in its own script; the edge's page marks the language it was rendered in,
-  which is right for everyone it is cached for, since the cache is kept per language, and choosing
-  needs the script. Log in and Join are links to `/login` and `/join`, which open the sheet over the
+  read the page. It is the member's menu (`ReadInMenu`); the edge's page marks the language it was
+  rendered in, which is right for everyone it is cached for, since the cache is kept per language,
+  and choosing needs the script. Log in and Join are links to `/login` and `/join`, which open the sheet over the
   page once the script runs (a modified click still opens the page).
 - The controls on the right are one family (`header-control.ts`): 34px tall and round, on
   `surface`, in a `line` border that darkens on hover. The search link and the theme menu are
-  circles of it, the Read-in pill a pill, whose text is 12px until `lg`, where the member's header
-  has the least room.
+  circles of it, the Read-in button a pill, whose text is 12px until `lg`, where the member's
+  header has the least room.
+- Read in (`ReadInMenu`) is one menu for every reader: a member's sets the language posts are
+  translated into, a visitor's (in the header and on `/login`) the interface and with it the
+  titles. Four languages do not fit in view, so the button names only the current one, short and
+  in its own script (`PILL_LABELS`: 简中, 繁中, EN, FR; "中文" alone stopped saying which Chinese
+  once Traditional came), and the list names each in full, in its own script and `lang`
+  (简体中文, 繁體中文, English, Français), so a reader who cannot read the page can still find
+  theirs. It is built as the theme menu is (`useHeaderMenu`, `MENU_PANEL`, `menuItem`): a native
+  `<details>`, its list a 160px `surface` panel right-aligned under the button, the chosen language
+  on the `hover` ground and `aria-pressed`, closed by a choice, a click elsewhere or Esc (which
+  gives focus back to the button). The button is 97px with EN and 104px with 简中 or 繁中 below `lg`
+  (106 and 114px at `lg`, macOS), against 138px for the two-language pill it replaced.
 - The theme menu (`ThemeMenu`, ADR 0037), in both headers from `sm` up and hidden below it, offers
   Auto, Light and Dark, as Settings and the Aa menu do. Its circle shows the choice in the `Glyph`
   line style, a half-filled circle for Auto, a sun, a moon, with its name ("Theme: Auto") inside
@@ -120,12 +130,14 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   each one wraps its label into the 56px bar instead. Below `sm` they stay shrinkable — the phone
   header has no room to spare, and a wrapped pill beats a nav with nothing left to scroll.
   `styles.e2e.ts` measures this at 640, 768, 800, 1024 and 1280, and from `sm` up no pill may be
-  clipped. With the theme menu and the Read-in pill in, the member's row is 247px on macOS, and
-  640px, the tightest case, leaves it 38px to spare (166px at 768, 221px at 1024); CI's Linux
-  Chromium sets text about 2% wider. Below `sm` it scrolls, 102px of it showing at 360.
+  clipped. With the theme menu and Read in at its widest label (简中, 繁中) in, the member's row
+  is 247px on macOS, and 640px, the tightest case, leaves it about 72px to spare (about 200px at
+  768, 256px at 1024): the 38px the two-language pill left, plus the 34px the menu saves. CI's
+  Linux Chromium sets text about 2% wider. Below `sm` it scrolls, about 122px of it showing at 360.
   `door.e2e.ts` measures the visitor's header at 360, 412, 640, 768, 800, 1024 and 1280 with the
-  same helper (`measureHeader` in `e2e/helpers.ts`): its 175px row is never clipped (57px to spare
-  at 640), and no control wraps.
+  same helper (`measureHeader` in `e2e/helpers.ts`): its 175px row is never clipped (about 90px
+  to spare at 640), and no control wraps. Both specs hold the Read-in button under the old pill's
+  137px, so a fifth language or a longer label cannot quietly take the room back.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
   list are sticky and scroll independently. The sidebar collapses to a 48px rail from a toggle in
@@ -173,7 +185,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 ## Components (`apps/reader/src/components`)
 
-`AppHeader`, `ThemeMenu`, `ReadInPill` (`ReadInMenu`, `VisitorLocale`), `FrontDoor` (the sheet and `DoorForm`), `WriterCard`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
+`AppHeader`, `ThemeMenu`, `ReadInMenu` (`MemberReadIn`, `VisitorLocale`), `FrontDoor` (the sheet and `DoorForm`), `WriterCard`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
 `PairedBody`, `TranslationBar`, `Untranslated`, `LikeButton`, `RecommendPopover`, `EmptyState`,
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `SiteFooter`, `TypographyMenu`, the
 highlight toolbar, note and list (`highlights.tsx`), and `Shortcuts`. The front page, Discover, a
@@ -208,8 +220,11 @@ box, *Confirm it's you*, which mails a code to the member's own address and take
 since the login page sends a member straight on. Its code field and its refusals are the sheet's
 (`door.codePlaceholder`, `door.errors.*`): a 429 says "too many tries" here too, never "wrong code".
 `/settings/translation` is labelled Language: the
-interface language comes first, each choice in its own name (English, 简体中文) so it can be found
-whatever the page is in, then what posts are translated into. The interface language is the
+interface language comes first, a native select like the one after it, each choice in its own
+name and `lang` (简体中文, English) so it can be found whatever the page is in, then what posts are
+translated into. A language's name that stands as a label (an option, a chip) starts with a
+capital (`asLabel`: "Français"), where a sentence keeps it as the language writes it
+("traduit du français"). The interface language is the
 profile's, so it follows the member to every device; the `tela_locale` cookie mirrors it for the
 edge, and is all a visitor has. A section opens with a 30 px serif heading and a
 muted intro; below, rows (`SettingRow`) separated by `line` rules: the label and a muted hint on the

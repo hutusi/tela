@@ -7,7 +7,7 @@ import { AccountMenu } from './account-menu'
 import { type DoorRequest, opensSheet, useFrontDoor } from './front-door'
 import { CONTROL } from './header-control'
 import { LogoMark } from './logo'
-import { ReadInMenu } from './read-in-menu'
+import { MemberReadIn } from './read-in-menu'
 import { SearchField } from './search-field'
 import { ThemeMenu } from './theme-menu'
 import { VisitorLocale } from './visitor-locale'
@@ -44,8 +44,8 @@ function Lockup() {
  * allowed to shrink, because it is the one that scrolls). A member's profile, dashboard, settings
  * and sign-out are in the menu under their avatar (Tela v2). A visitor gets a header of their own
  * (ADR 0035), as soon as the device is known to hold no member: it does not wait for /me. Both
- * carry the theme menu from `sm` up, and the same Read-in pill (ADR 0037); the controls on the
- * right are one family (`header-control.ts`).
+ * carry the theme menu from `sm` up, and the same Read-in menu; the controls on the right are one
+ * family (`header-control.ts`).
  */
 export function AppHeader() {
   const { status } = useSession()
@@ -94,7 +94,7 @@ function VisitorHeader() {
       </nav>
       <div className="flex-1" />
       <ThemeMenu />
-      <VisitorLocale className="hidden shrink-0 sm:flex" />
+      <VisitorLocale className="hidden shrink-0 sm:block" />
       <div className="flex shrink-0 items-center gap-1.5">
         <Link
           to="/login"
@@ -156,7 +156,7 @@ function MemberHeader() {
       />
       <ThemeMenu />
       {/* The UI locale is in Settings for a member. */}
-      {member ? <ReadInMenu readingLang={readingLang} /> : null}
+      {member ? <MemberReadIn readingLang={readingLang} /> : null}
       {member ? <AccountMenu /> : null}
     </header>
   )

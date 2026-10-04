@@ -3,16 +3,27 @@
  * chunks and laid over the original. The mock provider prefixes "en:" and drops a block marked
  * [[drop]], which is how a provider omitting an entry looks.
  */
-import { expect, test } from '@playwright/test'
+import { type APIRequestContext, expect, test } from '@playwright/test'
 import {
+  BASE,
   ensureFeeds,
   FIXTURES,
   heldOnDevice,
   keepCycling,
+  memberHeaders,
   resetReading,
   setPrefs,
   synced,
 } from './helpers'
+
+/** The member's reading language as the server has it, through a snapshot pull. */
+async function serverReadingLang(request: APIRequestContext): Promise<string | undefined> {
+  const res = await request.get(`${BASE}/api/v1/sync?cursor=0`, {
+    headers: await memberHeaders(request),
+  })
+  const body = (await res.json()) as { rows: { profile: { readingLang: string }[] } }
+  return body.rows.profile[0]?.readingLang
+}
 
 test.beforeAll(async () => {
   // A Japanese blog, whose titles the setup's sweeps have not seen yet.
@@ -146,11 +157,11 @@ test.describe('translation', () => {
   test('switching the reading language changes what gets translated', async ({ page }) => {
     await page.goto('/reading')
     await synced(page)
-    await page.getByTestId('read-in').getByRole('button', { name: '中文' }).click()
-    await expect(page.getByTestId('read-in').getByRole('button', { name: '中文' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+    const readIn = page.getByTestId('read-in')
+    await readIn.locator('summary').click()
+    await readIn.getByRole('button', { name: '简体中文' }).click()
+    await expect(readIn.locator('summary')).toHaveAccessibleName('Read in 简中')
+    await expect(readIn.getByTestId('read-in-zh-Hans')).toHaveAttribute('aria-pressed', 'true')
     // An English feed is now foreign; its titles in Chinese come from the next sweep.
     await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
     const stop = keepCycling(page)
@@ -161,8 +172,74 @@ test.describe('translation', () => {
     } finally {
       stop()
     }
-    await page.getByTestId('read-in').getByRole('button', { name: 'EN' }).click()
+    await readIn.locator('summary').click()
+    await readIn.getByRole('button', { name: 'English' }).click()
     await expect(page.getByTestId('article-row').first()).not.toContainText('EN → ZH')
+  })
+
+  /**
+   * Four languages do not fit in view, so Read in is a menu: the button names the one chosen,
+   * short, and the list names each in full, in its own script and `lang`. A choice is the member's
+   * reading language, pushed and kept, whatever the interface is in.
+   */
+  test('the Read-in menu offers four languages in their own names, and keeps the choice', async ({
+    page,
+  }) => {
+    try {
+      await page.goto('/reading')
+      await synced(page)
+      const readIn = page.getByTestId('read-in')
+      const summary = readIn.locator('summary')
+      const choice = (code: string) => readIn.getByTestId(`read-in-${code}`)
+      const pushed = (code: string) =>
+        page.waitForResponse(
+          (r) =>
+            r.url().includes('/api/v1/mutations') &&
+            r.ok() &&
+            (r.request().postData() ?? '').includes(`"readingLang":"${code}"`),
+        )
+      await expect(summary).toHaveAccessibleName('Read in EN')
+      await summary.click()
+      await expect(readIn.getByRole('button')).toHaveText([
+        '简体中文',
+        '繁體中文',
+        'English',
+        'Français',
+      ])
+      for (const code of ['zh-Hans', 'zh-Hant', 'en', 'fr']) {
+        await expect(choice(code)).toHaveAttribute('lang', code)
+      }
+      await expect(choice('en')).toHaveAttribute('aria-pressed', 'true')
+
+      // Traditional is a language of its own, not Chinese read another way.
+      let push = pushed('zh-Hant')
+      await choice('zh-Hant').click()
+      await expect(choice('zh-Hant')).toBeHidden()
+      await expect(summary).toHaveAccessibleName('Read in 繁中')
+      await push
+      expect(await serverReadingLang(page.request)).toBe('zh-Hant')
+
+      push = pushed('fr')
+      await summary.click()
+      await expect(choice('zh-Hant')).toHaveAttribute('aria-pressed', 'true')
+      await choice('fr').click()
+      await expect(summary).toHaveAccessibleName('Read in FR')
+      await push
+      expect(await serverReadingLang(page.request)).toBe('fr')
+
+      // Kept, so the next visit opens in it; one choice is marked, and Esc gives focus back.
+      await page.reload()
+      await expect(summary).toHaveAccessibleName('Read in FR')
+      await summary.click()
+      await expect(choice('fr')).toHaveAttribute('aria-pressed', 'true')
+      await expect(readIn.locator('[aria-pressed="true"]')).toHaveCount(1)
+      await page.keyboard.press('Escape')
+      await expect(choice('fr')).toBeHidden()
+      await expect(summary).toBeFocused()
+    } finally {
+      // Every spec signs in as this member: no other one should meet French.
+      await resetReading(page.request)
+    }
   })
 
   test('a paragraph that failed to translate says so, in both layouts', async ({ page }) => {

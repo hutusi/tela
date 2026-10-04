@@ -24,10 +24,17 @@ export function swatchColor(id: number): string {
 }
 
 /**
- * A language in the header's pills: Chinese in its own script, English as EN. Anything else falls
- * back to the badge ("JA"), which is what the article list calls it too.
+ * A language on the header's Read-in button, which names only the current one: each Chinese in
+ * its own script and told apart (简中, 繁中: "中文" alone stopped saying which once Traditional
+ * came), the others as their badge in capitals. Anything else falls back to the badge ("JA"),
+ * which is what the article list calls it too.
  */
-const PILL_LABELS: Record<string, string> = { 'zh-Hans': '中文', en: 'EN' }
+const PILL_LABELS: Record<string, string> = {
+  'zh-Hans': '简中',
+  'zh-Hant': '繁中',
+  en: 'EN',
+  fr: 'FR',
+}
 export function pillLabel(tag: string): string {
   return PILL_LABELS[tag] ?? languageBadge(tag)
 }

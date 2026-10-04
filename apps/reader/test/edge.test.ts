@@ -581,13 +581,18 @@ describe('public pages', () => {
     expect(zh).toContain('主题：深色')
   })
 
-  test("mark the visitor's language in the Read-in pill, as the cache is kept per language", async () => {
-    const pill = (html: string) =>
-      html.match(/<div[^>]*data-testid="visitor-locale"[^>]*>.*?<\/div>/s)?.[0] ?? ''
-    const en = pill(await (await page('/privacy')).text())
+  test("mark the visitor's language in the Read-in menu, as the cache is kept per language", async () => {
+    const menu = (html: string) =>
+      html.match(/<details[^>]*data-testid="visitor-locale"[^>]*>.*?<\/details>/s)?.[0] ?? ''
+    const summary = (html: string) => html.match(/<summary.*?<\/summary>/s)?.[0] ?? ''
+    const en = menu(await (await page('/privacy')).text())
+    // The button names the language the page is in; the list names each in its own script.
+    expect(summary(en)).toMatch(/Read in.*<span lang="en"[^>]*>EN<\/span>/s)
     expect(en).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="visitor-locale-en"/)
     expect(en).toMatch(/<button[^>]*aria-pressed="false"[^>]*data-testid="visitor-locale-zh-Hans"/)
-    const zh = pill(await (await page('/privacy', { cookie: 'tela_locale=zh-Hans' })).text())
+    expect(en).toMatch(/<button[^>]*lang="zh-Hans"[^>]*>简体中文<\/button>/)
+    const zh = menu(await (await page('/privacy', { cookie: 'tela_locale=zh-Hans' })).text())
+    expect(summary(zh)).toMatch(/阅读语言.*<span lang="zh-Hans"[^>]*>简中<\/span>/s)
     expect(zh).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="visitor-locale-zh-Hans"/)
   })
 

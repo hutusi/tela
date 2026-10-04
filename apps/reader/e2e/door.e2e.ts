@@ -64,6 +64,8 @@ test.describe('the visitor header', () => {
       if (wide) {
         expect(m.controls['theme-menu']?.width, 'theme menu squeezed').toBe(34)
         expect(m.controls['visitor-locale']?.height, 'Read in off the family').toBe(34)
+        // One language named on the button, the rest in its menu: narrower than the pill was.
+        expect(m.controls['visitor-locale']?.width, 'Read in wider than the pill').toBeLessThan(137)
       } else {
         await expect(page.getByTestId('nav-login')).toBeHidden()
         await expect(page.getByTestId('visitor-locale')).toBeHidden()
