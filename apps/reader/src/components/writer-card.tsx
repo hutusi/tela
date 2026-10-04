@@ -21,6 +21,11 @@ const CARD =
   'paper paper-card flex w-full max-w-[500px] flex-col gap-[18px] rounded-[18px] p-6 text-left text-ink sm:p-8'
 const NAME =
   'block truncate font-serif text-[30px] leading-[1.05] font-medium tracking-[-0.015em] sm:text-[34px]'
+/**
+ * The @handle under the name. A handle may be thirty characters with nowhere to break, so it is
+ * cut with an ellipsis inside its column, as the name is, and never runs under the Follow pill.
+ */
+const HANDLE = 'block truncate text-[13.5px] text-muted'
 const LABEL = 'text-[11px] font-semibold tracking-[0.1em] text-muted uppercase'
 const STAT = 'font-serif text-[22px] font-medium text-ink'
 const CHIP = 'rounded-full border border-line py-1 text-[13px]'
@@ -97,7 +102,7 @@ function ExampleCard({
           >
             {name}
           </Link>
-          <span className="text-[13.5px] text-muted" data-testid="writer-card-handle">
+          <span className={HANDLE} title={`@${profile.handle}`} data-testid="writer-card-handle">
             {`@${profile.handle}`}
           </span>
         </div>
@@ -213,11 +218,15 @@ function DraftCard({ draft }: { draft: CardDraft }) {
           >
             {name || t('yourName')}
           </span>
-          <span className="text-[13.5px] text-muted" data-testid="writer-card-handle">
+          <span
+            className={HANDLE}
+            title={`@${draft.handle ?? t('yourHandle')}`}
+            data-testid="writer-card-handle"
+          >
             {`@${draft.handle ?? t('yourHandle')}`}
           </span>
         </div>
-        <span aria-hidden="true" className={FOLLOW}>
+        <span aria-hidden="true" className={FOLLOW} data-testid="writer-card-follow">
           {t('follow')}
         </span>
       </header>

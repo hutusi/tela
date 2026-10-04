@@ -163,6 +163,37 @@ describe('the writer card', () => {
     expect(html).toContain('data-testid="writer-card-later"')
     expect(html).not.toContain('Hu Tusi')
   })
+
+  // A handle can be thirty characters with nowhere to break: both cards cut it inside its column,
+  // and keep the whole of it in the title (Codex review, PR #25). The layout itself is held by
+  // writers.e2e.ts at 360px; this keeps the example card, whose live handle is short, from losing it.
+  test('cuts a long handle in its column on both cards, keeping the whole of it', () => {
+    const long = 'alexanderthegreatofmacedon'
+    const handleOf = (html: string) =>
+      html.match(/<span[^>]*data-testid="writer-card-handle"[^>]*>/)?.[0] ?? ''
+    const example = handleOf(
+      render(
+        <WriterCard
+          draft={null}
+          example={{ ...PROFILE, profile: { ...PROFILE.profile, handle: long } }}
+          reading={reading}
+        />,
+      ),
+    )
+    const draft = handleOf(
+      render(
+        <WriterCard
+          draft={{ name: 'Alexander', handle: long, host: '' }}
+          example={null}
+          reading={reading}
+        />,
+      ),
+    )
+    for (const span of [example, draft]) {
+      expect(span).toContain('truncate')
+      expect(span).toContain(`title="@${long}"`)
+    }
+  })
 })
 
 describe("the example's activity", () => {
