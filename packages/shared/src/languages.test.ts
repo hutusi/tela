@@ -24,6 +24,7 @@ describe('languages', () => {
   test('ui locale guard', () => {
     expect(isUiLocale('en')).toBe(true)
     expect(isUiLocale('zh-Hant')).toBe(true)
+    expect(isUiLocale('fr')).toBe(true)
     expect(isUiLocale('ja')).toBe(false)
   })
 
@@ -75,6 +76,8 @@ describe('languages', () => {
     expect(negotiate('zh-TW')).toBe('zh-Hant')
     expect(negotiate('zh-HK,zh;q=0.8')).toBe('zh-Hant')
     expect(negotiate('zh-Hant-TW')).toBe('zh-Hant')
+    expect(negotiate('fr-CA')).toBe('fr')
+    expect(negotiate('de,fr;q=0.8')).toBe('fr')
     expect(negotiate('ja')).toBe('en')
     expect(negotiate('')).toBe('en')
   })

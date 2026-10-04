@@ -566,8 +566,8 @@ function NeverTranslate({
   const select = useRef<HTMLSelectElement>(null)
   const seen = new Set(Object.keys(names))
   for (const a of tables.articles.values()) if (a.sourceLang) seen.add(a.sourceLang)
+  // A chip or an option starts with the name; the remove button's label names it mid-sentence.
   const name = (tag: string) => names[tag] ?? tag
-  // A chip and an option start with the name; a sentence keeps it as it is ("français").
   const label = (tag: string) => asLabel(name(tag), locale)
   const pool = [...seen]
     .filter((tag) => tag !== readingLang && !never.includes(tag))

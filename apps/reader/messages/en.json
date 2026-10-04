@@ -29,7 +29,7 @@
     "description": "Independent blogs from around the world, each in its own language, with their titles translated into yours.",
     "hero": "A confluence of <em>{count, plural, one {# independent blog.} other {# independent blogs.}}</em>",
     "heroPlain": "A confluence of <em>independent blogs.</em>",
-    "intro": "Tela channels blogs and personal sites from around the world into one ocean of ideas, translated into Chinese or English as you read.",
+    "intro": "Tela channels blogs and personal sites from around the world into one ocean of ideas, translated as you read into Simplified or Traditional Chinese, English or French.",
     "join": "Join Tela",
     "logIn": "Log in",
     "week": "This week, {blogs, plural, one {# blog} other {# blogs}} wrote in {languages, plural, one {# language} other {# languages}}",

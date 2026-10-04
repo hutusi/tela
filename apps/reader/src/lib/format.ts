@@ -1,10 +1,14 @@
 import { languageBadge } from '@tela/shared'
 
-/** Short relative time such as "2h ago" / "2 小时前", or a date beyond 30 days. */
+/**
+ * Short relative time such as "2h ago" / "2 小时前" / "il y a 2 h", or a date beyond 30 days.
+ * French takes the short style: its narrow one is a bare signed number ("-2 h").
+ */
 export function relativeTime(at: number | null, locale: string, now = Date.now()): string {
   if (at === null) return ''
   const diffSec = Math.round((now - at) / 1000)
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'narrow' })
+  const style = locale === 'fr' ? 'short' : 'narrow'
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style })
   const abs = Math.abs(diffSec)
   if (abs < 60) return rtf.format(0, 'minute').replace(/^in |^now$/, (m) => (m === 'now' ? m : ''))
   if (abs < 3600) return rtf.format(-Math.round(diffSec / 60), 'minute')

@@ -72,6 +72,7 @@
       "devDependencies": {
         "@cloudflare/vite-plugin": "^1.62.0",
         "@cloudflare/workers-types": "^5.20260927.1",
+        "@formatjs/icu-messageformat-parser": "^3.5.17",
         "@playwright/test": "^1.63.0",
         "@tailwindcss/vite": "^4.3.3",
         "@tela/data": "workspace:*",

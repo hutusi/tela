@@ -550,7 +550,7 @@ describe('public pages', () => {
     expect(privacy).toMatch(/<meta name="description" content="Tela keeps what it needs/)
     expect(privacy).toContain('id="cookies"')
     expect(privacy).toContain('href="#cookies"')
-    expect(privacy).toContain('Last updated 3 October 2026')
+    expect(privacy).toContain('Last updated 4 October 2026')
     expect(apiCalls).toEqual([])
     // Three pages, once each: the second visit to Privacy came from the cache.
     expect(cache.size).toBe(3)
@@ -601,12 +601,24 @@ describe('public pages', () => {
     expect(zh).toContain('<html lang="zh-Hans"')
     expect(zh).toContain('<title>条款 · Tela</title>')
     expect(zh).toContain('id="writers"')
-    expect(zh).toContain('最后更新：2026年10月3日')
+    expect(zh).toContain('最后更新：2026年10月4日')
     const en = await (await page('/terms')).text()
     expect(en).toContain('<html lang="en"')
     expect(en).toContain('<title>Terms · Tela</title>')
     expect(cache.size).toBe(2)
     expect(apiCalls).toEqual([])
+  })
+
+  test('Traditional Chinese and French have info pages of their own, chosen by the browser too', async () => {
+    const hant = await (await page('/privacy', { 'accept-language': 'zh-TW,zh;q=0.8' })).text()
+    expect(hant).toContain('<html lang="zh-Hant"')
+    expect(hant).toContain('<title>隱私 · Tela</title>')
+    expect(hant).toContain('最後更新：2026年10月4日')
+    const fr = await (await page('/privacy', { cookie: 'tela_locale=fr' })).text()
+    expect(fr).toContain('<html lang="fr"')
+    expect(fr).toContain('<title>Confidentialité · Tela</title>')
+    expect(fr).toContain('Dernière mise à jour : 4 octobre 2026')
+    expect(fr).toContain('id="cookies"')
   })
 
   test('nothing a blog says can close the handover script or become markup', async () => {

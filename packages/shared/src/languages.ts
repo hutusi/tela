@@ -11,7 +11,12 @@ export type ReadingLanguage = (typeof READING_LANGUAGES)[number]
  * language: a visitor reads in the language of the interface (the edge passes one as the other),
  * so the two lists must not drift apart.
  */
-export const UI_LOCALES = ['zh-Hans', 'zh-Hant', 'en'] as const satisfies readonly ReadingLanguage[]
+export const UI_LOCALES = [
+  'zh-Hans',
+  'zh-Hant',
+  'en',
+  'fr',
+] as const satisfies readonly ReadingLanguage[]
 export type UiLocale = (typeof UI_LOCALES)[number]
 
 export const DEFAULT_UI_LOCALE: UiLocale = 'en'

@@ -54,7 +54,7 @@ export function blogHost(typed: string): string {
 }
 
 /** Labels that name the kind of host, not whose it is. */
-const GENERIC = new Set(['www', 'blog', 'blogs', 'm', 'en', 'zh', 'cn'])
+const GENERIC = new Set(['www', 'blog', 'blogs', 'm', 'en', 'zh', 'cn', 'tw', 'hk', 'fr'])
 
 /** The blog's own name, from its host: `blog.hutusi.com` → `hutusi`, `jvns.ca` → `jvns`. */
 function hostLabel(typed: string): string {

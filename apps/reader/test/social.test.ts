@@ -1,7 +1,7 @@
 /** The reader's pieces for people and prefs (ADR 0031): pure functions of the tables and a clock. */
 import { describe, expect, test } from 'bun:test'
 import { applyPull, emptyTables, type Tables, view } from '@tela/sync'
-import { monthYear, personColor, shortDate } from '../src/lib/format'
+import { monthYear, personColor, relativeTime, shortDate } from '../src/lib/format'
 import { PREF_KEYS, readingPrefsOf } from '../src/lib/prefs'
 import { leaving } from '../src/pages/settings'
 import { followedPeople, shownTitle, withoutRead } from '../src/store/selectors'
@@ -126,7 +126,15 @@ describe('dates and colours for people', () => {
     expect(shortDate(noon - 3 * DAY, 'en', noon)).toBe('Sep 27')
     expect(shortDate(new Date(2025, 11, 31, 12).getTime(), 'en', noon)).toBe('Dec 31, 2025')
     expect(shortDate(noon - DAY, 'zh-Hans', noon)).toBe('昨天')
+    expect(shortDate(noon - DAY, 'fr', noon)).toBe('Hier')
     expect(monthYear(noon, 'en')).toBe('September 2026')
+    expect(monthYear(noon, 'fr')).toBe('septembre 2026')
+  })
+
+  test('a relative time reads as words in French, not a signed number', () => {
+    // CLDR puts a no-break space before the unit, as French typography does.
+    expect(relativeTime(noon - 2 * 3_600_000, 'fr', noon).replace(/\s/gu, ' ')).toBe('il y a 2 h')
+    expect(relativeTime(noon - 2 * 3_600_000, 'en', noon)).toBe('2h ago')
   })
 
   test("a person's colour is theirs on every page", () => {
