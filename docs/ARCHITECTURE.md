@@ -278,7 +278,7 @@ A Vite + React SPA that renders from the device.
 | `/following?tab=` | What the people a member follows did, by RPC; whom they follow, from the device (ADR 0031) |
 | `/search?q=` | The device first, then blogs and older posts from the server |
 | `/add`, `/claim?url=&taken=`, `/sites/:id/claim` | Add feeds and OPML; claim a blog (For writers' card lands on `/claim` with its blog filled in) |
-| `/writers` | For writers: a calling card made as you type, beside `@hutusi`'s live one; SPA-only (ADR 0035) |
+| `/writers` | For writers: a calling card made as you type, beside a labelled sample (ADR 0037); SPA-only (ADR 0035) |
 | `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out), Privacy (with "Your data"); Invites and Account read `/api/v1/invites` and `/api/v1/account` live, not synced rows (`lib/account-api.ts`) |
 | `/dashboard` | The author's view |
 

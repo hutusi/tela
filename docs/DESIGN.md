@@ -68,21 +68,28 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 ## Layout rules
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
-  Reading/Discover/Following pills (Following for members), search, the Read-in menu ("Read in
-  中文 EN", for members), and the member's avatar (30px: their picture, or their initial on the accent). A
+  Reading/Discover/Following pills (Following for members), search, the theme switch (from `sm`),
+  the Read-in menu ("Read in 中文 EN", for members), and the member's avatar (30px: their picture, or their initial on the accent). A
   member's interface language is in Settings → Language, not the header. Pills are ink in every state: the active one is distinguished by its
   `hover` background alone, never by colour.
 - A visitor's header (ADR 0035) is its own, shown as soon as the device is known to hold no
   member (a guest, or a session still `unknown` with no stored account), so it never waits for
-  `/me`. From `sm` up: the lockup, the Discover and *For writers* pills, then "Read in EN ▾"
-  (`VisitorLocale`), *Log in* as a quiet pill and *Join* filled in `primary`; below `sm` the
-  lockup, the nav and Join, which at 360px leaves the two pills some 35px to spare. No Reading
+  `/me`. From `sm` up: the lockup, the Discover and *For writers* pills, then the theme switch,
+  "Read in EN ▾" (`VisitorLocale`), *Log in* as a quiet pill and *Join* filled in `primary`; below
+  `sm` the lockup, the nav and Join, which at 360px leaves the two pills some 35px to spare. No Reading
   pill and no search, both a member's. "Read in" sets the interface language and with it the
   language titles are translated into, which reverses the rule of 2026-10-01 that a visitor
   changed it only on the sign-in page: the first thing a visitor needs to know is whether they can
   read the page. It is a `<details>`, so it opens in the edge's page before the script runs; choosing
   needs the script. Log in and Join are links to `/login` and `/join`, which open the sheet over the
   page once the script runs (a modified click still opens the page).
+- The theme switch (`ThemeToggle`, ADR 0037) is a 34px circle like the search link, in both headers
+  from `sm` up and hidden below it: a moon on a light page and a sun on a dark one, each the
+  `Glyph` line style with its label ("Switch to dark theme", "Switch to light theme") inside it.
+  The stylesheet picks which half shows (`.light-only` and `.dark-only`, under the same selectors
+  as the dark tokens), so the edge's cached page and the first paint are right before any script
+  runs; it does nothing until the script runs. A press flips from the theme the page shows, read
+  then, to the other one; it never goes back to Auto, which is Settings' and the Aa menu's.
 - The avatar opens the account menu (Tela v2): a 220px `surface` panel under it with the member's
   name and @handle, then Your profile, Subscriptions (`/settings/subscriptions`), Dashboard,
   Settings, Invite friends (`/settings/invites`), a rule, and Sign out in `muted`. A disclosure, not an ARIA menu: Tab reaches its items.
@@ -103,11 +110,13 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   scrolls: from `sm` up every other control is `shrink-0`, since squeezed below its one-line width
   each one wraps its label into the 56px bar instead. Below `sm` they stay shrinkable — the phone
   header has no room to spare, and a wrapped pill beats a nav with nothing left to scroll.
-  `styles.e2e.ts` measures this at 640, 768, 800, 1024 and 1280: at most one pill may be clipped
-  from 800 up, and none at all from 1024. The tolerance is in pills rather than pixels because the
-  row measures 335px on macOS and 341px in CI's Linux Chromium. `door.e2e.ts` measures the
+  `styles.e2e.ts` measures this at 640, 768, 800, 1024 and 1280, and from `sm` up no pill may be
+  clipped. With the theme switch in, the member's row is 247px on macOS, and 640px, the tightest
+  case, leaves it 35px to spare (163px at 768, 236px at 1024); CI's Linux Chromium sets text about
+  2% wider. Below `sm` it scrolls, 102px of it showing at 360. `door.e2e.ts` measures the
   visitor's header at 360, 412, 640, 768, 800, 1024 and 1280 with the same helper
-  (`measureHeader` in `e2e/helpers.ts`): its nav is never clipped, and no control wraps.
+  (`measureHeader` in `e2e/helpers.ts`): its 175px row is never clipped (91px to spare at 640),
+  and no control wraps.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
   list are sticky and scroll independently. The sidebar collapses to a 48px rail from a toggle in
@@ -155,7 +164,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 ## Components (`apps/reader/src/components`)
 
-`AppHeader`, `VisitorLocale`, `FrontDoor` (the sheet and `DoorForm`), `WriterCard`, `ReadInMenu`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
+`AppHeader`, `ThemeToggle`, `VisitorLocale`, `FrontDoor` (the sheet and `DoorForm`), `WriterCard`, `ReadInMenu`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
 `PairedBody`, `TranslationBar`, `Untranslated`, `LikeButton`, `RecommendPopover`, `EmptyState`,
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `SiteFooter`, `TypographyMenu`, the
 highlight toolbar, note and list (`highlights.tsx`), and `Shortcuts`. The front page, Discover, a
@@ -243,13 +252,17 @@ form (50 px fields with 12 px corners on the `field` ground, the blog's with an 
 `https://`, then one row holding the line that says whether the handle is free and the `primary`
 *Claim your card*); on the right the card (`WriterCard`) with a caption under it. The card is a
 paper card on either ground (the `.paper` scope below, 18 px corners, 32 px in): a 60 px avatar, the
-name in serif at 34 px, the @handle, a Follow pill in ink that goes to the profile, *Writes* with
-each claimed blog's swatch, name and host and a *✓ Claimed*, the bio in serif italic, the counts
-with 22 px serif numerals, then under a rule the latest recommendation (where the design pins a
-post) with its note, and *Reads* with up to four blogs as chips and a "+N". Before the visitor
-types, it is a real member's live public profile, `@hutusi` (`lib/example.ts`, the one place it is
-named), "Reads N blogs" and the chips only when their subscriptions are public; with no such profile
-(a fresh stack), the card's outline in `hover` bars. As they type it becomes theirs, as the design's
+name in serif at 34 px (two lines at most, then cut, so "Lucía Ferrer" is whole at 360 px), the
+@handle (one line, cut), a Follow pill in ink, *Writes* with the blog's swatch, name and host and a
+*✓ Claimed*, the bio in serif italic, the counts with 22 px serif numerals, then under a rule the
+latest recommendation (where the design pins a post) with its note, and *Reads* with four blogs as
+chips and a "+N". Before the visitor types, it is a sample (`lib/sample-card.ts`, ADR 0037): the
+design's Lucía Ferrer of Kilómetro Cero (`kilometrocero.blog`, which resolves nowhere), captioned
+"An example card. Type your name to see yours." ("An example card." for a member). Nothing on it, or
+anywhere the page draws from it, is a link: `/@lucia` may be a real member's one day. Its titles are
+in the catalogs (`writers.sample.posts`), so they read in the page's language as Tela would show
+them; its bio and notes stay as written, as Tela leaves them. Its counts are modest and its rows are
+only what Tela does. As they type it becomes theirs, as the design's
 draft card: the name, the handle suggested from it (`lib/suggest-handle.ts`: the first name folded
 to `[a-z0-9_]`, the whole name when that is too short, the blog's own name for a name with nothing
 Latin in it), a blog name made from the host, a placeholder bio, zero counts, and a dashed note that
@@ -257,19 +270,19 @@ recommendations and blogs read come as they use Tela. Typing pauses 400 ms befor
 `/api/v1/public/handles/:handle`: "✓ @x is available" in accent, or "@x is taken. Try @y." with the
 suggestion a button; no answer says nothing and never holds the button back.
 
-Below the hero, each section under a `line` rule and each only from what Tela has: *Writers find
-each other here.* beside an activity card of the example's latest four recommendations and public
-likes, newest first, a recommendation's note under an accent rule (gone when there are none); *What
-your card does* (01–03 in accent serif), each with a small illustration that shows only when it has
-something true to show: the *Find me on Tela* link pill to the example's card, a blogroll of four
-blogs they read publicly, and a readers card from the claimed blog's reader count and the example's
-followers; *How it works* (1–3 as 56 px accent numerals under 2 px `ink` rules); *Your site stays
-yours* on the page ground, its title and three points in one row from `lg`; and the centred closing
-line with the live count of public blogs and an italic *Where's yours?* (`/api/v1/public/front`;
-without it, "Where's your blog?"), whose *Make your card* scrolls to the form and focuses the name.
-The footer the other public pages carry closes it. The copy says only what Tela does today: no
-pinned post, no named readers, no "reads you too", and translation is turned off from the Dashboard,
-not by removing the card. A member sees *Claim your blog* and *Your card* instead of the form.
+Below the hero, each section under a `line` rule, drawn from the same sample: *Writers find each
+other here.* beside an activity card labelled "Following · for example", four rows of the three
+kinds the Following page has (recommended, liked, subscribed to), newest first, a recommendation's
+note under an accent rule; *What your card does* (01–03 in accent serif), each with a small
+illustration: the *Find me on Tela @lucia* pill (not a link), a blogroll of four blogs, and a
+readers card with the claimed blog's readers on Tela and the writer's followers; *How it works*
+(1–3 as 56 px accent numerals under 2 px `ink` rules); *Your site stays yours* on the page ground,
+its title and three points in one row from `lg`; and the centred closing line with the live count
+of public blogs and an italic *Where's yours?* (`/api/v1/public/front`; without it, "Where's your
+blog?"), whose *Make your card* scrolls to the form and focuses the name. The footer the other
+public pages carry closes it. The copy says only what Tela does today: no pinned post, no named
+readers, no "reads you too", and translation is turned off from the Dashboard, not by removing the
+card. A member sees *Claim your blog* and *Your card* instead of the form.
 *Claim your card* opens the sheet in claim mode, titled "Claim @handle": a join (or a log-in) that,
 once the session is the member's and their handle is still the provisional `u_…`, sets the handle
 and display name, then lands on `/claim?url=…` with the blog filled in, and with a note when the
@@ -445,8 +458,11 @@ app at night is the page a visitor saw: paper is the light theme's ink, and ink 
 | `accent` | `oklch(0.74 0.12 150)` |
 | `accent-strong` | `oklch(0.80 0.12 150)` |
 
-`data-theme="dark|light"` on `<html>` is the member's choice. Without it,
-`prefers-color-scheme` decides. The two token blocks in `styles.css` must stay identical. A
+`data-theme="dark|light"` on `<html>` is the chosen theme: a member's synced `ui.theme` pref, or
+for a visitor the header switch's last press, kept on the device (`tela.theme`, which the inline
+script in `index.html` puts on before anything paints). Without it, `prefers-color-scheme`
+decides. An account that has never chosen takes the visitor's choice once its rows arrive, as its
+pref (ADR 0037), so the page and Settings never disagree. The two token blocks in `styles.css` must stay identical. A
 literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the dark ground:
 `styles.e2e.ts` checks the computed page colours in both themes.
 
@@ -457,7 +473,7 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - **Size:** four steps, ×0.88 / ×1 / ×1.13 / ×1.27 of the 19.5 px body (18 px for CJK).
   - **Width:** 560 / 640 / 760 px for the single column, and for a stacked pair. Two paired
     columns keep their own 640px measure.
-  - **Theme:** Auto / Light / Dark.
+  - **Theme:** Auto / Light / Dark. The header's switch writes the same pref, Light or Dark only.
 - **Marking read and hiding read posts** are the member's (Settings → Reading). With marking on
   opening off, the open post keeps its unread dot and the action row offers *Mark as read*; liking
   a post still reads it. With read posts hidden, a list keeps every post it has shown unread or
