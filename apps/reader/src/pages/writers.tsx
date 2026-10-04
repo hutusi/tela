@@ -11,9 +11,11 @@ import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { useFrontDoor } from '../components/front-door'
 import { PersonAvatar } from '../components/person-avatar'
-import { WriterCard } from '../components/writer-card'
+import { SiteAvatar } from '../components/site-avatar'
+import { SiteFooter } from '../components/site-footer'
+import { siteColor, WriterCard } from '../components/writer-card'
 import { EXAMPLE_HANDLE } from '../lib/example'
-import { displayHost, swatchColor } from '../lib/format'
+import { displayHost, relativeTime } from '../lib/format'
 import { useMemberControls } from '../lib/member'
 import { readingPrefsOf } from '../lib/prefs'
 import { publicTitle } from '../lib/public-title'
@@ -21,12 +23,13 @@ import { blogHost, blogUrl, suggestHandle } from '../lib/suggest-handle'
 import { useTitle } from '../lib/title'
 import { usePublic } from '../lib/use-public'
 import { useSession } from '../session'
-import { useReadingLang, useStore, useTables } from '../store/hooks'
+import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { useUi } from '../ui'
 import { PostLink } from '../views/post-link'
 import { profileDataOf } from '../views/public-data'
-import type { ProfileData, Reading } from '../views/types'
+import type { ProfileData, Reading, SiteData } from '../views/types'
 import { profilePath } from './profile'
+import { sitePath } from './site'
 
 /** What tela-api says of a handle (`GET /api/v1/public/handles/:handle`). */
 export type Availability = {
@@ -94,14 +97,52 @@ function useAvailability(handle: string | null): Availability | null {
 /** The part of the front page's JSON this page reads: how many blogs are public. */
 type FrontCounts = { counts?: { blogs?: unknown } }
 
+/** One thing the example did lately, as the activity card lists it. */
+type Activity = {
+  kind: 'recommended' | 'liked'
+  at: number
+  note: string | null
+  post: ProfileData['recommendations'][number] | NonNullable<ProfileData['liked']>[number]
+}
+
+/** How many of the example's recent recommendations and likes the activity card shows. */
+const ACTIVITY_SHOWN = 4
+/** How many blogs the blogroll under "What your card does" names. */
+const ROLL_SHOWN = 4
+
+/**
+ * The example's recommendations and public likes, newest first: what someone following them
+ * sees. A post they both liked and recommended shows once, as the recommendation.
+ */
+export function activityOf(data: ProfileData): Activity[] {
+  const recommended = new Set(data.recommendations.map((r) => r.article.id))
+  return [
+    ...data.recommendations.map((r) => ({
+      kind: 'recommended' as const,
+      at: r.createdAt,
+      note: r.note,
+      post: r,
+    })),
+    ...(data.liked ?? [])
+      .filter((l) => !recommended.has(l.article.id))
+      .map((l) => ({ kind: 'liked' as const, at: l.likedAt, note: null, post: l })),
+  ]
+    .sort((a, b) => b.at - a.at)
+    .slice(0, ACTIVITY_SHOWN)
+}
+
 const FIELD =
-  'h-11 w-full rounded-[10px] border border-thumb bg-surface px-3.5 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink'
+  'h-[50px] w-full rounded-xl border border-thumb bg-field px-[18px] text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink'
 const PRIMARY =
-  'inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-[15px] font-medium text-on-primary hover:no-underline hover:brightness-125 disabled:opacity-60'
+  'inline-flex h-12 shrink-0 items-center justify-center rounded-full bg-primary px-[26px] text-[15px] font-semibold whitespace-nowrap text-on-primary hover:text-on-primary hover:no-underline hover:brightness-125 disabled:opacity-60'
 const QUIET =
-  'inline-flex h-11 items-center justify-center rounded-full border border-thumb bg-surface px-5 text-[15px] font-medium text-ink hover:border-ink hover:no-underline'
-const SECTION = 'mx-auto w-full max-w-[1120px] px-4 py-16 md:px-12 md:py-20'
-const H2 = 'm-0 font-serif text-[32px] leading-[1.1] font-medium tracking-[-0.015em] md:text-[40px]'
+  'inline-flex h-12 shrink-0 items-center justify-center rounded-full border border-thumb px-[22px] text-[15px] font-medium text-ink hover:border-ink hover:text-ink hover:no-underline'
+const SECTION = 'border-t border-line py-16 md:py-[88px]'
+const H2 =
+  'm-0 mb-10 font-serif text-[36px] leading-[1.05] font-medium tracking-[-0.015em] md:mb-12 md:text-[46px]'
+const LABEL = 'text-[11px] font-semibold tracking-[0.1em] uppercase'
+/** A small card under a point of "What your card does", as the design draws its illustrations. */
+const SKETCH = 'mt-2.5 rounded-xl border border-line bg-surface px-[18px] py-1.5'
 
 export function WritersPage() {
   const t = useTranslations('writers')
@@ -110,6 +151,7 @@ export function WritersPage() {
   const { store } = useStore()
   const tables = useTables()
   const { locale } = useUi()
+  const now = useNow()
   const readingLang = useReadingLang(locale)
   const never = readingPrefsOf(tables).never
   const reading = useMemo(() => ({ lang: readingLang, never }), [readingLang, never])
@@ -120,6 +162,10 @@ export function WritersPage() {
 
   const loaded = usePublic<ProfileData>(profilePath(EXAMPLE_HANDLE))
   const example = loaded.status === 'ready' ? profileDataOf(loaded.data) : null
+  // The blog the example claimed first, for how many read it.
+  const claimed = example?.blogs[0] ?? null
+  const site = usePublic<SiteData>(claimed ? sitePath(claimed.id) : null)
+  const blogReaders = site.status === 'ready' ? site.data.site.readerCount : 0
   const front = usePublic<FrontCounts>('/api/v1/public/front')
   const counted = front.status === 'ready' ? front.data.counts?.blogs : undefined
   const blogs = typeof counted === 'number' && counted > 0 ? counted : null
@@ -131,7 +177,7 @@ export function WritersPage() {
   const handle = picked ?? suggestHandle(name, blog)
   const availability = useAvailability(handle)
   const typed = name.trim() !== '' || blog.trim() !== ''
-  const draft = typed ? { name, handle, host: blogHost(blog) } : null
+  const draft = visitor && typed ? { name, handle, host: blogHost(blog) } : null
   const form = useRef<HTMLFormElement>(null)
   const nameField = useRef<HTMLInputElement>(null)
 
@@ -146,306 +192,405 @@ export function WritersPage() {
   }
 
   const ownHandle = tables.profile?.handle ?? null
-  const notes = (example?.recommendations ?? []).filter((r) => r.note).slice(0, 3)
+  const own = example !== null && member?.userId === example.profile.id
+  const activity = example ? activityOf(example) : []
+  const roll = example?.subscriptions?.slice(0, ROLL_SHOWN) ?? []
+  const followers = example?.counts?.followers ?? 0
+  const accent = (chunks: React.ReactNode) => <em className="text-accent italic">{chunks}</em>
+  const caption = draft
+    ? t('card.captionDraft')
+    : example
+      ? visitor
+        ? t('card.captionExample', { handle: example.profile.handle })
+        : t('card.captionLive', { handle: example.profile.handle })
+      : null
 
   return (
-    <main className="flex-1 animate-fade" data-testid="writers-page">
-      <section className="mx-auto grid w-full max-w-[1120px] items-start gap-12 px-4 pt-12 pb-16 md:px-12 md:pt-20 md:pb-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] lg:gap-16">
-        <div className="min-w-0">
-          <div className="text-[12px] font-semibold tracking-[0.08em] text-accent uppercase">
-            {t('kicker')}
-          </div>
-          <h1 className="mt-4 mb-0 font-serif text-[42px] leading-[1.04] font-medium tracking-[-0.02em] md:text-[58px]">
-            {t.rich('hero.title', {
-              em: (chunks) => <em className="text-accent italic">{chunks}</em>,
-            })}
-          </h1>
-          <p className="mt-5 mb-0 max-w-[540px] text-[17px] leading-[1.55] text-ink-2">
-            {t('hero.lede')}
-          </p>
-          {visitor ? (
-            <form
-              ref={form}
-              onSubmit={claim}
-              className="mt-9 flex max-w-[460px] flex-col gap-3"
-              data-testid="writers-form"
-            >
-              <h2 className="m-0 text-[14px] font-semibold text-ink">{t('form.title')}</h2>
-              <input
-                ref={nameField}
-                name="name"
-                autoComplete="name"
-                required
-                maxLength={80}
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value)
-                  setPicked(null)
-                }}
-                placeholder={t('form.name')}
-                aria-label={t('form.name')}
-                data-testid="writers-name"
-                className={FIELD}
-              />
-              <label className="flex h-11 items-center rounded-[10px] border border-thumb bg-surface text-[15px] focus-within:border-ink">
-                <span className="pl-3.5 text-muted" aria-hidden="true">
-                  https://
-                </span>
+    <>
+      <main
+        className="mx-auto w-full max-w-[1200px] flex-1 animate-fade px-4 sm:px-6 md:px-10"
+        data-testid="writers-page"
+      >
+        <section className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-center gap-x-20 gap-y-14 pt-12 pb-20 md:pt-20 md:pb-[104px]">
+          <div className="flex min-w-0 flex-col">
+            <div className={`${LABEL} text-accent`}>{t('kicker')}</div>
+            <h1 className="mt-[18px] mb-[22px] font-serif text-[44px] leading-[1.02] font-medium tracking-[-0.025em] text-balance sm:text-[56px] lg:text-[68px]">
+              {t.rich('hero.title', { em: accent })}
+            </h1>
+            <p className="m-0 max-w-[520px] text-[17px] leading-[1.55] text-pretty text-ink-2 md:text-[18px]">
+              {t('hero.lede')}
+            </p>
+            {visitor ? (
+              <form
+                ref={form}
+                onSubmit={claim}
+                className="mt-9 flex max-w-[500px] flex-col gap-2.5"
+                data-testid="writers-form"
+              >
+                <h2 className={`${LABEL} m-0 text-muted`}>{t('form.title')}</h2>
                 <input
-                  name="blog"
-                  type="text"
-                  inputMode="url"
-                  autoComplete="url"
-                  autoCapitalize="off"
-                  spellCheck={false}
+                  ref={nameField}
+                  name="name"
+                  autoComplete="name"
                   required
-                  value={blog}
+                  maxLength={80}
+                  value={name}
                   onChange={(e) => {
-                    setBlog(e.target.value)
+                    setName(e.target.value)
                     setPicked(null)
                   }}
-                  placeholder={t('form.blogPlaceholder')}
-                  aria-label={t('form.blog')}
-                  data-testid="writers-blog"
-                  className="h-full min-w-0 flex-1 bg-transparent pr-3.5 pl-0.5 text-ink outline-none placeholder:text-muted"
+                  placeholder={t('form.name')}
+                  aria-label={t('form.name')}
+                  data-testid="writers-name"
+                  className={FIELD}
                 />
-              </label>
-              <p
-                aria-live="polite"
-                className="m-0 min-h-5 text-[13.5px] leading-5"
-                data-testid="writers-availability"
-                data-status={availability?.status ?? (handle ? 'unknown' : 'none')}
-              >
-                {!typed ? null : !handle ? (
-                  <span className="text-muted">{t('availability.none')}</span>
-                ) : availability?.status === 'available' ? (
-                  <span className="font-medium text-accent">
-                    {t('availability.available', { handle })}
+                <label className="flex h-[50px] items-center rounded-xl border border-thumb bg-field px-[18px] text-[15px] focus-within:border-ink">
+                  <span className="text-muted" aria-hidden="true">
+                    https://
                   </span>
-                ) : availability ? (
-                  <span className="text-ink-2">
-                    {t(`availability.${availability.status}`, { handle })}
-                    {availability.suggestion ? (
-                      <>
-                        {' '}
-                        {t.rich('availability.try', {
-                          suggestion: availability.suggestion,
-                          pick: (chunks) => (
-                            <button
-                              type="button"
-                              onClick={() => setPicked(availability.suggestion)}
-                              data-testid="writers-suggestion"
-                              className="font-medium text-accent underline underline-offset-2 hover:text-accent-strong"
-                            >
-                              {chunks}
-                            </button>
-                          ),
-                        })}
-                      </>
+                  <input
+                    name="blog"
+                    type="text"
+                    inputMode="url"
+                    autoComplete="url"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    required
+                    value={blog}
+                    onChange={(e) => {
+                      setBlog(e.target.value)
+                      setPicked(null)
+                    }}
+                    placeholder={t('form.blogPlaceholder')}
+                    aria-label={t('form.blog')}
+                    data-testid="writers-blog"
+                    className="h-full min-w-0 flex-1 bg-transparent px-1 text-ink outline-none placeholder:text-muted"
+                  />
+                </label>
+                <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+                  <p
+                    aria-live="polite"
+                    className="m-0 min-h-[18px] min-w-0 flex-1 basis-[220px] text-[13px] leading-[18px]"
+                    data-testid="writers-availability"
+                    data-status={availability?.status ?? (handle ? 'unknown' : 'none')}
+                  >
+                    {!typed ? null : !handle ? (
+                      <span className="text-muted">{t('availability.none')}</span>
+                    ) : availability?.status === 'available' ? (
+                      <span className="text-accent">{t('availability.available', { handle })}</span>
+                    ) : availability ? (
+                      <span className="text-ink-2">
+                        {t(`availability.${availability.status}`, { handle })}
+                        {availability.suggestion ? (
+                          <>
+                            {' '}
+                            {t.rich('availability.try', {
+                              suggestion: availability.suggestion,
+                              pick: (chunks) => (
+                                <button
+                                  type="button"
+                                  onClick={() => setPicked(availability.suggestion)}
+                                  data-testid="writers-suggestion"
+                                  className="font-medium text-accent underline underline-offset-2 hover:text-accent-strong"
+                                >
+                                  {chunks}
+                                </button>
+                              ),
+                            })}
+                          </>
+                        ) : null}
+                      </span>
                     ) : null}
-                  </span>
-                ) : null}
-              </p>
-              <button type="submit" className={PRIMARY} data-testid="writers-claim">
-                {t('form.submit')}
-              </button>
-              <p className="m-0 text-[12.5px] text-muted">{t('form.hint')}</p>
-            </form>
-          ) : (
-            <div className="mt-9 flex flex-col gap-4" data-testid="writers-member">
-              <p className="m-0 text-[15px] text-ink-2">{t('member.intro')}</p>
-              <div className="flex flex-wrap gap-3">
-                <Link to="/claim" className={PRIMARY} data-testid="writers-claim-blog">
-                  {t('member.claim')}
-                </Link>
-                {ownHandle ? (
-                  <Link to={`/@${ownHandle}`} className={QUIET} data-testid="writers-your-card">
-                    {t('member.card')}
+                  </p>
+                  <button type="submit" className={PRIMARY} data-testid="writers-claim">
+                    {t('form.submit')}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="mt-9 flex max-w-[500px] flex-col gap-4" data-testid="writers-member">
+                <p className="m-0 text-[15px] text-ink-2">{t('member.intro')}</p>
+                <div className="flex flex-wrap gap-3">
+                  <Link to="/claim" className={PRIMARY} data-testid="writers-claim-blog">
+                    {t('member.claim')}
                   </Link>
-                ) : null}
+                  {ownHandle ? (
+                    <Link to={`/@${ownHandle}`} className={QUIET} data-testid="writers-your-card">
+                      {t('member.card')}
+                    </Link>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-        <div className="min-w-0 lg:sticky lg:top-24">
-          <WriterCard draft={visitor ? draft : null} example={example} reading={reading} />
-        </div>
-      </section>
-
-      {example && notes.length > 0 ? (
-        <section className="border-t border-line" data-testid="writers-find">
-          <div className={SECTION}>
-            <h2 className={H2}>{t('find.title')}</h2>
-            <p className="mt-3 mb-0 max-w-[600px] text-[15.5px] leading-relaxed text-ink-2">
-              {t('find.intro', {
-                name: example.profile.displayName ?? `@${example.profile.handle}`,
-              })}
-            </p>
-            <ul className="m-0 mt-10 grid list-none gap-5 p-0 md:grid-cols-3">
-              {notes.map((r) => (
-                <Recommendation
-                  key={r.article.id}
-                  item={r}
-                  person={example.profile}
-                  member={member}
-                  reading={reading}
-                />
-              ))}
-            </ul>
+            )}
+          </div>
+          <div className="flex min-w-0 flex-col items-center gap-3.5">
+            <WriterCard draft={draft} example={example} reading={reading} own={own} />
+            {caption ? (
+              <span
+                className="text-center text-[13px] text-muted"
+                data-testid="writer-card-caption"
+              >
+                {caption}
+              </span>
+            ) : null}
           </div>
         </section>
-      ) : null}
 
-      <section className="border-t border-line">
-        <div className={SECTION}>
+        {example && activity.length > 0 ? (
+          <section
+            className={`${SECTION} grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-center gap-x-20 gap-y-12`}
+            data-testid="writers-find"
+          >
+            <div className="flex flex-col gap-[18px]">
+              <h2 className="m-0 font-serif text-[38px] leading-[1.04] font-medium tracking-[-0.02em] text-balance md:text-[50px]">
+                {t('find.title')}
+              </h2>
+              <p className="m-0 max-w-[480px] text-[16px] leading-[1.6] text-ink-2 md:text-[17px]">
+                {t('find.intro')}
+              </p>
+            </div>
+            <div className="min-w-0 rounded-2xl border border-line bg-surface px-5 py-2 sm:px-6">
+              <div className={`${LABEL} pt-4 pb-1 text-muted`}>
+                {t('find.label', { handle: example.profile.handle })}
+              </div>
+              <ul className="m-0 list-none p-0">
+                {activity.map((a, i) => (
+                  <ActivityRow
+                    key={`${a.kind}-${a.post.article.id}`}
+                    item={a}
+                    first={i === 0}
+                    person={example.profile}
+                    blog={example.blogs[0] ?? null}
+                    member={member}
+                    reading={reading}
+                    when={relativeTime(a.at, locale, now)}
+                  />
+                ))}
+              </ul>
+            </div>
+          </section>
+        ) : null}
+
+        <section className={SECTION}>
           <h2 className={H2}>{t('does.title')}</h2>
-          <ol className="m-0 mt-10 grid list-none gap-8 p-0 md:grid-cols-3 md:gap-10">
+          <ol className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-x-10 gap-y-12 p-0">
             {(['link', 'blogroll', 'readers'] as const).map((k, i) => (
-              <li key={k} className="flex flex-col gap-2 border-t border-ink pt-4">
-                <span className="font-serif text-[15px] text-muted" aria-hidden="true">
+              <li key={k} className="flex min-w-0 flex-col gap-3">
+                <span className="font-serif text-[22px] text-accent" aria-hidden="true">
                   {String(i + 1).padStart(2, '0')}
                 </span>
-                <h3 className="m-0 font-serif text-[22px] leading-[1.2] font-medium">
+                <h3 className="m-0 font-serif text-[27px] leading-[1.15] font-medium">
                   {t(`does.${k}.title`)}
                 </h3>
-                <p className="m-0 text-[14.5px] leading-relaxed text-ink-2">
-                  {t(`does.${k}.body`)}
-                </p>
+                <p className="m-0 text-[15px] leading-[1.55] text-ink-2">{t(`does.${k}.body`)}</p>
+                {k === 'link' && example ? (
+                  <Link
+                    to={`/@${example.profile.handle}`}
+                    className="mt-2.5 flex max-w-full items-center gap-2.5 self-start rounded-full border border-line bg-surface py-2 pr-2 pl-[18px] text-[14px] hover:border-thumb hover:no-underline"
+                    data-testid="writers-link-pill"
+                  >
+                    <span className="text-ink-2">{t('does.link.pill')}</span>
+                    <span className="truncate font-semibold text-ink">
+                      @{example.profile.handle}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="rounded-full bg-hover px-2.5 py-1 text-[12px] text-ink-2"
+                    >
+                      ↗
+                    </span>
+                  </Link>
+                ) : null}
+                {k === 'blogroll' && roll.length > 0 ? (
+                  <ul className={`${SKETCH} m-0 list-none`} data-testid="writers-roll">
+                    {roll.map((s, j) => (
+                      <li
+                        key={s.id}
+                        className={`flex items-center gap-2.5 py-[11px] ${j ? 'border-t border-line' : ''}`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="size-2.5 shrink-0 rounded-[3px]"
+                          style={{ background: siteColor(s.id) }}
+                        />
+                        <span className="min-w-0 flex-1 truncate font-serif text-[17px]">
+                          {s.title ?? displayHost(s.homeUrl)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {k === 'readers' && example && (blogReaders > 0 || followers > 0) ? (
+                  <ul className={`${SKETCH} m-0 list-none`} data-testid="writers-readers">
+                    {claimed && blogReaders > 0 ? (
+                      <li className="flex items-center gap-2.5 py-[11px]">
+                        <SiteAvatar
+                          id={claimed.id}
+                          title={claimed.title ?? claimed.homeUrl}
+                          faviconKey={claimed.faviconKey}
+                          size={28}
+                          radius={8}
+                        />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-[14px] font-medium">
+                            {claimed.title ?? displayHost(claimed.homeUrl)}
+                          </span>
+                          <span className="text-[12.5px] text-muted">
+                            {t('does.readers.blogReaders', { n: blogReaders })}
+                          </span>
+                        </span>
+                      </li>
+                    ) : null}
+                    {followers > 0 ? (
+                      <li
+                        className={`flex items-center gap-2.5 py-[11px] ${claimed && blogReaders > 0 ? 'border-t border-line' : ''}`}
+                      >
+                        <PersonAvatar
+                          handle={example.profile.handle}
+                          displayName={example.profile.displayName}
+                          avatar={example.profile.avatar}
+                          size={28}
+                        />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-[14px] font-medium">
+                            {example.profile.displayName ?? `@${example.profile.handle}`}
+                          </span>
+                          <span className="text-[12.5px] text-muted">
+                            {t('does.readers.followers', { n: followers })}
+                          </span>
+                        </span>
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : null}
               </li>
             ))}
           </ol>
-        </div>
-      </section>
+        </section>
 
-      <section className="border-t border-line">
-        <div className={SECTION}>
+        <section className={SECTION}>
           <h2 className={H2}>{t('how.title')}</h2>
-          <ol className="m-0 mt-10 grid list-none gap-8 p-0 md:grid-cols-3 md:gap-10">
+          <ol className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-10 p-0">
             {(['name', 'connect', 'follow'] as const).map((k, i) => (
-              <li key={k} className="flex gap-4">
+              <li key={k} className="flex flex-col gap-2.5 border-t-2 border-ink pt-5">
                 <span
                   aria-hidden="true"
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full border border-thumb font-serif text-[17px] font-medium"
+                  className="font-serif text-[56px] leading-[0.9] text-accent"
                 >
                   {i + 1}
                 </span>
-                <div className="flex flex-col gap-1.5">
-                  <h3 className="m-0 font-serif text-[21px] leading-[1.2] font-medium">
-                    {t(`how.${k}.title`)}
-                  </h3>
-                  <p className="m-0 text-[14.5px] leading-relaxed text-ink-2">
-                    {t(`how.${k}.body`)}
-                  </p>
-                </div>
+                <h3 className="m-0 mt-2 text-[17px] font-semibold">{t(`how.${k}.title`)}</h3>
+                <p className="m-0 text-[15px] leading-[1.55] text-ink-2">{t(`how.${k}.body`)}</p>
               </li>
             ))}
           </ol>
-        </div>
-      </section>
+        </section>
 
-      <section className="border-t border-line bg-hover">
-        <div className={SECTION}>
-          <h2 className={H2}>{t('yours.title')}</h2>
-          <ul className="m-0 mt-10 grid list-none gap-8 p-0 md:grid-cols-3 md:gap-10">
-            {(['nothing', 'ads', 'translation'] as const).map((k) => (
-              <li key={k} className="flex flex-col gap-2">
-                <h3 className="m-0 font-serif text-[21px] leading-[1.2] font-medium">
-                  {t(`yours.${k}.title`)}
-                </h3>
-                <p className="m-0 text-[14.5px] leading-relaxed text-ink-2">
-                  {t(`yours.${k}.body`)}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+        <section className="grid items-start gap-x-12 gap-y-8 border-t border-line py-14 sm:grid-cols-2 md:py-[72px] lg:grid-cols-4">
+          <h2 className="m-0 font-serif text-[30px] leading-[1.1] font-medium tracking-[-0.01em] md:text-[34px]">
+            {t('yours.title')}
+          </h2>
+          {(['nothing', 'ads', 'translation'] as const).map((k) => (
+            <div key={k} className="flex flex-col gap-1">
+              <h3 className="m-0 text-[15.5px] font-semibold">{t(`yours.${k}.title`)}</h3>
+              <p className="m-0 text-[14.5px] leading-normal text-ink-2">{t(`yours.${k}.body`)}</p>
+            </div>
+          ))}
+        </section>
 
-      <section className="border-t border-line">
-        <div className="mx-auto flex w-full max-w-[1120px] flex-col items-start gap-6 px-4 py-16 md:flex-row md:items-center md:justify-between md:px-12 md:py-20">
-          <h2 className={`${H2} max-w-[640px]`} data-testid="writers-cta-title">
-            {blogs !== null ? t('cta.count', { n: blogs }) : t('cta.title')}
+        <section className="flex flex-col items-center gap-7 border-t border-line pt-20 pb-24 text-center md:pt-24 md:pb-28">
+          <h2
+            className="m-0 max-w-[780px] font-serif text-[40px] leading-[1.04] font-medium tracking-[-0.02em] text-balance md:text-[58px]"
+            data-testid="writers-cta-title"
+          >
+            {blogs !== null
+              ? t.rich('cta.count', { n: blogs, em: accent })
+              : t.rich('cta.title', { em: accent })}
           </h2>
           {visitor ? (
             <button
               type="button"
               onClick={toForm}
-              className={`${PRIMARY} shrink-0`}
+              className={`${PRIMARY} h-[52px] px-[30px]`}
               data-testid="writers-make"
             >
               {t('cta.make')}
             </button>
           ) : (
-            <Link to="/claim" className={`${PRIMARY} shrink-0`}>
+            <Link to="/claim" className={`${PRIMARY} h-[52px] px-[30px]`}>
               {t('member.claim')}
             </Link>
           )}
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
+      <SiteFooter year={new Date(now).getFullYear()} />
+    </>
   )
 }
 
-/** One of the example's recommendations with a note: the note, the post, and who said it. */
-function Recommendation({
+/**
+ * One thing the example did, as someone following them sees it: who, what, when, the post, and
+ * the note a recommendation carried.
+ */
+function ActivityRow({
   item,
+  first,
   person,
+  blog,
   member,
   reading,
+  when,
 }: {
-  item: ProfileData['recommendations'][number]
+  item: Activity
+  first: boolean
   person: ProfileData['profile']
+  blog: ProfileData['blogs'][number] | null
   member: ReturnType<typeof useMemberControls>
   reading: Reading
+  when: string
 }) {
-  const source = item.siteTitle ?? displayHost(item.homeUrl)
-  const { title, badge } = publicTitle(item.article, reading)
+  const t = useTranslations('writers.find')
+  const { post } = item
+  const source = post.siteTitle ?? displayHost(post.homeUrl)
+  const { title } = publicTitle(post.article, reading)
   return (
     <li
-      className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-5"
-      data-testid="writers-note"
+      className={`grid grid-cols-[34px_minmax(0,1fr)] gap-3 py-4 ${first ? '' : 'border-t border-line'}`}
+      data-testid="writers-activity"
     >
-      <p className="m-0 font-serif text-[19px] leading-[1.4] italic" style={{ textWrap: 'pretty' }}>
-        “{item.note}”
-      </p>
-      <div className="relative mt-auto flex flex-col gap-1.5 hover:opacity-75">
-        <div className="flex items-center gap-2 text-[12px] text-muted">
-          <span
-            aria-hidden="true"
-            className="size-2.5 shrink-0 rounded-[3px]"
-            style={{ background: swatchColor(item.article.feedId) }}
-          />
-          <span className="truncate font-medium text-ink">{source}</span>
-          {badge ? (
-            <span className="rounded border border-line px-[5px] text-[10.5px]">{badge}</span>
+      <PersonAvatar
+        handle={person.handle}
+        displayName={person.displayName}
+        avatar={person.avatar}
+        size={34}
+      />
+      <div className="flex min-w-0 flex-col gap-[5px]">
+        <div className="text-[13.5px] leading-[1.45] text-ink-2">
+          <b className="font-semibold text-ink">{person.displayName ?? `@${person.handle}`}</b>
+          {blog ? (
+            <span className="text-muted"> {blog.title ?? displayHost(blog.homeUrl)}</span>
           ) : null}
+          {' · '}
+          {t(item.kind, { source })}
+          <span className="text-muted"> · {when}</span>
         </div>
-        <h3 className="m-0 font-serif text-[18px] leading-[1.25] font-medium">
-          <PostLink
-            article={item.article}
-            source={source}
-            member={member}
-            className="text-ink after:absolute after:inset-0 hover:no-underline"
+        <PostLink
+          article={post.article}
+          source={source}
+          member={member}
+          className="font-serif text-[19px] leading-[1.25] font-medium text-ink hover:text-ink hover:underline"
+        >
+          {title}
+        </PostLink>
+        {item.note ? (
+          <p
+            className="m-0 border-l-2 border-accent pl-3 font-serif text-[16.5px] leading-[1.4] text-ink-2 italic"
+            data-testid="writers-note"
           >
-            {title}
-          </PostLink>
-        </h3>
+            “{item.note}”
+          </p>
+        ) : null}
       </div>
-      <Link
-        to={`/@${person.handle}`}
-        className="flex items-center gap-2 border-t border-line pt-3 text-[12.5px] text-ink-2 hover:text-ink hover:no-underline"
-      >
-        <PersonAvatar
-          handle={person.handle}
-          displayName={person.displayName}
-          avatar={person.avatar}
-          size={22}
-        />
-        <span className="truncate">
-          <b className="font-medium text-ink">{person.displayName ?? `@${person.handle}`}</b> · @
-          {person.handle}
-        </span>
-      </Link>
     </li>
   )
 }

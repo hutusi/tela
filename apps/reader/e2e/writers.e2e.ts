@@ -96,7 +96,7 @@ test.describe('For writers, for a visitor', () => {
     await expect(card.getByTestId('writer-card-name')).toHaveText(NAME)
     await expect(card.getByTestId('writer-card-handle')).toHaveText('@hutusi')
     await expect(card.getByTestId('writer-card-bio')).toHaveText(BIO)
-    await expect(card.getByTestId('writer-card-reads')).toContainText(/reads \d+ blogs?/)
+    await expect(card.getByTestId('writer-card-reads')).toContainText(/Reads \d+ blogs?/)
     // The latest recommendation stands where a pinned post would: Tela has none.
     await expect(card.getByTestId('writer-card-latest')).toContainText(NOTE)
     await expect(page.getByTestId('writers-note').first()).toContainText(NOTE)
@@ -129,6 +129,32 @@ test.describe('For writers, for a visitor', () => {
     await expect(card.getByTestId('writer-card-handle')).toHaveText(offered)
     await expect(said).toHaveAttribute('data-status', 'available')
     await expect(said).toContainText(`✓ ${offered} is available`)
+  })
+
+  test('cuts a long handle before the Follow pill on a 360px card', async ({ page }) => {
+    // A valid handle of 26 characters with nowhere to break ran some 60px under the pill (Codex
+    // review, PR #25). Typed, the draft card takes the handle from the name.
+    await page.setViewportSize({ width: 360, height: 800 })
+    await page.goto('/writers')
+    await page.getByTestId('writers-name').fill('Alexanderthegreatofmacedon')
+    const card = page.getByTestId('writer-card')
+    await expect(card).toHaveAttribute('data-card', 'draft')
+    const handle = card.getByTestId('writer-card-handle')
+    await expect(handle).toContainText('@alexanderthegreat')
+    // Where the handle is painted, not where its box is: a box held to its column says nothing
+    // about text that spills out of it. The text's own extent counts, cut at the box only when the
+    // box clips what overflows it.
+    const painted = await handle.evaluate((el) => {
+      const range = document.createRange()
+      range.selectNodeContents(el)
+      const text = range.getBoundingClientRect().right
+      const clips = getComputedStyle(el).overflowX !== 'visible'
+      return clips ? Math.min(text, el.getBoundingClientRect().right) : text
+    })
+    const pill = await card.getByTestId('writer-card-follow').boundingBox()
+    expect(pill, 'the pill is laid out').toBeTruthy()
+    expect(painted, 'the handle is painted before the pill').toBeLessThanOrEqual(pill?.x ?? 0)
+    await expect(handle).toHaveAttribute('title', '@alexanderthegreatofmacedon')
   })
 
   test('keeps both pills whole in the 360px header', async ({ page }) => {

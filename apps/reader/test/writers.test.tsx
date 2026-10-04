@@ -5,11 +5,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { renderToString } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
-import { WriterCard } from '../src/components/writer-card'
+import { blogNameOf, WriterCard } from '../src/components/writer-card'
 import { I18n } from '../src/i18n'
 import { claimPath, finishCard, isProvisional, keepClaim, takeClaim } from '../src/lib/claim-card'
 import { blogHost, blogUrl, foldName, suggestHandle } from '../src/lib/suggest-handle'
-import { availabilityOf } from '../src/pages/writers'
+import { activityOf, availabilityOf } from '../src/pages/writers'
 import type { ProfileData } from '../src/views/types'
 
 describe('suggestHandle', () => {
@@ -142,6 +142,12 @@ describe('the writer card', () => {
     expect(hidden).not.toContain('data-testid="writer-card-reads"')
   })
 
+  test('names a blog from its host until it has its own name', () => {
+    expect(blogNameOf('ada-writes.dev')).toBe('Ada Writes')
+    expect(blogNameOf('hutusi.e2e.test')).toBe('Hutusi E2e')
+    expect(blogNameOf('localhost')).toBe('Localhost')
+  })
+
   test("is the visitor's own as they type, over the example", () => {
     const html = render(
       <WriterCard
@@ -156,6 +162,70 @@ describe('the writer card', () => {
     expect(html).toContain('ada.dev')
     expect(html).toContain('data-testid="writer-card-later"')
     expect(html).not.toContain('Hu Tusi')
+  })
+
+  // A handle can be thirty characters with nowhere to break: both cards cut it inside its column,
+  // and keep the whole of it in the title (Codex review, PR #25). The layout itself is held by
+  // writers.e2e.ts at 360px; this keeps the example card, whose live handle is short, from losing it.
+  test('cuts a long handle in its column on both cards, keeping the whole of it', () => {
+    const long = 'alexanderthegreatofmacedon'
+    const handleOf = (html: string) =>
+      html.match(/<span[^>]*data-testid="writer-card-handle"[^>]*>/)?.[0] ?? ''
+    const example = handleOf(
+      render(
+        <WriterCard
+          draft={null}
+          example={{ ...PROFILE, profile: { ...PROFILE.profile, handle: long } }}
+          reading={reading}
+        />,
+      ),
+    )
+    const draft = handleOf(
+      render(
+        <WriterCard
+          draft={{ name: 'Alexander', handle: long, host: '' }}
+          example={null}
+          reading={reading}
+        />,
+      ),
+    )
+    for (const span of [example, draft]) {
+      expect(span).toContain('truncate')
+      expect(span).toContain(`title="@${long}"`)
+    }
+  })
+})
+
+describe("the example's activity", () => {
+  const post = (id: number) => ({
+    ...PROFILE.recommendations[0]!,
+    article: { ...PROFILE.recommendations[0]!.article, id },
+  })
+
+  test('is its recommendations and public likes, newest first, a post once', () => {
+    const data: ProfileData = {
+      ...PROFILE,
+      recommendations: [
+        { ...post(1), note: 'Slowly.', createdAt: 300 },
+        { ...post(2), note: null, createdAt: 100 },
+      ],
+      liked: [
+        { ...post(3), likedAt: 200 },
+        // Liked and recommended: the recommendation says it.
+        { ...post(1), likedAt: 400 },
+      ],
+    }
+    expect(activityOf(data).map((a) => [a.kind, a.post.article.id, a.note])).toEqual([
+      ['recommended', 1, 'Slowly.'],
+      ['liked', 3, null],
+      ['recommended', 2, null],
+    ])
+  })
+
+  test('is at most four, and nothing without likes shown or recommendations', () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({ ...post(i), note: null, createdAt: i }))
+    expect(activityOf({ ...PROFILE, recommendations: many })).toHaveLength(4)
+    expect(activityOf({ ...PROFILE, recommendations: [], liked: null })).toEqual([])
   })
 })
 

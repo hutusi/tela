@@ -21,8 +21,10 @@ stay aligned.
 | `accent` | `oklch(0.50 0.10 150)` | unread dot, avatar, links, the mark's second strand |
 | `accent-strong` | `oklch(0.40 0.10 150)` | link hover |
 
-On a dark ground the accent lifts to `oklch(0.68 0.14 150)` (`#4eb068`), which is where the tiled
-mark takes its green from, and what `accent` becomes in dark mode (below).
+On a dark ground the green lifts to `oklch(0.68 0.14 150)` (`#4eb068`), which is where the tiled
+mark takes its green from, and what `primary` becomes in dark mode. Text in the accent (links, the
+italic spans) lifts a step further, to `oklch(0.74 0.12 150)`, as the design's Night page draws it
+(below).
 
 Fonts: EB Garamond (headings, article body, excerpts; 400/500/600, italic) and Figtree (UI;
 400/500/600), both self-hosted from `@fontsource` (Latin and Latin Extended), so no page asks
@@ -233,28 +235,41 @@ sheet unless a request is out; `/join` closes to `/`. Each error has its own wor
 a provider's code nobody listed still says the provider failed. A refused Google or GitHub
 sign-in comes back to the page it started on, which opens the sheet again saying why.
 
-For writers (`/writers`, from the design's *For writers v2*): a 1120 px page. The hero is two
-columns from `lg`: on the left the kicker in accent capitals, the serif title at 58 px (42 px on a
-phone) with *calling card* in accent italic, a lede, and the *Make your card* form (the name, the
-blog behind a muted `https://`, a line saying whether the handle is free, the `primary` *Claim your
-card*); on the right the card (`WriterCard`, a `surface` card with 16 px corners), sticky. Before
-the visitor types, the card is a real member's live public profile, `@hutusi` (`lib/example.ts`,
-the one place it is named): picture, name, @handle, the blogs they claimed, bio, followers and
-recommendations, "reads N blogs" only when their subscriptions are public, and their latest
-recommendation where the design had a pinned post; with no such profile (a fresh stack), an empty
-dashed outline. As they type it becomes theirs: the name, the handle suggested from it
-(`lib/suggest-handle.ts`: the first name folded to `[a-z0-9_]`, the whole name when that is too
-short, the blog's own name for a name with nothing Latin in it), the blog's host, and a dashed note
-that recommendations and blogs read come as they use Tela. Typing pauses 400 ms before the page asks
-`/api/v1/public/handles/:handle`: "✓ @x is available" in accent, or "@x is taken. Try @y." with
-the suggestion a button; no answer says nothing and never holds the button back. Then *Writers find
-each other here.* (the example's recommendations that carry a note, as cards; gone when there are
-none), *What your card does* (01–03 under an ink rule), *How it works* (1–3 in thumb-ringed
-circles), *Your site stays yours* on the `hover` ground, and the closing line with the live count
-of public blogs (`/api/v1/public/front`; without it, "Where's your blog?"), whose *Make your card*
-scrolls to the form and focuses the name. The copy says only what Tela does today: no pinned post,
-no named readers, no "reads you too", and translation is turned off from the Dashboard, not by
-removing the card. A member sees *Claim your blog* and *Your card* instead of the form.
+For writers (`/writers`, from the design's *For writers v2*): a 1200 px page, 40 px sides from `md`.
+The hero is two columns once both fit at 460 px with 80 px between them (about 1080 px of window),
+and stacks below that: on the left the kicker in accent capitals, the serif title at 68 px (56 px
+from `sm`, 44 px on a phone) with *calling card* in accent italic, a lede, and the *Make your card*
+form (50 px fields with 12 px corners on the `field` ground, the blog's with an inline muted
+`https://`, then one row holding the line that says whether the handle is free and the `primary`
+*Claim your card*); on the right the card (`WriterCard`) with a caption under it. The card is a
+paper card on either ground (the `.paper` scope below, 18 px corners, 32 px in): a 60 px avatar, the
+name in serif at 34 px, the @handle, a Follow pill in ink that goes to the profile, *Writes* with
+each claimed blog's swatch, name and host and a *✓ Claimed*, the bio in serif italic, the counts
+with 22 px serif numerals, then under a rule the latest recommendation (where the design pins a
+post) with its note, and *Reads* with up to four blogs as chips and a "+N". Before the visitor
+types, it is a real member's live public profile, `@hutusi` (`lib/example.ts`, the one place it is
+named), "Reads N blogs" and the chips only when their subscriptions are public; with no such profile
+(a fresh stack), the card's outline in `hover` bars. As they type it becomes theirs, as the design's
+draft card: the name, the handle suggested from it (`lib/suggest-handle.ts`: the first name folded
+to `[a-z0-9_]`, the whole name when that is too short, the blog's own name for a name with nothing
+Latin in it), a blog name made from the host, a placeholder bio, zero counts, and a dashed note that
+recommendations and blogs read come as they use Tela. Typing pauses 400 ms before the page asks
+`/api/v1/public/handles/:handle`: "✓ @x is available" in accent, or "@x is taken. Try @y." with the
+suggestion a button; no answer says nothing and never holds the button back.
+
+Below the hero, each section under a `line` rule and each only from what Tela has: *Writers find
+each other here.* beside an activity card of the example's latest four recommendations and public
+likes, newest first, a recommendation's note under an accent rule (gone when there are none); *What
+your card does* (01–03 in accent serif), each with a small illustration that shows only when it has
+something true to show: the *Find me on Tela* link pill to the example's card, a blogroll of four
+blogs they read publicly, and a readers card from the claimed blog's reader count and the example's
+followers; *How it works* (1–3 as 56 px accent numerals under 2 px `ink` rules); *Your site stays
+yours* on the page ground, its title and three points in one row from `lg`; and the centred closing
+line with the live count of public blogs and an italic *Where's yours?* (`/api/v1/public/front`;
+without it, "Where's your blog?"), whose *Make your card* scrolls to the form and focuses the name.
+The footer the other public pages carry closes it. The copy says only what Tela does today: no
+pinned post, no named readers, no "reads you too", and translation is turned off from the Dashboard,
+not by removing the card. A member sees *Claim your blog* and *Your card* instead of the form.
 *Claim your card* opens the sheet in claim mode, titled "Claim @handle": a join (or a log-in) that,
 once the session is the member's and their handle is still the provisional `u_…`, sets the handle
 and display name, then lands on `/claim?url=…` with the blog filled in, and with a note when the
@@ -310,30 +325,54 @@ Discover card (from the design): 40 px avatar (favicon or initial), name with a 
 claimed, host, language chip, serif tagline, "Latest: …", "N readers · cadence", and a
 Subscribe/Subscribed pill. Cadence is derived from posts in the last 30 days.
 
-Front page (`views/landing.tsx`, from `Tela Landing.dc.html` Turn 2, ADR 0035): a 1120 px page.
-The hero is a serif h1 (42 px, 64 px from `md`), "A confluence of N independent blogs.", the word
-"confluence" in `accent`, in the 400 italic Garamond ships (the h1 is 500, which has no
-italic), then an `ink-2` intro and two pills, "Join Tela" (filled `primary`) and "Log in"
-(outlined): links to `/join` and `/login` in the edge's page, which open the header's sheet once
-the app runs, as the header's own Join and Log in do. Under it a strip
-between two `line` rules: the date and "This week, N blogs wrote in M languages" (or "The latest
-from N blogs" when the week has none) on the left, and "Titles in: Original language | English"
-on the right, two links in a `hover` track whose active one is `surface` with a shadow, so the
-toggle works without JavaScript and the edge caches each mode apart (`?titles=translated`;
-Original is the default). The edition is a grid (two columns from `md`, three from `lg`) whose
-lead spans two: 18 px site avatar, blog name, the post's language (its own name, "Español", while
-titles are as written; the reader's name for it, "Spanish", while they are translated), the big
-serif title, the other title small and `muted` beneath, the lead's excerpt in serif `ink-2`, and
-time · minutes · author. Every title and excerpt carries its `lang`. A visitor's title opens the
-post on the blog (`PostLink`). The lead is the first post of three minutes or more with an
-excerpt. Only the edition has a skeleton; the copy renders at once. The page's root never
-fades in: the edge's copy is already on screen when the SPA replaces it. Then the writers strip
-("Write a blog? *Make it your calling card.*", outlined pill to `/writers`), on `surface` like
-Discover's claim strip. Day is the light tokens exactly; night is the existing dark tokens.
+Front page (`views/landing.tsx`, from `Tela Landing.dc.html` Turn 2, 2A Night and 2B Day, ADR
+0035): a 1280 px page with 56 px sides (16 px on a phone), at the design's line height of 1.2
+wherever a size does not set its own.
+
+- **Hero:** two columns from `lg`, 7fr and 5fr, 64 px apart, bottoms aligned. The h1 is serif 500,
+  80 px from `lg` (64 px from `md`, 44 px below), line height 1, tracking −0.025em, balanced:
+  "A confluence of *N independent blogs.*", the italic span in `accent` and the 400 italic
+  Garamond ships; with no count yet, no number. The right column holds the 18 px `ink-2` lede and
+  two pills, "Join Tela" (filled `primary`, 15 px, 13/26 px) and "Log in" (a `thumb` outline):
+  links to `/join` and `/login` in the edge's page, which open the header's sheet once the app
+  runs, as the header's own Join and Log in do.
+- **Strip:** a `line` rule above, 18 px either side. On the left, 11 px uppercase `muted`,
+  letter-spaced 0.1em: the date ("Saturday, 3 October", day before month in English) and "This
+  week, N blogs wrote in M languages" (or "The latest from N blogs" when the week has none). On
+  the right, "Titles in" and a `thumb`-bordered pill of two links whose active one is filled
+  `ink` on `paper`, so the toggle works without JavaScript and the edge caches each mode apart
+  (`?titles=translated`; Original is the default).
+- **Edition:** a grid 16 px apart (two columns from `md`, three from `lg`); the lead spans two, so
+  eleven posts make the lead and one card beside it, then three rows of three. A card is
+  `surface` with a `line` border (`muted` on hover), radius 12, 22 px in, 210 px tall at least
+  from `md`: a 10 px colour swatch (`swatchColor` of the feed), the blog's name in `ink`, and the
+  post's language at the right in 11 px uppercase (its own name, "Español", while titles are as
+  written; the reader's name for it, "Spanish", while they are translated); the 28 px serif title;
+  the other title in 16 px serif italic `muted`; and at the foot "N min · 3h ago" and "Read →".
+  The lead is 32 px in and 300 px tall, with a 48 px title (line height 1.04, balanced), the
+  excerpt in 20 px serif `ink-2` up to 640 px, then the other title, and "Read the post →" in
+  `accent`. Its header adds the feed's byline when the blog's name does not already say it
+  (`bylineName`: RSS's `hello@site (Name)` comes down to the name); a claimed blog shows the
+  claimant instead, on every card, linked to their card. The whole card is one link to the post
+  (the title's link, stretched over it); the blog's and the claimant's links sit above it. A
+  visitor's post opens on the blog (`PostLink`). Every title and excerpt carries its `lang`. The
+  lead is the first post of three minutes or more with an excerpt. Only the edition has a
+  skeleton; the copy renders at once.
+- **Writers strip:** 64 px below, a `line` rule and the hero's two columns again, centred: "Write a
+  blog? Make it your calling card." in 44 px serif, then 16 px `ink-2` copy and an outlined "Make
+  your card" pill to `/writers`.
+- **Chinese:** the main column turns off synthesized italics (`font-synthesis-style: none`), so an
+  italic span or title in a script with no italic face stays upright while its Latin keeps
+  Garamond's italic, and the two headlines keep words whole (`break-keep`), breaking at the comma
+  rather than inside 博客.
+
+The page's root never fades in: the edge's copy is already on screen when the SPA replaces it.
+Day is the light tokens exactly, night the dark ones, which are the design's Night palette.
 
 Footer (`components/site-footer.tsx`): under the front page and About, Privacy and Terms, in the
-SPA and in the edge's copy alike, a `line` rule, 13 px `muted`: "Tela © year · Made by AI Naive"
-(linking https://ainaive.com) on the left, About, For writers, Privacy and Terms on the right.
+SPA and in the edge's copy alike, a `line` rule and the front page's 1280 px measure, 22 px tall
+padding, 13 px `muted`: "Tela" in 19 px serif 600 `ink`, "© year · Made by AI Naive" (linking
+https://ainaive.com, in `ink-2`), and About, For writers, Privacy and Terms on the right.
 
 ## Strings
 
@@ -369,32 +408,42 @@ Tokens the Next app did not need, because it hard-coded them (and `knob`, which 
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `surface` | `#fff` | `#1f1c17` | cards, popovers, inputs (was `bg-white`) |
+| `surface` | `#fff` | `#26221d` | cards, popovers, inputs (was `bg-white`) |
 | `danger` | `oklch(0.50 0.15 25)` | `oklch(0.72 0.15 25)` | error text |
 | `highlight` | `oklch(0.91 0.10 95)` | `oklch(0.50 0.09 90 / 0.55)` | a highlight's paint |
 | `highlight-strong` | `oklch(0.80 0.14 90)` | `oklch(0.70 0.12 90)` | the highlight being edited |
 | `knob` | `#fff` | `#ede7db` | a switch's knob, light on either track in both themes (Tela v2) |
+| `field` | `#fff` | `#171511` | a form field's ground: white on paper, below the ground (not lifted) at night, as *For writers v2* draws its fields |
 | `primary` | `#1f1c18` | `oklch(0.68 0.14 150)` | the one filled call to action: *Join* (the header's, and the front page's *Join Tela*), the sheet's button (ADR 0035) |
-| `on-primary` | `#f6f2ea` | `#16140f` | text on `primary` |
+| `on-primary` | `#f6f2ea` | `#1f1c18` | text on `primary` |
 
 `primary` is ink by day, as the design's Day page has it, and the lifted green by night, as its
 Night page has it: a filled ink button on the dark ground would be a pale slab, louder than
 anything else on the page. `door.e2e.ts` checks the pair's computed colours in both themes.
 
-Dark mode redefines every token on a warm near-black ground rather than adding `dark:` variants:
+`.paper` is a scope for an element that stays a light card on either ground, as the design draws
+the For writers card at night. It re-declares every light token on the element, so its descendants
+inherit those ahead of the dark values on `:root` and their utilities need no `dark:` variant; a
+token added to `@theme` goes in its list too, or the dark value leaks in. `.paper-card` gives such
+a card its ground and lift: white with a hairline under it by day, the paper itself with a deeper
+shadow at night.
+
+Dark mode redefines every token on a warm near-black ground rather than adding `dark:` variants.
+The values are the Night palette of the design's front page (*Tela Landing*, 2A), so the member's
+app at night is the page a visitor saw: paper is the light theme's ink, and ink its paper.
 
 | Token | Dark |
 |---|---|
-| `paper` | `#16140f` |
-| `ink` | `#ede7db` |
-| `body` | `#ddd6c8` |
-| `ink-2` | `#b1a999` |
-| `muted` | `#8c8476` |
-| `line` | `#34302a` |
-| `hover` | `#29251f` |
-| `thumb` | `#454038` |
-| `accent` | `oklch(0.68 0.14 150)`, the lifted green above |
-| `accent-strong` | `oklch(0.78 0.12 150)` |
+| `paper` | `#1f1c18` |
+| `ink` | `#f6f2ea` |
+| `body` | `#e6dfd2`, between `ink` and `ink-2`: 12.8:1 on paper |
+| `ink-2` | `#cfc7b8` |
+| `muted` | `#a39a8b`: 6.1:1 on paper, 5.7:1 on `surface` |
+| `line` | `#35302a` |
+| `hover` | `#2e2a24` |
+| `thumb` | `#4a443a` |
+| `accent` | `oklch(0.74 0.12 150)` |
+| `accent-strong` | `oklch(0.80 0.12 150)` |
 
 `data-theme="dark|light"` on `<html>` is the member's choice. Without it,
 `prefers-color-scheme` decides. The two token blocks in `styles.css` must stay identical. A

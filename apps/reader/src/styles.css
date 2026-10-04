@@ -35,6 +35,8 @@
   --color-surface: #fff;
   /* A switch's knob: white on either track, and light on a dark ground too. */
   --color-knob: #fff;
+  /* A form field's ground: white on paper, and below the ground (not lifted) on a dark one. */
+  --color-field: #fff;
   --color-danger: oklch(0.5 0.15 25);
   /* A highlight is a marker's stroke over the text, never a box around it. */
   --color-highlight: oklch(0.91 0.1 95);
@@ -73,44 +75,94 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --color-paper: #16140f;
-    --color-surface: #1f1c17;
-    --color-ink: #ede7db;
-    --color-body: #ddd6c8;
-    --color-ink-2: #b1a999;
-    --color-muted: #8c8476;
-    --color-line: #34302a;
-    --color-hover: #29251f;
-    --color-thumb: #454038;
+    --color-paper: #1f1c18;
+    --color-surface: #26221d;
+    --color-ink: #f6f2ea;
+    --color-body: #e6dfd2;
+    --color-ink-2: #cfc7b8;
+    --color-muted: #a39a8b;
+    --color-line: #35302a;
+    --color-hover: #2e2a24;
+    --color-thumb: #4a443a;
     --color-knob: #ede7db;
-    --color-accent: oklch(0.68 0.14 150);
-    --color-accent-strong: oklch(0.78 0.12 150);
+    --color-accent: oklch(0.74 0.12 150);
+    --color-accent-strong: oklch(0.8 0.12 150);
     --color-danger: oklch(0.72 0.15 25);
+    --color-field: #171511;
     --color-highlight: oklch(0.5 0.09 90 / 0.55);
     --color-highlight-strong: oklch(0.7 0.12 90);
     --color-primary: oklch(0.68 0.14 150);
-    --color-on-primary: #16140f;
+    --color-on-primary: #1f1c18;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-paper: #16140f;
-  --color-surface: #1f1c17;
-  --color-ink: #ede7db;
-  --color-body: #ddd6c8;
-  --color-ink-2: #b1a999;
-  --color-muted: #8c8476;
-  --color-line: #34302a;
-  --color-hover: #29251f;
-  --color-thumb: #454038;
+  --color-paper: #1f1c18;
+  --color-surface: #26221d;
+  --color-ink: #f6f2ea;
+  --color-body: #e6dfd2;
+  --color-ink-2: #cfc7b8;
+  --color-muted: #a39a8b;
+  --color-line: #35302a;
+  --color-hover: #2e2a24;
+  --color-thumb: #4a443a;
   --color-knob: #ede7db;
-  --color-accent: oklch(0.68 0.14 150);
-  --color-accent-strong: oklch(0.78 0.12 150);
+  --color-accent: oklch(0.74 0.12 150);
+  --color-accent-strong: oklch(0.8 0.12 150);
   --color-danger: oklch(0.72 0.15 25);
+  --color-field: #171511;
   --color-highlight: oklch(0.5 0.09 90 / 0.55);
   --color-highlight-strong: oklch(0.7 0.12 90);
   --color-primary: oklch(0.68 0.14 150);
-  --color-on-primary: #16140f;
+  --color-on-primary: #1f1c18;
+}
+
+/*
+ * The paper scope: an element that stays a light card on either ground, as the design draws the
+ * For writers example card at night. It re-declares the light tokens on the element itself, and
+ * what it declares there is what its descendants inherit, ahead of the dark values on :root. A
+ * token left out of this list would leak the dark value in, so keep it in step with @theme.
+ */
+.paper {
+  color-scheme: light;
+  --color-paper: #f6f2ea;
+  --color-surface: #fff;
+  --color-field: #fff;
+  --color-ink: #1f1c18;
+  --color-body: #2a261f;
+  --color-ink-2: #5c554b;
+  --color-muted: #8a8275;
+  --color-line: #e3dccf;
+  --color-hover: #ece6da;
+  --color-thumb: #d9d2c5;
+  --color-source: color-mix(in oklab, var(--color-hover) 55%, var(--color-paper));
+  --color-accent: oklch(0.5 0.1 150);
+  --color-accent-strong: oklch(0.4 0.1 150);
+  --color-knob: #fff;
+  --color-danger: oklch(0.5 0.15 25);
+  --color-highlight: oklch(0.91 0.1 95);
+  --color-highlight-strong: oklch(0.8 0.14 90);
+  --color-primary: #1f1c18;
+  --color-on-primary: #f6f2ea;
+  color: var(--color-ink);
+}
+/* A paper card's ground and lift: white with a hairline under it by day; at night the paper
+   itself, with a deeper shadow to stand off the dark ground. Twice, as the dark blocks are. */
+.paper-card {
+  background: #fff;
+  box-shadow:
+    0 1px 0 #d9d2c5,
+    0 24px 60px rgb(31 28 24 / 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .paper-card {
+    background: #f6f2ea;
+    box-shadow: 0 30px 80px rgb(0 0 0 / 0.45);
+  }
+}
+:root[data-theme="dark"] .paper-card {
+  background: #f6f2ea;
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.45);
 }
 
 /*

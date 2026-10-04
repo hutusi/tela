@@ -97,7 +97,7 @@ test.describe('the visitor header', () => {
 
     // A literal colour in a class list would stay as it was on the dark ground.
     await page.emulateMedia({ colorScheme: 'dark' })
-    const night = { ground: await green(), text: 'rgb(22, 20, 15)' }
+    const night = { ground: await green(), text: 'rgb(31, 28, 24)' }
     expect(await pair('login-submit')).toEqual(night)
     await page.keyboard.press('Escape')
     expect(await pair('nav-join')).toEqual(night)

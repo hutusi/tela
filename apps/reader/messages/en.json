@@ -23,9 +23,9 @@
   },
   "front": {
     "description": "Independent blogs from around the world, each in its own language, with their titles translated into yours.",
-    "hero": "A <em>confluence</em> of {count, plural, one {# independent blog} other {# independent blogs}}.",
-    "heroPlain": "A <em>confluence</em> of independent blogs.",
-    "intro": "Personal blogs from around the world, each in its own language. Tela gathers them in one place and translates their titles, so you can tell what is worth reading before you open it. Members read whole posts beside a translation, paragraph by paragraph.",
+    "hero": "A confluence of <em>{count, plural, one {# independent blog.} other {# independent blogs.}}</em>",
+    "heroPlain": "A confluence of <em>independent blogs.</em>",
+    "intro": "Tela channels blogs and personal sites from around the world into one ocean of ideas, translated into Chinese or English as you read.",
     "join": "Join Tela",
     "logIn": "Log in",
     "week": "This week, {blogs, plural, one {# blog} other {# blogs}} wrote in {languages, plural, one {# language} other {# languages}}",
@@ -33,17 +33,18 @@
     "titlesIn": "Titles in",
     "original": "Original language",
     "minutes": "{n} min",
-    "by": "by {name}",
     "empty": "No posts yet. The blogs Tela gathers will show here as they write.",
     "writers": {
-      "title": "Write a blog? <em>Make it your calling card.</em>",
-      "intro": "Claim it on Tela: your profile shows it, and readers in other languages see its titles in theirs.",
-      "cta": "For writers"
-    }
+      "title": "Write a blog? Make it your calling card.",
+      "intro": "Claim your blog on Tela and get a page with your name, your blog and the posts you recommend. Your site stays where it is.",
+      "cta": "Make your card"
+    },
+    "read": "Read →",
+    "readPost": "Read the post →"
   },
   "footer": {
     "label": "About Tela",
-    "made": "Tela © {year} · Made by <maker>AI Naive</maker>",
+    "made": "© {year} · Made by <maker>AI Naive</maker>",
     "about": "About",
     "writers": "For writers",
     "privacy": "Privacy",
@@ -312,8 +313,7 @@
       "name": "Your name",
       "blog": "Your blog's address",
       "blogPlaceholder": "yourblog.com",
-      "submit": "Claim your card",
-      "hint": "Free, and you can change your name and handle later in Settings."
+      "submit": "Claim your card"
     },
     "availability": {
       "available": "✓ @{handle} is available",
@@ -332,21 +332,34 @@
       "writes": "Writes",
       "followers": "<b>{n}</b> {n, plural, one {follower} other {followers}}",
       "recommendations": "<b>{n}</b> {n, plural, one {recommendation} other {recommendations}}",
-      "reads": "reads <b>{n}</b> {n, plural, one {blog} other {blogs}}",
+      "reads": "Reads <b>{n}</b> {n, plural, one {blog} other {blogs}}",
       "recommends": "Latest recommendation",
       "yourName": "Your name",
       "yourHandle": "yourname",
-      "later": "Your recommendations, and the blogs you read if you choose to show them, appear here as you use Tela."
+      "later": "Your recommendations, and the blogs you read if you choose to show them, appear here as you use Tela.",
+      "follow": "Follow",
+      "claimed": "Claimed",
+      "readsLabel": "Reads",
+      "yourBlog": "Your blog",
+      "bioLater": "A line about what you write. You can change it any time.",
+      "latestLater": "Your latest recommendation shows here.",
+      "captionExample": "@{handle}'s card, live on Tela. Type your name to see yours.",
+      "captionLive": "@{handle}'s card, live on Tela.",
+      "captionDraft": "Your card, as you type."
     },
     "find": {
       "title": "Writers find each other here.",
-      "intro": "A recommendation on Tela can carry a note, and it shows on the recommender's card. These are {name}'s, live from Tela."
+      "intro": "Follow the writers you like and see what they recommend and like, and the blogs they read when they show them. A post someone recommends reaches everyone who follows them, with their note.",
+      "label": "Lately from @{handle}",
+      "recommended": "recommended a post from {source}",
+      "liked": "liked a post from {source}"
     },
     "does": {
       "title": "What your card does",
       "link": {
         "title": "One link for everything you write",
-        "body": "Your card at /@handle lists every blog you claim, with your name and a line about you."
+        "body": "Your card at /@handle lists every blog you claim, with your name and a line about you.",
+        "pill": "Find me on Tela"
       },
       "blogroll": {
         "title": "Your blogroll",
@@ -354,7 +367,9 @@
       },
       "readers": {
         "title": "Readers",
-        "body": "Readers follow you, subscribe to your blog in one click, and can read it translated beside the original. Your Dashboard shows how many read you, which posts they liked, and the notes they left."
+        "body": "Readers follow you, subscribe to your blog in one click, and can read it translated beside the original. Your Dashboard shows how many read you, which posts they liked, and the notes they left.",
+        "blogReaders": "{n, plural, one {# reader} other {# readers}} on Tela",
+        "followers": "{n, plural, one {# follower} other {# followers}}"
       }
     },
     "how": {
@@ -388,8 +403,8 @@
       }
     },
     "cta": {
-      "count": "{n, plural, one {# blog is} other {# blogs are}} already on Tela. Where's yours?",
-      "title": "Where's your blog?",
+      "count": "{n, plural, one {# blog is} other {# blogs are}} already on Tela. <em>Where's yours?</em>",
+      "title": "<em>Where's your blog?</em>",
       "make": "Make your card"
     }
   },

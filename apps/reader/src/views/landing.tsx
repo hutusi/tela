@@ -3,19 +3,44 @@
  * the doors in. Pure, rendered by the SPA and by the edge for visitors: nothing here reads
  * `window` or `document`, and the root does not fade in, since the edge's copy is already on
  * screen when the SPA replaces it. Only the edition waits for data; the rest is copy.
+ *
+ * The layout is the design's (Tela Landing, 2A Night / 2B Day; DESIGN.md): a two-column hero, an
+ * uppercase strip over the edition, bordered cards three to a row with the lead across two, and a
+ * full-width writers strip.
  */
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { type DoorRequest, opensSheet, useFrontDoor } from '../components/front-door'
-import { SiteAvatar } from '../components/site-avatar'
 import { SiteFooter } from '../components/site-footer'
-import { editionTitles, frontHref, pickLead, type TitlesMode } from '../lib/edition'
-import { displayHost, relativeTime } from '../lib/format'
+import { bylineName, editionTitles, frontHref, pickLead, type TitlesMode } from '../lib/edition'
+import { displayHost, relativeTime, swatchColor } from '../lib/format'
 import { nameIn } from '../lib/language-name'
 import { PostLink } from './post-link'
 import type { FrontData, FrontPost, MemberControls } from './types'
 
 const accent = (chunks: React.ReactNode) => <em className="font-normal text-accent">{chunks}</em>
+
+/** The hero and the writers strip: the headline's column, then the one beside it, from `lg`. */
+const SPLIT = 'grid lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-16'
+
+/** A link above the card's own: the card is one link to the post, laid over all of it. */
+const ABOVE = 'relative z-[1]'
+
+/**
+ * The strip's date: "Thursday, 1 October" in English, day before month as the design sets it,
+ * and the locale's own order otherwise ("10月1日星期四").
+ */
+function stripDate(now: number, locale: string): string {
+  const date = new Date(now)
+  if (locale.startsWith('en')) {
+    const weekday = new Intl.DateTimeFormat('en-GB', { weekday: 'long' }).format(date)
+    const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(date)
+    return `${weekday}, ${day}`
+  }
+  return new Intl.DateTimeFormat(locale, { weekday: 'long', month: 'long', day: 'numeric' }).format(
+    date,
+  )
+}
 
 export function LandingView({
   data,
@@ -48,11 +73,6 @@ export function LandingView({
   const posts = data?.edition.posts ?? []
   const lead = pickLead(posts)
   const rest = posts.filter((p) => p !== lead)
-  const date = new Intl.DateTimeFormat(locale, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  }).format(new Date(now))
   // What the strip says of the edition: nothing for an empty one, rather than "the latest from 0
   // blogs" beside "No posts yet".
   const span =
@@ -64,43 +84,47 @@ export function LandingView({
 
   return (
     <>
-      <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 pt-12 pb-20 md:px-12 md:pt-20">
-        <section className="max-w-[860px]">
-          <h1 className="m-0 font-serif text-[42px] leading-[1.06] font-medium tracking-[-0.02em] md:text-[64px]">
+      {/* No slanted Chinese: an italic span or title in a script with no italic face stays upright,
+          and its Latin keeps EB Garamond's own italic. */}
+      <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 pb-14 leading-[1.2] [font-synthesis-style:none] md:px-14">
+        <section className={`${SPLIT} items-end gap-8 pt-12 pb-10 md:pt-20 md:pb-14`}>
+          <h1 className="m-0 font-serif text-[44px] leading-none font-medium tracking-[-0.025em] text-balance break-keep md:text-[64px] lg:text-[80px]">
             {/* A count only once there is one: "a confluence of 0 blogs" is no welcome. */}
             {data && data.counts.blogs > 0
               ? t.rich('hero', { count: data.counts.blogs, em: accent })
               : t.rich('heroPlain', { em: accent })}
           </h1>
-          <p className="mt-5 mb-0 max-w-[620px] text-[17px] leading-relaxed text-ink-2">
-            {t('intro')}
-          </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Link
-              to="/join"
-              onClick={opens({ mode: 'join' })}
-              className="rounded-full bg-primary px-5 py-2.5 font-medium text-on-primary hover:no-underline hover:brightness-125"
-              data-testid="front-join"
-            >
-              {t('join')}
-            </Link>
-            <Link
-              to="/login"
-              onClick={opens({ mode: 'login' })}
-              className="rounded-full border border-line px-5 py-2.5 font-medium text-ink hover:border-ink hover:no-underline"
-              data-testid="front-login"
-            >
-              {t('logIn')}
-            </Link>
+          <div className="flex flex-col gap-6 lg:pb-2">
+            <p className="m-0 text-[17px] leading-[1.55] text-pretty text-ink-2 md:text-[18px]">
+              {t('intro')}
+            </p>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Link
+                to="/join"
+                onClick={opens({ mode: 'join' })}
+                className="rounded-full bg-primary px-[26px] py-[13px] text-[15px] font-semibold text-on-primary hover:no-underline hover:brightness-110"
+                data-testid="front-join"
+              >
+                {t('join')}
+              </Link>
+              <Link
+                to="/login"
+                onClick={opens({ mode: 'login' })}
+                className="rounded-full border border-thumb px-[22px] py-[13px] text-[15px] font-medium text-ink hover:border-ink hover:no-underline"
+                data-testid="front-login"
+              >
+                {t('logIn')}
+              </Link>
+            </div>
           </div>
         </section>
 
         <div
-          className="mt-14 flex flex-wrap items-center gap-x-6 gap-y-3 border-y border-line py-3 text-[13px]"
+          className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-line py-[18px]"
           data-testid="front-strip"
         >
-          <p className="m-0 min-w-0 flex-1 text-ink-2">
-            <span className="font-medium text-ink">{date}</span>
+          <p className="m-0 min-w-0 text-[11px] font-semibold tracking-[0.1em] text-muted uppercase">
+            <span>{stripDate(now, locale)}</span>
             {span ? (
               <>
                 <span aria-hidden="true"> · </span>
@@ -109,25 +133,25 @@ export function LandingView({
             ) : !data && loading ? (
               <>
                 <span aria-hidden="true"> · </span>
-                <span className="inline-block h-3 w-48 animate-pulse rounded bg-hover align-middle" />
+                <span className="inline-block h-2.5 w-48 animate-pulse rounded bg-hover align-middle" />
               </>
             ) : null}
           </p>
           <nav
             aria-label={t('titlesIn')}
-            className="flex shrink-0 items-center gap-2"
+            className="flex shrink-0 items-center gap-2.5 text-[13px] text-muted"
             data-testid="titles-toggle"
           >
-            <span className="text-muted">{t('titlesIn')}</span>
-            <span className="inline-flex rounded-full bg-hover p-0.5">
+            <span>{t('titlesIn')}</span>
+            <span className="inline-flex rounded-full border border-thumb p-0.5">
               {(['original', 'translated'] as const).map((mode) => (
                 <Link
                   key={mode}
                   to={frontHref(mode)}
                   aria-current={titles === mode ? 'page' : undefined}
                   data-testid={`titles-${mode}`}
-                  className={`rounded-full px-3 py-1 font-medium hover:no-underline ${
-                    titles === mode ? 'bg-surface text-ink shadow' : 'text-ink-2 hover:text-ink'
+                  className={`rounded-full px-3.5 py-[5px] font-medium hover:no-underline ${
+                    titles === mode ? 'bg-ink text-paper' : 'text-ink-2 hover:text-ink'
                   }`}
                 >
                   {mode === 'original' ? t('original') : nameIn(reading, locale)}
@@ -139,22 +163,21 @@ export function LandingView({
 
         {data === null ? (
           loading ? (
-            <div className="mt-8 grid gap-x-10 gap-y-10 md:grid-cols-2 lg:grid-cols-3" aria-busy>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" aria-busy>
               {[0, 1, 2, 3, 4].map((i) => (
                 <div
                   key={i}
-                  className={`animate-pulse rounded-xl bg-hover ${i === 0 ? 'h-[220px] md:col-span-2' : 'h-[150px]'}`}
+                  className={`animate-pulse rounded-xl border border-line bg-hover ${
+                    i === 0 ? 'h-[300px] md:col-span-2' : 'h-[210px]'
+                  }`}
                 />
               ))}
             </div>
           ) : null
         ) : posts.length === 0 ? (
-          <p className="mt-8 text-muted">{t('empty')}</p>
+          <p className="mt-2 leading-normal text-muted">{t('empty')}</p>
         ) : (
-          <div
-            className="mt-8 grid gap-x-10 gap-y-10 md:grid-cols-2 lg:grid-cols-3"
-            data-testid="front-edition"
-          >
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" data-testid="front-edition">
             {lead ? (
               <PostCard
                 post={lead}
@@ -182,21 +205,21 @@ export function LandingView({
         )}
 
         <section
-          className="mt-16 flex flex-wrap items-center gap-6 rounded-xl border border-line bg-surface px-7 py-6"
+          className={`${SPLIT} mt-16 items-center gap-6 border-t border-line pt-10 pb-2`}
           data-testid="writers-strip"
         >
-          <div className="min-w-[240px] flex-1">
-            <h2 className="m-0 mb-1 font-serif text-[24px] leading-tight font-medium">
-              {t.rich('writers.title', { em: accent })}
-            </h2>
-            <p className="m-0 text-ink-2">{t('writers.intro')}</p>
+          <h2 className="m-0 font-serif text-[34px] leading-[1.05] font-medium tracking-[-0.015em] break-keep md:text-[44px]">
+            {t('writers.title')}
+          </h2>
+          <div className="flex flex-col items-start gap-4">
+            <p className="m-0 text-[16px] leading-[1.55] text-ink-2">{t('writers.intro')}</p>
+            <Link
+              to="/writers"
+              className="rounded-full border border-thumb px-5 py-2.5 font-medium text-ink hover:border-ink hover:no-underline"
+            >
+              {t('writers.cta')}
+            </Link>
           </div>
-          <Link
-            to="/writers"
-            className="rounded-full border border-ink px-[18px] py-[9px] font-medium text-ink hover:bg-ink hover:text-paper hover:no-underline"
-          >
-            {t('writers.cta')}
-          </Link>
         </section>
       </main>
       <SiteFooter year={new Date(now).getFullYear()} />
@@ -225,34 +248,72 @@ function PostCard({
   const { article, site, claimant } = post
   const shown = editionTitles(article, titles, reading, locale)
   const source = site.title ?? displayHost(site.homeUrl)
+  // Who wrote it, beside the blog: the member who claimed it, linked to their card, or the feed's
+  // own byline on the lead, which has the room.
+  const author = lead ? bylineName(article.author, source) : null
+  const byline = claimant ? (
+    <Link
+      to={`/@${claimant.handle}`}
+      className={`${ABOVE} truncate text-ink-2 hover:text-ink hover:underline`}
+    >
+      {claimant.displayName ?? `@${claimant.handle}`}
+    </Link>
+  ) : author ? (
+    <span className="truncate">{author}</span>
+  ) : null
+  const other = shown.small ? (
+    <p
+      lang={shown.small.lang}
+      className="m-0 font-serif text-[16px] leading-[1.35] text-muted italic"
+      data-testid="front-other-title"
+    >
+      {shown.small.text}
+    </p>
+  ) : null
   return (
     <article
-      className={`flex min-w-0 flex-col gap-2 ${lead ? 'md:col-span-2' : ''}`}
+      className={`relative flex min-w-0 flex-col rounded-xl border border-line bg-surface hover:border-muted ${
+        lead
+          ? 'gap-4 p-6 md:col-span-2 md:min-h-[300px] md:p-8'
+          : 'gap-2.5 p-[22px] md:min-h-[210px]'
+      }`}
       data-testid={lead ? 'front-lead' : 'front-post'}
     >
-      <div className="flex min-w-0 items-center gap-2 text-[12.5px] text-muted">
-        <SiteAvatar id={site.id} title={source} faviconKey={site.faviconKey} size={18} radius={4} />
+      <div
+        className={`flex min-w-0 items-center gap-2 text-ink-2 ${lead ? 'text-[13px]' : 'text-[12.5px]'}`}
+      >
+        <span
+          aria-hidden="true"
+          className={`shrink-0 rounded-[3px] ${lead ? 'size-[11px]' : 'size-2.5'}`}
+          style={{ background: swatchColor(article.feedId) }}
+        />
         <Link
           to={`/s/${site.id}`}
-          className="truncate font-medium text-ink-2 hover:text-ink hover:no-underline"
+          className={`${ABOVE} truncate font-medium text-ink hover:text-ink hover:underline`}
         >
           {source}
         </Link>
-        {shown.label ? (
+        {byline ? (
           <>
             <span aria-hidden="true">·</span>
-            <span className="shrink-0" data-testid="front-lang">
-              {shown.label}
-            </span>
+            {byline}
           </>
+        ) : null}
+        {shown.label ? (
+          <span
+            className="ml-auto shrink-0 pl-2 text-[11px] font-semibold tracking-[0.08em] uppercase"
+            data-testid="front-lang"
+          >
+            {shown.label}
+          </span>
         ) : null}
       </div>
       <h2
         lang={shown.big.lang}
-        className={`m-0 font-serif font-medium ${
+        className={`m-0 font-serif font-medium text-ink ${
           lead
-            ? 'text-[30px] leading-[1.12] tracking-[-0.015em] md:text-[40px]'
-            : 'text-[21px] leading-snug'
+            ? 'text-[34px] leading-[1.04] tracking-[-0.02em] text-balance md:text-[48px]'
+            : 'mt-1 text-[28px] leading-[1.15] text-pretty'
         }`}
         data-testid="front-title"
       >
@@ -260,43 +321,34 @@ function PostCard({
           article={article}
           source={source}
           member={member}
-          className="text-ink hover:text-accent-strong hover:no-underline"
+          className="text-ink after:absolute after:inset-0 after:rounded-xl hover:text-ink hover:no-underline"
         >
           {shown.big.text}
         </PostLink>
       </h2>
-      {shown.small ? (
-        <p
-          lang={shown.small.lang}
-          className="m-0 text-[14px] leading-snug text-muted"
-          data-testid="front-other-title"
-        >
-          {shown.small.text}
-        </p>
-      ) : null}
+      {lead ? null : other}
       {lead && shown.excerpt ? (
         <p
           lang={shown.excerpt.lang}
-          className="m-0 mt-1 line-clamp-4 max-w-[680px] font-serif text-[18px] leading-relaxed text-ink-2"
+          className="m-0 line-clamp-4 max-w-[640px] font-serif text-[18px] leading-[1.45] text-pretty text-ink-2 md:text-[20px]"
         >
           {shown.excerpt.text}
         </p>
       ) : null}
-      <div className="flex flex-wrap gap-x-2 text-[12.5px] text-muted">
-        <span>{relativeTime(article.sortAt, locale, now)}</span>
-        <span aria-hidden="true">·</span>
-        <span>{t('minutes', { n: article.readingMinutes || 1 })}</span>
-        {claimant ? (
-          <>
-            <span aria-hidden="true">·</span>
-            <Link
-              to={`/@${claimant.handle}`}
-              className="text-ink-2 hover:text-ink hover:no-underline"
-            >
-              {t('by', { name: claimant.displayName ?? `@${claimant.handle}` })}
-            </Link>
-          </>
-        ) : null}
+      {lead ? other : null}
+      <div
+        className={`mt-auto flex items-center justify-between gap-3 text-muted ${
+          lead ? 'text-[13px]' : 'text-[12.5px]'
+        }`}
+      >
+        <span>
+          {t('minutes', { n: article.readingMinutes || 1 })}
+          <span aria-hidden="true"> · </span>
+          {relativeTime(article.sortAt, locale, now)}
+        </span>
+        <span aria-hidden="true" className={lead ? 'font-medium text-accent' : undefined}>
+          {lead ? t('readPost') : t('read')}
+        </span>
       </div>
     </article>
   )

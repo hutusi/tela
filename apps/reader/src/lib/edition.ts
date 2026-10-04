@@ -29,6 +29,47 @@ export function pickLead(posts: readonly FrontPost[]): FrontPost | null {
   )
 }
 
+/**
+ * The name a feed gives its post's author, as the lead's byline shows it beside the blog: RSS
+ * writes `hello@site.com (Name)` and some feeds `Name <hello@site.com>`, which come down to the
+ * name, and an address alone is no name. None when the blog's own name already says it ("Austin
+ * Kleon", "Manuel Moreale — Everything Feed"), since the byline would only repeat it: said as a
+ * name, not inside a longer word ("Ann" is not in "Annual Review"). Chinese, Japanese and Korean
+ * write names without spaces ("阮一峰的网络日志"), so a name in those scripts counts anywhere.
+ */
+export function bylineName(author: string | null, blog: string): string | null {
+  const raw = author?.trim()
+  if (!raw) return null
+  const name = (
+    /^\S+@\S+\s*\((.+)\)$/.exec(raw)?.[1] ??
+    /^(.+?)\s*<\S+@\S+>$/.exec(raw)?.[1] ??
+    raw
+  ).trim()
+  if (!name || /^\S+@\S+$/.test(name)) return null
+  return namedIn(blog.toLocaleLowerCase(), name.toLocaleLowerCase()) ? null : name
+}
+
+/** Scripts written without spaces between words, where a name has no edges to look for. */
+const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+
+/** A letter or digit in any script: what may not touch a name's edges for it to count as one. */
+const WORDLIKE = /[\p{L}\p{N}]/u
+
+/**
+ * Whether `title` says `name`: as a whole name, or anywhere for a name in an unspaced script. Each
+ * occurrence's neighbours are looked at directly rather than with a lookbehind, which Safari
+ * before 16.4 cannot parse.
+ */
+function namedIn(title: string, name: string): boolean {
+  if (UNSPACED.test(name)) return title.includes(name)
+  for (let at = title.indexOf(name); at !== -1; at = title.indexOf(name, at + 1)) {
+    const before = Array.from(title.slice(0, at)).at(-1) ?? ''
+    const after = Array.from(title.slice(at + name.length))[0] ?? ''
+    if (!WORDLIKE.test(before) && !WORDLIKE.test(after)) return true
+  }
+  return false
+}
+
 /** A text and the language it is in, for the element's `lang`. */
 export type Shown = { text: string; lang: string | undefined }
 
