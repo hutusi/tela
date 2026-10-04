@@ -49,9 +49,10 @@ everything so far sits under `[Unreleased]`.
   member that handle and name, and joining or logging in goes on to claim the blog. Until they
   type, the page shows a labelled sample card and the Following, blogroll and readers it would
   bring, all of it only what Tela does and none of it a link (ADR 0037).
-- **A light/dark switch in the header**, for visitors and members alike, from 640 px up. A
-  member's press is their synced theme, as Settings sets it; a visitor's stays on the device and
-  comes with them when they join (ADR 0037).
+- **A theme menu in the header**, for visitors and members alike, from 640 px up: Auto, Light
+  or Dark. A member's choice is their synced theme, as Settings sets it; a visitor's stays on the
+  device and comes with them when they join. A visitor's *Read in* is now the member's one-press
+  pill, both languages in view (ADR 0037).
 - **About, Privacy and Terms**, in English and Chinese, rendered at the edge from the bundle;
   every statement on them is checked against what the code does (ADR 0035).
 - **Highlights and notes**, private, on either side of a translation, and found again when the

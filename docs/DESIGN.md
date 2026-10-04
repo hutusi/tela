@@ -68,31 +68,37 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 ## Layout rules
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
-  Reading/Discover/Following pills (Following for members), search, the theme switch (from `sm`),
-  the Read-in menu ("Read in 中文 EN", for members), and the member's avatar (30px: their picture, or their initial on the accent). A
+  Reading/Discover/Following pills (Following for members), search, the theme menu (from `sm`),
+  the Read-in pill ("Read in 中文 EN"), and the member's avatar (30px: their picture, or their initial on the accent). A
   member's interface language is in Settings → Language, not the header. Pills are ink in every state: the active one is distinguished by its
   `hover` background alone, never by colour.
 - A visitor's header (ADR 0035) is its own, shown as soon as the device is known to hold no
   member (a guest, or a session still `unknown` with no stored account), so it never waits for
-  `/me`. From `sm` up: the lockup, the Discover and *For writers* pills, then the theme switch,
-  "Read in EN ▾" (`VisitorLocale`), *Log in* as a quiet pill and *Join* filled in `primary`; below
-  `sm` the lockup, the nav and Join, which at 360px leaves the two pills some 35px to spare. No Reading
-  pill and no search, both a member's. "Read in" sets the interface language and with it the
-  language titles are translated into, which reverses the rule of 2026-10-01 that a visitor
+  `/me`. From `sm` up: the lockup, the Discover and *For writers* pills, then the theme menu,
+  "Read in 中文 EN" (`VisitorLocale`), *Log in* as a quiet pill and *Join* filled in `primary`;
+  below `sm` the lockup, the nav and Join, which at 360px leaves the two pills some 35px to spare.
+  No Reading pill and no search, both a member's. "Read in" sets the interface language and with
+  it the language titles are translated into, which reverses the rule of 2026-10-01 that a visitor
   changed it only on the sign-in page: the first thing a visitor needs to know is whether they can
-  read the page. It is a `<details>`, so it opens in the edge's page before the script runs; choosing
+  read the page. It is the member's pill (`ReadInPill`, ADR 0037), both languages in view and one
+  press to change, each in its own script; the edge's page marks the language it was rendered in,
+  which is right for everyone it is cached for, since the cache is kept per language, and choosing
   needs the script. Log in and Join are links to `/login` and `/join`, which open the sheet over the
   page once the script runs (a modified click still opens the page).
-- The theme switch (`ThemeToggle`, ADR 0037) is a 34px circle like the search link, in both headers
-  from `sm` up and hidden below it: a moon on a light page and a sun on a dark one, each the
-  `Glyph` line style with its label ("Switch to dark theme", "Switch to light theme") inside it.
-  The stylesheet picks which half shows (`.light-only` and `.dark-only`, under the same selectors
-  as the dark tokens), so the edge's cached page and the first paint are right before any script
-  runs; it does nothing until the script runs. A press flips from the theme the page shows, read
-  then, to the other one; it never goes back to Auto, which is Settings' and the Aa menu's. A
-  member's press is their pref, and the page shows what the store makes of it, never the press
-  itself: a press that loses to a later choice changes nothing, rather than leaving the page and
-  Settings at odds.
+- The controls on the right are one family (`header-control.ts`): 34px tall and round, on
+  `surface`, in a `line` border that darkens on hover. The search link and the theme menu are
+  circles of it, the Read-in pill a pill, whose text is 12px until `lg`, where the member's header
+  has the least room.
+- The theme menu (`ThemeMenu`, ADR 0037), in both headers from `sm` up and hidden below it, offers
+  Auto, Light and Dark, as Settings and the Aa menu do. Its circle shows the choice in the `Glyph`
+  line style, a half-filled circle for Auto, a sun, a moon, with its name ("Theme: Auto") inside
+  it. The stylesheet picks which (`.theme-is-*`, from `data-theme`, which the inline script puts on
+  before anything paints), so the edge's one cached page is right for every visitor before any
+  script runs; for the same reason the edge marks no item as chosen, and the app marks the one the
+  page is set to. A native `<details>` with a 160px `surface` panel like the account menu's, so it
+  opens before the script runs; choosing needs the script, and closes it. A member's choice is
+  their pref, and the page shows what the store makes of it, never the choice itself: one that
+  loses to a later choice changes nothing, rather than leaving the page and Settings at odds.
 - The avatar opens the account menu (Tela v2): a 220px `surface` panel under it with the member's
   name and @handle, then Your profile, Subscriptions (`/settings/subscriptions`), Dashboard,
   Settings, Invite friends (`/settings/invites`), a rule, and Sign out in `muted`. A disclosure, not an ARIA menu: Tab reaches its items.
@@ -114,12 +120,12 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   each one wraps its label into the 56px bar instead. Below `sm` they stay shrinkable — the phone
   header has no room to spare, and a wrapped pill beats a nav with nothing left to scroll.
   `styles.e2e.ts` measures this at 640, 768, 800, 1024 and 1280, and from `sm` up no pill may be
-  clipped. With the theme switch in, the member's row is 247px on macOS, and 640px, the tightest
-  case, leaves it 35px to spare (163px at 768, 236px at 1024); CI's Linux Chromium sets text about
-  2% wider. Below `sm` it scrolls, 102px of it showing at 360. `door.e2e.ts` measures the
-  visitor's header at 360, 412, 640, 768, 800, 1024 and 1280 with the same helper
-  (`measureHeader` in `e2e/helpers.ts`): its 175px row is never clipped (91px to spare at 640),
-  and no control wraps.
+  clipped. With the theme menu and the Read-in pill in, the member's row is 247px on macOS, and
+  640px, the tightest case, leaves it 38px to spare (166px at 768, 221px at 1024); CI's Linux
+  Chromium sets text about 2% wider. Below `sm` it scrolls, 102px of it showing at 360.
+  `door.e2e.ts` measures the visitor's header at 360, 412, 640, 768, 800, 1024 and 1280 with the
+  same helper (`measureHeader` in `e2e/helpers.ts`): its 175px row is never clipped (57px to spare
+  at 640), and no control wraps.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
   list are sticky and scroll independently. The sidebar collapses to a 48px rail from a toggle in
@@ -167,7 +173,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 ## Components (`apps/reader/src/components`)
 
-`AppHeader`, `ThemeToggle`, `VisitorLocale`, `FrontDoor` (the sheet and `DoorForm`), `WriterCard`, `ReadInMenu`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
+`AppHeader`, `ThemeMenu`, `ReadInPill` (`ReadInMenu`, `VisitorLocale`), `FrontDoor` (the sheet and `DoorForm`), `WriterCard`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
 `PairedBody`, `TranslationBar`, `Untranslated`, `LikeButton`, `RecommendPopover`, `EmptyState`,
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `SiteFooter`, `TypographyMenu`, the
 highlight toolbar, note and list (`highlights.tsx`), and `Shortcuts`. The front page, Discover, a
@@ -462,7 +468,7 @@ app at night is the page a visitor saw: paper is the light theme's ink, and ink 
 | `accent-strong` | `oklch(0.80 0.12 150)` |
 
 `data-theme="dark|light"` on `<html>` is the chosen theme: a member's synced `ui.theme` pref, or
-for a visitor the header switch's last press, kept on the device (`tela.theme`, which the inline
+for a visitor their last choice in the header's menu, kept on the device (`tela.theme`, which the inline
 script in `index.html` puts on before anything paints). Without it, `prefers-color-scheme`
 decides. An account that has never chosen takes the visitor's choice once its rows arrive, as its
 pref (ADR 0037), so the page and Settings never disagree. The two token blocks in `styles.css` must stay identical. A
@@ -476,7 +482,7 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - **Size:** four steps, ×0.88 / ×1 / ×1.13 / ×1.27 of the 19.5 px body (18 px for CJK).
   - **Width:** 560 / 640 / 760 px for the single column, and for a stacked pair. Two paired
     columns keep their own 640px measure.
-  - **Theme:** Auto / Light / Dark. The header's switch writes the same pref, Light or Dark only.
+  - **Theme:** Auto / Light / Dark. The header's theme menu writes the same pref.
 - **Marking read and hiding read posts** are the member's (Settings → Reading). With marking on
   opening off, the open post keeps its unread dot and the action row offers *Mark as read*; liking
   a post still reads it. With read posts hidden, a list keeps every post it has shown unread or

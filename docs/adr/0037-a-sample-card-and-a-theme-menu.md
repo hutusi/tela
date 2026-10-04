@@ -1,8 +1,9 @@
-# 0037 — For writers shows a labelled sample, and both headers switch light and dark
+# 0037 — For writers shows a labelled sample, and both headers choose the theme
 
-Status: accepted (2026-10-04). Supersedes two parts of 0035: For writers' example card is no
-longer the owner's live `@hutusi` profile, and the visitor header gains an item. The rest of 0035
-stands, including that the copy says only what Tela does.
+Status: accepted (2026-10-04). Supersedes three parts of 0035: For writers' example card is no
+longer the owner's live `@hutusi` profile, the visitor header gains a theme menu, and a visitor's
+Read in is the member's pill rather than a dropdown. The rest of 0035 stands, including that the
+copy says only what Tela does.
 
 ## Context
 
@@ -38,23 +39,31 @@ of row the real page has, newest first), a blogroll, and a readers card.
   because Tela does not translate those either.
 - **The one live fact is how many blogs are public.** It stays in the closing line.
 
-**Both headers carry a light/dark switch from `sm` up.** It is a 34 px circle beside the search link
-(for a member) or the Read-in pill (for a visitor), hidden below `sm`, where the visitor header has
-some 35 px to spare.
+**Both headers carry a theme menu from `sm` up.** It is a 34 px circle beside the search link (for
+a member) or the Read-in pill (for a visitor), hidden below `sm`, where the visitor header has some
+35 px to spare. A first version was a two-state switch, flipping between light and dark; a visitor
+who pressed it once could never follow their system again, having no Settings to go back to Auto
+from. The menu offers the three choices Settings does.
 
-- **What a press does.** It flips from the theme shown, reading `data-theme` or the system at press
-  time, to the other one. It never goes back to System: that stays in Settings and the Aa menu.
-- **Where it is kept.** A member's press writes the synced `ui.theme` pref, and the page then shows
-  what the store makes of it, as it does for Settings and the Aa menu. A pref is settled by the
-  later `at`, so a press can lose to a choice made later elsewhere, or to a clock that is behind;
-  a page painted from the press would then disagree with Settings and the server for good. A
-  visitor has no pref, so their press goes on the page and stays on the device.
-- **The glyph comes from CSS.** The moon shows on a light page and the sun on a dark one, under the
-  same selectors as the colour tokens. It is therefore right in the edge's cached HTML and before
-  any script runs.
+- **What it offers.** Auto, Light and Dark, in a `<details>` like the account menu's panel. Its
+  circle shows the current choice: a half-filled circle, a sun or a moon.
+- **Where a choice is kept.** A member's choice writes the synced `ui.theme` pref, and the page then
+  shows what the store makes of it, as it does for Settings and the Aa menu. A pref is settled by
+  the later `at`, so a choice can lose to one made later elsewhere, or to a clock that is behind;
+  a page painted from the choice would then disagree with Settings and the server for good. A
+  visitor has no pref, so their choice goes on the page and stays on the device.
+- **The glyph comes from CSS.** The stylesheet shows the one `data-theme` names, which the inline
+  script puts on before anything paints, so the edge's one cached page is right for every visitor.
+  For the same reason the edge marks no item as chosen; the app marks the one the page is set to.
 - **A visitor's choice carries into their account.** If the account has no `ui.theme` row once its
-  rows arrive, and this browser shows light or dark by choice, that choice is written to the
-  account once. Otherwise the account's pref wins, as before.
+  rows arrive, and this browser chose light or dark, that choice is written to the account once.
+  Otherwise the account's pref wins, as before.
+
+**A visitor's Read in is a member's pill.** 0035 gave visitors "Read in EN ▾", a dropdown that sets
+the interface language, while members had "Read in 中文 EN", two buttons that set the reading
+language. Same words, two shapes. With two interface languages, both in view and one press beats a
+menu, so a visitor gets the member's pill (`ReadInPill`), setting what it set before. The controls
+on the header's right are one family: 34 px tall and round, on `surface`, in a `line` border.
 
 ## Consequences
 
@@ -62,9 +71,12 @@ some 35 px to spare.
   what they show. It fetches one public answer, `/api/v1/public/front`.
 - The sample is a claim about Tela's features, not about its members. A feature it shows that Tela
   later drops must leave the sample too.
-- Members can now set the theme in three places, and all of them write the one pref. The header's
-  press never offers System.
+- Members can now set the theme in three places, and all of them write the one pref and offer the
+  same three choices.
 - An account with no theme row, signing in on a browser where someone else chose dark, adopts dark.
   That is accepted: it is what the browser was showing.
+- A visitor's Read in is some 33 px wider than the dropdown was. The visitor header still has
+  57 px to spare at 640 px; the member header, the tighter, keeps 38 px, its pill at 12 px text
+  until `lg`.
 - The member header at `sm` has the least room to spare. The nav is still its one shrinkable item,
   and it scrolls if it runs short (DESIGN.md).

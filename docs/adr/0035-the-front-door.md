@@ -3,8 +3,8 @@
 Status: accepted (2026-10-02). Amends 0025: `/`, `/about`, `/privacy` and `/terms` join the public
 pages the edge renders, and the service worker takes its shell from `/__tela/shell`. Reverses
 DESIGN.md's rule of 2026-10-01 that a visitor's interface language is chosen only on the sign-in
-page. Superseded in part by 0037 (2026-10-04): For writers' example card is a labelled sample, and
-both headers carry a light/dark switch.
+page. Superseded in part by 0037 (2026-10-04): For writers' example card is a labelled sample, both
+headers carry a theme menu, and a visitor's Read in is the member's pill.
 
 ## Context
 
