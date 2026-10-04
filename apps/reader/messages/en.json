@@ -343,16 +343,23 @@
       "yourBlog": "Your blog",
       "bioLater": "A line about what you write. You can change it any time.",
       "latestLater": "Your latest recommendation shows here.",
-      "captionExample": "@{handle}'s card, live on Tela. Type your name to see yours.",
-      "captionLive": "@{handle}'s card, live on Tela.",
+      "captionSample": "An example card. Type your name to see yours.",
+      "captionSampleMember": "An example card.",
       "captionDraft": "Your card, as you type."
     },
     "find": {
       "title": "Writers find each other here.",
       "intro": "Follow the writers you like and see what they recommend and like, and the blogs they read when they show them. A post someone recommends reaches everyone who follows them, with their note.",
-      "label": "Lately from @{handle}",
+      "label": "Following · for example",
       "recommended": "recommended a post from {source}",
-      "liked": "liked a post from {source}"
+      "liked": "liked a post from {source}",
+      "subscribed": "subscribed to"
+    },
+    "sample": {
+      "posts": {
+        "granVia": "What you hear on Gran Vía at six in the morning",
+        "kitchen": "A kitchen you can take with you"
+      }
     },
     "does": {
       "title": "What your card does",

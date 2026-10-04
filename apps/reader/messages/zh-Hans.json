@@ -343,16 +343,23 @@
       "yourBlog": "你的博客",
       "bioLater": "一句话介绍你写什么。随时可以修改。",
       "latestLater": "你最近推荐的文章会显示在这里。",
-      "captionExample": "@{handle} 的名片，实时来自 Tela。输入你的名字，看看你的。",
-      "captionLive": "@{handle} 的名片，实时来自 Tela。",
+      "captionSample": "一张示例名片。输入你的名字，看看你的。",
+      "captionSampleMember": "一张示例名片。",
       "captionDraft": "你的名片，随输入而变。"
     },
     "find": {
       "title": "写作者在这里彼此发现。",
       "intro": "关注你喜欢的写作者，看他们推荐和喜欢的文章，以及他们公开的在读博客。有人推荐一篇文章，连同附言，会出现在每个关注他的人那里。",
-      "label": "@{handle} 最近",
+      "label": "关注 · 示例",
       "recommended": "推荐了 {source} 的一篇文章",
-      "liked": "喜欢了 {source} 的一篇文章"
+      "liked": "喜欢了 {source} 的一篇文章",
+      "subscribed": "订阅了"
+    },
+    "sample": {
+      "posts": {
+        "granVia": "清晨六点，格兰大道上能听到什么",
+        "kitchen": "一间可以带着走的厨房"
+      }
     },
     "does": {
       "title": "名片能做什么",

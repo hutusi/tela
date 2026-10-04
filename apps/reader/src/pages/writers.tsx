@@ -1,35 +1,28 @@
 /**
- * `/writers` (For writers): a writer's calling card, made as they type. The example beside the
- * form is a real member's live public card (`lib/example.ts`), and every line of the page says
- * only what Tela does today. "Claim your card" opens the sheet in claim mode, which makes the card
- * on the way in and goes on to claim the blog (`lib/claim-card.ts`). A member gets the ways on to
- * their card and their blog instead. SPA-only, and noindex with the rest of the beta (ADR 0035).
+ * `/writers` (For writers): a writer's calling card, made as they type. Beside the form is a
+ * sample card, labelled as one (`lib/sample-card.ts`, ADR 0037), and the sections under it draw
+ * from the same sample; every line of the page says only what Tela does today. "Claim your card"
+ * opens the sheet in claim mode, which makes the card on the way in and goes on to claim the blog
+ * (`lib/claim-card.ts`). A member gets the ways on to their card and their blog instead. SPA-only,
+ * and noindex with the rest of the beta (ADR 0035).
  */
 import { HANDLE, RESERVED_HANDLES } from '@tela/shared'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { useFrontDoor } from '../components/front-door'
 import { PersonAvatar } from '../components/person-avatar'
-import { SiteAvatar } from '../components/site-avatar'
 import { SiteFooter } from '../components/site-footer'
-import { siteColor, WriterCard } from '../components/writer-card'
-import { EXAMPLE_HANDLE } from '../lib/example'
-import { displayHost, relativeTime } from '../lib/format'
-import { useMemberControls } from '../lib/member'
-import { readingPrefsOf } from '../lib/prefs'
-import { publicTitle } from '../lib/public-title'
+import { Swatch } from '../components/swatch'
+import { WriterCard } from '../components/writer-card'
+import { relativeTime } from '../lib/format'
+import { SAMPLE, type SampleActivity } from '../lib/sample-card'
 import { blogHost, blogUrl, suggestHandle } from '../lib/suggest-handle'
 import { useTitle } from '../lib/title'
 import { usePublic } from '../lib/use-public'
 import { useSession } from '../session'
-import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
+import { useNow, useStore, useTables } from '../store/hooks'
 import { useUi } from '../ui'
-import { PostLink } from '../views/post-link'
-import { profileDataOf } from '../views/public-data'
-import type { ProfileData, Reading, SiteData } from '../views/types'
-import { profilePath } from './profile'
-import { sitePath } from './site'
 
 /** What tela-api says of a handle (`GET /api/v1/public/handles/:handle`). */
 export type Availability = {
@@ -97,40 +90,6 @@ function useAvailability(handle: string | null): Availability | null {
 /** The part of the front page's JSON this page reads: how many blogs are public. */
 type FrontCounts = { counts?: { blogs?: unknown } }
 
-/** One thing the example did lately, as the activity card lists it. */
-type Activity = {
-  kind: 'recommended' | 'liked'
-  at: number
-  note: string | null
-  post: ProfileData['recommendations'][number] | NonNullable<ProfileData['liked']>[number]
-}
-
-/** How many of the example's recent recommendations and likes the activity card shows. */
-const ACTIVITY_SHOWN = 4
-/** How many blogs the blogroll under "What your card does" names. */
-const ROLL_SHOWN = 4
-
-/**
- * The example's recommendations and public likes, newest first: what someone following them
- * sees. A post they both liked and recommended shows once, as the recommendation.
- */
-export function activityOf(data: ProfileData): Activity[] {
-  const recommended = new Set(data.recommendations.map((r) => r.article.id))
-  return [
-    ...data.recommendations.map((r) => ({
-      kind: 'recommended' as const,
-      at: r.createdAt,
-      note: r.note,
-      post: r,
-    })),
-    ...(data.liked ?? [])
-      .filter((l) => !recommended.has(l.article.id))
-      .map((l) => ({ kind: 'liked' as const, at: l.likedAt, note: null, post: l })),
-  ]
-    .sort((a, b) => b.at - a.at)
-    .slice(0, ACTIVITY_SHOWN)
-}
-
 const FIELD =
   'h-[50px] w-full rounded-xl border border-thumb bg-field px-[18px] text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink'
 const PRIMARY =
@@ -152,20 +111,10 @@ export function WritersPage() {
   const tables = useTables()
   const { locale } = useUi()
   const now = useNow()
-  const readingLang = useReadingLang(locale)
-  const never = readingPrefsOf(tables).never
-  const reading = useMemo(() => ({ lang: readingLang, never }), [readingLang, never])
-  const member = useMemberControls()
   const door = useFrontDoor()
   // As the header decides: a device known to hold no member gets the form at once.
   const visitor = status === 'guest' || (status === 'unknown' && store.userId === null)
 
-  const loaded = usePublic<ProfileData>(profilePath(EXAMPLE_HANDLE))
-  const example = loaded.status === 'ready' ? profileDataOf(loaded.data) : null
-  // The blog the example claimed first, for how many read it.
-  const claimed = example?.blogs[0] ?? null
-  const site = usePublic<SiteData>(claimed ? sitePath(claimed.id) : null)
-  const blogReaders = site.status === 'ready' ? site.data.site.readerCount : 0
   const front = usePublic<FrontCounts>('/api/v1/public/front')
   const counted = front.status === 'ready' ? front.data.counts?.blogs : undefined
   const blogs = typeof counted === 'number' && counted > 0 ? counted : null
@@ -192,18 +141,14 @@ export function WritersPage() {
   }
 
   const ownHandle = tables.profile?.handle ?? null
-  const own = example !== null && member?.userId === example.profile.id
-  const activity = example ? activityOf(example) : []
-  const roll = example?.subscriptions?.slice(0, ROLL_SHOWN) ?? []
-  const followers = example?.counts?.followers ?? 0
+  const { writer } = SAMPLE
   const accent = (chunks: React.ReactNode) => <em className="text-accent italic">{chunks}</em>
+  // The sample says it is one wherever it is shown: here, and on the activity card's label.
   const caption = draft
     ? t('card.captionDraft')
-    : example
-      ? visitor
-        ? t('card.captionExample', { handle: example.profile.handle })
-        : t('card.captionLive', { handle: example.profile.handle })
-      : null
+    : visitor
+      ? t('card.captionSample')
+      : t('card.captionSampleMember')
 
   return (
     <>
@@ -324,52 +269,39 @@ export function WritersPage() {
             )}
           </div>
           <div className="flex min-w-0 flex-col items-center gap-3.5">
-            <WriterCard draft={draft} example={example} reading={reading} own={own} />
-            {caption ? (
-              <span
-                className="text-center text-[13px] text-muted"
-                data-testid="writer-card-caption"
-              >
-                {caption}
-              </span>
-            ) : null}
+            <WriterCard draft={draft} sample={SAMPLE} />
+            <span className="text-center text-[13px] text-muted" data-testid="writer-card-caption">
+              {caption}
+            </span>
           </div>
         </section>
 
-        {example && activity.length > 0 ? (
-          <section
-            className={`${SECTION} grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-center gap-x-20 gap-y-12`}
-            data-testid="writers-find"
-          >
-            <div className="flex flex-col gap-[18px]">
-              <h2 className="m-0 font-serif text-[38px] leading-[1.04] font-medium tracking-[-0.02em] text-balance md:text-[50px]">
-                {t('find.title')}
-              </h2>
-              <p className="m-0 max-w-[480px] text-[16px] leading-[1.6] text-ink-2 md:text-[17px]">
-                {t('find.intro')}
-              </p>
-            </div>
-            <div className="min-w-0 rounded-2xl border border-line bg-surface px-5 py-2 sm:px-6">
-              <div className={`${LABEL} pt-4 pb-1 text-muted`}>
-                {t('find.label', { handle: example.profile.handle })}
-              </div>
-              <ul className="m-0 list-none p-0">
-                {activity.map((a, i) => (
-                  <ActivityRow
-                    key={`${a.kind}-${a.post.article.id}`}
-                    item={a}
-                    first={i === 0}
-                    person={example.profile}
-                    blog={example.blogs[0] ?? null}
-                    member={member}
-                    reading={reading}
-                    when={relativeTime(a.at, locale, now)}
-                  />
-                ))}
-              </ul>
-            </div>
-          </section>
-        ) : null}
+        <section
+          className={`${SECTION} grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-center gap-x-20 gap-y-12`}
+          data-testid="writers-find"
+        >
+          <div className="flex flex-col gap-[18px]">
+            <h2 className="m-0 font-serif text-[38px] leading-[1.04] font-medium tracking-[-0.02em] text-balance md:text-[50px]">
+              {t('find.title')}
+            </h2>
+            <p className="m-0 max-w-[480px] text-[16px] leading-[1.6] text-ink-2 md:text-[17px]">
+              {t('find.intro')}
+            </p>
+          </div>
+          <div className="min-w-0 rounded-2xl border border-line bg-surface px-5 py-2 sm:px-6">
+            <div className={`${LABEL} pt-4 pb-1 text-muted`}>{t('find.label')}</div>
+            <ul className="m-0 list-none p-0">
+              {SAMPLE.activity.map((a, i) => (
+                <ActivityRow
+                  key={`${a.kind}-${a.who.handle}`}
+                  item={a}
+                  first={i === 0}
+                  when={relativeTime(now - a.ago, locale, now)}
+                />
+              ))}
+            </ul>
+          </div>
+        </section>
 
         <section className={SECTION}>
           <h2 className={H2}>{t('does.title')}</h2>
@@ -383,84 +315,60 @@ export function WritersPage() {
                   {t(`does.${k}.title`)}
                 </h3>
                 <p className="m-0 text-[15px] leading-[1.55] text-ink-2">{t(`does.${k}.body`)}</p>
-                {k === 'link' && example ? (
-                  <Link
-                    to={`/@${example.profile.handle}`}
-                    className="mt-2.5 flex max-w-full items-center gap-2.5 self-start rounded-full border border-line bg-surface py-2 pr-2 pl-[18px] text-[14px] hover:border-thumb hover:no-underline"
+                {k === 'link' ? (
+                  <span
+                    className="mt-2.5 flex max-w-full items-center gap-2.5 self-start rounded-full border border-line bg-surface py-2 pr-2 pl-[18px] text-[14px]"
                     data-testid="writers-link-pill"
                   >
                     <span className="text-ink-2">{t('does.link.pill')}</span>
-                    <span className="truncate font-semibold text-ink">
-                      @{example.profile.handle}
-                    </span>
+                    <span className="truncate font-semibold text-ink">@{writer.handle}</span>
                     <span
                       aria-hidden="true"
                       className="rounded-full bg-hover px-2.5 py-1 text-[12px] text-ink-2"
                     >
                       ↗
                     </span>
-                  </Link>
+                  </span>
                 ) : null}
-                {k === 'blogroll' && roll.length > 0 ? (
+                {k === 'blogroll' ? (
                   <ul className={`${SKETCH} m-0 list-none`} data-testid="writers-roll">
-                    {roll.map((s, j) => (
+                    {SAMPLE.roll.map((blog, j) => (
                       <li
-                        key={s.id}
+                        key={blog.name}
                         className={`flex items-center gap-2.5 py-[11px] ${j ? 'border-t border-line' : ''}`}
                       >
                         <span
                           aria-hidden="true"
                           className="size-2.5 shrink-0 rounded-[3px]"
-                          style={{ background: siteColor(s.id) }}
+                          style={{ background: blog.color }}
                         />
                         <span className="min-w-0 flex-1 truncate font-serif text-[17px]">
-                          {s.title ?? displayHost(s.homeUrl)}
+                          {blog.name}
                         </span>
                       </li>
                     ))}
                   </ul>
                 ) : null}
-                {k === 'readers' && example && (blogReaders > 0 || followers > 0) ? (
+                {k === 'readers' ? (
                   <ul className={`${SKETCH} m-0 list-none`} data-testid="writers-readers">
-                    {claimed && blogReaders > 0 ? (
-                      <li className="flex items-center gap-2.5 py-[11px]">
-                        <SiteAvatar
-                          id={claimed.id}
-                          title={claimed.title ?? claimed.homeUrl}
-                          faviconKey={claimed.faviconKey}
-                          size={28}
-                          radius={8}
-                        />
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate text-[14px] font-medium">
-                            {claimed.title ?? displayHost(claimed.homeUrl)}
-                          </span>
-                          <span className="text-[12.5px] text-muted">
-                            {t('does.readers.blogReaders', { n: blogReaders })}
-                          </span>
+                    <li className="flex items-center gap-2.5 py-[11px]">
+                      <Swatch id={0} color={SAMPLE.blog.color} title={SAMPLE.blog.name} size={28} />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-[14px] font-medium">{SAMPLE.blog.name}</span>
+                        <span className="text-[12.5px] text-muted">
+                          {t('does.readers.blogReaders', { n: SAMPLE.blogReaders })}
                         </span>
-                      </li>
-                    ) : null}
-                    {followers > 0 ? (
-                      <li
-                        className={`flex items-center gap-2.5 py-[11px] ${claimed && blogReaders > 0 ? 'border-t border-line' : ''}`}
-                      >
-                        <PersonAvatar
-                          handle={example.profile.handle}
-                          displayName={example.profile.displayName}
-                          avatar={example.profile.avatar}
-                          size={28}
-                        />
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate text-[14px] font-medium">
-                            {example.profile.displayName ?? `@${example.profile.handle}`}
-                          </span>
-                          <span className="text-[12.5px] text-muted">
-                            {t('does.readers.followers', { n: followers })}
-                          </span>
+                      </span>
+                    </li>
+                    <li className="flex items-center gap-2.5 border-t border-line py-[11px]">
+                      <PersonAvatar handle={writer.handle} displayName={writer.name} size={28} />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-[14px] font-medium">{writer.name}</span>
+                        <span className="text-[12.5px] text-muted">
+                          {t('does.readers.followers', { n: SAMPLE.counts.followers })}
                         </span>
-                      </li>
-                    ) : null}
+                      </span>
+                    </li>
                   </ul>
                 ) : null}
               </li>
@@ -529,59 +437,39 @@ export function WritersPage() {
 }
 
 /**
- * One thing the example did, as someone following them sees it: who, what, when, the post, and
- * the note a recommendation carried.
+ * One row of the sample's Following page, as the page draws the real one: who, what, when, then
+ * the post or the blog, and the note a recommendation carried. Text only: the sample's posts are
+ * no one's, so nothing here links.
  */
 function ActivityRow({
   item,
   first,
-  person,
-  blog,
-  member,
-  reading,
   when,
 }: {
-  item: Activity
+  item: SampleActivity
   first: boolean
-  person: ProfileData['profile']
-  blog: ProfileData['blogs'][number] | null
-  member: ReturnType<typeof useMemberControls>
-  reading: Reading
   when: string
 }) {
-  const t = useTranslations('writers.find')
-  const { post } = item
-  const source = post.siteTitle ?? displayHost(post.homeUrl)
-  const { title } = publicTitle(post.article, reading)
+  const t = useTranslations('writers')
+  const { who } = item
   return (
     <li
       className={`grid grid-cols-[34px_minmax(0,1fr)] gap-3 py-4 ${first ? '' : 'border-t border-line'}`}
       data-testid="writers-activity"
+      data-kind={item.kind}
     >
-      <PersonAvatar
-        handle={person.handle}
-        displayName={person.displayName}
-        avatar={person.avatar}
-        size={34}
-      />
+      <PersonAvatar handle={who.handle} displayName={who.name} size={34} />
       <div className="flex min-w-0 flex-col gap-[5px]">
         <div className="text-[13.5px] leading-[1.45] text-ink-2">
-          <b className="font-semibold text-ink">{person.displayName ?? `@${person.handle}`}</b>
-          {blog ? (
-            <span className="text-muted"> {blog.title ?? displayHost(blog.homeUrl)}</span>
-          ) : null}
+          <b className="font-semibold text-ink">{who.name}</b>
+          <span className="text-muted"> {item.writes.name}</span>
           {' · '}
-          {t(item.kind, { source })}
+          {t(`find.${item.kind}`, { source: item.blog.name })}
           <span className="text-muted"> · {when}</span>
         </div>
-        <PostLink
-          article={post.article}
-          source={source}
-          member={member}
-          className="font-serif text-[19px] leading-[1.25] font-medium text-ink hover:text-ink hover:underline"
-        >
-          {title}
-        </PostLink>
+        <span className="font-serif text-[19px] leading-[1.25] font-medium text-ink">
+          {item.post ? t(`sample.posts.${item.post}`) : item.blog.name}
+        </span>
         {item.note ? (
           <p
             className="m-0 border-l-2 border-accent pl-3 font-serif text-[16.5px] leading-[1.4] text-ink-2 italic"
