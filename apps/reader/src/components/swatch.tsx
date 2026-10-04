@@ -6,11 +6,14 @@ export function Swatch({
   title,
   size = 18,
   round = false,
+  color,
 }: {
   id: number
   title: string
   size?: number
   round?: boolean
+  /** A colour of its own instead of the feed's, for a blog that is not one (For writers' sample). */
+  color?: string
 }) {
   return (
     <span
@@ -20,7 +23,7 @@ export function Swatch({
         width: size,
         height: size,
         borderRadius: round ? '50%' : Math.max(3, Math.round(size / 4)),
-        background: swatchColor(id),
+        background: color ?? swatchColor(id),
         fontSize: Math.max(9, Math.round(size * 0.55)),
       }}
     >

@@ -5,7 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { AppHeader } from './components/app-header'
 import { FrontDoorProvider, ToReading } from './components/front-door'
 import { detectLocale, I18n, localeCookie } from './i18n'
-import { applyTheme, typographyOf } from './lib/typography'
+import { applyTheme, deviceTheme, PREFS, themeToAdopt, typographyOf } from './lib/typography'
 import { forgetPublic } from './lib/use-public'
 import { AddPage } from './pages/add'
 import { ClaimPage, ClaimSitePage } from './pages/claim'
@@ -127,12 +127,30 @@ function Routed() {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
-  // A member's theme is a synced pref; a visitor keeps whatever this browser last had.
+  // A member's theme is a synced pref; a visitor keeps whatever this browser last had. An account
+  // that has never chosen one takes the visitor's, once: the first snapshot brings every pref
+  // with the profile, so no row then means none. Written as the pref, never only put on the page,
+  // or the page would be dark while Settings said Auto. A browser shared by two accounts gives
+  // the second whatever it shows, which is what that member is looking at anyway.
   const theme = typographyOf(tables).theme
   const synced = tables.profile !== null
+  const chosen = tables.prefs.has(PREFS.theme)
+  const adoptedFor = useRef<string | null>(null)
   useEffect(() => {
-    if (synced) applyTheme(theme)
-  }, [synced, theme])
+    if (!synced) return
+    const owner = store.userId
+    if (!chosen && owner !== null && adoptedFor.current !== owner) {
+      adoptedFor.current = owner
+      // Read now, not from the render: the store and the device are as they are when this runs.
+      const adopt = themeToAdopt(store.getSnapshot().tables, deviceTheme())
+      if (adopt) {
+        // The page shows it already; the pref's own render puts it on again.
+        store.mutate({ type: 'setPref', key: PREFS.theme, value: adopt })
+        return
+      }
+    }
+    applyTheme(theme)
+  }, [synced, chosen, theme, store])
   const ui = useMemo(() => ({ locale, setLocale }), [locale, setLocale])
   return (
     <UiContext.Provider value={ui}>

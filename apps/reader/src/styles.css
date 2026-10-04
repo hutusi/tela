@@ -166,6 +166,25 @@
 }
 
 /*
+ * The theme menu's glyph for the choice the page holds, each with its name (ThemeMenu): Auto with
+ * no `data-theme`, or Light or Dark. The stylesheet chooses, from the attribute the inline script
+ * puts on before anything paints, so the edge's one cached page is right for every visitor before
+ * any script of the app's runs. It is the choice, not the colours shown, so no media query. Unlayered
+ * on purpose, so the choice always wins: never put a display utility on these classes, as it would
+ * be dead code, and lay out what is inside them instead.
+ */
+.theme-is-light,
+.theme-is-dark,
+:root[data-theme="light"] .theme-is-system,
+:root[data-theme="dark"] .theme-is-system {
+  display: none;
+}
+:root[data-theme="light"] .theme-is-light,
+:root[data-theme="dark"] .theme-is-dark {
+  display: revert;
+}
+
+/*
  * Motion is opt-out at the token, which is where every use of it resolves: Tailwind compiles
  * `animate-fade` to `animation: var(--animate-fade)`, so one override covers all of them.
  * `styles.e2e.ts` checks the computed value, because nothing in the JSX shows this.

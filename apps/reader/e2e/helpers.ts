@@ -388,18 +388,18 @@ export async function measureHeader(page: Page, controls: string[]) {
 
 /**
  * What every header must hold at `width`. The page never scrolls sideways, and the nav is never
- * squeezed below one pill (a 4px nav was what `md` once rendered). Tolerances are in the nav's own
- * units, not pixels: the member's pill row measures 335px on macOS and 341px in CI's Linux
- * Chromium, and 800px fits it with less than that to spare. One pill's worth of slack at 800,
- * none at all by 1024.
+ * squeezed below one pill (a 4px nav was what `md` once rendered); from `sm` up it is not clipped
+ * at all. Measured on macOS with the theme menu and the Read-in pill in: the member's pill row is
+ * 247px (Reading, Discover, Following), and 640px, the tightest case, leaves it 38px to spare,
+ * where CI's Linux Chromium sets text about 2% wider (an older 335px row measured 341px there),
+ * some 10px of the row and the pill together. The visitor's row is 175px, with 57px to spare at
+ * 640. Below `sm` the member's nav scrolls:
+ * 102px of it shows at 360.
  */
 export function expectHeaderFits(m: Awaited<ReturnType<typeof measureHeader>>, width: number) {
   expect(m.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)
   expect(m.client, 'nav narrower than a single pill').toBeGreaterThanOrEqual(m.pill)
-  if (width >= 800) {
-    expect(m.client, 'more than one pill clipped').toBeGreaterThanOrEqual(m.scroll - m.pill)
-  }
-  if (width >= 1024) expect(m.client, 'nav is clipped').toBe(m.scroll)
+  if (width >= 640) expect(m.client, 'nav is clipped').toBe(m.scroll)
   for (const [id, box] of Object.entries(m.controls)) {
     expect(box.right, `${id} off screen`).toBeLessThanOrEqual(m.viewport)
   }

@@ -50,7 +50,9 @@ test.describe('the visitor header', () => {
       await page.goto('/')
       await page.getByTestId('nav-join').waitFor()
       const wide = width >= 640
-      const controls = wide ? ['nav-join', 'nav-login', 'visitor-locale'] : ['nav-join']
+      const controls = wide
+        ? ['nav-join', 'nav-login', 'visitor-locale', 'theme-menu']
+        : ['nav-join']
       const m = await measureHeader(page, controls)
       expectHeaderFits(m, width)
       // A visitor's nav is short enough never to scroll.
@@ -59,9 +61,14 @@ test.describe('the visitor header', () => {
       for (const id of controls) {
         expect(m.controls[id]?.height, `${id} wrapped`).toBeLessThanOrEqual(36)
       }
-      if (!wide) {
+      if (wide) {
+        expect(m.controls['theme-menu']?.width, 'theme menu squeezed').toBe(34)
+        expect(m.controls['visitor-locale']?.height, 'Read in off the family').toBe(34)
+      } else {
         await expect(page.getByTestId('nav-login')).toBeHidden()
         await expect(page.getByTestId('visitor-locale')).toBeHidden()
+        // The menu is in the page, and left out of the 360px budget.
+        await expect(page.getByTestId('theme-menu')).toBeHidden()
       }
       // Reading and search are a member's.
       await expect(page.getByTestId('nav-reading')).toHaveCount(0)
@@ -101,6 +108,91 @@ test.describe('the visitor header', () => {
     expect(await pair('login-submit')).toEqual(night)
     await page.keyboard.press('Escape')
     expect(await pair('nav-join')).toEqual(night)
+  })
+})
+
+test.describe("a visitor's theme", () => {
+  /**
+   * A visitor has no account to keep a choice in, so the menu writes this device alone (ADR 0037):
+   * the page, and `tela.theme` for the next first paint. `mutate` keeps nothing for no one, so
+   * nothing goes to tela-api, which would refuse it anyway.
+   */
+  test('stays on this device, the next visit paints it first, and Auto goes back', async ({
+    page,
+  }) => {
+    const mutations: string[] = []
+    page.on('request', (r) => {
+      if (r.url().includes('/api/v1/mutations')) mutations.push(r.url())
+    })
+    const theme = () =>
+      page.evaluate(() => ({
+        page: document.documentElement.dataset.theme ?? null,
+        kept: localStorage.getItem('tela.theme'),
+        paper: getComputedStyle(document.body).backgroundColor,
+      }))
+    await page.emulateMedia({ colorScheme: 'light' })
+    await page.goto('/discover')
+    const menu = page.getByTestId('theme-menu')
+    const summary = menu.locator('summary')
+    await expect(summary).toHaveAccessibleName('Theme: Auto')
+    await summary.click()
+    await expect(menu.getByTestId('theme-menu-system')).toHaveAttribute('aria-pressed', 'true')
+    await menu.getByTestId('theme-menu-dark').click()
+    expect(await theme()).toEqual({ page: 'dark', kept: 'dark', paper: 'rgb(31, 28, 24)' })
+    await expect(summary).toHaveAccessibleName('Theme: Dark')
+    // Chosen, the menu closes.
+    await expect(menu).not.toHaveAttribute('open')
+
+    await page.reload({ waitUntil: 'commit' })
+    await page.waitForFunction(() => document.body !== null)
+    expect((await theme()).page, 'dark before the app runs').toBe('dark')
+    await expect(page.getByTestId('nav-join')).toBeVisible()
+    expect(await theme()).toEqual({ page: 'dark', kept: 'dark', paper: 'rgb(31, 28, 24)' })
+    await expect(summary).toHaveAccessibleName('Theme: Dark')
+
+    // Auto: the system's again, and kept as that for the next visit.
+    await summary.click()
+    await menu.getByTestId('theme-menu-system').click()
+    expect(await theme()).toEqual({ page: null, kept: 'system', paper: 'rgb(246, 242, 234)' })
+    await expect(summary).toHaveAccessibleName('Theme: Auto')
+    expect(mutations).toEqual([])
+  })
+})
+
+test.describe('Join, after choosing a theme', () => {
+  test.use(visitor(16))
+  /**
+   * An account that has never chosen a theme takes the one its visitor chose on this device, as
+   * its synced pref: the page stays as it was, and Settings says what it shows.
+   */
+  test("the account takes the visitor's theme, and Settings says so", async ({ page, request }) => {
+    const code = await adminCode(request)
+    const email = `dark-joiner-${Date.now()}@e2e.test`
+    await page.emulateMedia({ colorScheme: 'light' })
+    await page.goto('/discover')
+    await page.getByTestId('theme-menu').locator('summary').click()
+    await page.getByTestId('theme-menu-dark').click()
+    expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark')
+
+    const adopted = page.waitForRequest(
+      (r) => r.url().includes('/api/v1/mutations') && (r.postData() ?? '').includes('ui.theme'),
+    )
+    await page.getByTestId('nav-join').click()
+    const sheet = page.getByTestId('front-door')
+    await sheet.getByTestId('join-code').fill(code)
+    await sheet.getByTestId('login-email').fill(email)
+    await sheet.getByTestId('login-submit').click()
+    await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    await sheet.getByTestId('login-submit').click()
+    await expect(page).toHaveURL(/\/discover$/)
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+    expect(JSON.parse((await adopted).postData() ?? '{}').mutations).toContainEqual(
+      expect.objectContaining({ type: 'setPref', key: 'ui.theme', value: 'dark' }),
+    )
+    expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark')
+
+    await page.goto('/settings/reading')
+    await expect(page.getByTestId('theme-dark')).toHaveAttribute('aria-pressed', 'true')
   })
 })
 

@@ -2,15 +2,17 @@
  * For writers: the handle offered as a writer types, the card drawn beside the form, and the card
  * carried through signing in (`lib/claim-card.ts`).
  */
+
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import type { UiLocale } from '@tela/shared'
 import { renderToString } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
 import { blogNameOf, WriterCard } from '../src/components/writer-card'
 import { I18n } from '../src/i18n'
 import { claimPath, finishCard, isProvisional, keepClaim, takeClaim } from '../src/lib/claim-card'
+import { SAMPLE } from '../src/lib/sample-card'
 import { blogHost, blogUrl, foldName, suggestHandle } from '../src/lib/suggest-handle'
-import { activityOf, availabilityOf } from '../src/pages/writers'
-import type { ProfileData } from '../src/views/types'
+import { availabilityOf } from '../src/pages/writers'
 
 describe('suggestHandle', () => {
   test('takes the first name, folded to what a handle holds', () => {
@@ -73,73 +75,45 @@ describe('whether a handle is free', () => {
   })
 })
 
-const reading = { lang: 'en', never: [] }
-
-function render(node: React.ReactNode): string {
+function render(node: React.ReactNode, locale: UiLocale = 'en'): string {
   return renderToString(
-    <I18n locale="en">
+    <I18n locale={locale}>
       <MemoryRouter>{node}</MemoryRouter>
     </I18n>,
   )
 }
 
-const PROFILE: ProfileData = {
-  profile: {
-    id: 'u1',
-    handle: 'hutusi',
-    displayName: 'Hu Tusi',
-    bio: 'Writes about reading.',
-    avatar: null,
-    memberSince: 0,
-  },
-  counts: {
-    following: 2,
-    followers: 7,
-    recommendations: 1,
-    liked: null,
-    subscriptions: 12,
-  },
-  blogs: [{ id: 3, title: 'Hutusi', homeUrl: 'https://hutusi.com', faviconKey: null }],
-  recommendations: [
-    {
-      siteId: 4,
-      siteTitle: 'Julia Evans',
-      homeUrl: 'https://jvns.ca',
-      listed: true,
-      note: 'Read this one slowly.',
-      createdAt: 0,
-      article: {
-        id: 9,
-        feedId: 4,
-        title: 'A post worth reading',
-      } as ProfileData['recommendations'][number]['article'],
-    },
-  ],
-  subscriptions: [],
-  liked: null,
-}
-
 describe('the writer card', () => {
-  test('is an empty outline with no example and nothing typed', () => {
-    const html = render(<WriterCard draft={null} example={null} reading={reading} />)
-    expect(html).toContain('data-testid="writer-card-outline"')
-    expect(html).not.toContain('data-testid="writer-card"')
+  test('is the sample until the visitor types: blog, bio, counts, latest and reads', () => {
+    const html = render(<WriterCard draft={null} sample={SAMPLE} />)
+    expect(html).toContain('data-card="sample"')
+    expect(html).toContain('Lucía Ferrer')
+    expect(html).toContain('@lucia')
+    expect(html).toContain('Kilómetro Cero')
+    expect(html).toContain('kilometrocero.blog')
+    expect(html).toContain(SAMPLE.bio)
+    expect(html).toMatch(/<b[^>]*>48<\/b> followers/)
+    expect(html).toMatch(/<b[^>]*>23<\/b> recommendations/)
+    expect(html).toMatch(/Reads <b[^>]*>24<\/b> blogs/)
+    expect(html).toContain('A kitchen you can take with you')
+    expect(html).toContain(SAMPLE.latest.note)
+    for (const blog of SAMPLE.reads) expect(html).toContain(blog.name)
+    expect(html).toContain('+20')
   })
 
-  test("is the example's live card: blogs, bio, counts and latest recommendation", () => {
-    const html = render(<WriterCard draft={null} example={PROFILE} reading={reading} />)
-    expect(html).toContain('data-card="example"')
-    expect(html).toContain('Hu Tusi')
-    expect(html).toContain('@hutusi')
-    expect(html).toContain('Writes about reading.')
-    expect(html).toContain('Read this one slowly.')
-    expect(html).toContain('A post worth reading')
-    expect(html).toContain('data-testid="writer-card-reads"')
-    // Whom they read is shown only when they show it.
-    const hidden = render(
-      <WriterCard draft={null} example={{ ...PROFILE, subscriptions: null }} reading={reading} />,
-    )
-    expect(hidden).not.toContain('data-testid="writer-card-reads"')
+  test('links nowhere: the sample is no one, and its handle may be someone one day', () => {
+    const html = render(<WriterCard draft={null} sample={SAMPLE} />)
+    expect(html).not.toContain('<a ')
+    // The Follow pill is drawn, not a control.
+    expect(html).toMatch(/<span aria-hidden="true"[^>]*data-testid="writer-card-follow"/)
+  })
+
+  test("shows a title in the reader's language, and a bio and a note as written", () => {
+    const html = render(<WriterCard draft={null} sample={SAMPLE} />, 'zh-Hans')
+    expect(html).toContain('一间可以带着走的厨房')
+    expect(html).not.toContain('A kitchen you can take with you')
+    expect(html).toContain(SAMPLE.bio)
+    expect(html).toContain(SAMPLE.latest.note)
   })
 
   test('names a blog from its host until it has its own name', () => {
@@ -148,12 +122,11 @@ describe('the writer card', () => {
     expect(blogNameOf('localhost')).toBe('Localhost')
   })
 
-  test("is the visitor's own as they type, over the example", () => {
+  test("is the visitor's own as they type, over the sample", () => {
     const html = render(
       <WriterCard
         draft={{ name: 'Ada Lovelace', handle: 'ada', host: 'ada.dev' }}
-        example={PROFILE}
-        reading={reading}
+        sample={SAMPLE}
       />,
     )
     expect(html).toContain('data-card="draft"')
@@ -161,71 +134,53 @@ describe('the writer card', () => {
     expect(html).toContain('@ada')
     expect(html).toContain('ada.dev')
     expect(html).toContain('data-testid="writer-card-later"')
-    expect(html).not.toContain('Hu Tusi')
+    expect(html).not.toContain('Lucía Ferrer')
   })
 
   // A handle can be thirty characters with nowhere to break: both cards cut it inside its column,
   // and keep the whole of it in the title (Codex review, PR #25). The layout itself is held by
-  // writers.e2e.ts at 360px; this keeps the example card, whose live handle is short, from losing it.
+  // writers.e2e.ts at 360px; this keeps the sample card, whose handle is short, from losing it.
   test('cuts a long handle in its column on both cards, keeping the whole of it', () => {
     const long = 'alexanderthegreatofmacedon'
     const handleOf = (html: string) =>
       html.match(/<span[^>]*data-testid="writer-card-handle"[^>]*>/)?.[0] ?? ''
-    const example = handleOf(
+    const sample = handleOf(
       render(
         <WriterCard
           draft={null}
-          example={{ ...PROFILE, profile: { ...PROFILE.profile, handle: long } }}
-          reading={reading}
+          sample={{ ...SAMPLE, writer: { ...SAMPLE.writer, handle: long } }}
         />,
       ),
     )
     const draft = handleOf(
-      render(
-        <WriterCard
-          draft={{ name: 'Alexander', handle: long, host: '' }}
-          example={null}
-          reading={reading}
-        />,
-      ),
+      render(<WriterCard draft={{ name: 'Alexander', handle: long, host: '' }} sample={SAMPLE} />),
     )
-    for (const span of [example, draft]) {
+    for (const span of [sample, draft]) {
       expect(span).toContain('truncate')
       expect(span).toContain(`title="@${long}"`)
     }
   })
 })
 
-describe("the example's activity", () => {
-  const post = (id: number) => ({
-    ...PROFILE.recommendations[0]!,
-    article: { ...PROFILE.recommendations[0]!.article, id },
+describe("the sample's Following", () => {
+  test('is newest first, as the Following page is', () => {
+    const ago = SAMPLE.activity.map((a) => a.ago)
+    expect(ago).toEqual([...ago].sort((x, y) => x - y))
   })
 
-  test('is its recommendations and public likes, newest first, a post once', () => {
-    const data: ProfileData = {
-      ...PROFILE,
-      recommendations: [
-        { ...post(1), note: 'Slowly.', createdAt: 300 },
-        { ...post(2), note: null, createdAt: 100 },
-      ],
-      liked: [
-        { ...post(3), likedAt: 200 },
-        // Liked and recommended: the recommendation says it.
-        { ...post(1), likedAt: 400 },
-      ],
+  test('is only the kinds of row Following has, and a note only on a recommendation', () => {
+    for (const a of SAMPLE.activity) {
+      expect(['recommended', 'liked', 'subscribed']).toContain(a.kind)
+      if (a.note) expect(a.kind).toBe('recommended')
+      // A subscription names a blog; a like or a recommendation, a post.
+      expect(a.post === null).toBe(a.kind === 'subscribed')
     }
-    expect(activityOf(data).map((a) => [a.kind, a.post.article.id, a.note])).toEqual([
-      ['recommended', 1, 'Slowly.'],
-      ['liked', 3, null],
-      ['recommended', 2, null],
-    ])
   })
 
-  test('is at most four, and nothing without likes shown or recommendations', () => {
-    const many = Array.from({ length: 6 }, (_, i) => ({ ...post(i), note: null, createdAt: i }))
-    expect(activityOf({ ...PROFILE, recommendations: many })).toHaveLength(4)
-    expect(activityOf({ ...PROFILE, recommendations: [], liked: null })).toEqual([])
+  test("agrees with the card: the writer's latest recommendation is in it, with its note", () => {
+    const own = SAMPLE.activity.find((a) => a.who.handle === SAMPLE.writer.handle)
+    expect(own?.post).toBe(SAMPLE.latest.post)
+    expect(own?.note).toBe(SAMPLE.latest.note)
   })
 })
 

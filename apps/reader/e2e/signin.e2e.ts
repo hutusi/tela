@@ -535,18 +535,19 @@ test.describe("a visitor's language", () => {
     await expect(banner.getByRole('link', { name: 'Log in', exact: true })).toBeVisible()
     // Reversed on 2026-10-02 (ADR 0035): a visitor needs to know at once whether they can read
     // the page, so the pill is in the header rather than on the sign-in page alone.
+    // The same one-press pill as a member's (ADR 0037): both languages in view.
     await expect(page.getByTestId('visitor-locale')).toContainText('Read in')
-    await page.getByTestId('visitor-locale').locator('summary').click()
+    await expect(page.getByTestId('visitor-locale-en')).toHaveAttribute('aria-pressed', 'true')
     await page.getByTestId('visitor-locale-zh-Hans').click()
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
     await expect(banner.getByRole('link', { name: '登录', exact: true })).toBeVisible()
-    await expect(page.getByTestId('visitor-locale')).toContainText('中文')
+    await expect(page.getByTestId('visitor-locale')).toContainText('阅读语言')
+    await expect(page.getByTestId('visitor-locale-zh-Hans')).toHaveAttribute('aria-pressed', 'true')
     // The choice is the cookie the edge reads, so a public page arrives in Chinese too.
     await page.goto('/discover')
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
     // The sign-in page has the same pill.
     await page.goto('/login')
-    await page.getByTestId('visitor-locale').locator('summary').click()
     await page.getByTestId('visitor-locale-en').click()
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   })

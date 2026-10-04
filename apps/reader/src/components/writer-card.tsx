@@ -1,17 +1,14 @@
 /**
  * A writer's calling card (For writers): what their profile at `/@handle` will say, drawn as the
- * design draws it, a paper card on either ground (`.paper` in `styles.css`). Three states, and only
- * what Tela has: a real member's live public profile as the example (`lib/example.ts`); the
- * visitor's own card as they type (their name, the handle suggested, their blog), with
- * recommendations and blogs read still to come; or an empty outline when there is neither. Pure,
- * so a test renders it.
+ * design draws it, a paper card on either ground (`.paper` in `styles.css`). Two states, and only
+ * what Tela has: a sample, labelled as one beside it (`lib/sample-card.ts`, ADR 0037), until the
+ * visitor types; then their own card as they type (their name, the handle suggested, their blog),
+ * with recommendations and blogs read still to come. Neither is anyone's yet, so nothing on either
+ * links anywhere. Pure, so a test renders it.
  */
-import { Fragment } from 'react'
-import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
-import { displayHost, personColor, swatchColor } from '../lib/format'
-import { publicTitle } from '../lib/public-title'
-import type { ProfileData, Reading } from '../views/types'
+import { personColor } from '../lib/format'
+import type { Sample } from '../lib/sample-card'
 import { PersonAvatar } from './person-avatar'
 
 /** What the visitor has typed: their name, the handle it suggests, and their blog's host. */
@@ -19,8 +16,12 @@ export type CardDraft = { name: string; handle: string | null; host: string }
 
 const CARD =
   'paper paper-card flex w-full max-w-[500px] flex-col gap-[18px] rounded-[18px] p-6 text-left text-ink sm:p-8'
+/**
+ * The name: up to two lines beside the Follow pill, breaking anywhere a long word must, then cut.
+ * At 360px one line holds some 110px, which cut "Lucía Ferrer" to "Lucía F…".
+ */
 const NAME =
-  'block truncate font-serif text-[30px] leading-[1.05] font-medium tracking-[-0.015em] sm:text-[34px]'
+  'line-clamp-2 font-serif text-[30px] leading-[1.05] font-medium tracking-[-0.015em] [overflow-wrap:anywhere] sm:text-[34px]'
 /**
  * The @handle under the name. A handle may be thirty characters with nowhere to break, so it is
  * cut with an ellipsis inside its column, as the name is, and never runs under the Follow pill.
@@ -29,15 +30,8 @@ const HANDLE = 'block truncate text-[13.5px] text-muted'
 const LABEL = 'text-[11px] font-semibold tracking-[0.1em] text-muted uppercase'
 const STAT = 'font-serif text-[22px] font-medium text-ink'
 const CHIP = 'rounded-full border border-line py-1 text-[13px]'
-/** The Follow pill, ink on the paper. */
-const FOLLOW =
-  'shrink-0 rounded-full bg-ink px-4 py-2 text-[13.5px] font-medium text-paper hover:text-paper hover:no-underline'
-
-/** How many blogs read the card names before "+N". */
-const READS_SHOWN = 4
-
-/** A site's colour, as its avatar has it when it has no favicon (`SiteAvatar`). */
-export const siteColor = (siteId: number) => swatchColor(siteId * 7919)
+/** The Follow pill, ink on the paper: drawn, not a control, on a card that is no one's yet. */
+const FOLLOW = 'shrink-0 rounded-full bg-ink px-4 py-2 text-[13.5px] font-medium text-paper'
 
 /** A blog's name from its host, until it has its own: `ada-writes.dev` → "Ada Writes". */
 export function blogNameOf(host: string): string {
@@ -48,152 +42,101 @@ export function blogNameOf(host: string): string {
 
 export function WriterCard({
   draft,
-  example,
-  reading,
-  own = false,
+  sample,
 }: {
-  /** The visitor's card, once they have typed anything; it wins over the example. */
+  /** The visitor's card, once they have typed anything; it wins over the sample. */
   draft: CardDraft | null
-  /** The example member's public profile; null while it loads, or when there is none. */
-  example: ProfileData | null
-  reading: Reading
-  /** The example is the viewer's own card, which offers them no Follow. */
-  own?: boolean
+  sample: Sample
 }) {
-  if (draft) return <DraftCard draft={draft} />
-  if (example) return <ExampleCard data={example} reading={reading} own={own} />
-  return <OutlineCard />
+  return draft ? <DraftCard draft={draft} /> : <SampleCard sample={sample} />
 }
 
-function ExampleCard({
-  data,
-  reading,
-  own,
-}: {
-  data: ProfileData
-  reading: Reading
-  own: boolean
-}) {
-  const t = useTranslations('writers.card')
-  const { profile, counts } = data
-  const name = profile.displayName ?? `@${profile.handle}`
-  const card = `/@${profile.handle}`
-  const latest = data.recommendations[0]
-  const shown = latest ? publicTitle(latest.article, reading) : null
-  // Whom they read, only when they show it.
-  const reads = data.subscriptions !== null && counts?.subscriptions != null
-  const readList = data.subscriptions ?? []
-  const more = Math.max(0, (counts?.subscriptions ?? readList.length) - READS_SHOWN)
+/** A swatch in a blog's colour, as the design marks each blog. */
+function Dot({ color, size, radius }: { color: string; size: number; radius: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="shrink-0"
+      style={{ background: color, width: size, height: size, borderRadius: radius }}
+    />
+  )
+}
+
+function SampleCard({ sample }: { sample: Sample }) {
+  const t = useTranslations('writers')
+  const { writer, counts } = sample
+  const more = Math.max(0, counts.reads - sample.reads.length)
   const stat = (chunks: React.ReactNode) => <b className={STAT}>{chunks}</b>
   return (
-    <article className={CARD} data-testid="writer-card" data-card="example">
+    <article className={CARD} data-testid="writer-card" data-card="sample">
       <header className="flex items-center gap-4">
-        <PersonAvatar
-          handle={profile.handle}
-          displayName={profile.displayName}
-          avatar={profile.avatar}
-          size={60}
-        />
+        <PersonAvatar handle={writer.handle} displayName={writer.name} size={60} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <Link
-            to={card}
-            className={`${NAME} text-ink hover:text-ink hover:no-underline`}
-            data-testid="writer-card-name"
-          >
-            {name}
-          </Link>
-          <span className={HANDLE} title={`@${profile.handle}`} data-testid="writer-card-handle">
-            {`@${profile.handle}`}
+          <span className={NAME} data-testid="writer-card-name">
+            {writer.name}
+          </span>
+          <span className={HANDLE} title={`@${writer.handle}`} data-testid="writer-card-handle">
+            {`@${writer.handle}`}
           </span>
         </div>
-        {own ? null : (
-          <Link to={card} className={FOLLOW} data-testid="writer-card-follow">
-            {t('follow')}
-          </Link>
-        )}
+        <span aria-hidden="true" className={FOLLOW} data-testid="writer-card-follow">
+          {t('card.follow')}
+        </span>
       </header>
-      {data.blogs.length > 0 ? (
-        <div
-          className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[14px] text-ink-2"
-          data-testid="writer-card-blogs"
-        >
-          <span>{t('writes')}</span>
-          {data.blogs.map((site) => (
-            <Fragment key={site.id}>
-              <span
-                aria-hidden="true"
-                className="size-3 shrink-0 rounded-[3px]"
-                style={{ background: siteColor(site.id) }}
-              />
-              <b className="font-medium text-ink">{site.title ?? displayHost(site.homeUrl)}</b>
-              <span className="text-muted">{displayHost(site.homeUrl)}</span>
-            </Fragment>
-          ))}
-          <span className="text-[12.5px] font-semibold text-accent">✓ {t('claimed')}</span>
-        </div>
-      ) : null}
-      {profile.bio ? (
-        <p
-          className="m-0 font-serif text-[19px] leading-[1.4] text-pretty text-body italic"
-          data-testid="writer-card-bio"
-        >
-          {profile.bio}
+      <div
+        className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[14px] text-ink-2"
+        data-testid="writer-card-blogs"
+      >
+        <span>{t('card.writes')}</span>
+        <Dot color={sample.blog.color} size={12} radius={3} />
+        <b className="font-medium text-ink">{sample.blog.name}</b>
+        <span className="text-muted">{sample.host}</span>
+        <span className="text-[12.5px] font-semibold text-accent">✓ {t('card.claimed')}</span>
+      </div>
+      <p
+        className="m-0 font-serif text-[19px] leading-[1.4] text-pretty text-body italic"
+        data-testid="writer-card-bio"
+      >
+        {sample.bio}
+      </p>
+      <div
+        className="flex flex-wrap items-baseline gap-x-[22px] gap-y-1 text-[13px] text-muted"
+        data-testid="writer-card-counts"
+      >
+        {(['followers', 'recommendations'] as const).map((k) => (
+          <span key={k} className="whitespace-nowrap">
+            {t.rich(`card.${k}`, { n: counts[k], b: stat })}
+          </span>
+        ))}
+        <span className="whitespace-nowrap" data-testid="writer-card-reads">
+          {t.rich('card.reads', { n: counts.reads, b: stat })}
+        </span>
+      </div>
+      <div className="h-px bg-line" />
+      <div className="flex flex-col gap-1.5" data-testid="writer-card-latest">
+        <span className={LABEL}>{t('card.recommends')}</span>
+        <span className="font-serif text-[22px] leading-[1.2] font-medium text-ink">
+          {t(`sample.posts.${sample.latest.post}`)}
+        </span>
+        <p className="m-0 font-serif text-[16.5px] leading-[1.4] text-ink-2 italic">
+          “{sample.latest.note}”
         </p>
-      ) : null}
-      {counts ? (
-        <div
-          className="flex flex-wrap items-baseline gap-x-[22px] gap-y-1 text-[13px] text-muted"
-          data-testid="writer-card-counts"
-        >
-          {(['followers', 'recommendations'] as const).map((k) => (
-            <span key={k} className="whitespace-nowrap">
-              {t.rich(k, { n: counts[k], b: stat })}
+      </div>
+      <div className="flex flex-col gap-2" data-testid="writer-card-reads-list">
+        <span className={LABEL}>{t('card.readsLabel')}</span>
+        <div className="flex flex-wrap gap-1.5">
+          {sample.reads.map((blog) => (
+            <span
+              key={blog.name}
+              className={`${CHIP} flex min-w-0 items-center gap-1.5 pr-[11px] pl-2 text-ink`}
+            >
+              <Dot color={blog.color} size={9} radius={2} />
+              <span className="truncate">{blog.name}</span>
             </span>
           ))}
-          {reads ? (
-            <span className="whitespace-nowrap" data-testid="writer-card-reads">
-              {t.rich('reads', { n: counts.subscriptions ?? 0, b: stat })}
-            </span>
-          ) : null}
+          {more > 0 ? <span className={`${CHIP} px-[11px] text-muted`}>{`+${more}`}</span> : null}
         </div>
-      ) : null}
-      {latest && shown ? (
-        <>
-          <div className="h-px bg-line" />
-          <div className="flex flex-col gap-1.5" data-testid="writer-card-latest">
-            <span className={LABEL}>{t('recommends')}</span>
-            <span className="font-serif text-[22px] leading-[1.2] font-medium text-ink">
-              {shown.title}
-            </span>
-            {latest.note ? (
-              <p className="m-0 font-serif text-[16.5px] leading-[1.4] text-ink-2 italic">
-                “{latest.note}”
-              </p>
-            ) : null}
-          </div>
-        </>
-      ) : null}
-      {reads && readList.length > 0 ? (
-        <div className="flex flex-col gap-2" data-testid="writer-card-reads-list">
-          <span className={LABEL}>{t('readsLabel')}</span>
-          <div className="flex flex-wrap gap-1.5">
-            {readList.slice(0, READS_SHOWN).map((site) => (
-              <span
-                key={site.id}
-                className={`${CHIP} flex min-w-0 items-center gap-1.5 pr-[11px] pl-2 text-ink`}
-              >
-                <span
-                  aria-hidden="true"
-                  className="size-[9px] shrink-0 rounded-[2px]"
-                  style={{ background: siteColor(site.id) }}
-                />
-                <span className="truncate">{site.title ?? displayHost(site.homeUrl)}</span>
-              </span>
-            ))}
-            {more > 0 ? <span className={`${CHIP} px-[11px] text-muted`}>+{more}</span> : null}
-          </div>
-        </div>
-      ) : null}
+      </div>
     </article>
   )
 }
@@ -266,27 +209,5 @@ function DraftCard({ draft }: { draft: CardDraft }) {
         {t('later')}
       </p>
     </article>
-  )
-}
-
-/** Room for a card, and nothing in it: no example to show, and nothing typed yet. */
-function OutlineCard() {
-  const bar = 'block rounded bg-hover'
-  return (
-    <div className={CARD} aria-hidden="true" data-testid="writer-card-outline" data-card="outline">
-      <div className="flex items-center gap-4">
-        <span className="size-[60px] shrink-0 rounded-full bg-hover" />
-        <div className="flex flex-1 flex-col gap-2">
-          <span className={`${bar} h-7 w-2/3`} />
-          <span className={`${bar} h-3 w-1/3`} />
-        </div>
-      </div>
-      <span className={`${bar} h-3 w-1/2`} />
-      <span className={`${bar} h-4 w-full`} />
-      <span className={`${bar} h-4 w-5/6`} />
-      <span className="h-px bg-line" />
-      <span className={`${bar} h-3 w-1/4`} />
-      <span className={`${bar} h-5 w-4/5`} />
-    </div>
   )
 }

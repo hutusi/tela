@@ -59,6 +59,24 @@ test.describe('without JavaScript', () => {
     await expect(page.getByTestId('site-footer')).toBeVisible()
     await expect(page.locator('#tela-data')).toHaveCount(1)
   })
+
+  test('the theme menu shows the choice from the stylesheet alone, and opens before any script', async ({
+    page,
+  }) => {
+    // One cached page for every visitor: with no choice on the page, its glyph and name are Auto,
+    // whatever the system shows, and no item claims to be chosen.
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await page.goto('/')
+    const menu = page.getByTestId('theme-menu')
+    const summary = menu.locator('summary')
+    await expect(summary).toHaveAccessibleName('Theme: Auto')
+    await expect(summary.locator('.theme-is-system svg')).toBeVisible()
+    await expect(summary.locator('.theme-is-dark svg')).toBeHidden()
+    await expect(summary.locator('.theme-is-light svg')).toBeHidden()
+    await summary.click()
+    await expect(menu.getByRole('button')).toHaveText(['Auto', 'Light', 'Dark'])
+    await expect(menu.locator('[aria-pressed]')).toHaveCount(0)
+  })
 })
 
 test.describe('with JavaScript', () => {

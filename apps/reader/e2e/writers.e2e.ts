@@ -1,44 +1,27 @@
 /**
- * For writers: the example card is a member's live public profile (`@hutusi`, seeded here with a
- * bio, a recommendation with a note and public subscriptions), the handle is checked as the
- * visitor types, and "Claim your card" carries the card through the sheet: the new member's
- * handle and name are set, and the claim starts from the blog they gave. A member gets the ways
- * on instead of the form. Each signing-in context comes from its own address, since better-auth
- * and `/api/v1/join` count tries per IP.
+ * For writers: beside the form is a sample card, labelled as one, and the sections under it draw
+ * from the same sample, with nothing in any of them a link (ADR 0037). The handle is checked as the
+ * visitor types (`@hutusi` is taken here, by a member made for it), and "Claim your card" carries
+ * the card through the sheet: the new member's handle and name are set, and the claim starts from
+ * the blog they gave. A member gets the ways on instead of the form. Each signing-in context comes
+ * from its own address, since better-auth and `/api/v1/join` count tries per IP.
  */
 import { type APIRequestContext, expect, request, test } from '@playwright/test'
 import {
   adminCode,
   BASE,
   expectHeaderFits,
-  FIXTURES,
   latestCode,
   measureHeader,
   memberHeaders,
   signInRequest,
 } from './helpers'
 
-const EXAMPLE = 'hutusi@e2e.test'
-const NAME = 'Hu Tusi'
-const BIO = 'Writes about reading, slowly, in two languages.'
-const NOTE = 'The debugging post I keep coming back to.'
-
 const ORIGIN = { origin: BASE }
 const visitor = (n: number) => ({
   storageState: { cookies: [], origins: [] },
   extraHTTPHeaders: { 'cf-connecting-ip': `198.51.100.${n}` },
 })
-
-/** One of the member's own calls, from their own context, as the app makes them. */
-async function push(api: APIRequestContext, mutations: Record<string, unknown>[]) {
-  const res = await api.post(`${BASE}/api/v1/mutations`, {
-    headers: { ...ORIGIN, ...(await memberHeaders(api)) },
-    data: {
-      mutations: mutations.map((m) => ({ mid: crypto.randomUUID(), at: Date.now(), ...m })),
-    },
-  })
-  expect(res.ok()).toBe(true)
-}
 
 /** The sign-in code mailed to `email`, once it has been sent. */
 async function mailedCode(api: APIRequestContext, email: string): Promise<string> {
@@ -52,33 +35,19 @@ async function mailedCode(api: APIRequestContext, email: string): Promise<string
   return code
 }
 
+// A member who holds `@hutusi`, so that typing that name finds it taken.
 test.beforeAll(async () => {
   const owner = await request.newContext({
     baseURL: BASE,
     extraHTTPHeaders: { 'cf-connecting-ip': '198.51.100.20' },
   })
   try {
-    await signInRequest(owner, EXAMPLE)
+    await signInRequest(owner, 'hutusi@e2e.test')
     const named = await owner.put(`${BASE}/api/v1/profile`, {
       headers: { ...ORIGIN, ...(await memberHeaders(owner)) },
-      data: { handle: 'hutusi', displayName: NAME, bio: BIO },
+      data: { handle: 'hutusi', displayName: 'Hu Tusi' },
     })
     expect(named.ok()).toBe(true)
-    // A blog they read, already in Tela from the setup: subscribing is enough.
-    const added = await owner.post(`${BASE}/api/v1/feeds`, {
-      headers: { ...ORIGIN, ...(await memberHeaders(owner)) },
-      data: { feedUrl: `${FIXTURES}/jvns.xml` },
-    })
-    expect(added.ok()).toBe(true)
-    const pulled = (await (
-      await owner.get(`${BASE}/api/v1/sync?cursor=0`, { headers: await memberHeaders(owner) })
-    ).json()) as { rows: { articles: { id: number }[] } }
-    const first = pulled.rows.articles[0]
-    if (!first) throw new Error('the fixture feed has no posts')
-    await push(owner, [
-      { type: 'recommend', articleId: first.id, note: NOTE },
-      { type: 'setPrivacy', publicSubscriptions: true },
-    ])
   } finally {
     await owner.dispose()
   }
@@ -87,23 +56,57 @@ test.beforeAll(async () => {
 test.describe('For writers, for a visitor', () => {
   test.use(visitor(21))
 
-  test("shows @hutusi's live card, and the notes from it", async ({ page }) => {
+  test('shows a sample card, says it is one, and links nowhere from it', async ({ page }) => {
     await page.goto('/writers')
     // The active pill: its own ground, not only on hover.
     await expect(page.getByTestId('nav-writers')).toHaveClass(/(^|\s)bg-hover(\s|$)/)
     const card = page.getByTestId('writer-card')
-    await expect(card).toHaveAttribute('data-card', 'example')
-    await expect(card.getByTestId('writer-card-name')).toHaveText(NAME)
-    await expect(card.getByTestId('writer-card-handle')).toHaveText('@hutusi')
-    await expect(card.getByTestId('writer-card-bio')).toHaveText(BIO)
-    await expect(card.getByTestId('writer-card-reads')).toContainText(/Reads \d+ blogs?/)
-    // The latest recommendation stands where a pinned post would: Tela has none.
-    await expect(card.getByTestId('writer-card-latest')).toContainText(NOTE)
-    await expect(page.getByTestId('writers-note').first()).toContainText(NOTE)
+    await expect(card).toHaveAttribute('data-card', 'sample')
+    await expect(card.getByTestId('writer-card-name')).toHaveText('Lucía Ferrer')
+    await expect(card.getByTestId('writer-card-handle')).toHaveText('@lucia')
+    await expect(card.getByTestId('writer-card-reads')).toHaveText('Reads 24 blogs')
+    await expect(card.getByTestId('writer-card-latest')).toContainText(
+      'A kitchen you can take with you',
+    )
+    await expect(page.getByTestId('writer-card-caption')).toHaveText(
+      'An example card. Type your name to see yours.',
+    )
+
+    // Following, for example: four rows of the kinds Following has, newest first.
+    const find = page.getByTestId('writers-find')
+    await expect(find).toContainText('Following · for example')
+    await expect(find.getByTestId('writers-activity')).toHaveCount(4)
+    await expect(find.getByTestId('writers-activity').first()).toContainText('12m ago')
+    await expect(find.getByTestId('writers-note')).toHaveCount(2)
+    await expect(page.getByTestId('writers-roll').locator('li')).toHaveCount(4)
+    await expect(page.getByTestId('writers-readers')).toContainText('61 readers on Tela')
+
+    // None of it is anyone's: no link to a profile, a post or a blog that is not there.
+    for (const id of ['writer-card', 'writers-find', 'writers-roll', 'writers-readers']) {
+      await expect(page.getByTestId(id).locator('a')).toHaveCount(0)
+    }
+    await expect(page.getByTestId('writers-link-pill')).not.toHaveAttribute('href', /.*/)
 
     // The closing call goes back to the form, ready to type in.
     await page.getByTestId('writers-make').click()
     await expect(page.getByTestId('writers-name')).toBeFocused()
+  })
+
+  test("reads the sample's titles in Chinese, and its bio as written", async ({
+    page,
+    context,
+  }) => {
+    await context.addCookies([{ name: 'tela_locale', value: 'zh-Hans', url: BASE }])
+    await page.goto('/writers')
+    const card = page.getByTestId('writer-card')
+    await expect(card.getByTestId('writer-card-latest')).toContainText('一间可以带着走的厨房')
+    await expect(card.getByTestId('writer-card-bio')).toHaveText(
+      'Walking notes from Madrid, mostly written before breakfast.',
+    )
+    await expect(page.getByTestId('writer-card-caption')).toHaveText(
+      '一张示例名片。输入你的名字，看看你的。',
+    )
+    await expect(page.getByTestId('writers-find')).toContainText('清晨六点，格兰大道上能听到什么')
   })
 
   test('checks the handle as the visitor types, and offers another when it is taken', async ({
@@ -221,6 +224,7 @@ test.describe('For writers, for a member', () => {
     await page.goto('/writers')
     await expect(page.getByTestId('writers-member')).toBeVisible()
     await expect(page.getByTestId('writers-form')).toHaveCount(0)
+    await expect(page.getByTestId('writer-card-caption')).toHaveText('An example card.')
     await expect(page.getByTestId('writers-claim-blog')).toHaveAttribute('href', '/claim')
     const me = (await (await page.request.get(`${BASE}/api/v1/me`)).json()) as {
       profile: { handle: string }
