@@ -205,6 +205,66 @@ test.describe('stylesheet', () => {
     })
   }
 
+  /**
+   * Simplified and Traditional share most code points but not every glyph's shape, and the font
+   * stacks name SC families: text in Traditional takes the TC ones, through the tokens, so the
+   * interface in 繁體中文 and a post or title marked zh-Hant both follow, and Simplified inside a
+   * Traditional page goes back. What a `:lang()` rule on a token resolves to is the browser's to say.
+   */
+  test('Chinese is drawn in the glyph forms of its own script', async ({ page }) => {
+    await page.goto('/reading')
+    await expect(page.getByTestId('nav-reading')).toBeVisible()
+    const families = await page.evaluate(() => {
+      const html = document.documentElement
+      const was = html.lang
+      const probe = (lang: string, className: string) => {
+        const el = document.createElement('div')
+        el.lang = lang
+        el.className = className
+        document.body.append(el)
+        const family = getComputedStyle(el).fontFamily
+        el.remove()
+        return family
+      }
+      // The interface's language is the page's: <body> resolves the sans token under it.
+      const ui = (lang: string) => {
+        html.lang = lang
+        return getComputedStyle(document.body).fontFamily
+      }
+      try {
+        const uiHant = ui('zh-Hant')
+        const hansInHant = probe('zh-Hans', 'article-body')
+        const uiHans = ui('zh-Hans')
+        html.lang = 'en'
+        return {
+          uiHant,
+          uiHans,
+          hansInHant,
+          bodyHant: probe('zh-Hant', 'article-body'),
+          bodyHans: probe('zh-Hans', 'article-body'),
+          titleHant: probe('zh-Hant', 'font-serif'),
+        }
+      } finally {
+        html.lang = was
+      }
+    })
+    // The first CJK family a stack names is the one a Chinese character is drawn in.
+    const cjk = (family: string) =>
+      family
+        .split(',')
+        .map((f) => f.trim().replace(/"/g, ''))
+        .find((f) => /CJK|Songti|PingFang/.test(f))
+    expect(cjk(families.uiHant), 'the interface in Traditional').toBe('PingFang TC')
+    expect(cjk(families.uiHans), 'the interface in Simplified').toBe('PingFang SC')
+    expect(cjk(families.bodyHant), 'a body in Traditional').toBe('Songti TC')
+    expect(cjk(families.titleHant), 'a title in Traditional').toBe('Songti TC')
+    expect(cjk(families.bodyHans), 'a body in Simplified').toBe('Songti SC')
+    expect(cjk(families.hansInHant), 'Simplified in a Traditional page').toBe('Songti SC')
+    // Latin text keeps the house faces either way.
+    expect(families.bodyHant).toMatch(/^"?EB Garamond"?,/)
+    expect(families.uiHant).toMatch(/^"?Figtree"?,/)
+  })
+
   test('the fade is off when the reader asks for less motion', async ({ page }) => {
     // Opening an article is the most repeated interaction in the app, and it fades every time.
     // The override is on the token rather than the utility, which assumes Tailwind compiles

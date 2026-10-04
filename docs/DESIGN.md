@@ -29,8 +29,14 @@ italic spans) lifts a step further, to `oklch(0.74 0.12 150)`, as the design's N
 Fonts: EB Garamond (headings, article body, excerpts; 400/500/600, italic) and Figtree (UI;
 400/500/600), both self-hosted from `@fontsource` (Latin and Latin Extended), so no page asks
 Google Fonts for anything. CJK fallbacks: Songti SC / Noto Serif CJK SC for
-serif, PingFang SC / Noto Sans CJK SC for sans. Base UI size 14px; article body 19.5px/1.55
-(CJK 18px/1.8).
+serif, PingFang SC / Noto Sans CJK SC for sans. Simplified and Traditional share most code points
+but not every glyph's shape, so text in Traditional (`:lang(zh-Hant)`: the interface in 繁體中文,
+or a post, title or option marked `lang="zh-Hant"`) takes Songti TC / Noto Serif CJK TC and
+PingFang TC / Noto Sans CJK TC, and Simplified inside it goes back to SC. The rule changes the
+`--font-serif` and `--font-sans` tokens, not `font-family`, so it reaches whatever resolves a
+token at or under the element; an element with a `lang` and no family of its own keeps the stack
+its parent resolved, so give it `font-serif` (or a class that sets a family). `styles.e2e.ts`
+checks the computed families. Base UI size 14px; article body 19.5px/1.55 (CJK 18px/1.8).
 
 Motion: `animate-fade` (250 ms fade + 4px rise) on view changes and popovers. Under
 `prefers-reduced-motion: reduce` the token itself becomes `none`, which covers every use at once;
@@ -415,7 +421,10 @@ https://ainaive.com, in `ink-2`), and About, For writers, Privacy and Terms on t
 
 Every user-facing string lives in `apps/reader/messages/en.json` and `zh-Hans.json` under the same
 keys (`apps/reader/test/messages.test.ts` checks); components read them with use-intl (next-intl's
-framework-free core). Placeholders use ICU plural syntax.
+framework-free core). Placeholders use ICU plural syntax. Punctuation that differs by language is
+a message too: a member's note is quoted through `common.quoted` (`“{text}”` in English and
+Simplified Chinese), never with marks written into the component, since Traditional quotes with
+「」 and French with « ».
 
 The one exception is the prose of About, Privacy and Terms, which lives in typed modules, one per
 locale: `apps/reader/src/content/info/{en,zh-Hans}.ts`. It is long, it carries links, and it is

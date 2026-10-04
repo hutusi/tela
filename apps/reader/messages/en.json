@@ -3,6 +3,9 @@
     "name": "Tela",
     "tagline": "Independent blogs, in any language."
   },
+  "common": {
+    "quoted": "“{text}”"
+  },
   "nav": {
     "reading": "Reading",
     "discover": "Discover",

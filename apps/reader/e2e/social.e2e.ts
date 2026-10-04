@@ -82,7 +82,8 @@ test.describe('following', () => {
     await expect(page).toHaveURL(/\/following$/)
     await expect(page.getByTestId('people-you-follow')).toContainText('Anna Kowalska')
     const items = page.getByTestId('following-item')
-    await expect(page.getByTestId('following-note')).toContainText(NOTE)
+    // In the quotation marks of the page's language (`common.quoted`): English's curly ones here.
+    await expect(page.getByTestId('following-note')).toHaveText(`“${NOTE}”`)
     await expect(items.filter({ hasText: 'liked a post' })).toHaveCount(1)
     // Her new subscription shows only if its blog is listed, which the fixture's may not be yet:
     // the API suite covers that rule (apps/api/test/social.test.ts).

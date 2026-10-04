@@ -451,6 +451,7 @@ function ActivityRow({
   when: string
 }) {
   const t = useTranslations('writers')
+  const tc = useTranslations('common')
   const { who } = item
   return (
     <li
@@ -475,7 +476,7 @@ function ActivityRow({
             className="m-0 border-l-2 border-accent pl-3 font-serif text-[16.5px] leading-[1.4] text-ink-2 italic"
             data-testid="writers-note"
           >
-            “{item.note}”
+            {tc('quoted', { text: item.note })}
           </p>
         ) : null}
       </div>

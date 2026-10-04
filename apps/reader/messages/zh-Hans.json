@@ -3,6 +3,9 @@
     "name": "Tela",
     "tagline": "独立博客，任何语言。"
   },
+  "common": {
+    "quoted": "“{text}”"
+  },
   "nav": {
     "reading": "阅读",
     "discover": "发现",

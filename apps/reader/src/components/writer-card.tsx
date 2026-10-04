@@ -64,6 +64,7 @@ function Dot({ color, size, radius }: { color: string; size: number; radius: num
 
 function SampleCard({ sample }: { sample: Sample }) {
   const t = useTranslations('writers')
+  const tc = useTranslations('common')
   const { writer, counts } = sample
   const more = Math.max(0, counts.reads - sample.reads.length)
   const stat = (chunks: React.ReactNode) => <b className={STAT}>{chunks}</b>
@@ -119,7 +120,7 @@ function SampleCard({ sample }: { sample: Sample }) {
           {t(`sample.posts.${sample.latest.post}`)}
         </span>
         <p className="m-0 font-serif text-[16.5px] leading-[1.4] text-ink-2 italic">
-          “{sample.latest.note}”
+          {tc('quoted', { text: sample.latest.note })}
         </p>
       </div>
       <div className="flex flex-col gap-2" data-testid="writer-card-reads-list">
