@@ -166,6 +166,28 @@ export async function translateTitlesJob(
       if (from) derived.push({ member, from })
       else fresh.push(member)
     }
+    // Converted from rows already stored, so written whatever the model does below: a provider
+    // that keeps failing must not leave these to be given up as failed with the rest.
+    const derivedRows = (now: number) =>
+      derived.flatMap(({ member, from }) =>
+        member.langs.map((lang) =>
+          // A stored title is plain text; OpenCC leaves everything but Chinese as it is.
+          upsertArticleTitle(
+            db,
+            {
+              articleId: member.article.id,
+              lang,
+              title: from.title === null ? null : planFor(sourceLang, lang).finish(from.title),
+              excerpt:
+                from.excerpt === null ? null : planFor(sourceLang, lang).finish(from.excerpt),
+              status: from.status,
+              sourceHash: member.article.title_hash,
+              model: from.model,
+            },
+            now,
+          ),
+        ),
+      )
     const all = fresh.flatMap((m) => blocks.get(m.article.id) as Block[])
     // Block id → what was written: in `target`, or with no model the source itself.
     const written = new Map<string, string>()
@@ -208,8 +230,14 @@ export async function translateTitlesJob(
       } catch (err) {
         if (err instanceof LeaseLost) return { status: 'lost' }
         // The provider is down or refusing: keep what other groups made, back off for the rest.
-        // Nothing of this group is written, Traditional included, so the two stay due together.
+        // Of this group only the conversions of stored rows are written; a post that needed the
+        // model keeps both Chinese titles due together.
         providerError = err instanceof Error ? err.message : String(err)
+        const kept = derivedRows(ctx.clock.now())
+        if (kept.length > 0) {
+          const committed = await commit(ctx, lease, kept, { hold: { ttlMs: TITLE_TTL_MS } })
+          if (!committed.ok) return { status: 'lost' }
+        }
         continue
       }
     }
@@ -290,27 +318,7 @@ export async function translateTitlesJob(
         )
       }
     }
-    for (const { member, from } of derived) {
-      for (const lang of member.langs) {
-        // A stored title is plain text; OpenCC leaves everything but Chinese as it is.
-        const { finish } = planFor(sourceLang, lang)
-        statements.push(
-          upsertArticleTitle(
-            db,
-            {
-              articleId: member.article.id,
-              lang,
-              title: from.title === null ? null : finish(from.title),
-              excerpt: from.excerpt === null ? null : finish(from.excerpt),
-              status: from.status,
-              sourceHash: member.article.title_hash,
-              model: from.model,
-            },
-            now,
-          ),
-        )
-      }
-    }
+    statements.push(...derivedRows(now))
     if (spent > 0) statements.push(chargeUsage(db, BACKGROUND, utcDay(now), spent))
     // Each group commits the moment it lands and holds the lease for the next, so a feed's calls
     // need not all fit in one lease, and a lease lost later keeps what was paid for here.

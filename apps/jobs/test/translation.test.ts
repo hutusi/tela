@@ -827,6 +827,42 @@ describe('Traditional Chinese', () => {
     expect(calls).toEqual([])
   })
 
+  test('a provider refusing Simplified still lets a standing Simplified title be converted', async () => {
+    // Post one as on the day this deploys (a current Simplified title, no Traditional one), post
+    // two retitled since: both are in one (Simplified, English) group. A provider that keeps
+    // refusing must not take post one's free conversion down with post two's call, or the
+    // kind's exhaustion would record it failed.
+    const ctx = context({ translator: writesChinese() })
+    await ingest(ctx, feed(['Post one', 'Post two']))
+    await cycle(ctx)
+    await db.run(sql`delete from article_titles where lang = 'zh-Hant'`)
+    await db.run(sql`update articles set title_hash = 'retitled' where id = 2`)
+    // Nothing cached either, so post two's title needs the model again.
+    await db.run(sql`delete from block_translations`)
+    const inner = writesChinese()
+    const refusing: Translator = {
+      model: inner.model,
+      async translate(request) {
+        if (request.targetLang === 'zh-Hans') throw new Error('HTTP 503')
+        return inner.translate(request)
+      },
+    }
+    calls.length = 0
+    clock.advance(MIN)
+    await cycle(context({ translator: refusing }))
+    expect(await titlesOf('zh-Hant')).toEqual([
+      { article_id: 1, title: 'zh-Hans:軟體 Post one', status: 'done', model: 'mock' },
+    ])
+    // Post two's Simplified call failed, so its Simplified title is still the old one's and its
+    // Traditional title waits with it.
+    expect(
+      await first<{ hash: string }>(
+        db,
+        sql`select source_hash as hash from article_titles where article_id = 2 and lang = 'zh-Hans'`,
+      ),
+    ).not.toEqual({ hash: 'retitled' })
+  })
+
   test('a body for a Traditional reader of an English post is written, and cached, as Simplified', async () => {
     const ctx = context({ translator: writesChinese() })
     await addReader()
