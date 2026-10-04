@@ -610,6 +610,13 @@ subscribers on an unclaimed site.
   spent. Reader requests still run, metered per member (30 requests an hour, a daily token
   allowance). A body converted between the Chinese scripts costs nothing and has its own limit
   (`convert`, 600 an hour), so reading Simplified posts in Traditional never uses up the paid one.
+- **A Chinese body paid for twice** (ADR 0038): the Simplified and Traditional requests for one
+  post that overlap each pay the model for the same blocks. This finds them (a request cut short
+  by its reservation, and finished by the other, shows too):
+  `select s.content_key, s.used_tokens, t.used_tokens from body_translations s join
+  body_translations t on t.content_key = s.content_key and t.lang = 'zh-Hant' where s.lang =
+  'zh-Hans' and s.used_tokens > 0 and t.used_tokens > 0`. If it returns more than the odd row,
+  build the coordination the ADR describes: one model job per body and Simplified.
 - **Retranslate titles:** `delete from article_titles where article_id in (…)`; the sweep finds
   them again. A title that is its own translation is recorded as `echo` and not retried.
 - **A stuck body:** `select * from body_translations where state in ('requested', 'running')`. A

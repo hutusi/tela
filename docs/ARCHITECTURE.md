@@ -178,7 +178,8 @@ and hashes as the `NORM_VERSION` contract.
   (`apps/jobs/src/translation/scripts.ts`, `planFor`). From any other language, titles group by
   what the model writes, so one Simplified call writes both Chinese rows, and a Traditional body
   is written and cached as Simplified and converted on the way out. The block cache holds only
-  model output; a conversion is never stored there.
+  model output; a conversion is never stored there. Simplified and Traditional requests for one
+  body that overlap each pay for the same blocks, a known cost (ADR 0038).
 
 ## API (`apps/api`, ADR 0024)
 

@@ -52,8 +52,16 @@ as the other), so the two lists must not drift apart.
   the model writes, so one Simplified call writes both Chinese rows, and a post whose Simplified
   row is already current (the whole archive, on the day this deploys) has its Traditional row
   converted from it. A Traditional body asks the model for Simplified, caches that, and converts
-  it on the way out, so a Simplified reader of the same post pays nothing. An English or French
-  post costs two paid title calls, not three.
+  it on the way out, so a Simplified reader of the same post, once that has finished, pays
+  nothing. An English or French post costs two paid title calls, not three.
+- **Two Chinese requests that overlap both pay.** The Simplified and Traditional bodies of one post
+  are two rows under two leases, and each reads the shared cache once, as it starts, so two that
+  run at once (two readers, or one switching 简中 to 繁中 while a body streams) each ask the model
+  for every block. That is what translating Traditional separately would cost every time, so the
+  pivot is never worse than not having it. Coordinating the two would put a waiting state into the
+  lease and streaming code, which is where this repository's costliest defects have been; for at
+  most one extra body a post, the cost is measured instead (OPERATIONS.md, "Translation"), and
+  the coordination is built if that ever finds it.
 - **The block cache holds only what a model wrote.** A conversion costs about a millisecond, and a
   cache row costs a write and storage for ever, so Traditional is converted from the Simplified
   entry whenever it is read. Every converted block's placeholders are checked like a model's.

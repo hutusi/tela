@@ -947,6 +947,60 @@ describe('Traditional Chinese', () => {
   })
 
   /**
+   * A known cost, kept on purpose (ADR 0038): the Simplified and Traditional requests for one body
+   * are two rows under two leases, and each looks the shared Simplified cache up once, as it
+   * starts. Two that overlap both ask the model for every block, which is what translating
+   * Traditional separately would cost every time; one after the other, the second pays nothing.
+   * The query is OPERATIONS.md's, which finds it in production.
+   */
+  test('two Chinese requests that overlap each pay for the same blocks, and the query finds it', async () => {
+    // The first call waits for the second, so both have read the cache before either writes it.
+    const mock = createMockTranslator({ calls })
+    let release: (() => void) | null = null
+    let overlapped = false
+    const gated: Translator = {
+      model: mock.model,
+      async translate(request) {
+        if (!overlapped) {
+          if (release) {
+            overlapped = true
+            release()
+          } else {
+            await new Promise<void>((resolve) => {
+              release = resolve
+            })
+          }
+        }
+        return mock.translate(request)
+      },
+    }
+    const ctx = context({ translator: gated })
+    await addReader()
+    await ingest(ctx, feed(['Post'], 4))
+    await cycle(context()) // titles, ungated
+    calls.length = 0
+    const key = await request(1, 'zh-Hans')
+    await request(1, 'zh-Hant')
+    const { tick, runJob } = await import('../src/runner')
+    await tick(ctx)
+    const messages = ctx.jobs.take('translate')
+    expect(messages).toHaveLength(2)
+    await Promise.all(messages.map((m) => runJob(ctx, m)))
+    expect((await bodyRow(key, 'zh-Hans'))?.state).toBe('done')
+    expect((await bodyRow(key, 'zh-Hant'))?.state).toBe('done')
+    // Every block went to the model twice, both times for Simplified.
+    const sent = calls.flatMap((c) => c.blocks.map((b) => b.id))
+    expect(new Set(sent).size * 2).toBe(sent.length)
+    expect(new Set(calls.map((c) => c.targetLang))).toEqual(new Set(['zh-Hans']))
+    expect(
+      await db.all(sql`
+        select s.content_key from body_translations s
+        join body_translations t on t.content_key = s.content_key and t.lang = 'zh-Hant'
+        where s.lang = 'zh-Hans' and s.used_tokens > 0 and t.used_tokens > 0`),
+    ).toEqual([{ content_key: key }])
+  })
+
+  /**
    * tela-api judges a conversion by the article's language, the job by the content object's, and
    * the object is shared by every article with that body, so the two can disagree.
    */
