@@ -12,6 +12,11 @@
  * and rehydration re-escapes text (ADR 0005). An execution stops starting chunks at its budget and
  * releases the lease with the row still `running`; the next tick claims it again and continues,
  * already-translated blocks now being cache hits.
+ *
+ * Traditional Chinese is never asked of the model (`./scripts`). A Traditional reader of a post in
+ * another language gets the Simplified translation converted, made and cached as Simplified, so a
+ * Simplified reader of the same post pays nothing; a post in one Chinese script reaches a reader
+ * of the other by conversion alone, streamed like cache hits, with no call and no spend.
  */
 import {
   type ContentObject,
@@ -33,6 +38,7 @@ import { commit, type Statement } from '@tela/ingest/pipeline'
 import { estimateTokens, type TranslationBlock, translateBlocks } from '@tela/llm'
 import { MAX_ARTICLE_TRANSLATION_TOKENS, NORM_VERSION } from '@tela/shared'
 import { sql } from 'drizzle-orm'
+import { convertTagged, planFor } from './scripts'
 import type { TranslationContext } from './titles'
 
 /** The opening chunk: small, so the first paragraphs land in about five seconds. */
@@ -137,19 +143,30 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
   }
   const sourceLang = object.lang === 'und' ? null : object.lang
   const requestId = row.requestId ?? 'background'
+  // What a model writes for this reader (Simplified for Traditional), and how that, or with no
+  // model the source itself, becomes the reader's language.
+  const { target, finish, label } = planFor(sourceLang, lang)
+  const model = label ?? translator.model
 
-  // Which leaves need a model: translatable, not skipped, not already cached.
+  // Which leaves need a model: translatable, not skipped, not already cached. Between the two
+  // Chinese scripts none does: every leaf is converted here, before any group is formed.
   const tagged = taggedTextsOf(object.blocks.map((b) => b.html).join(''))
   const hashOf = new Map<string, string>()
   for (const [id, info] of Object.entries(object.leaves)) {
     if (!info.skip && tagged[id] !== undefined) hashOf.set(id, info.hash)
   }
-  const cached = await cachedTranslations(db, [...new Set(hashOf.values())], lang, sourceLang)
+  const cached =
+    target === null
+      ? new Map<string, string>()
+      : await cachedTranslations(db, [...new Set(hashOf.values())], target, sourceLang)
   const translated = new Map<string, string>()
   const misses = new Map<string, string>()
+  const failed = new Set<string>()
   for (const [id, hash] of hashOf) {
-    const hit = cached.get(hash)
-    if (hit !== undefined) translated.set(id, hit)
+    const source = target === null ? tagged[id] : cached.get(hash)
+    const text = source === undefined ? undefined : convertTagged(finish, source)
+    if (text !== undefined) translated.set(id, text)
+    else if (target === null) failed.add(id)
     else misses.set(id, tagged[id] as string)
   }
 
@@ -159,7 +176,6 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
     ctx.maxArticleTokens ?? MAX_ARTICLE_TRANSLATION_TOKENS,
     row.reservedTokens > 0 ? row.reservedTokens : Number.POSITIVE_INFINITY,
   )
-  const failed = new Set<string>()
   let budgeted = 0
   for (const [id, text] of misses) {
     budgeted += estimateTokens(text)
@@ -178,7 +194,7 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
   const groups = chunkGroups(object, misses, { first: FIRST_CHUNK_TOKENS, rest: CHUNK_TOKENS })
   let stopped = false
   for (const group of groups) {
-    const needsModel = group.misses.some((m) => !translated.has(m.id))
+    const needsModel = target !== null && group.misses.some((m) => !translated.has(m.id))
     if (!needsModel && resuming) continue
     if (ctx.clock.now() >= deadline) {
       stopped = true
@@ -192,15 +208,20 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
         outcome = await translateBlocks(translator, {
           blocks: group.misses.filter((m) => !translated.has(m.id)),
           sourceLang,
-          targetLang: lang,
+          targetLang: target,
           // One group is one call plus its own strict retry, so each chunk is final when written.
           maxTokensPerChunk: Number.MAX_SAFE_INTEGER,
         })
       } catch (err) {
         return { status: 'retry', error: err instanceof Error ? err.message : String(err) }
       }
-      for (const [id, text] of outcome.translated) translated.set(id, text)
+      for (const [id, text] of outcome.translated) {
+        const finished = convertTagged(finish, text)
+        if (finished !== undefined) translated.set(id, finished)
+        else failed.add(id)
+      }
       for (const f of outcome.failed) failed.add(f.id)
+      // Cached as the model wrote it: a Traditional reader's Simplified is a Simplified reader's.
       const cacheable = [...outcome.translated.entries()].map(([id, text]) => ({
         sourceHash: hashOf.get(id) as string,
         taggedText: text,
@@ -210,7 +231,7 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
           storeBlockTranslations(
             db,
             cacheable,
-            { targetLang: lang, sourceLang, model: translator.model, normVersion: NORM_VERSION },
+            { targetLang: target, sourceLang, model: translator.model, normVersion: NORM_VERSION },
             now,
           ),
         )
@@ -224,7 +245,7 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
               job: 'translate.body',
               contentKey,
               articleId: null,
-              targetLang: lang,
+              targetLang: target,
               userId: row.requestedBy,
               model: usage.model,
               inputTokens: usage.inputTokens,
@@ -272,7 +293,7 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
     norm: NORM_VERSION,
     source: contentKey,
     lang,
-    model: translator.model,
+    model,
     status,
     blocks: object.blocks.map((_, i) => blockHtml(object, i, translated)),
     failedLeaves: [...failed],
@@ -294,7 +315,7 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
     settleBodyUsage(db, contentKey, lang, now),
     db.run(sql`
       update body_translations set state = ${status}, object_key = ${finalKey},
-        failed_leaves = ${JSON.stringify([...failed])}, model = ${translator.model},
+        failed_leaves = ${JSON.stringify([...failed])}, model = ${model},
         used_tokens = ${usedTokens}, reserved_tokens = 0, updated_at = ${now}, seq = ${currentSeq}
       where content_key = ${contentKey} and lang = ${lang} and state in ('requested', 'running')
     `),

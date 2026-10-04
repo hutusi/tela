@@ -35,6 +35,18 @@ export type TranslationRequestStatus =
   | 'budget_exhausted'
 
 const CJK_SOURCE = /^(zh|ja|ko)\b/
+const CHINESE_SCRIPTS: readonly (string | null)[] = ['zh-Hans', 'zh-Hant']
+
+/**
+ * A post in one Chinese script read in the other: tela-jobs converts it with OpenCC and asks no
+ * model (`scriptConversion` in @tela/llm, which tela-api does not import: it would bundle OpenCC's
+ * dictionaries for one comparison). Nothing is spent, so nothing is reserved.
+ */
+export function isScriptConversion(sourceLang: string | null, lang: string): boolean {
+  return (
+    sourceLang !== lang && CHINESE_SCRIPTS.includes(sourceLang) && CHINESE_SCRIPTS.includes(lang)
+  )
+}
 
 /**
  * Tokens to reserve against the member's day. The reservation is also the job's ceiling on
@@ -106,13 +118,18 @@ export function translationRoutes(deps: ApiDeps) {
       return answer('rate_limited', existing, 429)
     }
 
-    const reserve = reservationFor(article.body_chars ?? 0, article.source_lang)
+    // A conversion between the Chinese scripts costs nothing: no reservation, and a day's
+    // allowance already spent does not refuse it (the rate limit above still counts it).
+    const reserve = isScriptConversion(article.source_lang, lang)
+      ? 0
+      : reservationFor(article.body_chars ?? 0, article.source_lang)
     const day = utcDay(now)
     const requestId = crypto.randomUUID()
     const spent = sql`(select coalesce(sum(used + reserved), 0) from usage_daily
       where subject = ${member.id} and day = ${day})`
     // The request row and its reservation in one batch, both conditional: the row only while the
-    // day's allowance has room and nothing is already running, the reservation only for this row.
+    // day's allowance has room (or it costs nothing) and nothing is already running, the
+    // reservation only for this row.
     await db.batch([
       bumpSeq(db),
       db.run(sql`
@@ -120,7 +137,7 @@ export function translationRoutes(deps: ApiDeps) {
           reserved_tokens, reserved_day, updated_at, seq)
         select ${contentKey}, ${lang}, 'requested', ${requestId}, ${member.id}, ${reserve}, ${day},
           ${now}, ${currentSeq}
-        where ${spent} + ${reserve} <= ${USER_DAILY_TRANSLATION_TOKENS}
+        where ${reserve} = 0 or ${spent} + ${reserve} <= ${USER_DAILY_TRANSLATION_TOKENS}
         on conflict (content_key, lang) do update set
           state = 'requested', request_id = excluded.request_id, requested_by = excluded.requested_by,
           reserved_tokens = excluded.reserved_tokens, reserved_day = excluded.reserved_day,

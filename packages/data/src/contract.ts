@@ -562,7 +562,8 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { lang: 'zh-Hans', feedId: 1 },
       ])
 
-      // So does giving up on them: a row still filed under the alias is refiled as it fails.
+      // So does giving up on them: a row still filed under the alias is refiled as it fails, and
+      // every launch language the post is not in is given up on.
       await db.run(sql`update articles set title = 'B', title_hash = 'th-c' where id = 3`)
       await db.run(sql`update article_titles set feed_id = 2 where lang = 'zh-Hans'`)
       await db.batch([bumpSeq(db), failDueTitles(db, 1, T0)] as never)
@@ -571,7 +572,9 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
           select lang, feed_id as "feedId", status from article_titles order by lang`),
       ).toEqual([
         { lang: 'en', feedId: 1, status: 'failed' },
+        { lang: 'fr', feedId: 1, status: 'failed' },
         { lang: 'zh-Hans', feedId: 1, status: 'failed' },
+        { lang: 'zh-Hant', feedId: 1, status: 'failed' },
       ])
     })
   })

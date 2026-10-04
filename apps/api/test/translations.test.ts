@@ -3,7 +3,7 @@ import { ACTION_LIMITS, bumpSeq, currentSeq, first, type TelaDb, utcDay } from '
 import { USER_DAILY_TRANSLATION_TOKENS } from '@tela/shared'
 import type { PullResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
-import { reservationFor } from '../src/routes/translations'
+import { isScriptConversion, reservationFor } from '../src/routes/translations'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 let api: TestApi
@@ -105,8 +105,22 @@ describe('asking for a translation', () => {
   test('an article already in the language, or an unknown language, is invalid', async () => {
     await article({ lang: 'zh-Hans' })
     expect((await askJson()).status).toBe('invalid')
-    expect((await askJson({ articleId: 1, lang: 'fr' })).code).toBe(400)
+    expect((await askJson({ articleId: 1, lang: 'de' })).code).toBe(400)
     expect((await askJson({ articleId: 99, lang: 'en' })).code).toBe(404)
+  })
+
+  test('the other Chinese script is converted, not translated: it reserves nothing', async () => {
+    await article({ lang: 'zh-Hans' })
+    // A day already spent refuses a translation but not a conversion, which costs nothing.
+    await db.run(sql`insert into usage_daily (subject, day, reserved, used)
+      values (${reader.userId}, ${utcDay(api.clock.now())}, 0, ${USER_DAILY_TRANSLATION_TOKENS + 10})`)
+    expect((await askJson({ articleId: 1, lang: 'en' })).status).toBe('budget_exhausted')
+    expect(await askJson({ articleId: 1, lang: 'zh-Hant' })).toMatchObject({
+      code: 200,
+      status: 'requested',
+    })
+    expect(await usage()).toEqual({ reserved: 0, used: USER_DAILY_TRANSLATION_TOKENS + 10 })
+    expect(api.jobs.sent).toMatchObject([{ body: { key: 'ckey1:zh-Hant' } }])
   })
 
   test("the member's day is a ceiling: past it, nothing is requested", async () => {
@@ -161,5 +175,13 @@ describe('the reservation', () => {
     expect(reservationFor(1000, 'ja')).toBe(2000)
     expect(reservationFor(4000, 'en')).toBe(2000)
     expect(reservationFor(10_000_000, 'zh-Hans')).toBe(40_000)
+  })
+
+  test('is none between the two Chinese scripts, whichever way', () => {
+    expect(isScriptConversion('zh-Hans', 'zh-Hant')).toBe(true)
+    expect(isScriptConversion('zh-Hant', 'zh-Hans')).toBe(true)
+    expect(isScriptConversion('en', 'zh-Hant')).toBe(false)
+    expect(isScriptConversion(null, 'zh-Hans')).toBe(false)
+    expect(isScriptConversion('zh-Hans', 'zh-Hans')).toBe(false)
   })
 })
