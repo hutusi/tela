@@ -21,8 +21,10 @@ stay aligned.
 | `accent` | `oklch(0.50 0.10 150)` | unread dot, avatar, links, the mark's second strand |
 | `accent-strong` | `oklch(0.40 0.10 150)` | link hover |
 
-On a dark ground the accent lifts to `oklch(0.68 0.14 150)` (`#4eb068`), which is where the tiled
-mark takes its green from, and what `accent` becomes in dark mode (below).
+On a dark ground the green lifts to `oklch(0.68 0.14 150)` (`#4eb068`), which is where the tiled
+mark takes its green from, and what `primary` becomes in dark mode. Text in the accent (links, the
+italic spans) lifts a step further, to `oklch(0.74 0.12 150)`, as the design's Night page draws it
+(below).
 
 Fonts: EB Garamond (headings, article body, excerpts; 400/500/600, italic) and Figtree (UI;
 400/500/600), both self-hosted from `@fontsource` (Latin and Latin Extended), so no page asks
@@ -369,32 +371,34 @@ Tokens the Next app did not need, because it hard-coded them (and `knob`, which 
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `surface` | `#fff` | `#1f1c17` | cards, popovers, inputs (was `bg-white`) |
+| `surface` | `#fff` | `#26221d` | cards, popovers, inputs (was `bg-white`) |
 | `danger` | `oklch(0.50 0.15 25)` | `oklch(0.72 0.15 25)` | error text |
 | `highlight` | `oklch(0.91 0.10 95)` | `oklch(0.50 0.09 90 / 0.55)` | a highlight's paint |
 | `highlight-strong` | `oklch(0.80 0.14 90)` | `oklch(0.70 0.12 90)` | the highlight being edited |
 | `knob` | `#fff` | `#ede7db` | a switch's knob, light on either track in both themes (Tela v2) |
 | `primary` | `#1f1c18` | `oklch(0.68 0.14 150)` | the one filled call to action: *Join* (the header's, and the front page's *Join Tela*), the sheet's button (ADR 0035) |
-| `on-primary` | `#f6f2ea` | `#16140f` | text on `primary` |
+| `on-primary` | `#f6f2ea` | `#1f1c18` | text on `primary` |
 
 `primary` is ink by day, as the design's Day page has it, and the lifted green by night, as its
 Night page has it: a filled ink button on the dark ground would be a pale slab, louder than
 anything else on the page. `door.e2e.ts` checks the pair's computed colours in both themes.
 
-Dark mode redefines every token on a warm near-black ground rather than adding `dark:` variants:
+Dark mode redefines every token on a warm near-black ground rather than adding `dark:` variants.
+The values are the Night palette of the design's front page (*Tela Landing*, 2A), so the member's
+app at night is the page a visitor saw: paper is the light theme's ink, and ink its paper.
 
 | Token | Dark |
 |---|---|
-| `paper` | `#16140f` |
-| `ink` | `#ede7db` |
-| `body` | `#ddd6c8` |
-| `ink-2` | `#b1a999` |
-| `muted` | `#8c8476` |
-| `line` | `#34302a` |
-| `hover` | `#29251f` |
-| `thumb` | `#454038` |
-| `accent` | `oklch(0.68 0.14 150)`, the lifted green above |
-| `accent-strong` | `oklch(0.78 0.12 150)` |
+| `paper` | `#1f1c18` |
+| `ink` | `#f6f2ea` |
+| `body` | `#e6dfd2`, between `ink` and `ink-2`: 12.8:1 on paper |
+| `ink-2` | `#cfc7b8` |
+| `muted` | `#a39a8b`: 6.1:1 on paper, 5.7:1 on `surface` |
+| `line` | `#35302a` |
+| `hover` | `#2e2a24` |
+| `thumb` | `#4a443a` |
+| `accent` | `oklch(0.74 0.12 150)` |
+| `accent-strong` | `oklch(0.80 0.12 150)` |
 
 `data-theme="dark|light"` on `<html>` is the member's choice. Without it,
 `prefers-color-scheme` decides. The two token blocks in `styles.css` must stay identical. A

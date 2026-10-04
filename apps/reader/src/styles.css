@@ -73,44 +73,44 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --color-paper: #16140f;
-    --color-surface: #1f1c17;
-    --color-ink: #ede7db;
-    --color-body: #ddd6c8;
-    --color-ink-2: #b1a999;
-    --color-muted: #8c8476;
-    --color-line: #34302a;
-    --color-hover: #29251f;
-    --color-thumb: #454038;
+    --color-paper: #1f1c18;
+    --color-surface: #26221d;
+    --color-ink: #f6f2ea;
+    --color-body: #e6dfd2;
+    --color-ink-2: #cfc7b8;
+    --color-muted: #a39a8b;
+    --color-line: #35302a;
+    --color-hover: #2e2a24;
+    --color-thumb: #4a443a;
     --color-knob: #ede7db;
-    --color-accent: oklch(0.68 0.14 150);
-    --color-accent-strong: oklch(0.78 0.12 150);
+    --color-accent: oklch(0.74 0.12 150);
+    --color-accent-strong: oklch(0.8 0.12 150);
     --color-danger: oklch(0.72 0.15 25);
     --color-highlight: oklch(0.5 0.09 90 / 0.55);
     --color-highlight-strong: oklch(0.7 0.12 90);
     --color-primary: oklch(0.68 0.14 150);
-    --color-on-primary: #16140f;
+    --color-on-primary: #1f1c18;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-paper: #16140f;
-  --color-surface: #1f1c17;
-  --color-ink: #ede7db;
-  --color-body: #ddd6c8;
-  --color-ink-2: #b1a999;
-  --color-muted: #8c8476;
-  --color-line: #34302a;
-  --color-hover: #29251f;
-  --color-thumb: #454038;
+  --color-paper: #1f1c18;
+  --color-surface: #26221d;
+  --color-ink: #f6f2ea;
+  --color-body: #e6dfd2;
+  --color-ink-2: #cfc7b8;
+  --color-muted: #a39a8b;
+  --color-line: #35302a;
+  --color-hover: #2e2a24;
+  --color-thumb: #4a443a;
   --color-knob: #ede7db;
-  --color-accent: oklch(0.68 0.14 150);
-  --color-accent-strong: oklch(0.78 0.12 150);
+  --color-accent: oklch(0.74 0.12 150);
+  --color-accent-strong: oklch(0.8 0.12 150);
   --color-danger: oklch(0.72 0.15 25);
   --color-highlight: oklch(0.5 0.09 90 / 0.55);
   --color-highlight-strong: oklch(0.7 0.12 90);
   --color-primary: oklch(0.68 0.14 150);
-  --color-on-primary: #16140f;
+  --color-on-primary: #1f1c18;
 }
 
 /*

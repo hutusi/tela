@@ -313,8 +313,8 @@ test.describe('stylesheet', () => {
     await page.emulateMedia({ colorScheme: 'dark' })
     await page.goto('/settings/reading')
     await page.getByTestId('theme-system').click()
-    expect(await paper()).toBe('rgb(22, 20, 15)')
-    expect(await ink()).toBe('rgb(237, 231, 219)')
+    expect(await paper()).toBe('rgb(31, 28, 24)')
+    expect(await ink()).toBe('rgb(246, 242, 234)')
 
     await page.getByTestId('theme-light').click()
     expect(await paper()).toBe('rgb(246, 242, 234)')
@@ -322,7 +322,7 @@ test.describe('stylesheet', () => {
     await page.emulateMedia({ colorScheme: 'light' })
     const pushed = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
     await page.getByTestId('theme-dark').click()
-    expect(await paper()).toBe('rgb(22, 20, 15)')
+    expect(await paper()).toBe('rgb(31, 28, 24)')
     await pushed
     // The next visit is dark from the first paint: the inline script, before any app code.
     await page.reload({ waitUntil: 'commit' })
