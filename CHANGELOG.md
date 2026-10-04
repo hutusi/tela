@@ -28,6 +28,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Traditional Chinese and French** (ADR 0038), as reading languages and as interface
+  languages. Traditional is converted from Simplified by OpenCC with Taiwan phrasing, so a
+  Simplified post costs nothing to read in Traditional and the reverse, and one paid translation
+  serves both scripts. The interface language follows the browser's order of preference, so
+  `zh-TW` gets Traditional and a preferred English is no longer beaten by a Chinese listed after
+  it. Read in is now a menu.
 - **Invite codes** (ADR 0034). Every member can bring in five people, ever, from Settings →
   Invites, which lists the codes they made and who joined with each, and revokes one nobody has
   used. The operator makes codes of their own text for as many people as they choose

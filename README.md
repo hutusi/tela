@@ -72,7 +72,9 @@ bun run dev           # the reader with tela-api and tela-jobs beside it; see do
   advertises a hub.
 - **Running unattended**: a dead-man's switch, a weekly digest, a verified nightly export that
   restores anywhere SQLite runs, and D1's point-in-time recovery.
-- **UI languages**: English and Simplified Chinese, switchable without a reload.
+- **Languages**: Simplified and Traditional Chinese, English and French, for reading and for the
+  interface, switchable without a reload. Traditional is converted from Simplified, never paid for
+  twice.
 
 ## Status
 

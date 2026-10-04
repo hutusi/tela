@@ -419,18 +419,37 @@ https://ainaive.com, in `ink-2`), and About, For writers, Privacy and Terms on t
 
 ## Strings
 
-Every user-facing string lives in `apps/reader/messages/en.json` and `zh-Hans.json` under the same
-keys (`apps/reader/test/messages.test.ts` checks); components read them with use-intl (next-intl's
-framework-free core). Placeholders use ICU plural syntax. Punctuation that differs by language is
-a message too: a member's note is quoted through `common.quoted` (`“{text}”` in English and
-Simplified Chinese), never with marks written into the component, since Traditional quotes with
-「」 and French with « ».
+Every user-facing string lives in `apps/reader/messages/`, one catalog per interface language
+(`en`, `zh-Hans`, `zh-Hant`, `fr`), under the same keys with the same ICU arguments and rich-text
+tags (`apps/reader/test/messages.test.ts` checks every catalog against English, both ways);
+components read them with use-intl (next-intl's framework-free core). Placeholders use ICU plural
+syntax; French takes `one` for 0 and 1 from `Intl.PluralRules` without being told. Punctuation
+that differs by language is a message too: a member's note is quoted through `common.quoted`
+(`“{text}”` in English and Simplified Chinese, 「」 in Traditional, « » in French), never with
+marks written into the component.
+
+**Write English, Simplified and French; never Traditional.** `zh-Hant.json` is generated from
+`zh-Hans.json` by `bun run i18n:hant` (`apps/reader/scripts/hant.ts`): OpenCC with Taiwan
+phrasing, the converter that writes posts in Traditional, then Taiwan's corner quotes, then the
+ordered pairs in `messages/zh-Hant.overrides.json` for interface usage OpenCC leaves in mainland
+form (郵箱 → 電子郵件, 關注 → 追蹤, 儀表盤 → 儀表板). `apps/reader/test/hant.test.ts` fails until the
+committed file is what the generator writes. A wrong Traditional word is an override, never an
+edit to the generated file.
+
+**French** is written by hand, with *vous*. A no-break space goes before `:` and inside « », and a
+narrow one before `;`, `?` and `!` (the messages test checks). Tela holds no gender for a member, so
+a line about one uses forms that do not agree ("a recommandé", "Abonnement à # blogs"). Language
+names are lower case in `LANGUAGE_NAMES.fr`, as French writes them mid-sentence; `asLabel`
+capitalises one that starts a label, a menu item or a chip. French labels run longer than English
+ones, so a header label is measured in French too (`door.e2e.ts`, `styles.e2e.ts`): the header's
+Log in is "Connexion" because "Se connecter" clipped the nav at 640px.
 
 The one exception is the prose of About, Privacy and Terms, which lives in typed modules, one per
-locale: `apps/reader/src/content/info/{en,zh-Hans}.ts`. It is long, it carries links, and it is
+locale: `apps/reader/src/content/info/{en,zh-Hans,zh-Hant,fr}.ts`, the Traditional one generated
+with the catalog. It is long, it carries links, and it is
 reviewed as one document per language; as message keys it would be some 150 keys of ICU-escaped
 prose loaded by every screen. Each module `satisfies InfoContent` (`types.ts`), so the compiler
-holds both locales to every section. Section ids are fixed English anchors (`/privacy#cookies`)
+holds every locale to every section. Section ids are fixed English anchors (`/privacy#cookies`)
 in either language. Links are written `[text](href)` and drawn by `lib/inline-links.tsx`, which
 keeps only https, a path on this site or an anchor, and leaves anything else as text. The chrome
 around the prose (tabs, "On this page", "The short version", "Last updated {date}") is ordinary

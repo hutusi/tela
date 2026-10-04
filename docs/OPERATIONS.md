@@ -618,8 +618,12 @@ subscribers on an unclaimed site.
   translated, so a retry pays only for the rest.
 - **Switch provider:** change `LLM_PROVIDER`, `LLM_MODEL` and the key, and deploy tela-jobs.
   Cached blocks keep their `model`, so old and new output can be compared.
-- **Add a reading language:** append it to `READING_LANGUAGES` in `packages/shared`, add its name
-  to `LANGUAGE_NAMES`, and a message catalog if it is also a UI locale.
+- **Add a reading language:** the recipe is in AGENTS.md ("How to"). Deploying one makes every
+  article's title due in it at once, since `titleIsDue` has no age limit: the archive is translated
+  over the following days under `LLM_DAILY_BUDGET_TOKENS`. Watch it with `select target_lang,
+  count(*), sum(input_tokens + output_tokens) from llm_calls where job = 'translate.title' and
+  created_at > … group by target_lang`. Traditional Chinese costs nothing to backfill: it is
+  converted from Simplified, so `llm_calls` never has a `zh-Hant` row (ADR 0038).
 
 ## WebSub
 
