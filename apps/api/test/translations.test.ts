@@ -145,6 +145,21 @@ describe('asking for a translation', () => {
     expect(res).toMatchObject({ code: 429, status: 'rate_limited' })
   })
 
+  test('a conversion counts against its own rate limit, never the paid one', async () => {
+    await article({ lang: 'zh-Hans' })
+    // An hour of paid translations already spent: a Traditional reader still reads Simplified
+    // posts converted, and converting them takes nothing from the next translation.
+    const hour = 3600_000
+    const windowStart = Math.floor(api.clock.now() / hour) * hour
+    await db.run(sql`insert into action_limits (key, window_start, count)
+      values (${`translate:${reader.userId}`}, ${windowStart}, ${ACTION_LIMITS.translate.limit})`)
+    expect((await askJson({ articleId: 1, lang: 'en' })).code).toBe(429)
+    expect((await askJson({ articleId: 1, lang: 'zh-Hant' })).status).toBe('requested')
+    expect(
+      await db.all(sql`select key, count from action_limits where key like 'convert:%'`),
+    ).toEqual([{ key: `convert:${reader.userId}`, count: 1 }])
+  })
+
   test('the status route shows what exists now, and the row syncs to the reader', async () => {
     await article()
     await db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at, seq)

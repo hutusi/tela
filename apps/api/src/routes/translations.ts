@@ -114,15 +114,13 @@ export function translationRoutes(deps: ApiDeps) {
       return answer('in_progress', existing)
     }
     const now = deps.clock.now()
-    if (!(await consumeLimit(db, 'translate', member.id, now)).allowed) {
+    // A conversion between the Chinese scripts costs nothing: its own, far larger rate limit, no
+    // reservation, and a day's allowance already spent does not refuse it.
+    const conversion = isScriptConversion(article.source_lang, lang)
+    if (!(await consumeLimit(db, conversion ? 'convert' : 'translate', member.id, now)).allowed) {
       return answer('rate_limited', existing, 429)
     }
-
-    // A conversion between the Chinese scripts costs nothing: no reservation, and a day's
-    // allowance already spent does not refuse it (the rate limit above still counts it).
-    const reserve = isScriptConversion(article.source_lang, lang)
-      ? 0
-      : reservationFor(article.body_chars ?? 0, article.source_lang)
+    const reserve = conversion ? 0 : reservationFor(article.body_chars ?? 0, article.source_lang)
     const day = utcDay(now)
     const requestId = crypto.randomUUID()
     const spent = sql`(select coalesce(sum(used + reserved), 0) from usage_daily

@@ -608,7 +608,8 @@ subscribers on an unclaimed site.
   week's totals.
 - **Budget:** `LLM_DAILY_BUDGET_TOKENS` stops the title sweep for the rest of the UTC day once
   spent. Reader requests still run, metered per member (30 requests an hour, a daily token
-  allowance).
+  allowance). A body converted between the Chinese scripts costs nothing and has its own limit
+  (`convert`, 600 an hour), so reading Simplified posts in Traditional never uses up the paid one.
 - **Retranslate titles:** `delete from article_titles where article_id in (…)`; the sweep finds
   them again. A title that is its own translation is recorded as `echo` and not retried.
 - **A stuck body:** `select * from body_translations where state in ('requested', 'running')`. A
