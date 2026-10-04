@@ -16,8 +16,12 @@ export type CardDraft = { name: string; handle: string | null; host: string }
 
 const CARD =
   'paper paper-card flex w-full max-w-[500px] flex-col gap-[18px] rounded-[18px] p-6 text-left text-ink sm:p-8'
+/**
+ * The name: up to two lines beside the Follow pill, breaking anywhere a long word must, then cut.
+ * At 360px one line holds some 110px, which cut "Lucía Ferrer" to "Lucía F…".
+ */
 const NAME =
-  'block truncate font-serif text-[30px] leading-[1.05] font-medium tracking-[-0.015em] sm:text-[34px]'
+  'line-clamp-2 font-serif text-[30px] leading-[1.05] font-medium tracking-[-0.015em] [overflow-wrap:anywhere] sm:text-[34px]'
 /**
  * The @handle under the name. A handle may be thirty characters with nowhere to break, so it is
  * cut with an ellipsis inside its column, as the name is, and never runs under the Follow pill.
