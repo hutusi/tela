@@ -48,3 +48,45 @@ export function applyTheme(theme: Theme): void {
     localStorage.setItem(THEME_KEY, theme)
   } catch {}
 }
+
+const DARK = '(prefers-color-scheme: dark)'
+
+/**
+ * The theme the page shows now: its own choice, else the system's. Asked whenever it matters and
+ * never kept, so a press answers for the page as it is, after Settings, the Aa menu or a sync
+ * from another device has changed it.
+ */
+export function shownTheme(): 'light' | 'dark' {
+  const chosen = document.documentElement.dataset.theme
+  if (chosen === 'light' || chosen === 'dark') return chosen
+  return window.matchMedia(DARK).matches ? 'dark' : 'light'
+}
+
+/**
+ * Put the other theme on the page, and say which it was. Never `system`: the switch only says
+ * light or dark, and going back to following the system is for Settings and the Aa menu.
+ */
+export function flipTheme(): 'light' | 'dark' {
+  const next = shownTheme() === 'dark' ? 'light' : 'dark'
+  applyTheme(next)
+  return next
+}
+
+/** What this device last put on the page, as `applyTheme` kept it; `system` when it cannot say. */
+export function deviceTheme(): Theme {
+  try {
+    return pick(localStorage.getItem(THEME_KEY), THEMES, 'system')
+  } catch {
+    return 'system'
+  }
+}
+
+/**
+ * The theme an account takes from this device once it is synced: the one its visitor chose here
+ * before joining. Never over the account's own row, whatever that says, and nothing when the
+ * device only follows the system, which an account without a row does already.
+ */
+export function themeToAdopt(t: Pick<Tables, 'prefs'>, device: Theme): 'light' | 'dark' | null {
+  if (t.prefs.has(PREFS.theme) || device === 'system') return null
+  return device
+}

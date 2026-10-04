@@ -8,6 +8,7 @@ import { type DoorRequest, opensSheet, useFrontDoor } from './front-door'
 import { LogoMark } from './logo'
 import { ReadInMenu } from './read-in-menu'
 import { SearchField } from './search-field'
+import { ThemeToggle } from './theme-toggle'
 import { VisitorLocale } from './visitor-locale'
 
 type NavKey = 'reading' | 'discover' | 'following' | 'writers'
@@ -41,7 +42,8 @@ function Lockup() {
  * The header (DESIGN.md: three stages across `lg` and `xl`, and the nav is the one control
  * allowed to shrink, because it is the one that scrolls). A member's profile, dashboard, settings
  * and sign-out are in the menu under their avatar (Tela v2). A visitor gets a header of their own
- * (ADR 0035), as soon as the device is known to hold no member: it does not wait for /me.
+ * (ADR 0035), as soon as the device is known to hold no member: it does not wait for /me. Both
+ * carry the theme switch from `sm` up (ADR 0037).
  */
 export function AppHeader() {
   const { status } = useSession()
@@ -66,11 +68,11 @@ function usePill() {
 }
 
 /**
- * From `sm` up: the lockup, Discover and For writers, then Read in, Log in and Join; below `sm`
- * only Join is left beside the nav, which stays the one item that shrinks. At 360px the two pills
- * and Join fit with some 35px to spare (Figtree, measured). No Reading and no search: both are a
- * member's. Log in and Join are links, so they work before the script does, and open the sheet
- * over the page once it runs.
+ * From `sm` up: the lockup, Discover and For writers, then the theme switch, Read in, Log in and
+ * Join; below `sm` only Join is left beside the nav, which stays the one item that shrinks. At
+ * 360px the two pills and Join fit with some 35px to spare (Figtree, measured), which the switch,
+ * hidden there, leaves alone. No Reading and no search: both are a member's. Log in and Join are
+ * links, so they work before the script does, and open the sheet over the page once it runs.
  */
 function VisitorHeader() {
   const t = useTranslations('nav')
@@ -89,6 +91,7 @@ function VisitorHeader() {
         {pill('writers', '/writers')}
       </nav>
       <div className="flex-1" />
+      <ThemeToggle />
       <VisitorLocale className="hidden shrink-0 sm:block" />
       <div className="flex shrink-0 items-center gap-1.5">
         <Link
@@ -112,7 +115,11 @@ function VisitorHeader() {
   )
 }
 
-/** A member's header, and the one a device holding a member's rows shows until /me answers. */
+/**
+ * A member's header, and the one a device holding a member's rows shows until /me answers. From
+ * `sm` up the theme switch sits after search and before Read in; at 640px, the tightest case, the
+ * nav's 247px of pills still fit whole with 35px to spare (Figtree, measured).
+ */
 function MemberHeader() {
   const { status } = useSession()
   const { locale } = useUi()
@@ -146,6 +153,7 @@ function MemberHeader() {
         testId="search-input"
         className="hidden w-60 min-w-0 items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] text-muted focus-within:border-muted xl:flex"
       />
+      <ThemeToggle />
       {/* The UI locale is in Settings for a member. */}
       {member ? <ReadInMenu readingLang={readingLang} /> : null}
       {member ? <AccountMenu /> : null}

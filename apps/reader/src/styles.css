@@ -166,6 +166,31 @@
 }
 
 /*
+ * What only one theme shows: the theme switch's moon by day and its sun at night, each with its
+ * label (ThemeToggle). The stylesheet chooses, under the same two selectors as the dark tokens, so
+ * the edge's cached page and the first paint are right before any script runs. Unlayered on
+ * purpose, so the theme always wins: never put a display utility on these classes, as it would be
+ * dead code, and lay out what is inside them instead. Twice, as the dark blocks are.
+ */
+.dark-only {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .light-only {
+    display: none;
+  }
+  :root:not([data-theme="light"]) .dark-only {
+    display: revert;
+  }
+}
+:root[data-theme="dark"] .light-only {
+  display: none;
+}
+:root[data-theme="dark"] .dark-only {
+  display: revert;
+}
+
+/*
  * Motion is opt-out at the token, which is where every use of it resolves: Tailwind compiles
  * `animate-fade` to `animation: var(--animate-fade)`, so one override covers all of them.
  * `styles.e2e.ts` checks the computed value, because nothing in the JSX shows this.

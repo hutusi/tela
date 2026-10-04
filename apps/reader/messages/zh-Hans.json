@@ -19,7 +19,9 @@
     "yourProfile": "我的主页",
     "subscriptions": "订阅",
     "invites": "邀请朋友",
-    "writers": "写作者"
+    "writers": "写作者",
+    "toDark": "切换到深色主题",
+    "toLight": "切换到浅色主题"
   },
   "front": {
     "description": "来自世界各地的独立博客，各用各的语言，标题译成你的语言。",

@@ -19,7 +19,9 @@
     "yourProfile": "Your profile",
     "subscriptions": "Subscriptions",
     "invites": "Invite friends",
-    "writers": "For writers"
+    "writers": "For writers",
+    "toDark": "Switch to dark theme",
+    "toLight": "Switch to light theme"
   },
   "front": {
     "description": "Independent blogs from around the world, each in its own language, with their titles translated into yours.",
