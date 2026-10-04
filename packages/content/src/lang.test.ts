@@ -64,6 +64,19 @@ describe('lang', () => {
     )
   })
 
+  test("a hint's Chinese script decides only when the text cannot", () => {
+    // Traditional, but with none of the characters only one script has.
+    const title = '今天台北的天氣很好'
+    expect(detectLanguage(title, 'zh-TW')).toBe('zh-Hant')
+    expect(detectLanguage(title, 'zh-Hant')).toBe('zh-Hant')
+    expect(detectLanguage(title)).toBe('zh-Hans')
+    expect(detectLanguage(title, 'zh-CN')).toBe('zh-Hans')
+    expect(detectLanguage(title, 'en')).toBe('zh-Hans')
+    // A clear answer stands against the hint, either way.
+    expect(detectLanguage('我们这个软件的视频信息很好', 'zh-TW')).toBe('zh-Hans')
+    expect(detectLanguage('我們這個軟體的影片資訊很好', 'zh-CN')).toBe('zh-Hant')
+  })
+
   test('falls back to the hint for very short text', () => {
     expect(detectLanguage('Hi', 'de')).toBe('de')
     expect(detectLanguage('1234', null)).toBe('und')
