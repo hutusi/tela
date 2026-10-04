@@ -17,9 +17,10 @@ import {
   type Section,
 } from '../content/info/types'
 import { zhHans } from '../content/info/zh-Hans'
+import { zhHant } from '../content/info/zh-Hant'
 import { Inline, plainText } from '../lib/inline-links'
 
-const CONTENT: Record<UiLocale, InfoContent> = { en, 'zh-Hans': zhHans }
+const CONTENT: Record<UiLocale, InfoContent> = { en, 'zh-Hans': zhHans, 'zh-Hant': zhHant }
 
 export function infoContent(locale: UiLocale): InfoContent {
   return CONTENT[locale] ?? en

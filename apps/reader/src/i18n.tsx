@@ -6,9 +6,10 @@ import { isUiLocale, negotiateLocale, type UiLocale } from '@tela/shared'
 import { IntlProvider } from 'use-intl'
 import en from '../messages/en.json'
 import zhHans from '../messages/zh-Hans.json'
+import zhHant from '../messages/zh-Hant.json'
 import { safeDecode } from './lib/safe-decode'
 
-export const MESSAGES: Record<UiLocale, typeof en> = { en, 'zh-Hans': zhHans }
+export const MESSAGES: Record<UiLocale, typeof en> = { en, 'zh-Hans': zhHans, 'zh-Hant': zhHant }
 export const LOCALE_COOKIE = 'tela_locale'
 
 /**

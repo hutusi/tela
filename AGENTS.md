@@ -45,6 +45,7 @@ bun run e2e                          # Playwright: built tela-web + tela-api + t
 bun run build                        # every workspace that has a build script
 bun run dev                          # the reader in Vite, tela-api and tela-jobs beside it (http://localhost:5173; OPERATIONS.md)
 bun run db:generate                  # drizzle-kit generate in packages/data; review the SQL, commit packages/data/migrations/*
+bun run i18n:hant                    # regenerate the zh-Hant catalog and info pages from zh-Hans (OpenCC, Taiwan phrasing); commit the result
 bun run admin invite <email>         # invite a member through tela-api (ADMIN_TOKEN=…, TELA_URL optional)
 bun run admin code <TEXT> --uses N   # an operator invite code for N people (ADR 0034)
 bun run admin codes                  # the operator's codes: places taken, live holds

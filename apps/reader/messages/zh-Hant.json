@@ -1,0 +1,692 @@
+{
+  "app": {
+    "name": "Tela",
+    "tagline": "獨立部落格，任何語言。"
+  },
+  "common": {
+    "quoted": "「{text}」"
+  },
+  "nav": {
+    "reading": "閱讀",
+    "discover": "發現",
+    "following": "追蹤",
+    "readIn": "閱讀語言",
+    "search": "搜尋部落格、文章、人",
+    "logIn": "登入",
+    "join": "加入",
+    "signOut": "登出",
+    "addFeed": "+ 新增訂閱",
+    "dashboard": "儀表板",
+    "settings": "設定",
+    "account": "你的帳戶",
+    "yourProfile": "我的主頁",
+    "subscriptions": "訂閱",
+    "invites": "邀請朋友",
+    "writers": "寫作者",
+    "themeIs": "主題：{theme}"
+  },
+  "front": {
+    "description": "來自世界各地的獨立部落格，各用各的語言，標題譯成你的語言。",
+    "hero": "<em>{count} 個獨立部落格</em>，在此匯流。",
+    "heroPlain": "<em>獨立部落格</em>，在此匯流。",
+    "intro": "Tela 把世界各地的部落格和個人網站匯成一片思想的海洋，你讀的時候，就譯成中文或英文。",
+    "join": "加入 Tela",
+    "logIn": "登入",
+    "week": "本週，{blogs} 個部落格用 {languages} 種語言寫作",
+    "latest": "來自 {n} 個部落格的最新文章",
+    "titlesIn": "標題語言",
+    "original": "原文",
+    "minutes": "{n} 分鐘",
+    "empty": "還沒有文章。Tela 彙集的部落格一有新作，就會出現在這裡。",
+    "writers": {
+      "title": "你寫部落格嗎？讓它成為你的名片。",
+      "intro": "在 Tela 認領你的部落格，就有一頁屬於你：你的名字、你的部落格、你推薦的文章。你的網站原樣不動。",
+      "cta": "製作你的名片"
+    },
+    "read": "閱讀 →",
+    "readPost": "閱讀全文 →"
+  },
+  "footer": {
+    "label": "關於 Tela",
+    "made": "© {year} · 由 <maker>AI Naive</maker> 製作",
+    "about": "關於",
+    "writers": "寫作者",
+    "privacy": "隱私",
+    "terms": "條款"
+  },
+  "login": {
+    "title": "登入 Tela"
+  },
+  "door": {
+    "close": "關閉",
+    "login": {
+      "title": "歡迎回來",
+      "intro": "登入，從上次讀到的地方繼續。"
+    },
+    "join": {
+      "title": "加入 Tela",
+      "intro": "訂閱任何語言的任何部落格。沒有廣告，訂閱隨時可以匯出。"
+    },
+    "google": "使用 Google 繼續",
+    "github": "使用 GitHub 繼續",
+    "or": "或",
+    "email": "電子郵件",
+    "emailPlaceholder": "you@example.com",
+    "password": "密碼",
+    "forgot": "忘記密碼？",
+    "sendCode": "給我發驗證碼",
+    "logIn": "登入",
+    "usePassword": "用密碼登入",
+    "useCode": "改用電子郵件驗證碼",
+    "invite": "邀請碼",
+    "noCode": "沒有邀請碼？Tela 目前僅限受邀加入：請向已加入的成員要一個。",
+    "agree": "加入即表示你同意<terms>使用條款</terms>；另見<privacy>隱私政策</privacy>。",
+    "newHere": "第一次來 Tela？",
+    "toJoin": "加入",
+    "haveAccount": "已經有帳號？",
+    "toLogin": "登入",
+    "codeSent": "如果 {email} 有 Tela 帳號或邀請，驗證碼已在路上。輸入驗證碼，或直接開啟郵件中的連結。",
+    "joinSent": "驗證碼已傳送到 {email}。輸入驗證碼，或直接開啟郵件中的連結。",
+    "codePlaceholder": "6 位驗證碼",
+    "choosePassword": "設定密碼（選填）",
+    "passwordHint": "至少 {min} 個字元。不設密碼，也隨時可以用驗證碼登入。",
+    "verify": "繼續",
+    "otherAddress": "使用其他電子郵件",
+    "resetSent": "如果 {email} 有 Tela 帳號，我們已向它傳送驗證碼。輸入驗證碼，並設定新密碼。",
+    "newPassword": "新密碼，至少 {min} 個字元",
+    "resetConfirm": "設定密碼並登入",
+    "connecting": "已登入，正在連線 Tela…",
+    "unsaved": "你已登入，但密碼沒有儲存。隨時可以用「忘記密碼？」設定一個。",
+    "linkAs": "以 <b>{email}</b> 登入？",
+    "linkHint": "只有在這個連結是你本人申請的時候才繼續：別人發來的連結會讓你登入到他們的帳號。",
+    "linkConfirm": "登入",
+    "resetAs": "為 <b>{email}</b> 設定新密碼。",
+    "resetHint": "只有在你本人申請了重設密碼時才繼續。",
+    "errors": {
+      "invalid_email": "這不像是一個電子郵件地址。",
+      "send_failed": "驗證碼傳送失敗，請稍後再試。",
+      "bad_code": "驗證碼錯誤或已過期。",
+      "rate_limited": "嘗試次數過多。請稍等一分鐘再試。",
+      "reset_failed": "重設驗證碼錯誤或已過期，請重新申請。",
+      "password_set": "新密碼已設定，但用它登入失敗。請用驗證碼登入。",
+      "password_short": "密碼至少需要 {min} 個字元。",
+      "bad_password": "電子郵件和密碼不相符。",
+      "not_invited": "沒有 Tela 帳號使用這個電子郵件。請用你加入時的電子郵件登入，或用邀請碼加入。",
+      "invite_used": "這個邀請的名額已經用完，或已被撤回。請再要一個。",
+      "missing_code": "請輸入邀請碼。",
+      "invalid_code": "沒有這個邀請碼，或它已被撤回。",
+      "code_used": "這個邀請碼的名額已經用完。",
+      "provider_unlinked": "請先在服務商那裡驗證這個電子郵件，或用電子郵件登入後在 設定 → 帳戶 裡連結。",
+      "provider_no_email": "服務商沒有提供電子郵件地址。請改用電子郵件登入。",
+      "provider_cancelled": "登入已取消。",
+      "provider_expired": "等待時間過長，請重試。",
+      "provider_failed": "無法連線服務商。請重試，或用電子郵件登入。",
+      "failed": "出了點問題，請稍後再試。"
+    },
+    "claimTitle": "認領 @{handle}",
+    "claimCard": "認領你的名片"
+  },
+  "sidebar": {
+    "library": "資料庫",
+    "all": "全部文章",
+    "today": "今天",
+    "liked": "喜歡",
+    "subscriptions": "訂閱",
+    "noSubscriptions": "還沒有訂閱。",
+    "browse": "訂閱",
+    "hide": "收起側欄",
+    "show": "展開側欄",
+    "manage": "管理訂閱"
+  },
+  "list": {
+    "markAllRead": "全部標為已讀",
+    "empty": "這裡還沒有內容。",
+    "emptyHint": "新增一個訂閱源開始閱讀。",
+    "minutes": "{n} 分鐘",
+    "translatedBadge": "{from} → {to}",
+    "loadMore": "更早的文章",
+    "fetching": "正在首次抓取這個訂閱源…",
+    "allRead": "都讀完了。",
+    "allReadHint": "已讀文章被隱藏了，可以在<settings>設定</settings>裡重新顯示。"
+  },
+  "reader": {
+    "close": "✕ 關閉",
+    "like": "喜歡",
+    "liked": "已喜歡",
+    "recommend": "推薦",
+    "minRead": "閱讀約 {n} 分鐘",
+    "readOriginal": "開啟原文",
+    "readersOnTela": "{n, plural, =0 {在 Tela 上還沒有讀者} other {# 位 Tela 讀者}}",
+    "visibleToAuthor": "你的 ♡ 和推薦對作者可見。",
+    "pickArticle": "在左側選擇一篇文章。其他語言的文章會與譯文並排顯示。",
+    "unreadCount": "{n} 篇未讀",
+    "noContent": "這篇文章的訂閱源中沒有可讀內容。",
+    "articleGone": "這篇文章已不存在。請在左側另選一篇。",
+    "loadFailed": "載入時出錯了。",
+    "retry": "重試",
+    "recommendedLabel": "已推薦",
+    "recommendTitle": "推薦給你的讀者",
+    "recommendPlaceholder": "為什麼值得一讀？（選填）",
+    "recommendHint": "會顯示在你的個人頁，作者也能看到。",
+    "cancel": "取消",
+    "recommended": "已推薦。",
+    "recommendedWithNote": "已附上你的推薦語。",
+    "unrecommended": "已取消推薦。",
+    "fetchingFullText": "正在從原站取得全文…",
+    "upNext": "下一篇",
+    "focus": "專注",
+    "markRead": "標為已讀"
+  },
+  "add": {
+    "title": "新增訂閱",
+    "intro": "貼上部落格網址或訂閱源 URL。Tela 會找到訂閱源並開始抓取。",
+    "placeholder": "https://example.blog",
+    "find": "查詢訂閱源",
+    "searching": "正在查詢訂閱源…",
+    "none": "這個網址下沒有找到訂閱源。",
+    "subscribe": "訂閱",
+    "subscribed": "已訂閱",
+    "items": "{n} 篇文章",
+    "opml": "或匯入 OPML 檔案",
+    "opmlHint": "從其他閱讀器匯出。最多 500 個訂閱源。",
+    "import": "匯入",
+    "imported": "已匯入 {n} 個訂閱源。",
+    "errors": {
+      "invalid_url": "這不像是一個 URL。",
+      "fetch_failed": "無法連上這個網址。",
+      "opml_invalid": "該檔案不是 OPML 文件。",
+      "rate_limited": "操作太頻繁，請稍後再試。",
+      "opml_too_large": "OPML 檔案超過 1 MB。"
+    }
+  },
+  "translation": {
+    "writtenIn": "原文為<b>{source}</b>，由 Tela 翻譯成{target}。",
+    "writtenInOnly": "原文為<b>{source}</b>。",
+    "translateNow": "翻譯成{target}",
+    "translating": "翻譯中…",
+    "failed": "翻譯失敗。",
+    "partial": "有 {n} 段未能翻譯。",
+    "modesLabel": "閱讀版式",
+    "modes": {
+      "side": "對照",
+      "trans": "譯文",
+      "orig": "原文"
+    },
+    "columnTranslated": "{target} · 譯文",
+    "columnOriginal": "原文",
+    "blockUntranslated": "未翻譯",
+    "rateLimited": "翻譯請求過於頻繁，請稍後再試。",
+    "budgetExhausted": "今日的翻譯額度已用完，明天會重設。",
+    "unavailable": "暫時無法開始翻譯，請重試。",
+    "retry": "重新翻譯"
+  },
+  "discover": {
+    "title": "獨立部落格，任何語言。",
+    "intro": "有訂閱源的部落格與個人網站，由 Tela、作者和讀者一起挑選。一鍵訂閱，Tela 邊讀邊翻譯。",
+    "allTopics": "全部",
+    "language": "語言",
+    "allLanguages": "所有語言",
+    "topics": {
+      "essays": "隨筆",
+      "tech": "技術",
+      "cities": "城市",
+      "food": "美食",
+      "design": "設計",
+      "outdoors": "戶外",
+      "life": "生活",
+      "photography": "攝影",
+      "science": "科學"
+    },
+    "latest": "最新：",
+    "readers": "{n, plural, =0 {還沒有讀者} other {# 位讀者}}",
+    "cadence": {
+      "daily": "每日更新",
+      "weekly": "每週更新",
+      "biweekly": "每月兩更",
+      "monthly": "每月更新",
+      "quiet": "最近安靜"
+    },
+    "subscribe": "訂閱",
+    "subscribed": "已訂閱",
+    "claimed": "作者已認領",
+    "empty": "這裡還沒有收錄部落格。認領你的部落格，成為第一個。",
+    "claim": {
+      "title": "你有部落格嗎？",
+      "intro": "認領你的訂閱源，看看有多少人在讀你、你的文章反響如何，以及讀者推薦時說了什麼。",
+      "cta": "認領你的訂閱源"
+    }
+  },
+  "site": {
+    "claimedByName": "✓ 由 {name} 認領",
+    "visit": "前往網站 ↗",
+    "writtenIn": "用{lang}寫作",
+    "cadence": "{key, select, daily {每日更新} weekly {每週更新} biweekly {每月兩更} monthly {每月更新} other {最近安靜}}",
+    "readersOnTela": "{n} 位 Tela 讀者",
+    "claimLink": "這是你的網站？認領它",
+    "yourTopics": "你的主題",
+    "saveTopics": "儲存",
+    "posts": "文章",
+    "minutes": "{n} 分鐘",
+    "noPosts": "還沒有抓取到文章。",
+    "about": "關於",
+    "readersYouFollow": "你追蹤的讀者",
+    "readersText": {
+      "one": "{a} 在讀這個部落格。",
+      "two": "{a} 和 {b} 在讀這個部落格。",
+      "more": "{a}、{b} 等 {total} 人在讀這個部落格。"
+    },
+    "fromReaders": "讀者說",
+    "noteOn": "<person></person> 推薦了 <post></post>"
+  },
+  "claim": {
+    "title": "認領你的訂閱源",
+    "intro": "告訴我們你部落格的網址。我們會找到它的訂閱源，然後請你證明你擁有這個網站。",
+    "continue": "繼續",
+    "searching": "正在查詢訂閱源…",
+    "verifyTitle": "證明你擁有這個網站",
+    "verifyIntro": "在 {site} 的首頁加入以下兩段程式碼之一：",
+    "optionMeta": "方式一：meta 標籤",
+    "optionMetaHint": "放在首頁的 <head> 中。驗證完成後可以刪除。",
+    "optionRelMe": "方式二：rel=\"me\" 連結",
+    "optionRelMeHint": "從你的首頁連結到你的 Tela 個人頁（放在頁尾即可）。",
+    "verify": "驗證",
+    "verifyAgain": "再次驗證",
+    "checking": "正在檢查你的網站…",
+    "failed": "尚未驗證。",
+    "verified": "已驗證。這個網站在 Tela 上屬於你了。",
+    "verifiedHint": "它現在會出現在「發現」中。在網站頁選擇主題，在儀表板檢視讀者與喜歡。",
+    "viewSite": "檢視網站頁",
+    "claimedByOther": "這個網站已被另一位 Tela 成員認領。",
+    "errors": {
+      "invalid_url": "這不像是一個 URL。",
+      "fetch_failed": "無法連上這個網址。",
+      "no_feed": "這個網址下沒有找到訂閱源。Tela 只收錄發布訂閱源的網站。",
+      "rate_limited": "認領嘗試太頻繁，請稍後再試。"
+    },
+    "taken": "你選的使用者名稱已經屬於別人，所以目前用的還是臨時使用者名稱。可以在<link>設定</link>裡另選一個。"
+  },
+  "writers": {
+    "title": "寫作者",
+    "kicker": "寫作者",
+    "hero": {
+      "title": "獨立寫作者的<em>名片</em>。",
+      "lede": "在 Tela 上的一個頁面：你的名字、你寫的部落格、你推薦的文章。讀者在這裡找到你、追蹤你，一鍵訂閱你的部落格。"
+    },
+    "form": {
+      "title": "製作你的名片",
+      "name": "你的名字",
+      "blog": "你的部落格網址",
+      "blogPlaceholder": "yourblog.com",
+      "submit": "認領你的名片"
+    },
+    "availability": {
+      "available": "✓ @{handle} 可以使用",
+      "taken": "@{handle} 已被佔用。",
+      "reserved": "@{handle} 是保留名。",
+      "invalid": "@{handle} 不能用作使用者名稱。",
+      "try": "試試 <pick>@{suggestion}</pick>。",
+      "none": "使用者名稱取自你的名字或部落格名。"
+    },
+    "member": {
+      "intro": "你已經在 Tela 上了。認領你的部落格，把它放到名片上。",
+      "claim": "認領你的部落格",
+      "card": "你的名片"
+    },
+    "card": {
+      "writes": "寫作",
+      "followers": "<b>{n}</b> 位追蹤者",
+      "recommendations": "<b>{n}</b> 條推薦",
+      "reads": "在讀 <b>{n}</b> 個部落格",
+      "recommends": "最近推薦",
+      "yourName": "你的名字",
+      "yourHandle": "yourname",
+      "later": "你推薦的文章，以及你選擇公開的在讀部落格，會隨著你使用 Tela 出現在這裡。",
+      "follow": "追蹤",
+      "claimed": "已認領",
+      "readsLabel": "在讀",
+      "yourBlog": "你的部落格",
+      "bioLater": "一句話介紹你寫什麼。隨時可以修改。",
+      "latestLater": "你最近推薦的文章會顯示在這裡。",
+      "captionSample": "一張範例名片。輸入你的名字，看看你的。",
+      "captionSampleMember": "一張範例名片。",
+      "captionDraft": "你的名片，隨輸入而變。"
+    },
+    "find": {
+      "title": "寫作者在這裡彼此發現。",
+      "intro": "追蹤你喜歡的寫作者，看他們推薦和喜歡的文章，以及他們公開的在讀部落格。有人推薦一篇文章，連同附言，會出現在每個追蹤他的人那裡。",
+      "label": "追蹤 · 範例",
+      "recommended": "推薦了 {source} 的一篇文章",
+      "liked": "喜歡了 {source} 的一篇文章",
+      "subscribed": "訂閱了"
+    },
+    "sample": {
+      "posts": {
+        "granVia": "清晨六點，格蘭大道上能聽到什麼",
+        "kitchen": "一間可以帶著走的廚房"
+      }
+    },
+    "does": {
+      "title": "名片能做什麼",
+      "link": {
+        "title": "一個連結，彙集你寫的一切",
+        "body": "你的名片在 /@使用者名稱，列出你認領的每個部落格，還有你的名字和一句簡介。",
+        "pill": "在 Tela 上找到我"
+      },
+      "blogroll": {
+        "title": "你的部落格鏈",
+        "body": "推薦你喜歡的文章，附上一句話。願意的話，也可以公開你在讀的部落格：在設定裡開啟一個開關即可。"
+      },
+      "readers": {
+        "title": "讀者",
+        "body": "讀者可以追蹤你，一鍵訂閱你的部落格，還能對照原文讀譯文。儀表板會告訴你有多少人在讀、他們喜歡哪些文章、留下了什麼話。",
+        "blogReaders": "Tela 上有 {n} 位讀者",
+        "followers": "{n} 位追蹤者"
+      }
+    },
+    "how": {
+      "title": "怎麼做",
+      "name": {
+        "title": "選一個名字",
+        "body": "你的名字，以及名片網址裡的使用者名稱。之後都可以在設定裡修改。"
+      },
+      "connect": {
+        "title": "連結你的部落格",
+        "body": "在你的網站上加一行，證明它屬於你：一個 meta 標籤，或一個指向你名片的連結。任何有 RSS 或 Atom 訂閱源的部落格都可以。"
+      },
+      "follow": {
+        "title": "追蹤你喜歡的寫作者",
+        "body": "追蹤其他寫作者和讀者：他們推薦的文章會出現在你的「追蹤」頁。"
+      }
+    },
+    "yours": {
+      "title": "你的網站還是你的",
+      "nothing": {
+        "title": "什麼都不用搬",
+        "body": "Tela 讀取你已經在發布的訂閱源。每篇文章都連結回你的網站。"
+      },
+      "ads": {
+        "title": "沒有廣告",
+        "body": "Tela 不放廣告：你的文章旁邊沒有，別處也沒有。"
+      },
+      "translation": {
+        "title": "翻譯由你決定",
+        "body": "讀者可以讀到你文章的譯文。如果你不希望這樣，可以在儀表板裡為你的部落格關閉翻譯。"
+      }
+    },
+    "cta": {
+      "count": "已有 {n} 個部落格在 Tela 上。<em>你的呢？</em>",
+      "title": "<em>你的部落格在哪裡？</em>",
+      "make": "製作你的名片"
+    }
+  },
+  "profile": {
+    "joined": "{when}加入",
+    "editProfile": "編輯資料",
+    "follow": "追蹤",
+    "following": "追蹤中",
+    "stats": {
+      "following": "追蹤 <b>{n}</b> 人",
+      "followers": "<b>{n}</b> 位追蹤者",
+      "recommendations": "<b>{n}</b> 條推薦"
+    },
+    "writes": "寫作",
+    "tabs": {
+      "recommendations": "推薦",
+      "liked": "喜歡",
+      "subscriptions": "訂閱"
+    },
+    "nothing": "這裡還什麼都沒有。"
+  },
+  "following": {
+    "title": "追蹤",
+    "intro": "你追蹤的人在讀什麼、喜歡什麼、推薦什麼。",
+    "tabs": {
+      "all": "全部",
+      "recs": "推薦",
+      "likes": "喜歡"
+    },
+    "recommended": "推薦了",
+    "liked": "喜歡了 {n} 篇文章",
+    "subscribed": "{n, plural, =1 {訂閱了} other {訂閱了 {n} 個部落格，包括}}",
+    "minutes": "{n} 分鐘",
+    "read": "閱讀 →",
+    "empty": "這裡還沒有動態。追蹤幾位讀者，看看他們推薦什麼。",
+    "failed": "動態沒能載入出來。",
+    "retry": "重試",
+    "older": "更早的動態",
+    "peopleYouFollow": "你追蹤的人",
+    "noOneYet": "還沒有。去讀者的個人頁追蹤他們。",
+    "readersToFollow": "可以追蹤的讀者",
+    "follow": "追蹤",
+    "followingButton": "追蹤中"
+  },
+  "dashboard": {
+    "title": "你的網站",
+    "intro": "有多少人在讀你，你的文章反響如何，讀者推薦時說了什麼。",
+    "noSites": "你還沒有認領網站。",
+    "post": "文章",
+    "notes": "讀者說",
+    "noNotes": "還沒有推薦語。",
+    "optOutTranslation": "關閉翻譯",
+    "allowTranslation": "允許翻譯",
+    "listing": {
+      "private": "未公開",
+      "listed": "已在「發現」列出",
+      "featured": "精選",
+      "rejected": "已隱藏"
+    }
+  },
+  "settings": {
+    "title": "設定",
+    "sections": {
+      "profile": "個人資料",
+      "reading": "閱讀",
+      "translation": "語言",
+      "subscriptions": "訂閱",
+      "privacy": "隱私",
+      "invites": "邀請",
+      "account": "帳戶"
+    },
+    "profileIntro": "讀者和作者在 Tela 上看到的你。",
+    "gravatar": "使用我的 Gravatar 頭像",
+    "gravatarRefresh": "重新整理",
+    "pictureUpload": "上傳頭像",
+    "pictureReplace": "更換頭像",
+    "pictureRemove": "刪除",
+    "pictureFallbackGravatar": "到處都顯示這張。刪掉它就改回你的 Gravatar 頭像。",
+    "pictureFallbackInitial": "到處都顯示這張。刪掉它就改回你的首字母。",
+    "gravatarHints": {
+      "shown": "來自你登入電子郵件對應的 Gravatar，出現在你名字出現的地方；別人幾分鐘內看到變化。在 Gravatar 換了頭像？點「重新整理」。",
+      "none": "Gravatar 上沒有你登入電子郵件對應的頭像，所以顯示你的首字母。",
+      "checking": "正在向 Gravatar 查詢你的登入電子郵件……",
+      "off": "已關閉：除非上傳頭像，否則顯示你的首字母。"
+    },
+    "pictureErrors": {
+      "unreadable": "瀏覽器讀不了這個檔案。",
+      "too_large": "檔案超過 20 MB。",
+      "rate_limited": "一小時內改得太多了，請稍後再試。",
+      "failed": "頭像沒能儲存，請再試一次。"
+    },
+    "cropTitle": "你的頭像",
+    "cropHint": "拖動調整位置，縮放來取景。",
+    "cropArea": "頭像取景框，顯示在圓形裡。方向鍵可以移動它。",
+    "cropZoom": "縮放",
+    "cropCancel": "取消",
+    "cropSave": "儲存",
+    "cropSaving": "儲存中……",
+    "name": "名字",
+    "handle": "使用者名稱",
+    "handleHint": "3–30 個小寫字母、數字或底線，用於你的個人頁網址。",
+    "bio": "簡介",
+    "charsLeft": "還可輸入 {n} 個字",
+    "saveChanges": "儲存更改",
+    "saved": "已儲存。",
+    "viewProfile": "檢視個人頁",
+    "errors": {
+      "invalid_handle": "使用者名稱需為 3–30 個小寫字母、數字或底線，且不能使用保留詞。",
+      "handle_taken": "該使用者名稱已被佔用。"
+    },
+    "readingIntro": "文章在「閱讀」裡的樣子和行為。",
+    "textSize": "字級",
+    "textSizeHint": "作用於文章正文。",
+    "measure": "行寬",
+    "measureHint": "文章欄最寬能到多少。",
+    "theme": "主題",
+    "themeHint": "「跟隨系統」隨系統設定切換。",
+    "markOnOpen": "開啟即標為已讀",
+    "markOnOpenHint": "關掉的話，文章會一直是未讀，直到你手動標記。",
+    "hideRead": "隱藏已讀文章",
+    "hideReadHint": "列表只顯示未讀文章，喜歡的文章始終保留。",
+    "translationIntro": "Tela 介面用的語言，以及文章翻譯成的語言。原文隨時一鍵可見。",
+    "uiLocale": "介面語言",
+    "uiLocaleHint": "選單、按鈕和提示文字，在你登入的每臺裝置上都一樣。",
+    "translateInto": "翻譯成",
+    "translateIntoHint": "你主要的閱讀語言。",
+    "autoTranslate": "自動翻譯",
+    "autoTranslateHint": "關掉的話，外語文章開啟時是原文，附一個「翻譯」按鈕。",
+    "defaultView": "預設檢視",
+    "defaultViewHint": "譯文開啟時的樣子。",
+    "never": "從不翻譯",
+    "neverHint": "你讀得順的語言：這些文章直接顯示原文，標題也是。",
+    "addLanguage": "+ 新增語言",
+    "add": "新增",
+    "removeLanguage": "移除{lang}",
+    "subscriptionsIntro": "{n} 個部落格。可以用 OPML 從別的閱讀器帶來訂閱。",
+    "importOpml": "匯入 OPML",
+    "opmlExport": "匯出",
+    "unsubscribe": "取消訂閱",
+    "subscribe": "訂閱",
+    "noSubscriptions": "還沒有訂閱。",
+    "privacyIntro": "選擇別人在你的個人頁上能看到什麼。",
+    "showLikes": "展示喜歡的文章",
+    "showLikesHint": "展示在你的個人頁上，也給追蹤你的人看。作者的儀表板只顯示一篇文章有多少人喜歡，不顯示是誰。",
+    "showSubscriptions": "展示訂閱",
+    "showSubscriptionsHint": "展示在你的個人頁上，也給追蹤你的人看。",
+    "privacyDelay": "公開個人頁可能要幾分鐘才會跟上改動。",
+    "yourData": "你的資料",
+    "yourDataHint": "你的資料、訂閱、喜歡、推薦、劃線和追蹤的人，打包成一個檔案。",
+    "download": "下載"
+  },
+  "invites": {
+    "intro": "Tela 目前僅限邀請加入。你可以邀請五個人：一個邀請碼只能讓一個人加入，用過後永久計入名額。撤銷一個還沒人用過的邀請碼，可以收回它的名額。",
+    "left": "{n, plural, =0 {你的邀請名額已經用完。} other {你還可以邀請 # 個人。}}",
+    "create": "產生邀請碼",
+    "none": "還沒有邀請碼。產生一個，再把連結發給朋友。",
+    "copy": "複製連結",
+    "copied": "已複製",
+    "revoke": "撤銷",
+    "joined": "已加入",
+    "joinedBy": "<who>{handle}</who> 已加入",
+    "errors": {
+      "allowance_used": "你已經邀請了五個人。",
+      "rate_limited": "一小時內產生的邀請碼太多，請稍後再試。",
+      "failed": "操作沒有成功，請重試。",
+      "load": "無法載入你的邀請碼，請稍後再試。"
+    }
+  },
+  "account": {
+    "intro": "你登入 Tela 的方式。每次更改都會發郵件通知你；新增登入方式會讓你的其他裝置登出。",
+    "email": "電子郵件",
+    "emailHint": "登入驗證碼會發到這裡。",
+    "password": "密碼",
+    "passwordSet": "已設定。你仍然可以用郵件驗證碼登入。",
+    "passwordNone": "未設定。你用郵件驗證碼登入。",
+    "passwordAdd": "設定密碼",
+    "passwordChange": "修改密碼",
+    "passwordCurrent": "目前的密碼",
+    "passwordNew": "新密碼",
+    "passwordHint": "至少 {min} 個字元。",
+    "passwordSave": "儲存密碼",
+    "passwordSaved": "密碼已儲存。",
+    "cancel": "取消",
+    "providers": {
+      "google": "Google",
+      "github": "GitHub"
+    },
+    "linkedSince": "自 {date} 起已連結。",
+    "notLinked": "未連結。",
+    "link": "連結",
+    "unlink": "取消連結",
+    "everywhere": "在所有裝置上登出",
+    "everywhereHint": "結束所有裝置上的登入，包括這一臺。",
+    "everywhereButton": "在所有裝置上登出",
+    "confirmTitle": "確認是你本人",
+    "confirmHint": "要更改登入方式，請先用發到你電子郵件的驗證碼確認是你本人。",
+    "confirmSent": "驗證碼已傳送到 {email}，請在這裡輸入。",
+    "confirm": "給我發驗證碼",
+    "confirmSubmit": "確認",
+    "errors": {
+      "not_fresh": "請先確認是你本人。",
+      "rejected": "沒有被接受。請檢查密碼後重試。",
+      "rate_limited": "更改太頻繁，請稍後再試。",
+      "failed": "操作沒有成功，請重試。",
+      "link_failed": "沒能連結這個帳號，請重試。",
+      "load": "無法載入你的登入方式，請稍後再試。"
+    }
+  },
+  "search": {
+    "title": "搜尋",
+    "resultsFor": "「{query}」的結果",
+    "hint": "按名稱或網址搜尋部落格，按標題（原文或譯文）搜尋你訂閱的文章。",
+    "none": "沒有與「{query}」相符的內容。",
+    "sites": "部落格",
+    "articles": "你訂閱的文章",
+    "noArticles": "你訂閱的文章中沒有相符的結果。",
+    "signInForArticles": "登入後可搜尋你訂閱的文章。"
+  },
+  "notFound": {
+    "title": "這裡什麼也沒有",
+    "intro": "這個頁面不存在，或者沒有公開。",
+    "home": "回到首頁"
+  },
+  "highlights": {
+    "title": "{n} 處劃線",
+    "highlight": "劃線",
+    "addNote": "寫筆記",
+    "noteLabel": "劃線筆記",
+    "notePlaceholder": "你的筆記，只有你能看到。",
+    "save": "儲存",
+    "cancel": "取消",
+    "remove": "刪除劃線",
+    "detached": "文章裡已經沒有這段文字了。",
+    "elsewhere": "在另一種版式或語言中，切換即可看到。"
+  },
+  "typography": {
+    "label": "文字與主題",
+    "size": "字級",
+    "measure": "行寬",
+    "theme": "主題",
+    "measures": {
+      "narrow": "窄",
+      "normal": "適中",
+      "wide": "寬"
+    },
+    "themes": {
+      "system": "跟隨系統",
+      "light": "淺色",
+      "dark": "深色"
+    }
+  },
+  "keys": {
+    "title": "鍵盤快捷鍵",
+    "next": "下一篇",
+    "previous": "上一篇",
+    "close": "關閉文章",
+    "highlight": "為所選文字劃線",
+    "sidebar": "收起或展開側欄",
+    "focus": "閱讀時隱藏列表",
+    "help": "顯示或隱藏此列表",
+    "dismiss": "關閉"
+  },
+  "info": {
+    "pages": "關於 Tela",
+    "tabs": {
+      "about": "關於",
+      "privacy": "隱私",
+      "terms": "條款"
+    },
+    "onThisPage": "本頁內容",
+    "short": "簡而言之",
+    "updated": "最後更新：{date}"
+  }
+}
