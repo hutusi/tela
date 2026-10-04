@@ -41,8 +41,12 @@ as the other), so the two lists must not drift apart.
 
 - **Between the two scripts there is no model call.** A Simplified post's Traditional title and
   body are converted from the source, and a Traditional post's Simplified ones the other way, with
-  no usage, no `llm_calls` row and nothing reserved against the member's allowance (the per-member
-  rate limit still counts the request). The rows say `opencc:twp` or `opencc:cn` where a model's
+  no usage, no `llm_calls` row and nothing reserved against the member's allowance. A conversion
+  has its own rate limit (`convert`, 600 an hour): a Traditional reader opens one with every
+  Simplified post, and counted against the paid 30 an hour, a morning's reading would refuse the
+  next real translation. tela-api judges a conversion by the article's language and the job by the
+  stored body's, which every article with that body shares, so the job never pays for a request
+  that reserved nothing, and settles one already in the language asked for. The rows say `opencc:twp` or `opencc:cn` where a model's
   name would be.
 - **From any other language, Traditional pivots through Simplified.** Titles are grouped by what
   the model writes, so one Simplified call writes both Chinese rows, and a post whose Simplified

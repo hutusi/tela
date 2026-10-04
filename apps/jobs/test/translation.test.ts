@@ -945,6 +945,37 @@ describe('Traditional Chinese', () => {
     expect(final.model).toBe('opencc:cn')
     expect(final.blocks.join('')).toContain('我们这个软件的视频信息很好。')
   })
+
+  /**
+   * tela-api judges a conversion by the article's language, the job by the content object's, and
+   * the object is shared by every article with that body, so the two can disagree.
+   */
+  test("a reader's request that reserved nothing is never paid for, whatever the object says", async () => {
+    const ctx = context()
+    await addReader()
+    await ingest(ctx, feed(['Post'], 4))
+    await cycle(ctx) // titles
+    calls.length = 0
+    // Reserved nothing, as for a conversion, but the stored body is English.
+    const key = await request(1, 'zh-Hant', 0)
+    await cycle(ctx)
+    expect(calls).toEqual([])
+    expect(await db.all(sql`select 1 from llm_calls where job = 'translate.body'`)).toEqual([])
+    expect((await bodyRow(key, 'zh-Hant'))?.state).toMatch(/failed|partial/)
+  })
+
+  test('a body already in the language asked for is settled, not sent to the model', async () => {
+    const ctx = context()
+    await addReader()
+    await ingest(ctx, feed(['Post'], 4))
+    await cycle(ctx) // titles
+    calls.length = 0
+    const key = await request(1, 'en')
+    await cycle(ctx)
+    expect(calls).toEqual([])
+    expect(await bodyRow(key, 'en')).toMatchObject({ state: 'failed' })
+    expect(await ledger()).toEqual({ reserved: 0, used: 0 })
+  })
 })
 
 async function contentKeyOf(articleId: number) {

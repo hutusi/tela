@@ -147,6 +147,11 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
   // model the source itself, becomes the reader's language.
   const { target, finish, label } = planFor(sourceLang, lang)
   const model = label ?? translator.model
+  // tela-api refuses a reader's own language by the article's, but the content object is shared by
+  // every article with this body and says its own: nothing to write, and nothing to pay for.
+  if (sourceLang === lang) {
+    return settleFailed(ctx, lease, contentKey, lang, 'already in that language')
+  }
 
   // Which leaves need a model: translatable, not skipped, not already cached. Between the two
   // Chinese scripts none does: every leaf is converted here, before any group is formed.
@@ -171,11 +176,16 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
   }
 
   // Cap the source tokens one article may spend: the operator's ceiling, and the reader's
-  // reservation when they asked for it. Leaves past the cap render as source (`partial`).
-  const cap = Math.min(
-    ctx.maxArticleTokens ?? MAX_ARTICLE_TRANSLATION_TOKENS,
-    row.reservedTokens > 0 ? row.reservedTokens : Number.POSITIVE_INFINITY,
-  )
+  // reservation when they asked for it. Leaves past the cap render as source (`partial`). A
+  // reader's request that reserved nothing was judged a conversion between the Chinese scripts
+  // by the article's language; if the shared object says otherwise, it is never paid for.
+  const unreserved = row.requestedBy !== null && row.reservedTokens === 0
+  const cap = unreserved
+    ? 0
+    : Math.min(
+        ctx.maxArticleTokens ?? MAX_ARTICLE_TRANSLATION_TOKENS,
+        row.reservedTokens > 0 ? row.reservedTokens : Number.POSITIVE_INFINITY,
+      )
   let budgeted = 0
   for (const [id, text] of misses) {
     budgeted += estimateTokens(text)
