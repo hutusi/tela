@@ -29,13 +29,15 @@ export function swatchColor(id: number): string {
 
 /**
  * A language on the header's Read-in button, which names only the current one: each Chinese in
- * its own script and told apart (简中, 繁中: "中文" alone stopped saying which once Traditional
- * came), the others as their badge in capitals. Anything else falls back to the badge ("JA"),
+ * its own script and told apart (简体, 繁體: "中文" alone stopped saying which once Traditional
+ * came). Those are what Chinese language switchers say on either side of the strait; a lone 简 or
+ * 繁 says too little beside EN, and 简中, 繁中 are game-localization slang. The others are their
+ * badge in capitals. Anything else falls back to the badge ("JA"),
  * which is what the article list calls it too.
  */
 const PILL_LABELS: Record<string, string> = {
-  'zh-Hans': '简中',
-  'zh-Hant': '繁中',
+  'zh-Hans': '简体',
+  'zh-Hant': '繁體',
   en: 'EN',
   fr: 'FR',
 }

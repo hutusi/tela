@@ -97,13 +97,13 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
 - Read in (`ReadInMenu`) is one menu for every reader: a member's sets the language posts are
   translated into, a visitor's (in the header and on `/login`) the interface and with it the
   titles. Four languages do not fit in view, so the button names only the current one, short and
-  in its own script (`PILL_LABELS`: 简中, 繁中, EN, FR; "中文" alone stopped saying which Chinese
+  in its own script (`PILL_LABELS`: 简体, 繁體, EN, FR; "中文" alone stopped saying which Chinese
   once Traditional came), and the list names each in full, in its own script and `lang`
   (简体中文, 繁體中文, English, Français), so a reader who cannot read the page can still find
   theirs. It is built as the theme menu is (`useHeaderMenu`, `MENU_PANEL`, `menuItem`): a native
   `<details>`, its list a 160px `surface` panel right-aligned under the button, the chosen language
   on the `hover` ground and `aria-pressed`, closed by a choice, a click elsewhere or Esc (which
-  gives focus back to the button). The button is 97px with EN and 104px with 简中 or 繁中 below `lg`
+  gives focus back to the button). The button is 97px with EN and 104px with 简体 or 繁體 below `lg`
   (106 and 114px at `lg`, macOS), against 138px for the two-language pill it replaced.
 - The theme menu (`ThemeMenu`, ADR 0037), in both headers from `sm` up and hidden below it, offers
   Auto, Light and Dark, as Settings and the Aa menu do. Its circle shows the choice in the `Glyph`
@@ -136,7 +136,7 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   each one wraps its label into the 56px bar instead. Below `sm` they stay shrinkable — the phone
   header has no room to spare, and a wrapped pill beats a nav with nothing left to scroll.
   `styles.e2e.ts` measures this at 640, 768, 800, 1024 and 1280, and from `sm` up no pill may be
-  clipped. With the theme menu and Read in at its widest label (简中, 繁中) in, the member's row
+  clipped. With the theme menu and Read in at its widest label (简体, 繁體) in, the member's row
   is 247px on macOS, and 640px, the tightest case, leaves it about 72px to spare (about 200px at
   768, 256px at 1024): the 38px the two-language pill left, plus the 34px the menu saves. CI's
   Linux Chromium sets text about 2% wider. Below `sm` it scrolls, about 122px of it showing at 360.

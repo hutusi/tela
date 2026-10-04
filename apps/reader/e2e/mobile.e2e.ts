@@ -55,7 +55,7 @@ test.describe('mobile fallback', () => {
       await page.goto('/reading')
       const readIn = page.getByTestId('read-in')
       const summary = readIn.locator('summary')
-      await expect(summary).toHaveAccessibleName('Read in 繁中')
+      await expect(summary).toHaveAccessibleName('Read in 繁體')
       const heights = await summary
         .locator('span')
         .evaluateAll((spans) => spans.map((s) => Math.round(s.getBoundingClientRect().height)))

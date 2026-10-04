@@ -543,7 +543,7 @@ test.describe("a visitor's language", () => {
     await page.getByTestId('visitor-locale-zh-Hans').click()
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
     await expect(banner.getByRole('link', { name: '登录', exact: true })).toBeVisible()
-    await expect(readIn.locator('summary')).toHaveAccessibleName('阅读语言 简中')
+    await expect(readIn.locator('summary')).toHaveAccessibleName('阅读语言 简体')
     await expect(page.getByTestId('visitor-locale-zh-Hans')).toHaveAttribute('aria-pressed', 'true')
     // The choice is the cookie the edge reads, so a public page arrives in Chinese too.
     await page.goto('/discover')

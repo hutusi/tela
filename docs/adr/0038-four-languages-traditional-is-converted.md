@@ -56,7 +56,7 @@ as the other), so the two lists must not drift apart.
   nothing. An English or French post costs two paid title calls, not three.
 - **Two Chinese requests that overlap both pay.** The Simplified and Traditional bodies of one post
   are two rows under two leases, and each reads the shared cache once, as it starts, so two that
-  run at once (two readers, or one switching 简中 to 繁中 while a body streams) each ask the model
+  run at once (two readers, or one switching 简体 to 繁體 while a body streams) each ask the model
   for every block. That is what translating Traditional separately would cost every time, so the
   pivot is never worse than not having it. Coordinating the two would put a waiting state into the
   lease and streaming code, which is where this repository's costliest defects have been; for at
@@ -85,7 +85,7 @@ participles that agree with a member's gender. Language names are stored lower c
 writes them mid-sentence, and `asLabel` capitalises one that starts a label. Quotation marks
 around a member's note are a message of their own (“…”, 「…」, « … »).
 
-**Read in is a menu:** a button showing the current language (简中, 繁中, EN, FR) that opens the
+**Read in is a menu:** a button showing the current language (简体, 繁體, EN, FR) that opens the
 four endonyms, each in its own script. It is narrower than the pill was. Members, visitors and the
 login page share it, as they shared the pill. Settings chooses the interface language from a
 select, like the translation language.

@@ -592,7 +592,7 @@ describe('public pages', () => {
     expect(en).toMatch(/<button[^>]*aria-pressed="false"[^>]*data-testid="visitor-locale-zh-Hans"/)
     expect(en).toMatch(/<button[^>]*lang="zh-Hans"[^>]*>简体中文<\/button>/)
     const zh = menu(await (await page('/privacy', { cookie: 'tela_locale=zh-Hans' })).text())
-    expect(summary(zh)).toMatch(/阅读语言.*<span lang="zh-Hans"[^>]*>简中<\/span>/s)
+    expect(summary(zh)).toMatch(/阅读语言.*<span lang="zh-Hans"[^>]*>简体<\/span>/s)
     expect(zh).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="visitor-locale-zh-Hans"/)
   })
 

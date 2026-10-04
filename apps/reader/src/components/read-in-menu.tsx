@@ -5,7 +5,7 @@ import { useStore } from '../store/hooks'
 import { CONTROL, MENU_PANEL, menuItem, useHeaderMenu } from './header-control'
 
 /**
- * "Read in 简中 ▾": the one language control for every reader, a menu built as the theme menu is
+ * "Read in 简体 ▾": the one language control for every reader, a menu built as the theme menu is
  * (`useHeaderMenu`). Four languages do not fit in view at once, so the button names only the
  * current one, short (`pillLabel`), and the list names each in full, in its own script and its
  * own `lang`, so a reader who cannot read the page can still find theirs. A member's sets the

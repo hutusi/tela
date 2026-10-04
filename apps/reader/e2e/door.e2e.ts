@@ -48,7 +48,7 @@ test.describe('a zh-TW browser', () => {
     await page.goto('/')
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant')
     await expect(page.getByTestId('nav-join')).toHaveText('加入')
-    await expect(page.getByTestId('visitor-locale').locator('summary')).toContainText('繁中')
+    await expect(page.getByTestId('visitor-locale').locator('summary')).toContainText('繁體')
   })
 })
 

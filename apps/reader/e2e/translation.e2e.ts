@@ -160,7 +160,7 @@ test.describe('translation', () => {
     const readIn = page.getByTestId('read-in')
     await readIn.locator('summary').click()
     await readIn.getByRole('button', { name: '简体中文' }).click()
-    await expect(readIn.locator('summary')).toHaveAccessibleName('Read in 简中')
+    await expect(readIn.locator('summary')).toHaveAccessibleName('Read in 简体')
     await expect(readIn.getByTestId('read-in-zh-Hans')).toHaveAttribute('aria-pressed', 'true')
     // An English feed is now foreign; its titles in Chinese come from the next sweep.
     await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
@@ -215,7 +215,7 @@ test.describe('translation', () => {
       let push = pushed('zh-Hant')
       await choice('zh-Hant').click()
       await expect(choice('zh-Hant')).toBeHidden()
-      await expect(summary).toHaveAccessibleName('Read in 繁中')
+      await expect(summary).toHaveAccessibleName('Read in 繁體')
       await push
       expect(await serverReadingLang(page.request)).toBe('zh-Hant')
 
