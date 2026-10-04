@@ -168,7 +168,7 @@ test.describe('the interface language', () => {
       })
       await page.goto('/settings/translation')
       const pushed = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
-      await page.getByTestId('ui-locale-zh-Hans').click()
+      await page.getByTestId('ui-locale').selectOption('zh-Hans')
       await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
       // Now the profile arrives, with the account's older English, and the choice stands.
       release()
@@ -191,7 +191,7 @@ test.describe('the interface language', () => {
     try {
       await page.goto('/settings/translation')
       const pushed = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
-      await page.getByTestId('ui-locale-zh-Hans').click()
+      await page.getByTestId('ui-locale').selectOption('zh-Hans')
       await pushed
 
       // Another device: the same member, and a cookie that still says English.

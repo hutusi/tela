@@ -3,6 +3,9 @@
     "name": "Tela",
     "tagline": "独立博客，任何语言。"
   },
+  "common": {
+    "quoted": "“{text}”"
+  },
   "nav": {
     "reading": "阅读",
     "discover": "发现",
@@ -26,7 +29,7 @@
     "description": "来自世界各地的独立博客，各用各的语言，标题译成你的语言。",
     "hero": "<em>{count} 个独立博客</em>，在此汇流。",
     "heroPlain": "<em>独立博客</em>，在此汇流。",
-    "intro": "Tela 把世界各地的博客和个人网站汇成一片思想的海洋，你读的时候，就译成中文或英文。",
+    "intro": "Tela 把世界各地的博客和个人网站汇成一片思想的海洋，你读的时候，就译成简体中文、繁体中文、英文或法文。",
     "join": "加入 Tela",
     "logIn": "登录",
     "week": "本周，{blogs} 个博客用 {languages} 种语言写作",

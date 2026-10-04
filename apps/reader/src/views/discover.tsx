@@ -1,5 +1,5 @@
 /** Discover (`/discover`): listed blogs by topic and language. Rendered by the SPA and the edge. */
-import { LANGUAGE_NAMES, TOPICS, type UiLocale } from '@tela/shared'
+import { asLabel, LANGUAGE_NAMES, TOPICS, type UiLocale } from '@tela/shared'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { SiteCard } from '../components/site-card'
@@ -27,8 +27,10 @@ export function DiscoverView({
 }) {
   const t = useTranslations('discover')
   const names = LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en
+  // The menu's value and items are labels: "Japonais", where a French sentence says "japonais".
+  const label = (tag: string) => asLabel(names[tag] ?? tag, locale)
   const here = discoverHref(params)
-  const langLabel = params.lang ? (names[params.lang] ?? params.lang) : t('allLanguages')
+  const langLabel = params.lang ? label(params.lang) : t('allLanguages')
   const languages = data?.languages ?? []
 
   return (
@@ -83,7 +85,7 @@ export function DiscoverView({
                 to={discoverHref({ topic: params.topic, lang: l.lang })}
                 className={menuItem(params.lang === l.lang)}
               >
-                <span>{names[l.lang] ?? l.lang}</span>
+                <span>{label(l.lang)}</span>
                 <span className="text-xs text-muted">{l.count}</span>
               </Link>
             ))}

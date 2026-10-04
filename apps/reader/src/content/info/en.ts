@@ -11,7 +11,7 @@ export const en = {
   about: {
     kicker: 'About Tela',
     title: 'A reader for the independent web.',
-    lede: 'Tela gathers independent blogs and personal sites into one calm reading list, translates posts into English or Chinese, whichever you read, and lets writers and readers find each other through what people recommend, not an engagement algorithm.',
+    lede: 'Tela gathers independent blogs and personal sites into one calm reading list, translates posts into the language you read (Simplified or Traditional Chinese, English or French), and lets writers and readers find each other through what people recommend, not an engagement algorithm.',
     short: [
       'A free reader for blogs and personal sites that publish a feed.',
       'Your reading list runs newest first, nothing is ranked to keep you scrolling, and there are no ads.',
@@ -198,7 +198,7 @@ export const en = {
         blocks: [
           {
             list: [
-              'Tela translates posts into English or Chinese, whichever you read in. Titles and excerpts are translated as posts arrive, and the full text when someone opens the post or asks for it.',
+              'Tela translates posts into the language you read in: Simplified or Traditional Chinese, English or French. Titles and excerpts are translated as posts arrive, and the full text when someone opens the post or asks for it. Traditional Chinese is converted from the Simplified translation, not translated again.',
               "What is sent is the post's own text, with the post's title and the blog's name for context. Nothing about you is sent: not your name, email address, handle or what you read.",
               'Translation is done by Alibaba Cloud Model Studio (Bailian, dashscope.aliyuncs.com), in mainland China.',
               'A translation is kept and shared: everyone who reads that post in that language sees the same one.',

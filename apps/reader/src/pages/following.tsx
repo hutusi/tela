@@ -388,6 +388,7 @@ function Activity({
   now: number
 }) {
   const t = useTranslations('following')
+  const tc = useTranslations('common')
   const { person } = item
   const profile = `/@${person.handle}`
   const verb =
@@ -426,7 +427,7 @@ function Activity({
                 style={{ textWrap: 'pretty' }}
                 data-testid="following-note"
               >
-                “{item.note}”
+                {tc('quoted', { text: item.note })}
               </p>
             ) : null}
             <PostCard post={item.post} member={member} lang={lang} never={never} />

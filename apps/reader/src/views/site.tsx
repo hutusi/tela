@@ -36,6 +36,7 @@ export function SiteView({
 }) {
   const t = useTranslations('site')
   const td = useTranslations('discover')
+  const tc = useTranslations('common')
   const { site } = data
   const title = site.title ?? displayHost(site.homeUrl)
   const primary = data.feeds[0]
@@ -250,7 +251,9 @@ export function SiteView({
                   key={`${n.person.handle}:${n.article.id}`}
                   className="border-b border-line py-3.5"
                 >
-                  <p className="m-0 font-serif text-[18px] leading-[1.4] italic">“{n.note}”</p>
+                  <p className="m-0 font-serif text-[18px] leading-[1.4] italic">
+                    {tc('quoted', { text: n.note })}
+                  </p>
                   <div className="mt-2 text-[12.5px] leading-[1.4] text-muted">
                     {t.rich('noteOn', {
                       person: () => (

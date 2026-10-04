@@ -1,4 +1,4 @@
-import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
+import { asLabel, LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
 import { Fragment } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 import type { BlockPair } from '../lib/block-pairs'
@@ -34,8 +34,11 @@ type Props = {
 export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang }: Props) {
   const tt = useTranslations('translation')
   const locale = useLocale()
-  const targetName =
-    (LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en)[targetLang] ?? targetLang
+  // It starts the column's label ("Anglais · traduction"), though French writes "anglais".
+  const targetName = asLabel(
+    (LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en)[targetLang] ?? targetLang,
+    locale,
+  )
 
   return (
     <div className="@container">

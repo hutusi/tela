@@ -7,6 +7,7 @@ import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { SiteFooter } from '../components/site-footer'
 import { en } from '../content/info/en'
+import { fr } from '../content/info/fr'
 import {
   type Block,
   INFO_PAGES,
@@ -17,9 +18,10 @@ import {
   type Section,
 } from '../content/info/types'
 import { zhHans } from '../content/info/zh-Hans'
+import { zhHant } from '../content/info/zh-Hant'
 import { Inline, plainText } from '../lib/inline-links'
 
-const CONTENT: Record<UiLocale, InfoContent> = { en, 'zh-Hans': zhHans }
+const CONTENT: Record<UiLocale, InfoContent> = { 'zh-Hans': zhHans, 'zh-Hant': zhHant, en, fr }
 
 export function infoContent(locale: UiLocale): InfoContent {
   return CONTENT[locale] ?? en
@@ -31,7 +33,7 @@ export function infoDescription(locale: UiLocale, page: InfoPageId): string {
   return plainText('lede' in content && content.lede ? content.lede : content.short.join(' '))
 }
 
-/** "2 October 2026", "2026年10月2日": the day itself, wherever the page is rendered. */
+/** "2 October 2026", "2 octobre 2026", "2026年10月2日": the day itself, wherever it is rendered. */
 function updatedOn(locale: UiLocale): string {
   return new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : locale, {
     day: 'numeric',

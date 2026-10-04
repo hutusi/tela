@@ -36,6 +36,9 @@ describe('suggestHandle', () => {
     expect(suggestHandle('山田太郎', 'blog.yamada.jp')).toBe('yamada')
     expect(suggestHandle('김민준', 'min-jun.github.io')).toBe('min_jun')
     expect(suggestHandle('', 'jvns.ca')).toBe('jvns')
+    // A label that names a language or region edition is no one's name.
+    expect(suggestHandle('胡涂说', 'tw.hutusi.com')).toBe('hutusi')
+    expect(suggestHandle('', 'fr.example.org')).toBe('example')
   })
 
   test('suggests nothing it could not use', () => {

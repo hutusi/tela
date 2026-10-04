@@ -1,0 +1,692 @@
+{
+  "app": {
+    "name": "Tela",
+    "tagline": "Des blogs indépendants, dans toutes les langues."
+  },
+  "common": {
+    "quoted": "« {text} »"
+  },
+  "nav": {
+    "reading": "Lecture",
+    "discover": "Découvrir",
+    "following": "Suivis",
+    "readIn": "Lire en",
+    "search": "Rechercher des blogs, des articles, des personnes",
+    "logIn": "Connexion",
+    "join": "S’inscrire",
+    "signOut": "Se déconnecter",
+    "addFeed": "+ Ajouter un flux",
+    "dashboard": "Tableau de bord",
+    "settings": "Paramètres",
+    "account": "Votre compte",
+    "yourProfile": "Votre profil",
+    "subscriptions": "Abonnements",
+    "invites": "Inviter des proches",
+    "writers": "Pour les auteurs",
+    "themeIs": "Thème : {theme}"
+  },
+  "front": {
+    "description": "Des blogs indépendants du monde entier, chacun dans sa langue, avec des titres traduits dans la vôtre.",
+    "hero": "Une confluence de <em>{count, plural, one {# blog indépendant.} other {# blogs indépendants.}}</em>",
+    "heroPlain": "Une confluence de <em>blogs indépendants.</em>",
+    "intro": "Tela réunit des blogs et des sites personnels du monde entier en un seul océan d’idées, traduits au fil de votre lecture en chinois simplifié ou traditionnel, en anglais ou en français.",
+    "join": "Rejoindre Tela",
+    "logIn": "Se connecter",
+    "week": "Cette semaine, {blogs, plural, one {# blog a écrit} other {# blogs ont écrit}} en {languages, plural, one {# langue} other {# langues}}",
+    "latest": "Les derniers articles de {n, plural, one {# blog} other {# blogs}}",
+    "titlesIn": "Titres en",
+    "original": "Langue d’origine",
+    "minutes": "{n} min",
+    "empty": "Aucun article pour l’instant. Les blogs que Tela rassemble apparaîtront ici dès qu’ils publieront.",
+    "writers": {
+      "title": "Vous tenez un blog ? Faites-en votre carte de visite.",
+      "intro": "Revendiquez votre blog sur Tela et obtenez une page à votre nom, avec votre blog et les articles que vous recommandez. Votre site reste où il est.",
+      "cta": "Créer votre carte"
+    },
+    "read": "Lire →",
+    "readPost": "Lire l’article →"
+  },
+  "footer": {
+    "label": "À propos de Tela",
+    "made": "© {year} · Conçu par <maker>AI Naive</maker>",
+    "about": "À propos",
+    "writers": "Pour les auteurs",
+    "privacy": "Confidentialité",
+    "terms": "Conditions"
+  },
+  "login": {
+    "title": "Se connecter à Tela"
+  },
+  "door": {
+    "close": "Fermer",
+    "login": {
+      "title": "Bon retour",
+      "intro": "Connectez-vous pour reprendre là où vous en étiez."
+    },
+    "join": {
+      "title": "Rejoindre Tela",
+      "intro": "Abonnez-vous à n’importe quel blog, dans n’importe quelle langue. Pas de publicité, et vous exportez vos abonnements quand vous voulez."
+    },
+    "google": "Continuer avec Google",
+    "github": "Continuer avec GitHub",
+    "or": "ou",
+    "email": "E-mail",
+    "emailPlaceholder": "vous@example.com",
+    "password": "Mot de passe",
+    "forgot": "Mot de passe oublié ?",
+    "sendCode": "Recevoir un code par e-mail",
+    "logIn": "Se connecter",
+    "usePassword": "Se connecter avec un mot de passe",
+    "useCode": "Recevoir plutôt un code par e-mail",
+    "invite": "Code d’invitation",
+    "noCode": "Pas de code ? Tela fonctionne sur invitation pour l’instant : demandez-en un à un membre.",
+    "agree": "En vous inscrivant, vous acceptez les <terms>Conditions</terms> ; voir aussi la page <privacy>Confidentialité</privacy>.",
+    "newHere": "Première visite sur Tela ?",
+    "toJoin": "S’inscrire",
+    "haveAccount": "Vous avez déjà un compte ?",
+    "toLogin": "Se connecter",
+    "codeSent": "Si {email} a un compte Tela ou une invitation, un code est en route. Saisissez-le ici, ou ouvrez le lien du même e-mail.",
+    "joinSent": "Nous avons envoyé un code à {email}. Saisissez-le ici, ou ouvrez le lien du même e-mail.",
+    "codePlaceholder": "Code à 6 chiffres",
+    "choosePassword": "Choisissez un mot de passe (facultatif)",
+    "passwordHint": "{min} caractères ou plus. Vous pourrez toujours vous connecter avec un code.",
+    "verify": "Continuer",
+    "otherAddress": "Utiliser une autre adresse",
+    "resetSent": "Si {email} a un compte Tela, nous lui avons envoyé un code. Saisissez-le, puis choisissez un nouveau mot de passe.",
+    "newPassword": "Nouveau mot de passe, {min} caractères ou plus",
+    "resetConfirm": "Définir le mot de passe et se connecter",
+    "connecting": "Connexion réussie. Ouverture de Tela…",
+    "unsaved": "La connexion a réussi, mais votre mot de passe n’a pas été enregistré. Vous pouvez en définir un à tout moment avec « Mot de passe oublié ? ».",
+    "linkAs": "Se connecter en tant que <b>{email}</b> ?",
+    "linkHint": "Ne continuez que si vous avez demandé ce lien vous-même : un lien envoyé par quelqu’un d’autre vous connecterait à son compte.",
+    "linkConfirm": "Se connecter",
+    "resetAs": "Choisissez un nouveau mot de passe pour <b>{email}</b>.",
+    "resetHint": "Ne continuez que si vous avez vous-même demandé à réinitialiser ce mot de passe.",
+    "errors": {
+      "invalid_email": "Cela ne ressemble pas à une adresse e-mail.",
+      "send_failed": "Impossible d’envoyer le code. Réessayez dans une minute.",
+      "bad_code": "Ce code est erroné ou a expiré.",
+      "rate_limited": "Trop de tentatives. Patientez une minute, puis réessayez.",
+      "reset_failed": "Ce code de réinitialisation est erroné ou a expiré. Demandez-en un nouveau.",
+      "password_set": "Votre nouveau mot de passe est défini, mais la connexion avec celui-ci a échoué. Connectez-vous avec un code.",
+      "password_short": "Le mot de passe doit comporter au moins {min} caractères.",
+      "bad_password": "Cette adresse e-mail et ce mot de passe ne correspondent pas.",
+      "not_invited": "Aucun compte Tela n’utilise cette adresse. Connectez-vous avec l’adresse de votre inscription, ou inscrivez-vous avec un code d’invitation.",
+      "invite_used": "Toutes les personnes prévues pour cette invitation se sont inscrites, ou elle a été retirée. Demandez-en une autre.",
+      "missing_code": "Saisissez votre code d’invitation.",
+      "invalid_code": "Ce code d’invitation n’existe pas, ou il a été retiré.",
+      "code_used": "Toutes les personnes prévues pour ce code d’invitation se sont inscrites.",
+      "provider_unlinked": "Vérifiez cette adresse auprès du fournisseur, ou connectez-vous par e-mail et associez-le dans Paramètres → Compte.",
+      "provider_no_email": "Le fournisseur n’a pas communiqué d’adresse e-mail. Connectez-vous plutôt par e-mail.",
+      "provider_cancelled": "La connexion a été annulée.",
+      "provider_expired": "Cela a pris trop de temps. Réessayez.",
+      "provider_failed": "Impossible de joindre le fournisseur. Réessayez, ou connectez-vous par e-mail.",
+      "failed": "Une erreur s’est produite. Réessayez dans une minute."
+    },
+    "claimTitle": "Revendiquer @{handle}",
+    "claimCard": "Revendiquer votre carte"
+  },
+  "sidebar": {
+    "library": "Bibliothèque",
+    "all": "Tous les articles",
+    "today": "Aujourd’hui",
+    "liked": "Coups de cœur",
+    "subscriptions": "Abonnements",
+    "noSubscriptions": "Aucun abonnement pour l’instant.",
+    "browse": "Flux",
+    "hide": "Replier la barre latérale",
+    "show": "Déplier la barre latérale",
+    "manage": "Gérer les abonnements"
+  },
+  "list": {
+    "markAllRead": "Tout marquer comme lu",
+    "empty": "Rien ici pour l’instant.",
+    "emptyHint": "Ajoutez un flux pour commencer à lire.",
+    "minutes": "{n} min",
+    "translatedBadge": "{from} → {to}",
+    "loadMore": "Articles plus anciens",
+    "fetching": "Première récupération de ce flux…",
+    "allRead": "Vous êtes à jour.",
+    "allReadHint": "Les articles lus sont masqués. <settings>Réaffichez-les</settings> dans les Paramètres."
+  },
+  "reader": {
+    "close": "✕ Fermer",
+    "like": "J’aime",
+    "liked": "Vous aimez",
+    "recommend": "Recommander",
+    "minRead": "{n} min de lecture",
+    "readOriginal": "Ouvrir l’original",
+    "readersOnTela": "{n, plural, =0 {aucun lecteur sur Tela pour l’instant} one {# lecteur sur Tela} other {# lecteurs sur Tela}}",
+    "visibleToAuthor": "Vos ♡ et vos recommandations sont visibles par l’auteur.",
+    "pickArticle": "Choisissez un article à gauche. Les articles dans d’autres langues s’ouvrent avec une traduction à côté de l’original.",
+    "unreadCount": "{n, plural, one {# non lu} other {# non lus}}",
+    "noContent": "Le flux de cet article ne contient aucun texte lisible.",
+    "articleGone": "Cet article n’est plus disponible. Choisissez-en un autre à gauche.",
+    "loadFailed": "Une erreur est survenue pendant le chargement.",
+    "retry": "Réessayer",
+    "recommendedLabel": "Recommandé",
+    "recommendTitle": "Recommander à vos lecteurs",
+    "recommendPlaceholder": "Pourquoi le lire ? (facultatif)",
+    "recommendHint": "Visible sur votre profil et par l’auteur.",
+    "cancel": "Annuler",
+    "recommended": "Recommandé.",
+    "recommendedWithNote": "Recommandé, avec votre mot.",
+    "unrecommended": "Recommandation retirée.",
+    "fetchingFullText": "Récupération de l’article complet sur le site…",
+    "upNext": "À suivre",
+    "focus": "Focus",
+    "markRead": "Marquer comme lu"
+  },
+  "add": {
+    "title": "Ajouter un flux",
+    "intro": "Collez l’adresse d’un blog ou l’URL d’un flux. Tela trouve le flux et commence à le récupérer.",
+    "placeholder": "https://example.blog",
+    "find": "Trouver les flux",
+    "searching": "Recherche de flux…",
+    "none": "Aucun flux trouvé à cette adresse.",
+    "subscribe": "S’abonner",
+    "subscribed": "Abonné(e)",
+    "items": "{n, plural, one {# article} other {# articles}}",
+    "opml": "Ou importez un fichier OPML",
+    "opmlHint": "Exporté depuis un autre lecteur de flux. Jusqu’à 500 flux.",
+    "import": "Importer",
+    "imported": "{n, plural, one {# flux importé.} other {# flux importés.}}",
+    "errors": {
+      "invalid_url": "Cela ne ressemble pas à une URL.",
+      "fetch_failed": "Impossible de joindre cette adresse.",
+      "opml_invalid": "Ce fichier n’est pas un document OPML.",
+      "rate_limited": "Trop de requêtes. Patientez un peu, puis réessayez.",
+      "opml_too_large": "Ce fichier OPML dépasse 1 Mo."
+    }
+  },
+  "translation": {
+    "writtenIn": "Écrit en <b>{source}</b>. Traduit en {target} par Tela.",
+    "writtenInOnly": "Écrit en <b>{source}</b>.",
+    "translateNow": "Traduire en {target}",
+    "translating": "Traduction en cours…",
+    "failed": "La traduction a échoué.",
+    "partial": "{n, plural, one {# paragraphe n’a pas pu être traduit.} other {# paragraphes n’ont pas pu être traduits.}}",
+    "modesLabel": "Mise en page de lecture",
+    "modes": {
+      "side": "Côte à côte",
+      "trans": "Traduction",
+      "orig": "Original"
+    },
+    "columnTranslated": "{target} · traduction",
+    "columnOriginal": "original",
+    "blockUntranslated": "non traduit",
+    "rateLimited": "Trop de demandes de traduction pour le moment. Réessayez d’ici un petit moment.",
+    "budgetExhausted": "Vous avez épuisé votre quota de traduction du jour. Il se renouvelle demain.",
+    "unavailable": "La traduction n’a pas pu démarrer. Réessayez.",
+    "retry": "Relancer la traduction"
+  },
+  "discover": {
+    "title": "Des blogs indépendants, dans toutes les langues.",
+    "intro": "Des blogs et des sites personnels qui publient un flux, choisis par Tela, par leurs auteurs et par les lecteurs. Abonnez-vous en un clic ; Tela traduit au fil de votre lecture.",
+    "allTopics": "Tous",
+    "language": "Langue",
+    "allLanguages": "Toutes les langues",
+    "topics": {
+      "essays": "Essais",
+      "tech": "Tech",
+      "cities": "Villes",
+      "food": "Cuisine",
+      "design": "Design",
+      "outdoors": "Plein air",
+      "life": "Vie",
+      "photography": "Photo",
+      "science": "Sciences"
+    },
+    "latest": "Dernier article :",
+    "readers": "{n, plural, =0 {aucun lecteur pour l’instant} one {# lecteur} other {# lecteurs}}",
+    "cadence": {
+      "daily": "chaque jour",
+      "weekly": "chaque semaine",
+      "biweekly": "deux fois par mois",
+      "monthly": "chaque mois",
+      "quiet": "calme ces derniers temps"
+    },
+    "subscribe": "S’abonner",
+    "subscribed": "Abonné(e)",
+    "claimed": "Revendiqué par son auteur",
+    "empty": "Aucun blog ici pour l’instant. Revendiquez le vôtre et ouvrez la marche.",
+    "claim": {
+      "title": "Vous avez un blog ?",
+      "intro": "Revendiquez votre flux pour voir combien de personnes vous lisent, comment vos articles ont été reçus et ce que les lecteurs en ont dit en les recommandant.",
+      "cta": "Revendiquer votre flux"
+    }
+  },
+  "site": {
+    "claimedByName": "✓ Revendiqué par {name}",
+    "visit": "Visiter le site ↗",
+    "writtenIn": "Écrit en {lang}",
+    "cadence": "{key, select, daily {Publie chaque jour} weekly {Publie chaque semaine} biweekly {Publie deux fois par mois} monthly {Publie chaque mois} other {Calme ces derniers temps}}",
+    "readersOnTela": "{n, plural, one {# lecteur sur Tela} other {# lecteurs sur Tela}}",
+    "claimLink": "C’est votre site ? Revendiquez-le",
+    "yourTopics": "Vos thèmes",
+    "saveTopics": "Enregistrer",
+    "posts": "Articles",
+    "minutes": "{n} min",
+    "noPosts": "Aucun article récupéré pour l’instant.",
+    "about": "À propos",
+    "readersYouFollow": "Lecteurs que vous suivez",
+    "readersText": {
+      "one": "{a} lit ce blog.",
+      "two": "{a} et {b} lisent ce blog.",
+      "more": "{a}, {b} et {n, plural, one {# autre personne} other {# autres personnes}} lisent ce blog."
+    },
+    "fromReaders": "Ce qu’en disent les lecteurs",
+    "noteOn": "<person></person> sur <post></post>"
+  },
+  "claim": {
+    "title": "Revendiquer votre flux",
+    "intro": "Indiquez l’adresse de votre blog. Nous trouverons son flux, puis vous demanderons de prouver que vous contrôlez le site.",
+    "continue": "Continuer",
+    "searching": "Recherche de votre flux…",
+    "verifyTitle": "Prouvez que ce site est à vous",
+    "verifyIntro": "Ajoutez l’un de ces deux extraits à la page d’accueil de {site} :",
+    "optionMeta": "Option A : une balise meta",
+    "optionMetaHint": "Placez-la dans le <head> de votre page d’accueil. Vous pourrez la retirer après la vérification.",
+    "optionRelMe": "Option B : un lien rel=\"me\"",
+    "optionRelMeHint": "Faites un lien vers votre profil Tela depuis votre page d’accueil (un lien en pied de page suffit).",
+    "verify": "Vérifier",
+    "verifyAgain": "Vérifier à nouveau",
+    "checking": "Vérification de votre site…",
+    "failed": "Pas encore vérifié.",
+    "verified": "Vérifié. Ce site est à vous sur Tela.",
+    "verifiedHint": "Il apparaît désormais dans Découvrir. Choisissez ses thèmes sur la page du site, et suivez lecteurs et coups de cœur dans votre tableau de bord.",
+    "viewSite": "Voir la page du site",
+    "claimedByOther": "Ce site a déjà été revendiqué par une autre personne sur Tela.",
+    "errors": {
+      "invalid_url": "Cela ne ressemble pas à une URL.",
+      "fetch_failed": "Impossible de joindre cette adresse.",
+      "no_feed": "Aucun flux trouvé à cette adresse. Tela référence les sites qui publient un flux.",
+      "rate_limited": "Trop de tentatives de revendication. Patientez un peu, puis réessayez."
+    },
+    "taken": "L’identifiant choisi appartient déjà à quelqu’un d’autre : le vôtre reste donc provisoire. Choisissez-en un autre dans les <link>Paramètres</link>."
+  },
+  "writers": {
+    "title": "Pour les auteurs",
+    "kicker": "Pour les auteurs",
+    "hero": {
+      "title": "La <em>carte de visite</em> de votre écriture indépendante.",
+      "lede": "Une page sur Tela avec votre nom, les blogs que vous écrivez et les articles que vous recommandez. Les lecteurs vous y trouvent, vous suivent et s’abonnent à votre blog en un clic."
+    },
+    "form": {
+      "title": "Créez votre carte",
+      "name": "Votre nom",
+      "blog": "L’adresse de votre blog",
+      "blogPlaceholder": "monblog.fr",
+      "submit": "Revendiquer votre carte"
+    },
+    "availability": {
+      "available": "✓ @{handle} est disponible",
+      "taken": "@{handle} est déjà pris.",
+      "reserved": "@{handle} est réservé.",
+      "invalid": "@{handle} ne peut pas servir d’identifiant.",
+      "try": "Essayez <pick>@{suggestion}</pick>.",
+      "none": "Votre identifiant vient de votre nom, ou de celui de votre blog."
+    },
+    "member": {
+      "intro": "Vous êtes sur Tela. Revendiquez votre blog pour l’ajouter à votre carte.",
+      "claim": "Revendiquer votre blog",
+      "card": "Votre carte"
+    },
+    "card": {
+      "writes": "Écrit sur",
+      "followers": "<b>{n}</b> {n, plural, one {abonné} other {abonnés}}",
+      "recommendations": "<b>{n}</b> {n, plural, one {recommandation} other {recommandations}}",
+      "reads": "Lit <b>{n}</b> {n, plural, one {blog} other {blogs}}",
+      "recommends": "Dernière recommandation",
+      "yourName": "Votre nom",
+      "yourHandle": "votrenom",
+      "later": "Vos recommandations, et les blogs que vous lisez si vous choisissez de les montrer, apparaîtront ici au fil de votre usage de Tela.",
+      "follow": "Suivre",
+      "claimed": "Revendiqué",
+      "readsLabel": "Lit",
+      "yourBlog": "Votre blog",
+      "bioLater": "Une ligne sur ce que vous écrivez. Modifiable à tout moment.",
+      "latestLater": "Votre dernière recommandation s’affiche ici.",
+      "captionSample": "Un exemple de carte. Tapez votre nom pour voir la vôtre.",
+      "captionSampleMember": "Un exemple de carte.",
+      "captionDraft": "Votre carte, au fil de la saisie."
+    },
+    "find": {
+      "title": "Ici, les auteurs se trouvent entre eux.",
+      "intro": "Suivez les auteurs que vous aimez : vous verrez ce qu’ils recommandent et aiment, et les blogs qu’ils lisent quand ils les montrent. Quand quelqu’un recommande un article, toutes les personnes qui suivent ce compte le reçoivent, avec son mot.",
+      "label": "Suivis · exemple",
+      "recommended": "a recommandé un article de {source}",
+      "liked": "a aimé un article de {source}",
+      "subscribed": "a ajouté à ses abonnements"
+    },
+    "sample": {
+      "posts": {
+        "granVia": "Ce qu’on entend sur la Gran Vía à six heures du matin",
+        "kitchen": "Une cuisine qu’on emporte avec soi"
+      }
+    },
+    "does": {
+      "title": "Ce que fait votre carte",
+      "link": {
+        "title": "Un seul lien pour tout ce que vous écrivez",
+        "body": "Votre carte, à l’adresse /@identifiant, réunit tous les blogs que vous revendiquez, avec votre nom et une ligne sur vous.",
+        "pill": "Retrouvez-moi sur Tela"
+      },
+      "blogroll": {
+        "title": "Votre blogroll",
+        "body": "Recommandez les articles qui vous ont plu, avec un mot. Montrez aussi les blogs que vous lisez, si vous le souhaitez : c’est un seul interrupteur dans les Paramètres."
+      },
+      "readers": {
+        "title": "Lecteurs",
+        "body": "Les lecteurs vous suivent, s’abonnent à votre blog en un clic et peuvent le lire traduit à côté de l’original. Votre tableau de bord montre combien de personnes vous lisent, quels articles leur ont plu et les mots qu’elles ont laissés.",
+        "blogReaders": "{n, plural, one {# lecteur} other {# lecteurs}} sur Tela",
+        "followers": "{n, plural, one {# abonné} other {# abonnés}}"
+      }
+    },
+    "how": {
+      "title": "Comment ça marche",
+      "name": {
+        "title": "Choisissez votre nom",
+        "body": "Votre nom, et un identifiant pour l’adresse de votre carte. L’un et l’autre se changent ensuite dans les Paramètres."
+      },
+      "connect": {
+        "title": "Reliez votre blog",
+        "body": "Ajoutez une ligne à votre site pour montrer qu’il est à vous : une balise meta, ou un lien vers votre carte. Tout blog doté d’un flux RSS ou Atom convient."
+      },
+      "follow": {
+        "title": "Suivez les auteurs que vous aimez",
+        "body": "Suivez d’autres auteurs et lecteurs : ce qu’ils recommandent s’affiche sur votre page Suivis."
+      }
+    },
+    "yours": {
+      "title": "Votre site reste le vôtre",
+      "nothing": {
+        "title": "Rien ne bouge",
+        "body": "Tela lit le flux que vous publiez déjà. Chaque article renvoie vers votre site."
+      },
+      "ads": {
+        "title": "Pas de publicité",
+        "body": "Tela n’affiche aucune publicité : ni à côté de vos textes, ni ailleurs."
+      },
+      "translation": {
+        "title": "La traduction, c’est vous qui décidez",
+        "body": "Les lecteurs peuvent lire vos articles traduits. Si vous préférez qu’ils ne le fassent pas, désactivez la traduction pour votre blog depuis le tableau de bord."
+      }
+    },
+    "cta": {
+      "count": "{n, plural, one {# blog est} other {# blogs sont}} déjà sur Tela. <em>Et le vôtre ?</em>",
+      "title": "<em>Où est votre blog ?</em>",
+      "make": "Créer votre carte"
+    }
+  },
+  "profile": {
+    "joined": "Membre depuis {when}",
+    "editProfile": "Modifier le profil",
+    "follow": "Suivre",
+    "following": "Suivi(e)",
+    "stats": {
+      "following": "Suit <b>{n}</b> {n, plural, one {personne} other {personnes}}",
+      "followers": "<b>{n}</b> {n, plural, one {abonné} other {abonnés}}",
+      "recommendations": "<b>{n}</b> {n, plural, one {recommandation} other {recommandations}}"
+    },
+    "writes": "Écrit sur",
+    "tabs": {
+      "recommendations": "Recommandations",
+      "liked": "Coups de cœur",
+      "subscriptions": "Abonnements"
+    },
+    "nothing": "Rien à afficher pour l’instant."
+  },
+  "following": {
+    "title": "Suivis",
+    "intro": "Ce que lisent, aiment et transmettent les personnes que vous suivez.",
+    "tabs": {
+      "all": "Tout",
+      "recs": "Recommandations",
+      "likes": "Coups de cœur"
+    },
+    "recommended": "a recommandé",
+    "liked": "{n, plural, one {a aimé un article} other {a aimé # articles}}",
+    "subscribed": "{n, plural, one {a ajouté à ses abonnements} other {a ajouté # blogs à ses abonnements, dont}}",
+    "minutes": "{n} min",
+    "read": "Lire →",
+    "empty": "Rien ici pour l’instant. Suivez quelques lecteurs pour voir ce qu’ils transmettent.",
+    "failed": "L’activité n’a pas pu être chargée.",
+    "retry": "Réessayer",
+    "older": "Activité plus ancienne",
+    "peopleYouFollow": "Personnes que vous suivez",
+    "noOneYet": "Personne pour l’instant. Suivez des lecteurs depuis leur profil.",
+    "readersToFollow": "Lecteurs à suivre",
+    "follow": "Suivre",
+    "followingButton": "Suivi(e)"
+  },
+  "dashboard": {
+    "title": "Vos sites",
+    "intro": "Combien de personnes vous lisent, comment vos articles ont été reçus et ce que les lecteurs en ont dit en les recommandant.",
+    "noSites": "Vous n’avez pas encore revendiqué de site.",
+    "post": "Article",
+    "notes": "Ce qu’en disent les lecteurs",
+    "noNotes": "Aucun mot de recommandation pour l’instant.",
+    "optOutTranslation": "Désactiver la traduction",
+    "allowTranslation": "Autoriser la traduction",
+    "listing": {
+      "private": "privé",
+      "listed": "dans Découvrir",
+      "featured": "mis en avant",
+      "rejected": "masqué"
+    }
+  },
+  "settings": {
+    "title": "Paramètres",
+    "sections": {
+      "profile": "Profil",
+      "reading": "Lecture",
+      "translation": "Langue",
+      "subscriptions": "Abonnements",
+      "privacy": "Confidentialité",
+      "invites": "Invitations",
+      "account": "Compte"
+    },
+    "profileIntro": "Comment vous apparaissez aux lecteurs et aux auteurs sur Tela.",
+    "gravatar": "Utiliser mon Gravatar",
+    "gravatarRefresh": "Actualiser",
+    "pictureUpload": "Envoyer une photo",
+    "pictureReplace": "Changer de photo",
+    "pictureRemove": "Supprimer",
+    "pictureFallbackGravatar": "Affichée partout. Supprimez-la pour revenir à votre Gravatar.",
+    "pictureFallbackInitial": "Affichée partout. Supprimez-la pour revenir à votre initiale.",
+    "gravatarHints": {
+      "shown": "La photo liée à votre adresse e-mail de connexion, partout où votre nom apparaît ; les autres voient un changement en quelques minutes. Vous l’avez changée sur Gravatar ? Actualisez.",
+      "none": "Gravatar n’a pas de photo pour votre adresse e-mail de connexion : votre initiale s’affiche donc.",
+      "checking": "Interrogation de Gravatar sur votre adresse e-mail de connexion…",
+      "off": "Désactivé : votre initiale s’affiche, sauf si vous envoyez une photo."
+    },
+    "pictureErrors": {
+      "unreadable": "Ce fichier n’est pas une image que ce navigateur sait lire.",
+      "too_large": "Ce fichier dépasse 20 Mo.",
+      "rate_limited": "Trop de changements en une heure. Réessayez plus tard.",
+      "failed": "La photo n’a pas pu être enregistrée. Réessayez."
+    },
+    "cropTitle": "Votre photo",
+    "cropHint": "Faites-la glisser pour la déplacer, et zoomez pour la cadrer.",
+    "cropArea": "La photo, dans le cercle où elle s’affiche. Les flèches du clavier la déplacent.",
+    "cropZoom": "Zoom",
+    "cropCancel": "Annuler",
+    "cropSave": "Enregistrer",
+    "cropSaving": "Enregistrement…",
+    "name": "Nom",
+    "handle": "Identifiant",
+    "handleHint": "3 à 30 lettres minuscules, chiffres ou tirets bas. Il sert dans l’adresse de votre profil.",
+    "bio": "Bio",
+    "charsLeft": "{n, plural, one {# caractère restant} other {# caractères restants}}",
+    "saveChanges": "Enregistrer les modifications",
+    "saved": "Enregistré.",
+    "viewProfile": "Voir le profil",
+    "errors": {
+      "invalid_handle": "Un identifiant compte 3 à 30 lettres minuscules, chiffres ou tirets bas, et certains mots sont réservés.",
+      "handle_taken": "Cet identifiant est déjà pris."
+    },
+    "readingIntro": "L’apparence et le comportement des articles dans Lecture.",
+    "textSize": "Taille du texte",
+    "textSizeHint": "S’applique au corps des articles.",
+    "measure": "Longueur de ligne",
+    "measureHint": "La largeur maximale de la colonne d’un article.",
+    "theme": "Thème",
+    "themeHint": "Auto suit votre système.",
+    "markOnOpen": "Marquer comme lu à l’ouverture",
+    "markOnOpenHint": "Sinon, un article reste non lu jusqu’à ce que vous le marquiez.",
+    "hideRead": "Masquer les articles lus",
+    "hideReadHint": "Les listes n’affichent que les articles non lus ; vos coups de cœur restent toujours visibles.",
+    "translationIntro": "La langue que parle Tela, et celle dans laquelle il traduit les articles. L’original n’est jamais qu’à un clic.",
+    "uiLocale": "Langue de l’interface",
+    "uiLocaleHint": "Menus, boutons et messages, sur chaque appareil où vous vous connectez.",
+    "translateInto": "Traduire en",
+    "translateIntoHint": "Votre principale langue de lecture.",
+    "autoTranslate": "Traduire automatiquement",
+    "autoTranslateHint": "Sinon, les articles en langue étrangère s’ouvrent dans l’original, avec un bouton Traduire.",
+    "defaultView": "Affichage par défaut",
+    "defaultViewHint": "Comment s’ouvrent d’abord les articles traduits.",
+    "never": "Ne jamais traduire",
+    "neverHint": "Les langues que vous lisez sans peine : leurs articles s’ouvrent dans l’original, titres compris.",
+    "addLanguage": "+ Ajouter une langue",
+    "add": "Ajouter",
+    "removeLanguage": "Retirer de la liste : {lang}",
+    "subscriptionsIntro": "{n, plural, one {# blog} other {# blogs}}. Importez les flux d’un autre lecteur avec OPML.",
+    "importOpml": "Importer un OPML",
+    "opmlExport": "Exporter",
+    "unsubscribe": "Se désabonner",
+    "subscribe": "S’abonner",
+    "noSubscriptions": "Aucun abonnement pour l’instant.",
+    "privacyIntro": "Choisissez ce que les autres voient sur votre profil.",
+    "showLikes": "Montrer mes coups de cœur",
+    "showLikesHint": "Sur votre profil, et aux personnes qui vous suivent. Le tableau de bord d’un auteur montre combien de personnes ont aimé un article, pas lesquelles.",
+    "showSubscriptions": "Montrer mes abonnements",
+    "showSubscriptionsHint": "Sur votre profil, et aux personnes qui vous suivent.",
+    "privacyDelay": "Votre profil public peut mettre quelques minutes à refléter un changement.",
+    "yourData": "Vos données",
+    "yourDataHint": "Votre profil, vos abonnements, coups de cœur, recommandations et surlignages, et les personnes que vous suivez, en un seul fichier.",
+    "download": "Télécharger"
+  },
+  "invites": {
+    "intro": "Tela fonctionne sur invitation pour l’instant. Vous pouvez inviter cinq personnes : un code permet à une personne de s’inscrire et, une fois utilisé, il compte pour de bon. Révoquez un code que personne n’a utilisé pour récupérer sa place.",
+    "left": "{n, plural, =0 {Vous avez invité toutes les personnes possibles.} one {Vous pouvez encore inviter # personne.} other {Vous pouvez encore inviter # personnes.}}",
+    "create": "Créer un code",
+    "none": "Aucun code pour l’instant. Créez-en un, puis envoyez son lien à quelqu’un.",
+    "copy": "Copier le lien",
+    "copied": "Copié",
+    "revoke": "Révoquer",
+    "joined": "Utilisé",
+    "joinedBy": "<who>{handle}</who> a rejoint Tela",
+    "errors": {
+      "allowance_used": "Vous avez déjà invité cinq personnes.",
+      "rate_limited": "Trop de codes en une heure. Réessayez plus tard.",
+      "failed": "Cela n’a pas fonctionné. Réessayez.",
+      "load": "Impossible de charger vos codes. Réessayez plus tard."
+    }
+  },
+  "account": {
+    "intro": "Comment vous vous connectez à Tela. Chaque changement vous est signalé par e-mail, et l’ajout d’un moyen de connexion déconnecte vos autres appareils.",
+    "email": "E-mail",
+    "emailHint": "Les codes de connexion sont envoyés ici.",
+    "password": "Mot de passe",
+    "passwordSet": "Défini. Vous pouvez toujours vous connecter avec un code reçu par e-mail.",
+    "passwordNone": "Non défini. Vous vous connectez avec un code reçu par e-mail.",
+    "passwordAdd": "Définir un mot de passe",
+    "passwordChange": "Changer de mot de passe",
+    "passwordCurrent": "Mot de passe actuel",
+    "passwordNew": "Nouveau mot de passe",
+    "passwordHint": "Au moins {min} caractères.",
+    "passwordSave": "Enregistrer le mot de passe",
+    "passwordSaved": "Mot de passe enregistré.",
+    "cancel": "Annuler",
+    "providers": {
+      "google": "Google",
+      "github": "GitHub"
+    },
+    "linkedSince": "Associé depuis {date}.",
+    "notLinked": "Non associé.",
+    "link": "Associer",
+    "unlink": "Dissocier",
+    "everywhere": "Se déconnecter partout",
+    "everywhereHint": "Met fin à toutes les sessions sur tous les appareils, celui-ci compris.",
+    "everywhereButton": "Se déconnecter partout",
+    "confirmTitle": "Confirmez votre identité",
+    "confirmHint": "Pour changer votre façon de vous connecter, confirmez votre identité avec un code envoyé à votre adresse e-mail.",
+    "confirmSent": "Nous avons envoyé un code à {email}. Saisissez-le ici.",
+    "confirm": "Recevoir un code par e-mail",
+    "confirmSubmit": "Confirmer",
+    "errors": {
+      "not_fresh": "Confirmez d’abord votre identité.",
+      "rejected": "Refusé. Vérifiez le mot de passe et réessayez.",
+      "rate_limited": "Trop de changements. Réessayez plus tard.",
+      "failed": "Cela n’a pas fonctionné. Réessayez.",
+      "link_failed": "Ce compte n’a pas pu être associé. Réessayez.",
+      "load": "Impossible de charger vos moyens de connexion. Réessayez plus tard."
+    }
+  },
+  "search": {
+    "title": "Recherche",
+    "resultsFor": "Résultats pour « {query} »",
+    "hint": "Les blogs par nom ou par adresse, et les articles de vos abonnements par titre (original ou traduit).",
+    "none": "Aucun résultat pour « {query} ».",
+    "sites": "Blogs",
+    "articles": "Articles de vos abonnements",
+    "noArticles": "Aucun article de vos abonnements ne correspond.",
+    "signInForArticles": "Connectez-vous pour chercher dans les articles de vos abonnements."
+  },
+  "notFound": {
+    "title": "Rien ici",
+    "intro": "Cette page n’existe pas, ou elle n’est pas publique.",
+    "home": "Aller à la page d’accueil"
+  },
+  "highlights": {
+    "title": "{n, plural, one {# surlignage} other {# surlignages}}",
+    "highlight": "Surligner",
+    "addNote": "Ajouter une note",
+    "noteLabel": "Note sur un surlignage",
+    "notePlaceholder": "Votre note. Elle n’est visible que par vous.",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "remove": "Supprimer le surlignage",
+    "detached": "Ce passage ne figure plus dans l’article.",
+    "elsewhere": "Dans une autre mise en page ou une autre langue : changez pour le voir."
+  },
+  "typography": {
+    "label": "Texte et thème",
+    "size": "Taille",
+    "measure": "Largeur",
+    "theme": "Thème",
+    "measures": {
+      "narrow": "Étroite",
+      "normal": "Normale",
+      "wide": "Large"
+    },
+    "themes": {
+      "system": "Auto",
+      "light": "Clair",
+      "dark": "Sombre"
+    }
+  },
+  "keys": {
+    "title": "Raccourcis clavier",
+    "next": "Article suivant",
+    "previous": "Article précédent",
+    "close": "Fermer l’article",
+    "highlight": "Surligner la sélection",
+    "sidebar": "Replier ou déplier la barre latérale",
+    "focus": "Masquer la liste pendant la lecture",
+    "help": "Afficher ou masquer cette liste",
+    "dismiss": "Fermer"
+  },
+  "info": {
+    "pages": "À propos de Tela",
+    "tabs": {
+      "about": "À propos",
+      "privacy": "Confidentialité",
+      "terms": "Conditions"
+    },
+    "onThisPage": "Sur cette page",
+    "short": "En bref",
+    "updated": "Dernière mise à jour : {date}"
+  }
+}

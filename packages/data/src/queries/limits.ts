@@ -22,6 +22,12 @@ export const ACTION_LIMITS = {
   claimVerify: { limit: 30, windowSec: 3600 },
   /** A body translation can cost a dozen model calls; a reader opens far fewer. */
   translate: { limit: 30, windowSec: 3600 },
+  /**
+   * A body converted between the Chinese scripts costs no call (ADR 0038), and a Traditional
+   * reader opens one with every Simplified post, so it has its own bucket: counted against the
+   * paid one, a morning's reading would refuse the next real translation.
+   */
+  convert: { limit: 600, windowSec: 3600 },
   /** A member's whole history in one response (ADR 0031's "Your data"). */
   export: { limit: 10, windowSec: 3600 },
   /** A picture of their own (ADR 0033): each one is an object in R2 and a new address. */

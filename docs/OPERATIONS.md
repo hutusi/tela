@@ -608,7 +608,15 @@ subscribers on an unclaimed site.
   week's totals.
 - **Budget:** `LLM_DAILY_BUDGET_TOKENS` stops the title sweep for the rest of the UTC day once
   spent. Reader requests still run, metered per member (30 requests an hour, a daily token
-  allowance).
+  allowance). A body converted between the Chinese scripts costs nothing and has its own limit
+  (`convert`, 600 an hour), so reading Simplified posts in Traditional never uses up the paid one.
+- **A Chinese body paid for twice** (ADR 0038): the Simplified and Traditional requests for one
+  post that overlap each pay the model for the same blocks. This finds them (a request cut short
+  by its reservation, and finished by the other, shows too):
+  `select s.content_key, s.used_tokens, t.used_tokens from body_translations s join
+  body_translations t on t.content_key = s.content_key and t.lang = 'zh-Hant' where s.lang =
+  'zh-Hans' and s.used_tokens > 0 and t.used_tokens > 0`. If it returns more than the odd row,
+  build the coordination the ADR describes: one model job per body and Simplified.
 - **Retranslate titles:** `delete from article_titles where article_id in (…)`; the sweep finds
   them again. A title that is its own translation is recorded as `echo` and not retried.
 - **A stuck body:** `select * from body_translations where state in ('requested', 'running')`. A
@@ -618,8 +626,12 @@ subscribers on an unclaimed site.
   translated, so a retry pays only for the rest.
 - **Switch provider:** change `LLM_PROVIDER`, `LLM_MODEL` and the key, and deploy tela-jobs.
   Cached blocks keep their `model`, so old and new output can be compared.
-- **Add a reading language:** append it to `READING_LANGUAGES` in `packages/shared`, add its name
-  to `LANGUAGE_NAMES`, and a message catalog if it is also a UI locale.
+- **Add a reading language:** the recipe is in AGENTS.md ("How to"). Deploying one makes every
+  article's title due in it at once, since `titleIsDue` has no age limit: the archive is translated
+  over the following days under `LLM_DAILY_BUDGET_TOKENS`. Watch it with `select target_lang,
+  count(*), sum(input_tokens + output_tokens) from llm_calls where job = 'translate.title' and
+  created_at > … group by target_lang`. Traditional Chinese costs nothing to backfill: it is
+  converted from Simplified, so `llm_calls` never has a `zh-Hant` row (ADR 0038).
 
 ## WebSub
 

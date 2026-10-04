@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { resetReading, setPrefs } from './helpers'
 
 // Runs in the `mobile` project (a Pixel 7 viewport), as the setup's member.
 test.describe('mobile fallback', () => {
@@ -44,15 +45,34 @@ test.describe('mobile fallback', () => {
     )
   })
 
-  test('中文 in the Read-in pill stays on one line on a phone', async ({ page }) => {
-    await page.goto('/reading')
-    const pill = page.getByTestId('read-in')
-    await pill.waitFor()
-    // Two characters can break between them where "ZH" never could: each choice is one line.
-    const heights = await pill
-      .getByRole('button')
-      .evaluateAll((buttons) => buttons.map((b) => Math.round(b.getBoundingClientRect().height)))
-    expect(new Set(heights).size, `button heights ${heights}`).toBe(1)
+  test('the Read-in menu stays on one line on a phone, and its list on screen', async ({
+    page,
+  }) => {
+    // Two characters can break between them where "EN" never could, and the phone's header has
+    // no room to spare: each of the button's words stays one line all the same.
+    await setPrefs(page.request, {}, { readingLang: 'zh-Hant' })
+    try {
+      await page.goto('/reading')
+      const readIn = page.getByTestId('read-in')
+      const summary = readIn.locator('summary')
+      await expect(summary).toHaveAccessibleName('Read in 繁體')
+      const heights = await summary
+        .locator('span')
+        .evaluateAll((spans) => spans.map((s) => Math.round(s.getBoundingClientRect().height)))
+      for (const height of heights) expect(height, `span heights ${heights}`).toBeLessThan(24)
+      // The list opens under the button, right-aligned to it, and fits the phone.
+      await summary.click()
+      await expect(readIn.getByTestId('read-in-zh-Hant')).toBeVisible()
+      const panel = await readIn.evaluate((el) => {
+        const box = el.querySelector('div')?.getBoundingClientRect()
+        const viewport = document.documentElement.clientWidth
+        return { left: box?.left ?? -1, right: box?.right ?? viewport + 1, viewport }
+      })
+      expect(panel.left, 'list off the left edge').toBeGreaterThanOrEqual(0)
+      expect(panel.right, 'list off the right edge').toBeLessThanOrEqual(panel.viewport)
+    } finally {
+      await resetReading(page.request)
+    }
   })
 
   test('the theme menu stays out of the header on a phone', async ({ page }) => {

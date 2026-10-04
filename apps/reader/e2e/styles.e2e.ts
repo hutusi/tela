@@ -1,5 +1,12 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
-import { ensureFeeds, expectHeaderFits, measureHeader, resetReading, synced } from './helpers'
+import {
+  ensureFeeds,
+  expectHeaderFits,
+  measureHeader,
+  resetReading,
+  setPrefs,
+  synced,
+} from './helpers'
 
 /**
  * What the class strings claim, checked against what the browser computes.
@@ -120,9 +127,9 @@ test.describe('stylesheet', () => {
     test(`the header fits and keeps its nav at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 })
       await page.goto('/reading')
-      // The Read-in pill appears once the session is known and is 137px wide ("Read in 中文 EN").
-      // Measuring before it lands reads a header ~150px lighter than the one a member sees, which
-      // passes when it shouldn't.
+      // The Read-in menu appears once the session is known ("Read in EN ▾", 97px). Measuring
+      // before it lands reads a header ~107px lighter than the one a member sees, which passes
+      // when it shouldn't.
       await page.getByTestId('read-in').waitFor({ state: 'attached' })
 
       const m = await measureHeader(page, ['account-menu', 'theme-menu', 'read-in'])
@@ -136,7 +143,38 @@ test.describe('stylesheet', () => {
         height: 34,
       })
       expect(m.controls['read-in']?.height, 'Read in off the family').toBe(34)
+      // Four languages went into a menu so that the header would not grow: the button stays
+      // narrower than the two-language pill it replaced ("Read in 中文 EN", 137px).
+      expect(m.controls['read-in']?.width, 'Read in wider than the pill').toBeLessThan(137)
     })
+  }
+
+  /**
+   * The width budget above is spent in English. French labels run longer ("Tableau de bord",
+   * "Lire en"), and every control but the nav is `shrink-0`, so a longer label takes its room from
+   * the nav or pushes the header past the viewport: measure each interface language. The account's
+   * language is the member's, so it is set there, and put back.
+   */
+  for (const locale of ['zh-Hans', 'zh-Hant', 'fr'] as const) {
+    for (const width of [640, 768, 800, 1024, 1280]) {
+      test(`the header fits and keeps its nav in ${locale} at ${width}px`, async ({ page }) => {
+        await setPrefs(page.request, {}, { uiLocale: locale })
+        try {
+          await page.setViewportSize({ width, height: 900 })
+          await page.goto('/reading')
+          await expect(page.locator('html')).toHaveAttribute('lang', locale)
+          await page.getByTestId('read-in').waitFor({ state: 'attached' })
+          const ids = ['account-menu', 'theme-menu', 'read-in']
+          const m = await measureHeader(page, ids)
+          expectHeaderFits(m, width)
+          for (const id of ids) {
+            expect(m.controls[id]?.height, `${id} wrapped`).toBeLessThanOrEqual(36)
+          }
+        } finally {
+          await setPrefs(page.request, {}, { uiLocale: 'en' })
+        }
+      })
+    }
   }
 
   /**
@@ -201,6 +239,66 @@ test.describe('stylesheet', () => {
       }
     })
   }
+
+  /**
+   * Simplified and Traditional share most code points but not every glyph's shape, and the font
+   * stacks name SC families: text in Traditional takes the TC ones, through the tokens, so the
+   * interface in 繁體中文 and a post or title marked zh-Hant both follow, and Simplified inside a
+   * Traditional page goes back. What a `:lang()` rule on a token resolves to is the browser's to say.
+   */
+  test('Chinese is drawn in the glyph forms of its own script', async ({ page }) => {
+    await page.goto('/reading')
+    await expect(page.getByTestId('nav-reading')).toBeVisible()
+    const families = await page.evaluate(() => {
+      const html = document.documentElement
+      const was = html.lang
+      const probe = (lang: string, className: string) => {
+        const el = document.createElement('div')
+        el.lang = lang
+        el.className = className
+        document.body.append(el)
+        const family = getComputedStyle(el).fontFamily
+        el.remove()
+        return family
+      }
+      // The interface's language is the page's: <body> resolves the sans token under it.
+      const ui = (lang: string) => {
+        html.lang = lang
+        return getComputedStyle(document.body).fontFamily
+      }
+      try {
+        const uiHant = ui('zh-Hant')
+        const hansInHant = probe('zh-Hans', 'article-body')
+        const uiHans = ui('zh-Hans')
+        html.lang = 'en'
+        return {
+          uiHant,
+          uiHans,
+          hansInHant,
+          bodyHant: probe('zh-Hant', 'article-body'),
+          bodyHans: probe('zh-Hans', 'article-body'),
+          titleHant: probe('zh-Hant', 'font-serif'),
+        }
+      } finally {
+        html.lang = was
+      }
+    })
+    // The first CJK family a stack names is the one a Chinese character is drawn in.
+    const cjk = (family: string) =>
+      family
+        .split(',')
+        .map((f) => f.trim().replace(/"/g, ''))
+        .find((f) => /CJK|Songti|PingFang/.test(f))
+    expect(cjk(families.uiHant), 'the interface in Traditional').toBe('PingFang TC')
+    expect(cjk(families.uiHans), 'the interface in Simplified').toBe('PingFang SC')
+    expect(cjk(families.bodyHant), 'a body in Traditional').toBe('Songti TC')
+    expect(cjk(families.titleHant), 'a title in Traditional').toBe('Songti TC')
+    expect(cjk(families.bodyHans), 'a body in Simplified').toBe('Songti SC')
+    expect(cjk(families.hansInHant), 'Simplified in a Traditional page').toBe('Songti SC')
+    // Latin text keeps the house faces either way.
+    expect(families.bodyHant).toMatch(/^"?EB Garamond"?,/)
+    expect(families.uiHant).toMatch(/^"?Figtree"?,/)
+  })
 
   test('the fade is off when the reader asks for less motion', async ({ page }) => {
     // Opening an article is the most repeated interaction in the app, and it fades every time.

@@ -4,7 +4,8 @@
  */
 import type { Request as CfRequest, ExecutionContext } from '@cloudflare/workers-types'
 import { r2Blobs } from '@tela/platform/cloudflare'
-import { detectLocale, isUiLocale } from '../src/i18n'
+import { isUiLocale, preferredLanguages } from '@tela/shared'
+import { detectLocale } from '../src/i18n'
 import { type PublicRoute, publicRoute, renderPublicPage } from '../src/ssr'
 import { createEdge, type PublicPages } from './edge'
 import type { Env } from './env'
@@ -14,9 +15,7 @@ const pages: PublicPages<PublicRoute> = {
   locale: (request) =>
     detectLocale(
       request.headers.get('cookie') ?? '',
-      (request.headers.get('accept-language') ?? '')
-        .split(',')
-        .map((l) => l.split(';')[0]?.trim() ?? ''),
+      preferredLanguages(request.headers.get('accept-language') ?? ''),
     ),
   render: ({ route, url, data, locale, template }) =>
     renderPublicPage({

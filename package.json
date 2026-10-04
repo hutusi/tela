@@ -21,7 +21,8 @@
     "test:workers": "bun run --filter '@tela/*' test:workers",
     "e2e": "apps/reader/e2e/run.sh",
     "db:generate": "bun run --filter @tela/data generate",
-    "admin": "bun apps/api/scripts/admin.ts"
+    "admin": "bun apps/api/scripts/admin.ts",
+    "i18n:hant": "bun apps/reader/scripts/hant.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",

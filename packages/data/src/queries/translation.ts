@@ -153,6 +153,8 @@ export function dueTitlesOfFeed(db: TelaDb, feedId: number): Promise<DueTitle[]>
 
 /**
  * Record the titles a job kept failing on as failed, so the sweep stops asking until they change.
+ * A row that held the previous title's translation loses it: readers would otherwise see the old
+ * headline translated under the new one, and a Traditional title converted from it would copy it.
  * The batch these statements join must bump the sync sequence.
  */
 export function failDueTitles(db: TelaDb, feedId: number, now: number) {
@@ -170,8 +172,8 @@ export function failDueTitles(db: TelaDb, feedId: number, now: number) {
         where t.article_id = d.id and t.lang = l.value and t.source_hash = d.title_hash
       )
     on conflict (article_id, lang) do update set
-      feed_id = excluded.feed_id, status = 'failed', source_hash = excluded.source_hash,
-      updated_at = excluded.updated_at, seq = excluded.seq
+      feed_id = excluded.feed_id, status = 'failed', title = null, excerpt = null, model = null,
+      source_hash = excluded.source_hash, updated_at = excluded.updated_at, seq = excluded.seq
   `)
 }
 

@@ -1,4 +1,8 @@
+import { normalizeLangTag } from '@tela/shared'
 import { eld } from 'eld/extrasmall'
+
+/** Kept here too: the feed pipeline normalizes declared tags through @tela/content. */
+export { normalizeLangTag }
 
 const HAN = /\p{Script=Han}/gu
 const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/gu
@@ -19,34 +23,20 @@ function count(text: string, re: RegExp): number {
   return (text.match(re) ?? []).length
 }
 
-/** Map a feed-provided or detected tag onto the tags Tela uses. */
-export function normalizeLangTag(tag: string | null | undefined): string | null {
-  if (!tag) return null
-  const t = tag.trim().toLowerCase().replace('_', '-')
-  if (!t) return null
-  if (t === 'zh' || t === 'zh-cn' || t === 'zh-sg' || t === 'zh-hans' || t.startsWith('zh-hans-')) {
-    return 'zh-Hans'
-  }
-  if (
-    t === 'zh-tw' ||
-    t === 'zh-hk' ||
-    t === 'zh-mo' ||
-    t === 'zh-hant' ||
-    t.startsWith('zh-hant-')
-  ) {
-    return 'zh-Hant'
-  }
-  return t.split('-')[0] ?? null
-}
-
-function chineseVariant(text: string): 'zh-Hans' | 'zh-Hant' {
+/**
+ * Which Chinese script `text` is written in, by its telltale characters. A short title can have
+ * none of them, or as many of each: the text cannot say, so a hint that names a script (a feed
+ * declaring zh-TW, a blog that writes Traditional) decides, and with no such hint Simplified does.
+ */
+function chineseVariant(text: string, hint: string | null): 'zh-Hans' | 'zh-Hant' {
   let simp = 0
   let trad = 0
   for (const ch of text) {
     if (SIMPLIFIED_ONLY.includes(ch)) simp++
     else if (TRADITIONAL_ONLY.includes(ch)) trad++
   }
-  return trad > simp ? 'zh-Hant' : 'zh-Hans'
+  if (trad !== simp) return trad > simp ? 'zh-Hant' : 'zh-Hans'
+  return hint === 'zh-Hant' ? 'zh-Hant' : 'zh-Hans'
 }
 
 /**
@@ -66,7 +56,7 @@ export function detectLanguage(text: string, hint?: string | null): string {
   const han = count(sample, HAN)
   if (kana / letters >= 0.05) return 'ja'
   if (hangul / letters >= 0.2) return 'ko'
-  if (han / letters >= 0.3) return chineseVariant(sample)
+  if (han / letters >= 0.3) return chineseVariant(sample, normalizedHint)
 
   if (letters < 20 && normalizedHint) return normalizedHint
   const result = eld.detect(sample)
@@ -77,6 +67,7 @@ export function detectLanguage(text: string, hint?: string | null): string {
     const hinted = normalizedHint.startsWith('zh-') ? 'zh' : normalizedHint
     if ((scores[hinted] ?? 0) >= (scores[guess] ?? 0) * HINT_TIE) guess = hinted
   }
-  if (guess === 'zh') return chineseVariant(sample)
+  // The hint was scored as plain `zh`; its script still breaks a tie between the two.
+  if (guess === 'zh') return chineseVariant(sample, normalizedHint)
   return normalizeLangTag(guess) ?? 'und'
 }

@@ -6,6 +6,7 @@
  * live answers on purpose (`settings-account.tsx`).
  */
 import {
+  asLabel,
   LANGUAGE_NAMES,
   languageBadge,
   READING_LANGUAGES,
@@ -460,6 +461,10 @@ function ReadingSection() {
 
 const MODES: ReadingMode[] = ['side', 'trans', 'orig']
 
+/** A native select, as each language choice here is: four or more do not fit a segmented row. */
+const SELECT =
+  'cursor-pointer rounded-lg border border-line bg-surface px-2.5 py-[7px] text-[13.5px] text-ink'
+
 function TranslationSection() {
   const t = useTranslations('settings')
   const tt = useTranslations('translation')
@@ -474,14 +479,22 @@ function TranslationSection() {
       <Intro>{t('translationIntro')}</Intro>
       {/* Each language in its own name, so it can be found whatever the page is in now. */}
       <SettingRow label={t('uiLocale')} hint={t('uiLocaleHint')}>
-        <Segmented
-          label={t('uiLocale')}
-          options={UI_LOCALES}
-          value={locale as UiLocale}
-          render={(l) => <span lang={l}>{LANGUAGE_NAMES[l][l]}</span>}
-          onChoose={setLocale}
-          testId="ui-locale"
-        />
+        <select
+          value={locale}
+          aria-label={t('uiLocale')}
+          onChange={(e) => {
+            const chosen = UI_LOCALES.find((l) => l === e.target.value)
+            if (chosen) setLocale(chosen)
+          }}
+          className={SELECT}
+          data-testid="ui-locale"
+        >
+          {UI_LOCALES.map((l) => (
+            <option key={l} value={l} lang={l}>
+              {asLabel(LANGUAGE_NAMES[l][l] ?? l, l)}
+            </option>
+          ))}
+        </select>
       </SettingRow>
       <SettingRow label={t('translateInto')} hint={t('translateIntoHint')}>
         <select
@@ -491,12 +504,12 @@ function TranslationSection() {
             const readingLang = READING_LANGUAGES.find((l) => l === e.target.value)
             if (readingLang) store.mutate({ type: 'setProfile', readingLang })
           }}
-          className="cursor-pointer rounded-lg border border-line bg-surface px-2.5 py-[7px] text-[13.5px] text-ink"
+          className={SELECT}
           data-testid="settings-reading-lang"
         >
           {READING_LANGUAGES.map((code) => (
             <option key={code} value={code}>
-              {names[code] ?? code}
+              {asLabel(names[code] ?? code, locale)}
             </option>
           ))}
         </select>
@@ -543,6 +556,7 @@ function NeverTranslate({
   const t = useTranslations('settings')
   const tables = useTables()
   const { store } = useStore()
+  const { locale } = useUi()
   const set = (value: string[]) => store.mutate({ type: 'setPref', key: PREF_KEYS.never, value })
   // The select only chooses; Add commits. Arrow keys on a closed select (Windows, Linux) and
   // type-ahead fire a change per step, which added a language at each one.
@@ -552,7 +566,9 @@ function NeverTranslate({
   const select = useRef<HTMLSelectElement>(null)
   const seen = new Set(Object.keys(names))
   for (const a of tables.articles.values()) if (a.sourceLang) seen.add(a.sourceLang)
+  // A chip or an option starts with the name; the remove button's label names it mid-sentence.
   const name = (tag: string) => names[tag] ?? tag
+  const label = (tag: string) => asLabel(name(tag), locale)
   const pool = [...seen]
     .filter((tag) => tag !== readingLang && !never.includes(tag))
     .sort((a, b) => name(a).localeCompare(name(b)))
@@ -568,7 +584,7 @@ function NeverTranslate({
             className="flex items-center gap-1.5 rounded-full border border-line bg-surface py-[5px] pr-1.5 pl-3 text-[13px]"
             data-testid="never-chip"
           >
-            {name(tag)}
+            {label(tag)}
             <button
               type="button"
               onClick={() => {
@@ -594,7 +610,7 @@ function NeverTranslate({
           <option value="">{t('addLanguage')}</option>
           {pool.map((tag) => (
             <option key={tag} value={tag}>
-              {name(tag)}
+              {label(tag)}
             </option>
           ))}
         </select>

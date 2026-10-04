@@ -1,10 +1,14 @@
 import { languageBadge } from '@tela/shared'
 
-/** Short relative time such as "2h ago" / "2 小时前", or a date beyond 30 days. */
+/**
+ * Short relative time such as "2h ago" / "2 小时前" / "il y a 2 h", or a date beyond 30 days.
+ * French takes the short style: its narrow one is a bare signed number ("-2 h").
+ */
 export function relativeTime(at: number | null, locale: string, now = Date.now()): string {
   if (at === null) return ''
   const diffSec = Math.round((now - at) / 1000)
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'narrow' })
+  const style = locale === 'fr' ? 'short' : 'narrow'
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style })
   const abs = Math.abs(diffSec)
   if (abs < 60) return rtf.format(0, 'minute').replace(/^in |^now$/, (m) => (m === 'now' ? m : ''))
   if (abs < 3600) return rtf.format(-Math.round(diffSec / 60), 'minute')
@@ -24,10 +28,19 @@ export function swatchColor(id: number): string {
 }
 
 /**
- * A language in the header's pills: Chinese in its own script, English as EN. Anything else falls
- * back to the badge ("JA"), which is what the article list calls it too.
+ * A language on the header's Read-in button, which names only the current one: each Chinese in
+ * its own script and told apart (简体, 繁體: "中文" alone stopped saying which once Traditional
+ * came). Those are what Chinese language switchers say on either side of the strait; a lone 简 or
+ * 繁 says too little beside EN, and 简中, 繁中 are game-localization slang. The others are their
+ * badge in capitals. Anything else falls back to the badge ("JA"),
+ * which is what the article list calls it too.
  */
-const PILL_LABELS: Record<string, string> = { 'zh-Hans': '中文', en: 'EN' }
+const PILL_LABELS: Record<string, string> = {
+  'zh-Hans': '简体',
+  'zh-Hant': '繁體',
+  en: 'EN',
+  fr: 'FR',
+}
 export function pillLabel(tag: string): string {
   return PILL_LABELS[tag] ?? languageBadge(tag)
 }

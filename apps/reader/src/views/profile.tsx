@@ -227,6 +227,7 @@ function Posts({
   testId: string
 }) {
   const t = useTranslations('profile')
+  const tc = useTranslations('common')
   if (items.length === 0) {
     return (
       <p className="py-12 text-center text-muted" data-testid={testId}>
@@ -253,7 +254,7 @@ function Posts({
                   className="m-0 font-serif text-[21px] leading-[1.4] italic"
                   style={{ textWrap: 'pretty' }}
                 >
-                  “{item.note}”
+                  {tc('quoted', { text: item.note })}
                 </p>
               ) : null}
               <div className="relative flex flex-col gap-1.5 hover:opacity-75">

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { bumpSeq, currentSeq } from '@tela/data'
 import type { Blobs } from '@tela/platform'
 import { memoryBlobs } from '@tela/platform/portable'
+import { preferredLanguages, type UiLocale } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { createTestApi, signedIn, type TestApi } from '../../api/test/helpers'
 import { detectLocale } from '../src/i18n'
@@ -63,11 +64,12 @@ const TEMPLATE = `<!doctype html>
 const pages: PublicPages<PublicRoute> = {
   route: publicRoute,
   locale: (request) =>
-    detectLocale(request.headers.get('cookie') ?? '', [
-      request.headers.get('accept-language') ?? '',
-    ]),
+    detectLocale(
+      request.headers.get('cookie') ?? '',
+      preferredLanguages(request.headers.get('accept-language') ?? ''),
+    ),
   render: ({ route, url, data, locale, template }) =>
-    renderPublicPage({ route, url, data, locale: locale as 'en' | 'zh-Hans', now: 0, template }),
+    renderPublicPage({ route, url, data, locale: locale as UiLocale, now: 0, template }),
 }
 
 beforeEach(async () => {
@@ -548,7 +550,7 @@ describe('public pages', () => {
     expect(privacy).toMatch(/<meta name="description" content="Tela keeps what it needs/)
     expect(privacy).toContain('id="cookies"')
     expect(privacy).toContain('href="#cookies"')
-    expect(privacy).toContain('Last updated 3 October 2026')
+    expect(privacy).toContain('Last updated 4 October 2026')
     expect(apiCalls).toEqual([])
     // Three pages, once each: the second visit to Privacy came from the cache.
     expect(cache.size).toBe(3)
@@ -579,13 +581,18 @@ describe('public pages', () => {
     expect(zh).toContain('主题：深色')
   })
 
-  test("mark the visitor's language in the Read-in pill, as the cache is kept per language", async () => {
-    const pill = (html: string) =>
-      html.match(/<div[^>]*data-testid="visitor-locale"[^>]*>.*?<\/div>/s)?.[0] ?? ''
-    const en = pill(await (await page('/privacy')).text())
+  test("mark the visitor's language in the Read-in menu, as the cache is kept per language", async () => {
+    const menu = (html: string) =>
+      html.match(/<details[^>]*data-testid="visitor-locale"[^>]*>.*?<\/details>/s)?.[0] ?? ''
+    const summary = (html: string) => html.match(/<summary.*?<\/summary>/s)?.[0] ?? ''
+    const en = menu(await (await page('/privacy')).text())
+    // The button names the language the page is in; the list names each in its own script.
+    expect(summary(en)).toMatch(/Read in.*<span lang="en"[^>]*>EN<\/span>/s)
     expect(en).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="visitor-locale-en"/)
     expect(en).toMatch(/<button[^>]*aria-pressed="false"[^>]*data-testid="visitor-locale-zh-Hans"/)
-    const zh = pill(await (await page('/privacy', { cookie: 'tela_locale=zh-Hans' })).text())
+    expect(en).toMatch(/<button[^>]*lang="zh-Hans"[^>]*>简体中文<\/button>/)
+    const zh = menu(await (await page('/privacy', { cookie: 'tela_locale=zh-Hans' })).text())
+    expect(summary(zh)).toMatch(/阅读语言.*<span lang="zh-Hans"[^>]*>简体<\/span>/s)
     expect(zh).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="visitor-locale-zh-Hans"/)
   })
 
@@ -594,12 +601,24 @@ describe('public pages', () => {
     expect(zh).toContain('<html lang="zh-Hans"')
     expect(zh).toContain('<title>条款 · Tela</title>')
     expect(zh).toContain('id="writers"')
-    expect(zh).toContain('最后更新：2026年10月3日')
+    expect(zh).toContain('最后更新：2026年10月4日')
     const en = await (await page('/terms')).text()
     expect(en).toContain('<html lang="en"')
     expect(en).toContain('<title>Terms · Tela</title>')
     expect(cache.size).toBe(2)
     expect(apiCalls).toEqual([])
+  })
+
+  test('Traditional Chinese and French have info pages of their own, chosen by the browser too', async () => {
+    const hant = await (await page('/privacy', { 'accept-language': 'zh-TW,zh;q=0.8' })).text()
+    expect(hant).toContain('<html lang="zh-Hant"')
+    expect(hant).toContain('<title>隱私 · Tela</title>')
+    expect(hant).toContain('最後更新：2026年10月4日')
+    const fr = await (await page('/privacy', { cookie: 'tela_locale=fr' })).text()
+    expect(fr).toContain('<html lang="fr"')
+    expect(fr).toContain('<title>Confidentialité · Tela</title>')
+    expect(fr).toContain('Dernière mise à jour : 4 octobre 2026')
+    expect(fr).toContain('id="cookies"')
   })
 
   test('nothing a blog says can close the handover script or become markup', async () => {

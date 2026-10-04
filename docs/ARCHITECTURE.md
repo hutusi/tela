@@ -160,7 +160,7 @@ and hashes as the `NORM_VERSION` contract.
   deterministic mock. `translateBlocks` validates every block (placeholder multiset, length ratio,
   non-identity) and retries failures once in strict mode.
 - **Titles, eager** (`translate.title`, keyed by feed): the sweep finds feeds with articles whose
-  current title hash has no row in some launch language; a job translates up to 20 titles and
+  current title hash has no row in some reading language (`READING_LANGUAGES`: `zh-Hans`, `zh-Hant`, `en`, `fr`); a job translates up to 20 titles and
   excerpts of one feed per call per language, and commits each (language, source) group in its
   own fenced batch as it lands. The background budget (`usage_daily` subject `'*'`)
   stops the sweep for the day once spent.
@@ -172,6 +172,14 @@ and hashes as the `NORM_VERSION` contract.
   `t/<key>/<lang>/<sha>.json`.
 - The block cache is content-addressed and shared by titles and bodies; a title echo never enters
   it.
+- **Traditional Chinese is converted, never translated** (ADR 0038). The model is only ever asked
+  for Simplified; `packages/llm/src/zh-script.ts` (OpenCC, Taiwan phrasing) converts. Between the
+  two scripts a title or body is converted from the source, with no call, usage or reservation
+  (`apps/jobs/src/translation/scripts.ts`, `planFor`). From any other language, titles group by
+  what the model writes, so one Simplified call writes both Chinese rows, and a Traditional body
+  is written and cached as Simplified and converted on the way out. The block cache holds only
+  model output; a conversion is never stored there. Simplified and Traditional requests for one
+  body that overlap each pay for the same blocks, a known cost (ADR 0038).
 
 ## API (`apps/api`, ADR 0024)
 

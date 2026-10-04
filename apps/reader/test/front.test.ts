@@ -153,6 +153,14 @@ describe('language names', () => {
     expect(nameIn('zh-Hans', 'en')).toBe('Chinese (Simplified)')
     expect(nameIn('es', 'zh-Hans')).toBe('西班牙语')
     expect(nameIn('en', 'en')).toBe('English')
+    expect(nameIn('es', 'zh-Hant')).toBe('西班牙文')
+  })
+
+  test('starts with a capital, as a label does, though French writes the name in lower case', () => {
+    expect(nameIn('es', 'fr')).toBe('Espagnol')
+    expect(nameIn('zh-Hant', 'fr')).toBe('Chinois traditionnel')
+    // Beyond Tela's own list, the runtime's name is a label too.
+    expect(nameIn('uk', 'fr')).toBe('Ukrainien')
   })
 
   test('a tag no runtime knows is shown as itself', () => {

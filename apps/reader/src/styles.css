@@ -118,6 +118,27 @@
 }
 
 /*
+ * Chinese in the glyphs of its own script. Simplified and Traditional share most code points but
+ * not every glyph's shape, and a font draws them in the forms of the region it was made for, so
+ * the stacks above, which name SC families, would draw Traditional text in mainland forms. Text in
+ * Traditional (the interface in 繁體中文, or a post, a title or an option marked
+ * `lang="zh-Hant"`) takes the TC families instead, and Simplified inside it goes back to SC. The
+ * tokens change, not `font-family`, so every `var(--font-*)` at or under the element follows; an
+ * element with a `lang` and no family of its own inherits the stack its parent already resolved,
+ * so it needs `font-serif` (or a class that sets a family) to switch. Unlayered like the dark
+ * tokens: these rules set only variables, which no utility sets, so they outrank nothing they
+ * should not. `styles.e2e.ts` checks the computed families.
+ */
+:lang(zh-Hant) {
+  --font-serif: "EB Garamond", "Songti TC", "Noto Serif CJK TC", Georgia, serif;
+  --font-sans: "Figtree", "PingFang TC", "Noto Sans CJK TC", system-ui, sans-serif;
+}
+:lang(zh-Hans) {
+  --font-serif: "EB Garamond", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+  --font-sans: "Figtree", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+}
+
+/*
  * The paper scope: an element that stays a light card on either ground, as the design draws the
  * For writers example card at night. It re-declares the light tokens on the element itself, and
  * what it declares there is what its descendants inherit, ahead of the dark values on :root. A

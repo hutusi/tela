@@ -306,12 +306,12 @@ test.describe('reader', () => {
     const pushed = () =>
       page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
     let push = pushed()
-    await page.getByTestId('ui-locale-zh-Hans').click()
+    await page.getByTestId('ui-locale').selectOption('zh-Hans')
     await expect(page.getByTestId('nav-reading')).toHaveText('阅读')
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
     await push
     push = pushed()
-    await page.getByTestId('ui-locale-en').click()
+    await page.getByTestId('ui-locale').selectOption('en')
     await expect(page.getByTestId('nav-reading')).toHaveText('Reading')
     await push
   })

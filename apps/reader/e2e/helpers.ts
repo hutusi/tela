@@ -389,12 +389,12 @@ export async function measureHeader(page: Page, controls: string[]) {
 /**
  * What every header must hold at `width`. The page never scrolls sideways, and the nav is never
  * squeezed below one pill (a 4px nav was what `md` once rendered); from `sm` up it is not clipped
- * at all. Measured on macOS with the theme menu and the Read-in pill in: the member's pill row is
- * 247px (Reading, Discover, Following), and 640px, the tightest case, leaves it 38px to spare,
- * where CI's Linux Chromium sets text about 2% wider (an older 335px row measured 341px there),
- * some 10px of the row and the pill together. The visitor's row is 175px, with 57px to spare at
- * 640. Below `sm` the member's nav scrolls:
- * 102px of it shows at 360.
+ * at all. On macOS with the theme menu and the Read-in menu in: the member's pill row is 247px
+ * (Reading, Discover, Following), and 640px, the tightest case, leaves it about 72px to spare
+ * with the widest label (简体, 繁體: the button is 104px there, where the two-language pill it
+ * replaced was 138px and left 38px), where CI's Linux Chromium sets text about 2% wider (an older
+ * 335px row measured 341px there). The visitor's row is 175px, with about 90px to spare at 640.
+ * Below `sm` the member's nav scrolls: about 122px of it shows at 360.
  */
 export function expectHeaderFits(m: Awaited<ReturnType<typeof measureHeader>>, width: number) {
   expect(m.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)

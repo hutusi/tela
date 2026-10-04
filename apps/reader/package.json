@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json",
-    "icons": "bun scripts/generate-icons.ts"
+    "icons": "bun scripts/generate-icons.ts",
+    "i18n:hant": "bun scripts/hant.ts"
   },
   "dependencies": {
     "@fontsource/eb-garamond": "^5.3.0",
@@ -28,9 +29,11 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.62.0",
     "@cloudflare/workers-types": "^5.20260927.1",
+    "@formatjs/icu-messageformat-parser": "^3.5.17",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tela/data": "workspace:*",
+    "@tela/llm": "workspace:*",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
