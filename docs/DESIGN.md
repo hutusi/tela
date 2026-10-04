@@ -89,7 +89,10 @@ Playwright installs. Regenerate and commit them whenever the geometry changes.
   The stylesheet picks which half shows (`.light-only` and `.dark-only`, under the same selectors
   as the dark tokens), so the edge's cached page and the first paint are right before any script
   runs; it does nothing until the script runs. A press flips from the theme the page shows, read
-  then, to the other one; it never goes back to Auto, which is Settings' and the Aa menu's.
+  then, to the other one; it never goes back to Auto, which is Settings' and the Aa menu's. A
+  member's press is their pref, and the page shows what the store makes of it, never the press
+  itself: a press that loses to a later choice changes nothing, rather than leaving the page and
+  Settings at odds.
 - The avatar opens the account menu (Tela v2): a 220px `surface` panel under it with the member's
   name and @handle, then Your profile, Subscriptions (`/settings/subscriptions`), Dashboard,
   Settings, Invite friends (`/settings/invites`), a rule, and Sign out in `muted`. A disclosure, not an ARIA menu: Tab reaches its items.

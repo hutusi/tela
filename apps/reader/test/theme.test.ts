@@ -4,12 +4,16 @@ import type { PrefRow } from '@tela/sync'
 import {
   applyTheme,
   deviceTheme,
-  flipTheme,
   PREFS,
+  pressThemeSwitch,
   shownTheme,
   type Theme,
   themeToAdopt,
+  typographyOf,
 } from '../src/lib/typography'
+import { memoryPersistence } from '../src/store/db'
+import { LocalStore } from '../src/store/local'
+import { NOW, profile, pull } from './rows'
 
 const saved = {
   document: globalThis.document,
@@ -85,29 +89,79 @@ describe('the theme the page shows', () => {
   })
 })
 
-describe('the switch', () => {
-  test('goes from the dark a system shows to light, then back to dark, and never to system', () => {
+/** A device holding no account: a visitor's. */
+async function visitor() {
+  const store = new LocalStore(memoryPersistence(), () => NOW)
+  await store.open()
+  return store
+}
+
+/** A device holding account `a`, synced, whose theme row (if any) was written at `NOW`. */
+async function member(held: string | null, clock = NOW) {
+  const store = new LocalStore(memoryPersistence(), () => clock)
+  await store.open()
+  await store.setUser('a')
+  const prefs = held === null ? [] : [{ key: PREFS.theme, value: held, updatedAt: NOW, seq: 4 }]
+  await store.applyPull(pull(5, { profile: [profile], prefs }, true), store.epoch)
+  return store
+}
+
+const stored = (store: LocalStore) => typographyOf(store.getSnapshot().tables).theme
+
+describe("a visitor's switch", () => {
+  test('goes from the dark a system shows to light, then back to dark, and never to system', async () => {
+    const store = await visitor()
     systemDark = true
     applyTheme('system')
     written = []
-    expect(flipTheme()).toBe('light')
+    pressThemeSwitch(store)
     expect(dataset.theme).toBe('light')
     expect(held.get('tela.theme')).toBe('light')
-    expect(flipTheme()).toBe('dark')
+    pressThemeSwitch(store)
     expect(dataset.theme).toBe('dark')
     expect(held.get('tela.theme')).toBe('dark')
     expect(written).toEqual(['light', 'dark'])
+    // Nothing is queued for a server: it is no one's.
+    expect(store.unsent()).toEqual([])
   })
 
-  test('answers for the page as it is when pressed, whoever changed it since', () => {
-    expect(flipTheme()).toBe('dark')
-    // Settings, the Aa menu or a sync put the page back to light in between.
+  test('answers for the page as it is when pressed, whoever changed it since', async () => {
+    const store = await visitor()
+    pressThemeSwitch(store)
+    expect(dataset.theme).toBe('dark')
+    // Another tab or the device put the page back to light in between.
     applyTheme('light')
-    expect(flipTheme()).toBe('dark')
+    pressThemeSwitch(store)
+    expect(dataset.theme).toBe('dark')
     // And to following a system that has gone dark.
     applyTheme('system')
     systemDark = true
-    expect(flipTheme()).toBe('light')
+    pressThemeSwitch(store)
+    expect(dataset.theme).toBe('light')
+  })
+})
+
+describe("a member's switch", () => {
+  test('is their synced pref, and the page shows it', async () => {
+    const store = await member(null)
+    pressThemeSwitch(store)
+    expect(stored(store)).toBe('dark')
+    expect(dataset.theme).toBe('dark')
+    expect(store.unsent()).toMatchObject([{ type: 'setPref', key: PREFS.theme, value: 'dark' }])
+    pressThemeSwitch(store)
+    expect(stored(store)).toBe('light')
+    expect(dataset.theme).toBe('light')
+  })
+
+  // Codex review: with the browser's clock a minute behind, the press loses to the dark chosen at
+  // NOW, and a page painted from the press showed light while Settings and the server said dark,
+  // for good, since the pref never changed to put it right.
+  test('that loses to a later choice leaves the page as the pref has it', async () => {
+    const store = await member('dark', NOW - 60_000)
+    applyTheme('dark')
+    pressThemeSwitch(store)
+    expect(stored(store)).toBe('dark')
+    expect(dataset.theme).toBe('dark')
   })
 })
 
@@ -122,7 +176,7 @@ describe("this device's theme", () => {
     expect(deviceTheme()).toBe('system')
   })
 
-  test('is system when the storage refuses', () => {
+  test('is system when the storage refuses', async () => {
     const refusing = {
       getItem: () => {
         throw new Error('denied')
@@ -135,7 +189,7 @@ describe("this device's theme", () => {
     try {
       expect(deviceTheme()).toBe('system')
       // And a choice still reaches the page.
-      expect(flipTheme()).toBe('dark')
+      pressThemeSwitch(await visitor())
       expect(dataset.theme).toBe('dark')
     } finally {
       Object.assign(globalThis, { localStorage: storage })

@@ -4,6 +4,7 @@
  * this one does not know falls back to the default instead of rendering nonsense.
  */
 import type { Tables } from '@tela/sync'
+import type { LocalStore } from '../store/local'
 
 export const SIZES = { s: 0.88, m: 1, l: 1.13, xl: 1.27 } as const
 export const MEASURES = { narrow: 560, normal: 640, wide: 760 } as const
@@ -62,14 +63,26 @@ export function shownTheme(): 'light' | 'dark' {
   return window.matchMedia(DARK).matches ? 'dark' : 'light'
 }
 
+/** What the header's switch needs of the device store. */
+type Switchable = Pick<LocalStore, 'userId' | 'mutate' | 'getSnapshot'>
+
 /**
- * Put the other theme on the page, and say which it was. Never `system`: the switch only says
- * light or dark, and going back to following the system is for Settings and the Aa menu.
+ * The header's switch, pressed: the other theme from the one the page shows, light or dark, never
+ * `system` (following the system again is for Settings and the Aa menu). A visitor's is this
+ * device's alone, so it goes on the page at once. A member's is their synced pref, and the page
+ * shows what the store makes of it, never the press itself: a pref is settled by the later `at`,
+ * so a press can lose (to a choice made later on another device, or to a clock behind it), and a
+ * page painted from the press would then disagree with Settings and the server for good, since the
+ * pref never changed to put it right (Codex review).
  */
-export function flipTheme(): 'light' | 'dark' {
+export function pressThemeSwitch(store: Switchable): void {
   const next = shownTheme() === 'dark' ? 'light' : 'dark'
-  applyTheme(next)
-  return next
+  if (store.userId === null) {
+    applyTheme(next)
+    return
+  }
+  store.mutate({ type: 'setPref', key: PREFS.theme, value: next })
+  applyTheme(typographyOf(store.getSnapshot().tables).theme)
 }
 
 /** What this device last put on the page, as `applyTheme` kept it; `system` when it cannot say. */

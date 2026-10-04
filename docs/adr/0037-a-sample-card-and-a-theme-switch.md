@@ -44,8 +44,11 @@ some 35 px to spare.
 
 - **What a press does.** It flips from the theme shown, reading `data-theme` or the system at press
   time, to the other one. It never goes back to System: that stays in Settings and the Aa menu.
-- **Where it is kept.** A press writes the synced `ui.theme` pref through `store.mutate`, which keeps
-  nothing for a visitor, so the same press is device-only for them.
+- **Where it is kept.** A member's press writes the synced `ui.theme` pref, and the page then shows
+  what the store makes of it, as it does for Settings and the Aa menu. A pref is settled by the
+  later `at`, so a press can lose to a choice made later elsewhere, or to a clock that is behind;
+  a page painted from the press would then disagree with Settings and the server for good. A
+  visitor has no pref, so their press goes on the page and stays on the device.
 - **The glyph comes from CSS.** The moon shows on a light page and the sun on a dark one, under the
   same selectors as the colour tokens. It is therefore right in the edge's cached HTML and before
   any script runs.
