@@ -1,5 +1,12 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
-import { ensureFeeds, expectHeaderFits, measureHeader, resetReading, synced } from './helpers'
+import {
+  ensureFeeds,
+  expectHeaderFits,
+  measureHeader,
+  resetReading,
+  setPrefs,
+  synced,
+} from './helpers'
 
 /**
  * What the class strings claim, checked against what the browser computes.
@@ -140,6 +147,34 @@ test.describe('stylesheet', () => {
       // narrower than the two-language pill it replaced ("Read in 中文 EN", 137px).
       expect(m.controls['read-in']?.width, 'Read in wider than the pill').toBeLessThan(137)
     })
+  }
+
+  /**
+   * The width budget above is spent in English. French labels run longer ("Tableau de bord",
+   * "Lire en"), and every control but the nav is `shrink-0`, so a longer label takes its room from
+   * the nav or pushes the header past the viewport: measure each interface language. The account's
+   * language is the member's, so it is set there, and put back.
+   */
+  for (const locale of ['zh-Hans', 'zh-Hant', 'fr'] as const) {
+    for (const width of [640, 768, 800, 1024, 1280]) {
+      test(`the header fits and keeps its nav in ${locale} at ${width}px`, async ({ page }) => {
+        await setPrefs(page.request, {}, { uiLocale: locale })
+        try {
+          await page.setViewportSize({ width, height: 900 })
+          await page.goto('/reading')
+          await expect(page.locator('html')).toHaveAttribute('lang', locale)
+          await page.getByTestId('read-in').waitFor({ state: 'attached' })
+          const ids = ['account-menu', 'theme-menu', 'read-in']
+          const m = await measureHeader(page, ids)
+          expectHeaderFits(m, width)
+          for (const id of ids) {
+            expect(m.controls[id]?.height, `${id} wrapped`).toBeLessThanOrEqual(36)
+          }
+        } finally {
+          await setPrefs(page.request, {}, { uiLocale: 'en' })
+        }
+      })
+    }
   }
 
   /**

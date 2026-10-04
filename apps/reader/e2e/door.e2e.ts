@@ -37,6 +37,47 @@ async function codeAfter(request: APIRequestContext, email: string, before: numb
   return latestCode(request, email)
 }
 
+/**
+ * A browser's own languages choose the interface until the visitor chooses (ADR 0038): Taiwan's
+ * and Hong Kong's Chinese read Traditional, French reads French, and a language listed after a
+ * preferred one does not beat it.
+ */
+test.describe('a zh-TW browser', () => {
+  test.use({ locale: 'zh-TW' })
+  test('lands in Traditional Chinese', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant')
+    await expect(page.getByTestId('nav-join')).toHaveText('加入')
+    await expect(page.getByTestId('visitor-locale').locator('summary')).toContainText('繁中')
+  })
+})
+
+test.describe('a fr-FR browser', () => {
+  test.use({ locale: 'fr-FR' })
+  test('lands in French, and Read in takes it to Traditional Chinese and back', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 900 })
+    await page.goto('/')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    await expect(page.getByTestId('nav-join')).toHaveText('S’inscrire')
+
+    const menu = page.getByTestId('visitor-locale')
+    await menu.locator('summary').click()
+    await page.getByTestId('visitor-locale-zh-Hant').click()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant')
+    await expect(page.getByTestId('nav-join')).toHaveText('加入')
+    // The choice is the cookie's, so the edge renders the next page in it.
+    await page.goto('/about')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant')
+
+    await menu.locator('summary').click()
+    await page.getByTestId('visitor-locale-fr').click()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    await expect(page.getByTestId('nav-join')).toHaveText('S’inscrire')
+  })
+})
+
 test.describe('the visitor header', () => {
   /**
    * The member's header is measured in styles.e2e.ts; a visitor's has controls of its own (Read
@@ -76,6 +117,30 @@ test.describe('the visitor header', () => {
       await expect(page.getByTestId('nav-reading')).toHaveCount(0)
       await expect(page.getByTestId('search-link')).toHaveCount(0)
     })
+  }
+
+  /**
+   * The same budget in the other interface languages: French labels run longer ("S’inscrire",
+   * "Lire en", "Pour les auteurs"), and the controls do not shrink. The header's Log in is
+   * "Connexion" for this: "Se connecter" clipped the nav by 4px at 640.
+   */
+  for (const locale of ['zh-Hans', 'zh-Hant', 'fr'] as const) {
+    for (const width of [640, 768, 1024]) {
+      test(`fits in ${locale} at ${width}px`, async ({ page, context }) => {
+        await context.addCookies([{ name: 'tela_locale', value: locale, url: BASE }])
+        await page.setViewportSize({ width, height: 900 })
+        await page.goto('/')
+        await expect(page.locator('html')).toHaveAttribute('lang', locale)
+        await page.getByTestId('nav-join').waitFor()
+        const controls = ['nav-join', 'nav-login', 'visitor-locale', 'theme-menu']
+        const m = await measureHeader(page, controls)
+        expectHeaderFits(m, width)
+        expect(m.client, 'nav is clipped').toBe(m.scroll)
+        for (const id of controls) {
+          expect(m.controls[id]?.height, `${id} wrapped`).toBeLessThanOrEqual(36)
+        }
+      })
+    }
   }
 
   test('Join and the sheet are the primary pair: ink by day, the lifted green by night', async ({
