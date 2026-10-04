@@ -36,7 +36,7 @@ export function isUiLocale(value: unknown): value is UiLocale {
  */
 export function normalizeLangTag(tag: string | null | undefined): string | null {
   if (!tag) return null
-  const t = tag.trim().toLowerCase().replace('_', '-')
+  const t = tag.trim().toLowerCase().replaceAll('_', '-')
   if (!t) return null
   if (t === 'zh' || t === 'zh-cn' || t === 'zh-sg' || t === 'zh-hans' || t.startsWith('zh-hans-')) {
     return 'zh-Hans'

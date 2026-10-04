@@ -56,6 +56,10 @@ describe('languages', () => {
     expect(normalizeLangTag('zh_TW')).toBe('zh-Hant')
     expect(normalizeLangTag('zh-HK')).toBe('zh-Hant')
     expect(normalizeLangTag('zh-Hant-TW')).toBe('zh-Hant')
+    // Some sources separate every subtag with an underscore, not only the first.
+    expect(normalizeLangTag('zh_Hant_TW')).toBe('zh-Hant')
+    expect(normalizeLangTag('zh_Hans_CN')).toBe('zh-Hans')
+    expect(normalizeLangTag('en_US')).toBe('en')
     expect(normalizeLangTag('fr-CA')).toBe('fr')
     expect(normalizeLangTag('en-US')).toBe('en')
     expect(normalizeLangTag('')).toBeNull()
