@@ -55,6 +55,14 @@ test.describe('mobile fallback', () => {
     expect(new Set(heights).size, `button heights ${heights}`).toBe(1)
   })
 
+  test('the theme switch stays out of the header on a phone', async ({ page }) => {
+    // Below `sm` the header's room is the nav's; Settings and the Aa menu choose the theme there.
+    await page.goto('/reading')
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+    await expect(page.getByTestId('theme-toggle')).toHaveCount(1)
+    await expect(page.getByTestId('theme-toggle')).toBeHidden()
+  })
+
   test('the account menu opens on a phone, and holds the way to Settings', async ({ page }) => {
     await page.goto('/reading')
     await page.getByTestId('account-menu').click()

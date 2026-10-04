@@ -125,10 +125,15 @@ test.describe('stylesheet', () => {
       // passes when it shouldn't.
       await page.getByTestId('read-in').waitFor({ state: 'attached' })
 
-      const m = await measureHeader(page, ['account-menu'])
+      const m = await measureHeader(page, ['account-menu', 'theme-toggle'])
       expectHeaderFits(m, width)
       // The one way to Settings, the Dashboard and signing out: whole, and on screen.
       expect(m.controls['account-menu']?.width, 'account menu squeezed').toBe(30)
+      // The theme switch is a circle beside search, never pressed into an oval.
+      expect(m.controls['theme-toggle'], 'theme switch squeezed').toMatchObject({
+        width: 34,
+        height: 34,
+      })
     })
   }
 
@@ -331,6 +336,45 @@ test.describe('stylesheet', () => {
 
     await page.getByTestId('theme-system').click()
     expect(await paper()).toBe('rgb(246, 242, 234)')
+  })
+
+  /**
+   * The header's switch (ADR 0037) is the same synced pref as Settings: pressed on a dark system,
+   * it chooses Light, Settings says so, and the next visit is light from the first paint. The
+   * glyph is the stylesheet's, so its name is checked as the browser computes it.
+   */
+  test("a member's theme switch is their synced choice", async ({ page }) => {
+    const paper = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await page.goto('/reading')
+    await expect(page.getByTestId('nav-reading')).toBeVisible()
+    const toggle = page.getByTestId('theme-toggle')
+    await expect(toggle).toHaveAccessibleName('Switch to light theme')
+    expect(await paper()).toBe('rgb(31, 28, 24)')
+
+    const pushed = page.waitForRequest(
+      (r) => r.url().includes('/api/v1/mutations') && (r.postData() ?? '').includes('ui.theme'),
+    )
+    await toggle.click()
+    expect(await paper()).toBe('rgb(246, 242, 234)')
+    await expect(toggle).toHaveAccessibleName('Switch to dark theme')
+    expect(JSON.parse((await pushed).postData() ?? '{}').mutations).toContainEqual(
+      expect.objectContaining({ type: 'setPref', key: 'ui.theme', value: 'light' }),
+    )
+
+    await page.goto('/settings/reading')
+    await expect(page.getByTestId('theme-light')).toHaveAttribute('aria-pressed', 'true')
+    await page.reload({ waitUntil: 'commit' })
+    await page.waitForFunction(() => document.body !== null)
+    expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('light')
+    await expect(page.getByTestId('theme-light')).toHaveAttribute('aria-pressed', 'true')
+    expect(await paper()).toBe('rgb(246, 242, 234)')
+
+    // Pressed again it is Dark, never back to Auto: following the system is Settings' to choose.
+    await toggle.click()
+    await expect(page.getByTestId('theme-dark')).toHaveAttribute('aria-pressed', 'true')
+    await page.getByTestId('theme-system').click()
+    await expect(toggle).toHaveAccessibleName('Switch to light theme')
   })
 
   test("text size and line length are the member's, and reach the article", async ({ page }) => {

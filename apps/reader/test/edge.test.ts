@@ -554,6 +554,25 @@ describe('public pages', () => {
     expect(cache.size).toBe(3)
   })
 
+  test('carry the theme switch with both its halves, which the stylesheet chooses between', async () => {
+    // One cached page for every visitor, whatever their theme: the HTML holds both glyphs and both
+    // labels, and the page's CSS shows one (ADR 0037).
+    const toggle = (html: string) =>
+      html.match(/<button[^>]*data-testid="theme-toggle"[^>]*>.*?<\/button>/s)?.[0] ?? ''
+    const en = toggle(await (await page('/about')).text())
+    expect(en).toMatch(
+      /<span class="light-only"><svg.*?<\/svg><span class="sr-only">Switch to dark theme<\/span><\/span>/s,
+    )
+    expect(en).toMatch(
+      /<span class="dark-only"><svg.*?<\/svg><span class="sr-only">Switch to light theme<\/span><\/span>/s,
+    )
+    // No state in the markup for a cached page to get wrong.
+    expect(en).not.toContain('aria-pressed')
+    const zh = toggle(await (await page('/about', { cookie: 'tela_locale=zh-Hans' })).text())
+    expect(zh).toContain('切换到深色主题')
+    expect(zh).toContain('切换到浅色主题')
+  })
+
   test("an info page renders in the reader's language, cached apart", async () => {
     const zh = await (await page('/terms', { cookie: 'tela_locale=zh-Hans' })).text()
     expect(zh).toContain('<html lang="zh-Hans"')

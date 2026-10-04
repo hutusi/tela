@@ -59,6 +59,22 @@ test.describe('without JavaScript', () => {
     await expect(page.getByTestId('site-footer')).toBeVisible()
     await expect(page.locator('#tela-data')).toHaveCount(1)
   })
+
+  test("the theme switch says where it goes from the stylesheet alone, as the colo's copy is shared", async ({
+    page,
+  }) => {
+    // One cached page for every visitor: the glyph and the name are the system's to choose.
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await page.goto('/')
+    const toggle = page.getByTestId('theme-toggle')
+    await expect(toggle).toHaveAccessibleName('Switch to light theme')
+    await expect(toggle.locator('.dark-only svg')).toBeVisible()
+    await expect(toggle.locator('.light-only svg')).toBeHidden()
+    await page.emulateMedia({ colorScheme: 'light' })
+    await expect(toggle).toHaveAccessibleName('Switch to dark theme')
+    await expect(toggle.locator('.light-only svg')).toBeVisible()
+    await expect(toggle.locator('.dark-only svg')).toBeHidden()
+  })
 })
 
 test.describe('with JavaScript', () => {
