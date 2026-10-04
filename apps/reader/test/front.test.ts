@@ -117,6 +117,15 @@ describe("the edition's titles", () => {
       bylineName('hello@manuelmoreale.com (Manuel Moreale)', 'Manuel Moreale — Everything Feed'),
     ).toBeNull()
     expect(bylineName('austin kleon', 'Austin Kleon')).toBeNull()
+    // A name inside a longer word is not the blog naming them (CodeRabbit, PR #25).
+    expect(bylineName('Ann', 'Annual Review')).toBe('Ann')
+    expect(bylineName('Ann', "Ann's Notes")).toBeNull()
+    expect(bylineName('Kleon', 'Austin Kleon')).toBeNull()
+    expect(bylineName('Leon', 'Austin Kleon')).toBe('Leon')
+    expect(bylineName('J. R. Smith (Jr.)', 'J. R. Smith (Jr.) writes')).toBeNull()
+    // Unspaced scripts have no edges to a name: anywhere in the title counts.
+    expect(bylineName('阮一峰', '阮一峰的网络日志')).toBeNull()
+    expect(bylineName('张鑫旭', '张鑫旭-鑫空间-鑫生活')).toBeNull()
     expect(bylineName('  ', 'Blog')).toBeNull()
     expect(bylineName(null, 'Blog')).toBeNull()
   })
