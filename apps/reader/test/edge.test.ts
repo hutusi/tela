@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { bumpSeq, currentSeq } from '@tela/data'
 import type { Blobs } from '@tela/platform'
 import { memoryBlobs } from '@tela/platform/portable'
+import { preferredLanguages } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { createTestApi, signedIn, type TestApi } from '../../api/test/helpers'
 import { detectLocale } from '../src/i18n'
@@ -63,9 +64,10 @@ const TEMPLATE = `<!doctype html>
 const pages: PublicPages<PublicRoute> = {
   route: publicRoute,
   locale: (request) =>
-    detectLocale(request.headers.get('cookie') ?? '', [
-      request.headers.get('accept-language') ?? '',
-    ]),
+    detectLocale(
+      request.headers.get('cookie') ?? '',
+      preferredLanguages(request.headers.get('accept-language') ?? ''),
+    ),
   render: ({ route, url, data, locale, template }) =>
     renderPublicPage({ route, url, data, locale: locale as 'en' | 'zh-Hans', now: 0, template }),
 }

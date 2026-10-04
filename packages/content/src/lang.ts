@@ -1,4 +1,8 @@
+import { normalizeLangTag } from '@tela/shared'
 import { eld } from 'eld/extrasmall'
+
+/** Kept here too: the feed pipeline normalizes declared tags through @tela/content. */
+export { normalizeLangTag }
 
 const HAN = /\p{Script=Han}/gu
 const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/gu
@@ -17,26 +21,6 @@ const TRADITIONAL_ONLY = '們這說為於後與個麼來時會國對發經過還
 
 function count(text: string, re: RegExp): number {
   return (text.match(re) ?? []).length
-}
-
-/** Map a feed-provided or detected tag onto the tags Tela uses. */
-export function normalizeLangTag(tag: string | null | undefined): string | null {
-  if (!tag) return null
-  const t = tag.trim().toLowerCase().replace('_', '-')
-  if (!t) return null
-  if (t === 'zh' || t === 'zh-cn' || t === 'zh-sg' || t === 'zh-hans' || t.startsWith('zh-hans-')) {
-    return 'zh-Hans'
-  }
-  if (
-    t === 'zh-tw' ||
-    t === 'zh-hk' ||
-    t === 'zh-mo' ||
-    t === 'zh-hant' ||
-    t.startsWith('zh-hant-')
-  ) {
-    return 'zh-Hant'
-  }
-  return t.split('-')[0] ?? null
 }
 
 function chineseVariant(text: string): 'zh-Hans' | 'zh-Hant' {
