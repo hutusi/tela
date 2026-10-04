@@ -554,23 +554,39 @@ describe('public pages', () => {
     expect(cache.size).toBe(3)
   })
 
-  test('carry the theme switch with both its halves, which the stylesheet chooses between', async () => {
-    // One cached page for every visitor, whatever their theme: the HTML holds both glyphs and both
-    // labels, and the page's CSS shows one (ADR 0037).
-    const toggle = (html: string) =>
-      html.match(/<button[^>]*data-testid="theme-toggle"[^>]*>.*?<\/button>/s)?.[0] ?? ''
-    const en = toggle(await (await page('/about')).text())
-    expect(en).toMatch(
-      /<span class="light-only"><svg.*?<\/svg><span class="sr-only">Switch to dark theme<\/span><\/span>/s,
-    )
-    expect(en).toMatch(
-      /<span class="dark-only"><svg.*?<\/svg><span class="sr-only">Switch to light theme<\/span><\/span>/s,
-    )
-    // No state in the markup for a cached page to get wrong.
+  test('carry the theme menu with all three glyphs, which the stylesheet chooses between', async () => {
+    // One cached page for every visitor, whatever their theme: the HTML holds every glyph with its
+    // name, the page's CSS shows the one `data-theme` says, and no item claims a choice (ADR 0037).
+    const menu = (html: string) =>
+      html.match(/<details[^>]*data-testid="theme-menu"[^>]*>.*?<\/details>/s)?.[0] ?? ''
+    const en = menu(await (await page('/about')).text())
+    for (const [theme, name] of [
+      ['system', 'Auto'],
+      ['light', 'Light'],
+      ['dark', 'Dark'],
+    ]) {
+      expect(en).toMatch(
+        new RegExp(
+          `<span class="theme-is-${theme}"><svg.*?</svg><span class="sr-only">Theme: ${name}</span></span>`,
+          's',
+        ),
+      )
+      expect(en).toContain(`data-testid="theme-menu-${theme}"`)
+    }
     expect(en).not.toContain('aria-pressed')
-    const zh = toggle(await (await page('/about', { cookie: 'tela_locale=zh-Hans' })).text())
-    expect(zh).toContain('切换到深色主题')
-    expect(zh).toContain('切换到浅色主题')
+    const zh = menu(await (await page('/about', { cookie: 'tela_locale=zh-Hans' })).text())
+    expect(zh).toContain('主题：跟随系统')
+    expect(zh).toContain('主题：深色')
+  })
+
+  test("mark the visitor's language in the Read-in pill, as the cache is kept per language", async () => {
+    const pill = (html: string) =>
+      html.match(/<div[^>]*data-testid="visitor-locale"[^>]*>.*?<\/div>/s)?.[0] ?? ''
+    const en = pill(await (await page('/privacy')).text())
+    expect(en).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="visitor-locale-en"/)
+    expect(en).toMatch(/<button[^>]*aria-pressed="false"[^>]*data-testid="visitor-locale-zh-Hans"/)
+    const zh = pill(await (await page('/privacy', { cookie: 'tela_locale=zh-Hans' })).text())
+    expect(zh).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="visitor-locale-zh-Hans"/)
   })
 
   test("an info page renders in the reader's language, cached apart", async () => {

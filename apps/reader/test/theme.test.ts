@@ -1,12 +1,12 @@
-/** The theme switch (ADR 0037): the page as it is, the other theme, and a visitor's choice kept. */
+/** The theme menu (ADR 0037): the page's choice, a choice made, and a visitor's choice kept. */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import type { PrefRow } from '@tela/sync'
 import {
   applyTheme,
+  chooseTheme,
   deviceTheme,
   PREFS,
-  pressThemeSwitch,
-  shownTheme,
+  pageTheme,
   type Theme,
   themeToAdopt,
   typographyOf,
@@ -60,24 +60,19 @@ const prefs = (value?: unknown) => ({
   ),
 })
 
-describe('the theme the page shows', () => {
-  test("is the page's own choice, over the system's", () => {
+describe('the theme the page is set to', () => {
+  test('is its own choice, whatever the system shows', () => {
     systemDark = true
     dataset.theme = 'light'
-    expect(shownTheme()).toBe('light')
-    systemDark = false
+    expect(pageTheme()).toBe('light')
     dataset.theme = 'dark'
-    expect(shownTheme()).toBe('dark')
+    expect(pageTheme()).toBe('dark')
   })
 
-  test("is the system's without a choice, or with one this build does not know", () => {
-    systemDark = true
-    expect(shownTheme()).toBe('dark')
-    systemDark = false
-    expect(shownTheme()).toBe('light')
+  test('is Auto without a choice, or with one this build does not know', () => {
+    expect(pageTheme()).toBe('system')
     dataset.theme = 'sepia'
-    systemDark = true
-    expect(shownTheme()).toBe('dark')
+    expect(pageTheme()).toBe('system')
   })
 
   test('following the system is no choice on the page, and is kept as one on the device', () => {
@@ -108,58 +103,42 @@ async function member(held: string | null, clock = NOW) {
 
 const stored = (store: LocalStore) => typographyOf(store.getSnapshot().tables).theme
 
-describe("a visitor's switch", () => {
-  test('goes from the dark a system shows to light, then back to dark, and never to system', async () => {
+describe("a visitor's choice", () => {
+  test("goes on the page and stays on the device, Auto included, and is no one else's", async () => {
     const store = await visitor()
-    systemDark = true
-    applyTheme('system')
     written = []
-    pressThemeSwitch(store)
-    expect(dataset.theme).toBe('light')
-    expect(held.get('tela.theme')).toBe('light')
-    pressThemeSwitch(store)
+    chooseTheme(store, 'dark')
     expect(dataset.theme).toBe('dark')
-    expect(held.get('tela.theme')).toBe('dark')
-    expect(written).toEqual(['light', 'dark'])
-    // Nothing is queued for a server: it is no one's.
+    chooseTheme(store, 'light')
+    expect(dataset.theme).toBe('light')
+    // Back to following the system: no choice on the page, and that kept for the next visit.
+    chooseTheme(store, 'system')
+    expect('theme' in dataset).toBe(false)
+    expect(written).toEqual(['dark', 'light', 'system'])
+    // Nothing is queued for a server.
     expect(store.unsent()).toEqual([])
-  })
-
-  test('answers for the page as it is when pressed, whoever changed it since', async () => {
-    const store = await visitor()
-    pressThemeSwitch(store)
-    expect(dataset.theme).toBe('dark')
-    // Another tab or the device put the page back to light in between.
-    applyTheme('light')
-    pressThemeSwitch(store)
-    expect(dataset.theme).toBe('dark')
-    // And to following a system that has gone dark.
-    applyTheme('system')
-    systemDark = true
-    pressThemeSwitch(store)
-    expect(dataset.theme).toBe('light')
   })
 })
 
-describe("a member's switch", () => {
+describe("a member's choice", () => {
   test('is their synced pref, and the page shows it', async () => {
     const store = await member(null)
-    pressThemeSwitch(store)
+    chooseTheme(store, 'dark')
     expect(stored(store)).toBe('dark')
     expect(dataset.theme).toBe('dark')
     expect(store.unsent()).toMatchObject([{ type: 'setPref', key: PREFS.theme, value: 'dark' }])
-    pressThemeSwitch(store)
-    expect(stored(store)).toBe('light')
-    expect(dataset.theme).toBe('light')
+    chooseTheme(store, 'system')
+    expect(stored(store)).toBe('system')
+    expect('theme' in dataset).toBe(false)
   })
 
-  // Codex review: with the browser's clock a minute behind, the press loses to the dark chosen at
-  // NOW, and a page painted from the press showed light while Settings and the server said dark,
+  // Codex review: with the browser's clock a minute behind, the choice loses to the dark chosen at
+  // NOW, and a page painted from the choice showed light while Settings and the server said dark,
   // for good, since the pref never changed to put it right.
-  test('that loses to a later choice leaves the page as the pref has it', async () => {
+  test('that loses to a later one leaves the page as the pref has it', async () => {
     const store = await member('dark', NOW - 60_000)
     applyTheme('dark')
-    pressThemeSwitch(store)
+    chooseTheme(store, 'light')
     expect(stored(store)).toBe('dark')
     expect(dataset.theme).toBe('dark')
   })
@@ -189,7 +168,7 @@ describe("this device's theme", () => {
     try {
       expect(deviceTheme()).toBe('system')
       // And a choice still reaches the page.
-      pressThemeSwitch(await visitor())
+      chooseTheme(await visitor(), 'dark')
       expect(dataset.theme).toBe('dark')
     } finally {
       Object.assign(globalThis, { localStorage: storage })

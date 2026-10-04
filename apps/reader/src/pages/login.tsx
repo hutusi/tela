@@ -63,7 +63,7 @@ export function LoginPage() {
           <LogoMark />
           <span>Tela</span>
         </Link>
-        <VisitorLocale className="shrink-0" />
+        <VisitorLocale className="flex shrink-0" />
       </header>
       <main className="mx-auto flex w-full max-w-sm flex-1 flex-col px-6 py-16 animate-fade">
         <DoorForm

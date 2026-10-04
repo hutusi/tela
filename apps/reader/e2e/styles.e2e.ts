@@ -120,20 +120,22 @@ test.describe('stylesheet', () => {
     test(`the header fits and keeps its nav at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 })
       await page.goto('/reading')
-      // The Read-in menu appears once the session is known and is 140px wide ("Read in 中文 EN").
+      // The Read-in pill appears once the session is known and is 137px wide ("Read in 中文 EN").
       // Measuring before it lands reads a header ~150px lighter than the one a member sees, which
       // passes when it shouldn't.
       await page.getByTestId('read-in').waitFor({ state: 'attached' })
 
-      const m = await measureHeader(page, ['account-menu', 'theme-toggle'])
+      const m = await measureHeader(page, ['account-menu', 'theme-menu', 'read-in'])
       expectHeaderFits(m, width)
       // The one way to Settings, the Dashboard and signing out: whole, and on screen.
       expect(m.controls['account-menu']?.width, 'account menu squeezed').toBe(30)
-      // The theme switch is a circle beside search, never pressed into an oval.
-      expect(m.controls['theme-toggle'], 'theme switch squeezed').toMatchObject({
+      // The theme menu is a circle beside search, never pressed into an oval, and Read in is of
+      // the same family: as tall.
+      expect(m.controls['theme-menu'], 'theme menu squeezed').toMatchObject({
         width: 34,
         height: 34,
       })
+      expect(m.controls['read-in']?.height, 'Read in off the family').toBe(34)
     })
   }
 
@@ -339,25 +341,29 @@ test.describe('stylesheet', () => {
   })
 
   /**
-   * The header's switch (ADR 0037) is the same synced pref as Settings: pressed on a dark system,
-   * it chooses Light, Settings says so, and the next visit is light from the first paint. The
-   * glyph is the stylesheet's, so its name is checked as the browser computes it.
+   * The header's theme menu (ADR 0037) is the same synced pref as Settings: on a dark system, Light
+   * chosen there is Light in Settings and the next visit is light from the first paint, a choice
+   * made in Settings shows on the menu, and Auto goes back to the system. The glyph is the
+   * stylesheet's, so its name is checked as the browser computes it.
    */
-  test("a member's theme switch is their synced choice", async ({ page }) => {
+  test("a member's theme menu is their synced choice", async ({ page }) => {
     const paper = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
     await page.emulateMedia({ colorScheme: 'dark' })
     await page.goto('/reading')
     await expect(page.getByTestId('nav-reading')).toBeVisible()
-    const toggle = page.getByTestId('theme-toggle')
-    await expect(toggle).toHaveAccessibleName('Switch to light theme')
+    const menu = page.getByTestId('theme-menu')
+    const summary = menu.locator('summary')
+    await expect(summary).toHaveAccessibleName('Theme: Auto')
     expect(await paper()).toBe('rgb(31, 28, 24)')
 
     const pushed = page.waitForRequest(
       (r) => r.url().includes('/api/v1/mutations') && (r.postData() ?? '').includes('ui.theme'),
     )
-    await toggle.click()
+    await summary.click()
+    await expect(menu.getByTestId('theme-menu-system')).toHaveAttribute('aria-pressed', 'true')
+    await menu.getByTestId('theme-menu-light').click()
     expect(await paper()).toBe('rgb(246, 242, 234)')
-    await expect(toggle).toHaveAccessibleName('Switch to dark theme')
+    await expect(summary).toHaveAccessibleName('Theme: Light')
     expect(JSON.parse((await pushed).postData() ?? '{}').mutations).toContainEqual(
       expect.objectContaining({ type: 'setPref', key: 'ui.theme', value: 'light' }),
     )
@@ -370,11 +376,16 @@ test.describe('stylesheet', () => {
     await expect(page.getByTestId('theme-light')).toHaveAttribute('aria-pressed', 'true')
     expect(await paper()).toBe('rgb(246, 242, 234)')
 
-    // Pressed again it is Dark, never back to Auto: following the system is Settings' to choose.
-    await toggle.click()
-    await expect(page.getByTestId('theme-dark')).toHaveAttribute('aria-pressed', 'true')
-    await page.getByTestId('theme-system').click()
-    await expect(toggle).toHaveAccessibleName('Switch to light theme')
+    // Settings' choice is the menu's too.
+    await page.getByTestId('theme-dark').click()
+    await expect(summary).toHaveAccessibleName('Theme: Dark')
+    await summary.click()
+    await expect(menu.getByTestId('theme-menu-dark')).toHaveAttribute('aria-pressed', 'true')
+    // And Auto from the menu is Auto in Settings: the system's dark.
+    await menu.getByTestId('theme-menu-system').click()
+    await expect(page.getByTestId('theme-system')).toHaveAttribute('aria-pressed', 'true')
+    await expect(summary).toHaveAccessibleName('Theme: Auto')
+    expect(await paper()).toBe('rgb(31, 28, 24)')
   })
 
   test("text size and line length are the member's, and reach the article", async ({ page }) => {

@@ -20,8 +20,7 @@
     "subscriptions": "Subscriptions",
     "invites": "Invite friends",
     "writers": "For writers",
-    "toDark": "Switch to dark theme",
-    "toLight": "Switch to light theme"
+    "themeIs": "Theme: {theme}"
   },
   "front": {
     "description": "Independent blogs from around the world, each in its own language, with their titles translated into yours.",

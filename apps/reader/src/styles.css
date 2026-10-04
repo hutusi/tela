@@ -166,27 +166,21 @@
 }
 
 /*
- * What only one theme shows: the theme switch's moon by day and its sun at night, each with its
- * label (ThemeToggle). The stylesheet chooses, under the same two selectors as the dark tokens, so
- * the edge's cached page and the first paint are right before any script runs. Unlayered on
- * purpose, so the theme always wins: never put a display utility on these classes, as it would be
- * dead code, and lay out what is inside them instead. Twice, as the dark blocks are.
+ * The theme menu's glyph for the choice the page holds, each with its name (ThemeMenu): Auto with
+ * no `data-theme`, or Light or Dark. The stylesheet chooses, from the attribute the inline script
+ * puts on before anything paints, so the edge's one cached page is right for every visitor before
+ * any script of the app's runs. It is the choice, not the colours shown, so no media query. Unlayered
+ * on purpose, so the choice always wins: never put a display utility on these classes, as it would
+ * be dead code, and lay out what is inside them instead.
  */
-.dark-only {
+.theme-is-light,
+.theme-is-dark,
+:root[data-theme="light"] .theme-is-system,
+:root[data-theme="dark"] .theme-is-system {
   display: none;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .light-only {
-    display: none;
-  }
-  :root:not([data-theme="light"]) .dark-only {
-    display: revert;
-  }
-}
-:root[data-theme="dark"] .light-only {
-  display: none;
-}
-:root[data-theme="dark"] .dark-only {
+:root[data-theme="light"] .theme-is-light,
+:root[data-theme="dark"] .theme-is-dark {
   display: revert;
 }
 

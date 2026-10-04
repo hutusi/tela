@@ -50,38 +50,28 @@ export function applyTheme(theme: Theme): void {
   } catch {}
 }
 
-const DARK = '(prefers-color-scheme: dark)'
-
-/**
- * The theme the page shows now: its own choice, else the system's. Asked whenever it matters and
- * never kept, so a press answers for the page as it is, after Settings, the Aa menu or a sync
- * from another device has changed it.
- */
-export function shownTheme(): 'light' | 'dark' {
-  const chosen = document.documentElement.dataset.theme
-  if (chosen === 'light' || chosen === 'dark') return chosen
-  return window.matchMedia(DARK).matches ? 'dark' : 'light'
+/** The theme the page is set to: its `data-theme`, or `system` without one. */
+export function pageTheme(): Theme {
+  return pick(document.documentElement.dataset.theme, THEMES, 'system')
 }
 
-/** What the header's switch needs of the device store. */
-type Switchable = Pick<LocalStore, 'userId' | 'mutate' | 'getSnapshot'>
+/** What the header's theme menu needs of the device store. */
+type Choosing = Pick<LocalStore, 'userId' | 'mutate' | 'getSnapshot'>
 
 /**
- * The header's switch, pressed: the other theme from the one the page shows, light or dark, never
- * `system` (following the system again is for Settings and the Aa menu). A visitor's is this
- * device's alone, so it goes on the page at once. A member's is their synced pref, and the page
- * shows what the store makes of it, never the press itself: a pref is settled by the later `at`,
- * so a press can lose (to a choice made later on another device, or to a clock behind it), and a
- * page painted from the press would then disagree with Settings and the server for good, since the
- * pref never changed to put it right (Codex review).
+ * A theme chosen in the header's menu (ADR 0037): Auto, Light or Dark, as Settings and the Aa menu
+ * offer them. A visitor's is this device's alone, so it goes on the page at once. A member's is
+ * their synced pref, and the page shows what the store makes of it, never the choice itself: a
+ * pref is settled by the later `at`, so a choice can lose (to one made later on another device, or
+ * to a clock behind it), and a page painted from it would then disagree with Settings and the
+ * server for good, since the pref never changed to put it right (Codex review).
  */
-export function pressThemeSwitch(store: Switchable): void {
-  const next = shownTheme() === 'dark' ? 'light' : 'dark'
+export function chooseTheme(store: Choosing, theme: Theme): void {
   if (store.userId === null) {
-    applyTheme(next)
+    applyTheme(theme)
     return
   }
-  store.mutate({ type: 'setPref', key: PREFS.theme, value: next })
+  store.mutate({ type: 'setPref', key: PREFS.theme, value: theme })
   applyTheme(typographyOf(store.getSnapshot().tables).theme)
 }
 
