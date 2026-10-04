@@ -746,7 +746,7 @@ describe('the front page (ADR 0035)', () => {
       )
     ).text()
     expect(html).toContain('No posts yet.')
-    expect(html).toContain('of independent blogs.')
+    expect(html).toMatch(/A confluence of <em[^>]*>independent blogs\.<\/em>/)
     expect(html).not.toMatch(/\b0 independent blogs/)
     expect(html).not.toContain('The latest from')
     expect(html).not.toContain(' · </span>')

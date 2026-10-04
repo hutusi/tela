@@ -23,9 +23,9 @@
   },
   "front": {
     "description": "来自世界各地的独立博客，各用各的语言，标题译成你的语言。",
-    "hero": "{count} 个独立博客，在此<em>汇流</em>。",
-    "heroPlain": "独立博客，在此<em>汇流</em>。",
-    "intro": "来自世界各地的个人博客，各用各的语言。Tela 把它们汇在一处，并翻译标题，让你打开之前就知道值不值得读。会员还能逐段对照译文阅读全文。",
+    "hero": "<em>{count} 个独立博客</em>，在此汇流。",
+    "heroPlain": "<em>独立博客</em>，在此汇流。",
+    "intro": "Tela 把世界各地的博客和个人网站汇成一片思想的海洋，你读的时候，就译成中文或英文。",
     "join": "加入 Tela",
     "logIn": "登录",
     "week": "本周，{blogs} 个博客用 {languages} 种语言写作",
@@ -33,17 +33,18 @@
     "titlesIn": "标题语言",
     "original": "原文",
     "minutes": "{n} 分钟",
-    "by": "作者 {name}",
     "empty": "还没有文章。Tela 汇集的博客一有新作，就会出现在这里。",
     "writers": {
-      "title": "你写博客吗？<em>让它成为你的名片。</em>",
-      "intro": "在 Tela 认领你的博客：你的主页会展示它，用其他语言阅读的读者也能看到译成他们语言的标题。",
-      "cta": "写作者"
-    }
+      "title": "你写博客吗？让它成为你的名片。",
+      "intro": "在 Tela 认领你的博客，就有一页属于你：你的名字、你的博客、你推荐的文章。你的网站原样不动。",
+      "cta": "制作你的名片"
+    },
+    "read": "阅读 →",
+    "readPost": "阅读全文 →"
   },
   "footer": {
     "label": "关于 Tela",
-    "made": "Tela © {year} · 由 <maker>AI Naive</maker> 制作",
+    "made": "© {year} · 由 <maker>AI Naive</maker> 制作",
     "about": "关于",
     "writers": "写作者",
     "privacy": "隐私",

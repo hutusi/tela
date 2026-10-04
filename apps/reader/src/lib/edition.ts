@@ -29,6 +29,24 @@ export function pickLead(posts: readonly FrontPost[]): FrontPost | null {
   )
 }
 
+/**
+ * The name a feed gives its post's author, as the lead's byline shows it beside the blog: RSS
+ * writes `hello@site.com (Name)` and some feeds `Name <hello@site.com>`, which come down to the
+ * name, and an address alone is no name. None when the blog's own name already says it ("Austin
+ * Kleon", "Manuel Moreale — Everything Feed"), since the byline would only repeat it.
+ */
+export function bylineName(author: string | null, blog: string): string | null {
+  const raw = author?.trim()
+  if (!raw) return null
+  const name = (
+    /^\S+@\S+\s*\((.+)\)$/.exec(raw)?.[1] ??
+    /^(.+?)\s*<\S+@\S+>$/.exec(raw)?.[1] ??
+    raw
+  ).trim()
+  if (!name || /^\S+@\S+$/.test(name)) return null
+  return blog.toLocaleLowerCase().includes(name.toLocaleLowerCase()) ? null : name
+}
+
 /** A text and the language it is in, for the element's `lang`. */
 export type Shown = { text: string; lang: string | undefined }
 

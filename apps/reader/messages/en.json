@@ -23,9 +23,9 @@
   },
   "front": {
     "description": "Independent blogs from around the world, each in its own language, with their titles translated into yours.",
-    "hero": "A <em>confluence</em> of {count, plural, one {# independent blog} other {# independent blogs}}.",
-    "heroPlain": "A <em>confluence</em> of independent blogs.",
-    "intro": "Personal blogs from around the world, each in its own language. Tela gathers them in one place and translates their titles, so you can tell what is worth reading before you open it. Members read whole posts beside a translation, paragraph by paragraph.",
+    "hero": "A confluence of <em>{count, plural, one {# independent blog.} other {# independent blogs.}}</em>",
+    "heroPlain": "A confluence of <em>independent blogs.</em>",
+    "intro": "Tela channels blogs and personal sites from around the world into one ocean of ideas, translated into Chinese or English as you read.",
     "join": "Join Tela",
     "logIn": "Log in",
     "week": "This week, {blogs, plural, one {# blog} other {# blogs}} wrote in {languages, plural, one {# language} other {# languages}}",
@@ -33,17 +33,18 @@
     "titlesIn": "Titles in",
     "original": "Original language",
     "minutes": "{n} min",
-    "by": "by {name}",
     "empty": "No posts yet. The blogs Tela gathers will show here as they write.",
     "writers": {
-      "title": "Write a blog? <em>Make it your calling card.</em>",
-      "intro": "Claim it on Tela: your profile shows it, and readers in other languages see its titles in theirs.",
-      "cta": "For writers"
-    }
+      "title": "Write a blog? Make it your calling card.",
+      "intro": "Claim your blog on Tela and get a page with your name, your blog and the posts you recommend. Your site stays where it is.",
+      "cta": "Make your card"
+    },
+    "read": "Read →",
+    "readPost": "Read the post →"
   },
   "footer": {
     "label": "About Tela",
-    "made": "Tela © {year} · Made by <maker>AI Naive</maker>",
+    "made": "© {year} · Made by <maker>AI Naive</maker>",
     "about": "About",
     "writers": "For writers",
     "privacy": "Privacy",

@@ -312,30 +312,54 @@ Discover card (from the design): 40 px avatar (favicon or initial), name with a 
 claimed, host, language chip, serif tagline, "Latest: …", "N readers · cadence", and a
 Subscribe/Subscribed pill. Cadence is derived from posts in the last 30 days.
 
-Front page (`views/landing.tsx`, from `Tela Landing.dc.html` Turn 2, ADR 0035): a 1120 px page.
-The hero is a serif h1 (42 px, 64 px from `md`), "A confluence of N independent blogs.", the word
-"confluence" in `accent`, in the 400 italic Garamond ships (the h1 is 500, which has no
-italic), then an `ink-2` intro and two pills, "Join Tela" (filled `primary`) and "Log in"
-(outlined): links to `/join` and `/login` in the edge's page, which open the header's sheet once
-the app runs, as the header's own Join and Log in do. Under it a strip
-between two `line` rules: the date and "This week, N blogs wrote in M languages" (or "The latest
-from N blogs" when the week has none) on the left, and "Titles in: Original language | English"
-on the right, two links in a `hover` track whose active one is `surface` with a shadow, so the
-toggle works without JavaScript and the edge caches each mode apart (`?titles=translated`;
-Original is the default). The edition is a grid (two columns from `md`, three from `lg`) whose
-lead spans two: 18 px site avatar, blog name, the post's language (its own name, "Español", while
-titles are as written; the reader's name for it, "Spanish", while they are translated), the big
-serif title, the other title small and `muted` beneath, the lead's excerpt in serif `ink-2`, and
-time · minutes · author. Every title and excerpt carries its `lang`. A visitor's title opens the
-post on the blog (`PostLink`). The lead is the first post of three minutes or more with an
-excerpt. Only the edition has a skeleton; the copy renders at once. The page's root never
-fades in: the edge's copy is already on screen when the SPA replaces it. Then the writers strip
-("Write a blog? *Make it your calling card.*", outlined pill to `/writers`), on `surface` like
-Discover's claim strip. Day is the light tokens exactly; night is the existing dark tokens.
+Front page (`views/landing.tsx`, from `Tela Landing.dc.html` Turn 2, 2A Night and 2B Day, ADR
+0035): a 1280 px page with 56 px sides (16 px on a phone), at the design's line height of 1.2
+wherever a size does not set its own.
+
+- **Hero:** two columns from `lg`, 7fr and 5fr, 64 px apart, bottoms aligned. The h1 is serif 500,
+  80 px from `lg` (64 px from `md`, 44 px below), line height 1, tracking −0.025em, balanced:
+  "A confluence of *N independent blogs.*", the italic span in `accent` and the 400 italic
+  Garamond ships; with no count yet, no number. The right column holds the 18 px `ink-2` lede and
+  two pills, "Join Tela" (filled `primary`, 15 px, 13/26 px) and "Log in" (a `thumb` outline):
+  links to `/join` and `/login` in the edge's page, which open the header's sheet once the app
+  runs, as the header's own Join and Log in do.
+- **Strip:** a `line` rule above, 18 px either side. On the left, 11 px uppercase `muted`,
+  letter-spaced 0.1em: the date ("Saturday, 3 October", day before month in English) and "This
+  week, N blogs wrote in M languages" (or "The latest from N blogs" when the week has none). On
+  the right, "Titles in" and a `thumb`-bordered pill of two links whose active one is filled
+  `ink` on `paper`, so the toggle works without JavaScript and the edge caches each mode apart
+  (`?titles=translated`; Original is the default).
+- **Edition:** a grid 16 px apart (two columns from `md`, three from `lg`); the lead spans two, so
+  eleven posts make the lead and one card beside it, then three rows of three. A card is
+  `surface` with a `line` border (`muted` on hover), radius 12, 22 px in, 210 px tall at least
+  from `md`: a 10 px colour swatch (`swatchColor` of the feed), the blog's name in `ink`, and the
+  post's language at the right in 11 px uppercase (its own name, "Español", while titles are as
+  written; the reader's name for it, "Spanish", while they are translated); the 28 px serif title;
+  the other title in 16 px serif italic `muted`; and at the foot "N min · 3h ago" and "Read →".
+  The lead is 32 px in and 300 px tall, with a 48 px title (line height 1.04, balanced), the
+  excerpt in 20 px serif `ink-2` up to 640 px, then the other title, and "Read the post →" in
+  `accent`. Its header adds the feed's byline when the blog's name does not already say it
+  (`bylineName`: RSS's `hello@site (Name)` comes down to the name); a claimed blog shows the
+  claimant instead, on every card, linked to their card. The whole card is one link to the post
+  (the title's link, stretched over it); the blog's and the claimant's links sit above it. A
+  visitor's post opens on the blog (`PostLink`). Every title and excerpt carries its `lang`. The
+  lead is the first post of three minutes or more with an excerpt. Only the edition has a
+  skeleton; the copy renders at once.
+- **Writers strip:** 64 px below, a `line` rule and the hero's two columns again, centred: "Write a
+  blog? Make it your calling card." in 44 px serif, then 16 px `ink-2` copy and an outlined "Make
+  your card" pill to `/writers`.
+- **Chinese:** the main column turns off synthesized italics (`font-synthesis-style: none`), so an
+  italic span or title in a script with no italic face stays upright while its Latin keeps
+  Garamond's italic, and the two headlines keep words whole (`break-keep`), breaking at the comma
+  rather than inside 博客.
+
+The page's root never fades in: the edge's copy is already on screen when the SPA replaces it.
+Day is the light tokens exactly, night the dark ones, which are the design's Night palette.
 
 Footer (`components/site-footer.tsx`): under the front page and About, Privacy and Terms, in the
-SPA and in the edge's copy alike, a `line` rule, 13 px `muted`: "Tela © year · Made by AI Naive"
-(linking https://ainaive.com) on the left, About, For writers, Privacy and Terms on the right.
+SPA and in the edge's copy alike, a `line` rule and the front page's 1280 px measure, 22 px tall
+padding, 13 px `muted`: "Tela" in 19 px serif 600 `ink`, "© year · Made by AI Naive" (linking
+https://ainaive.com, in `ink-2`), and About, For writers, Privacy and Terms on the right.
 
 ## Strings
 

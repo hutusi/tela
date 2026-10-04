@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { editionTitles, frontHref, pickLead, titlesMode } from '../src/lib/edition'
+import { bylineName, editionTitles, frontHref, pickLead, titlesMode } from '../src/lib/edition'
 import { nameIn, nativeName } from '../src/lib/language-name'
 import type { FrontPost } from '../src/views/types'
 
@@ -102,6 +102,23 @@ describe("the edition's titles", () => {
     const unknown = editionTitles(post(4, { sourceLang: null }).article, 'original', 'en', 'en')
     expect(unknown.label).toBeNull()
     expect(unknown.big.lang).toBeUndefined()
+  })
+
+  test("the lead's byline is the author's name, and only when the blog's name does not say it", () => {
+    expect(bylineName('Lucía Ferrer', 'Kilómetro Cero')).toBe('Lucía Ferrer')
+    expect(bylineName('hello@manuelmoreale.com (Manuel Moreale)', 'Kilómetro Cero')).toBe(
+      'Manuel Moreale',
+    )
+    expect(bylineName('Manuel Moreale <hello@manuelmoreale.com>', 'Kilómetro Cero')).toBe(
+      'Manuel Moreale',
+    )
+    expect(bylineName('hello@manuelmoreale.com', 'Kilómetro Cero')).toBeNull()
+    expect(
+      bylineName('hello@manuelmoreale.com (Manuel Moreale)', 'Manuel Moreale — Everything Feed'),
+    ).toBeNull()
+    expect(bylineName('austin kleon', 'Austin Kleon')).toBeNull()
+    expect(bylineName('  ', 'Blog')).toBeNull()
+    expect(bylineName(null, 'Blog')).toBeNull()
   })
 
   test('the mode is in the address, and only `translated` is not the default', () => {

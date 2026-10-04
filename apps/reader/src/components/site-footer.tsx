@@ -1,6 +1,7 @@
 /**
  * The public pages' footer: who makes Tela, and the pages that say what it is, what it offers
- * writers and what it keeps.
+ * writers and what it keeps. Laid out as the design's front page closes (Tela Landing): the name
+ * in serif, the maker, and the links at the right, on the front page's 1280px measure.
  * Pure, like the views it closes: the edge renders it too.
  */
 import { Link } from 'react-router'
@@ -12,16 +13,17 @@ export function SiteFooter({ year }: { year: number }) {
   const t = useTranslations('footer')
   return (
     <footer
-      className="border-t border-line px-4 py-8 text-[13px] text-muted md:px-12"
+      className="border-t border-line text-[13px] leading-[1.2] text-muted"
       data-testid="site-footer"
     >
-      <div className="mx-auto flex w-full max-w-[1120px] flex-wrap items-center gap-x-6 gap-y-3">
+      <div className="mx-auto flex w-full max-w-[1280px] flex-wrap items-center gap-x-6 gap-y-3 px-4 py-[22px] md:px-14">
+        <span className="font-serif text-[19px] leading-none font-semibold text-ink">Tela</span>
         <p className="m-0">
           {t.rich('made', {
             // A string: a number would be formatted, and 2026 is not "2,026".
             year: String(year),
             maker: (chunks) => (
-              <a href="https://ainaive.com" className={LINK}>
+              <a href="https://ainaive.com" className={`${LINK} font-medium`}>
                 {chunks}
               </a>
             ),
