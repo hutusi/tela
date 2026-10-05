@@ -55,8 +55,12 @@ export async function health(db: TelaDb, blobs: Blobs, now: number): Promise<Hea
       select count(*) as n from body_translations
       where state in ('requested', 'running') and updated_at < ${now - 30 * MIN}
     `),
+    // Only what the sweep can take: a paused or dead feed's due pages wait for it, not for the
+    // sweep (as `dueExtractions` reads them), and would keep the check red for as long as it is.
     db.all(sql`
-      select count(*) as n from articles where extract_state = 'due' and fetched_at < ${now - 6 * HOUR}
+      select count(*) as n from articles a join feeds f on f.id = a.feed_id
+      where a.extract_state = 'due' and a.url is not null and f.status = 'active'
+        and a.fetched_at < ${now - 6 * HOUR}
     `),
   ] as never)) as unknown as unknown[][]
   const backup = await latestBackup(blobs).catch(() => null)

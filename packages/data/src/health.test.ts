@@ -61,6 +61,23 @@ describe('the health check', () => {
     expect((await health(db, blobs, NOW)).ok).toBe(true)
   })
 
+  test("counts the pages waiting for the sweep, never a paused or dead feed's", async () => {
+    const { db, blobs } = await world()
+    await feeds(db, 2, NOW + HOUR)
+    const n = THRESHOLDS.extractionBacklog + 1
+    for (let i = 0; i < n; i++) {
+      await db.run(sql`insert into articles (feed_id, dedup_key, url, title, fetched_at, sort_at,
+          extract_state)
+        values (1, ${`k${i}`}, ${`https://a.example/${i}`}, 't', ${NOW - 7 * HOUR}, 0, 'due')`)
+    }
+    expect((await health(db, blobs, NOW)).problems).toEqual([
+      `${n} articles have waited over six hours for their full text`,
+    ])
+    // Paused by an operator (a writer asked to leave): the sweep will not take them, nor wait.
+    await db.run(sql`update feeds set status = 'paused' where id = 1`)
+    expect((await health(db, blobs, NOW)).ok).toBe(true)
+  })
+
   test('speaks up when a reader waits on a translation, or the backup is old or broken', async () => {
     const { db, blobs } = await world()
     await db.run(sql`insert into body_translations (content_key, lang, state, updated_at)
