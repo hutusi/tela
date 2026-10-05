@@ -980,9 +980,9 @@ describe('feeds', () => {
     expect((await feedOf(feed))?.fetch_region).toBe('cn')
     expect((await feedOf(flipped))?.fetch_region).toBe('global')
 
-    // Undone while it still holds: global again, with the timeouts it had.
+    // Undone while it still holds: global again, its timeouts as the fetches since left them.
     expect((await undo(relayed.undo?.group)).status).toBe(200)
-    expect(await feedOf(feed)).toMatchObject({ fetch_region: 'global', timeout_streak: 5 })
+    expect(await feedOf(feed)).toMatchObject({ fetch_region: 'global', timeout_streak: 0 })
   })
 
   test('Use the relay pins a feed the timeouts flipped, and Fetch directly undoes only while it holds', async () => {

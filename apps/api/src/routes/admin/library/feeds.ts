@@ -141,7 +141,10 @@ const useRelay: ActHandler = async (ctx, id) => {
   })
 }
 
-/** Fetch a feed straight from Cloudflare again. */
+/**
+ * Fetch a feed straight from Cloudflare again, its timeouts counted afresh: a streak the relay
+ * left would list it under Timing out at once and send it back to the relay on its first timeout.
+ */
 const useGlobal: ActHandler = async (ctx, id) => {
   const feedId = idOf(id)
   if (feedId === null) return 'not_found'
@@ -150,23 +153,23 @@ const useGlobal: ActHandler = async (ctx, id) => {
     table: 'feeds',
     id: feedId,
     applies: sql`${UNMERGED} and fetch_region = 'cn'`,
-    set: sql`fetch_region = 'global', region_flipped_at = null`,
+    set: sql`fetch_region = 'global', region_flipped_at = null, timeout_streak = 0`,
     from: REGION_FROM,
-    to: { fetchRegion: 'global', regionFlippedAt: null },
+    to: { fetchRegion: 'global', regionFlippedAt: null, timeoutStreak: 0 },
     after: (db) => cutOff(db, feedId),
   })
 }
 
 /**
- * Put a feed's region back while it is still the one the action set. The timeout streak moves
- * with every fetch, so it is restored but not compared.
+ * Put a feed's region back while it is still the one the action set. The timeout streak is the
+ * fetches' own count, moved by every one since: it stays as they left it, never put back to a
+ * value older than they are.
  */
 const restoreRegion = restoreColumns({
   table: 'feeds',
   columns: {
     fetchRegion: 'fetch_region',
     regionFlippedAt: 'region_flipped_at',
-    timeoutStreak: 'timeout_streak',
   },
   match: ['fetchRegion', 'regionFlippedAt'],
   after: cutOff,
