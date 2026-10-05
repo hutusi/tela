@@ -34,7 +34,8 @@ export type LedgerArea = keyof typeof ADMIN_FILTERS
 export type AdminFilter<A extends LedgerArea = LedgerArea> = (typeof ADMIN_FILTERS)[A][number]
 
 export function isLedgerArea(value: unknown): value is LedgerArea {
-  return typeof value === 'string' && value in ADMIN_FILTERS
+  // Own keys only: `in` would also say yes to `constructor` and `__proto__`.
+  return typeof value === 'string' && Object.hasOwn(ADMIN_FILTERS, value)
 }
 
 export function isAdminFilter<A extends LedgerArea>(
