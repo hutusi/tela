@@ -554,6 +554,39 @@ Nothing here needs watching; three things speak up when something is wrong (ADR 
   `wrangler tail tela-jobs` on a Monday at 08:00 UTC shows the run.
 - **Resend's and Bailian's own consoles** for their quotas; the digest shows Tela's side of both.
 
+## The admin console
+
+`/admin` (ADR 0039) is where the operator acts on what the digest and the dead-man's switch
+report: claims to review, feeds to fetch, pause or move to the relay, Discover's listings, members,
+invite codes, translation spend and dead letters. It reads from tela-api over the network, unlike
+the rest of the reader, and every change it makes is audited in `admin_actions`.
+
+- **Open it to a member:** `ADMIN_TOKEN=… bun run admin grant you@example.com` (and `ungrant`). The
+  account must exist; only the token grants it, so an admin cannot make another admin. The account
+  menu shows *Admin* once the member's device has synced, and every console call reads the flag
+  from D1 again, so an ungrant closes the console at once.
+- **Undo** takes back a change that set a value (a listing, a pause, a region, a dismissal, a
+  revoke) while nothing else has changed it since; otherwise it says so and restores nothing. A
+  fetch, a check or a retry has no undo.
+- **What it changes beats the work in flight.** Pausing a feed, moving it to the relay, rejecting or
+  removing a claim break the item's lease in the same batch, so a job already running writes
+  nothing over the choice.
+- **Discover** shows a listing change on the public pages within about five minutes: the edge
+  caches them per colo, and nothing purges that cache.
+- **Sign out everywhere** deletes the member's sessions; a device's signed copy of one still
+  answers for up to five minutes wherever only that copy is read.
+- **Retry** on a dead letter makes its row due again for the next tick, with fresh attempts. A body
+  translation retried runs as background work: the background budget pays, up to
+  `LLM_MAX_ARTICLE_TOKENS` for the post. The health check counts only unresolved dead letters, and
+  the digest says how many of the week's were resolved.
+- **Heartbeats** (`ops_heartbeats`): `tick` (each kind dispatched, and the switches tela-jobs runs
+  with: the background budget, the article cap, whether a translator, the relay, WebSub and the
+  assets bucket are configured), `health` (every fifth minute, what the dead-man's switch heard),
+  `daily` (upkeep and the export) and `digest` (once sent). The console reads the budget and the
+  relay from the tick's, so after a deploy they show as unknown until the first tick.
+- **What it never shows:** a member's subscriptions, reading, likes, highlights or follows. An
+  audit row never holds an email address.
+
 ## Backups
 
 - **Time Travel** is the point-in-time copy: `wrangler d1 time-travel restore tela --timestamp=…`
@@ -589,16 +622,22 @@ subscribers on an unclaimed site.
   `apps/api/scripts/curated-sites.ts` (fetched and parsed, so its declared home is honoured) and
   features it with its topics, one blog a request. Running it again changes nothing that is
   already right. A rejected blog is left alone; a claimed one keeps its owner's topics.
-- **Feature or hide a blog by hand:** `update sites set listing = 'featured' where id = …`, or
-  `'rejected'`, which curation then leaves alone.
-- **Take a blog off Tela when its writer asks** (Terms, "Writers' work"): hide it as above, which
-  takes it out of Discover and makes its page a 404, and stop fetching it with
-  `update feeds set status = 'paused', updated_at = <now ms> where site_id = …`. Fetching, page
+- **Feature or hide a blog:** in the console, Discover or Sites → Feature, List, Hide or
+  Restore. Hide (`rejected`) is the veto curation and every door leave alone; Restore returns a
+  blog to what the doors say. `private` is not offered: an unclaimed blog with three readers is
+  listed again on the next subscribe.
+- **Take a blog off Tela when its writer asks** (Terms, "Writers' work"): hide it, which takes it
+  out of Discover and makes its page a 404, and pause each of its feeds in Feeds. Fetching, page
   extraction and WebSub renewal all read only `status = 'active'` feeds, and nothing revives a
   paused one (the weekly retry is for `'dead'`). Posts already fetched stay with their
   subscribers.
-- **Release a claim** so another member can claim the site: `update sites set claimed_by = null,
-  claimed_at = null where id = …; delete from site_claims where site_id = …`.
+- **Release a claim** so another member can claim the site: Claims → Verified → Remove claim. The
+  claim stays, failed, so the claimer's device learns it (a deleted row would never reach it); the
+  blog loses its owner, their translation opt-out and the feeds it declared, and stays listed only
+  if three people read it.
+- **Vouch for a claim** whose check cannot see the proof (a page behind bot protection, a tag in
+  the wrong place): Claims → Verify by hand. The check then skips the proof, and still reads the
+  home page for the feeds the blog declares.
 
 ## Translation
 
