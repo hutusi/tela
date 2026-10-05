@@ -13,7 +13,7 @@ import { nameIn } from '../../lib/language-name'
 import { adminList } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps, Status } from '../area'
 import { KeyValues, Note } from '../components/record'
-import { KindTile, ReportPending, useReport } from './system'
+import { KindTile, ReportPending, TILE, useReport } from './system'
 
 /** Tokens as a stat says them: 24.5M, 2450万. */
 function useCompact(): (n: number) => string {
@@ -253,11 +253,11 @@ export function useTranslationArea(): AnyAreaSpec {
               : t('translation.model'),
         tile: (row) =>
           row.kind === 'blog' && row.siteId !== null ? (
-            <Swatch id={row.siteId} title={title(row)} />
+            <Swatch id={row.siteId} title={title(row)} size={TILE} />
           ) : row.kind === 'job' ? (
             <KindTile kind={row.label ?? ''} />
           ) : (
-            <Swatch id={0} title={title(row)} color="var(--color-ink-2)" />
+            <Swatch id={0} title={title(row)} color="var(--color-ink-2)" size={TILE} />
           ),
       },
       columns: [

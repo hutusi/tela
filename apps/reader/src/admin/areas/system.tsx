@@ -35,12 +35,15 @@ export const KIND_TILES: Record<string, { letter: string; hue: number }> = {
 /** The kinds in the order tela-jobs lists them (LEASE_KINDS), for the per-kind strip. */
 const KINDS = Object.keys(KIND_TILES)
 
+/** A row's tile, at the size every ledger's row starts with. */
+export const TILE = 28
+
 export function KindTile({ kind }: { kind: string }) {
   const tile = KIND_TILES[kind]
   return tile ? (
-    <Swatch id={tile.hue} title={tile.letter} />
+    <Swatch id={tile.hue} title={tile.letter} size={TILE} />
   ) : (
-    <Swatch id={0} title={kind} color="var(--color-muted)" />
+    <Swatch id={0} title={kind} color="var(--color-muted)" size={TILE} />
   )
 }
 
