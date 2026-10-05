@@ -8,6 +8,7 @@ import * as schema from '../../src/schema'
 
 /** Children before parents, so foreign keys never object; then reset the AUTOINCREMENT counters. */
 const TABLES = [
+  'admin_actions',
   'highlights',
   'recommendations',
   'user_article_states',

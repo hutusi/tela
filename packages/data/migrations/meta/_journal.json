@@ -43,6 +43,13 @@
       "when": 1790941944523,
       "tag": "0005_odd_supreme_intelligence",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791203049502,
+      "tag": "0006_red_machine_man",
+      "breakpoints": true
     }
   ]
 }
