@@ -255,6 +255,8 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
               job: 'translate.body',
               contentKey,
               articleId: null,
+              // Found from the content key as the row is written.
+              feedId: null,
               targetLang: target,
               userId: row.requestedBy,
               model: usage.model,

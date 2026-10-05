@@ -674,6 +674,24 @@ describe('a body translation that fails', () => {
   })
 })
 
+describe('the call log', () => {
+  test('names the blog each call was for: titles by their lease, bodies by their content', async () => {
+    const ctx = context()
+    await addReader()
+    await ingest(ctx, feed(['A post'], 4))
+    await cycle(ctx)
+    await request(1, 'zh-Hans')
+    await cycle(ctx)
+    const rows = await db.all<{ job: string; feed_id: number | null }>(
+      sql`select distinct job, feed_id from llm_calls order by job`,
+    )
+    expect(rows).toEqual([
+      { job: 'translate.body', feed_id: 1 },
+      { job: 'translate.title', feed_id: 1 },
+    ])
+  })
+})
+
 describe('Traditional Chinese', () => {
   /**
    * The mock, writing Simplified Chinese that conversion visibly changes: every text segment it
