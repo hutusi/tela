@@ -2,7 +2,7 @@
  * tela-api's routes (ADR 0024). Portable: built from `ApiDeps`, so the Cloudflare entry and the
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
-import { audit, bumpSeq, currentSeq, first, inviteAddress, newGroupId, schema } from '@tela/data'
+import { audit, bumpSeq, currentSeq, first, newGroupId, schema } from '@tela/data'
 import { CLIENT_HEADER, MEMBER_HEADER, MIN_CLIENT, pushSchema } from '@tela/sync'
 import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -16,6 +16,7 @@ import { avatarRoutes } from './routes/avatars'
 import { claimRoutes } from './routes/claims'
 import { curate } from './routes/curate'
 import { feedRoutes } from './routes/feeds'
+import { inviteMember } from './routes/invite-member'
 import { inviteRoutes, operatorCodeRoutes } from './routes/invites'
 import { memberRoutes } from './routes/members'
 import { pictureRoutes } from './routes/picture'
@@ -134,20 +135,9 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.post('/api/admin/invite', async (c) => {
     if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
     const body = await c.req.json<{ email?: unknown }>().catch(() => ({}) as { email?: unknown })
-    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
-    if (!EMAIL.test(email)) return c.json({ error: 'invalid_email' }, 400)
-    const ctx = await auth.$context
-    const existing = await ctx.internalAdapter.findUserByEmail(email)
-    let user = existing?.user
-    if (!user) {
-      await inviteAddress(deps.db, { email, now: deps.clock.now() })
-      user = await ctx.internalAdapter.createUser(
-        { email, name: '', emailVerified: false },
-        { method: 'admin' },
-      )
-    }
-    await auth.api.sendVerificationOTP({ body: { email, type: 'sign-in' } })
-    return c.json({ userId: user.id, created: !existing })
+    const invited = await inviteMember(deps, auth, typeof body.email === 'string' ? body.email : '')
+    if (!invited) return c.json({ error: 'invalid_email' }, 400)
+    return c.json(invited)
   })
 
   /** Add a curated blog's feed and feature it in Discover (`bun run admin curate`). */
