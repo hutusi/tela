@@ -223,6 +223,34 @@ describe('the Overview', () => {
     expect(html).toContain('undid Paused')
   })
 
+  test('a feed timing out opens under Timing out, not Failing', () => {
+    const feed = OVERVIEW.queues.feeds.rows[0]!
+    const slow = { ...feed, id: '89', feedId: 89, errorCount: 0, timeoutStreak: 4 }
+    const mixed = {
+      ...OVERVIEW,
+      queues: { ...OVERVIEW.queues, feeds: { count: 2, rows: [feed, slow] } },
+    }
+    const html = render(
+      <OverviewView overview={mixed} failed={false} onRetry={() => {}} now={now} />,
+      '/admin',
+    )
+    expect(html).toContain('href="/admin/feeds?id=88"')
+    expect(html).toContain('href="/admin/feeds?f=timeout&amp;id=89"')
+    // Start opens Failing while any row is failing…
+    expect(html).toContain('href="/admin/feeds"')
+    // …and Timing out once every row is timing out.
+    const slowOnly = {
+      ...OVERVIEW,
+      queues: { ...OVERVIEW.queues, feeds: { count: 1, rows: [slow] } },
+    }
+    const timeout = render(
+      <OverviewView overview={slowOnly} failed={false} onRetry={() => {}} now={now} />,
+      '/admin',
+    )
+    expect(timeout).toContain('href="/admin/feeds?f=timeout"')
+    expect(timeout).not.toContain('href="/admin/feeds"')
+  })
+
   test('a calm day says so', () => {
     const calm = {
       ...OVERVIEW,

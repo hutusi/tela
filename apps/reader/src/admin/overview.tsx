@@ -47,8 +47,8 @@ export function Overview() {
   return <OverviewView overview={value} failed={failed} onRetry={() => void reload()} />
 }
 
-/** What a queue card shows of a row, and which ledger acts on it. */
-type QueueRow = { id: string; title: string; sub: string; status: Status }
+/** What a queue card shows of a row; `filter` where the row sits under another than the card's. */
+type QueueRow = { id: string; title: string; sub: string; status: Status; filter?: AdminFilter }
 
 type Queue = {
   key: keyof AdminOverview['queues']
@@ -57,6 +57,14 @@ type Queue = {
   count: number
   rows: QueueRow[]
 }
+
+/**
+ * The Feeds filter a failing-feeds row sits under. The queue holds feeds timing out from Cloudflare
+ * as well as failing ones, and the ledger keeps the two apart: a link to the wrong one opens a
+ * record its list does not show.
+ */
+const feedQueueFilter = (row: AdminFeedRow): AdminFilter<'feeds'> =>
+  row.timeoutStreak >= 3 ? 'timeout' : 'failing'
 
 /** A status for a row whose area has not said: the dot alone carries it, in the tone's word. */
 function fallbackStatus(t: Translate, tone: AdminTone): Status {
@@ -145,13 +153,19 @@ export function OverviewView({
     {
       key: 'feeds',
       area: 'feeds',
-      filter: 'failing',
+      // Start under Failing, unless every row the card shows is timing out.
+      filter:
+        queues.feeds.rows.length > 0 &&
+        queues.feeds.rows.every((row) => feedQueueFilter(row) === 'timeout')
+          ? 'timeout'
+          : 'failing',
       count: queues.feeds.count,
       rows: queues.feeds.rows.map((row: AdminFeedRow) => ({
         id: row.id,
         title: row.siteTitle ?? row.feedUrl,
         sub: row.lastError ?? displayHost(row.feedUrl),
         status: statusOf(feeds, row, row.timeoutStreak >= 3 ? 'warn' : 'bad'),
+        filter: feedQueueFilter(row),
       })),
     },
     {
@@ -246,7 +260,8 @@ function HealthLine({ health }: { health: AdminHealth }) {
 
 function QueueCard({ card }: { card: Queue }) {
   const t = useTranslations('admin.shell')
-  const at = (id?: string) => ledgerHref(card.area, { filter: card.filter, ...(id ? { id } : {}) })
+  const at = (id?: string, filter = card.filter) =>
+    ledgerHref(card.area, { filter, ...(id ? { id } : {}) })
   return (
     <section
       className="flex min-w-0 flex-col rounded-[14px] border border-line bg-surface px-[22px] pt-[18px] pb-2.5"
@@ -269,7 +284,7 @@ function QueueCard({ card }: { card: Queue }) {
       {card.rows.slice(0, 3).map((row) => (
         <Link
           key={row.id}
-          to={at(row.id)}
+          to={at(row.id, row.filter)}
           className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3.5 border-t border-line py-[11px] text-ink hover:text-accent hover:no-underline"
         >
           <div className="min-w-0">
