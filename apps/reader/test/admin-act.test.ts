@@ -3,11 +3,19 @@
  * toast, History and the health line say, in the console's own English and Simplified Chinese.
  */
 import { describe, expect, test } from 'bun:test'
-import { ACTION_CONFIRM, ADMIN_ACTIONS, type AdminHealth } from '@tela/shared/admin'
+import {
+  ACTION_CONFIRM,
+  ADMIN_ACTIONS,
+  type AdminHealth,
+  type AdminRowBase,
+} from '@tela/shared/admin'
 import { createTranslator } from 'use-intl'
 import {
   actionLook,
   actMessage,
+  bulkOffer,
+  bulkTargets,
+  confirmWords,
   historyWords,
   promptFor,
   type Translate,
@@ -43,6 +51,9 @@ describe('the words', () => {
       }
       for (const action of ACTION_CONFIRM) {
         expect(words(`confirm.${action}`)).not.toBe(`admin.shell.confirm.${action}`)
+        expect(words(`confirmMany.${action}`, { n: 3 })).not.toBe(
+          `admin.shell.confirmMany.${action}`,
+        )
       }
     },
   )
@@ -69,6 +80,44 @@ describe('asking first', () => {
     expect(promptFor('site.feature')).toBeNull()
     expect(promptFor('feed.pause')).toBeNull()
     expect(promptFor('site.topics', { topics: ['essays'] })).toBeNull()
+  })
+})
+
+describe('a confirmation', () => {
+  test('asks of one target in the singular, of several by their number', () => {
+    expect(confirmWords(t, { action: 'code.revoke', ids: ['code:A'] })).toBe(
+      'Revoke this code? Nobody else can join with it; whoever joined keeps their account.',
+    )
+    expect(confirmWords(t, { action: 'code.revoke', ids: ['code:A', 'code:B', 'code:C'] })).toBe(
+      'Revoke these 3 codes? Nobody else can join with them; whoever joined keeps their account.',
+    )
+    expect(
+      confirmWords(translator('zh-Hans'), { action: 'hold.cancel', ids: ['hold:1', 'hold:2'] }),
+    ).toBe('确定取消这 2 份邀请吗？这些邮箱将无法再用它们完成加入。')
+  })
+})
+
+describe('the bulk bar', () => {
+  const code = (id: string): AdminRowBase => ({ id, actions: ['code.revoke', 'code.addUses'] })
+  const revoked = (id: string): AdminRowBase => ({ id, actions: ['code.restore'] })
+  const hold = (id: string): AdminRowBase => ({ id, actions: ['hold.cancel'] })
+  const bulk = ['code.revoke', 'hold.cancel'] as const
+
+  test('offers an action only while a checked row takes it', () => {
+    expect(bulkOffer(bulk, [code('code:A'), code('code:B')])).toEqual(['code.revoke'])
+    expect(bulkOffer(bulk, [hold('hold:1')])).toEqual(['hold.cancel'])
+    expect(bulkOffer(bulk, [code('code:A'), hold('hold:1')])).toEqual([
+      'code.revoke',
+      'hold.cancel',
+    ])
+    expect(bulkOffer(bulk, [revoked('code:C')])).toEqual([])
+    expect(bulkOffer([], [code('code:A')])).toEqual([])
+  })
+
+  test('sends an action for the rows it applies to, never the rest', () => {
+    const checked = [code('code:A'), hold('hold:1'), revoked('code:C'), code('code:B')]
+    expect(bulkTargets('code.revoke', checked)).toEqual(['code:A', 'code:B'])
+    expect(bulkTargets('hold.cancel', checked)).toEqual(['hold:1'])
   })
 })
 

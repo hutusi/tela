@@ -456,7 +456,9 @@ reader's shell.
   the foot inline, never a browser dialog; in the bulk bar it opens above the bar, and for New code
   and Invite beside the search.
 - **Bulk bar.** While rows are checked: an `ink` pill stuck to the foot of the column, "3 selected",
-  the area's bulk actions and *Clear*.
+  each of the area's bulk actions that at least one checked row takes (sent for those rows only,
+  and confirmed in the plural: "Revoke these 3 codes?"), and *Clear*. An area with no bulk action
+  (People) has no check column.
 - **Undo toast.** An `ink` pill at the foot of the content column for six seconds: what was done
   and to what ("Featured · Nordvest", or "Hidden · 3 items"), with *Undo* while it can be undone.
 - **Keys.** `j`/`k` (or the arrows) move, `x` checks, Enter or `o` opens, `1`–`3` act on the open

@@ -117,6 +117,15 @@ describe('the ledger', () => {
     expect(html).toContain('>Unfeature<')
   })
 
+  test('an area with no bulk action draws no check boxes', () => {
+    const checks = render(<Ledger area="sites" spec={spec} initial={BLOG_LIST} />, '/admin/sites')
+    expect(checks.match(/type="checkbox"/g)).toHaveLength(4)
+    const none = blogSpec({ bulk: [] }) as AnyAreaSpec
+    const html = render(<Ledger area="sites" spec={none} initial={BLOG_LIST} />, '/admin/sites')
+    expect(html).not.toContain('type="checkbox"')
+    expect(html).not.toContain('28px_')
+  })
+
   test('an empty queue is clear; an empty search has no matches; anything else is empty', () => {
     const empty = { ...BLOG_LIST, rows: [] }
     const queue = blogSpec({ queue: true }) as AnyAreaSpec

@@ -8,7 +8,7 @@ import { normalizeInviteCode } from '@tela/shared'
 import { ADMIN_REASON_MAX, type AdminActArgs } from '@tela/shared/admin'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
-import { actionLook, promptFor } from '../act'
+import { actionLook, confirmWords, promptFor } from '../act'
 import type { Prompt } from '../use-act'
 import { ActionButton } from './buttons'
 
@@ -55,7 +55,7 @@ function ConfirmStrip({
   }, [])
   return (
     <div className="flex flex-col gap-2.5" data-testid="admin-confirm">
-      <p className="m-0 text-[13.5px] leading-normal text-ink-2">{t(`confirm.${prompt.action}`)}</p>
+      <p className="m-0 text-[13.5px] leading-normal text-ink-2">{confirmWords(t, prompt)}</p>
       <div className="flex flex-wrap gap-2">
         <ActionButton
           ref={yes}

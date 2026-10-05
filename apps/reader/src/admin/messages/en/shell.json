@@ -117,6 +117,21 @@
     "yes": "Yes, go ahead",
     "no": "Cancel"
   },
+  "confirmMany": {
+    "claim": {
+      "vouch": "Vouch for these {n} claims? Their checks skip the proof and give each blog to its claimant.",
+      "remove": "Remove these {n} claims? Their blogs will have no owner, and Discover lists each only if enough people read it."
+    },
+    "member": {
+      "signOut": "Sign these {n} members out on every device? It takes up to five minutes everywhere."
+    },
+    "code": {
+      "revoke": "Revoke these {n} codes? Nobody else can join with them; whoever joined keeps their account."
+    },
+    "hold": {
+      "cancel": "Cancel these {n} invitations? Those addresses can no longer finish joining with them."
+    }
+  },
   "input": {
     "reason": "Why? The claimant sees this.",
     "uses": "How many more people",

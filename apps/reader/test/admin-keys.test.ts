@@ -19,7 +19,7 @@ const press = (key: string, more: Partial<KeyLike> = {}): KeyLike => ({
   ...more,
 })
 
-const LIST: KeyState = { rows: 4, open: false, checked: 0, prompt: false }
+const LIST: KeyState = { rows: 4, open: false, checked: 0, prompt: false, checkable: true }
 
 describe('whether the console takes a key', () => {
   test('a plain key on the page is the console’s', () => {
@@ -65,6 +65,10 @@ describe('what a key does', () => {
     expect(ledgerCommand('2', LIST)).toEqual({ type: 'act', index: 1 })
     expect(ledgerCommand('3', LIST)).toEqual({ type: 'act', index: 2 })
     expect(ledgerCommand('4', LIST)).toBeNull()
+  })
+
+  test('x checks nothing where the area has no bulk action', () => {
+    expect(ledgerCommand('x', { ...LIST, checkable: false })).toBeNull()
   })
 
   test('u undoes and / searches, even with nothing listed', () => {

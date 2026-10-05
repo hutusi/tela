@@ -65,6 +65,8 @@ export type KeyState = {
   open: boolean
   /** Rows checked for a bulk action. */
   checked: number
+  /** The area has bulk actions, so its rows can be checked at all. */
+  checkable: boolean
   /** A confirmation or a question is waiting for an answer. */
   prompt: boolean
 }
@@ -101,7 +103,7 @@ export function ledgerCommand(key: string, state: KeyState): LedgerCommand | nul
     case 'ArrowUp':
       return { type: 'move', step: -1 }
     case 'x':
-      return { type: 'check' }
+      return state.checkable ? { type: 'check' } : null
     case 'Enter':
     case 'o':
       return { type: 'open' }

@@ -12,6 +12,7 @@ import {
   type AdminActionName,
   type AdminActResponse,
   type AdminHistoryEntry,
+  type AdminRowBase,
   type AdminUndoResponse,
   isAdminAction,
 } from '@tela/shared/admin'
@@ -47,6 +48,35 @@ export function promptFor(
   if (input && !args) return { input }
   if ((ACTION_CONFIRM as readonly AdminActionName[]).includes(action)) return { confirm: true }
   return null
+}
+
+/**
+ * What a confirmation asks: of one target, or of `n` at once. A bulk question in the singular
+ * ("Revoke this code?") over three checked codes would be a yes to something else.
+ */
+export function confirmWords(
+  t: Translate,
+  prompt: { action: AdminActionName; ids: readonly string[] },
+) {
+  const n = prompt.ids.length
+  return n > 1 ? t(`confirmMany.${prompt.action}`, { n }) : t(`confirm.${prompt.action}`)
+}
+
+/**
+ * The bulk actions to offer for the checked rows: the area's, each only while at least one checked
+ * row takes it now (the server lists what applies to each row). Revoke means nothing to a hold, and
+ * a retry nothing to a lease.
+ */
+export function bulkOffer(
+  bulk: readonly AdminActionName[],
+  checked: readonly AdminRowBase[],
+): AdminActionName[] {
+  return bulk.filter((action) => checked.some((row) => row.actions.includes(action)))
+}
+
+/** The checked rows a bulk action is sent for: those it applies to, never the rest. */
+export function bulkTargets(action: AdminActionName, checked: readonly AdminRowBase[]): string[] {
+  return checked.filter((row) => row.actions.includes(action)).map((row) => row.id)
 }
 
 function errorWords(t: Translate, error: AdminActError | string): string {

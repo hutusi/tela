@@ -21,7 +21,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
-import { actionLook, promptFor } from '../act'
+import { actionLook, bulkOffer, bulkTargets, promptFor } from '../act'
 import { NotAdmin } from '../api'
 import type { Act, AnyAreaSpec } from '../area'
 import { AREA_HOOKS } from '../areas'
@@ -67,10 +67,15 @@ function Unbuilt({ area }: { area: LedgerArea }) {
 }
 
 /** The grid of a row: the check, the name, three columns while the table is wide, the status, the
- *  likeliest action. With a record open, or below `lg`, only the check, the name and the status. */
-const GRID_OPEN = 'grid-cols-[28px_minmax(0,1fr)_124px]'
-const GRID_WIDE =
-  'grid-cols-[28px_minmax(0,1fr)_116px] lg:grid-cols-[28px_minmax(0,2fr)_minmax(0,1fr)_minmax(0,.8fr)_minmax(0,1fr)_124px] xl:grid-cols-[28px_minmax(0,2fr)_minmax(0,1fr)_minmax(0,.8fr)_minmax(0,1fr)_124px_116px]'
+ *  likeliest action. With a record open, or below `lg`, only the check, the name and the status.
+ *  An area with no bulk action (People) has no check column. */
+const GRID = {
+  open: 'grid-cols-[28px_minmax(0,1fr)_124px]',
+  wide: 'grid-cols-[28px_minmax(0,1fr)_116px] lg:grid-cols-[28px_minmax(0,2fr)_minmax(0,1fr)_minmax(0,.8fr)_minmax(0,1fr)_124px] xl:grid-cols-[28px_minmax(0,2fr)_minmax(0,1fr)_minmax(0,.8fr)_minmax(0,1fr)_124px_116px]',
+  openNoCheck: 'grid-cols-[minmax(0,1fr)_124px]',
+  wideNoCheck:
+    'grid-cols-[minmax(0,1fr)_116px] lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,.8fr)_minmax(0,1fr)_124px] xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,.8fr)_minmax(0,1fr)_124px_116px]',
+} as const
 
 type Loaded = {
   filter: AdminFilter
@@ -163,8 +168,11 @@ export function Ledger({
         ? focusId
         : (ids[0] ?? null)
 
+  // Rows are checked only for a bulk action, so an area with none has no checks.
+  const checkable = spec.bulk.length > 0
   const [checks, setChecks] = useState<ReadonlySet<string>>(() => new Set())
-  const checked = useMemo(() => ids.filter((id) => checks.has(id)), [ids, checks])
+  const checkedRows = useMemo(() => rows.filter((row) => checks.has(row.id)), [rows, checks])
+  const checked = useMemo(() => checkedRows.map((row) => row.id), [checkedRows])
   // A new filter or search is a new list: what was checked in the old one is not in view.
   // biome-ignore lint/correctness/useExhaustiveDependencies: on a new filter or search only
   useEffect(() => {
@@ -322,8 +330,8 @@ export function Ledger({
 
   // ---- Keys ---------------------------------------------------------------------------------
   const search = useRef<HTMLInputElement>(null)
-  const keys = useRef({ rows, checked, actOnRow, toggleCheck, undo: admin.undo })
-  keys.current = { rows, checked, actOnRow, toggleCheck, undo: admin.undo }
+  const keys = useRef({ rows, checked, checkable, actOnRow, toggleCheck, undo: admin.undo })
+  keys.current = { rows, checked, checkable, actOnRow, toggleCheck, undo: admin.undo }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const how = keyDisposition(keyLike(e))
@@ -332,7 +340,7 @@ export function Ledger({
         if (e.target instanceof HTMLElement) e.target.blur()
         return
       }
-      const { rows, checked, actOnRow, toggleCheck, undo } = keys.current
+      const { rows, checked, checkable, actOnRow, toggleCheck, undo } = keys.current
       // The state as it is now: the address and the last key's focus, not this render's.
       const now = parseLedgerState(area, new URLSearchParams(window.location.search))
       const ids = rows.map((row) => row.id)
@@ -342,6 +350,7 @@ export function Ledger({
         open: now.id !== null,
         checked: checked.length,
         prompt: promptRef.current !== null,
+        checkable,
       })
       if (!command) return
       e.preventDefault()
@@ -417,7 +426,13 @@ export function Ledger({
   // ---- Drawing ------------------------------------------------------------------------------
   const filterLabel = spec.filterLabel(state.filter)
   const isOpen = state.id !== null
-  const grid = isOpen ? GRID_OPEN : GRID_WIDE
+  const grid = checkable
+    ? isOpen
+      ? GRID.open
+      : GRID.wide
+    : isOpen
+      ? GRID.openNoCheck
+      : GRID.wideNoCheck
   const allChecked = rows.length > 0 && checked.length === rows.length
   const Header = spec.Header
   const sortHeader = (key: SortKey, label: string, className = '') => {
@@ -509,12 +524,14 @@ export function Ledger({
             <div
               className={`admin-side grid items-center gap-3 px-3.5 py-[9px] text-[11.5px] font-semibold tracking-[.06em] text-muted uppercase ${grid}`}
             >
-              <CheckBox
-                checked={allChecked}
-                mixed={!allChecked && checked.length > 0}
-                label={t('ledger.selectAll')}
-                onToggle={() => setChecks(allChecked ? new Set() : new Set(ids))}
-              />
+              {checkable ? (
+                <CheckBox
+                  checked={allChecked}
+                  mixed={!allChecked && checked.length > 0}
+                  label={t('ledger.selectAll')}
+                  onToggle={() => setChecks(allChecked ? new Set() : new Set(ids))}
+                />
+              ) : null}
               {sortHeader('name', spec.name.label)}
               {isOpen
                 ? null
@@ -547,14 +564,16 @@ export function Ledger({
                   data-focus={isFocused ? 'true' : 'false'}
                   data-open={on ? 'true' : 'false'}
                 >
-                  <CheckBox
-                    checked={checks.has(row.id)}
-                    label={t('ledger.select')}
-                    onToggle={() => {
-                      focus(row.id)
-                      toggleCheck(row.id)
-                    }}
-                  />
+                  {checkable ? (
+                    <CheckBox
+                      checked={checks.has(row.id)}
+                      label={t('ledger.select')}
+                      onToggle={() => {
+                        focus(row.id)
+                        toggleCheck(row.id)
+                      }}
+                    />
+                  ) : null}
                   <div className="flex min-w-0 items-center gap-2.5">
                     <span className="flex shrink-0">{spec.name.tile(row)}</span>
                     <div className="min-w-0">
@@ -654,11 +673,11 @@ export function Ledger({
       {checked.length > 0 ? (
         <BulkBar
           n={checked.length}
-          actions={spec.bulk}
+          actions={bulkOffer(spec.bulk, checkedRows)}
           busy={busy}
           raised={admin.toast !== null}
           prompt={prompt?.where === 'bulk' ? prompt : null}
-          onAct={(action) => request(action, checked, 'bulk')}
+          onAct={(action) => request(action, bulkTargets(action, checkedRows), 'bulk')}
           onAnswer={answer}
           onCancel={() => setPrompt(null)}
           onClear={() => setChecks(new Set())}
