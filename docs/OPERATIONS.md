@@ -627,7 +627,8 @@ subscribers on an unclaimed site.
   blog to what the doors say. `private` is not offered: an unclaimed blog with three readers is
   listed again on the next subscribe.
 - **Take a blog off Tela when its writer asks** (Terms, "Writers' work"): hide it, which takes it
-  out of Discover and makes its page a 404, and pause each of its feeds in Feeds. Fetching, page
+  out of Discover and makes its page a 404, and pause each of its feeds (Feeds → Fetching, searched
+  by the blog's address). Fetching, page
   extraction and WebSub renewal all read only `status = 'active'` feeds, and nothing revives a
   paused one (the weekly retry is for `'dead'`). Posts already fetched stay with their
   subscribers.
