@@ -7,6 +7,7 @@
 
 import {
   audit,
+  BACKGROUND,
   bumpSeq,
   first,
   health,
@@ -19,6 +20,7 @@ import {
   latestBackup,
   redue,
   type TelaDb,
+  utcDay,
 } from '@tela/data'
 import type { Blobs } from '@tela/platform'
 import {
@@ -130,10 +132,15 @@ async function systemList(
             limit,
           )
   const [counted, found] = (await runBatch(db, [
+    // Counted under the search, as every other area counts its filters.
     db.all(sql`
-      select (select count(*) from dead_letters where resolved_at is null) as dead,
-        (select count(*) from leases where ${BACKING_OFF(now)}) as retrying,
-        (select count(*) from dead_letters where resolved_at is not null) as resolved
+      select
+        (select count(*) from dead_letters d where ${DEAD_UNRESOLVED} ${matching(q, deadText)})
+          as dead,
+        (select count(*) from leases where ${BACKING_OFF(now)}
+          ${matching(q, sql`kind || ' ' || key || ' ' || coalesce(last_error, '')`)}) as retrying,
+        (select count(*) from dead_letters d where d.resolved_at is not null
+          ${matching(q, deadText)}) as resolved
     `),
     rows,
   ])) as [Row[], Row[]]
@@ -251,6 +258,25 @@ async function systemDetail(
 }
 
 /**
+ * Whether today's background budget is spent. A body retried runs as background work (no member
+ * reserved it), and nothing on its way checks the budget the titles are held to: a bulk retry
+ * could spend it, and stop every title for the rest of the day. The budget is the one tela-jobs
+ * reported with its last tick; none reported, or 0, is no limit.
+ */
+async function backgroundSpent(db: TelaDb, now: number): Promise<boolean> {
+  const row = await first<{ spent: number; budget: number | null }>(
+    db,
+    sql`select
+      coalesce((select used + reserved from usage_daily
+        where subject = ${BACKGROUND} and day = ${utcDay(now)}), 0) as spent,
+      (select json_extract(info, '$.config.backgroundBudget') from ops_heartbeats
+        where name = 'tick') as budget`,
+  )
+  const budget = Number(row?.budget ?? 0)
+  return budget > 0 && Number(row?.spent ?? 0) >= budget
+}
+
+/**
  * Retry a dead letter: its kind's `REDUE`, and the letter resolved as `retried`, in one batch. The
  * first statement aborts the batch, as a lost lease's fence does, unless the letter is still
  * unresolved: one retried and one dismissed at once must not leave the item due and the letter
@@ -266,6 +292,7 @@ const retryDead: ActHandler = async (ctx, id) => {
   )
   if (!letter) return 'not_found'
   if (letter.resolved_at !== null || !isRedueKind(letter.kind)) return 'not_applicable'
+  if (letter.kind === 'translate.body' && (await backgroundSpent(db, ctx.now))) return 'limit'
   const again = redue(db, letter.kind, letter.key, ctx.now)
   const unresolved = sql`from dead_letters where id = ${deadId} and resolved_at is null`
   try {

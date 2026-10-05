@@ -534,6 +534,24 @@ describe('acting on dead work', () => {
     expect(row).toEqual({ state: 'requested', requested_by: null })
   })
 
+  test("a body is not retried once the day's background budget is spent", async () => {
+    await api.db.run(sql`
+      insert into body_translations (content_key, lang, state, reserved_tokens, updated_at)
+      values ('ck2', 'fr', 'failed', 0, 0)
+    `)
+    const id = await deadLetter('translate.body', 'ck2:fr')
+    await heartbeat(api.db, 'tick', now, { config: { backgroundBudget: 1000 } })
+    await api.db.run(sql`insert into usage_daily (subject, day, reserved, used)
+      values ('*', ${new Date(now).toISOString().slice(0, 10)}, 0, 1000)`)
+    expect(await act('dead.retry', [`dead:${id}`])).toMatchObject({
+      done: [],
+      failed: [{ id: `dead:${id}`, error: 'limit' }],
+    })
+    // Another kind is not background translation, and is retried whatever the budget.
+    const fetch = await deadLetter('feed.fetch', '2')
+    expect((await act('dead.retry', [`dead:${fetch}`])).done).toHaveLength(1)
+  })
+
   test('a dismissal is undone while nothing has changed since, and not after', async () => {
     const id = await deadLetter('site.assets', '1')
     const first1 = await act('dead.dismiss', [`dead:${id}`])

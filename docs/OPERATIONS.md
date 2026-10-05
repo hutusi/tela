@@ -577,7 +577,8 @@ the rest of the reader, and every change it makes is audited in `admin_actions`.
   answers for up to five minutes wherever only that copy is read.
 - **Retry** on a dead letter makes its row due again for the next tick, with fresh attempts. A body
   translation retried runs as background work: the background budget pays, up to
-  `LLM_MAX_ARTICLE_TOKENS` for the post. The health check counts only unresolved dead letters, and
+  `LLM_MAX_ARTICLE_TOKENS` for the post, and once the day's budget is spent the console refuses
+  one until tomorrow. The health check counts only unresolved dead letters, and
   the digest says how many of the week's were resolved.
 - **Heartbeats** (`ops_heartbeats`): `tick` (each kind dispatched, and the switches tela-jobs runs
   with: the background budget, the article cap, whether a translator, the relay, WebSub and the

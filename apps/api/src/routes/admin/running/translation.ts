@@ -70,12 +70,15 @@ async function translationList(
   const totals = sql`count(*) as calls, sum(c.input_tokens) as input,
     sum(c.output_tokens) as output, json_group_array(distinct c.target_lang) as targets`
   const [counted, found, middle] = (await runBatch(db, [
+    // Counted under the search, as every other area counts its filters.
     db.all(sql`
       select
-        (select count(distinct f.site_id) from llm_calls c join feeds f on f.id = c.feed_id
-          where c.created_at >= ${since}) as blogs,
-        (select count(distinct job) from llm_calls where created_at >= ${since}) as jobs,
-        (select count(distinct model) from llm_calls where created_at >= ${since}) as models
+        (select count(distinct s.id) from ${BY_BLOG} where c.created_at >= ${since}
+          ${search(sql`coalesce(s.title, '') || ' ' || s.home_url`)}) as blogs,
+        (select count(distinct c.job) from llm_calls c where c.created_at >= ${since}
+          ${search(sql`c.job`)}) as jobs,
+        (select count(distinct c.model) from llm_calls c where c.created_at >= ${since}
+          ${search(sql`c.model`)}) as models
     `),
     filter === 'blogs'
       ? db.all(sql`
