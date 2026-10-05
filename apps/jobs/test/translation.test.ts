@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import {
+  BACKGROUND,
   bumpSeq,
   first,
   headSeq,
   mergeFeed,
+  redue,
   startLease,
   type TelaDb,
   TITLES_PER_JOB,
@@ -637,6 +639,52 @@ describe('a body translation that fails', () => {
     // The reader asks again: only the new reservation is held, not the old one beside it.
     await request(1, 'zh-Hans', 20_000)
     expect(await ledger()).toEqual({ reserved: 20_000, used: row!.used_tokens })
+  })
+
+  test('retried by an operator, is asked for by nobody and paid for by the background budget', async () => {
+    let failing = true
+    const mock = createMockTranslator({ calls })
+    const flaky: Translator = {
+      model: mock.model,
+      async translate(request) {
+        if (failing && request.blocks.some((b) => b.text.includes('Paragraph'))) {
+          throw new Error('HTTP 503')
+        }
+        return mock.translate(request)
+      },
+    }
+    const ctx = context({ translator: flaky })
+    await addReader()
+    await ingest(ctx, feed(['A post'], 4))
+    const key = await request(1, 'zh-Hans', 20_000)
+    for (let i = 0; i < 3; i++) {
+      await cycle(ctx)
+      clock.advance(5 * MIN)
+    }
+    expect((await bodyRow(key))?.state).toBe('failed')
+    const charged = await ledger()
+    // Nothing was paid for yet: every call so far failed (titles too, carrying the excerpt).
+    expect(await db.all(sql`select 1 from llm_calls`)).toEqual([])
+
+    // The console's retry: the row is requested again, by nobody.
+    failing = false
+    const { statements } = redue(db, 'translate.body', `${key}:zh-Hans`, clock.now())
+    await db.batch([bumpSeq(db), ...statements] as never)
+    await cycle(ctx)
+    const row = await bodyRow(key)
+    expect(row?.state).toBe('done')
+    expect(row!.used_tokens).toBeGreaterThan(0)
+    // Everything spent since went to the background budget: the titles, and the body with them.
+    const spent = await first<{ n: number }>(
+      db,
+      sql`select sum(input_tokens + output_tokens) as n from llm_calls`,
+    )
+    expect(await ledger(BACKGROUND)).toEqual({ reserved: 0, used: spent?.n ?? -1 })
+    expect(await ledger()).toEqual(charged)
+    const logged = await db.all<{ user_id: string | null }>(
+      sql`select distinct user_id from llm_calls where job = 'translate.body'`,
+    )
+    expect(logged).toEqual([{ user_id: null }])
   })
 
   test('reported, as a missing content object, gives its reservation back', async () => {
