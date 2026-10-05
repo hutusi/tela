@@ -111,6 +111,15 @@ export function ledgerCommand(key: string, state: KeyState): LedgerCommand | nul
   return null
 }
 
+/**
+ * The row to scroll into view once the keyboard is on it: the one a key (or the record's ↑ ↓) moved
+ * to, and nothing else. Opening an area, a new filter or a click also moves the focus, to the first
+ * row or the one clicked, and scrolling there would carry the page past its header.
+ */
+export function scrollTarget(moved: string | null, focused: string | null): string | null {
+  return moved !== null && moved === focused ? moved : null
+}
+
 /** The row a step lands on, held at the ends; from nowhere, j starts at the top and k at the end. */
 export function stepTo(ids: readonly string[], from: string | null, step: 1 | -1): string | null {
   if (ids.length === 0) return null

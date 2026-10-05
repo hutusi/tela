@@ -29,7 +29,7 @@ import { ActionButton, CheckBox } from '../components/buttons'
 import { ActionPrompt } from '../components/prompt'
 import { StatusPill } from '../components/record'
 import { useAdmin } from '../context'
-import { keyDisposition, keyLike, ledgerCommand, stepTo } from '../keys'
+import { keyDisposition, keyLike, ledgerCommand, scrollTarget, stepTo } from '../keys'
 import {
   type LedgerState,
   ledgerHref,
@@ -160,6 +160,8 @@ export function Ledger({
     focusRef.current = id
     setFocusId(id)
   }, [])
+  /** The row a key (or the record's ↑ ↓) last moved to, until it has been scrolled into view. */
+  const moved = useRef<string | null>(null)
   const openIndex = state.id ? ids.indexOf(state.id) : -1
   const focused =
     openIndex >= 0
@@ -364,6 +366,7 @@ export function Ledger({
         case 'move': {
           const next = stepTo(ids, at, command.step)
           if (next === null) return
+          if (next !== at) moved.current = next
           focus(next)
           // The record follows the keys while one is open, without a history entry per step.
           if (listed) go({ id: next }, true)
@@ -405,11 +408,14 @@ export function Ledger({
     return () => window.removeEventListener('keydown', onKey)
   }, [area, go, focus, setPrompt])
 
-  // The focused row stays in view as the keys move it.
+  // The focused row stays in view as the keys move it, and only then: opening an area or a filter
+  // focuses its first row, and scrolling to that would carry the page past its own header.
   useEffect(() => {
-    if (focused === null) return
+    const id = scrollTarget(moved.current, focused)
+    if (id === null) return
+    moved.current = null
     document
-      .querySelector(`[data-testid="admin-row"][data-row-id="${CSS.escape(focused)}"]`)
+      .querySelector(`[data-testid="admin-row"][data-row-id="${CSS.escape(id)}"]`)
       ?.scrollIntoView({ block: 'nearest' })
   }, [focused])
 
@@ -653,6 +659,7 @@ export function Ledger({
               const now = parseLedgerState(area, new URLSearchParams(window.location.search))
               const next = stepTo(ids, now.id, step)
               if (next === null) return
+              if (next !== now.id) moved.current = next
               focus(next)
               go({ id: next }, true)
             }}

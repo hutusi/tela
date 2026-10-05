@@ -5,6 +5,7 @@ import {
   type KeyState,
   keyDisposition,
   ledgerCommand,
+  scrollTarget,
   stepTo,
 } from '../src/admin/keys'
 
@@ -104,6 +105,19 @@ describe('what a key does', () => {
     expect(ledgerCommand('a', LIST)).toBeNull()
     expect(ledgerCommand('Tab', LIST)).toBeNull()
     expect(ledgerCommand(' ', LIST)).toBeNull()
+  })
+})
+
+describe('scrolling a row into view', () => {
+  test('a key that moved to a row scrolls to it once the focus is there', () => {
+    expect(scrollTarget('b', 'b')).toBe('b')
+    // The record follows the key a render later: nothing until the focus arrives.
+    expect(scrollTarget('b', 'a')).toBeNull()
+  })
+
+  test('a focus no key moved (an area opened, a new filter, a click) scrolls nothing', () => {
+    expect(scrollTarget(null, 'a')).toBeNull()
+    expect(scrollTarget(null, null)).toBeNull()
   })
 })
 
