@@ -692,7 +692,7 @@ export function Ledger({
               {t('ledger.truncated', { n: ADMIN_LIST_LIMIT })}
             </p>
           ) : null}
-          <KeyLegend />
+          <KeyLegend checkable={checkable} />
         </div>
         {isOpen ? (
           <RecordPanel

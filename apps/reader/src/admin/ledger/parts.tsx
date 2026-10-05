@@ -124,12 +124,12 @@ export function SearchBox({
   )
 }
 
-/** The keys, under the table. */
-export function KeyLegend() {
+/** The keys, under the table; X only where rows can be checked. */
+export function KeyLegend({ checkable = true }: { checkable?: boolean }) {
   const t = useTranslations('admin.shell')
   const keys: [string, string][] = [
     ['J K', t('keys.move')],
-    ['X', t('keys.select')],
+    ...(checkable ? ([['X', t('keys.select')]] as [string, string][]) : []),
     ['↵', t('keys.open')],
     ['1–3', t('keys.act')],
     ['U', t('keys.undo')],

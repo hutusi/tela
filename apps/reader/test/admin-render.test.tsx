@@ -135,6 +135,9 @@ describe('the ledger', () => {
     const html = render(<Ledger area="sites" spec={none} initial={BLOG_LIST} />, '/admin/sites')
     expect(html).not.toContain('type="checkbox"')
     expect(html).not.toContain('28px_')
+    // Nor does its key legend offer X.
+    expect(html).not.toMatch(/<kbd[^>]*>X<\/kbd>/)
+    expect(checks).toMatch(/<kbd[^>]*>X<\/kbd>/)
   })
 
   test('an empty queue is clear; an empty search has no matches; anything else is empty', () => {
