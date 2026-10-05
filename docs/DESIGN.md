@@ -440,17 +440,22 @@ reader's shell.
   (34 below `md`), and one line on what the area is for.
 - **Ledger.** Filter pills with their counts (the current one filled `ink`), the search (360px,
   `surface`, a `/` chip; it waits 200 ms after the last key and searches on the server), a count
-  line, then the table: a 28px check column, the name (a tile, the title and a muted line, both
-  truncating), three columns, the status, and the row's likeliest action as a small pill (in
+  line, then the table: a 28px check column, the name (a 28px tile, the title and a muted line,
+  both truncating), three columns, the status, and the row's likeliest action as a small pill (in
   `danger` for Hide, Reject, Remove, Revoke, Cancel). Columns `28px 2fr 1fr .8fr 1fr 124px 116px`
   from `xl`; the action gives way at `lg`, the three columns below it, leaving name and status.
   Headers sort ascending, descending, then not; a number column by its number, a missing value
-  last either way. The keyboard's row has an inset 1.5px accent ring. An empty queue says *Queue
-  clear.*, an empty search *No matches*, anything else *Nothing here.*, each in the serif.
+  last either way; the sorted header shows its arrow and carries `aria-sort` (the grid has table,
+  row and cell roles). The keyboard's row has an inset 1.5px accent ring, and the page scrolls to
+  it only when a key moved it there. The search box rings in the accent while focused. An empty
+  queue says *Queue clear.*, an empty search *No matches*, anything else *Nothing here.*, each in
+  the serif.
 - **Record panel.** Beside the table from `lg` (360px, 430px from `xl`), sticky, on `surface`, with
   its own scroll, and never taller than the room below its top, so its actions are on screen before
-  it sticks; below `lg` it covers the page under *← Back to the list*. Its head: the status, the
-  row's line, "2 of 9", ↑ ↓ and ✕. Its foot: the row's actions as round buttons, the first filled
+  it sticks; below `lg` it covers the page under *← Back to the list*, as a modal dialog that
+  keeps Tab inside and hands focus back to the row when it closes. Its head: the status, the
+  row's line, "2 of 9", ↑ ↓ and ✕; a record no filter lists (a rejected claim) opens from its own
+  detail, without a place or ↑ ↓. Its foot: the row's actions as round buttons, the first filled
   in `primary` unless it takes something away, each with its key (1–3) in a chip of its own
   colour. A confirmation or a question (a rejection's reason, uses, a code, an address) replaces
   the foot inline, never a browser dialog; in the bulk bar it opens above the bar, and for New code
@@ -468,9 +473,11 @@ reader's shell.
   the checks; listed under the table in `kbd` chips. A key typed in a field is the field's, and
   Enter on a button presses it.
 - **Overview.** Today's date as the eyebrow, *Overview*, how many decisions wait; the health check
-  as one bordered line (a dot, what fails, "checked 13:05", *System →*); *Needs you*, four `surface`
-  cards (claims to review, failing feeds, dead letters, Discover candidates), each with up to three
-  rows and *Start →*; *This week* in four cells against the week before; *Recent admin activity*.
+  as one bordered line (a dot, what fails, "checked 13:05 UTC", *System →*); *Needs you*, four
+  `surface` cards (claims to review, failing feeds, dead letters, Discover candidates), each with up
+  to three rows and *Start →*, a row linking under the filter that lists it (a feed timing out
+  under *Timing out*); *This week* in four cells against the week before; *Recent admin activity*,
+  each line opening the record it acted on.
 
 **Strings.** The console's words live in the chunk, in `src/admin/messages/{en,zh-Hans}/*.json`,
 one file per part (`shell`, `library`, `members`, `running`), never in the app's catalogues. English
