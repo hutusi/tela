@@ -120,7 +120,7 @@ export function TranslationReportView({ report }: { report: AdminTranslationRepo
   const t = useTranslations('admin.running')
   const compact = useCompact()
   const { inputTokens, outputTokens, calls } = report.totals
-  const near = new Set(report.nearCap.map((m) => m.handle ?? `${m.day}:${m.used}`)).size
+  const near = report.nearCap
   return (
     <div className="mt-[22px]">
       <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">

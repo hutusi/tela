@@ -120,8 +120,11 @@ export type AdminTranslationReport = {
   unattributed: number
   background: { day: string; used: number; reserved: number; budget: number | null }
   memberCap: number
-  /** Members within one article of their daily cap this week, latest first. */
-  nearCap: { handle: string | null; day: string; used: number }[]
+  /**
+   * How many members came within one article of their daily cap this week. A count, never who:
+   * a member's tokens are what they opened, and what a member reads is not the console's to show.
+   */
+  nearCap: number
 }
 
 /** The sidebar's badges, `GET /api/v1/admin/counts`: what waits in each queue. */

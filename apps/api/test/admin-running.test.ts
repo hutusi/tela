@@ -341,9 +341,8 @@ describe('Translation', () => {
     expect(body.unattributed).toBe(60)
     expect(body.background.budget).toBe(2_000_000)
     expect(body.memberCap).toBe(USER_DAILY_TRANSLATION_TOKENS)
-    expect(body.nearCap).toEqual([
-      { handle: 'claimer', day: yesterday, used: USER_DAILY_TRANSLATION_TOKENS - 1000 },
-    ])
+    // How many, never who: a member's tokens are what they read.
+    expect(body.nearCap).toBe(1)
   })
 })
 

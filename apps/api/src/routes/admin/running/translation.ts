@@ -177,12 +177,9 @@ async function translationReport(db: TelaDb, now: number): Promise<AdminTranslat
     `),
     db.all(sql`select info from ops_heartbeats where name = 'tick'`),
     db.all(sql`
-      select p.handle, u.day, u.used + u.reserved as used
-      from usage_daily u left join profiles p on p.user_id = u.subject
+      select count(distinct u.subject) as n from usage_daily u
       where u.subject <> ${BACKGROUND} and u.day >= ${weekStart}
         and u.used + u.reserved > ${nearCap}
-      order by u.day desc, used desc
-      limit 50
     `),
   ])) as [Row[], Row[], Row[], Row[], Row[]]
   const byDay = new Map(days.map((r) => [Number(r.d), r]))
@@ -215,11 +212,7 @@ async function translationReport(db: TelaDb, now: number): Promise<AdminTranslat
       budget: config ? config.backgroundBudget : null,
     },
     memberCap: USER_DAILY_TRANSLATION_TOKENS,
-    nearCap: near.map((r) => ({
-      handle: r.handle === null || r.handle === undefined ? null : String(r.handle),
-      day: String(r.day),
-      used: Number(r.used ?? 0),
-    })),
+    nearCap: Number(near[0]?.n ?? 0),
   }
 }
 
