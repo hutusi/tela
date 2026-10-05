@@ -11,12 +11,14 @@ import type {
   AdminSystemRow,
   HealthCheck,
 } from '@tela/shared/admin'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 import { Swatch } from '../../components/swatch'
+import { useLive } from '../../lib/use-live'
 import { adminGet, adminList } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps, Status } from '../area'
 import { Dot, Evidence, History, KeyValues, Note, StatusPill, useWhen } from '../components/record'
+import { useAdmin } from '../context'
 
 /** Each kind of background work, as its tile shows it: a letter, and a colour of its own. */
 export const KIND_TILES: Record<string, { letter: string; hue: number }> = {
@@ -43,31 +45,23 @@ export function KindTile({ kind }: { kind: string }) {
 }
 
 /**
- * A report the area's header reads once when it opens, and again on `reload`. The area's own rows
- * come through the ledger; this is the part above them.
+ * A report the area's header reads when it opens, again on `reload`, and again whenever the
+ * console's version moves (after any action or undo), as the list under it does: retrying a dead
+ * letter changes the health check, pausing a blog's translation the month's figures. The last
+ * report stays up while the next loads. The area's own rows come through the ledger; this is the
+ * part above them. A 403 reaches the ledger's own load too, which shows the page that is not there.
  */
 export function useReport<T>(path: string) {
-  const [value, setValue] = useState<T | null>(null)
-  const [failed, setFailed] = useState(false)
-  const reload = useCallback(
-    async (signal?: AbortSignal) => {
-      try {
-        const answer = await adminGet<T>(path, signal)
-        if (signal?.aborted) return
-        setValue(answer)
-        setFailed(answer === null)
-      } catch {
-        // A 403 reaches the ledger's own load too, which shows the page that is not there.
-        if (!signal?.aborted) setFailed(true)
-      }
-    },
-    [path],
-  )
+  const { version } = useAdmin()
+  const load = useCallback((signal?: AbortSignal) => adminGet<T>(path, signal), [path])
+  const { value, failed, reload } = useLive(load)
+  // The version the area opened at is the one the first load already read.
+  const seen = useRef(version)
   useEffect(() => {
-    const controller = new AbortController()
-    void reload(controller.signal)
-    return () => controller.abort()
-  }, [reload])
+    if (version === seen.current) return
+    seen.current = version
+    void reload()
+  }, [version, reload])
   return { value, failed, reload }
 }
 
