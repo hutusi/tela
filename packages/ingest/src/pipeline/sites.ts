@@ -14,6 +14,7 @@ import {
   moveFeedToOrigin,
   type TelaDb,
 } from '@tela/data'
+import type { ClaimMethod } from '@tela/shared'
 import { findAll, getAttributeValue } from 'domutils'
 import { type SQL, sql } from 'drizzle-orm'
 import { parseDocument } from 'htmlparser2'
@@ -177,7 +178,7 @@ export async function resolveDeclaredFeeds(
 export { dueClaims } from '@tela/data'
 
 export type ClaimOutcome =
-  | { status: 'verified'; method: 'meta' | 'rel_me'; detached: number }
+  | { status: 'verified'; method: ClaimMethod; vouched: boolean; detached: number }
   | { status: 'failed'; error: string }
   | { status: 'skipped'; reason: string }
   | { status: 'lost' }
@@ -190,7 +191,11 @@ function claimFailed(db: TelaDb, claimId: number, error: string, now: number) {
   `)
 }
 
-/** Fetch the site's home page and settle the pending claim. */
+/**
+ * Fetch the site's home page and settle the pending claim. A claim an operator vouched for (ADR
+ * 0039) skips only the proof: the page is still fetched, because the feeds it declares are the
+ * ones the site will vouch for, and a site another member holds is still not taken from them.
+ */
 export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<ClaimOutcome> {
   const { db } = ctx
   const claimId = Number(lease.key)
@@ -198,14 +203,17 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
     site_id: number
     user_id: string
     token: string
+    method: ClaimMethod
     status: string
+    vouched_by: string | null
     home_url: string
     claimed_by: string | null
     handle: string | null
   }>(
     db,
     sql`
-      select c.site_id, c.user_id, c.token, c.status, s.home_url, s.claimed_by, p.handle
+      select c.site_id, c.user_id, c.token, c.method, c.status, c.vouched_by, s.home_url,
+        s.claimed_by, p.handle
       from site_claims c join sites s on s.id = c.site_id
       left join profiles p on p.user_id = c.user_id
       where c.id = ${claimId}
@@ -237,7 +245,10 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
   }
   if (page.status !== 200 || !page.body) return fail(`home page returned HTTP ${page.status}`)
   const base = (ctx.publicUrl ?? 'https://tela.ainaive.com').replace(/\/+$/, '')
-  const proof = findProof(page.body, claim.token, [`${base}/@${claim.handle}`])
+  const vouched = claim.vouched_by !== null
+  const proof = vouched
+    ? { method: claim.method }
+    : findProof(page.body, claim.token, [`${base}/@${claim.handle}`])
   if (!proof) {
     return fail(
       `no <meta name="${VERIFICATION_META}"> with the token and no rel="me" link to your profile on ${page.finalUrl}`,
@@ -285,7 +296,12 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
       `),
       ...moves,
     ],
-    { status: 'verified', method: proof.method, detached: moves.length > 0 ? feeds.length : 0 },
+    {
+      status: 'verified',
+      method: proof.method,
+      vouched,
+      detached: moves.length > 0 ? feeds.length : 0,
+    },
   )
 }
 

@@ -244,6 +244,80 @@ describe('verifyClaimJob', () => {
     expect(row?.error).toContain(VERIFICATION_META)
   })
 
+  describe('vouched for by an operator (ADR 0039)', () => {
+    const vouchFor = async (claimId: number) => {
+      await addUser('ops', 'operator')
+      await db.run(sql`update site_claims set vouched_by = 'ops' where id = ${claimId}`)
+    }
+
+    test('verifies with no proof on the page, and still moves feeds the site does not vouch for', async () => {
+      await addUser('owner', 'owner')
+      const { siteId, feedId } = await siteFor('/feed.xml')
+      const squatter = await FixtureServer.start()
+      try {
+        await db.run(sql`
+          insert into feeds (site_id, feed_url, host, served_origin, next_fetch_at, created_at, updated_at)
+          values (${siteId}, ${squatter.url('/evil.xml')}, '127.0.0.1', ${squatter.origin}, ${NOW}, 1, 1)
+        `)
+        // No meta tag, no rel="me": only the feed the home page declares.
+        serveHtml(
+          '/',
+          '<html><head><link rel="alternate" type="application/rss+xml" href="/feed.xml"></head></html>',
+        )
+        const claimId = await pendingClaim(siteId, 'owner')
+        await vouchFor(claimId)
+        expect(await verifyClaimJob(ctx(), await claim('site.claim', claimId))).toMatchObject({
+          status: 'verified',
+          method: 'meta',
+          vouched: true,
+        })
+        const site = await first<{ claimed_by: string; declared_feed_urls: string }>(
+          db,
+          sql`select claimed_by, declared_feed_urls from sites where id = ${siteId}`,
+        )
+        expect(site?.claimed_by).toBe('owner')
+        expect(JSON.parse(site!.declared_feed_urls)).toEqual([server.url('/feed.xml')])
+        const onSite = await db.all<{ id: number }>(
+          sql`select id from feeds where site_id = ${siteId}`,
+        )
+        expect(onSite.map((f) => f.id)).toEqual([feedId])
+        // The home page was still read: that is where the declared feeds come from.
+        expect(server.requests.some((r) => r.path === '/')).toBe(true)
+      } finally {
+        await squatter.stop()
+      }
+    })
+
+    test('still fails when the home page cannot be read', async () => {
+      await addUser('owner', 'owner')
+      const { siteId } = await siteFor('/feed.xml')
+      server.set('/', (_req, res) => {
+        res.writeHead(503)
+        res.end()
+      })
+      const claimId = await pendingClaim(siteId, 'owner')
+      await vouchFor(claimId)
+      expect(await verifyClaimJob(ctx(), await claim('site.claim', claimId))).toEqual({
+        status: 'failed',
+        error: 'home page returned HTTP 503',
+      })
+    })
+
+    test('never takes a blog another member holds', async () => {
+      await addUser('first', 'first_owner')
+      await addUser('second', 'second_owner')
+      const { siteId } = await siteFor('/feed.xml')
+      await db.run(sql`update sites set claimed_by = 'first' where id = ${siteId}`)
+      serveHtml('/', '<html></html>')
+      const claimId = await pendingClaim(siteId, 'second')
+      await vouchFor(claimId)
+      expect(await verifyClaimJob(ctx(), await claim('site.claim', claimId))).toEqual({
+        status: 'failed',
+        error: 'site already claimed by another member',
+      })
+    })
+  })
+
   test('a site another member already claimed is not taken away', async () => {
     await addUser('first', 'first_owner')
     await addUser('second', 'second_owner')
