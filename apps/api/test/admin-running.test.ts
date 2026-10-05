@@ -128,6 +128,7 @@ describe('the badges and the Overview', () => {
         siteId: 2,
         siteTitle: null,
         homeUrl: 'https://two.example',
+        faviconKey: null,
         claimant: { id: claimant.userId, handle: 'claimer', name: null },
         owner: null,
         method: 'meta',

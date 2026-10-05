@@ -10,21 +10,22 @@ import { Hono } from 'hono'
 import type { ApiDeps } from '../../../deps'
 import type { AdminEnv } from '../framework'
 import { runBatch } from '../framework'
-import { auditedLabel, lookUp, wantAudited, wanted, wantJob } from './names'
 import {
-  CLAIM_NEEDS_REVIEW,
-  claimRows,
-  DEAD_UNRESOLVED,
-  DISCOVER_CANDIDATE,
-  deadRows,
-  FEED_FAILING,
-  feedRows,
-  siteRows,
-  toClaimRow,
-  toDeadRow,
-  toFeedRow,
-  toSiteRow,
-} from './rows'
+  CLAIM_SELECT,
+  type ClaimRaw,
+  claimRow,
+  FEED_SELECT,
+  type FeedRaw,
+  feedRow,
+  NEEDS_REVIEW,
+  RELAY_SELECT,
+  relayOf,
+  SITE_SELECT,
+  type SiteRaw,
+  siteRow,
+} from '../library/rows'
+import { auditedLabel, lookUp, wantAudited, wanted, wantJob } from './names'
+import { DEAD_UNRESOLVED, DISCOVER_CANDIDATE, deadRows, FEED_FAILING, toDeadRow } from './rows'
 import { liveHealth } from './system'
 
 const DAY = 86_400_000
@@ -37,7 +38,7 @@ type Row = Record<string, unknown>
 const queueCounts = (db: TelaDb) =>
   db.all(sql`
     select
-      (select count(*) from site_claims c where ${CLAIM_NEEDS_REVIEW}) as claims,
+      (select count(*) from site_claims c where ${NEEDS_REVIEW}) as claims,
       (select count(*) from feeds f where ${FEED_FAILING}) as feeds,
       (select count(*) from dead_letters d where ${DEAD_UNRESOLVED}) as dead,
       (select count(*) from sites s where ${DISCOVER_CANDIDATE}) as candidates
@@ -77,14 +78,19 @@ async function overview(deps: ApiDeps, now: number): Promise<AdminOverview> {
     recentActivity(db, 12),
     runBatch(db, [
       queueCounts(db),
-      claimRows(db, now, CLAIM_NEEDS_REVIEW, sql`c.last_checked_at desc, c.id desc`, QUEUE_ROWS),
-      feedRows(db, FEED_FAILING, sql`f.error_count desc, f.timeout_streak desc, f.id`, QUEUE_ROWS),
+      // The ledgers' own rows, so a queue and its ledger agree on a row and what it offers.
+      db.all(sql`${CLAIM_SELECT} where ${NEEDS_REVIEW}
+        order by c.last_checked_at desc, c.id desc limit ${QUEUE_ROWS}`),
+      db.all(sql`${FEED_SELECT} where ${FEED_FAILING}
+        order by f.error_count desc, f.timeout_streak desc, f.id limit ${QUEUE_ROWS}`),
       deadRows(db, DEAD_UNRESOLVED, sql`d.at desc, d.id desc`, QUEUE_ROWS),
-      siteRows(db, DISCOVER_CANDIDATE, sql`s.reader_count desc, s.id`, QUEUE_ROWS),
+      db.all(sql`${SITE_SELECT} where ${DISCOVER_CANDIDATE}
+        order by s.reader_count desc, s.id limit ${QUEUE_ROWS}`),
       weekly(db, now),
+      db.all(RELAY_SELECT),
     ]),
   ])
-  const [counted, claims, feeds, dead, candidates, week] = results as Row[][]
+  const [counted, claims, feeds, dead, candidates, week, relay] = results as Row[][]
   const w = wanted()
   for (const r of dead ?? []) wantJob(w, String(r.kind), String(r.key))
   for (const entry of activity) wantAudited(w, entry)
@@ -100,13 +106,11 @@ async function overview(deps: ApiDeps, now: number): Promise<AdminOverview> {
     queues: {
       claims: {
         count: Number(n.claims ?? 0),
-        rows: (claims ?? []).map((r) =>
-          toClaimRow(r, ['claim.recheck', 'claim.vouch', 'claim.reject', 'claim.dismiss']),
-        ),
+        rows: (claims ?? []).map((r) => claimRow(r as unknown as ClaimRaw, now)),
       },
       feeds: {
         count: Number(n.feeds ?? 0),
-        rows: (feeds ?? []).map((r) => toFeedRow(r, ['feed.fetch', 'feed.pause'])),
+        rows: (feeds ?? []).map((r) => feedRow(r as unknown as FeedRaw, relayOf(relay))),
       },
       dead: {
         count: Number(n.dead ?? 0),
@@ -114,9 +118,7 @@ async function overview(deps: ApiDeps, now: number): Promise<AdminOverview> {
       },
       candidates: {
         count: Number(n.candidates ?? 0),
-        rows: (candidates ?? []).map((r) =>
-          toSiteRow(r, ['site.feature', 'site.list', 'site.hide']),
-        ),
+        rows: (candidates ?? []).map((r) => siteRow(r as unknown as SiteRaw, 'discover')),
       },
     },
     week: {
