@@ -37,6 +37,25 @@ export function adminList<R, A extends LedgerArea>(
   return adminGet<AdminList<R, A>>(`${area}?${params}`, signal)
 }
 
+/**
+ * A ledger searched in the browser, its words never sent. People and Invitations are searched by
+ * email address, and an address in a request's URL would reach the Workers' logs; the console
+ * keeps it out of `admin_actions` for the same reason (ADR 0039). The whole filter is loaded (500
+ * rows at most) and narrowed here.
+ */
+export async function adminListSearchedHere<R, A extends LedgerArea>(
+  area: A,
+  filter: AdminFilter<A>,
+  q: string,
+  words: (row: R) => string,
+  signal?: AbortSignal,
+): Promise<AdminList<R, A> | null> {
+  const list = await adminList<R, A>(area, filter, '', signal)
+  const needle = q.trim().toLowerCase()
+  if (!list || !needle) return list
+  return { ...list, rows: list.rows.filter((row) => words(row).toLowerCase().includes(needle)) }
+}
+
 export async function adminAct(request: AdminActRequest): Promise<AdminActResponse | null> {
   const { status, body } = await apiJson<AdminActResponse>('/api/v1/admin/act', { body: request })
   if (status === 403) throw new NotAdmin()
