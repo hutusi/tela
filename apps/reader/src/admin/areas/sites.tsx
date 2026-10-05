@@ -59,16 +59,20 @@ export const handleOf = (t: Translate, person: AdminPerson | null) =>
 /** Words that open another record: a claim's blog, a blog's owner. */
 export function RecordLink({
   onClick,
+  disabled = false,
   children,
 }: {
   onClick: () => void
+  /** Words that act, while an action is out. */
+  disabled?: boolean
   children: React.ReactNode
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="cursor-pointer text-left text-ink underline decoration-thumb underline-offset-2 hover:decoration-ink"
+      disabled={disabled}
+      className="cursor-pointer text-left text-ink underline decoration-thumb underline-offset-2 hover:decoration-ink disabled:cursor-default disabled:opacity-60"
     >
       {children}
     </button>
@@ -254,7 +258,7 @@ export function useDescribe() {
   }
 }
 
-function SiteRecord({ row, detail, act, open }: RecordProps<AdminSiteRow, AdminSiteDetail>) {
+function SiteRecord({ row, detail, act, open, busy }: RecordProps<AdminSiteRow, AdminSiteDetail>) {
   const t = useTranslations('admin.library')
   const shell = useTranslations('admin.shell')
   const locale = useLocale()
@@ -281,6 +285,7 @@ function SiteRecord({ row, detail, act, open }: RecordProps<AdminSiteRow, AdminS
     <span className="flex flex-wrap items-baseline gap-x-3">
       {site.translationOptOut ? t('kv.translationOff') : t('kv.translationOn')}
       <RecordLink
+        disabled={busy}
         onClick={() =>
           act(site.translationOptOut ? 'site.translationOn' : 'site.translationOff', [row.id])
         }

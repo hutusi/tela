@@ -172,7 +172,7 @@ export function RecordPanel({
                 {spec.name.sub(row)}
               </p>
             </header>
-            <Rendered key={row.id} render={spec.Record} props={{ row, detail, act, open }} />
+            <Rendered key={row.id} render={spec.Record} props={{ row, detail, act, open, busy }} />
           </>
         ) : (
           <p className="m-0 text-[14px] text-muted">

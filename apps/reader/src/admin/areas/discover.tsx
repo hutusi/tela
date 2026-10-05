@@ -80,9 +80,12 @@ const chip = (on: boolean) =>
 /** The blog's topics, each a toggle: Discover's nine, in Discover's order. */
 function TopicChips({
   topics,
+  busy,
   onToggle,
 }: {
   topics: readonly string[]
+  /** The last click's list is still on its way: the next builds on what the server keeps. */
+  busy: boolean
   onToggle: (topic: string) => void
 }) {
   const t = useTranslations('admin.library')
@@ -94,8 +97,9 @@ function TopicChips({
             key={topic}
             type="button"
             aria-pressed={topics.includes(topic)}
+            disabled={busy}
             onClick={() => onToggle(topic)}
-            className={chip(topics.includes(topic))}
+            className={`${chip(topics.includes(topic))} disabled:cursor-default disabled:opacity-60`}
           >
             {t(`topics.${topic}`)}
           </button>
@@ -106,7 +110,13 @@ function TopicChips({
   )
 }
 
-function DiscoverRecord({ row, detail, act, open }: RecordProps<AdminSiteRow, AdminSiteDetail>) {
+function DiscoverRecord({
+  row,
+  detail,
+  act,
+  open,
+  busy,
+}: RecordProps<AdminSiteRow, AdminSiteDetail>) {
   const t = useTranslations('admin.library')
   const locale = useLocale()
   const describe = useDescribe()
@@ -124,8 +134,8 @@ function DiscoverRecord({ row, detail, act, open }: RecordProps<AdminSiteRow, Ad
     const next = topics.includes(topic)
       ? topics.filter((x) => x !== topic)
       : TOPICS.filter((x) => x === topic || topics.includes(x))
-    setSent(next)
-    act('site.topics', [row.id], { topics: next })
+    // Shown as sent only once it went: a click while another action is out sends nothing.
+    if (act('site.topics', [row.id], { topics: next })) setSent(next)
   }
   const owner = site.owner
   const ownerLink = owner ? (
@@ -144,7 +154,7 @@ function DiscoverRecord({ row, detail, act, open }: RecordProps<AdminSiteRow, Ad
           [t('kv.about'), detail?.description ?? null],
         ]}
       />
-      <TopicChips topics={topics} onToggle={toggle} />
+      <TopicChips topics={topics} busy={busy} onToggle={toggle} />
       <Note>{t('notes.discoverLag')}</Note>
       {detail ? <History entries={detail.history} describe={describe} /> : null}
     </div>

@@ -316,7 +316,7 @@ export function Ledger({
   const act: Act = useCallback(
     (action, targets, args) => {
       const now = parseLedgerState(area, new URLSearchParams(window.location.search))
-      request(action, targets ?? (now.id ? [now.id] : []), 'record', args)
+      return request(action, targets ?? (now.id ? [now.id] : []), 'record', args)
     },
     [area, request],
   )

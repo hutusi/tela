@@ -28,14 +28,19 @@ export type Column<R> = {
   number?: (row: R) => number | null
 }
 
-/** Run an action from inside a record (a topic chip, a link that acts): the ledger's own path. */
-export type Act = (action: AdminActionName, ids?: string[], args?: AdminActArgs) => void
+/**
+ * Run an action from inside a record (a topic chip, a link that acts): the ledger's own path. One
+ * action at a time: false, and nothing sent, while another is out.
+ */
+export type Act = (action: AdminActionName, ids?: string[], args?: AdminActArgs) => boolean
 
 export type RecordProps<R, D> = {
   row: R
   /** Null while the record is loading, or when it failed to. */
   detail: D | null
   act: Act
+  /** An action is out: a control that acts waits for it. */
+  busy: boolean
   /** Open another area's record: a claim's site, a site's owner. */
   open: (area: LedgerArea, id: string) => void
 }

@@ -34,11 +34,19 @@ export function useAdminAct(options: {
   const t = useTranslations('admin.shell')
   const [prompt, setPrompt] = useState<Prompt | null>(null)
   const [busy, setBusy] = useState(false)
+  // Busy as of now, not as of the last render: two clicks in one frame both see `busy` false.
+  const busyRef = useRef(false)
   const latest = useRef(options)
   latest.current = options
 
+  /**
+   * Send an action, unless one is already out: one at a time, so a second click on a topic chip
+   * or a toggle never races the first and lands on the state from before it. Says whether it went.
+   */
   const run = useCallback(
     async (action: AdminActionName, ids: string[], args?: AdminActArgs) => {
+      if (busyRef.current) return false
+      busyRef.current = true
       setPrompt(null)
       setBusy(true)
       try {
@@ -54,18 +62,22 @@ export function useAdminAct(options: {
         if (error instanceof NotAdmin) admin.deny()
         else admin.say(t('errors.failed'), { error: true })
       } finally {
+        busyRef.current = false
         setBusy(false)
         admin.changed()
       }
+      return true
     },
     [admin, t],
   )
 
-  /** Act, or ask first. */
+  /** Act, or ask first; nothing while an action is out. Says whether it went or asked. */
   const request = useCallback(
     (action: AdminActionName, ids: string[], where: PromptPlace, args?: AdminActArgs) => {
+      if (busyRef.current) return false
       if (promptFor(action, args)) setPrompt({ action, ids, where, ...(args ? { args } : {}) })
       else void run(action, ids, args)
+      return true
     },
     [run],
   )
