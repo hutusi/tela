@@ -136,7 +136,7 @@ export function siteRow(raw: SiteRaw, area: 'sites' | 'discover'): AdminSiteRow 
  * that is someone else (`op`, a dispute), and its check's lease while one is held or backing off.
  */
 export const CLAIM_SELECT = sql`
-  select c.id, c.site_id, s.title, s.home_url, s.reader_count, c.user_id,
+  select c.id, c.site_id, s.title, s.home_url, s.favicon_key, s.reader_count, c.user_id,
     cp.handle as claimant_handle, cp.display_name as claimant_name,
     op.user_id as owner_id, op.handle as owner_handle, op.display_name as owner_name,
     c.method, c.status, c.error, c.vouched_by, c.created_at, c.last_checked_at, c.verified_at,
@@ -152,6 +152,7 @@ export type ClaimRaw = {
   site_id: number
   title: string | null
   home_url: string
+  favicon_key: string | null
   reader_count: number
   user_id: string
   claimant_handle: string | null
@@ -212,6 +213,7 @@ export function claimRow(raw: ClaimRaw, now: number): AdminClaimRow {
     siteId: raw.site_id,
     siteTitle: raw.title,
     homeUrl: raw.home_url,
+    faviconKey: raw.favicon_key,
     claimant: personOf(raw.user_id, raw.claimant_handle, raw.claimant_name),
     owner: personOf(raw.owner_id, raw.owner_handle, raw.owner_name),
     method: raw.method,
@@ -233,7 +235,8 @@ export function claimRow(raw: ClaimRaw, now: number): AdminClaimRow {
 
 /** Every column a feed row needs, from `feeds f join sites s`, with the site's owner (`op`). */
 export const FEED_SELECT = sql`
-  select f.id, f.site_id, s.title as site_title, s.home_url, f.feed_url, f.format, f.status,
+  select f.id, f.site_id, s.title as site_title, s.home_url, s.favicon_key, f.feed_url, f.format,
+    f.status,
     f.fetch_region, f.error_count, f.timeout_streak, f.last_error, f.last_fetched_at,
     f.last_item_at, f.next_fetch_at, f.merged_into, s.claimed_by as owner_id,
     op.handle as owner_handle, op.display_name as owner_name,
@@ -247,6 +250,7 @@ export type FeedRaw = {
   site_id: number
   site_title: string | null
   home_url: string
+  favicon_key: string | null
   feed_url: string
   format: FeedFormat | null
   status: FeedStatus
@@ -293,6 +297,7 @@ export function feedRow(raw: FeedRaw, relay: boolean): AdminFeedRow {
     siteId: raw.site_id,
     siteTitle: raw.site_title,
     homeUrl: raw.home_url,
+    faviconKey: raw.favicon_key,
     feedUrl: raw.feed_url,
     format: raw.format,
     status: raw.status,

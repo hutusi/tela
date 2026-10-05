@@ -34,6 +34,8 @@ export type AdminClaimRow = AdminRowBase & {
   siteId: number
   siteTitle: string | null
   homeUrl: string
+  /** The blog's favicon, for the row's tile. */
+  faviconKey: string | null
   claimant: AdminPerson | null
   /** The site's owner when it is someone other than the claimant: a disputed claim. */
   owner: AdminPerson | null
@@ -56,6 +58,8 @@ export type AdminFeedRow = AdminRowBase & {
   siteId: number
   siteTitle: string | null
   homeUrl: string
+  /** The blog's favicon, for the row's tile. */
+  faviconKey: string | null
   feedUrl: string
   format: FeedFormat | null
   status: FeedStatus
