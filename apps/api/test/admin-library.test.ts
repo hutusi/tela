@@ -506,7 +506,14 @@ describe('the ledgers', () => {
     await addFeed(site)
 
     const failingList = await list<AdminFeedRow>('feeds', 'failing')
-    expect(failingList.counts).toEqual({ failing: 1, timeout: 2, dead: 1, paused: 1, merged: 1 })
+    expect(failingList.counts).toEqual({
+      failing: 1,
+      timeout: 2,
+      dead: 1,
+      paused: 1,
+      merged: 1,
+      fetching: 1,
+    })
     expect(failingList.rows[0]).toMatchObject({
       feedId: failing,
       siteTitle: 'Blog',

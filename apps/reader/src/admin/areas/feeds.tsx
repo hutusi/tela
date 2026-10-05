@@ -1,6 +1,7 @@
 /**
  * The Feeds ledger (ADR 0039): the feeds that stopped. Failing ones with the error they last had,
- * ones timing out from Cloudflare (which the China relay may reach), dead, paused and merged ones.
+ * ones timing out from Cloudflare (which the China relay may reach), dead, paused and merged ones;
+ * and last, the ones fetching as they should, for an operator who must pause one.
  * A merged feed is read-only: its next fetch would merge it again (ADR 0028).
  */
 import type { AdminFeedDetail, AdminFeedRow, AdminFilter } from '@tela/shared/admin'

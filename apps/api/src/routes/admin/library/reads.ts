@@ -71,6 +71,9 @@ const FEED_FILTERS: Record<AdminFilter<'feeds'>, SQL> = {
   dead: sql`f.status = 'dead'`,
   paused: sql`f.status = 'paused' and f.merged_into is null`,
   merged: sql`f.merged_into is not null`,
+  // Fetching as it should: the feeds an operator pauses when a writer asks to leave.
+  fetching: sql`f.status = 'active' and f.error_count = 0 and f.timeout_streak < 3
+    and f.merged_into is null`,
 }
 
 /** One count per filter, in one row, over `from` narrowed by the search. */

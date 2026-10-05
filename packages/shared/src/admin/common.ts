@@ -23,7 +23,7 @@ export type AdminArea = (typeof ADMIN_AREAS)[number]
 export const ADMIN_FILTERS = {
   claims: ['review', 'checking', 'verified'],
   sites: ['discover', 'private', 'attention', 'hidden'],
-  feeds: ['failing', 'timeout', 'dead', 'paused', 'merged'],
+  feeds: ['failing', 'timeout', 'dead', 'paused', 'merged', 'fetching'],
   discover: ['featured', 'listed', 'candidates', 'hidden'],
   people: ['admins', 'members'],
   invites: ['codes', 'waiting', 'revoked'],

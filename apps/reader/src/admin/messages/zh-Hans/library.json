@@ -18,7 +18,8 @@
       "timeout": "超时",
       "dead": "已停用",
       "paused": "已暂停",
-      "merged": "已合并"
+      "merged": "已合并",
+      "fetching": "正常抓取"
     },
     "discover": {
       "featured": "精选",

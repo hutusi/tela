@@ -18,7 +18,8 @@
       "timeout": "Timing out",
       "dead": "Dead",
       "paused": "Paused",
-      "merged": "Merged"
+      "merged": "Merged",
+      "fetching": "Fetching"
     },
     "discover": {
       "featured": "Featured",
