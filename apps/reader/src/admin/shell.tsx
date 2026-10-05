@@ -2,7 +2,7 @@
  * The console's frame (the design's 2a): a 228px sidebar (the mark and an Admin pill, the areas in
  * their groups with what waits in each queue, the member and the way back to reading) and the
  * area the address names, which scrolls on its own. Below `md` the sidebar is a strip that scrolls
- * sideways above the page. The undo toast lives here, at the foot of the content column, so it
+ * sideways above the page. The undo toast lives here, at the top of the content column, so it
  * outlasts a move to another area.
  */
 import { type AdminArea, type AdminCounts, isLedgerArea } from '@tela/shared/admin'

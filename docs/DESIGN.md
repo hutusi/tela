@@ -459,8 +459,10 @@ reader's shell.
   each of the area's bulk actions that at least one checked row takes (sent for those rows only,
   and confirmed in the plural: "Revoke these 3 codes?"), and *Clear*. An area with no bulk action
   (People) has no check column.
-- **Undo toast.** An `ink` pill at the foot of the content column for six seconds: what was done
-  and to what ("Featured · Nordvest", or "Hidden · 3 items"), with *Undo* while it can be undone.
+- **Undo toast.** An `ink` pill at the top of the content column, centred, for six seconds: what was
+  done and to what ("Featured · Nordvest", or "Hidden · 3 items"), with *Undo* while it can be
+  undone, by click or by `u` from any page of the console. An undo's answer replaces only the toast
+  it undid.
 - **Keys.** `j`/`k` (or the arrows) move, `x` checks, Enter or `o` opens, `1`–`3` act on the open
   (else the focused) row, `u` undoes, `/` searches, Esc takes back a question, then the record, then
   the checks; listed under the table in `kbd` chips. A key typed in a field is the field's, and

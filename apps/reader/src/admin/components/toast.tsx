@@ -1,7 +1,8 @@
 /**
  * The undo toast: what the last action did, for six seconds, with Undo while it can be taken back
- * (U does the same). At the foot of the content column, centred; the live region is always there,
- * so a reader of the screen hears each new message.
+ * (U does the same). At the top of the content column, centred, as the design puts it, so it never
+ * sits on the bulk bar or a record's actions at the foot; the live region is always there, so a
+ * reader of the screen hears each new message.
  */
 import { useEffect } from 'react'
 import { useTranslations } from 'use-intl'
@@ -27,7 +28,7 @@ export function UndoToast() {
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4 md:absolute"
+      className="pointer-events-none fixed inset-x-0 top-4 z-40 flex justify-center px-4 md:absolute"
     >
       {toast ? (
         <div

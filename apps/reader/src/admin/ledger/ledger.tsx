@@ -679,7 +679,6 @@ export function Ledger({
           n={checked.length}
           actions={bulkOffer(spec.bulk, checkedRows)}
           busy={busy}
-          raised={admin.toast !== null}
           prompt={prompt?.where === 'bulk' ? prompt : null}
           onAct={(action) => request(action, bulkTargets(action, checkedRows), 'bulk')}
           onAnswer={answer}
@@ -746,7 +745,6 @@ function BulkBar({
   n,
   actions,
   busy,
-  raised,
   prompt,
   onAct,
   onAnswer,
@@ -756,8 +754,6 @@ function BulkBar({
   n: number
   actions: readonly AdminActionName[]
   busy: boolean
-  /** The toast is up, at the foot of the column: stand above it. */
-  raised: boolean
   prompt: Prompt | null
   onAct: (action: AdminActionName) => void
   onAnswer: (args?: AdminActArgs) => void
@@ -767,7 +763,7 @@ function BulkBar({
   const t = useTranslations('admin.shell')
   return (
     <div
-      className={`pointer-events-none sticky z-10 -mt-7 flex flex-col items-center gap-2 ${raised ? 'bottom-[72px]' : 'bottom-[18px]'}`}
+      className="pointer-events-none sticky bottom-[18px] z-10 -mt-7 flex flex-col items-center gap-2"
       data-testid="admin-bulk"
     >
       {prompt ? (
