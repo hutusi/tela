@@ -1,10 +1,19 @@
 /**
  * The record beside the table (the design's 2a): its state, where it sits in the list with ↑ ↓,
  * the area's own body, and its actions with their keys. From `lg` it stands beside the table and
- * scrolls on its own; below `lg` it covers the page, with a way back to the list.
+ * scrolls on its own; below `lg` it covers the page, with a way back to the list, and is a modal
+ * dialog: focus goes into it, Tab stays in it, and closing it hands focus back to the row.
  */
 import type { AdminActArgs, AdminActionName, AdminRowBase, LedgerArea } from '@tela/shared/admin'
-import { type ReactNode, type RefObject, useEffect, useRef } from 'react'
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from 'react'
 import { useTranslations } from 'use-intl'
 import { actionLook } from '../act'
 import type { Act, AnyAreaSpec } from '../area'
@@ -28,6 +37,78 @@ const ICON =
 
 /** Tailwind's `lg`, where the panel stands beside the table. */
 const BESIDE = '(min-width: 64rem)'
+
+/** Whether the panel stands beside the table now. A server render, which has no screen, says so. */
+function useBeside(): boolean {
+  return useSyncExternalStore(
+    (changed) => {
+      const query = window.matchMedia(BESIDE)
+      query.addEventListener('change', changed)
+      return () => query.removeEventListener('change', changed)
+    },
+    () => window.matchMedia(BESIDE).matches,
+    () => true,
+  )
+}
+
+/** What Tab can reach inside an element, in order, leaving out what is hidden or disabled. */
+function tabStops(root: HTMLElement): HTMLElement[] {
+  const all = root.querySelectorAll<HTMLElement>(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )
+  return [...all].filter((el) => el.getClientRects().length > 0)
+}
+
+/**
+ * Below `lg` the panel covers the page as a modal dialog: focus moves into it as it opens, and Tab
+ * and Shift+Tab go round inside it. Either way, closing it with focus inside (✕, Back, Esc on one
+ * of its buttons) hands focus back to the row it showed, rather than to the top of the page.
+ */
+function useDialogFocus(ref: RefObject<HTMLElement | null>, modal: boolean, rowId: string | null) {
+  const shown = useRef(rowId)
+  shown.current = rowId
+  useEffect(() => {
+    const panel = ref.current
+    if (!panel || !modal) return
+    if (!panel.contains(document.activeElement)) panel.focus({ preventScroll: true })
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      const stops = tabStops(panel)
+      const first = stops[0]
+      const last = stops.at(-1)
+      if (!first || !last) {
+        e.preventDefault()
+        return
+      }
+      const at = document.activeElement
+      if (e.shiftKey && (at === first || at === panel)) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && at === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    panel.addEventListener('keydown', onKey)
+    return () => panel.removeEventListener('keydown', onKey)
+  }, [ref, modal])
+  // A layout effect's cleanup runs while the panel is still in the page, so it can tell where the
+  // focus was; the row takes it once the table has drawn without the panel.
+  useLayoutEffect(() => {
+    const panel = ref.current
+    return () => {
+      const id = shown.current
+      if (!panel?.contains(document.activeElement) || id === null) return
+      requestAnimationFrame(() => {
+        document
+          .querySelector<HTMLElement>(
+            `[data-testid="admin-row"][data-row-id="${CSS.escape(id)}"] a[href]`,
+          )
+          ?.focus()
+      })
+    }
+  }, [ref])
+}
 
 /**
  * From `lg` the panel sticks to the top of the column once the column has scrolled to it; until
@@ -102,12 +183,21 @@ export function RecordPanel({
   const t = useTranslations('admin.shell')
   const status = row ? spec.status(row) : null
   const panel = useRef<HTMLElement>(null)
+  const titleId = useId()
+  const modal = !useBeside()
   useFitBelowFold(panel)
+  useDialogFocus(panel, modal, row?.id ?? null)
   return (
+    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: aria-modal comes only with role="dialog"
     <section
       ref={panel}
-      aria-label={row ? spec.name.title(row) : t('ledger.close')}
-      className="fixed inset-0 z-30 flex min-w-0 animate-fade flex-col overflow-hidden bg-paper lg:sticky lg:top-0 lg:right-auto lg:bottom-auto lg:left-auto lg:z-auto lg:max-h-[calc(100dvh-60px)] lg:rounded-[14px] lg:border lg:border-line lg:bg-surface"
+      // A dialog only while it covers the page; beside the table, a region of it.
+      role={modal ? 'dialog' : undefined}
+      aria-modal={modal ? true : undefined}
+      aria-labelledby={row ? titleId : undefined}
+      aria-label={row ? undefined : t('ledger.record')}
+      tabIndex={-1}
+      className="fixed inset-0 z-30 flex min-w-0 animate-fade flex-col overflow-hidden bg-paper outline-none lg:sticky lg:top-0 lg:right-auto lg:bottom-auto lg:left-auto lg:z-auto lg:max-h-[calc(100dvh-60px)] lg:rounded-[14px] lg:border lg:border-line lg:bg-surface"
       data-testid="admin-record"
     >
       <button
@@ -165,7 +255,10 @@ export function RecordPanel({
           <>
             {/* The record's name, as the design heads it: the areas give the body below. */}
             <header className="flex flex-col gap-1">
-              <h2 className="m-0 font-serif text-[28px] leading-[1.12] font-medium tracking-[-0.01em] [overflow-wrap:anywhere]">
+              <h2
+                id={titleId}
+                className="m-0 font-serif text-[28px] leading-[1.12] font-medium tracking-[-0.01em] [overflow-wrap:anywhere]"
+              >
                 {spec.name.title(row)}
               </h2>
               <p className="m-0 text-[13px] text-muted [overflow-wrap:anywhere]">
