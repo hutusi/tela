@@ -17,7 +17,10 @@
  * What index.html loads (its scripts, stylesheets and preloads) is fetched before the swap. Fonts
  * are cached as the page asks for them, since a page loads only the few its text needs; they are
  * kept while a kept stylesheet names them. Dynamic `import()` chunks are not precached either:
- * the build has one JS bundle today, and a lazy chunk would be cached only once a page loaded it.
+ * the admin console (ADR 0039) is one, cached only once a page has loaded it and dropped at the
+ * next swap like any file the new shell does not load. A shell older than the deploy that asks
+ * for a chunk that is gone gets the app's HTML, which `fits` refuses to keep, and the app reloads
+ * once to boot the current shell (`app.tsx`).
  *
  * Bump SHELL whenever a released worker may have cached something wrong: activation drops every
  * other cache and warms the new one (OPERATIONS.md).

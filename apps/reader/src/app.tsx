@@ -2,6 +2,7 @@
 import { isUiLocale, type UiLocale } from '@tela/shared'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
+import { useTranslations } from 'use-intl'
 import { AppHeader } from './components/app-header'
 import { FrontDoorProvider, ToReading } from './components/front-door'
 import { detectLocale, I18n, localeCookie } from './i18n'
@@ -30,8 +31,65 @@ import type { LocalStore } from './store/local'
 import type { Objects } from './store/objects'
 import { UiContext } from './ui'
 
-/** The admin console (ADR 0039): its own chunk, fetched only when an admin opens it. */
-const AdminApp = lazy(() => import('./admin'))
+/** This tab has reloaded once for a console chunk that would not load. */
+const ADMIN_RELOADED = 'tela.admin-reloaded'
+
+/**
+ * The admin console (ADR 0039): its own chunk, fetched only when an admin opens it. After a
+ * deploy, a shell from before it asks for a chunk the network no longer has, and the single-page
+ * fallback answers that with index.html (AGENTS gotchas), so the import fails: the page reloads
+ * once, which boots the current shell, and only a second failure in this tab is shown. The flag
+ * is cleared once a load succeeds, so the next deploy gets its own reload. Vite's
+ * `vite:preloadError` event fires for the same failure; handling the import's own rejection here
+ * covers that and a chunk that fails to evaluate alike.
+ */
+const AdminApp = lazy(() =>
+  import('./admin').then(
+    (module) => {
+      try {
+        sessionStorage.removeItem(ADMIN_RELOADED)
+      } catch {}
+      return module
+    },
+    () => {
+      let first = false
+      try {
+        first = sessionStorage.getItem(ADMIN_RELOADED) === null
+        if (first) sessionStorage.setItem(ADMIN_RELOADED, '1')
+      } catch {
+        // No sessionStorage: a reload could not tell itself from the first try, so none.
+      }
+      if (first) {
+        window.location.reload()
+        // The page is going: render nothing until it has.
+        return new Promise<never>(() => {})
+      }
+      return { default: AdminUnavailable }
+    },
+  ),
+)
+
+/** The console's chunk would not load even after a reload: offline, or the deploy is mid-way. */
+function AdminUnavailable() {
+  const t = useTranslations('reader')
+  return (
+    <main className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-6 py-20 animate-fade">
+      <p className="text-[15px] text-ink-2">{t('loadFailed')}</p>
+      <div>
+        <a
+          href={window.location.href}
+          onClick={(e) => {
+            e.preventDefault()
+            window.location.reload()
+          }}
+          className="inline-block rounded-full border border-ink px-4 py-2 text-[13px] font-medium text-ink hover:bg-ink hover:text-paper hover:no-underline"
+        >
+          {t('retry')}
+        </a>
+      </div>
+    </main>
+  )
+}
 
 /** A page only members see: anyone else signs in first and comes back. */
 function Members({ children }: { children: React.ReactNode }) {
