@@ -1,1 +1,101 @@
-{}
+{
+  "signIn": {
+    "code": "電子郵件驗證碼",
+    "credential": "密碼",
+    "google": "Google",
+    "github": "GitHub"
+  },
+  "listing": {
+    "private": "未公開",
+    "listed": "已列入",
+    "featured": "精選",
+    "rejected": "已隱藏"
+  },
+  "people": {
+    "filters": { "admins": "管理員", "members": "成員" },
+    "search": "按使用者名稱、暱稱或電子郵件搜尋",
+    "name": "成員",
+    "columns": { "role": "角色", "signIn": "登入方式", "joined": "加入時間" },
+    "role": { "admin": "管理員", "member": "成員" },
+    "privacy": "閱讀記錄、訂閱和點贊都是私密的，管理員也看不到。",
+    "kv": {
+      "email": "電子郵件",
+      "signIn": "登入方式",
+      "joined": "加入",
+      "invites": "邀請",
+      "sessions": "工作階段",
+      "bio": "簡介"
+    },
+    "separator": "、",
+    "joinedBy": {
+      "operator": "{date}，由運營者邀請",
+      "member": "{date}，由 <who>@{handle}</who> 用邀請碼 {code} 邀請",
+      "someone": "{date}，用成員的邀請碼 {code}",
+      "code": "{date}，用邀請碼 {code}",
+      "none": "{date}"
+    },
+    "invitesUsed": "已用 {used} 個，共 {allowance} 個",
+    "sessions": "{n, plural, =0 {無} other {# 臺裝置}}",
+    "lastSeen": "{sessions}，最近活躍於{when}",
+    "blogs": "認領的部落格",
+    "blogLine": "{listing} · {readers, plural, other {# 位讀者}}",
+    "codes": "名下的邀請碼",
+    "joinedWith": "加入者：",
+    "history": {
+      "signOut": "退出了 {n, plural, other {# 個工作階段}}",
+      "invited": "已按電子郵件邀請",
+      "mailed": "已重新傳送登入驗證碼",
+      "grant": "已開通管理後臺",
+      "ungrant": "已關閉管理後臺"
+    }
+  },
+  "invites": {
+    "filters": { "codes": "邀請碼", "waiting": "等待中", "revoked": "已作廢" },
+    "search": "按邀請碼、邀請人或電子郵件搜尋",
+    "name": "邀請碼或電子郵件",
+    "columns": { "createdBy": "建立者", "uses": "名額", "when": "建立或到期" },
+    "operator": "運營者",
+    "sub": {
+      "operator": "運營者的邀請碼",
+      "member": "@{handle} 的邀請碼",
+      "someone": "成員的邀請碼",
+      "hold": "等待使用 {code}",
+      "holdOperator": "運營者的邀請"
+    },
+    "uses": "{used} / {max}",
+    "created": "{when}建立",
+    "expires": "{when}到期",
+    "status": {
+      "active": "已用 {used}/{max}",
+      "full": "已滿",
+      "revoked": "已作廢",
+      "waiting": "等待中 · {when}到期",
+      "lapsed": "已過期"
+    },
+    "kv": {
+      "code": "邀請碼",
+      "createdBy": "建立者",
+      "created": "建立時間",
+      "uses": "名額",
+      "waiting": "等待中",
+      "revoked": "作廢時間",
+      "email": "電子郵件",
+      "with": "邀請碼",
+      "invitedBy": "邀請人",
+      "asked": "申請時間",
+      "expires": "到期時間"
+    },
+    "usesOf": "已用 {used} 個，共 {max} 個",
+    "waitingCount": "{n, plural, =0 {無人} other {# 個電子郵件}}等待登入",
+    "joined": "用它加入的人",
+    "nobody": "還沒有人。",
+    "latestTen": "只顯示最近十位。",
+    "revokeNote": "作廢時，等待使用這個邀請碼的邀請也會被永久取消：撤銷能恢復邀請碼，但這些電子郵件需要重新申請加入。",
+    "memberNote": "成員的邀請碼只能邀請一個人。在未使用就作廢之前，它佔用成員的五個名額之一。",
+    "holdNote": "電子郵件只在這裡顯示。審計日誌只用編號記錄這份邀請，從不記錄電子郵件。",
+    "history": {
+      "created": "已建立，可供 {n, plural, other {# 人}}使用",
+      "addUses": "名額從 {from} 增加到 {to}"
+    }
+  }
+}
