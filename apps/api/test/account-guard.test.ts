@@ -226,6 +226,21 @@ const MEMBER_ROUTES: MemberRoute[] = [
     body: () => ({ group: ADMIN_GROUP }),
     effect: 'writes',
   },
+  { route: 'GET /api/v1/admin/people', path: '/api/v1/admin/people?f=admins', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/people/:id',
+    // b is signed in by the beforeEach, after this table is built.
+    get path() {
+      return `/api/v1/admin/people/${b.userId}`
+    },
+    effect: 'reads',
+  },
+  { route: 'GET /api/v1/admin/invites', path: '/api/v1/admin/invites?f=codes', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/invites/:id',
+    path: `/api/v1/admin/invites/code:${B_CODE}`,
+    effect: 'reads',
+  },
   {
     route: 'POST /api/v1/mutations',
     path: '/api/v1/mutations',
