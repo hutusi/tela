@@ -1,8 +1,9 @@
 /**
- * The admin console (ADR 0039): only a member the operator granted it opens it; an admin hides a
- * featured blog from Discover and takes it back, works a ledger from the keyboard, pauses a feed,
- * and reads it all in Chinese; and the console fits a phone. Each member here is new and comes
- * from an address of its own (sign-in is limited per address).
+ * The admin console (ADR 0039): only a member the operator granted it opens it, and to anyone else
+ * (a visitor too) it is a page that does not exist; an admin hides a featured blog from Discover
+ * and takes it back, works a ledger from the keyboard, pauses a feed, opens a claim no filter
+ * lists, and reads it all in Chinese; and the console fits a phone. Each member here is new and
+ * comes from an address of its own (sign-in is limited per address).
  */
 import { type Browser, expect, type Page, test } from '@playwright/test'
 import { ADMIN_TOKEN, BASE, FIXTURES, fromAccountMenu, signInRequest } from './helpers'
@@ -47,14 +48,31 @@ async function curated(page: Page): Promise<number> {
   return ((await res.json()) as { siteId: number }).siteId
 }
 
+/** What a member call carries: the client's protocol and the member it names. */
+async function asMember(page: Page): Promise<Record<string, string>> {
+  const me = (await (await page.request.get(`${BASE}/api/v1/me`)).json()) as { id: string }
+  return { 'x-tela-client': '2', 'x-tela-member': me.id }
+}
+
 /** The site's listing, as the console's own Discover ledger reads it. */
 async function listingOf(page: Page, siteId: number): Promise<string | undefined> {
-  const me = (await (await page.request.get(`${BASE}/api/v1/me`)).json()) as { id: string }
   const res = await page.request.get(`${BASE}/api/v1/admin/sites/${siteId}`, {
-    headers: { 'x-tela-client': '2', 'x-tela-member': me.id },
+    headers: await asMember(page),
   })
   return ((await res.json()) as { site?: { listing: string } }).site?.listing
 }
+
+test('a visitor at /admin finds a page that does not exist, not a way to sign in', async ({
+  page,
+}) => {
+  await page.goto('/admin')
+  await expect(page.getByTestId('not-found')).toBeVisible()
+  await expect(page).toHaveURL(/\/admin$/)
+  await expect(page.getByTestId('admin-shell')).toHaveCount(0)
+  await page.goto('/admin/claims?id=1')
+  await expect(page.getByTestId('not-found')).toBeVisible()
+  await expect(page).toHaveURL(/\/admin\/claims/)
+})
 
 test('a member the operator has not granted finds nothing at /admin, and no menu item', async ({
   browser,
@@ -146,6 +164,43 @@ test('an admin pauses a feed that fetches as it should, and it waits under Pause
     .locator('[data-testid="admin-record-action"][data-action="feed.resume"]')
     .click()
   await expect(page.getByTestId('admin-toast')).toContainText('Resumed')
+})
+
+test('a claim the operator rejected, under no filter, still opens by its id', async ({
+  browser,
+}) => {
+  const page = await member(browser, 16, { admin: true })
+  await curated(page)
+  const headers = await asMember(page)
+  // The admin claims the curated blog as a member would, and rejects the claim at once: failed
+  // and reviewed, it is in none of Claims' filters (not in review, not checking, not verified).
+  const started = await page.request.post(`${BASE}/api/v1/claims`, {
+    headers: { ...headers, ...ORIGIN },
+    data: { url: `${FIXTURES}/jvns.xml` },
+  })
+  expect(started.ok()).toBe(true)
+  const { siteId } = (await started.json()) as { siteId: number }
+  const verify = await page.request.post(`${BASE}/api/v1/claims/${siteId}/verify`, {
+    headers: { ...headers, ...ORIGIN },
+  })
+  expect(verify.ok()).toBe(true)
+  const site = (await (
+    await page.request.get(`${BASE}/api/v1/admin/sites/${siteId}`, { headers })
+  ).json()) as { claims: { id: string; claimant: { id: string } | null }[] }
+  const claim = site.claims.find((c) => c.claimant?.id === headers['x-tela-member'])
+  expect(claim).toBeTruthy()
+  const claimId = claim!.id
+  const rejected = await page.request.post(`${BASE}/api/v1/admin/act`, {
+    headers: { ...headers, ...ORIGIN },
+    data: { action: 'claim.reject', ids: [claimId], args: { reason: 'Not the author' } },
+  })
+  expect(((await rejected.json()) as { done: string[] }).done).toEqual([claimId])
+
+  await page.goto(`/admin/claims?id=${claimId}`)
+  const record = page.getByTestId('admin-record')
+  await expect(record).toBeVisible()
+  await expect(record).toContainText('Not the author')
+  await expect(record).not.toContainText('It no longer exists')
 })
 
 test('the console speaks Simplified Chinese to a member who reads it', async ({ browser }) => {
