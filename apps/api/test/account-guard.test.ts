@@ -242,6 +242,19 @@ const MEMBER_ROUTES: MemberRoute[] = [
     effect: 'reads',
   },
   { route: 'GET /api/v1/admin/invites', path: '/api/v1/admin/invites?f=codes', effect: 'reads' },
+  // Searches are posted, so an address never reaches a URL (ADR 0039).
+  {
+    route: 'POST /api/v1/admin/people',
+    path: '/api/v1/admin/people',
+    body: () => ({ f: 'admins', q: 'b' }),
+    effect: 'reads',
+  },
+  {
+    route: 'POST /api/v1/admin/invites',
+    path: '/api/v1/admin/invites',
+    body: () => ({ f: 'codes', q: 'B' }),
+    effect: 'reads',
+  },
   { route: 'GET /api/v1/admin/claims', path: '/api/v1/admin/claims?f=review', effect: 'reads' },
   { route: 'GET /api/v1/admin/claims/:id', path: '/api/v1/admin/claims/1', effect: 'reads' },
   { route: 'GET /api/v1/admin/sites', path: '/api/v1/admin/sites?f=discover', effect: 'reads' },

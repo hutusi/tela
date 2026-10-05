@@ -80,7 +80,7 @@ Traditional string. A French interface reads the console in English.
 - After a deploy, a cached shell may ask for an admin chunk the network no longer has; the console
   reloads once rather than failing on the single-page fallback's `index.html`.
 - An audit row never holds an email address: an invitation to an address is named by the member
-  it made, and a cancelled hold by its redemption id. Searches for an address run in the browser,
+  it made, and a cancelled hold by its redemption id. People and Invitations post their searches,
   so no address reaches a request's URL, and the Workers' logs, either.
 - The console's "Invite by email" counts each mail against the address's limit for sign-in codes:
   better-auth counts nothing for a call tela-api makes itself.

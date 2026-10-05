@@ -16,7 +16,7 @@ import { useMemo } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 import { PersonAvatar } from '../../components/person-avatar'
 import { displayHost, relativeTime, shortDate } from '../../lib/format'
-import { adminGet, adminListSearchedHere } from '../api'
+import { adminGet, adminSearch } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps } from '../area'
 import { History, KeyValues, Note, Section } from '../components/record'
 
@@ -48,15 +48,9 @@ export function PersonLink({
   )
 }
 
-/** Searched in the browser: a search is often an email address (`adminListSearchedHere`). */
+/** A search is posted: it is often an email address (`adminSearch`). */
 const loadPeople = (f: AdminFilter<'people'>, q: string, signal?: AbortSignal) =>
-  adminListSearchedHere<AdminPersonRow, 'people'>(
-    'people',
-    f,
-    q,
-    (row) => `${row.handle} ${row.name ?? ''} ${row.email}`,
-    signal,
-  )
+  adminSearch<AdminPersonRow, 'people'>('people', f, q, signal)
 
 const loadPerson = (id: string, signal?: AbortSignal) =>
   adminGet<AdminPersonDetail>(`people/${encodeURIComponent(id)}`, signal)

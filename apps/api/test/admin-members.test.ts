@@ -62,12 +62,21 @@ async function get<T>(path: string, as = ops): Promise<T> {
   return (await res.json()) as T
 }
 
+/** A search is posted, never put in the URL: it is often an address (ADR 0039). */
+async function search<T>(area: string, f: string, q: string): Promise<T> {
+  const res = await api.request(`/api/v1/admin/${area}`, { as: ops, body: { f, q } })
+  expect(res.status).toBe(200)
+  return (await res.json()) as T
+}
+
 const people = (f: string, q = '') =>
-  get<AdminList<AdminPersonRow, 'people'>>(`people?f=${f}${q ? `&q=${encodeURIComponent(q)}` : ''}`)
+  q
+    ? search<AdminList<AdminPersonRow, 'people'>>('people', f, q)
+    : get<AdminList<AdminPersonRow, 'people'>>(`people?f=${f}`)
 const invites = (f: string, q = '') =>
-  get<AdminList<AdminInviteRow, 'invites'>>(
-    `invites?f=${f}${q ? `&q=${encodeURIComponent(q)}` : ''}`,
-  )
+  q
+    ? search<AdminList<AdminInviteRow, 'invites'>>('invites', f, q)
+    : get<AdminList<AdminInviteRow, 'invites'>>(`invites?f=${f}`)
 
 /** A visitor joins with `code` and signs in with the code mailed to them. */
 async function joinWith(code: string, email: string): Promise<SignedIn> {
@@ -122,6 +131,17 @@ const auditRows = (action: string) =>
     sql`select target_kind, target_key, detail, actor_id from admin_actions where action = ${action}
       order by id`,
   )
+
+describe('searching', () => {
+  test('is posted; a search in the URL is not read, and a malformed body is refused', async () => {
+    const all = await get<AdminList<AdminPersonRow, 'people'>>('people?f=admins&q=nobody')
+    expect(all.rows.length).toBeGreaterThan(0)
+    for (const body of [{ f: 7 }, { q: 'x'.repeat(201) }, { f: 'nope' }]) {
+      const res = await api.request('/api/v1/admin/people', { as: ops, body })
+      expect(res.status).toBe(400)
+    }
+  })
+})
 
 describe('people', () => {
   test('lists admins and members apart, with every count under the search', async () => {

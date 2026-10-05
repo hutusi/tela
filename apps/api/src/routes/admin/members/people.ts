@@ -17,7 +17,7 @@ import { type SQL, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiDeps } from '../../../deps'
 import { likePattern } from '../../members'
-import { type ActHandler, type AdminEnv, returned, runBatch } from '../framework'
+import { type ActHandler, type AdminEnv, returned, runBatch, searchBody } from '../framework'
 import { codeQuery, toCode } from './invites'
 
 /** The ways in besides the mailed code that `account` rows record (ADR 0036). */
@@ -150,22 +150,24 @@ const signOut: ActHandler = async (ctx, id) => {
   return returned(results[2]).length > 0 ? 'not_applicable' : 'not_found'
 }
 
-/** `GET /people?f=&q=` and `GET /people/:id`. */
+/**
+ * `GET /people?f=` and `GET /people/:id`; a search is `POST /people {f, q}`. A search here is often
+ * an email address, and a request's URL reaches the Workers' logs where its body does not.
+ */
 export function peopleRoutes(deps: ApiDeps) {
   const { db } = deps
   const routes = new Hono<AdminEnv>()
 
-  routes.get('/people', async (c) => {
-    const f = c.req.query('f') ?? 'admins'
-    if (!isAdminFilter('people', f)) return c.json({ error: 'invalid' }, 400)
-    const matches = personMatches(likePattern(c.req.query('q') ?? ''))
+  const list = async (f: string, q: string) => {
+    if (!isAdminFilter('people', f)) return null
+    const matches = personMatches(likePattern(q))
     const [counts, rows] = await db.batch([
       db.all<{ admins: number; members: number }>(sql`
         select coalesce(sum(p.is_admin = 1), 0) as admins, coalesce(sum(p.is_admin <> 1), 0) as members
         from user u join profiles p on p.user_id = u.id where ${matches}
       `),
       db.all<PersonRaw>(sql`
-        ${personSelect(Date.now())}
+        ${personSelect(deps.clock.now())}
         where p.is_admin = ${f === 'admins' ? 1 : 0} and ${matches}
         order by u.created_at desc, u.id limit ${ADMIN_LIST_LIMIT + 1}
       `),
@@ -175,7 +177,17 @@ export function peopleRoutes(deps: ApiDeps) {
       rows: rows.slice(0, ADMIN_LIST_LIMIT).map(toPerson),
       truncated: rows.length > ADMIN_LIST_LIMIT,
     }
-    return c.json(answer)
+    return answer
+  }
+
+  routes.get('/people', async (c) => {
+    const answer = await list(c.req.query('f') ?? 'admins', '')
+    return answer ? c.json(answer) : c.json({ error: 'invalid' }, 400)
+  })
+  routes.post('/people', async (c) => {
+    const body = await searchBody(c.req.raw)
+    const answer = body && (await list(body.f ?? 'admins', body.q))
+    return answer ? c.json(answer) : c.json({ error: 'invalid' }, 400)
   })
 
   routes.get('/people/:id', async (c) => {

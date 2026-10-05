@@ -27,7 +27,14 @@ import { Hono } from 'hono'
 import type { ApiDeps } from '../../../deps'
 import { inviteAddressOf, inviteMember } from '../../invite-member'
 import { likePattern } from '../../members'
-import { type ActHandler, type AdminEnv, type Inverse, returned, runBatch } from '../framework'
+import {
+  type ActHandler,
+  type AdminEnv,
+  type Inverse,
+  returned,
+  runBatch,
+  searchBody,
+} from '../framework'
 
 /** An operator code's places, as the schema checks them. */
 const MAX_USES = 100_000
@@ -210,16 +217,18 @@ function matchers(q: string): { code: SQL; hold: SQL } {
   }
 }
 
-/** `GET /invites?f=&q=` and `GET /invites/:id`. */
+/**
+ * `GET /invites?f=` and `GET /invites/:id`; a search is `POST /invites {f, q}`, since a hold is
+ * found by its address, and a request's URL reaches the Workers' logs where its body does not.
+ */
 export function inviteRoutes(deps: ApiDeps) {
   const { db } = deps
   const routes = new Hono<AdminEnv>()
 
-  routes.get('/invites', async (c) => {
-    const f = c.req.query('f') ?? 'codes'
-    if (!isAdminFilter('invites', f)) return c.json({ error: 'invalid' }, 400)
+  const list = async (f: string, q: string) => {
+    if (!isAdminFilter('invites', f)) return null
     const now = deps.clock.now()
-    const match = matchers(c.req.query('q') ?? '')
+    const match = matchers(q)
     const codesFrom = sql`from invite_codes c left join profiles cp on cp.user_id = c.created_by`
     const counted = db.all<{ codes: number; waiting: number; revoked: number }>(sql`
       select
@@ -263,7 +272,17 @@ export function inviteRoutes(deps: ApiDeps) {
       rows: rows.slice(0, ADMIN_LIST_LIMIT),
       truncated: rows.length > ADMIN_LIST_LIMIT,
     }
-    return c.json(answer)
+    return answer
+  }
+
+  routes.get('/invites', async (c) => {
+    const answer = await list(c.req.query('f') ?? 'codes', '')
+    return answer ? c.json(answer) : c.json({ error: 'invalid' }, 400)
+  })
+  routes.post('/invites', async (c) => {
+    const body = await searchBody(c.req.raw)
+    const answer = body && (await list(body.f ?? 'codes', body.q))
+    return answer ? c.json(answer) : c.json({ error: 'invalid' }, 400)
   })
 
   routes.get('/invites/:id', async (c) => {

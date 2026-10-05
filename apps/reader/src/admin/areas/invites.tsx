@@ -17,23 +17,14 @@ import { useMemo } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 import { Swatch } from '../../components/swatch'
 import { personColor, relativeTime } from '../../lib/format'
-import { adminGet, adminListSearchedHere } from '../api'
+import { adminGet, adminSearch } from '../api'
 import type { AnyAreaSpec, AreaSpec, RecordProps, Status } from '../area'
 import { History, KeyValues, Note, Section } from '../components/record'
 import { fullDate, type MembersT, PersonLink } from './people'
 
-/** Searched in the browser: a hold is found by its address (`adminListSearchedHere`). */
+/** A search is posted: a hold is found by its address (`adminSearch`). */
 const loadInvites = (f: AdminFilter<'invites'>, q: string, signal?: AbortSignal) =>
-  adminListSearchedHere<AdminInviteRow, 'invites'>(
-    'invites',
-    f,
-    q,
-    (row) =>
-      row.type === 'code'
-        ? `${row.code} ${groupInviteCode(row.code)} ${row.createdBy?.handle ?? ''}`
-        : `${row.email} ${row.code ?? ''} ${row.codeOwner?.handle ?? ''}`,
-    signal,
-  )
+  adminSearch<AdminInviteRow, 'invites'>('invites', f, q, signal)
 
 const loadInvite = (id: string, signal?: AbortSignal) =>
   adminGet<AdminInviteDetail>(`invites/${encodeURIComponent(id)}`, signal)

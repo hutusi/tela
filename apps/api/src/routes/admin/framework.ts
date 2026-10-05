@@ -65,3 +65,16 @@ export async function runBatch(db: TelaDb, items: BatchItem<'sqlite'>[]): Promis
 
 /** The rows a `RETURNING` statement in a batch gave back. */
 export const returned = (result: unknown): unknown[] => (Array.isArray(result) ? result : [])
+
+/**
+ * A search's filter and words from a POST body, or null when the body is not one. Searches that
+ * may hold an email address are posted rather than put in the URL, which reaches the Workers'
+ * logs (ADR 0039).
+ */
+export async function searchBody(request: Request): Promise<{ f?: string; q: string } | null> {
+  const body = (await request.json().catch(() => null)) as { f?: unknown; q?: unknown } | null
+  if (typeof body !== 'object' || body === null) return null
+  if (body.f !== undefined && typeof body.f !== 'string') return null
+  if (body.q !== undefined && (typeof body.q !== 'string' || body.q.length > 200)) return null
+  return { ...(typeof body.f === 'string' ? { f: body.f } : {}), q: body.q ?? '' }
+}
