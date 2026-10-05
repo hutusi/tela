@@ -219,7 +219,10 @@ const remove: ActHandler = async (ctx, id) => {
 
 /**
  * Give a removed claim its blog back, while the blog has had no owner since and the claim is
- * still the one the operator removed. A listing an operator or the doors changed since is kept.
+ * still the one the operator removed. What an operator or the doors chose for the blog since is
+ * kept: its listing, and a translation pause (removal cleared the owner's; a pause set after it
+ * is a later choice, which the undo's guard cannot see, since it is the site's and not the
+ * claim's).
  */
 const restoreRemoved: Inverse = (db: TelaDb, change, now) => {
   const claimId = Number(change.targetKey)
@@ -244,7 +247,8 @@ const restoreRemoved: Inverse = (db: TelaDb, change, now) => {
       db.run(sql`
         update sites set claimed_by = ${site.claimedBy ?? null},
           claimed_at = ${site.claimedAt ?? null}, declared_feed_urls = ${declared},
-          translation_opt_out = ${site.translationOptOut ?? 0},
+          translation_opt_out = case when translation_opt_out = 0
+            then ${site.translationOptOut ?? 0} else translation_opt_out end,
           listing = case when listing = ${to.site?.listing ?? null}
             then ${site.listing ?? 'private'} else listing end,
           updated_at = ${now}, seq = ${currentSeq}

@@ -881,6 +881,17 @@ describe('claims', () => {
     ])
   })
 
+  test('an undone removal keeps a translation pause an operator set after it', async () => {
+    const owner = await signedIn('owner@x.test')
+    const site = await addSite({ listing: 'listed', claimedBy: owner.userId, optOut: 0 })
+    const claim = await addClaim(site, owner.userId, { status: 'verified' })
+    const removed = await act('claim.remove', [claim])
+    // Another tab pauses the blog's translation; that is the site's change, not the claim's.
+    expect(await outcome('site.translationOff', site)).toBe('done')
+    expect((await undo(removed.undo?.group)).status).toBe(200)
+    expect(await siteOf(site)).toMatchObject({ claimed_by: owner.userId, translation_opt_out: 1 })
+  })
+
   test('Remove keeps an editor’s listing, and its undo waits for nobody to have claimed the blog', async () => {
     const owner = await signedIn('owner@x.test')
     const next = await signedIn('next@x.test')
