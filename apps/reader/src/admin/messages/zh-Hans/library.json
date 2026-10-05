@@ -99,6 +99,7 @@
     "other": "抓取失败"
   },
   "actions": { "unfeature": "取消精选", "restoreDefault": "恢复默认" },
+  "actionsDone": { "unfeature": "已取消精选", "restoreDefault": "已恢复默认" },
   "topics": {
     "essays": "随笔",
     "tech": "技术",

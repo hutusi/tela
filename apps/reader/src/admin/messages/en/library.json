@@ -99,6 +99,7 @@
     "other": "Failing"
   },
   "actions": { "unfeature": "Unfeature", "restoreDefault": "Restore to default" },
+  "actionsDone": { "unfeature": "Unfeatured", "restoreDefault": "Restored to default" },
   "topics": {
     "essays": "Essays",
     "tech": "Tech",

@@ -76,6 +76,12 @@ export type AreaSpec<A extends LedgerArea, R extends AdminRowBase, D> = {
   create?: readonly AdminActionName[]
   /** Words for an action on a row, where the shell's own would mislead (Unfeature, not Restore). */
   actionLabel?: (row: R, action: AdminActionName) => string | undefined
+  /**
+   * The toast's past tense for an action on one row, where `actionLabel` renamed the action: the
+   * Unfeature button is followed by "Unfeatured", not "Restored". Read before the action is sent,
+   * from the row as it was.
+   */
+  actionDone?: (row: R, action: AdminActionName) => string | undefined
   /** The first filter is a queue: empty, it says "Queue clear." */
   queue?: boolean
 }

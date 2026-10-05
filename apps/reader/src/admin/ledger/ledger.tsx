@@ -299,14 +299,30 @@ export function Ledger({
   }, [shown, state.id])
 
   // ---- Acting -----------------------------------------------------------------------------
-  const titleOf = useCallback((id: string) => {
+  /** A row the page shows, in the list or as the open record. */
+  const shownRow = useCallback((id: string) => {
     const open = openRowRef.current
-    const row = rowsRef.current.find((r) => r.id === id) ?? (open?.id === id ? open : undefined)
-    return row ? specRef.current.name.title(row) : null
+    return rowsRef.current.find((r) => r.id === id) ?? (open?.id === id ? open : undefined)
   }, [])
+  const titleOf = useCallback(
+    (id: string) => {
+      const row = shownRow(id)
+      return row ? specRef.current.name.title(row) : null
+    },
+    [shownRow],
+  )
+  const doneWords = useCallback(
+    (action: AdminActionName, acting: string[]) => {
+      const [one, ...more] = acting
+      const row = one !== undefined && more.length === 0 ? shownRow(one) : undefined
+      return row ? specRef.current.actionDone?.(row, action) : undefined
+    },
+    [shownRow],
+  )
   const { prompt, setPrompt, busy, request, run } = useAdminAct({
     area,
     titleOf,
+    doneWords,
     onActed: ({ ids: acted }) => {
       const [one] = acted
       if (acted.length === 1 && one) moving.current = { acted: one, before: ids }

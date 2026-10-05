@@ -96,12 +96,14 @@ export function actMessage(
     response: AdminActResponse | null
     /** The title of a row it acted on, as the ledger showed it; null for one it did not show. */
     titleOf: (id: string) => string | null
+    /** The area's own past tense for the action, where it named the action its own way. */
+    words?: string | undefined
   },
 ): string {
   const { action, response, titleOf } = outcome
   if (!response) return t('errors.failed')
   const { done, failed } = response
-  const words = t(`actions.${action}.done`)
+  const words = outcome.words ?? t(`actions.${action}.done`)
   const first = failed[0]
   if (done.length === 0) return first ? errorWords(t, first.error) : t('errors.not_applicable')
   if (first) {

@@ -29,6 +29,8 @@ export function useAdminAct(options: {
   area: LedgerArea
   /** A row's title as the ledger shows it, for the toast. */
   titleOf: (id: string) => string | null
+  /** The area's past tense for an action on these rows, where it has its own (Unfeatured). */
+  doneWords?: (action: AdminActionName, ids: string[]) => string | undefined
   /** After an answer, before the reload it starts: the ledger notes where the selection was. */
   onActed?: (acted: Acted) => void
 }) {
@@ -51,11 +53,13 @@ export function useAdminAct(options: {
       busyRef.current = true
       setPrompt(null)
       setBusy(true)
+      // Read from the rows as they are before the action changes them.
+      const words = latest.current.doneWords?.(action, ids)
       try {
         const response = await adminAct({ action, ids, ...(args ? { args } : {}) })
         const titleOf = (id: string) =>
           latest.current.titleOf(id) ?? (id === '' ? (args?.code ?? args?.email ?? null) : null)
-        admin.say(actMessage(t, { action, response, titleOf }), {
+        admin.say(actMessage(t, { action, response, titleOf, words }), {
           undo: response?.undo?.group ?? null,
           error: !response || response.done.length === 0,
           about: response ? { area: latest.current.area, ids: response.done } : null,

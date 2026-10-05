@@ -106,6 +106,14 @@ export function restoreLabel(t: Translate, row: AdminSiteRow, action: string) {
   return undefined
 }
 
+/** What a Restore did, in the same words as its button: "Unfeatured", "Restored to default". */
+export function restoreDone(t: Translate, listing: unknown, action: string) {
+  if (action !== 'site.restore') return undefined
+  if (listing === 'featured') return t('actionsDone.unfeature')
+  if (listing === 'rejected') return t('actionsDone.restoreDefault')
+  return undefined
+}
+
 /** A blog's topics in words, in Discover's order. */
 export const topicWords = (t: Translate, topics: readonly string[]) =>
   topics.map((topic) => t(`topics.${topic}`)).join(t('listSeparator'))
@@ -227,6 +235,7 @@ function sitesSpec(t: Translate, locale: string): AreaSpec<'sites', AdminSiteRow
     Record: SiteRecord,
     bulk: ['site.fetchAll', 'site.hide'],
     actionLabel: (row, action) => restoreLabel(t, row, action),
+    actionDone: (row, action) => restoreDone(t, row.listing, action),
   }
 }
 

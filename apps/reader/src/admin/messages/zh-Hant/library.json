@@ -99,6 +99,7 @@
     "other": "抓取失敗"
   },
   "actions": { "unfeature": "取消精選", "restoreDefault": "恢復預設" },
+  "actionsDone": { "unfeature": "已取消精選", "restoreDefault": "已恢復預設" },
   "topics": {
     "essays": "隨筆",
     "tech": "技術",

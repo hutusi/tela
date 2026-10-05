@@ -21,6 +21,7 @@ import {
   loadSite,
   personName,
   RecordLink,
+  restoreDone,
   restoreLabel,
   type Translate,
   topicWords,
@@ -63,6 +64,7 @@ function discoverSpec(
     Record: DiscoverRecord,
     bulk: ['site.feature', 'site.hide'],
     actionLabel: (row, action) => restoreLabel(t, row, action),
+    actionDone: (row, action) => restoreDone(t, row.listing, action),
   }
 }
 

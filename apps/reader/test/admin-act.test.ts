@@ -21,6 +21,7 @@ import {
   type Translate,
   undoMessage,
 } from '../src/admin/act'
+import { restoreDone } from '../src/admin/areas/sites'
 import { ADMIN_MESSAGES } from '../src/admin/i18n'
 import { healthSummary } from '../src/admin/overview'
 import { OVERVIEW } from './admin-fixtures'
@@ -146,6 +147,29 @@ describe('the toast', () => {
   test('one row: what was done, to what', () => {
     const response = { done: ['12'], failed: [], undo: { group: 'g1' } }
     expect(actMessage(t, { action: 'site.feature', response, titleOf })).toBe('Featured · Nordvest')
+  })
+
+  test('an area’s own words for what it did, where it named the action its own way', () => {
+    const response = { done: ['12'], failed: [], undo: { group: 'g4' } }
+    expect(actMessage(t, { action: 'site.restore', response, titleOf, words: 'Unfeatured' })).toBe(
+      'Unfeatured · Nordvest',
+    )
+    expect(actMessage(t, { action: 'site.restore', response, titleOf })).toBe('Restored · Nordvest')
+  })
+
+  test('Restore says what it did to the blog, as its button said it', () => {
+    const library = (locale: 'en' | 'zh-Hans') =>
+      createTranslator({
+        locale,
+        messages: { admin: ADMIN_MESSAGES[locale] },
+        namespace: 'admin.library',
+      }) as unknown as Parameters<typeof restoreDone>[0]
+    expect(restoreDone(library('en'), 'featured', 'site.restore')).toBe('Unfeatured')
+    expect(restoreDone(library('en'), 'rejected', 'site.restore')).toBe('Restored to default')
+    expect(restoreDone(library('zh-Hans'), 'featured', 'site.restore')).toBe('已取消精选')
+    // Any other action, or a listing Restore does not change, keeps the shell's words.
+    expect(restoreDone(library('en'), 'featured', 'site.hide')).toBeUndefined()
+    expect(restoreDone(library('en'), 'listed', 'site.restore')).toBeUndefined()
   })
 
   test('a row the ledger did not show: the action alone', () => {
