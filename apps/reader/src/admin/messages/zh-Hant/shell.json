@@ -206,7 +206,7 @@
     "label": "健康",
     "allOk": "一切都在正常範圍內。",
     "restOk": "其餘都在正常範圍內。",
-    "checked": "{time} 檢查",
+    "checked": "檢查於 {time}",
     "system": "系統 →",
     "overdueFeeds": "{value} 個訂閱源已逾期兩小時以上，超過上限 {limit}。",
     "deadLetters": "過去一天有 {value} 個任務成了死信且尚未處理，超過上限 {limit}。",

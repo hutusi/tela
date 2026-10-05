@@ -185,6 +185,8 @@ describe('the Overview', () => {
     expect(html).toContain('data-ok="false"')
     expect(html).toContain('24 articles have waited over six hours for the full text')
     expect(html).toContain('System →')
+    // In UTC, as System says it.
+    expect(html).toContain('checked 13:05 UTC')
     // The four queues, each with its count and the way in.
     for (const label of [
       'Claims to review',
@@ -292,6 +294,7 @@ describe('the Overview', () => {
     expect(html).toContain('四个队列中共有 6 项待处理。')
     expect(html).toContain('待你处理')
     expect(html).toContain('上周 35')
+    expect(html).toContain('检查于 UTC 13:05')
     expect(html).toContain('已设为精选 · Nordvest')
   })
 })

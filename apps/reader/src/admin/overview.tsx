@@ -24,6 +24,7 @@ import { historyWords, type Translate } from './act'
 import { adminGet, NotAdmin } from './api'
 import type { AnyAreaSpec, Status } from './area'
 import { AREA_HOOKS } from './areas'
+import { useUtc } from './areas/system'
 import { ActionButton } from './components/buttons'
 import { Dot, StatusPill } from './components/record'
 import { useAdmin } from './context'
@@ -197,7 +198,7 @@ export function OverviewView({
   return (
     <div className="flex flex-col pb-10" data-testid="admin-overview">
       {head}
-      <HealthLine health={overview.health} />
+      <HealthLine health={overview.health} now={now} />
       <h2 className="mt-7 mb-0 font-serif text-[26px] font-medium">{t('overview.needsYou')}</h2>
       <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {cards.map((card) => (
@@ -230,12 +231,12 @@ export function healthSummary(t: Translate, health: AdminHealth, locale: string)
   return sentences.join(locale.startsWith('zh') ? '' : ' ')
 }
 
-function HealthLine({ health }: { health: AdminHealth }) {
+/** The health check in a line; its time in UTC, the clock the checks and System run on. */
+function HealthLine({ health, now }: { health: AdminHealth; now: number }) {
   const t = useTranslations('admin.shell')
   const locale = useLocale()
-  const time = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(
-    new Date(health.at),
-  )
+  const utc = useUtc()
+  const time = utc(health.at, now) ?? ''
   return (
     <Link
       to={ledgerHref('system')}

@@ -98,13 +98,13 @@ export function ReportPending({ failed, reload }: { failed: boolean; reload: () 
  * A time as the scheduled work is set, in UTC: the hour today, or the day and hour before that.
  * The crons run on UTC (03:17, Mondays 08:00), so the console says when in the same clock.
  */
-export function useUtc(): (at: number | null) => string | null {
+export function useUtc(): (at: number | null, now?: number) => string | null {
   const locale = useLocale()
   const t = useTranslations('admin.running')
-  return (at) => {
+  return (at, now = Date.now()) => {
     if (at === null) return null
     const sameDay =
-      new Date(at).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10)
+      new Date(at).toISOString().slice(0, 10) === new Date(now).toISOString().slice(0, 10)
     const time = new Intl.DateTimeFormat(locale, {
       ...(sameDay ? {} : { month: 'short', day: 'numeric' }),
       hour: '2-digit',
