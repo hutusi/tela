@@ -23,6 +23,7 @@ import {
   utcDay,
 } from '@tela/data'
 import type { Blobs } from '@tela/platform'
+import { MAX_ARTICLE_TRANSLATION_TOKENS } from '@tela/shared'
 import {
   ADMIN_LIST_LIMIT,
   type AdminFilter,
@@ -258,22 +259,24 @@ async function systemDetail(
 }
 
 /**
- * Whether today's background budget is spent. A body retried runs as background work (no member
- * reserved it), and nothing on its way checks the budget the titles are held to: a bulk retry
- * could spend it, and stop every title for the rest of the day. The budget is the one tela-jobs
- * reported with its last tick; none reported, or 0, is no limit.
+ * What a body retried may spend, and the budget it is held to. A body retried runs as background
+ * work (no member reserved it), and nothing on its way checks the budget the titles are held to,
+ * so it reserves its tokens there itself, as a member's request reserves on theirs: the post's
+ * ceiling, which the job caps it at. The budget and the ceiling are the ones tela-jobs reported
+ * with its last tick; a budget of none, or 0, is no limit.
  */
-async function backgroundSpent(db: TelaDb, now: number): Promise<boolean> {
-  const row = await first<{ spent: number; budget: number | null }>(
+async function bodyAllowance(db: TelaDb): Promise<{ reserve: number; budget: number }> {
+  const row = await first<{ budget: number | null; ceiling: number | null }>(
     db,
-    sql`select
-      coalesce((select used + reserved from usage_daily
-        where subject = ${BACKGROUND} and day = ${utcDay(now)}), 0) as spent,
-      (select json_extract(info, '$.config.backgroundBudget') from ops_heartbeats
-        where name = 'tick') as budget`,
+    sql`select json_extract(info, '$.config.backgroundBudget') as budget,
+      json_extract(info, '$.config.maxArticleTokens') as ceiling
+      from ops_heartbeats where name = 'tick'`,
   )
-  const budget = Number(row?.budget ?? 0)
-  return budget > 0 && Number(row?.spent ?? 0) >= budget
+  const ceiling = Number(row?.ceiling ?? 0)
+  return {
+    reserve: ceiling > 0 ? ceiling : MAX_ARTICLE_TRANSLATION_TOKENS,
+    budget: Number(row?.budget ?? 0),
+  }
 }
 
 /**
@@ -292,14 +295,27 @@ const retryDead: ActHandler = async (ctx, id) => {
   )
   if (!letter) return 'not_found'
   if (letter.resolved_at !== null || !isRedueKind(letter.kind)) return 'not_applicable'
-  if (letter.kind === 'translate.body' && (await backgroundSpent(db, ctx.now))) return 'limit'
-  const again = redue(db, letter.kind, letter.key, ctx.now)
+  const body = letter.kind === 'translate.body' ? await bodyAllowance(db) : null
+  const again = redue(db, letter.kind, letter.key, ctx.now, body ? { reserve: body.reserve } : {})
+  // In the batch, so each retry of a bulk sees the tokens the ones before it reserved.
+  const overBudget =
+    body && body.budget > 0
+      ? [
+          db.run(sql`
+            insert into lease_fence (x) select null
+            where (select coalesce(sum(used + reserved), 0) from usage_daily
+              where subject = ${BACKGROUND} and day = ${utcDay(ctx.now)}) + ${body.reserve}
+              > ${body.budget}
+          `),
+        ]
+      : []
   const unresolved = sql`from dead_letters where id = ${deadId} and resolved_at is null`
   try {
     const results = await runBatch(db, [
       db.run(
         sql`insert into lease_fence (x) select null where not exists (select 1 ${unresolved})`,
       ),
+      ...overBudget,
       ...(again.synced ? [bumpSeq(db)] : []),
       audit(
         db,
@@ -328,8 +344,10 @@ const retryDead: ActHandler = async (ctx, id) => {
     ])
     return returned(results.at(-1)).length > 0 ? 'done' : 'not_applicable'
   } catch (err) {
-    if (isFenceRefusal(err)) return 'not_applicable'
-    throw err
+    if (!isFenceRefusal(err)) throw err
+    // Either guard: a letter still unresolved was refused for the budget.
+    const still = await first<{ id: number }>(db, sql`select id ${unresolved}`)
+    return still && overBudget.length > 0 ? 'limit' : 'not_applicable'
   }
 }
 

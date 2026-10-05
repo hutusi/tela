@@ -534,19 +534,37 @@ describe('acting on dead work', () => {
     expect(row).toEqual({ state: 'requested', requested_by: null })
   })
 
-  test("a body is not retried once the day's background budget is spent", async () => {
-    await api.db.run(sql`
-      insert into body_translations (content_key, lang, state, reserved_tokens, updated_at)
-      values ('ck2', 'fr', 'failed', 0, 0)
-    `)
-    const id = await deadLetter('translate.body', 'ck2:fr')
-    await heartbeat(api.db, 'tick', now, { config: { backgroundBudget: 1000 } })
-    await api.db.run(sql`insert into usage_daily (subject, day, reserved, used)
-      values ('*', ${new Date(now).toISOString().slice(0, 10)}, 0, 1000)`)
-    expect(await act('dead.retry', [`dead:${id}`])).toMatchObject({
-      done: [],
-      failed: [{ id: `dead:${id}`, error: 'limit' }],
+  test('a bulk of body retries reserves as it goes, and stops where the budget does', async () => {
+    const today = new Date(now).toISOString().slice(0, 10)
+    await heartbeat(api.db, 'tick', now, {
+      config: { backgroundBudget: 100_000, maxArticleTokens: 40_000 },
     })
+    await api.db.run(sql`insert into usage_daily (subject, day, reserved, used)
+      values ('*', ${today}, 0, 10000)`)
+    const ids: string[] = []
+    for (const ck of ['b1', 'b2', 'b3']) {
+      await api.db.run(sql`
+        insert into body_translations (content_key, lang, state, reserved_tokens, updated_at)
+        values (${ck}, 'fr', 'failed', 0, 0)
+      `)
+      ids.push(`dead:${await deadLetter('translate.body', `${ck}:fr`)}`)
+    }
+    // 10,000 spent of 100,000: room for two posts at the 40,000 ceiling, not a third.
+    expect(await act('dead.retry', ids)).toMatchObject({
+      done: [ids[0], ids[1]],
+      failed: [{ id: ids[2], error: 'limit' }],
+    })
+    expect(
+      await first(api.db, sql`select reserved, used from usage_daily where subject = '*'`),
+    ).toEqual({ reserved: 80_000, used: 10_000 })
+    const rows = await api.db.all<{ content_key: string; state: string; reserved_tokens: number }>(
+      sql`select content_key, state, reserved_tokens from body_translations order by content_key`,
+    )
+    expect(rows).toEqual([
+      { content_key: 'b1', state: 'requested', reserved_tokens: 40_000 },
+      { content_key: 'b2', state: 'requested', reserved_tokens: 40_000 },
+      { content_key: 'b3', state: 'failed', reserved_tokens: 0 },
+    ])
     // Another kind is not background translation, and is retried whatever the budget.
     const fetch = await deadLetter('feed.fetch', '2')
     expect((await act('dead.retry', [`dead:${fetch}`])).done).toHaveLength(1)

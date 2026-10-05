@@ -12,16 +12,19 @@
  */
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from './db'
-import { utcDay } from './queries/translation'
+import { BACKGROUND, utcDay } from './queries/translation'
 import type { LeaseKind } from './schema/values'
 import { currentSeq } from './seq'
 
 type Statement = ReturnType<TelaDb['run']>
 
+/** What a retry brings with it: for a body, the tokens it reserves on the background budget. */
+export type RedueOptions = { reserve?: number }
+
 export type Redue = {
   /** The statements write a row readers sync: the batch starts with `bumpSeq`. */
   synced: boolean
-  statements: (db: TelaDb, key: string, now: number) => Statement[]
+  statements: (db: TelaDb, key: string, now: number, options: RedueOptions) => Statement[]
 }
 
 const id = (key: string): number => Number(key)
@@ -105,20 +108,31 @@ export const REDUE: Record<LeaseKind, Redue> = {
     ],
   },
   // A request of nobody's: `requested_by` null is what makes the settle charge the background
-  // budget (`'*'`) rather than the member who first asked, and with no reservation the job's
-  // only cap is the operator's per-article ceiling (LLM_MAX_ARTICLE_TOKENS). A new request id
-  // keeps the old run's chunk objects out of the new one's.
+  // budget (`'*'`) rather than the member who first asked. It reserves there as a member's
+  // request reserves on theirs, in the same batch and only if this request is the one written,
+  // so a second retry sees the first's tokens taken; the job caps the post at the reservation and
+  // the settle gives back what it did not spend. A new request id keeps the old run's chunk
+  // objects out of the new one's.
   'translate.body': {
     synced: true,
-    statements: (db, key, now) => {
+    statements: (db, key, now, { reserve = 0 }) => {
       const { contentKey, lang } = splitBodyKey(key)
+      const requestId = crypto.randomUUID()
+      const day = utcDay(now)
       return [
         db.run(sql`
-          update body_translations set state = 'requested', request_id = ${crypto.randomUUID()},
-            requested_by = null, reserved_tokens = 0, reserved_day = ${utcDay(now)},
+          update body_translations set state = 'requested', request_id = ${requestId},
+            requested_by = null, reserved_tokens = ${reserve}, reserved_day = ${day},
             used_tokens = 0, chunk_keys = '[]', object_key = null, failed_leaves = '[]',
             updated_at = ${now}, seq = ${currentSeq}
           where content_key = ${contentKey} and lang = ${lang} and state in ('failed', 'skipped')
+        `),
+        db.run(sql`
+          insert into usage_daily (subject, day, reserved, used)
+          select ${BACKGROUND}, ${day}, ${reserve}, 0
+          where ${reserve} > 0 and exists (select 1 from body_translations
+            where content_key = ${contentKey} and lang = ${lang} and request_id = ${requestId})
+          on conflict (subject, day) do update set reserved = reserved + excluded.reserved
         `),
       ]
     },
@@ -134,12 +148,13 @@ export function redue(
   kind: LeaseKind,
   key: string,
   now: number,
+  options: RedueOptions = {},
 ): { synced: boolean; statements: Statement[] } {
   const spec = REDUE[kind]
   return {
     synced: spec.synced,
     statements: [
-      ...spec.statements(db, key, now),
+      ...spec.statements(db, key, now, options),
       db.run(sql`delete from leases where kind = ${kind} and key = ${key} and until < ${now}`),
     ],
   }
