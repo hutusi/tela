@@ -5,14 +5,11 @@
  */
 import { audit, bumpSeq, currentSeq, first, type TelaDb } from '@tela/data'
 import { COMMUNITY_LISTING_MIN_READERS, type SiteListing } from '@tela/shared'
-import type { AdminActionName } from '@tela/shared/admin'
+import { type AdminActionName, CLAIM_REMOVED_ERROR } from '@tela/shared/admin'
 import { type SQL, sql } from 'drizzle-orm'
 import { checkClaimSoon } from '../../claims'
 import { type ActHandler, type Inverse, returned, runBatch } from '../framework'
 import { applyChange, breakLease, idOf, restoreColumns, stamped } from './common'
-
-/** The error a removed claim shows its claimant. */
-export const REMOVED_BY_OPERATOR = 'removed by an operator'
 
 /** Check a failed claim again, at once. The claimant sees it pending, then the answer. */
 const recheck: ActHandler = async (ctx, id) => {
@@ -195,7 +192,7 @@ const remove: ActHandler = async (ctx, id) => {
             'declaredFeedUrls', json(s.declared_feed_urls),
             'translationOptOut', s.translation_opt_out, 'listing', s.listing))`,
         to: sql`json_object(
-          'claim', json_object('status', 'failed', 'error', ${REMOVED_BY_OPERATOR},
+          'claim', json_object('status', 'failed', 'error', ${CLAIM_REMOVED_ERROR},
             'reviewedAt', ${ctx.now}),
           'site', json_object('claimedBy', null, 'listing', ${listingUnclaimed('s.')}))`,
       },
@@ -203,7 +200,7 @@ const remove: ActHandler = async (ctx, id) => {
         where c.id = ${claimId} and c.status = 'verified'`,
     ),
     db.all(sql`
-      update site_claims set status = 'failed', error = ${REMOVED_BY_OPERATOR},
+      update site_claims set status = 'failed', error = ${CLAIM_REMOVED_ERROR},
         reviewed_at = ${ctx.now}, seq = ${currentSeq}
       where id = ${claimId} and status = 'verified'
       returning id
@@ -232,7 +229,7 @@ const restoreRemoved: Inverse = (db: TelaDb, change, now) => {
   const still: SQL = sql`exists (
     select 1 from site_claims c join sites s on s.id = c.site_id
     where c.id = ${claimId} and s.id = ${siteId} and c.status = 'failed'
-      and c.error = ${REMOVED_BY_OPERATOR} and s.claimed_by is null)`
+      and c.error = ${CLAIM_REMOVED_ERROR} and s.claimed_by is null)`
   const declared = JSON.stringify(Array.isArray(site.declaredFeedUrls) ? site.declaredFeedUrls : [])
   return {
     changed: sql`not ${still}`,

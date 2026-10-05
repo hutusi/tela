@@ -9,6 +9,9 @@ import type {
 } from '../constants'
 import type { AdminHistoryEntry, AdminPerson, AdminRowBase } from './common'
 
+/** The error a claim an operator removed shows its claimant, and how the console tells it apart. */
+export const CLAIM_REMOVED_ERROR = 'removed by an operator'
+
 /** A blog as every library ledger shows it. */
 export type AdminSiteRow = AdminRowBase & {
   siteId: number
