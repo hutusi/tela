@@ -1,6 +1,6 @@
 /** The reader app: providers, and one route per page. Every page renders from the local store. */
 import { isUiLocale, type UiLocale } from '@tela/shared'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { AppHeader } from './components/app-header'
 import { FrontDoorProvider, ToReading } from './components/front-door'
@@ -29,6 +29,9 @@ import { StoreProvider, useStore, useTables } from './store/hooks'
 import type { LocalStore } from './store/local'
 import type { Objects } from './store/objects'
 import { UiContext } from './ui'
+
+/** The admin console (ADR 0039): its own chunk, fetched only when an admin opens it. */
+const AdminApp = lazy(() => import('./admin'))
 
 /** A page only members see: anyone else signs in first and comes back. */
 function Members({ children }: { children: React.ReactNode }) {
@@ -159,6 +162,16 @@ function Routed() {
           <div className="flex min-h-full flex-col">
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/admin/*"
+                element={
+                  <Members>
+                    <Suspense fallback={null}>
+                      <AdminApp />
+                    </Suspense>
+                  </Members>
+                }
+              />
               <Route
                 path="*"
                 element={

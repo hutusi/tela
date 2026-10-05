@@ -845,4 +845,13 @@ describe('writes to the API', () => {
     // tela-api's own refusal (no bearer token), not the edge's.
     expect(await (await post('/api/admin/invite', {})).json()).toEqual({ error: 'forbidden' })
   })
+
+  test("the admin console's writes take the cookie, so they come from this origin too", async () => {
+    // ADR 0039: `/api/v1/admin/*`, never `/api/admin/*`, which any origin may write to.
+    const act = '/api/v1/admin/act'
+    expect((await post(act, { cookie, origin: 'https://evil.example', ...client })).status).toBe(
+      403,
+    )
+    expect((await post(act, { cookie, ...client })).status).toBe(403)
+  })
 })

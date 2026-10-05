@@ -112,7 +112,7 @@ describe('public pages at the edge', () => {
     // Anything else in the address is the default mode, under the default key.
     expect(route('/?titles=nope')).toMatchObject({ titles: 'original', key: '/' })
     // SPA-only: a code in `/join?code=` must never reach a cached page, or Workers Logs.
-    for (const path of ['/join', '/join?code=ABCD', '/writers', '/__tela/shell'])
+    for (const path of ['/join', '/join?code=ABCD', '/writers', '/__tela/shell', '/admin/feeds'])
       expect(route(path)).toBeNull()
   })
 
@@ -144,7 +144,9 @@ describe('public pages at the edge', () => {
     // The shell the service worker keeps is fetched from a path the Worker never runs for, and
     // neither are the SPA's own pages: a code in `/join?code=` must never reach a cached page, or
     // Workers Logs (ADR 0035).
-    for (const path of ['/__tela/shell', '/join', '/writers']) expect(runsFirst(path)).toBe(false)
+    // The admin console is the SPA's too: never rendered or cached at the edge (ADR 0039).
+    for (const path of ['/__tela/shell', '/join', '/writers', '/admin', '/admin/feeds'])
+      expect(runsFirst(path)).toBe(false)
     expect(patterns).not.toContain('/*')
   })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { type MessageFormatElement, parse, TYPE } from '@formatjs/icu-messageformat-parser'
 import fr from '../messages/fr.json'
+import { ADMIN_MESSAGES } from '../src/admin/i18n'
 import { fr as frInfo } from '../src/content/info/fr'
 import { MESSAGES } from '../src/i18n'
 
@@ -94,6 +95,30 @@ describe('message catalogues', () => {
     const french = [...strings(fr), ...strings(frInfo, 'info/fr.ts:')]
     for (const [key, text] of french) {
       expect({ key, loose: /(?<=\S) [:;?!»]|« /.test(text) }).toEqual({ key, loose: false })
+    }
+  })
+})
+
+// The admin console's own catalogues (ADR 0039): English and Simplified, Traditional generated.
+const adminEn = strings(ADMIN_MESSAGES.en)
+const adminCatalogues = Object.entries(ADMIN_MESSAGES).filter(([lang]) => lang !== 'en')
+
+describe('admin catalogues', () => {
+  test.each(adminCatalogues)('%s has the same keys as en', (_, messages) => {
+    expect([...strings(messages).keys()].sort()).toEqual([...adminEn.keys()].sort())
+  })
+
+  test.each(adminCatalogues)('%s reads the arguments and tags en does', (_, messages) => {
+    for (const [key, message] of strings(messages)) {
+      const source = adminEn.get(key)
+      if (source === undefined) continue
+      const want = shape(source)
+      const got = shape(message)
+      expect({ key, args: got.args, tags: got.tags }).toEqual({
+        key,
+        args: want.args,
+        tags: want.tags,
+      })
     }
   })
 })
