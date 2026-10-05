@@ -21,7 +21,12 @@ function shape(rows: Record<keyof SyncRows, RawRow[]>): SyncRows {
   out.profile = rows.profile.map((r) => ({
     ...(r as Omit<
       SyncRows['profile'][number],
-      'publicSubscriptions' | 'publicLikes' | 'gravatar' | 'gravatarFound' | 'avatarUploaded'
+      | 'publicSubscriptions'
+      | 'publicLikes'
+      | 'gravatar'
+      | 'gravatarFound'
+      | 'avatarUploaded'
+      | 'isAdmin'
     >),
     publicSubscriptions: bool(r.publicSubscriptions),
     publicLikes: bool(r.publicLikes),
@@ -29,6 +34,7 @@ function shape(rows: Record<keyof SyncRows, RawRow[]>): SyncRows {
     gravatarFound:
       r.gravatarFound === null || r.gravatarFound === undefined ? null : bool(r.gravatarFound),
     avatarUploaded: bool(r.avatarUploaded),
+    isAdmin: bool(r.isAdmin),
   }))
   out.prefs = rows.prefs.map((r) => ({
     key: String(r.key),

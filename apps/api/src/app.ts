@@ -2,7 +2,7 @@
  * tela-api's routes (ADR 0024). Portable: built from `ApiDeps`, so the Cloudflare entry and the
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
-import { inviteAddress, schema } from '@tela/data'
+import { audit, bumpSeq, currentSeq, first, inviteAddress, newGroupId, schema } from '@tela/data'
 import { CLIENT_HEADER, MEMBER_HEADER, MIN_CLIENT, pushSchema } from '@tela/sync'
 import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -10,6 +10,8 @@ import { type Auth, createAuth } from './auth'
 import type { ApiDeps } from './deps'
 import { fromOperator } from './operator'
 import { accountRoutes } from './routes/account'
+import { adminRoutes } from './routes/admin'
+import { runBatch } from './routes/admin/framework'
 import { avatarRoutes } from './routes/avatars'
 import { claimRoutes } from './routes/claims'
 import { curate } from './routes/curate'
@@ -165,6 +167,53 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   /** The operator's invite codes (`bun run admin code|codes|revoke`, ADR 0034). */
   app.route('/api/admin/codes', operatorCodeRoutes(deps))
 
+  /**
+   * Open or close the admin console for a member (`bun run admin grant|ungrant`, ADR 0039). Only
+   * the operator's token grants it, so a member signed in to the console cannot make another
+   * admin. The profile's seq moves, so the member's devices learn it on their next pull.
+   */
+  app.post('/api/admin/admins', async (c) => {
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
+    const body = await c.req
+      .json<{ email?: unknown; admin?: unknown }>()
+      .catch(() => ({}) as { email?: unknown; admin?: unknown })
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    if (!EMAIL.test(email) || typeof body.admin !== 'boolean') {
+      return c.json({ error: 'invalid' }, 400)
+    }
+    const admin = body.admin
+    const found = await first<{ id: string; is_admin: number }>(
+      deps.db,
+      sql`select u.id, p.is_admin from user u join profiles p on p.user_id = u.id
+        where u.email = ${email}`,
+    )
+    if (!found) return c.json({ error: 'not_found' }, 404)
+    const now = deps.clock.now()
+    const flag = admin ? 1 : 0
+    const target = sql`from profiles where user_id = ${found.id} and is_admin <> ${flag}`
+    await runBatch(deps.db, [
+      bumpSeq(deps.db),
+      audit(
+        deps.db,
+        {
+          group: newGroupId(),
+          actor: null,
+          action: admin ? 'admin.grant' : 'admin.ungrant',
+          targetKind: 'member',
+          targetKey: found.id,
+          at: now,
+        },
+        { from: sql`json_object('isAdmin', is_admin = 1)`, to: { isAdmin: admin } },
+        target,
+      ),
+      deps.db.run(sql`
+        update profiles set is_admin = ${flag}, updated_at = ${now}, seq = ${currentSeq}
+        where user_id = ${found.id} and is_admin <> ${flag}
+      `),
+    ])
+    return c.json({ userId: found.id, admin, changed: found.is_admin !== flag })
+  })
+
   if (deps.config.testMode) {
     // e2e reads sign-in codes here instead of from a real inbox. Test mode only.
     app.get('/api/test/outbox', (c) => {
@@ -240,6 +289,7 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     return c.json(result, 200, { 'cache-control': 'no-store' })
   })
 
+  app.route('/api/v1/admin', adminRoutes(deps, auth))
   app.route('/api/v1/translations', translationRoutes(deps))
   app.route('/api/v1/feeds', feedRoutes(deps))
   app.route('/api/v1/claims', claimRoutes(deps))

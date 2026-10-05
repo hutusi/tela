@@ -21,6 +21,8 @@ const nameless = { [MEMBER_HEADER]: undefined }
 const B_CODE = 'BCDEFGHJKMNP'
 /** b's GitHub, linked, for b to unlink (ADR 0036). */
 const B_GITHUB = 'b-github-account'
+/** An admin action of b's, for b to undo (ADR 0039). */
+const ADMIN_GROUP = 'guard-admin-group'
 
 let server: FixtureServer
 let api: TestApi
@@ -79,6 +81,14 @@ beforeEach(async () => {
   await createMemberCode(db, { userId: b.userId, now: 0, code: B_CODE })
   await db.run(sql`insert into account (id, account_id, provider_id, user_id, created_at, updated_at)
     values (${B_GITHUB}, '4242', 'github', ${b.userId}, 0, 0)`)
+  // b runs the admin console (ADR 0039), and hid blog 3 there, for b to undo.
+  await db.batch([
+    db.run(sql`update profiles set is_admin = 1 where user_id = ${b.userId}`),
+    db.run(sql`update sites set listing = 'rejected' where id = 3`),
+    db.run(sql`insert into admin_actions (group_id, actor_id, action, target_kind, target_key, detail, at)
+      values (${ADMIN_GROUP}, ${b.userId}, 'site.hide', 'site', '3',
+        '{"from":{"listing":"listed"},"to":{"listing":"rejected"}}', 0)`),
+  ] as never)
 })
 
 const subsOf = (userId: string) =>
@@ -203,6 +213,19 @@ const OPML = `<?xml version="1.0"?><opml version="2.0"><head><title>s</title></h
 /** Every authenticated /api/v1 route but /me, each as a request that does something for b. */
 const MEMBER_ROUTES: MemberRoute[] = [
   { route: 'GET /api/v1/sync', path: '/api/v1/sync?cursor=0', effect: 'reads' },
+  // The admin console (ADR 0039): b is an admin.
+  {
+    route: 'POST /api/v1/admin/act',
+    path: '/api/v1/admin/act',
+    body: () => ({ action: 'site.feature', ids: ['2'] }),
+    effect: 'writes',
+  },
+  {
+    route: 'POST /api/v1/admin/undo',
+    path: '/api/v1/admin/undo',
+    body: () => ({ group: ADMIN_GROUP }),
+    effect: 'writes',
+  },
   {
     route: 'POST /api/v1/mutations',
     path: '/api/v1/mutations',

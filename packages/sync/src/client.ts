@@ -122,6 +122,7 @@ export function applyPull(confirmed: Confirmed, given: PullResponse): Confirmed 
         row.gravatarFound === undefined ? (previous?.gravatarFound ?? null) : row.gravatarFound,
       avatarUploaded: row.avatarUploaded ?? previous?.avatarUploaded ?? false,
       avatar: row.avatar === undefined ? (previous?.avatar ?? null) : row.avatar,
+      isAdmin: row.isAdmin ?? previous?.isAdmin ?? false,
     }
   }
   for (const row of r.prefs) t.prefs.set(row.key, row)

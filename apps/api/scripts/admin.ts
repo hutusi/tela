@@ -7,6 +7,8 @@
  *   ADMIN_TOKEN=… bun run admin codes                    # yours, with their places and holds
  *   ADMIN_TOKEN=… bun run admin revoke WELCOME           # nobody else joins with it
  *   ADMIN_TOKEN=… bun run admin curate                   # the curated blogs (curated-sites.ts)
+ *   ADMIN_TOKEN=… bun run admin grant you@example.com    # open the admin console to a member
+ *   ADMIN_TOKEN=… bun run admin ungrant you@example.com  # and close it (ADR 0039)
  *   TELA_URL=http://localhost:8787 ADMIN_TOKEN=… bun run admin invite a@b.c
  */
 import { parseArgs } from 'node:util'
@@ -24,6 +26,7 @@ function usage(): never {
       '       bun run admin codes',
       '       bun run admin revoke <TEXT>',
       '       bun run admin curate',
+      '       bun run admin grant|ungrant <email>',
       '(needs ADMIN_TOKEN; TELA_URL optional)',
     ].join('\n'),
   )
@@ -160,6 +163,22 @@ if (command === 'invite') {
     `${CURATED_SITES.length - failures} of ${CURATED_SITES.length} curated; the sweeps fetch new ones within a minute`,
   )
   if (failures > 0) process.exit(1)
+} else if (command === 'grant' || command === 'ungrant') {
+  const email = args[0]
+  if (!email) usage()
+  const admin_ = command === 'grant'
+  const { res, text, json } = await admin('POST', 'admins', { email, admin: admin_ })
+  if (res.status === 404) {
+    console.error(`${email} has no account; \`bun run admin invite ${email}\` makes one`)
+    process.exit(1)
+  }
+  if (!res.ok) failed(command, res, text)
+  const verb = admin_ ? 'can now open' : 'can no longer open'
+  console.log(
+    json.changed
+      ? `${email} ${verb} the admin console (${base}/admin)`
+      : `${email} already ${admin_ ? 'could' : 'could not'} open the admin console`,
+  )
 } else {
   usage()
 }
