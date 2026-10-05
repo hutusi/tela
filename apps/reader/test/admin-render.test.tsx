@@ -56,6 +56,11 @@ describe('the ledger', () => {
     expect(html).toMatch(
       /text-danger[^"]*"[^>]*data-testid="admin-row-action" data-action="site.hide"/,
     )
+    // A table of rows and cells to a screen reader, each row's check named by its row.
+    expect(html).toContain('role="table" aria-label="Sites"')
+    expect(html.match(/role="row"/g)).toHaveLength(4)
+    expect(html).toContain('aria-label="Select Pfadwerk"')
+    expect(html).toContain('aria-label="Select all"')
     // The first row has the keyboard until a key moves it.
     expect(html).toMatch(/data-row-id="7" data-focus="true"/)
     expect(html).toContain('J K')
@@ -75,6 +80,11 @@ describe('the ledger', () => {
     ])
     expect(desc).toContain('data-sort="desc"')
     expect(desc).toContain('Readers ↓')
+    // The direction is said as well as drawn: on the column's header, and in the button's name,
+    // which no aria-label hides.
+    expect(desc).toMatch(/role="columnheader" aria-sort="descending"[^>]*><button/)
+    expect(desc.match(/aria-sort=/g)).toHaveLength(1)
+    expect(desc).not.toMatch(/<button[^>]*aria-label="Readers"/)
     const asc = render(
       <Ledger area="sites" spec={spec} initial={BLOG_LIST} />,
       '/admin/sites?sort=c1',

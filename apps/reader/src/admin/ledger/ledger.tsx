@@ -45,6 +45,7 @@ import {
 import { type Prompt, useAdminAct } from '../use-act'
 import { AreaHeader, FilterPills, KeyLegend, SearchBox } from './parts'
 import { RecordPanel, Rendered } from './record-panel'
+import { Cell, HeaderCell, Row, Table } from './table'
 
 /** An area's ledger, or a quiet word while its slice is still to come. */
 export function AreaLedger({ area }: { area: LedgerArea }) {
@@ -476,23 +477,29 @@ export function Ledger({
       : GRID.wideNoCheck
   const allChecked = rows.length > 0 && checked.length === rows.length
   const Header = spec.Header
-  const sortHeader = (key: SortKey, label: string, className = '') => {
+  /**
+   * A column's header: its name, a button that sorts by it, and while it does the direction, as an
+   * arrow anyone can see and as `aria-sort` for whoever cannot. The button is named by what it
+   * shows, so the arrow is read too.
+   */
+  const sortHeader = (key: SortKey, label: string, className = 'min-w-0') => {
     const on = state.sort === key
     return (
-      <button
-        type="button"
-        onClick={() =>
-          go(
-            nextSort(parseLedgerState(area, new URLSearchParams(window.location.search)), key),
-            true,
-          )
-        }
-        className={`block max-w-full min-w-0 cursor-pointer truncate border-0 bg-transparent p-0 text-left ${on ? 'text-ink' : 'text-muted hover:text-ink'} ${className}`}
-        aria-label={label}
-        data-sort={on ? state.dir : undefined}
-      >
-        {on ? `${label} ${state.dir === 'asc' ? '↑' : '↓'}` : label}
-      </button>
+      <HeaderCell key={key} sort={on ? state.dir : null} className={className}>
+        <button
+          type="button"
+          onClick={() =>
+            go(
+              nextSort(parseLedgerState(area, new URLSearchParams(window.location.search)), key),
+              true,
+            )
+          }
+          className={`block max-w-full min-w-0 cursor-pointer truncate border-0 bg-transparent p-0 text-left ${on ? 'text-ink' : 'text-muted hover:text-ink'}`}
+          data-sort={on ? state.dir : undefined}
+        >
+          {on ? `${label} ${state.dir === 'asc' ? '↑' : '↓'}` : label}
+        </button>
+      </HeaderCell>
     )
   }
 
@@ -562,107 +569,114 @@ export function Ledger({
           <div
             className={`overflow-hidden rounded-xl border border-line bg-paper ${stale ? 'opacity-60' : ''}`}
           >
-            <div
-              className={`admin-side grid items-center gap-3 px-3.5 py-[9px] text-[11.5px] font-semibold tracking-[.06em] text-muted uppercase ${grid}`}
-            >
-              {checkable ? (
-                <CheckBox
-                  checked={allChecked}
-                  mixed={!allChecked && checked.length > 0}
-                  label={t('ledger.selectAll')}
-                  onToggle={() => setChecks(allChecked ? new Set() : new Set(ids))}
-                />
-              ) : null}
-              {sortHeader('name', spec.name.label)}
-              {isOpen
-                ? null
-                : spec.columns.map((column, i) => (
-                    <span key={column.label} className="hidden min-w-0 lg:block">
-                      {sortHeader(`c${i + 1}` as SortKey, column.label)}
-                    </span>
-                  ))}
-              {sortHeader('status', t('ledger.status'))}
-              {isOpen ? null : <span className="hidden xl:block" />}
-            </div>
-            {rows.map((row) => {
-              const on = row.id === state.id
-              const isFocused = row.id === focused
-              const status = spec.status(row)
-              const primary = row.actions[0]
-              return (
-                // biome-ignore lint/a11y/noStaticElementInteractions: a pointer shortcut; the name's link and the keys reach the same record
-                // biome-ignore lint/a11y/useKeyWithClickEvents: as above
-                <div
-                  key={row.id}
-                  onClick={(e) => {
-                    if ((e.target as Element).closest('a, button, label, input')) return
-                    focus(row.id)
-                    go({ id: on ? null : row.id })
-                  }}
-                  className={`grid cursor-pointer items-center gap-3 border-t border-line px-3.5 py-[11px] text-[13.5px] hover:bg-hover ${grid} ${on ? 'bg-hover' : ''} ${isFocused ? 'shadow-[inset_0_0_0_1.5px_var(--color-accent)]' : ''}`}
-                  data-testid="admin-row"
-                  data-row-id={row.id}
-                  data-focus={isFocused ? 'true' : 'false'}
-                  data-open={on ? 'true' : 'false'}
-                >
-                  {checkable ? (
+            <Table aria-label={t(`nav.${area}`)}>
+              <Row
+                className={`admin-side grid items-center gap-3 px-3.5 py-[9px] text-[11.5px] font-semibold tracking-[.06em] text-muted uppercase ${grid}`}
+              >
+                {checkable ? (
+                  <HeaderCell className="flex">
                     <CheckBox
-                      checked={checks.has(row.id)}
-                      label={t('ledger.select')}
-                      onToggle={() => {
-                        focus(row.id)
-                        toggleCheck(row.id)
-                      }}
+                      checked={allChecked}
+                      mixed={!allChecked && checked.length > 0}
+                      label={t('ledger.selectAll')}
+                      onToggle={() => setChecks(allChecked ? new Set() : new Set(ids))}
                     />
-                  ) : null}
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="flex shrink-0">{spec.name.tile(row)}</span>
-                    <div className="min-w-0">
-                      <Link
-                        to={ledgerHref(area, { ...state, id: on ? null : row.id })}
-                        onClick={() => focus(row.id)}
-                        className="block truncate font-medium text-ink hover:no-underline"
-                        aria-current={on ? 'true' : undefined}
-                      >
-                        {spec.name.title(row)}
-                      </Link>
-                      <div className="truncate text-[12px] text-muted">{spec.name.sub(row)}</div>
-                    </div>
-                  </div>
-                  {isOpen
-                    ? null
-                    : spec.columns.map((column) => (
-                        <span
-                          key={column.label}
-                          className="hidden truncate text-ink-2 tabular-nums lg:block"
+                  </HeaderCell>
+                ) : null}
+                {sortHeader('name', spec.name.label)}
+                {isOpen
+                  ? null
+                  : spec.columns.map((column, i) =>
+                      sortHeader(`c${i + 1}` as SortKey, column.label, 'hidden min-w-0 lg:block'),
+                    )}
+                {sortHeader('status', t('ledger.status'))}
+                {isOpen ? null : (
+                  <HeaderCell className="hidden xl:block">
+                    <span className="sr-only">{t('ledger.actionColumn')}</span>
+                  </HeaderCell>
+                )}
+              </Row>
+              {rows.map((row) => {
+                const on = row.id === state.id
+                const isFocused = row.id === focused
+                const status = spec.status(row)
+                const primary = row.actions[0]
+                return (
+                  // A pointer shortcut: the name's link and the keys reach the same record.
+                  <Row
+                    key={row.id}
+                    onClick={(e) => {
+                      if ((e.target as Element).closest('a, button, label, input')) return
+                      focus(row.id)
+                      go({ id: on ? null : row.id })
+                    }}
+                    className={`grid cursor-pointer items-center gap-3 border-t border-line px-3.5 py-[11px] text-[13.5px] hover:bg-hover ${grid} ${on ? 'bg-hover' : ''} ${isFocused ? 'shadow-[inset_0_0_0_1.5px_var(--color-accent)]' : ''}`}
+                    data-testid="admin-row"
+                    data-row-id={row.id}
+                    data-focus={isFocused ? 'true' : 'false'}
+                    data-open={on ? 'true' : 'false'}
+                  >
+                    {checkable ? (
+                      <Cell className="flex">
+                        <CheckBox
+                          checked={checks.has(row.id)}
+                          label={t('ledger.selectRow', { title: spec.name.title(row) })}
+                          onToggle={() => {
+                            focus(row.id)
+                            toggleCheck(row.id)
+                          }}
+                        />
+                      </Cell>
+                    ) : null}
+                    <Cell className="flex min-w-0 items-center gap-2.5">
+                      <span className="flex shrink-0">{spec.name.tile(row)}</span>
+                      <div className="min-w-0">
+                        <Link
+                          to={ledgerHref(area, { ...state, id: on ? null : row.id })}
+                          onClick={() => focus(row.id)}
+                          className="block truncate font-medium text-ink hover:no-underline"
+                          aria-current={on ? 'true' : undefined}
                         >
-                          {column.text(row)}
-                        </span>
-                      ))}
-                  <span className="flex min-w-0 justify-start">
-                    <StatusPill tone={status.tone} label={status.label} />
-                  </span>
-                  {isOpen ? null : (
-                    <span className="hidden min-w-0 justify-end xl:flex">
-                      {primary ? (
-                        <ActionButton
-                          look={actionLook(primary, 1) === 'danger' ? 'danger' : 'ghost'}
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => actOnRow(row, primary)}
-                          data-testid="admin-row-action"
-                          data-action={primary}
-                        >
-                          <span className="truncate">
-                            {spec.actionLabel?.(row, primary) ?? t(`actions.${primary}.short`)}
-                          </span>
-                        </ActionButton>
-                      ) : null}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
+                          {spec.name.title(row)}
+                        </Link>
+                        <div className="truncate text-[12px] text-muted">{spec.name.sub(row)}</div>
+                      </div>
+                    </Cell>
+                    {isOpen
+                      ? null
+                      : spec.columns.map((column) => (
+                          <Cell
+                            key={column.label}
+                            className="hidden truncate text-ink-2 tabular-nums lg:block"
+                          >
+                            {column.text(row)}
+                          </Cell>
+                        ))}
+                    <Cell className="flex min-w-0 justify-start">
+                      <StatusPill tone={status.tone} label={status.label} />
+                    </Cell>
+                    {isOpen ? null : (
+                      <Cell className="hidden min-w-0 justify-end xl:flex">
+                        {primary ? (
+                          <ActionButton
+                            look={actionLook(primary, 1) === 'danger' ? 'danger' : 'ghost'}
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => actOnRow(row, primary)}
+                            data-testid="admin-row-action"
+                            data-action={primary}
+                          >
+                            <span className="truncate">
+                              {spec.actionLabel?.(row, primary) ?? t(`actions.${primary}.short`)}
+                            </span>
+                          </ActionButton>
+                        ) : null}
+                      </Cell>
+                    )}
+                  </Row>
+                )
+              })}
+            </Table>
             <TableState
               spec={spec}
               shown={shown}
