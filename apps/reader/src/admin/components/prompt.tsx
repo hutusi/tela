@@ -49,19 +49,24 @@ function ConfirmStrip({
 }) {
   const t = useTranslations('admin.shell')
   const yes = useRef<HTMLButtonElement>(null)
-  // The yes has focus, so Enter answers it; Esc, the ledger's keys take the question back.
+  const consequence = useId()
+  // The yes has focus, so Enter answers it; Esc, the ledger's keys take the question back. Focused
+  // first, it is read with what it agrees to, not as a bare "Yes".
   useEffect(() => {
     yes.current?.focus()
   }, [])
   return (
     <div className="flex flex-col gap-2.5" data-testid="admin-confirm">
-      <p className="m-0 text-[13.5px] leading-normal text-ink-2">{confirmWords(t, prompt)}</p>
+      <p id={consequence} className="m-0 text-[13.5px] leading-normal text-ink-2">
+        {confirmWords(t, prompt)}
+      </p>
       <div className="flex flex-wrap gap-2">
         <ActionButton
           ref={yes}
           look={actionLook(prompt.action, 0)}
           disabled={busy}
           onClick={() => onAnswer(prompt.args)}
+          aria-describedby={consequence}
           data-testid="admin-confirm-yes"
         >
           {t('confirm.yes')}

@@ -104,7 +104,8 @@ export function SearchBox({
     return () => clearTimeout(timer)
   }, [draft])
   return (
-    <div className="flex w-[360px] max-w-full min-w-0 items-center gap-2 rounded-lg border border-thumb bg-surface pr-2 pl-3 focus-within:border-muted">
+    // The field draws no outline of its own; the box rings in the accent while it has focus.
+    <div className="flex w-[360px] max-w-full min-w-0 items-center gap-2 rounded-lg border border-thumb bg-surface pr-2 pl-3 focus-within:border-muted focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
       <span aria-hidden="true" className="text-muted">
         ⌕
       </span>

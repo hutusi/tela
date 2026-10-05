@@ -8,6 +8,7 @@ import type { UiLocale } from '@tela/shared'
 import { renderToString } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
 import type { AnyAreaSpec } from '../src/admin/area'
+import { ActionPrompt } from '../src/admin/components/prompt'
 import { AdminContext } from '../src/admin/context'
 import { AdminI18n } from '../src/admin/i18n'
 import { Ledger } from '../src/admin/ledger/ledger'
@@ -187,6 +188,24 @@ describe('the ledger', () => {
       'fr',
     )
     expect(html).toContain('3 in In Discover · click a column to sort')
+  })
+})
+
+describe('a confirmation', () => {
+  test('asks in the plural for several, and its yes is described by what it does', () => {
+    const html = render(
+      <ActionPrompt
+        prompt={{ action: 'code.revoke', ids: ['code:A', 'code:B'], where: 'bulk' }}
+        busy={false}
+        onAnswer={() => {}}
+        onCancel={() => {}}
+      />,
+      '/admin/invites',
+    )
+    expect(html).toContain('Revoke these 2 codes?')
+    const id = html.match(/<p id="([^"]+)"/)?.[1]
+    expect(id).toBeTruthy()
+    expect(html).toContain(`aria-describedby="${id}"`)
   })
 })
 
