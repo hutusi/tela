@@ -88,6 +88,9 @@ beforeEach(async () => {
     db.run(sql`insert into admin_actions (group_id, actor_id, action, target_kind, target_key, detail, at)
       values (${ADMIN_GROUP}, ${b.userId}, 'site.hide', 'site', '3',
         '{"from":{"listing":"listed"},"to":{"listing":"rejected"}}', 0)`),
+    // Work that gave up, for the System area's record.
+    db.run(sql`insert into dead_letters (id, kind, key, attempts, error, at)
+      values (1, 'feed.fetch', '3', 5, 'timed out', 0)`),
   ] as never)
 })
 
@@ -236,6 +239,25 @@ const MEMBER_ROUTES: MemberRoute[] = [
     effect: 'reads',
   },
   { route: 'GET /api/v1/admin/invites', path: '/api/v1/admin/invites?f=codes', effect: 'reads' },
+  { route: 'GET /api/v1/admin/counts', path: '/api/v1/admin/counts', effect: 'reads' },
+  { route: 'GET /api/v1/admin/overview', path: '/api/v1/admin/overview', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/translation',
+    path: '/api/v1/admin/translation?f=blogs',
+    effect: 'reads',
+  },
+  {
+    route: 'GET /api/v1/admin/translation/report',
+    path: '/api/v1/admin/translation/report',
+    effect: 'reads',
+  },
+  { route: 'GET /api/v1/admin/system', path: '/api/v1/admin/system?f=dead', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/system/report',
+    path: '/api/v1/admin/system/report',
+    effect: 'reads',
+  },
+  { route: 'GET /api/v1/admin/system/:id', path: '/api/v1/admin/system/dead:1', effect: 'reads' },
   {
     route: 'GET /api/v1/admin/invites/:id',
     path: `/api/v1/admin/invites/code:${B_CODE}`,
