@@ -91,6 +91,9 @@ beforeEach(async () => {
     // Work that gave up, for the System area's record.
     db.run(sql`insert into dead_letters (id, kind, key, attempts, error, at)
       values (1, 'feed.fetch', '3', 5, 'timed out', 0)`),
+    // a's failed claim on blog 2, for the Claims area's record.
+    db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status, created_at)
+      values (1, 2, ${a.userId}, 'meta', 'guard-token', 'failed', 0)`),
   ] as never)
 })
 
@@ -239,6 +242,17 @@ const MEMBER_ROUTES: MemberRoute[] = [
     effect: 'reads',
   },
   { route: 'GET /api/v1/admin/invites', path: '/api/v1/admin/invites?f=codes', effect: 'reads' },
+  { route: 'GET /api/v1/admin/claims', path: '/api/v1/admin/claims?f=review', effect: 'reads' },
+  { route: 'GET /api/v1/admin/claims/:id', path: '/api/v1/admin/claims/1', effect: 'reads' },
+  { route: 'GET /api/v1/admin/sites', path: '/api/v1/admin/sites?f=discover', effect: 'reads' },
+  { route: 'GET /api/v1/admin/sites/:id', path: '/api/v1/admin/sites/1', effect: 'reads' },
+  { route: 'GET /api/v1/admin/feeds', path: '/api/v1/admin/feeds?f=failing', effect: 'reads' },
+  { route: 'GET /api/v1/admin/feeds/:id', path: '/api/v1/admin/feeds/1', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/discover',
+    path: '/api/v1/admin/discover?f=featured',
+    effect: 'reads',
+  },
   { route: 'GET /api/v1/admin/counts', path: '/api/v1/admin/counts', effect: 'reads' },
   { route: 'GET /api/v1/admin/overview', path: '/api/v1/admin/overview', effect: 'reads' },
   {
