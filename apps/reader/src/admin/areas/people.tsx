@@ -205,6 +205,7 @@ export function usePeopleArea(): AnyAreaSpec {
       searchHint: t('people.search'),
       load: loadPeople,
       loadDetail: loadPerson,
+      rowOf: (detail) => detail.person,
       name: {
         label: t('people.name'),
         title: (row) => row.name || `@${row.handle}`,

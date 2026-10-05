@@ -192,6 +192,7 @@ function sitesSpec(t: Translate, locale: string): AreaSpec<'sites', AdminSiteRow
     searchHint: t('search.sites'),
     load: loadSites,
     loadDetail: loadSite,
+    rowOf: (detail) => detail.site,
     name: {
       label: t('names.site'),
       title: (row) => blogName(row.title, row.homeUrl),

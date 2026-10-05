@@ -40,6 +40,7 @@ function discoverSpec(
     searchHint: t('search.discover'),
     load: loadDiscover,
     loadDetail: loadSite,
+    rowOf: (detail) => detail.site,
     name: {
       label: t('names.blog'),
       title: (row) => blogName(row.title, row.homeUrl),

@@ -340,6 +340,7 @@ export function useSystemArea(): AnyAreaSpec {
       load: (filter, q, signal) => adminList<AdminSystemRow, 'system'>('system', filter, q, signal),
       loadDetail: (id, signal) =>
         adminGet<AdminSystemDetail>(`system/${encodeURIComponent(id)}`, signal),
+      rowOf: (detail) => detail.row,
       name: {
         label: t('system.name'),
         title: (row) => row.kind,

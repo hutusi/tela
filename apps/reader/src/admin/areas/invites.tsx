@@ -215,6 +215,7 @@ export function useInvitesArea(): AnyAreaSpec {
       searchHint: t('invites.search'),
       load: loadInvites,
       loadDetail: loadInvite,
+      rowOf: (detail) => detail.invite,
       name: {
         label: t('invites.name'),
         title: titleOf,

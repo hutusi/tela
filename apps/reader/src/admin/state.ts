@@ -156,6 +156,25 @@ export function sortValueOf(spec: AnyAreaSpec, key: SortKey): (row: AdminRowBase
 }
 
 /**
+ * The row the open record shows, and its place in the list as shown (-1 for none). A listed row
+ * is itself. A record no filter lists (a claim rejected or removed, a row past the list's limit)
+ * is the row its detail carries, once the detail has loaded: it has no place, so no "2 of 9" and
+ * no previous or next. Null while there is neither.
+ */
+export function openedRecord<R, D>(
+  rows: readonly R[],
+  ids: readonly string[],
+  id: string | null,
+  detail: D | null,
+  rowOf: ((detail: D) => R) | undefined,
+): { row: R | null; index: number } {
+  if (id === null) return { row: null, index: -1 }
+  const index = ids.indexOf(id)
+  if (index >= 0) return { row: rows[index] ?? null, index }
+  return { row: detail !== null && rowOf ? rowOf(detail) : null, index: -1 }
+}
+
+/**
  * Where the selection goes after an action on `acted`: the row itself while it is still listed,
  * else the next one the list showed before that is still there, else the one before it (the
  * design's "acting on it moves you to the next one"), else the first row listed now. Null when

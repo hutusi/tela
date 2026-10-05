@@ -9,6 +9,7 @@ import {
   ledgerHref,
   nextAfterAct,
   nextSort,
+  openedRecord,
   parseLedgerState,
   patchedHref,
   sortRows,
@@ -151,6 +152,34 @@ describe('sorting', () => {
     expect(by('name')).toEqual(['Nordvest', 'Pfadwerk', '日々の海'])
     // By the status's words; the two Failing rows keep the server's order.
     expect(by('status')).toEqual(['Nordvest', '日々の海', 'Pfadwerk'])
+  })
+})
+
+describe('the open record', () => {
+  const rows = [
+    { id: 'a', actions: [] },
+    { id: 'b', actions: [] },
+  ]
+  const ids = rows.map((row) => row.id)
+  const rowOf = (detail: { row: { id: string; actions: never[] } }) => detail.row
+  const rejected = { row: { id: 'z', actions: [] } }
+
+  test('a listed row is itself, in its place', () => {
+    expect(openedRecord(rows, ids, 'b', null, rowOf)).toEqual({ row: rows[1]!, index: 1 })
+    // The list's own row wins over the detail's, which may be a moment older or newer.
+    expect(openedRecord(rows, ids, 'a', { row: { id: 'a', actions: [] } }, rowOf).row).toBe(
+      rows[0]!,
+    )
+  })
+
+  test('a record no filter lists opens from its detail, with no place in the list', () => {
+    expect(openedRecord(rows, ids, 'z', rejected, rowOf)).toEqual({ row: rejected.row, index: -1 })
+  })
+
+  test('nothing to show until the detail has come, or for an area with no detail', () => {
+    expect(openedRecord(rows, ids, 'z', null, rowOf)).toEqual({ row: null, index: -1 })
+    expect(openedRecord(rows, ids, 'z', rejected, undefined)).toEqual({ row: null, index: -1 })
+    expect(openedRecord(rows, ids, null, rejected, rowOf)).toEqual({ row: null, index: -1 })
   })
 })
 

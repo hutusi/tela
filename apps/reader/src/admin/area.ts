@@ -47,6 +47,11 @@ export type AreaSpec<A extends LedgerArea, R extends AdminRowBase, D> = {
   load: (filter: AdminFilter<A>, q: string, signal?: AbortSignal) => Promise<AdminList<R, A> | null>
   /** Null for an area whose rows say everything (Translation). */
   loadDetail: ((id: string, signal?: AbortSignal) => Promise<D | null>) | null
+  /**
+   * The row a record's detail carries. A record no filter lists (a rejected claim, a row past the
+   * list's limit) opens from it: there is no list row to show, but the detail has one.
+   */
+  rowOf?: (detail: D) => R
   name: {
     label: string
     title: (row: R) => string

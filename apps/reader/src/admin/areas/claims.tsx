@@ -38,6 +38,7 @@ function claimsSpec(
     searchHint: t('search.claims'),
     load: loadClaims,
     loadDetail: loadClaim,
+    rowOf: (detail) => detail.claim,
     name: {
       label: t('names.blog'),
       title: (row) => displayHost(row.homeUrl),

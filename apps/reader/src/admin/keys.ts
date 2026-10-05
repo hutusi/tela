@@ -84,6 +84,13 @@ export function ledgerCommand(key: string, state: KeyState): LedgerCommand | nul
       if (state.prompt) return { type: 'cancelPrompt' }
       if (state.open) return { type: 'close' }
       return state.checked > 0 ? { type: 'clearChecks' } : null
+    // An open record has actions of its own, even one no row of the list is (a rejected claim).
+    case '1':
+    case '2':
+    case '3':
+      return state.rows > 0 || state.open
+        ? { type: 'act', index: (Number(k) - 1) as 0 | 1 | 2 }
+        : null
   }
   if (state.rows === 0) return null
   switch (k) {
@@ -98,12 +105,6 @@ export function ledgerCommand(key: string, state: KeyState): LedgerCommand | nul
     case 'Enter':
     case 'o':
       return { type: 'open' }
-    case '1':
-      return { type: 'act', index: 0 }
-    case '2':
-      return { type: 'act', index: 1 }
-    case '3':
-      return { type: 'act', index: 2 }
   }
   return null
 }

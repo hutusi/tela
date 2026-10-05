@@ -35,6 +35,7 @@ import {
   ledgerHref,
   nextAfterAct,
   nextSort,
+  openedRecord,
   parseLedgerState,
   patchedHref,
   type SortKey,
@@ -199,7 +200,10 @@ export function Ledger({
     )
     return () => controller.abort()
   }, [state.id, version, hasDetail, deny])
-  const openRow = openIndex >= 0 ? (rows[openIndex] ?? null) : null
+  const openDetail = detail && detail.id === state.id ? detail.value : null
+  const openRow = openedRecord(rows, ids, state.id, openDetail, spec.rowOf).row
+  const openRowRef = useRef(openRow)
+  openRowRef.current = openRow
 
   // ---- After a list arrives: move on from an acted row, or find a record the filter hides -------
   const moving = useRef<Moving | null>(null)
@@ -221,8 +225,9 @@ export function Ledger({
     if (move) {
       const next = nextAfterAct(move.before, after, move.acted)
       if (now.id === move.acted) {
-        // The design's "acting on it moves you to the next one": only when it left the list.
-        if (next !== move.acted) {
+        // The design's "acting on it moves you to the next one": only when it left the list. A
+        // record the list never showed (opened from its detail) has no next one, and stays.
+        if (next !== move.acted && move.before.includes(move.acted)) {
           if (next) focus(next)
           go({ id: next }, true)
         }
@@ -264,7 +269,8 @@ export function Ledger({
 
   // ---- Acting -----------------------------------------------------------------------------
   const titleOf = useCallback((id: string) => {
-    const row = rowsRef.current.find((r) => r.id === id)
+    const open = openRowRef.current
+    const row = rowsRef.current.find((r) => r.id === id) ?? (open?.id === id ? open : undefined)
     return row ? specRef.current.name.title(row) : null
   }, [])
   const { prompt, setPrompt, busy, request, run } = useAdminAct({
@@ -360,9 +366,14 @@ export function Ledger({
         case 'open':
           if (at !== null && now.id !== at) go({ id: at })
           return
-        case 'act':
-          if (row) actOnRow(row, row.actions[command.index])
+        case 'act': {
+          // The open record's actions, listed or not (never the focused row's under a record the
+          // list does not show); with none open, the focused row's.
+          const open = openRowRef.current
+          const target = now.id === null || listed ? row : open?.id === now.id ? open : null
+          if (target) actOnRow(target, target.actions[command.index])
           return
+        }
         case 'undo':
           undo()
           return
@@ -613,7 +624,7 @@ export function Ledger({
           <RecordPanel
             spec={spec}
             row={openRow}
-            detail={detail && detail.id === state.id ? detail.value : null}
+            detail={openDetail}
             index={openIndex}
             total={rows.length}
             missing={missing !== null && missing === state.id}

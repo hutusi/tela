@@ -40,6 +40,7 @@ function feedsSpec(t: Translate): AreaSpec<'feeds', AdminFeedRow, AdminFeedDetai
     searchHint: t('search.feeds'),
     load: loadFeeds,
     loadDetail: loadFeed,
+    rowOf: (detail) => detail.feed,
     name: {
       label: t('names.feed'),
       title: (row) => feedAddress(row.feedUrl),

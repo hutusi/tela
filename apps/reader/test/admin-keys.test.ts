@@ -76,6 +76,14 @@ describe('what a key does', () => {
     expect(ledgerCommand('Enter', empty)).toBeNull()
   })
 
+  test('1 to 3 act on an open record even with nothing listed', () => {
+    // A record no filter lists (a rejected claim) opens from its detail over an empty list.
+    const alone = { ...LIST, rows: 0, open: true }
+    expect(ledgerCommand('1', alone)).toEqual({ type: 'act', index: 0 })
+    expect(ledgerCommand('3', alone)).toEqual({ type: 'act', index: 2 })
+    expect(ledgerCommand('j', alone)).toBeNull()
+  })
+
   test('Esc takes back the nearest thing: a question, the record, the checks', () => {
     expect(ledgerCommand('Escape', { ...LIST, prompt: true, open: true, checked: 2 })).toEqual({
       type: 'cancelPrompt',
