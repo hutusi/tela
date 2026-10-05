@@ -73,6 +73,35 @@ export function ledgerHref(area: LedgerArea, state: Partial<LedgerState> = {}): 
   return `/admin/${area}${ledgerSearch(area, state)}`
 }
 
+/**
+ * The ledger that acts on an audit entry's target, and the row id it gives that target. The audit
+ * log keys a target as its own table does; the ledgers that list two kinds of row tell them apart
+ * by a prefix (`dead:<n>` and `lease:<kind>:<key>` in System, `code:<CODE>` and `hold:<n>` in
+ * Invitations), so a bare key there names no row. Null for a kind no ledger lists.
+ */
+export function auditedRow(kind: string, key: string): { area: LedgerArea; id: string } | null {
+  switch (kind) {
+    case 'site':
+      return { area: 'sites', id: key }
+    case 'feed':
+      return { area: 'feeds', id: key }
+    case 'claim':
+      return { area: 'claims', id: key }
+    case 'member':
+      return { area: 'people', id: key }
+    case 'code':
+      return { area: 'invites', id: `code:${key}` }
+    case 'hold':
+      return { area: 'invites', id: `hold:${key}` }
+    case 'dead':
+      return { area: 'system', id: `dead:${key}` }
+    case 'lease':
+      return { area: 'system', id: `lease:${key}` }
+    default:
+      return null
+  }
+}
+
 /** Where a change leads from the address `search` holds now: read at the moment of the change. */
 export function patchedHref(area: LedgerArea, search: string, patch: Partial<LedgerState>): string {
   const now = parseLedgerState(area, new URLSearchParams(search))

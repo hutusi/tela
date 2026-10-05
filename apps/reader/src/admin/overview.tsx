@@ -27,7 +27,7 @@ import { AREA_HOOKS } from './areas'
 import { ActionButton } from './components/buttons'
 import { Dot, StatusPill } from './components/record'
 import { useAdmin } from './context'
-import { ledgerHref } from './state'
+import { auditedRow, ledgerHref } from './state'
 
 const loadOverview = (signal?: AbortSignal) => adminGet<AdminOverview>('overview', signal)
 
@@ -56,18 +56,6 @@ type Queue = {
   filter: AdminFilter
   count: number
   rows: QueueRow[]
-}
-
-/** Where an audit entry's target is acted on, by its kind. */
-const TARGET_AREA: Record<string, LedgerArea> = {
-  site: 'sites',
-  feed: 'feeds',
-  claim: 'claims',
-  member: 'people',
-  code: 'invites',
-  hold: 'invites',
-  dead: 'system',
-  lease: 'system',
 }
 
 /** A status for a row whose area has not said: the dot alone carries it, in the tone's word. */
@@ -352,7 +340,7 @@ function Activity({ activity, now }: { activity: AdminOverview['activity']; now:
         {activity.map((entry) => {
           const words = historyWords(t, entry)
           const line = entry.label ? t('toast.one', { action: words, target: entry.label }) : words
-          const area: LedgerArea | undefined = TARGET_AREA[entry.targetKind]
+          const target = auditedRow(entry.targetKind, entry.targetKey)
           const body = (
             <>
               <span className="text-[12.5px] whitespace-nowrap text-muted">{when(entry.at)}</span>
@@ -366,10 +354,10 @@ function Activity({ activity, now }: { activity: AdminOverview['activity']; now:
           )
           const row =
             'grid grid-cols-[80px_minmax(0,1fr)] items-baseline gap-3.5 border-b border-line py-[9px] text-[13.5px] text-ink'
-          return area ? (
+          return target ? (
             <Link
               key={entry.id}
-              to={ledgerHref(area, { id: entry.targetKey })}
+              to={ledgerHref(target.area, { id: target.id })}
               className={`${row} hover:text-accent hover:no-underline`}
               data-testid="admin-activity"
             >

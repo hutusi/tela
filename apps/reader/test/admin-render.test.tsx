@@ -215,6 +215,9 @@ describe('the Overview', () => {
     expect(html).toContain('@hutusi')
     expect(html).toContain('Featured · Nordvest')
     expect(html).toContain('href="/admin/sites?id=12"')
+    // A dead letter and a code open as their ledgers list them, not by the audit log's bare key.
+    expect(html).toContain('href="/admin/system?id=dead%3A5"')
+    expect(html).toContain('href="/admin/invites?id=code%3AWRITERS"')
     expect(html).toContain('The CLI')
     expect(html).toContain('Made an admin · @mara')
     expect(html).toContain('undid Paused')

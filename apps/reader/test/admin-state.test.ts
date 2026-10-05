@@ -4,6 +4,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 import {
+  auditedRow,
   compareSort,
   ledgerHref,
   nextAfterAct,
@@ -79,6 +80,22 @@ describe('the address', () => {
       '/admin/feeds?f=dead&q=x&id=9&sort=c1',
     )
     expect(patchedHref('feeds', '?f=dead&id=9', { id: null })).toBe('/admin/feeds?f=dead')
+  })
+
+  test('an audit entry opens the row its ledger lists, whatever the audit log keys it by', () => {
+    expect(auditedRow('site', '12')).toEqual({ area: 'sites', id: '12' })
+    expect(auditedRow('feed', '88')).toEqual({ area: 'feeds', id: '88' })
+    expect(auditedRow('claim', '41')).toEqual({ area: 'claims', id: '41' })
+    expect(auditedRow('member', 'u-mara')).toEqual({ area: 'people', id: 'u-mara' })
+    // The ledgers with two kinds of row tell them apart by a prefix the audit log does not keep.
+    expect(auditedRow('dead', '5')).toEqual({ area: 'system', id: 'dead:5' })
+    expect(auditedRow('lease', 'translate.body:9:zh-Hans')).toEqual({
+      area: 'system',
+      id: 'lease:translate.body:9:zh-Hans',
+    })
+    expect(auditedRow('code', 'WRITERS')).toEqual({ area: 'invites', id: 'code:WRITERS' })
+    expect(auditedRow('hold', '17')).toEqual({ area: 'invites', id: 'hold:17' })
+    expect(auditedRow('report', '1')).toBeNull()
   })
 
   test('a header click cycles ascending, descending, off', () => {
