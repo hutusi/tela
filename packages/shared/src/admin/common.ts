@@ -183,6 +183,7 @@ export type AdminAuditAction = AdminActionName | 'undo' | 'admin.grant' | 'admin
 
 /** One audit row: who did what to which target, and what it replaced. */
 export type AdminHistoryEntry = {
+  id: number
   at: number
   /** Null for the operator's CLI, or a member since deleted. */
   actor: AdminPerson | null

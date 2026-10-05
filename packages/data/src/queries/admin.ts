@@ -96,6 +96,7 @@ function toEntry(row: HistoryRaw): AdminHistoryEntry {
     detail = JSON.parse(row.detail) as typeof detail
   } catch {}
   return {
+    id: row.id,
     at: row.at,
     actor:
       row.actor_id && row.handle
