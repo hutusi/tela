@@ -118,10 +118,11 @@ export function RecordPanel({
         {t('ledger.backToList')}
       </button>
       <div className="flex shrink-0 items-center gap-2 border-b border-line py-2.5 pr-3 pl-[18px]">
-        {status ? <StatusPill tone={status.tone} label={status.label} /> : null}
-        <span className="min-w-0 truncate text-[12.5px] text-muted">
-          {row ? spec.name.sub(row) : ''}
-        </span>
+        {status ? (
+          <span className="flex min-w-0 shrink">
+            <StatusPill tone={status.tone} label={status.label} />
+          </span>
+        ) : null}
         <div className="flex-1" />
         {index >= 0 ? (
           <span className="shrink-0 text-[12.5px] whitespace-nowrap text-muted tabular-nums">
@@ -161,7 +162,18 @@ export function RecordPanel({
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-5 py-[18px]">
         {row ? (
-          <Rendered key={row.id} render={spec.Record} props={{ row, detail, act, open }} />
+          <>
+            {/* The record's name, as the design heads it: the areas give the body below. */}
+            <header className="flex flex-col gap-1">
+              <h2 className="m-0 font-serif text-[28px] leading-[1.12] font-medium tracking-[-0.01em] [overflow-wrap:anywhere]">
+                {spec.name.title(row)}
+              </h2>
+              <p className="m-0 text-[13px] text-muted [overflow-wrap:anywhere]">
+                {spec.name.sub(row)}
+              </p>
+            </header>
+            <Rendered key={row.id} render={spec.Record} props={{ row, detail, act, open }} />
+          </>
         ) : (
           <p className="m-0 text-[14px] text-muted">
             {missing ? t('errors.not_found') : t('ledger.loading')}
