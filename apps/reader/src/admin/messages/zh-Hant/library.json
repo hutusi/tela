@@ -1,1 +1,178 @@
-{}
+{
+  "search": {
+    "claims": "搜尋部落格或成員",
+    "sites": "搜尋部落格、訂閱源或主人",
+    "feeds": "搜尋訂閱源、部落格或主人",
+    "discover": "搜尋部落格或主人"
+  },
+  "filters": {
+    "claims": { "review": "待稽核", "checking": "檢查中", "verified": "已驗證" },
+    "sites": {
+      "discover": "在發現中",
+      "private": "未公開",
+      "attention": "需要處理",
+      "hidden": "已隱藏"
+    },
+    "feeds": {
+      "failing": "抓取失敗",
+      "timeout": "超時",
+      "dead": "已停用",
+      "paused": "已暫停",
+      "merged": "已合併"
+    },
+    "discover": {
+      "featured": "精選",
+      "listed": "已列入",
+      "candidates": "候選",
+      "hidden": "已隱藏"
+    }
+  },
+  "names": { "blog": "部落格", "site": "部落格", "feed": "訂閱源" },
+  "columns": {
+    "claimant": "認領人",
+    "method": "方式",
+    "opened": "提交於",
+    "owner": "主人",
+    "feeds": "訂閱源",
+    "readers": "讀者",
+    "blog": "部落格",
+    "region": "線路",
+    "lastError": "最近的錯誤",
+    "topics": "話題",
+    "language": "語言"
+  },
+  "methods": { "meta": "Meta 標籤", "rel_me": "rel=\"me\" 連結", "dns": "DNS 記錄" },
+  "regions": { "global": "直連", "cn": "中國中轉" },
+  "formats": { "rss": "RSS", "atom": "Atom", "rdf": "RDF", "json": "JSON Feed" },
+  "listing": {
+    "featured": "精選",
+    "listed": "已列入",
+    "private": "未公開",
+    "rejected": "已隱藏",
+    "unclaimed": "無人認領"
+  },
+  "health": {
+    "ok": "正常",
+    "failing": "抓取失敗",
+    "timeout": "超時",
+    "dead": "已停用",
+    "paused": "已暫停",
+    "none": "一個都沒有"
+  },
+  "feedCount": "{n} · {health}",
+  "siteStatus": {
+    "failing": "訂閱源抓取失敗",
+    "timeout": "訂閱源超時",
+    "dead": "訂閱源已停用",
+    "claim": "認領檢查失敗"
+  },
+  "claimStatus": {
+    "verified": "已驗證",
+    "checking": "檢查中",
+    "disputed": "有爭議",
+    "review": "待稽核",
+    "failed": "檢查失敗",
+    "reviewed": "已處理",
+    "removed": "已撤銷"
+  },
+  "feedStatus": {
+    "ok": "正常",
+    "timeout": "超時",
+    "dead": "已停用",
+    "paused": "已暫停",
+    "merged": "已合併"
+  },
+  "feedErrors": {
+    "notFound": "404",
+    "gone": "已刪除",
+    "http": "HTTP {status}",
+    "rateLimited": "被限流",
+    "parse": "解析錯誤",
+    "tls": "TLS 錯誤",
+    "dns": "DNS 錯誤",
+    "network": "網路錯誤",
+    "timeout": "超時",
+    "tooLarge": "內容過大",
+    "redirects": "重定向迴圈",
+    "blocked": "被攔截",
+    "other": "抓取失敗"
+  },
+  "actions": { "unfeature": "取消精選", "restoreDefault": "恢復預設" },
+  "topics": {
+    "essays": "隨筆",
+    "tech": "技術",
+    "cities": "城市",
+    "food": "美食",
+    "design": "設計",
+    "outdoors": "戶外",
+    "life": "生活",
+    "photography": "攝影",
+    "science": "科學"
+  },
+  "person": "{name}（@{handle}）",
+  "handle": "@{handle}",
+  "none": "—",
+  "listSeparator": "、",
+  "unknownLanguage": "未知",
+  "kv": {
+    "blog": "部落格",
+    "blogValue": "{title} · {n, plural, other {# 位讀者}}",
+    "claimant": "認領人",
+    "owner": "主人",
+    "ownerValue": "{person} · {method}，{when}",
+    "currentOwner": "現在的主人",
+    "method": "方式",
+    "attempts": "嘗試次數",
+    "nextTry": "下次嘗試",
+    "opened": "提交於",
+    "lastChecked": "上次檢查",
+    "verified": "驗證於",
+    "reviewed": "處理於",
+    "token": "權杖",
+    "tokenValue": "{head}…",
+    "listing": "列入狀態",
+    "listingValue": "{listing} · {topics}",
+    "readers": "讀者",
+    "language": "語言",
+    "translation": "翻譯",
+    "translationOn": "正在翻譯",
+    "translationOff": "已暫停",
+    "tokens": "近 30 天用量（token）",
+    "added": "加入於",
+    "about": "簡介",
+    "status": "狀態",
+    "errors": "連續錯誤",
+    "timeouts": "連續超時",
+    "lastFetched": "上次抓取",
+    "newestPost": "最新文章",
+    "nextFetch": "下次抓取",
+    "region": "線路",
+    "format": "格式",
+    "address": "地址",
+    "mergedInto": "合併到"
+  },
+  "status": {
+    "active": "正常執行",
+    "paused": "已被管理員暫停",
+    "dead": "已停用",
+    "merged": "已暫停，合併到另一個訂閱源"
+  },
+  "sections": {
+    "feeds": "訂閱源",
+    "claims": "認領",
+    "topics": "話題",
+    "lastCheck": "上次檢查 · {when}",
+    "lastError": "最近的錯誤"
+  },
+  "feedLine": "{url} · {state}",
+  "claimLine": "{who} · {status}",
+  "openFeed": "開啟訂閱源 #{id}",
+  "notes": {
+    "vouched": "管理員為這次認領做了擔保。檢查會跳過證明，但仍會讀取主頁，找出它宣告的訂閱源；認領人自己重新檢查時，擔保隨之取消。",
+    "disputed": "這個部落格已經有主人了。檢查不會把部落格從主人手裡拿走：要先撤銷對方的認領。",
+    "merged": "這個訂閱源和同一部落格的另一個訂閱源列出的文章相同，所以已經合併過去：新增這個地址會訂閱那一個。合併無法撤回，下次抓取時會再次合併。",
+    "noRelay": "沒有配置中國中轉，這個訂閱源只能直接抓取。",
+    "discoverLag": "改動大約五分鐘內出現在公開頁面上：邊緣節點有快取。",
+    "topicsHint": "話題決定部落格在發現裡出現在哪裡。點選一個話題來新增或移除。"
+  }
+}

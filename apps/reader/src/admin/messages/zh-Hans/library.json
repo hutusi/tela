@@ -1,1 +1,178 @@
-{}
+{
+  "search": {
+    "claims": "搜索博客或成员",
+    "sites": "搜索博客、订阅源或主人",
+    "feeds": "搜索订阅源、博客或主人",
+    "discover": "搜索博客或主人"
+  },
+  "filters": {
+    "claims": { "review": "待审核", "checking": "检查中", "verified": "已验证" },
+    "sites": {
+      "discover": "在发现中",
+      "private": "未公开",
+      "attention": "需要处理",
+      "hidden": "已隐藏"
+    },
+    "feeds": {
+      "failing": "抓取失败",
+      "timeout": "超时",
+      "dead": "已停用",
+      "paused": "已暂停",
+      "merged": "已合并"
+    },
+    "discover": {
+      "featured": "精选",
+      "listed": "已列入",
+      "candidates": "候选",
+      "hidden": "已隐藏"
+    }
+  },
+  "names": { "blog": "博客", "site": "博客", "feed": "订阅源" },
+  "columns": {
+    "claimant": "认领人",
+    "method": "方式",
+    "opened": "提交于",
+    "owner": "主人",
+    "feeds": "订阅源",
+    "readers": "读者",
+    "blog": "博客",
+    "region": "线路",
+    "lastError": "最近的错误",
+    "topics": "话题",
+    "language": "语言"
+  },
+  "methods": { "meta": "Meta 标签", "rel_me": "rel=\"me\" 链接", "dns": "DNS 记录" },
+  "regions": { "global": "直连", "cn": "中国中转" },
+  "formats": { "rss": "RSS", "atom": "Atom", "rdf": "RDF", "json": "JSON Feed" },
+  "listing": {
+    "featured": "精选",
+    "listed": "已列入",
+    "private": "未公开",
+    "rejected": "已隐藏",
+    "unclaimed": "无人认领"
+  },
+  "health": {
+    "ok": "正常",
+    "failing": "抓取失败",
+    "timeout": "超时",
+    "dead": "已停用",
+    "paused": "已暂停",
+    "none": "一个都没有"
+  },
+  "feedCount": "{n} · {health}",
+  "siteStatus": {
+    "failing": "订阅源抓取失败",
+    "timeout": "订阅源超时",
+    "dead": "订阅源已停用",
+    "claim": "认领检查失败"
+  },
+  "claimStatus": {
+    "verified": "已验证",
+    "checking": "检查中",
+    "disputed": "有争议",
+    "review": "待审核",
+    "failed": "检查失败",
+    "reviewed": "已处理",
+    "removed": "已撤销"
+  },
+  "feedStatus": {
+    "ok": "正常",
+    "timeout": "超时",
+    "dead": "已停用",
+    "paused": "已暂停",
+    "merged": "已合并"
+  },
+  "feedErrors": {
+    "notFound": "404",
+    "gone": "已删除",
+    "http": "HTTP {status}",
+    "rateLimited": "被限流",
+    "parse": "解析错误",
+    "tls": "TLS 错误",
+    "dns": "DNS 错误",
+    "network": "网络错误",
+    "timeout": "超时",
+    "tooLarge": "内容过大",
+    "redirects": "重定向循环",
+    "blocked": "被拦截",
+    "other": "抓取失败"
+  },
+  "actions": { "unfeature": "取消精选", "restoreDefault": "恢复默认" },
+  "topics": {
+    "essays": "随笔",
+    "tech": "技术",
+    "cities": "城市",
+    "food": "美食",
+    "design": "设计",
+    "outdoors": "户外",
+    "life": "生活",
+    "photography": "摄影",
+    "science": "科学"
+  },
+  "person": "{name}（@{handle}）",
+  "handle": "@{handle}",
+  "none": "—",
+  "listSeparator": "、",
+  "unknownLanguage": "未知",
+  "kv": {
+    "blog": "博客",
+    "blogValue": "{title} · {n, plural, other {# 位读者}}",
+    "claimant": "认领人",
+    "owner": "主人",
+    "ownerValue": "{person} · {method}，{when}",
+    "currentOwner": "现在的主人",
+    "method": "方式",
+    "attempts": "尝试次数",
+    "nextTry": "下次尝试",
+    "opened": "提交于",
+    "lastChecked": "上次检查",
+    "verified": "验证于",
+    "reviewed": "处理于",
+    "token": "令牌",
+    "tokenValue": "{head}…",
+    "listing": "列入状态",
+    "listingValue": "{listing} · {topics}",
+    "readers": "读者",
+    "language": "语言",
+    "translation": "翻译",
+    "translationOn": "正在翻译",
+    "translationOff": "已暂停",
+    "tokens": "近 30 天用量（token）",
+    "added": "加入于",
+    "about": "简介",
+    "status": "状态",
+    "errors": "连续错误",
+    "timeouts": "连续超时",
+    "lastFetched": "上次抓取",
+    "newestPost": "最新文章",
+    "nextFetch": "下次抓取",
+    "region": "线路",
+    "format": "格式",
+    "address": "地址",
+    "mergedInto": "合并到"
+  },
+  "status": {
+    "active": "正常运行",
+    "paused": "已被管理员暂停",
+    "dead": "已停用",
+    "merged": "已暂停，合并到另一个订阅源"
+  },
+  "sections": {
+    "feeds": "订阅源",
+    "claims": "认领",
+    "topics": "话题",
+    "lastCheck": "上次检查 · {when}",
+    "lastError": "最近的错误"
+  },
+  "feedLine": "{url} · {state}",
+  "claimLine": "{who} · {status}",
+  "openFeed": "打开订阅源 #{id}",
+  "notes": {
+    "vouched": "管理员为这次认领做了担保。检查会跳过证明，但仍会读取主页，找出它声明的订阅源；认领人自己重新检查时，担保随之取消。",
+    "disputed": "这个博客已经有主人了。检查不会把博客从主人手里拿走：要先撤销对方的认领。",
+    "merged": "这个订阅源和同一博客的另一个订阅源列出的文章相同，所以已经合并过去：添加这个地址会订阅那一个。合并无法撤回，下次抓取时会再次合并。",
+    "noRelay": "没有配置中国中转，这个订阅源只能直接抓取。",
+    "discoverLag": "改动大约五分钟内出现在公开页面上：边缘节点有缓存。",
+    "topicsHint": "话题决定博客在发现里出现在哪里。点击一个话题来添加或移除。"
+  }
+}
