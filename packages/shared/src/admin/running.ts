@@ -39,6 +39,11 @@ export type AdminHeartbeats = {
     websub: boolean
     assets: boolean
   } | null
+  /**
+   * The scheduled health check (every fifth minute): when it last ran, and whether the dead-man's
+   * switch heard "ok" or `/fail`. Null until one has run.
+   */
+  health?: { at: number; ok: boolean } | null
 }
 
 export type AdminBackup = {
