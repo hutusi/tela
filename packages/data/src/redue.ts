@@ -75,7 +75,8 @@ export const REDUE: Record<LeaseKind, Redue> = {
     synced: true,
     statements: (db, key) => [
       db.run(sql`
-        update site_claims set status = 'pending', error = null, seq = ${currentSeq}
+        update site_claims set status = 'pending', error = null, vouched_by = null,
+          seq = ${currentSeq}
         where id = ${id(key)} and status = 'failed'
       `),
     ],

@@ -744,6 +744,18 @@ describe('claims', () => {
     expect(await runCheck()).toMatchObject({ status: 'failed' })
   })
 
+  test('a vouch ends with the claim it vouched for: removed, a re-check asks for proof again', async () => {
+    const { siteId, claimId } = await memberClaim()
+    await act('claim.vouch', [claimId])
+    expect(await runCheck()).toMatchObject({ status: 'verified', vouched: true })
+    await api.db.run(sql`delete from leases`)
+    expect(await outcome('claim.remove', claimId)).toBe('done')
+    expect((await claimOf(claimId))?.vouched_by).toBeNull()
+    expect(await outcome('claim.recheck', claimId)).toBe('done')
+    expect(await runCheck()).toMatchObject({ status: 'failed' })
+    expect((await siteOf(siteId))?.claimed_by).toBeNull()
+  })
+
   test('Verify by hand is refused on a blog someone else holds, and on a verified claim', async () => {
     const { claimId, siteId } = await memberClaim()
     const owner = await signedIn('owner@x.test')

@@ -20,9 +20,10 @@ const recheck: ActHandler = async (ctx, id) => {
     table: 'site_claims',
     id: claimId,
     applies: sql`status = 'failed'`,
-    set: sql`status = 'pending', error = null`,
-    from: sql`json_object('status', status, 'error', error)`,
-    to: { status: 'pending', error: null },
+    // A re-check asks for the proof again: only `claim.vouch` ever skips it.
+    set: sql`status = 'pending', error = null, vouched_by = null`,
+    from: sql`json_object('status', status, 'error', error, 'vouchedBy', vouched_by)`,
+    to: { status: 'pending', error: null, vouchedBy: null },
   })
   if (outcome === 'done') await checkClaimSoon(ctx.deps, claimId, ctx.now)
   return outcome
@@ -201,7 +202,7 @@ const remove: ActHandler = async (ctx, id) => {
     ),
     db.all(sql`
       update site_claims set status = 'failed', error = ${CLAIM_REMOVED_ERROR},
-        reviewed_at = ${ctx.now}, seq = ${currentSeq}
+        reviewed_at = ${ctx.now}, vouched_by = null, seq = ${currentSeq}
       where id = ${claimId} and status = 'verified'
       returning id
     `),
