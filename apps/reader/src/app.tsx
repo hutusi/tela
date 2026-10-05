@@ -35,11 +35,11 @@ import { UiContext } from './ui'
 const ADMIN_RELOADED = 'tela.admin-reloaded'
 
 /**
- * The admin console (ADR 0039): its own chunk, fetched only when an admin opens it. After a
- * deploy, a shell from before it asks for a chunk the network no longer has, and the single-page
- * fallback answers that with index.html (AGENTS gotchas), so the import fails: the page reloads
- * once, which boots the current shell, and only a second failure in this tab is shown. The flag
- * is cleared once a load succeeds, so the next deploy gets its own reload. Vite's
+ * The admin console (ADR 0039): its own chunk, fetched only when an admin opens it (`AdminGate`).
+ * After a deploy, a shell from before it asks for a chunk the network no longer has, and the
+ * single-page fallback answers that with index.html (AGENTS gotchas), so the import fails: the
+ * page reloads once, which boots the current shell, and only a second failure in this tab is
+ * shown. The flag is cleared once a load succeeds, so the next deploy gets its own reload. Vite's
  * `vite:preloadError` event fires for the same failure; handling the import's own rejection here
  * covers that and a chunk that fails to evaluate alike.
  */
@@ -88,6 +88,33 @@ function AdminUnavailable() {
         </a>
       </div>
     </main>
+  )
+}
+
+/**
+ * `/admin` (ADR 0039): the console for an admin, and for anyone else the app's Not found, as any
+ * missing page shows it. A guest is not sent to sign in, which would say there is something behind
+ * the door, and a member who is no admin never fetches the console's chunk. This device's copy of
+ * the member's profile decides what to draw; tela-api checks the flag again on every admin call,
+ * and the console shows Not found on the first 403.
+ */
+function AdminGate() {
+  const { status } = useSession()
+  const profile = useTables().profile
+  // Not an answer yet: the session is being asked, or a member's first sync has not landed.
+  if (status === 'unknown' || (status === 'member' && !profile)) return null
+  if (status === 'guest' || !profile?.isAdmin) {
+    return (
+      <>
+        <AppHeader />
+        <NotFoundPage />
+      </>
+    )
+  }
+  return (
+    <Suspense fallback={null}>
+      <AdminApp />
+    </Suspense>
   )
 }
 
@@ -220,16 +247,7 @@ function Routed() {
           <div className="flex min-h-full flex-col">
             <Routes>
               <Route path="/login" element={<LoginPage />} />
-              <Route
-                path="/admin/*"
-                element={
-                  <Members>
-                    <Suspense fallback={null}>
-                      <AdminApp />
-                    </Suspense>
-                  </Members>
-                }
-              />
+              <Route path="/admin/*" element={<AdminGate />} />
               <Route
                 path="*"
                 element={
