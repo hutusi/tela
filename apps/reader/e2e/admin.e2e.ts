@@ -48,6 +48,18 @@ async function curated(page: Page): Promise<number> {
   return ((await res.json()) as { siteId: number }).siteId
 }
 
+/** The console's own chunk (ADR 0039), which nobody but an admin should ever fetch. */
+const ADMIN_CHUNK = /\/assets\/admin-[^/]*\.js(\?|$)/
+
+/** Every script the page asks for from now on. */
+function scriptsOf(page: Page): string[] {
+  const urls: string[] = []
+  page.on('request', (request) => {
+    if (request.resourceType() === 'script') urls.push(request.url())
+  })
+  return urls
+}
+
 /** What a member call carries: the client's protocol and the member it names. */
 async function asMember(page: Page): Promise<Record<string, string>> {
   const me = (await (await page.request.get(`${BASE}/api/v1/me`)).json()) as { id: string }
@@ -65,6 +77,7 @@ async function listingOf(page: Page, siteId: number): Promise<string | undefined
 test('a visitor at /admin finds a page that does not exist, not a way to sign in', async ({
   page,
 }) => {
+  const scripts = scriptsOf(page)
   await page.goto('/admin')
   await expect(page.getByTestId('not-found')).toBeVisible()
   await expect(page).toHaveURL(/\/admin$/)
@@ -72,6 +85,7 @@ test('a visitor at /admin finds a page that does not exist, not a way to sign in
   await page.goto('/admin/claims?id=1')
   await expect(page.getByTestId('not-found')).toBeVisible()
   await expect(page).toHaveURL(/\/admin\/claims/)
+  expect(scripts.filter((url) => ADMIN_CHUNK.test(url))).toEqual([])
 })
 
 test('a member the operator has not granted finds nothing at /admin, and no menu item', async ({
@@ -82,9 +96,12 @@ test('a member the operator has not granted finds nothing at /admin, and no menu
   await page.getByTestId('account-menu').click()
   await expect(page.getByTestId('nav-settings')).toBeVisible()
   await expect(page.getByTestId('nav-admin')).toHaveCount(0)
+  const scripts = scriptsOf(page)
   await page.goto('/admin')
   await expect(page.getByTestId('not-found')).toBeVisible()
   await expect(page.getByTestId('admin-shell')).toHaveCount(0)
+  // Not found before the console's chunk: it is never fetched for a member who is no admin.
+  expect(scripts.filter((url) => ADMIN_CHUNK.test(url))).toEqual([])
 })
 
 test('an admin hides a featured blog from Discover, and takes it back with Undo', async ({
@@ -93,9 +110,12 @@ test('an admin hides a featured blog from Discover, and takes it back with Undo'
   const page = await member(browser, 12, { admin: true })
   const siteId = await curated(page)
   await page.goto('/reading')
+  const scripts = scriptsOf(page)
   await fromAccountMenu(page, 'nav-admin')
   await expect(page).toHaveURL(/\/admin$/)
   await expect(page.getByTestId('admin-overview')).toBeVisible()
+  // The pattern the two specs above rely on does match the chunk an admin loads.
+  expect(scripts.some((url) => ADMIN_CHUNK.test(url))).toBe(true)
   await expect(page.getByTestId('admin-health')).toBeVisible()
 
   await page.locator('[data-testid="admin-nav-item"][data-area="discover"]').click()
