@@ -21,7 +21,7 @@ import {
   type Translate,
   undoMessage,
 } from '../src/admin/act'
-import { restoreDone } from '../src/admin/areas/sites'
+import { describeLibrary, restoreDone } from '../src/admin/areas/sites'
 import { ADMIN_MESSAGES } from '../src/admin/i18n'
 import { healthSummary } from '../src/admin/overview'
 import { OVERVIEW } from './admin-fixtures'
@@ -227,11 +227,56 @@ describe('the toast', () => {
 describe('what an audit entry says', () => {
   test('an action in its past tense, an undo of one, a grant', () => {
     expect(historyWords(t, { action: 'feed.pause' })).toBe('Paused')
-    expect(historyWords(t, { action: 'undo', undid: 'feed.pause' })).toBe('undid Paused')
+    expect(historyWords(t, { action: 'undo', undid: 'feed.pause' })).toBe('Undid: Paused')
+    expect(historyWords(translator('zh-Hans'), { action: 'undo', undid: 'site.hide' })).toBe(
+      '撤销：已隐藏',
+    )
     expect(historyWords(t, { action: 'undo' })).toBe('Undone')
     expect(historyWords(t, { action: 'admin.grant' })).toBe('Made an admin')
     expect(historyWords(t, { action: 'admin.ungrant' })).toBe('No longer an admin')
     expect(historyWords(t, { action: 'site.retire' as never })).toBe('site.retire')
+  })
+})
+
+describe('what a library record’s History says', () => {
+  const both = (locale: 'en' | 'zh-Hans') =>
+    [
+      createTranslator({
+        locale,
+        messages: { admin: ADMIN_MESSAGES[locale] },
+        namespace: 'admin.library',
+      }) as unknown as Parameters<typeof describeLibrary>[0],
+      translator(locale) as unknown as Parameters<typeof describeLibrary>[1],
+    ] as const
+
+  test('the topics a blog was given, and a rejection’s reason, in each language’s punctuation', () => {
+    const [library, shell] = both('en')
+    expect(describeLibrary(library, shell, { action: 'site.topics', to: ['tech', 'essays'] })).toBe(
+      'Topics saved: Tech, Essays',
+    )
+    expect(describeLibrary(library, shell, { action: 'site.topics', to: [] })).toBe(
+      'Topics saved: —',
+    )
+    expect(
+      describeLibrary(library, shell, { action: 'claim.reject', to: { error: 'Not the author' } }),
+    ).toBe('Rejected: “Not the author”')
+    const [zh, zhShell] = both('zh-Hans')
+    expect(describeLibrary(zh, zhShell, { action: 'site.topics', to: ['tech', 'essays'] })).toBe(
+      '话题已保存：技术、随笔',
+    )
+    expect(
+      describeLibrary(zh, zhShell, { action: 'claim.reject', to: { error: '不是作者' } }),
+    ).toBe('已驳回：“不是作者”')
+  })
+
+  test('a Restore in its button’s words', () => {
+    const [library, shell] = both('en')
+    const restore = (listing: string) =>
+      describeLibrary(library, shell, { action: 'site.restore', from: { listing } })
+    expect(restore('featured')).toBe('Unfeatured')
+    expect(restore('rejected')).toBe('Restored to default')
+    // Anything else reads as the action's own past tense.
+    expect(describeLibrary(library, shell, { action: 'site.hide' })).toBeUndefined()
   })
 })
 

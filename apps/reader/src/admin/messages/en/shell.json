@@ -185,7 +185,7 @@
     "history": "History",
     "justNow": "Just now",
     "byCli": "the operator, from the command line",
-    "undo": "undid {action}",
+    "undo": "Undid: {action}",
     "unbuilt": "This area is not built yet."
   },
   "keys": {

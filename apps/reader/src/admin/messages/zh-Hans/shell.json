@@ -169,7 +169,7 @@
     "history": "记录",
     "justNow": "刚刚",
     "byCli": "运营者（命令行）",
-    "undo": "撤销了{action}",
+    "undo": "撤销：{action}",
     "unbuilt": "这个区域尚未完成。"
   },
   "keys": {

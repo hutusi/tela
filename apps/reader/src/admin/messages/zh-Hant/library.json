@@ -166,6 +166,10 @@
     "lastCheck": "上次檢查 · {when}",
     "lastError": "最近的錯誤"
   },
+  "history": {
+    "topics": "{action}：{topics}",
+    "rejected": "{action}：「{reason}」"
+  },
   "feedLine": "{url} · {state}",
   "claimLine": "{who} · {status}",
   "openFeed": "開啟訂閱源 #{id}",

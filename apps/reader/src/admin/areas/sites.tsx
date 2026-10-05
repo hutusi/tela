@@ -245,26 +245,40 @@ export function useSitesArea(): AnyAreaSpec {
   return useMemo(() => sitesSpec(t, locale), [t, locale])
 }
 
-/** The history's words for a library action where the bare past tense says too little. */
+/**
+ * The history's words for a library action where the bare past tense says too little: the topics
+ * a blog was given, a rejection's reason, and a Restore in its button's words. The punctuation is
+ * the catalogue's, so Chinese reads with its own colon. `t` is `admin.library`, `shell`
+ * `admin.shell`.
+ */
+export function describeLibrary(
+  t: Translate,
+  shell: Translate,
+  entry: { action: string; from?: unknown; to?: unknown },
+): string | undefined {
+  const to = (entry.to ?? null) as { error?: unknown } | unknown[] | null
+  if (entry.action === 'site.topics' && Array.isArray(to)) {
+    const topics = to.filter((x): x is string => typeof x === 'string')
+    return t('history.topics', {
+      action: shell('actions.site.topics.done'),
+      topics: topics.length ? topicWords(t, topics) : t('none'),
+    })
+  }
+  if (entry.action === 'claim.reject' && to && !Array.isArray(to) && typeof to.error === 'string') {
+    return t('history.rejected', { action: shell('actions.claim.reject.done'), reason: to.error })
+  }
+  if (entry.action === 'site.restore') {
+    const from = (entry.from ?? null) as { listing?: unknown } | null
+    return restoreDone(t, from?.listing, entry.action)
+  }
+  return undefined
+}
+
 export function useDescribe() {
   const t = useTranslations('admin.library')
   const shell = useTranslations('admin.shell')
-  return (entry: { action: string; to?: unknown }) => {
-    const to = (entry.to ?? null) as { error?: unknown } | unknown[] | null
-    if (entry.action === 'site.topics' && Array.isArray(to)) {
-      const topics = to.filter((x): x is string => typeof x === 'string')
-      return `${shell('actions.site.topics.done')}: ${topics.length ? topicWords(t, topics) : t('none')}`
-    }
-    if (
-      entry.action === 'claim.reject' &&
-      to &&
-      !Array.isArray(to) &&
-      typeof to.error === 'string'
-    ) {
-      return `${shell('actions.claim.reject.done')}: “${to.error}”`
-    }
-    return undefined
-  }
+  return (entry: { action: string; from?: unknown; to?: unknown }) =>
+    describeLibrary(t, shell, entry)
 }
 
 function SiteRecord({ row, detail, act, open, busy }: RecordProps<AdminSiteRow, AdminSiteDetail>) {

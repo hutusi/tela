@@ -169,7 +169,7 @@
     "history": "記錄",
     "justNow": "剛剛",
     "byCli": "運營者（命令列）",
-    "undo": "撤銷了{action}",
+    "undo": "撤銷：{action}",
     "unbuilt": "這個區域尚未完成。"
   },
   "keys": {

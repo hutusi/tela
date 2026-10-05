@@ -231,7 +231,7 @@ describe('the Overview', () => {
     expect(html).toContain('href="/admin/invites?id=code%3AWRITERS"')
     expect(html).toContain('The CLI')
     expect(html).toContain('Made an admin · @mara')
-    expect(html).toContain('undid Paused')
+    expect(html).toContain('Undid: Paused')
   })
 
   test('a feed timing out opens under Timing out, not Failing', () => {

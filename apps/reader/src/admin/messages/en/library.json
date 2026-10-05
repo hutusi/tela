@@ -166,6 +166,10 @@
     "lastCheck": "Last check · {when}",
     "lastError": "Last error"
   },
+  "history": {
+    "topics": "{action}: {topics}",
+    "rejected": "{action}: “{reason}”"
+  },
   "feedLine": "{url} · {state}",
   "claimLine": "{who} · {status}",
   "openFeed": "Open feed #{id}",
