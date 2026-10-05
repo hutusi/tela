@@ -90,6 +90,28 @@ describe('tick and runJob', () => {
     expect(beat?.at).toBe(NOW + MIN)
   })
 
+  test('the tick says what it sent and the switches it runs with', async () => {
+    await tick({ ...ctx, backgroundBudget: 2_000_000, websub: true })
+    const beat = await first<{ info: string }>(
+      db,
+      sql`select info from ops_heartbeats where name = 'tick'`,
+    )
+    expect(JSON.parse(beat?.info ?? '{}')).toEqual({
+      'feed.fetch': 0,
+      'article.extract': 0,
+      'member.gravatar': 0,
+      'site.claim': 0,
+      config: {
+        backgroundBudget: 2_000_000,
+        maxArticleTokens: 40_000,
+        translator: false,
+        relay: false,
+        websub: true,
+        assets: false,
+      },
+    })
+  })
+
   test("a host's summary articles are extracted one after another, a gap apart, not one a tick", async () => {
     server.text('/feed.xml', summaries())
     for (const n of [1, 2, 3]) {

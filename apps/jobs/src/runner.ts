@@ -11,11 +11,14 @@ import {
   deadLetter,
   failLease,
   fence,
+  heartbeat,
   type Lease,
   type LeaseKind,
   startLease,
 } from '@tela/data'
 import type { Jobs } from '@tela/platform'
+import { MAX_ARTICLE_TRANSLATION_TOKENS } from '@tela/shared'
+import type { AdminHeartbeats } from '@tela/shared/admin'
 import { sql } from 'drizzle-orm'
 import { type JobMessage, type JobQueues, KINDS, type KindSpec, type WorkContext } from './kinds'
 
@@ -70,7 +73,28 @@ async function dispatch(
   return send.length
 }
 
-/** Claim every kind's due work and send it on; record that the tick ran. */
+export type RunningConfig = NonNullable<AdminHeartbeats['config']>
+
+/**
+ * The switches this deployment runs with, as the tick reports them. tela-api learns the
+ * background budget from here rather than from a var of its own, which could drift from the one
+ * tela-jobs spends by (the budget moved into this Worker's config for that reason).
+ */
+export function runningConfig(ctx: WorkContext): RunningConfig {
+  return {
+    backgroundBudget: ctx.backgroundBudget ?? 0,
+    maxArticleTokens: ctx.maxArticleTokens ?? MAX_ARTICLE_TRANSLATION_TOKENS,
+    translator: ctx.translator !== undefined,
+    relay: ctx.region?.relayAvailable === true,
+    websub: ctx.websub === true,
+    assets: ctx.assets !== undefined,
+  }
+}
+
+/**
+ * Claim every kind's due work and send it on; record that the tick ran, what it sent per kind,
+ * and the config it ran with.
+ */
 export async function tick(ctx: JobsContext): Promise<TickReport> {
   const report: TickReport = {}
   for (const [kind, spec] of Object.entries(KINDS) as [LeaseKind, KindSpec][]) {
@@ -87,10 +111,7 @@ export async function tick(ctx: JobsContext): Promise<TickReport> {
     })
     report[kind] = await dispatch(ctx, kind, spec, owner, claimed, now)
   }
-  await ctx.db.run(sql`
-    insert into ops_heartbeats (name, at, info) values ('tick', ${ctx.clock.now()}, ${JSON.stringify(report)})
-    on conflict (name) do update set at = excluded.at, info = excluded.info
-  `)
+  await heartbeat(ctx.db, 'tick', ctx.clock.now(), { ...report, config: runningConfig(ctx) })
   return report
 }
 

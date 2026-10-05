@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { backUp, LATEST_BACKUP } from '@tela/data'
+import { backUp, heartbeats, latestBackup } from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
-import { memoryBlobs } from '@tela/platform/portable'
+import { memoryBlobs, memoryMail } from '@tela/platform/portable'
 import { sql } from 'drizzle-orm'
-import { digest, health, pingDeadman, THRESHOLDS } from '../src/ops'
+import { checkHealth, digest, nightly, pingDeadman, weekly } from '../src/ops'
 
 const NOW = Date.UTC(2026, 8, 28, 12)
 const HOUR = 3600_000
@@ -24,43 +24,40 @@ async function feeds(db: Awaited<ReturnType<typeof world>>['db'], n: number, nex
   }
 }
 
-describe('the health check', () => {
-  test('is quiet while work gets done', async () => {
+describe('the scheduled health check', () => {
+  test('keeps its answer as a heartbeat and tells the switch', async () => {
     const { db, blobs } = await world()
-    await feeds(db, 10, NOW + HOUR)
-    expect(await health(db, blobs, NOW)).toEqual({ ok: true, problems: [] })
+    await feeds(db, 4, NOW - 3 * HOUR)
+    const calls: string[] = []
+    const fake = (async (url: string) => {
+      calls.push(url)
+      return new Response('OK')
+    }) as unknown as typeof fetch
+    const h = await checkHealth(db, blobs, NOW, 'https://hc-ping.com/abc', fake)
+    expect(h.ok).toBe(false)
+    expect(calls).toEqual(['https://hc-ping.com/abc/fail'])
+    expect(await heartbeats(db)).toMatchObject({
+      health: {
+        at: NOW,
+        info: { ok: false, problems: ['4 feeds are more than two hours past due'] },
+      },
+    })
   })
+})
 
-  test('speaks up when feeds sit past due, but not for one a fetch is holding', async () => {
+describe('the nightly run', () => {
+  test('sweeps, exports, and says so in its heartbeat', async () => {
     const { db, blobs } = await world()
-    await feeds(db, THRESHOLDS.overdueFeeds + 1, NOW - 3 * HOUR)
-    expect((await health(db, blobs, NOW)).problems).toEqual([
-      '4 feeds are more than two hours past due',
-    ])
-    await db.run(sql`insert into leases (kind, key, owner, until, attempts, not_before)
-      values ('feed.fetch', '1', 'x', ${NOW + 60_000}, 1, 0)`)
-    expect((await health(db, blobs, NOW)).ok).toBe(true)
-  })
-
-  test('speaks up when a reader waits on a translation, or the backup is old or broken', async () => {
-    const { db, blobs } = await world()
-    await db.run(sql`insert into body_translations (content_key, lang, state, updated_at)
-      values ('k', 'en', 'running', ${NOW - 45 * 60_000})`)
-    await blobs.put(
-      LATEST_BACKUP,
-      JSON.stringify({
-        date: '2026-09-26',
-        finishedAt: NOW - 50 * HOUR,
-        rows: 1,
-        verified: false,
-        problems: ['x'],
-      }),
-    )
-    expect((await health(db, blobs, NOW)).problems).toEqual([
-      '1 body translations have been waiting over 30 minutes',
-      'the last backup is from 2026-09-26',
-      'the 2026-09-26 backup failed its check',
-    ])
+    const run = await nightly(db, blobs, () => NOW)
+    expect(run.backup).toMatchObject({ date: '2026-09-28', verified: true })
+    const beat = (await heartbeats(db)).daily
+    expect(beat?.at).toBe(NOW)
+    expect(beat?.info).toMatchObject({
+      revived: 0,
+      backup: { date: '2026-09-28', verified: true },
+      pruned: 0,
+    })
+    expect((await latestBackup(blobs))?.date).toBe('2026-09-28')
   })
 })
 
@@ -109,10 +106,43 @@ describe('the weekly digest', () => {
     expect(mail.text).toContain('1 new posts this week')
     expect(mail.text).toContain('4 errors: https://a.example/')
     expect(mail.text).toContain('1 feed.fetch')
+    expect(mail.text).toContain('0 of them resolved in the admin console')
     expect(mail.text).toContain('1200 input and 300 output tokens in 1 calls')
     expect(mail.text).toContain('last backup 2026-09-28')
     expect(mail.text).toContain('verified')
     expect(mail.text).toContain('the case for the relay')
     expect(mail.text).toContain('5 timeouts in a row')
+  })
+})
+
+describe('the weekly run', () => {
+  test('counts the dead letters an operator resolved, and leaves a heartbeat once sent', async () => {
+    const { db, blobs } = await world()
+    for (const resolved of [null, NOW - HOUR]) {
+      await db.run(sql`insert into dead_letters (kind, key, attempts, error, at, resolved_at, resolution)
+        values ('site.assets', '1', 3, 'x', ${NOW - 2 * HOUR}, ${resolved},
+          ${resolved === null ? null : 'dismissed'})`)
+    }
+    const mail = memoryMail()
+    const sent = await weekly(db, blobs, NOW, { mail, to: 'owner@x.test' })
+    expect(sent.sent).toBe(true)
+    expect(sent.text).toContain('2 site.assets')
+    expect(sent.text).toContain('1 of them resolved in the admin console')
+    expect(mail.outbox.map((m) => m.to)).toEqual(['owner@x.test'])
+    expect((await heartbeats(db)).digest).toEqual({
+      at: NOW,
+      info: { sent: true, subject: sent.subject },
+    })
+  })
+
+  test('a send that fails leaves the last heartbeat as it was', async () => {
+    const { db, blobs } = await world()
+    const broken = {
+      send: async () => {
+        throw new Error('resend is down')
+      },
+    }
+    await expect(weekly(db, blobs, NOW, { mail: broken, to: 'owner@x.test' })).rejects.toThrow()
+    expect((await heartbeats(db)).digest).toBeUndefined()
   })
 })

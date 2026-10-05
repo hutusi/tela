@@ -1,6 +1,7 @@
 export * from './backup'
 export * from './db'
 export * from './first'
+export * from './health'
 export * from './jobs'
 export * from './leases'
 export * from './queries/admin'
