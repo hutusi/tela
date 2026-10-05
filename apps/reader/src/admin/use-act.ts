@@ -3,7 +3,7 @@
  * happened in the toast with its undo, and have everything load again. Confirmations and questions
  * are inline, in the record panel, the bulk bar or beside the search, never `window.confirm`.
  */
-import type { AdminActArgs, AdminActionName } from '@tela/shared/admin'
+import type { AdminActArgs, AdminActionName, LedgerArea } from '@tela/shared/admin'
 import { useCallback, useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
 import { actMessage, promptFor } from './act'
@@ -25,6 +25,8 @@ export type Prompt = {
 export type Acted = { action: AdminActionName; ids: string[]; done: string[] }
 
 export function useAdminAct(options: {
+  /** The ledger acting, so an undo can select what it put back. */
+  area: LedgerArea
   /** A row's title as the ledger shows it, for the toast. */
   titleOf: (id: string) => string | null
   /** After an answer, before the reload it starts: the ledger notes where the selection was. */
@@ -56,6 +58,7 @@ export function useAdminAct(options: {
         admin.say(actMessage(t, { action, response, titleOf }), {
           undo: response?.undo?.group ?? null,
           error: !response || response.done.length === 0,
+          about: response ? { area: latest.current.area, ids: response.done } : null,
         })
         if (response) latest.current.onActed?.({ action, ids, done: response.done })
       } catch (error) {

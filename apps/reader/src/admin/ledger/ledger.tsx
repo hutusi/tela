@@ -217,6 +217,18 @@ export function Ledger({
 
   // ---- After a list arrives: move on from an acted row, or find a record the filter hides -------
   const moving = useRef<Moving | null>(null)
+  // A row an undo put back, to select again once the list that shows it arrives: the design's undo
+  // puts the board back as it was, and acting had moved the selection on from that row.
+  const restoring = useRef<string | null>(null)
+  const restored = admin.restored
+  // An undo from before this ledger opened (in another visit to the area) is not this board's.
+  const seenRestore = useRef(restored?.seq ?? 0)
+  useEffect(() => {
+    if (!restored || restored.seq === seenRestore.current) return
+    seenRestore.current = restored.seq
+    const [one, ...more] = restored.area === area ? restored.ids : []
+    restoring.current = one !== undefined && more.length === 0 ? one : null
+  }, [restored, area])
   const [missing, setMissing] = useState<string | null>(null)
   // The record last looked for under the other filters, so one answer starts one search.
   const located = useRef<string | null>(null)
@@ -230,6 +242,15 @@ export function Ledger({
     if (!shown || stale || !shown.data) return
     const after = rowsRef.current.map((row) => row.id)
     const now = parseLedgerState(area, new URLSearchParams(window.location.search))
+    const back = restoring.current
+    restoring.current = null
+    if (back !== null && after.includes(back)) {
+      moving.current = null
+      focus(back)
+      // An open record goes back to it; with none open, the keyboard does.
+      if (now.id !== null && now.id !== back) go({ id: back }, true)
+      return
+    }
     const move = moving.current
     moving.current = null
     if (move) {
@@ -284,6 +305,7 @@ export function Ledger({
     return row ? specRef.current.name.title(row) : null
   }, [])
   const { prompt, setPrompt, busy, request, run } = useAdminAct({
+    area,
     titleOf,
     onActed: ({ ids: acted }) => {
       const [one] = acted

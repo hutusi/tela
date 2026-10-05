@@ -10,7 +10,13 @@ const run = (events: ToastEvent[], from: ToastState = NO_TOAST) => events.reduce
 describe('the toast', () => {
   test('each message is numbered anew, even with the same words', () => {
     const one = run([{ type: 'say', text: 'Hidden · Nordvest', undo: 'g1' }])
-    expect(one.toast).toEqual({ id: 1, text: 'Hidden · Nordvest', undo: 'g1', error: false })
+    expect(one.toast).toEqual({
+      id: 1,
+      text: 'Hidden · Nordvest',
+      undo: 'g1',
+      error: false,
+      about: null,
+    })
     const two = run([{ type: 'say', text: 'Hidden · Nordvest', undo: 'g1' }], one)
     expect(two.toast?.id).toBe(2)
   })
@@ -18,7 +24,7 @@ describe('the toast', () => {
   test('an undo that is out leaves nothing on its toast to take back', () => {
     const shown = run([{ type: 'say', text: 'Hidden · Nordvest', undo: 'g1' }])
     const undoing = run([{ type: 'undoing', id: 1 }], shown)
-    expect(undoing.toast).toEqual({ id: 1, text: 'Hidden · Nordvest', undo: null, error: false })
+    expect(undoing.toast).toMatchObject({ id: 1, text: 'Hidden · Nordvest', undo: null })
     // Only that toast's: a stale U for an older one changes nothing.
     expect(run([{ type: 'undoing', id: 7 }], shown)).toBe(shown)
   })
@@ -29,7 +35,37 @@ describe('the toast', () => {
       { type: 'undoing', id: 1 },
       { type: 'reply', to: 1, text: 'Undone', error: false },
     ])
-    expect(state.toast).toEqual({ id: 2, text: 'Undone', undo: null, error: false })
+    expect(state.toast).toEqual({ id: 2, text: 'Undone', undo: null, error: false, about: null })
+  })
+
+  test('an undo that put a row back says which, for the ledger to select it again', () => {
+    const about = { area: 'sites' as const, ids: ['12'] }
+    const state = run([
+      { type: 'say', text: 'Hidden · Nordvest', undo: 'g1', about },
+      { type: 'undoing', id: 1 },
+      { type: 'reply', to: 1, text: 'Undone', error: false, restored: about },
+    ])
+    expect(state.restored).toEqual({ area: 'sites', ids: ['12'], seq: 2 })
+    // It stays as it was while later messages come and go.
+    const later = run([{ type: 'say', text: 'Featured · Pfadwerk', undo: 'g2', about }], state)
+    expect(later.restored).toEqual(state.restored)
+  })
+
+  test('an undo that came too late, or failed, put nothing back', () => {
+    const about = { area: 'sites' as const, ids: ['12'] }
+    const state = run([
+      { type: 'say', text: 'Hidden · Nordvest', undo: 'g1', about },
+      { type: 'undoing', id: 1 },
+      { type: 'say', text: 'Paused · a feed', undo: 'g2' },
+      { type: 'reply', to: 1, text: 'Undone', error: false, restored: about },
+    ])
+    expect(state.restored).toBeNull()
+  })
+
+  test('only a toast that can be undone keeps what it was about', () => {
+    const about = { area: 'feeds' as const, ids: ['88'] }
+    expect(run([{ type: 'say', text: 'Fetch queued', about }]).toast?.about).toBeNull()
+    expect(run([{ type: 'say', text: 'Paused', undo: 'g', about }]).toast?.about).toEqual(about)
   })
 
   test('a late answer never takes a newer toast’s words or its Undo', () => {
@@ -40,11 +76,10 @@ describe('the toast', () => {
       { type: 'say', text: 'Paused · nordvest.example/feed.xml', undo: 'g2' },
       { type: 'reply', to: 1, text: 'Undone', error: false },
     ])
-    expect(state.toast).toEqual({
+    expect(state.toast).toMatchObject({
       id: 2,
       text: 'Paused · nordvest.example/feed.xml',
       undo: 'g2',
-      error: false,
     })
   })
 
@@ -55,12 +90,7 @@ describe('the toast', () => {
       { type: 'dismiss', id: 1 },
       { type: 'reply', to: 1, text: 'Something changed since', error: true },
     ])
-    expect(state.toast).toEqual({
-      id: 2,
-      text: 'Something changed since',
-      undo: null,
-      error: true,
-    })
+    expect(state.toast).toMatchObject({ id: 2, text: 'Something changed since', error: true })
   })
 
   test('a toast’s timer takes down that toast only', () => {

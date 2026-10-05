@@ -462,7 +462,7 @@ reader's shell.
 - **Undo toast.** An `ink` pill at the top of the content column, centred, for six seconds: what was
   done and to what ("Featured · Nordvest", or "Hidden · 3 items"), with *Undo* while it can be
   undone, by click or by `u` from any page of the console. An undo's answer replaces only the toast
-  it undid.
+  it undid, and the row it put back is selected again (its record reopened, if one was open).
 - **Keys.** `j`/`k` (or the arrows) move, `x` checks, Enter or `o` opens, `1`–`3` act on the open
   (else the focused) row, `u` undoes, `/` searches, Esc takes back a question, then the record, then
   the checks; listed under the table in `kbd` chips. A key typed in a field is the field's, and

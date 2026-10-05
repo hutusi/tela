@@ -4,7 +4,7 @@
  * toast, and the way to say the member is no admin after all.
  */
 import { createContext, useContext } from 'react'
-import type { Toast } from './toasts'
+import type { Toast, ToastAbout, ToastState } from './toasts'
 
 export type { Toast }
 
@@ -13,7 +13,12 @@ export type AdminContextValue = {
   /** Something changed on the server: load again. */
   changed(): void
   toast: Toast | null
-  say(text: string, options?: { undo?: string | null; error?: boolean }): void
+  say(
+    text: string,
+    options?: { undo?: string | null; error?: boolean; about?: ToastAbout | null },
+  ): void
+  /** What the last undo put back, for the ledger to select again. */
+  restored: ToastState['restored']
   /** Take toast `id` down (its time is up); with no id, whatever is shown. */
   dismiss(id?: number): void
   /** Take back the action the toast shows, if it can be. */

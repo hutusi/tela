@@ -105,6 +105,7 @@ export const QUIET_ADMIN: AdminContextValue = {
   dismiss() {},
   undo() {},
   deny() {},
+  restored: null,
 }
 
 const person = (handle: string) => ({ id: `u-${handle}`, handle, name: null })

@@ -23,7 +23,7 @@ import { AreaLedger } from './ledger/ledger'
 import { badgeOf, NAV } from './nav'
 import { AdminNotFound } from './not-found'
 import { Overview } from './overview'
-import { NO_TOAST, toastReducer } from './toasts'
+import { NO_TOAST, type ToastAbout, toastReducer } from './toasts'
 
 const loadCounts = (signal?: AbortSignal) => adminGet<AdminCounts>('counts', signal)
 
@@ -41,8 +41,10 @@ export function AdminShell({ area: fixed }: { area?: AdminArea }) {
   const [toasts, dispatch] = useReducer(toastReducer, NO_TOAST)
   const toast = toasts.toast
   const say = useCallback(
-    (text: string, options: { undo?: string | null; error?: boolean } = {}) =>
-      dispatch({ type: 'say', text, ...options }),
+    (
+      text: string,
+      options: { undo?: string | null; error?: boolean; about?: ToastAbout | null } = {},
+    ) => dispatch({ type: 'say', text, ...options }),
     [],
   )
   const dismiss = useCallback((id?: number) => dispatch({ type: 'dismiss', id }), [])
@@ -61,7 +63,8 @@ export function AdminShell({ area: fixed }: { area?: AdminArea }) {
     adminUndo(group).then(
       (response) => {
         const error = !response || !('restored' in response)
-        dispatch({ type: 'reply', to: from.id, text: undoMessage(t, response), error })
+        const text = undoMessage(t, response)
+        dispatch({ type: 'reply', to: from.id, text, error, restored: error ? null : from.about })
         changed()
       },
       (error: unknown) => {
@@ -85,8 +88,8 @@ export function AdminShell({ area: fixed }: { area?: AdminArea }) {
   }, [])
 
   const admin = useMemo<AdminContextValue>(
-    () => ({ version, changed, toast, say, dismiss, undo, deny }),
-    [version, changed, toast, say, dismiss, undo, deny],
+    () => ({ version, changed, toast, say, dismiss, undo, deny, restored: toasts.restored }),
+    [version, changed, toast, say, dismiss, undo, deny, toasts.restored],
   )
 
   const counts = useLive(loadCounts)
