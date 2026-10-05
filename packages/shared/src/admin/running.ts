@@ -119,6 +119,16 @@ export type AdminTranslationReport = {
   nearCap: { handle: string | null; day: string; used: number }[]
 }
 
+/** The sidebar's badges, `GET /api/v1/admin/counts`: what waits in each queue. */
+export type AdminCounts = {
+  /** Failed claims not reviewed since. */
+  claims: number
+  /** Feeds failing or timing out. */
+  feeds: number
+  /** Unresolved dead letters. */
+  dead: number
+}
+
 export type AdminOverview = {
   health: AdminHealth
   queues: {
