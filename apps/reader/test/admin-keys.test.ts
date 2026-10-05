@@ -1,6 +1,7 @@
 /** The admin console's keys (the design's 2a): which key does what, in which state. */
 import { describe, expect, test } from 'bun:test'
 import {
+  isUndoKey,
   type KeyLike,
   type KeyState,
   keyDisposition,
@@ -72,9 +73,8 @@ describe('what a key does', () => {
     expect(ledgerCommand('x', { ...LIST, checkable: false })).toBeNull()
   })
 
-  test('u undoes and / searches, even with nothing listed', () => {
+  test('/ searches, even with nothing listed', () => {
     const empty = { ...LIST, rows: 0 }
-    expect(ledgerCommand('u', empty)).toEqual({ type: 'undo' })
     expect(ledgerCommand('/', empty)).toEqual({ type: 'search' })
     expect(ledgerCommand('j', empty)).toBeNull()
     expect(ledgerCommand('1', empty)).toBeNull()
@@ -105,6 +105,26 @@ describe('what a key does', () => {
     expect(ledgerCommand('a', LIST)).toBeNull()
     expect(ledgerCommand('Tab', LIST)).toBeNull()
     expect(ledgerCommand(' ', LIST)).toBeNull()
+  })
+})
+
+describe('u', () => {
+  test('undoes from anywhere in the console, the Overview included', () => {
+    expect(isUndoKey(press('u'))).toBe(true)
+    expect(isUndoKey(press('U'))).toBe(true)
+    // The confirmation strip's Yes has focus; u is still the console's.
+    expect(isUndoKey(press('u', { onControl: true }))).toBe(true)
+  })
+
+  test('is a letter in a field, and a browser’s shortcut with a modifier', () => {
+    expect(isUndoKey(press('u', { inField: true }))).toBe(false)
+    expect(isUndoKey(press('u', { metaKey: true }))).toBe(false)
+    expect(isUndoKey(press('u', { defaultPrevented: true }))).toBe(false)
+    expect(isUndoKey(press('j'))).toBe(false)
+  })
+
+  test('is no ledger’s key, so a ledger and the shell never both take it', () => {
+    expect(ledgerCommand('u', LIST)).toBeNull()
   })
 })
 

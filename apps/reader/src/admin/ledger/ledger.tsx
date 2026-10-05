@@ -332,8 +332,8 @@ export function Ledger({
 
   // ---- Keys ---------------------------------------------------------------------------------
   const search = useRef<HTMLInputElement>(null)
-  const keys = useRef({ rows, checked, checkable, actOnRow, toggleCheck, undo: admin.undo })
-  keys.current = { rows, checked, checkable, actOnRow, toggleCheck, undo: admin.undo }
+  const keys = useRef({ rows, checked, checkable, actOnRow, toggleCheck })
+  keys.current = { rows, checked, checkable, actOnRow, toggleCheck }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const how = keyDisposition(keyLike(e))
@@ -342,7 +342,7 @@ export function Ledger({
         if (e.target instanceof HTMLElement) e.target.blur()
         return
       }
-      const { rows, checked, checkable, actOnRow, toggleCheck, undo } = keys.current
+      const { rows, checked, checkable, actOnRow, toggleCheck } = keys.current
       // The state as it is now: the address and the last key's focus, not this render's.
       const now = parseLedgerState(area, new URLSearchParams(window.location.search))
       const ids = rows.map((row) => row.id)
@@ -386,9 +386,6 @@ export function Ledger({
           if (target) actOnRow(target, target.actions[command.index])
           return
         }
-        case 'undo':
-          undo()
-          return
         case 'search':
           search.current?.focus()
           return

@@ -18,6 +18,7 @@ import { undoMessage } from './act'
 import { adminGet, adminUndo, NotAdmin } from './api'
 import { UndoToast } from './components/toast'
 import { AdminContext, type AdminContextValue } from './context'
+import { isUndoKey, keyLike } from './keys'
 import { AreaLedger } from './ledger/ledger'
 import { badgeOf, NAV } from './nav'
 import { AdminNotFound } from './not-found'
@@ -69,6 +70,20 @@ export function AdminShell({ area: fixed }: { area?: AdminArea }) {
       },
     )
   }, [changed, deny, t])
+  // U undoes what the toast offers, on the Overview as in any area: one listener, here with the
+  // toast, so no page handles it twice. A U the toast has nothing for is left to the browser.
+  const undoNow = useRef(undo)
+  undoNow.current = undo
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!isUndoKey(keyLike(e)) || !shown.current?.undo) return
+      e.preventDefault()
+      undoNow.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const admin = useMemo<AdminContextValue>(
     () => ({ version, changed, toast, say, dismiss, undo, deny }),
     [version, changed, toast, say, dismiss, undo, deny],

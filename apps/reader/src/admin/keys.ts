@@ -2,7 +2,8 @@
  * The console's keys (the design's 2a board): j and k move, x checks, Enter or o opens, 1 to 3
  * act, u undoes, / searches, Esc closes the record or clears the checks. The decision is pure, so
  * the tests say what a key does in each state; the ledger's one listener applies it, reading the
- * state it acts on when the key is pressed (AGENTS gotchas), as `reading.tsx` does.
+ * state it acts on when the key is pressed (AGENTS gotchas), as `reading.tsx` does. U is the
+ * shell's, not a ledger's: the toast it undoes is the shell's, on the Overview as in any area.
  */
 
 /** A key event as far as the console asks about it. */
@@ -47,12 +48,16 @@ export function keyLike(e: KeyboardEvent): KeyLike {
   }
 }
 
+/** U, wherever the console is: undo what the toast offers. Typed in a field, it is a letter. */
+export function isUndoKey(e: KeyLike): boolean {
+  return keyDisposition(e) === 'handle' && e.key.toLowerCase() === 'u'
+}
+
 export type LedgerCommand =
   | { type: 'move'; step: 1 | -1 }
   | { type: 'check' }
   | { type: 'open' }
   | { type: 'act'; index: 0 | 1 | 2 }
-  | { type: 'undo' }
   | { type: 'search' }
   | { type: 'cancelPrompt' }
   | { type: 'close' }
@@ -78,8 +83,6 @@ export type KeyState = {
 export function ledgerCommand(key: string, state: KeyState): LedgerCommand | null {
   const k = key.length === 1 ? key.toLowerCase() : key
   switch (k) {
-    case 'u':
-      return { type: 'undo' }
     case '/':
       return { type: 'search' }
     case 'Escape':
