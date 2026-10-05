@@ -100,6 +100,9 @@ function useDialogFocus(ref: RefObject<HTMLElement | null>, modal: boolean, rowI
       const id = shown.current
       if (!panel?.contains(document.activeElement) || id === null) return
       requestAnimationFrame(() => {
+        // Only focus the panel took with it: anything that has taken focus since keeps it.
+        const at = document.activeElement
+        if (at && at !== document.body) return
         document
           .querySelector<HTMLElement>(
             `[data-testid="admin-row"][data-row-id="${CSS.escape(id)}"] a[href]`,
