@@ -210,6 +210,22 @@ describe('undo', () => {
     expect(await listingOf(b)).toBe('rejected')
   })
 
+  test('restores nothing once a later action touched the target, even one that came back', async () => {
+    const ops = await admin()
+    const a = await addSite('listed')
+    const groupOf = async (action: string) =>
+      ((await (await act(ops, { action, ids: [String(a)] })).json()) as { undo: { group: string } })
+        .undo.group
+    const featured = await groupOf('site.feature')
+    await groupOf('site.hide')
+    await groupOf('site.feature')
+    // Featured again, as the first action left it; undoing that one would take back 'listed',
+    // a value two later choices have overruled.
+    const res = await api.request('/api/v1/admin/undo', { as: ops, body: { group: featured } })
+    expect(res.status).toBe(409)
+    expect(await listingOf(a)).toBe('featured')
+  })
+
   test('is a 404 for a group it does not know', async () => {
     const ops = await admin()
     const res = await api.request('/api/v1/admin/undo', { as: ops, body: { group: 'nope' } })

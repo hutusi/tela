@@ -152,7 +152,15 @@ export function adminRoutes(deps: ApiDeps, auth: Auth) {
       const change = { targetKey: row.target_key, from: detail.from ?? null, to: detail.to ?? null }
       const step = inverse(db, change, now)
       synced ||= step.synced
-      guards.push(undoGuard(db, group, step.changed))
+      // A later operator action on the same target is a change since, whatever it left: a target
+      // that left the action's value and came back to it would otherwise take stale values back.
+      // One that was itself undone is not, so groups can still be undone newest first.
+      const later = sql`exists (select 1 from admin_actions later
+        where later.target_kind = ${row.target_kind} and later.target_key = ${row.target_key}
+          and later.id > ${row.id} and later.group_id <> ${group} and later.action <> 'undo'
+          and not exists (select 1 from admin_actions u where u.action = 'undo'
+            and json_extract(u.detail, '$.group') = later.group_id))`
+      guards.push(undoGuard(db, group, sql`(${step.changed}) or ${later}`))
       restores.push(...step.restore)
       audits.push(
         audit(
