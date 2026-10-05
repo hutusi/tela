@@ -161,6 +161,7 @@
     "loadFailed": "加载失败。",
     "retry": "重试",
     "selected": "已选 {n} 项",
+    "bulkMax": "一次最多 {n} 项",
     "clear": "清除",
     "position": "第 {i} 项，共 {n} 项",
     "previous": "上一项",

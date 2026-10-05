@@ -200,3 +200,30 @@ export function nextAfterAct(
   }
   return after[0] ?? null
 }
+
+/**
+ * The checks after a row's box is toggled: checked off, or on while fewer than `max` are, since an
+ * action names at most `ADMIN_BULK_MAX` targets and the server refuses more whole.
+ */
+export function toggledCheck(
+  checks: ReadonlySet<string>,
+  id: string,
+  max: number,
+): ReadonlySet<string> {
+  const next = new Set(checks)
+  if (next.has(id)) next.delete(id)
+  else if (next.size < max) next.add(id)
+  return next
+}
+
+/** What "check all" checks: the first `max` rows as listed, or none when those are checked. */
+export function checkedAll(
+  ids: readonly string[],
+  checks: ReadonlySet<string>,
+  max: number,
+): ReadonlySet<string> {
+  const first = ids.slice(0, max)
+  const all =
+    first.length > 0 && checks.size === first.length && first.every((id) => checks.has(id))
+  return all ? new Set() : new Set(first)
+}

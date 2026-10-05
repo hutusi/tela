@@ -5,6 +5,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   auditedRow,
+  checkedAll,
   compareSort,
   ledgerHref,
   nextAfterAct,
@@ -14,6 +15,7 @@ import {
   patchedHref,
   sortRows,
   sortValueOf,
+  toggledCheck,
 } from '../src/admin/state'
 import { BLOGS, blogSpec } from './admin-fixtures'
 
@@ -210,5 +212,23 @@ describe('after an action', () => {
 
   test('a row the list never showed has no place to move on from', () => {
     expect(nextAfterAct(before, ['a', 'b'], 'zz')).toBeNull()
+  })
+})
+
+describe('checking rows', () => {
+  test('stops at the most one action may name, and unchecks whatever the count', () => {
+    const three = new Set(['a', 'b', 'c'])
+    expect([...toggledCheck(three, 'd', 3)]).toEqual(['a', 'b', 'c'])
+    expect([...toggledCheck(three, 'b', 3)]).toEqual(['a', 'c'])
+    expect([...toggledCheck(new Set(['a']), 'd', 3)]).toEqual(['a', 'd'])
+  })
+
+  test('check all takes the first rows as listed, and unchecks them on a second press', () => {
+    const ids = ['a', 'b', 'c', 'd']
+    const first = checkedAll(ids, new Set(), 3)
+    expect([...first]).toEqual(['a', 'b', 'c'])
+    expect([...checkedAll(ids, first, 3)]).toEqual([])
+    // Some checked, not those: check all checks the first ones.
+    expect([...checkedAll(ids, new Set(['d']), 3)]).toEqual(['a', 'b', 'c'])
   })
 })

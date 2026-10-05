@@ -131,6 +131,13 @@ export const ACTION_CONFIRM = [
   'hold.cancel',
 ] as const satisfies readonly AdminActionName[]
 
+/**
+ * The most targets one action may name, and so the most rows the console lets anyone check at
+ * once. Each target is a batch of its own, and a Worker invocation makes at most 1,000 D1
+ * queries: 500 checked rows would be refused whole, not acted on in part.
+ */
+export const ADMIN_BULK_MAX = 50
+
 /** Free text an operator may give: a rejection's reason, kept as the claim's error. */
 export const ADMIN_REASON_MAX = 300
 

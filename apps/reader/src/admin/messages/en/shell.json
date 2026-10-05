@@ -177,6 +177,7 @@
     "loadFailed": "Couldn't load this.",
     "retry": "Try again",
     "selected": "{n} selected",
+    "bulkMax": "at most {n} at a time",
     "clear": "Clear",
     "position": "{i} of {n}",
     "previous": "Previous",

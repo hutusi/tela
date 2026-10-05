@@ -8,6 +8,7 @@
  */
 import { audit, bumpSeq, first, groupRows, isFenceRefusal, newGroupId, undoGuard } from '@tela/data'
 import {
+  ADMIN_BULK_MAX,
   ADMIN_REASON_MAX,
   type AdminActArgs,
   type AdminActError,
@@ -29,7 +30,7 @@ import { membersModule } from './members'
 import { runningModule } from './running'
 
 /** At most this many targets in one request: one bulk action is one group, and one undo. */
-export const MAX_TARGETS = 50
+export const MAX_TARGETS = ADMIN_BULK_MAX
 
 const NO_STORE = { 'cache-control': 'no-store' }
 

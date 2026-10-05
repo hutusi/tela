@@ -555,7 +555,10 @@ describe('acting on dead work', () => {
       failed: [{ id: ids[2], error: 'limit' }],
     })
     expect(
-      await first(api.db, sql`select reserved, used from usage_daily where subject = '*'`),
+      await first<{ reserved: number; used: number }>(
+        api.db,
+        sql`select reserved, used from usage_daily where subject = '*'`,
+      ),
     ).toEqual({ reserved: 80_000, used: 10_000 })
     const rows = await api.db.all<{ content_key: string; state: string; reserved_tokens: number }>(
       sql`select content_key, state, reserved_tokens from body_translations order by content_key`,

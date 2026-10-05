@@ -9,6 +9,7 @@
  * mean nothing in a copied link.
  */
 import {
+  ADMIN_BULK_MAX,
   ADMIN_FILTERS,
   ADMIN_LIST_LIMIT,
   type AdminActArgs,
@@ -31,6 +32,7 @@ import { StatusPill } from '../components/record'
 import { useAdmin } from '../context'
 import { keyDisposition, keyLike, ledgerCommand, scrollTarget, stepTo } from '../keys'
 import {
+  checkedAll,
   type LedgerState,
   ledgerHref,
   nextAfterAct,
@@ -41,6 +43,7 @@ import {
   type SortKey,
   sortRows,
   sortValueOf,
+  toggledCheck,
 } from '../state'
 import { type Prompt, useAdminAct } from '../use-act'
 import { AreaHeader, FilterPills, KeyLegend, SearchBox } from './parts'
@@ -182,12 +185,7 @@ export function Ledger({
     setChecks(new Set())
   }, [state.filter, state.q])
   const toggleCheck = useCallback((id: string) => {
-    setChecks((now) => {
-      const next = new Set(now)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    setChecks((now) => toggledCheck(now, id, ADMIN_BULK_MAX))
   }, [])
 
   // ---- The open record --------------------------------------------------------------------
@@ -475,7 +473,7 @@ export function Ledger({
     : isOpen
       ? GRID.openNoCheck
       : GRID.wideNoCheck
-  const allChecked = rows.length > 0 && checked.length === rows.length
+  const allChecked = rows.length > 0 && checked.length === Math.min(rows.length, ADMIN_BULK_MAX)
   const Header = spec.Header
   /**
    * A column's header: its name, a button that sorts by it, and while it does the direction, as an
@@ -579,7 +577,7 @@ export function Ledger({
                       checked={allChecked}
                       mixed={!allChecked && checked.length > 0}
                       label={t('ledger.selectAll')}
-                      onToggle={() => setChecks(allChecked ? new Set() : new Set(ids))}
+                      onToggle={() => setChecks((now) => checkedAll(ids, now, ADMIN_BULK_MAX))}
                     />
                   </HeaderCell>
                 ) : null}
@@ -729,6 +727,7 @@ export function Ledger({
       {checked.length > 0 ? (
         <BulkBar
           n={checked.length}
+          full={checked.length >= ADMIN_BULK_MAX && rows.length > ADMIN_BULK_MAX}
           actions={bulkOffer(spec.bulk, checkedRows)}
           busy={busy}
           prompt={prompt?.where === 'bulk' ? prompt : null}
@@ -795,6 +794,7 @@ function TableState({
 /** The sticky bar while rows are checked: how many, what can be done to all of them, Clear. */
 function BulkBar({
   n,
+  full,
   actions,
   busy,
   prompt,
@@ -804,6 +804,8 @@ function BulkBar({
   onClear,
 }: {
   n: number
+  /** As many are checked as one action may name, and the list has more. */
+  full: boolean
   actions: readonly AdminActionName[]
   busy: boolean
   prompt: Prompt | null
@@ -827,6 +829,14 @@ function BulkBar({
         <span className="mr-1.5 shrink-0 font-semibold whitespace-nowrap">
           {t('ledger.selected', { n })}
         </span>
+        {full ? (
+          <span
+            className="mr-1.5 shrink-0 whitespace-nowrap opacity-75"
+            data-testid="admin-bulk-full"
+          >
+            {t('ledger.bulkMax', { n: ADMIN_BULK_MAX })}
+          </span>
+        ) : null}
         {actions.map((action) => (
           <button
             key={action}
