@@ -3,6 +3,7 @@
   "badge": "管理",
   "role": "管理員",
   "back": "← 返回閱讀",
+  "navLabel": "管理區域",
   "nav": {
     "overview": "概覽",
     "claims": "認領",
@@ -19,6 +20,16 @@
     "library": "內容庫",
     "members": "成員",
     "running": "執行"
+  },
+  "about": {
+    "claims": "作者用 meta 標籤或 rel=\"me\" 連結證明部落格是自己的，部落格就歸入其名下。檢查會自動進行；這裡是它無法判定的認領、仍在檢查的認領，以及已經驗證的認領。",
+    "sites": "Tela 收錄的每個部落格：它的訂閱源、主人、讀者，以及是否列在發現裡。各個佇列都連結到這裡。",
+    "feeds": "每個訂閱源按自己的節奏抓取。這裡是停下來的那些：出錯的、從 Cloudflare 訪問超時的、已失效的、被手動暫停的，以及併入其他訂閱源的。",
+    "discover": "部落格被認領或有三位讀者後，就會列在發現裡。是否精選由運營者決定；被隱藏的部落格無論是否認領都不會出現。更改會在五分鐘內出現在發現裡。",
+    "people": "成員及其帳號基本資訊。管理員只能看到成員的公開名片，看不到他們讀了什麼、訂閱了什麼、喜歡或劃線了什麼。",
+    "invites": "Tela 目前僅限邀請加入。每位成員有五個邀請碼可以送出；運營者的邀請碼可供設定的人數使用。",
+    "translation": "過去 30 天翻譯消耗的 token。成員按每日上限預留額度；所有人的標題翻譯都出自同一份後臺預算。",
+    "system": "健康檢查及其追蹤的後臺任務。用完重試次數的任務會成為死信，除非有人處理，否則不會再重試。"
   },
   "actions": {
     "site": {
@@ -143,7 +154,8 @@
     "history": "記錄",
     "justNow": "剛剛",
     "byCli": "運營者（命令列）",
-    "undo": "撤銷了{action}"
+    "undo": "撤銷了{action}",
+    "unbuilt": "這個區域尚未完成。"
   },
   "keys": {
     "move": "移動",
@@ -151,7 +163,8 @@
     "open": "開啟",
     "act": "操作",
     "undo": "撤銷",
-    "search": "搜尋"
+    "search": "搜尋",
+    "close": "關閉"
   },
   "tones": {
     "ok": "正常",
@@ -159,5 +172,47 @@
     "bad": "有問題",
     "info": "進行中",
     "neutral": "空閒"
+  },
+  "audit": {
+    "grant": "設為管理員",
+    "ungrant": "取消管理員"
+  },
+  "overview": {
+    "waiting": "四個佇列中共有 {n} 項待處理。",
+    "calm": "沒有待處理的事項，Tela 正在自行運轉。",
+    "needsYou": "待你處理",
+    "queues": {
+      "claims": "待稽核的認領",
+      "feeds": "出錯的訂閱源",
+      "dead": "死信",
+      "candidates": "發現候選"
+    },
+    "start": "開始 →",
+    "nothingWaiting": "沒有待處理的。",
+    "readers": "{n} 位讀者",
+    "thisWeek": "本週",
+    "week": {
+      "members": "新成員",
+      "claimsVerified": "驗證的認領",
+      "feedsAdded": "新增訂閱源",
+      "tokens": "翻譯 token"
+    },
+    "weekBefore": "上週 {n}",
+    "activity": "最近的管理操作",
+    "noActivity": "還沒有管理操作。",
+    "cli": "命令列"
+  },
+  "health": {
+    "label": "健康",
+    "allOk": "一切都在正常範圍內。",
+    "restOk": "其餘都在正常範圍內。",
+    "checked": "{time} 檢查",
+    "system": "系統 →",
+    "overdueFeeds": "{value} 個訂閱源已逾期兩小時以上，超過上限 {limit}。",
+    "deadLetters": "過去一天有 {value} 個任務成了死信且尚未處理，超過上限 {limit}。",
+    "stuckBodies": "{value} 篇正文翻譯已等待超過 30 分鐘。",
+    "extractionBacklog": "{value} 篇文章等待全文已超過六小時，超過上限 {limit}。",
+    "backupAge": "最近一次備份已是 {value} 小時前，超過上限 {limit} 小時。",
+    "backupVerified": "最近一次備份校驗失敗。"
   }
 }

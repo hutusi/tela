@@ -3,6 +3,7 @@
   "badge": "Admin",
   "role": "Admin",
   "back": "← Back to reading",
+  "navLabel": "Admin areas",
   "nav": {
     "overview": "Overview",
     "claims": "Claims",
@@ -19,6 +20,16 @@
     "library": "Library",
     "members": "Members",
     "running": "Running"
+  },
+  "about": {
+    "claims": "A blog becomes its author's once they prove it with a meta tag or a rel=\"me\" link. The check runs on its own; here are the claims it could not settle, the ones still checking, and the ones it verified.",
+    "sites": "Every blog Tela knows: its feeds, its owner, its readers, and whether Discover lists it. The queues link here.",
+    "feeds": "Each feed is fetched on its own schedule. These are the ones that stopped: errors, timeouts from Cloudflare, feeds that died, feeds paused by hand, and feeds merged into another.",
+    "discover": "A blog is listed once it is claimed or three people read it. Featuring is the operator's call, and a hidden blog never appears, whatever its claims. Changes reach Discover within five minutes.",
+    "people": "Members and their account basics. Admins see a member's public card, never what they read, subscribe to, like or highlight.",
+    "invites": "Tela is invitation-only. Each member has five codes to give; an operator's code admits as many people as it was given.",
+    "translation": "What translation costs, in tokens, over the last 30 days. Members reserve against a daily cap; titles for everyone come out of one background budget.",
+    "system": "The health check and the work it watches. A job that runs out of attempts becomes a dead letter, and nothing retries it unless someone does."
   },
   "actions": {
     "site": {
@@ -159,7 +170,8 @@
     "history": "History",
     "justNow": "Just now",
     "byCli": "the operator, from the command line",
-    "undo": "undid {action}"
+    "undo": "undid {action}",
+    "unbuilt": "This area is not built yet."
   },
   "keys": {
     "move": "move",
@@ -167,7 +179,8 @@
     "open": "open",
     "act": "act",
     "undo": "undo",
-    "search": "search"
+    "search": "search",
+    "close": "close"
   },
   "tones": {
     "ok": "Fine",
@@ -175,5 +188,47 @@
     "bad": "Problem",
     "info": "In progress",
     "neutral": "Idle"
+  },
+  "audit": {
+    "grant": "Made an admin",
+    "ungrant": "No longer an admin"
+  },
+  "overview": {
+    "waiting": "{n, plural, one {# decision waiting} other {# decisions waiting}} across four queues.",
+    "calm": "Nothing waiting. Tela is running on its own.",
+    "needsYou": "Needs you",
+    "queues": {
+      "claims": "Claims to review",
+      "feeds": "Failing feeds",
+      "dead": "Dead letters",
+      "candidates": "Discover candidates"
+    },
+    "start": "Start →",
+    "nothingWaiting": "Nothing waiting.",
+    "readers": "{n, plural, one {# reader} other {# readers}}",
+    "thisWeek": "This week",
+    "week": {
+      "members": "New members",
+      "claimsVerified": "Claims verified",
+      "feedsAdded": "Feeds added",
+      "tokens": "Translation tokens"
+    },
+    "weekBefore": "{n} the week before",
+    "activity": "Recent admin activity",
+    "noActivity": "No admin actions yet.",
+    "cli": "The CLI"
+  },
+  "health": {
+    "label": "Health",
+    "allOk": "Everything is within limits.",
+    "restOk": "Everything else is within limits.",
+    "checked": "checked {time}",
+    "system": "System →",
+    "overdueFeeds": "{value, plural, one {# feed is} other {# feeds are}} more than two hours past due, above the limit of {limit}.",
+    "deadLetters": "{value, plural, one {# job was} other {# jobs were}} dead-lettered in the last day and not yet resolved, above the limit of {limit}.",
+    "stuckBodies": "{value, plural, one {# body translation has} other {# body translations have}} waited over 30 minutes.",
+    "extractionBacklog": "{value, plural, one {# article has} other {# articles have}} waited over six hours for the full text, above the limit of {limit}.",
+    "backupAge": "The last backup is {value} hours old, above the limit of {limit}.",
+    "backupVerified": "The last backup failed its check."
   }
 }

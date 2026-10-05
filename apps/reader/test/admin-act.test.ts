@@ -1,0 +1,197 @@
+/**
+ * Acting in the admin console: which actions ask first, how their buttons look, and what the
+ * toast, History and the health line say, in the console's own English and Simplified Chinese.
+ */
+import { describe, expect, test } from 'bun:test'
+import { ACTION_CONFIRM, ADMIN_ACTIONS, type AdminHealth } from '@tela/shared/admin'
+import { createTranslator } from 'use-intl'
+import {
+  actionLook,
+  actMessage,
+  historyWords,
+  promptFor,
+  type Translate,
+  undoMessage,
+} from '../src/admin/act'
+import { ADMIN_MESSAGES } from '../src/admin/i18n'
+import { healthSummary } from '../src/admin/overview'
+import { OVERVIEW } from './admin-fixtures'
+
+const translator = (locale: 'en' | 'zh-Hans'): Translate =>
+  createTranslator({
+    locale,
+    messages: { admin: ADMIN_MESSAGES[locale] },
+    namespace: 'admin.shell',
+  }) as unknown as Translate
+
+const t = translator('en')
+const titles: Record<string, string> = { '7': 'Pfadwerk', '12': 'Nordvest' }
+const titleOf = (id: string) => titles[id] ?? null
+
+describe('the words', () => {
+  // use-intl reads a dot in a key as nesting, so `actions.site.feature.label` must be nested in the
+  // catalogue: a key written "site.feature" would never be found, in any language.
+  test.each(['en', 'zh-Hans'] as const)(
+    '%s has every action’s label, short form and past tense',
+    (lang) => {
+      const words = translator(lang)
+      for (const action of ADMIN_ACTIONS) {
+        for (const form of ['label', 'short', 'done']) {
+          const key = `actions.${action}.${form}`
+          expect({ key, text: words(key) }).not.toEqual({ key, text: `admin.shell.${key}` })
+        }
+      }
+      for (const action of ACTION_CONFIRM) {
+        expect(words(`confirm.${action}`)).not.toBe(`admin.shell.confirm.${action}`)
+      }
+    },
+  )
+})
+
+describe('asking first', () => {
+  test('an action that needs words asks for them, unless they were given', () => {
+    expect(promptFor('claim.reject')).toEqual({ input: 'reason' })
+    expect(promptFor('code.addUses')).toEqual({ input: 'uses' })
+    expect(promptFor('code.create')).toEqual({ input: 'code' })
+    expect(promptFor('invite.address')).toEqual({ input: 'email' })
+    expect(promptFor('claim.reject', { reason: 'Not the author' })).toBeNull()
+  })
+
+  test('an action hard to take back asks for a yes, even with its words given', () => {
+    expect(promptFor('claim.vouch')).toEqual({ confirm: true })
+    expect(promptFor('claim.remove')).toEqual({ confirm: true })
+    expect(promptFor('member.signOut')).toEqual({ confirm: true })
+    expect(promptFor('code.revoke', {})).toEqual({ confirm: true })
+    expect(promptFor('hold.cancel')).toEqual({ confirm: true })
+  })
+
+  test('the rest go at once', () => {
+    expect(promptFor('site.feature')).toBeNull()
+    expect(promptFor('feed.pause')).toBeNull()
+    expect(promptFor('site.topics', { topics: ['essays'] })).toBeNull()
+  })
+})
+
+describe('how an action looks', () => {
+  test('a taking-away action is danger wherever it is', () => {
+    for (const action of [
+      'site.hide',
+      'claim.reject',
+      'claim.remove',
+      'code.revoke',
+      'hold.cancel',
+    ] as const) {
+      expect(actionLook(action, 0)).toBe('danger')
+      expect(actionLook(action, 2)).toBe('danger')
+    }
+  })
+
+  test('the likeliest is filled, the others quiet', () => {
+    expect(actionLook('site.feature', 0)).toBe('primary')
+    expect(actionLook('site.feature', 1)).toBe('ghost')
+    expect(actionLook('member.signOut', 0)).toBe('primary')
+  })
+})
+
+describe('the toast', () => {
+  test('one row: what was done, to what', () => {
+    const response = { done: ['12'], failed: [], undo: { group: 'g1' } }
+    expect(actMessage(t, { action: 'site.feature', response, titleOf })).toBe('Featured · Nordvest')
+  })
+
+  test('a row the ledger did not show: the action alone', () => {
+    const response = { done: ['99'], failed: [], undo: null }
+    expect(actMessage(t, { action: 'feed.fetch', response, titleOf })).toBe('Fetch queued')
+  })
+
+  test('several rows: how many', () => {
+    const response = { done: ['7', '12'], failed: [], undo: { group: 'g2' } }
+    expect(actMessage(t, { action: 'site.hide', response, titleOf })).toBe('Hidden · 2 items')
+    expect(actMessage(translator('zh-Hans'), { action: 'site.hide', response, titleOf })).toBe(
+      '已隐藏 · 2 项',
+    )
+  })
+
+  test('some did, some did not: both counts and the first reason', () => {
+    const response = {
+      done: ['7'],
+      failed: [{ id: '12', error: 'not_applicable' as const }],
+      undo: { group: 'g3' },
+    }
+    expect(actMessage(t, { action: 'site.feature', response, titleOf })).toBe(
+      'Featured · 1 done, 1 not: Nothing to change',
+    )
+  })
+
+  test('none did: the reason alone', () => {
+    const response = { done: [], failed: [{ id: '88', error: 'no_relay' as const }], undo: null }
+    expect(actMessage(t, { action: 'feed.relay', response, titleOf })).toBe(
+      'No China relay is configured',
+    )
+    // A code this build does not know reads as a failure, not as a missing message.
+    const odd = { done: [], failed: [{ id: '1', error: 'weird' as never }], undo: null }
+    expect(actMessage(t, { action: 'feed.relay', response: odd, titleOf })).toBe(
+      "Couldn't reach Tela. Try again.",
+    )
+  })
+
+  test('no answer at all', () => {
+    expect(actMessage(t, { action: 'site.list', response: null, titleOf })).toBe(
+      "Couldn't reach Tela. Try again.",
+    )
+  })
+
+  test('an undo: done, too late, or gone', () => {
+    expect(undoMessage(t, { restored: 2 })).toBe('Undone')
+    expect(undoMessage(t, { error: 'changed_since' })).toBe(
+      'Something changed since, so nothing was undone',
+    )
+    expect(undoMessage(t, { error: 'not_found' })).toBe('It no longer exists')
+    expect(undoMessage(t, null)).toBe("Couldn't reach Tela. Try again.")
+  })
+})
+
+describe('what an audit entry says', () => {
+  test('an action in its past tense, an undo of one, a grant', () => {
+    expect(historyWords(t, { action: 'feed.pause' })).toBe('Paused')
+    expect(historyWords(t, { action: 'undo', undid: 'feed.pause' })).toBe('undid Paused')
+    expect(historyWords(t, { action: 'undo' })).toBe('Undone')
+    expect(historyWords(t, { action: 'admin.grant' })).toBe('Made an admin')
+    expect(historyWords(t, { action: 'admin.ungrant' })).toBe('No longer an admin')
+    expect(historyWords(t, { action: 'site.retire' as never })).toBe('site.retire')
+  })
+})
+
+describe('the health line', () => {
+  test('what fails, then that the rest is fine', () => {
+    expect(healthSummary(t, OVERVIEW.health, 'en')).toBe(
+      '24 articles have waited over six hours for the full text, above the limit of 20. Everything else is within limits.',
+    )
+    expect(healthSummary(translator('zh-Hans'), OVERVIEW.health, 'zh-Hans')).toBe(
+      '24 篇文章等待全文已超过六小时，超过上限 20。其余都在正常范围内。',
+    )
+  })
+
+  test('everything fine', () => {
+    const fine: AdminHealth = {
+      ...OVERVIEW.health,
+      ok: true,
+      checks: OVERVIEW.health.checks.map((check) => ({ ...check, ok: true })),
+    }
+    expect(healthSummary(t, fine, 'en')).toBe('Everything is within limits.')
+  })
+
+  test('everything failing has no “else”', () => {
+    const bad: AdminHealth = {
+      ok: false,
+      at: 0,
+      checks: [
+        { name: 'overdueFeeds', value: 1, limit: 3, ok: false },
+        { name: 'backupVerified', value: null, limit: null, ok: false },
+      ],
+    }
+    expect(healthSummary(t, bad, 'en')).toBe(
+      '1 feed is more than two hours past due, above the limit of 3. The last backup failed its check.',
+    )
+  })
+})

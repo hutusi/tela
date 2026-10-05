@@ -6,6 +6,7 @@
 import type { AdminHistoryEntry, AdminTone } from '@tela/shared/admin'
 import { useLocale, useTranslations } from 'use-intl'
 import { relativeTime } from '../../lib/format'
+import { historyWords } from '../act'
 
 const TONE: Record<AdminTone, string> = {
   ok: 'bg-ok',
@@ -103,17 +104,7 @@ export function History({
   const t = useTranslations('admin.shell')
   const when = useWhen()
   if (entries.length === 0) return null
-  const words = (entry: AdminHistoryEntry) => {
-    const own = describe?.(entry)
-    if (own) return own
-    if (entry.action === 'undo') {
-      return entry.undid
-        ? t('ledger.undo', { action: t(`actions.${entry.undid}.done`) })
-        : t('toast.undone')
-    }
-    if (entry.action === 'admin.grant' || entry.action === 'admin.ungrant') return entry.action
-    return t(`actions.${entry.action}.done`)
-  }
+  const words = (entry: AdminHistoryEntry) => describe?.(entry) || historyWords(t, entry)
   return (
     <Section label={t('ledger.history')}>
       <ol className="m-0 flex list-none flex-col gap-1 p-0">
