@@ -19,7 +19,8 @@ export function UndoToast() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: each new message gets its own six seconds
   useEffect(() => {
     if (id === null) return
-    const timer = setTimeout(dismiss, TOAST_MS)
+    // This toast's own time: a timer that fires just as a newer one arrives takes nothing down.
+    const timer = setTimeout(() => dismiss(id), TOAST_MS)
     return () => clearTimeout(timer)
   }, [id])
   return (

@@ -4,15 +4,9 @@
  * toast, and the way to say the member is no admin after all.
  */
 import { createContext, useContext } from 'react'
+import type { Toast } from './toasts'
 
-export type Toast = {
-  /** New for every message, so a repeat of the same words still restarts its six seconds. */
-  id: number
-  text: string
-  /** The group to post to `/undo`, while the action can be taken back. */
-  undo: string | null
-  error: boolean
-}
+export type { Toast }
 
 export type AdminContextValue = {
   version: number
@@ -20,7 +14,8 @@ export type AdminContextValue = {
   changed(): void
   toast: Toast | null
   say(text: string, options?: { undo?: string | null; error?: boolean }): void
-  dismiss(): void
+  /** Take toast `id` down (its time is up); with no id, whatever is shown. */
+  dismiss(id?: number): void
   /** Take back the action the toast shows, if it can be. */
   undo(): void
   /** A 403: the console is a page that is not (ADR 0039). */

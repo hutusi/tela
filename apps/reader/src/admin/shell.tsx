@@ -6,7 +6,7 @@
  * outlasts a move to another area.
  */
 import { type AdminArea, type AdminCounts, isLedgerArea } from '@tela/shared/admin'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { LogoMark } from '../components/logo'
@@ -17,11 +17,12 @@ import { useTables } from '../store/hooks'
 import { undoMessage } from './act'
 import { adminGet, adminUndo, NotAdmin } from './api'
 import { UndoToast } from './components/toast'
-import { AdminContext, type AdminContextValue, type Toast } from './context'
+import { AdminContext, type AdminContextValue } from './context'
 import { AreaLedger } from './ledger/ledger'
 import { badgeOf, NAV } from './nav'
 import { AdminNotFound } from './not-found'
 import { Overview } from './overview'
+import { NO_TOAST, toastReducer } from './toasts'
 
 const loadCounts = (signal?: AbortSignal) => adminGet<AdminCounts>('counts', signal)
 
@@ -36,35 +37,38 @@ export function AdminShell({ area: fixed }: { area?: AdminArea }) {
   const deny = useCallback(() => setDenied(true), [])
   const [version, setVersion] = useState(0)
   const changed = useCallback(() => setVersion((n) => n + 1), [])
-  const [toast, setToast] = useState<Toast | null>(null)
+  const [toasts, dispatch] = useReducer(toastReducer, NO_TOAST)
+  const toast = toasts.toast
   const say = useCallback(
-    (text: string, options: { undo?: string | null; error?: boolean } = {}) => {
-      setToast((last) => ({
-        id: (last?.id ?? 0) + 1,
-        text,
-        undo: options.undo ?? null,
-        error: options.error ?? false,
-      }))
-    },
+    (text: string, options: { undo?: string | null; error?: boolean } = {}) =>
+      dispatch({ type: 'say', text, ...options }),
     [],
   )
-  const dismiss = useCallback(() => setToast(null), [])
-  const group = toast?.undo ?? null
+  const dismiss = useCallback((id?: number) => dispatch({ type: 'dismiss', id }), [])
+  // The toast as of now, for a U pressed before React has drawn the last message.
+  const shown = useRef(toast)
+  shown.current = toast
+  const undoing = useRef<number | null>(null)
   const undo = useCallback(() => {
-    if (!group) return
+    const from = shown.current
+    const group = from?.undo
     // One undo per toast: a second U while the first is out finds nothing to take back.
-    setToast((last) => (last ? { ...last, undo: null } : last))
+    if (!from || !group || undoing.current === from.id) return
+    undoing.current = from.id
+    dispatch({ type: 'undoing', id: from.id })
+    // The answer replaces this toast only: a newer action's toast keeps its words and its Undo.
     adminUndo(group).then(
       (response) => {
-        say(undoMessage(t, response), { error: !response || !('restored' in response) })
+        const error = !response || !('restored' in response)
+        dispatch({ type: 'reply', to: from.id, text: undoMessage(t, response), error })
         changed()
       },
       (error: unknown) => {
         if (error instanceof NotAdmin) deny()
-        else say(t('errors.failed'), { error: true })
+        else dispatch({ type: 'reply', to: from.id, text: t('errors.failed'), error: true })
       },
     )
-  }, [group, say, changed, deny, t])
+  }, [changed, deny, t])
   const admin = useMemo<AdminContextValue>(
     () => ({ version, changed, toast, say, dismiss, undo, deny }),
     [version, changed, toast, say, dismiss, undo, deny],
