@@ -21,46 +21,72 @@
     "running": "运行"
   },
   "actions": {
-    "site.feature": { "label": "设为精选", "short": "精选", "done": "已设为精选" },
-    "site.list": { "label": "列入发现", "short": "列入", "done": "已列入发现" },
-    "site.hide": { "label": "从发现中隐藏", "short": "隐藏", "done": "已隐藏" },
-    "site.restore": { "label": "恢复默认", "short": "恢复", "done": "已恢复默认" },
-    "site.topics": { "label": "话题", "short": "话题", "done": "话题已保存" },
-    "site.translationOff": { "label": "暂停翻译", "short": "暂停", "done": "翻译已暂停" },
-    "site.translationOn": { "label": "恢复翻译", "short": "恢复", "done": "翻译已恢复" },
-    "site.fetchAll": { "label": "抓取全部订阅源", "short": "抓取", "done": "已加入抓取队列" },
-    "claim.recheck": { "label": "立即重新检查", "short": "重新检查", "done": "已加入检查队列" },
-    "claim.vouch": { "label": "人工验证", "short": "验证", "done": "已担保，正在检查" },
-    "claim.reject": { "label": "驳回", "short": "驳回", "done": "已驳回" },
-    "claim.dismiss": { "label": "暂不处理", "short": "暂不处理", "done": "已移出队列" },
-    "claim.remove": { "label": "撤销认领", "short": "撤销", "done": "认领已撤销" },
-    "feed.fetch": { "label": "立即抓取", "short": "抓取", "done": "已加入抓取队列" },
-    "feed.pause": { "label": "暂停", "short": "暂停", "done": "已暂停" },
-    "feed.resume": { "label": "恢复", "short": "恢复", "done": "已恢复" },
-    "feed.revive": { "label": "重新启用", "short": "启用", "done": "已重新启用，正在抓取" },
-    "feed.relay": { "label": "通过中国中转抓取", "short": "用中转", "done": "改为通过中转抓取" },
-    "feed.global": { "label": "直接抓取", "short": "直连", "done": "改为直接抓取" },
-    "dead.retry": { "label": "立即重试", "short": "重试", "done": "已重新排队" },
-    "dead.dismiss": { "label": "忽略", "short": "忽略", "done": "已忽略" },
-    "lease.retryNow": { "label": "立即重试", "short": "重试", "done": "一分钟内重试" },
-    "member.signOut": {
-      "label": "在所有设备上退出",
-      "short": "退出登录",
-      "done": "五分钟内将在所有设备上退出"
+    "site": {
+      "feature": { "label": "设为精选", "short": "精选", "done": "已设为精选" },
+      "list": { "label": "列入发现", "short": "列入", "done": "已列入发现" },
+      "hide": { "label": "从发现中隐藏", "short": "隐藏", "done": "已隐藏" },
+      "restore": { "label": "恢复默认", "short": "恢复", "done": "已恢复默认" },
+      "topics": { "label": "话题", "short": "话题", "done": "话题已保存" },
+      "translationOff": { "label": "暂停翻译", "short": "暂停", "done": "翻译已暂停" },
+      "translationOn": { "label": "恢复翻译", "short": "恢复", "done": "翻译已恢复" },
+      "fetchAll": { "label": "抓取全部订阅源", "short": "抓取", "done": "已加入抓取队列" }
     },
-    "code.create": { "label": "新建邀请码", "short": "新建邀请码", "done": "邀请码已创建" },
-    "code.addUses": { "label": "增加名额", "short": "增加名额", "done": "名额已增加" },
-    "code.revoke": { "label": "作废", "short": "作废", "done": "已作废" },
-    "code.restore": { "label": "恢复", "short": "恢复", "done": "已恢复" },
-    "hold.cancel": { "label": "取消邀请", "short": "取消", "done": "已取消" },
-    "invite.address": { "label": "按邮箱邀请", "short": "邀请", "done": "邀请已发出" }
+    "claim": {
+      "recheck": { "label": "立即重新检查", "short": "重新检查", "done": "已加入检查队列" },
+      "vouch": { "label": "人工验证", "short": "验证", "done": "已担保，正在检查" },
+      "reject": { "label": "驳回", "short": "驳回", "done": "已驳回" },
+      "dismiss": { "label": "暂不处理", "short": "暂不处理", "done": "已移出队列" },
+      "remove": { "label": "撤销认领", "short": "撤销", "done": "认领已撤销" }
+    },
+    "feed": {
+      "fetch": { "label": "立即抓取", "short": "抓取", "done": "已加入抓取队列" },
+      "pause": { "label": "暂停", "short": "暂停", "done": "已暂停" },
+      "resume": { "label": "恢复", "short": "恢复", "done": "已恢复" },
+      "revive": { "label": "重新启用", "short": "启用", "done": "已重新启用，正在抓取" },
+      "relay": { "label": "通过中国中转抓取", "short": "用中转", "done": "改为通过中转抓取" },
+      "global": { "label": "直接抓取", "short": "直连", "done": "改为直接抓取" }
+    },
+    "dead": {
+      "retry": { "label": "立即重试", "short": "重试", "done": "已重新排队" },
+      "dismiss": { "label": "忽略", "short": "忽略", "done": "已忽略" }
+    },
+    "lease": {
+      "retryNow": { "label": "立即重试", "short": "重试", "done": "一分钟内重试" }
+    },
+    "member": {
+      "signOut": {
+        "label": "在所有设备上退出",
+        "short": "退出登录",
+        "done": "五分钟内将在所有设备上退出"
+      }
+    },
+    "code": {
+      "create": { "label": "新建邀请码", "short": "新建邀请码", "done": "邀请码已创建" },
+      "addUses": { "label": "增加名额", "short": "增加名额", "done": "名额已增加" },
+      "revoke": { "label": "作废", "short": "作废", "done": "已作废" },
+      "restore": { "label": "恢复", "short": "恢复", "done": "已恢复" }
+    },
+    "hold": {
+      "cancel": { "label": "取消邀请", "short": "取消", "done": "已取消" }
+    },
+    "invite": {
+      "address": { "label": "按邮箱邀请", "short": "邀请", "done": "邀请已发出" }
+    }
   },
   "confirm": {
-    "claim.vouch": "确定为这次认领担保吗？检查将跳过证明，把博客交给认领人。",
-    "claim.remove": "确定撤销这次认领吗？博客将没有主人，只有读者足够多时才会列在发现里。",
-    "member.signOut": "确定让这位成员在所有设备上退出吗？最多需要五分钟。",
-    "code.revoke": "确定作废这个邀请码吗？之后没人能再用它加入；已经加入的人保留账号。",
-    "hold.cancel": "确定取消这份邀请吗？这个邮箱将无法再用它完成加入。",
+    "claim": {
+      "vouch": "确定为这次认领担保吗？检查将跳过证明，把博客交给认领人。",
+      "remove": "确定撤销这次认领吗？博客将没有主人，只有读者足够多时才会列在发现里。"
+    },
+    "member": {
+      "signOut": "确定让这位成员在所有设备上退出吗？最多需要五分钟。"
+    },
+    "code": {
+      "revoke": "确定作废这个邀请码吗？之后没人能再用它加入；已经加入的人保留账号。"
+    },
+    "hold": {
+      "cancel": "确定取消这份邀请吗？这个邮箱将无法再用它完成加入。"
+    },
     "yes": "确定",
     "no": "取消"
   },

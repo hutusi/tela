@@ -21,66 +21,88 @@
     "running": "Running"
   },
   "actions": {
-    "site.feature": { "label": "Feature", "short": "Feature", "done": "Featured" },
-    "site.list": { "label": "List in Discover", "short": "List", "done": "Listed" },
-    "site.hide": { "label": "Hide from Discover", "short": "Hide", "done": "Hidden" },
-    "site.restore": { "label": "Restore", "short": "Restore", "done": "Restored" },
-    "site.topics": { "label": "Topics", "short": "Topics", "done": "Topics saved" },
-    "site.translationOff": {
-      "label": "Pause translation",
-      "short": "Pause",
-      "done": "Translation paused"
+    "site": {
+      "feature": { "label": "Feature", "short": "Feature", "done": "Featured" },
+      "list": { "label": "List in Discover", "short": "List", "done": "Listed" },
+      "hide": { "label": "Hide from Discover", "short": "Hide", "done": "Hidden" },
+      "restore": { "label": "Restore", "short": "Restore", "done": "Restored" },
+      "topics": { "label": "Topics", "short": "Topics", "done": "Topics saved" },
+      "translationOff": {
+        "label": "Pause translation",
+        "short": "Pause",
+        "done": "Translation paused"
+      },
+      "translationOn": {
+        "label": "Allow translation",
+        "short": "Allow",
+        "done": "Translation allowed"
+      },
+      "fetchAll": { "label": "Fetch all feeds", "short": "Fetch", "done": "Fetch queued" }
     },
-    "site.translationOn": {
-      "label": "Allow translation",
-      "short": "Allow",
-      "done": "Translation allowed"
+    "claim": {
+      "recheck": { "label": "Re-check now", "short": "Re-check", "done": "Check queued" },
+      "vouch": {
+        "label": "Verify by hand",
+        "short": "Verify",
+        "done": "Vouched for; checking now"
+      },
+      "reject": { "label": "Reject", "short": "Reject", "done": "Rejected" },
+      "dismiss": { "label": "Dismiss", "short": "Dismiss", "done": "Dismissed" },
+      "remove": { "label": "Remove claim", "short": "Remove", "done": "Claim removed" }
     },
-    "site.fetchAll": { "label": "Fetch all feeds", "short": "Fetch", "done": "Fetch queued" },
-    "claim.recheck": { "label": "Re-check now", "short": "Re-check", "done": "Check queued" },
-    "claim.vouch": {
-      "label": "Verify by hand",
-      "short": "Verify",
-      "done": "Vouched for; checking now"
+    "feed": {
+      "fetch": { "label": "Fetch now", "short": "Fetch", "done": "Fetch queued" },
+      "pause": { "label": "Pause", "short": "Pause", "done": "Paused" },
+      "resume": { "label": "Resume", "short": "Resume", "done": "Resumed" },
+      "revive": { "label": "Revive", "short": "Revive", "done": "Revived; fetching now" },
+      "relay": {
+        "label": "Fetch through the China relay",
+        "short": "Use relay",
+        "done": "Fetching through the relay"
+      },
+      "global": { "label": "Fetch directly", "short": "Direct", "done": "Fetching directly" }
     },
-    "claim.reject": { "label": "Reject", "short": "Reject", "done": "Rejected" },
-    "claim.dismiss": { "label": "Dismiss", "short": "Dismiss", "done": "Dismissed" },
-    "claim.remove": { "label": "Remove claim", "short": "Remove", "done": "Claim removed" },
-    "feed.fetch": { "label": "Fetch now", "short": "Fetch", "done": "Fetch queued" },
-    "feed.pause": { "label": "Pause", "short": "Pause", "done": "Paused" },
-    "feed.resume": { "label": "Resume", "short": "Resume", "done": "Resumed" },
-    "feed.revive": { "label": "Revive", "short": "Revive", "done": "Revived; fetching now" },
-    "feed.relay": {
-      "label": "Fetch through the China relay",
-      "short": "Use relay",
-      "done": "Fetching through the relay"
+    "dead": {
+      "retry": { "label": "Retry now", "short": "Retry", "done": "Queued again" },
+      "dismiss": { "label": "Dismiss", "short": "Dismiss", "done": "Dismissed" }
     },
-    "feed.global": { "label": "Fetch directly", "short": "Direct", "done": "Fetching directly" },
-    "dead.retry": { "label": "Retry now", "short": "Retry", "done": "Queued again" },
-    "dead.dismiss": { "label": "Dismiss", "short": "Dismiss", "done": "Dismissed" },
-    "lease.retryNow": {
-      "label": "Retry now",
-      "short": "Retry",
-      "done": "Retrying within a minute"
+    "lease": {
+      "retryNow": { "label": "Retry now", "short": "Retry", "done": "Retrying within a minute" }
     },
-    "member.signOut": {
-      "label": "Sign out everywhere",
-      "short": "Sign out",
-      "done": "Signed out everywhere within five minutes"
+    "member": {
+      "signOut": {
+        "label": "Sign out everywhere",
+        "short": "Sign out",
+        "done": "Signed out everywhere within five minutes"
+      }
     },
-    "code.create": { "label": "New code", "short": "New code", "done": "Code made" },
-    "code.addUses": { "label": "Add uses", "short": "Add uses", "done": "Uses added" },
-    "code.revoke": { "label": "Revoke", "short": "Revoke", "done": "Revoked" },
-    "code.restore": { "label": "Restore", "short": "Restore", "done": "Restored" },
-    "hold.cancel": { "label": "Cancel invitation", "short": "Cancel", "done": "Cancelled" },
-    "invite.address": { "label": "Invite by email", "short": "Invite", "done": "Invitation sent" }
+    "code": {
+      "create": { "label": "New code", "short": "New code", "done": "Code made" },
+      "addUses": { "label": "Add uses", "short": "Add uses", "done": "Uses added" },
+      "revoke": { "label": "Revoke", "short": "Revoke", "done": "Revoked" },
+      "restore": { "label": "Restore", "short": "Restore", "done": "Restored" }
+    },
+    "hold": {
+      "cancel": { "label": "Cancel invitation", "short": "Cancel", "done": "Cancelled" }
+    },
+    "invite": {
+      "address": { "label": "Invite by email", "short": "Invite", "done": "Invitation sent" }
+    }
   },
   "confirm": {
-    "claim.vouch": "Vouch for this claim? Its check skips the proof and gives the blog to the claimant.",
-    "claim.remove": "Remove this claim? The blog will have no owner, and Discover lists it only if enough people read it.",
-    "member.signOut": "Sign this member out on every device? It takes up to five minutes everywhere.",
-    "code.revoke": "Revoke this code? Nobody else can join with it; whoever joined keeps their account.",
-    "hold.cancel": "Cancel this invitation? The address can no longer finish joining with it.",
+    "claim": {
+      "vouch": "Vouch for this claim? Its check skips the proof and gives the blog to the claimant.",
+      "remove": "Remove this claim? The blog will have no owner, and Discover lists it only if enough people read it."
+    },
+    "member": {
+      "signOut": "Sign this member out on every device? It takes up to five minutes everywhere."
+    },
+    "code": {
+      "revoke": "Revoke this code? Nobody else can join with it; whoever joined keeps their account."
+    },
+    "hold": {
+      "cancel": "Cancel this invitation? The address can no longer finish joining with it."
+    },
     "yes": "Yes, go ahead",
     "no": "Cancel"
   },
