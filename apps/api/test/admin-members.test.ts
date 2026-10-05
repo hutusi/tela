@@ -685,6 +685,14 @@ describe('inviting an address', () => {
         failed: [{ id: '', error: 'invalid' }],
       })
     }
+
+    // Each invitation mails a sign-in code, held to the address's limit like any other: five an
+    // hour, the two above included, then a refusal and no mail.
+    const invite = () => act({ action: 'invite.address', ids: [], args: { email: 'new@x.test' } })
+    for (let i = 0; i < 3; i++) expect((await invite()).done).toEqual([''])
+    const sent = api.mail.outbox.length
+    expect(await invite()).toMatchObject({ done: [], failed: [{ id: '', error: 'limit' }] })
+    expect(api.mail.outbox.length).toBe(sent)
     // It names no target.
     const named = await api.request('/api/v1/admin/act', {
       as: ops,

@@ -10,7 +10,7 @@
  * only while nobody has joined with it, and revoking any code deletes its holds. An audit row never
  * holds an address: a hold is named by its redemption id.
  */
-import { audit, historyOf, type TelaDb } from '@tela/data'
+import { audit, consumeLimit, historyOf, type TelaDb } from '@tela/data'
 import { INVITE_ALLOWANCE, isOperatorCode, normalizeInviteCode } from '@tela/shared'
 import {
   ADMIN_LIST_LIMIT,
@@ -25,7 +25,7 @@ import {
 import { type SQL, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiDeps } from '../../../deps'
-import { inviteMember } from '../../invite-member'
+import { inviteAddressOf, inviteMember } from '../../invite-member'
 import { likePattern } from '../../members'
 import { type ActHandler, type AdminEnv, type Inverse, returned, runBatch } from '../framework'
 
@@ -519,10 +519,15 @@ const cancelHold: ActHandler = async (ctx, id) => {
 /**
  * Invite an address, as `bun run admin invite` does (`inviteMember`). The account is made through
  * better-auth, which no batch can hold, so the audit row follows it, naming the member made (or
- * found) and never the address.
+ * found) and never the address. Each mail counts against the address's `otpSend`, the limit every
+ * sign-in code is held to: `auth.api` carries no request, so better-auth's hook counts nothing for
+ * it, and the console would otherwise mail one address without end.
  */
 const inviteByAddress: ActHandler = async (ctx, _id, args) => {
-  const invited = await inviteMember(ctx.deps, ctx.auth, args.email ?? '')
+  const email = inviteAddressOf(args.email ?? '')
+  if (email === null) return 'invalid'
+  if (!(await consumeLimit(ctx.deps.db, 'otpSend', email, ctx.now)).allowed) return 'limit'
+  const invited = await inviteMember(ctx.deps, ctx.auth, email)
   if (!invited) return 'invalid'
   const { db } = ctx.deps
   await runBatch(db, [

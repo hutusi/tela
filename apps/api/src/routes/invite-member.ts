@@ -9,6 +9,12 @@ import type { ApiDeps } from '../deps'
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+/** The address as better-auth keys it (trimmed, lowercased), or null when it is not one. */
+export function inviteAddressOf(input: string): string | null {
+  const email = input.trim().toLowerCase()
+  return EMAIL.test(email) && email.length <= 254 ? email : null
+}
+
 export type Invited = {
   userId: string
   /** False when the address already had an account, which was only mailed a fresh code. */
@@ -28,8 +34,8 @@ export async function inviteMember(
   auth: Auth,
   input: string,
 ): Promise<Invited | null> {
-  const email = input.trim().toLowerCase()
-  if (!EMAIL.test(email)) return null
+  const email = inviteAddressOf(input)
+  if (email === null) return null
   const ctx = await auth.$context
   const existing = await ctx.internalAdapter.findUserByEmail(email)
   let user = existing?.user
