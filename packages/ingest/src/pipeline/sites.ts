@@ -183,6 +183,9 @@ export type ClaimOutcome =
   | { status: 'skipped'; reason: string }
   | { status: 'lost' }
 
+/** Why a claim on a blog another member holds fails. */
+const TAKEN = 'site already claimed by another member'
+
 function claimFailed(db: TelaDb, claimId: number, error: string, now: number) {
   return db.run(sql`
     update site_claims set status = 'failed', error = ${error.slice(0, 500)}, last_checked_at = ${now},
@@ -229,9 +232,7 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
   const fail = (error: string) =>
     done([claimFailed(db, claimId, error, ctx.clock.now())], { status: 'failed', error })
   if (!claim.handle) return fail('the claimant has no profile')
-  if (claim.claimed_by !== null && claim.claimed_by !== claim.user_id) {
-    return fail('site already claimed by another member')
-  }
+  if (claim.claimed_by !== null && claim.claimed_by !== claim.user_id) return fail(TAKEN)
 
   let page: Awaited<ReturnType<HttpClient['get']>>
   try {
@@ -281,28 +282,38 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
       moves.push(...moveFeedToOrigin(db, { id: f.id, siteId: claim.site_id }, origin, now))
     }
   }
-  return done(
-    [
-      db.run(sql`
+  // Another member's claim on this blog may have been verified while this one read the page. Then
+  // nothing here may be written, not the claim's "verified" nor the moves this page decided: the
+  // guard aborts the batch as a lost lease's fence does, and the claim fails on its own below.
+  const taken = sql`exists (select 1 from sites where id = ${claim.site_id}
+    and claimed_by is not null and claimed_by <> ${claim.user_id})`
+  const committed = await commit(ctx, lease, [
+    db.run(sql`insert into lease_fence (x) select null where ${taken}`),
+    db.run(sql`
         update site_claims set status = 'verified', method = ${proof.method}, error = null,
           last_checked_at = ${now}, verified_at = ${now}, seq = ${currentSeq}
         where id = ${claimId}
       `),
-      db.run(sql`
+    db.run(sql`
         update sites set claimed_by = ${claim.user_id}, claimed_at = ${now},
           listing = case when listing = 'private' then 'listed' else listing end,
           declared_feed_urls = ${JSON.stringify(declared)}, updated_at = ${now}, seq = ${currentSeq}
         where id = ${claim.site_id} and (claimed_by is null or claimed_by = ${claim.user_id})
       `),
-      ...moves,
-    ],
-    {
+    ...moves,
+  ])
+  if (committed.ok) {
+    return {
       status: 'verified',
       method: proof.method,
       vouched,
       detached: moves.length > 0 ? feeds.length : 0,
-    },
-  )
+    }
+  }
+  // Refused: the blog went to someone else, or the lease did. The failure's own commit is fenced,
+  // so a holder that lost its lease writes nothing either way.
+  if (await first(db, sql`select 1 as taken where ${taken}`)) return fail(TAKEN)
+  return { status: 'lost' }
 }
 
 // ---------------------------------------------------------------------------------------------

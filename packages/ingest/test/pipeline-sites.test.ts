@@ -318,6 +318,51 @@ describe('verifyClaimJob', () => {
     })
   })
 
+  test('a blog claimed by someone else while the check read the page is neither taken nor moved', async () => {
+    await addUser('first', 'first_owner')
+    await addUser('second', 'second_owner')
+    const { siteId, feedId } = await siteFor('/feed.xml')
+    // A feed from another origin, which a verification would move off the site.
+    const squatter = await FixtureServer.start()
+    try {
+      await db.run(sql`
+        insert into feeds (site_id, feed_url, host, served_origin, next_fetch_at, created_at, updated_at)
+        values (${siteId}, ${squatter.url('/other.xml')}, '127.0.0.1', ${squatter.origin}, ${NOW}, 1, 1)
+      `)
+      const claimId = await pendingClaim(siteId, 'second', 'tok-2')
+      // The first member's claim is verified while this check is fetching the page.
+      server.set('/', async (_req, res) => {
+        await db.run(sql`update sites set claimed_by = 'first' where id = ${siteId}`)
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        res.end(`<html><head><meta name="${VERIFICATION_META}" content="tok-2"></head></html>`)
+      })
+      expect(await verifyClaimJob(ctx(), await claim('site.claim', claimId))).toEqual({
+        status: 'failed',
+        error: 'site already claimed by another member',
+      })
+      const row = await first<{ status: string; verified_at: number | null }>(
+        db,
+        sql`select status, verified_at from site_claims where id = ${claimId}`,
+      )
+      expect(row).toEqual({ status: 'failed', verified_at: null })
+      expect(
+        (
+          await first<{ claimed_by: string }>(
+            db,
+            sql`select claimed_by from sites where id = ${siteId}`,
+          )
+        )?.claimed_by,
+      ).toBe('first')
+      const onSite = await db.all<{ id: number }>(
+        sql`select id from feeds where site_id = ${siteId} order by id`,
+      )
+      expect(onSite.length).toBe(2)
+      expect(onSite[0]?.id).toBe(feedId)
+    } finally {
+      await squatter.stop()
+    }
+  })
+
   test('a site another member already claimed is not taken away', async () => {
     await addUser('first', 'first_owner')
     await addUser('second', 'second_owner')
