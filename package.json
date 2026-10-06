@@ -13,6 +13,7 @@
   },
   "scripts": {
     "dev": "bun run --filter @tela/reader dev",
+    "dev:seed": "bun apps/api/scripts/dev-seed.ts",
     "build": "bun run --filter '@tela/*' build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

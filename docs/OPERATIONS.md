@@ -236,6 +236,14 @@ Then:
    http://localhost:5173' localhost:5173/api/test/cycle` runs the sweeps to completion (fetches,
    extraction, titles, claims), which is what the minute tick does in production.
 
+**Something to look at:** with `bun run dev` running, `bun run dev:seed you@example.com` adds the
+curated blogs and runs the sweeps so they have posts, then writes made-up members, codes, claims
+to review, feeds in trouble, a month of translation spend and dead letters into the local D1, so
+every area of the admin console (ADR 0039) has something in it. It invites the address, opens the
+console to it, and prints its sign-in link. It writes the made-up states once (a second run only
+adds what is missing), and only ever with `wrangler d1 execute --local`: it refuses any
+`TELA_URL` that is not localhost. Without an address, its own Mara is the admin it names.
+
 To try Google or GitHub, register a dev OAuth app with the callback
 `http://localhost:5173/api/auth/callback/google` (or `/github`) and add its `GOOGLE_CLIENT_ID` and
 `GOOGLE_CLIENT_SECRET` (or `GITHUB_…`) to `apps/api/.dev.vars`; join with a code from `admin code`.
