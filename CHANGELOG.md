@@ -96,8 +96,9 @@ everything so far sits under `[Unreleased]`.
 - **A theme menu in the header**, for visitors and members alike, from 640 px up: Auto, Light
   or Dark. A member's choice is their synced theme, as Settings sets it; a visitor's stays on the
   device and comes with them when they join (ADR 0037).
-- **About, Privacy and Terms**, in English and Chinese, rendered at the edge from the bundle;
-  every statement on them is checked against what the code does (ADR 0035).
+- **About, Privacy and Terms**, in English, Simplified and Traditional Chinese, and French,
+  rendered at the edge from the bundle; every statement on them is checked against what the code
+  does (ADR 0035).
 - **Highlights and notes**, private, on either side of a translation, and found again when the
   post is edited; text size, line length and a dark theme, synced across devices; `j`/`k`, `Esc`
   and `h` on the reading page (ADR 0026).
