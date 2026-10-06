@@ -5,9 +5,10 @@
  * components in Phase 6).
  *
  * Only listed and featured blogs appear. The Postgres app rendered a private or rejected site's
- * page for anyone with its id, which on a cached public page would be a leak.
+ * page for anyone with its id, which on a cached public page would be a leak. A reader count is
+ * given from three readers up and is null below, in the order as well as the value (ADR 0041).
  */
-import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first } from '@tela/data'
+import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first, publicReaderCount } from '@tela/data'
 import { HANDLE, isTopic, RESERVED_HANDLES } from '@tela/shared'
 import { getIP } from 'better-auth/api'
 import { sql } from 'drizzle-orm'
@@ -27,6 +28,8 @@ export const PROFILE_CACHE = 'public, max-age=60, s-maxage=300, stale-while-reva
 const LANG = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/
 const DAY = 24 * 60 * 60 * 1000
 const PUBLIC_LISTING = sql.raw(`('listed', 'featured')`)
+/** A blog's reader count as anyone may see it (`publicReaderCount`), over `sites s`. */
+const READER_COUNT = publicReaderCount('s')
 /**
  * A post's titles in the launch languages it has one in, from a table aliased `a`: a public page
  * is cached for everyone, so it carries each and the reader picks the one they read in.
@@ -98,7 +101,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
           s.primary_lang as "primaryLang", s.listing, (s.claimed_by is not null) as claimed,
-          s.reader_count as "readerCount",
+          ${READER_COUNT} as "readerCount",
           (select min(f.id) from feeds f where f.site_id = s.id and f.merged_into is null) as "feedId",
           (select a.title from articles a join feeds f on f.id = a.feed_id where f.site_id = s.id
             and f.merged_into is null order by a.sort_at desc limit 1) as "latestTitle",
@@ -109,7 +112,8 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
             as "postsLast30d"
         from sites s
         where s.listing in ${PUBLIC_LISTING} ${byTopic} ${byLang}
-        order by s.listing = 'featured' desc, s.claimed_by is not null desc, s.reader_count desc, s.id
+        order by s.listing = 'featured' desc, s.claimed_by is not null desc,
+          coalesce(${READER_COUNT}, 0) desc, s.id
         limit 60
       `),
       db.all(sql`
@@ -147,7 +151,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
     const [sites, feeds, posts, topics, notes] = (await db.batch([
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
-          s.primary_lang as "primaryLang", s.listing, s.reader_count as "readerCount",
+          s.primary_lang as "primaryLang", s.listing, ${READER_COUNT} as "readerCount",
           p.handle as "claimedBy", p.display_name as "claimantName", p.bio as "claimantBio",
           ${avatarOf('p')} as "claimantAvatar",
           (select count(*) from articles a join feeds f on f.id = a.feed_id

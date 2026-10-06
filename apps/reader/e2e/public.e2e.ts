@@ -109,8 +109,18 @@ test.describe('discover and claim', () => {
     const card = page.locator(`[data-testid="site-card"][data-site-id="${siteId}"]`)
     await expect(card).toBeVisible()
     await expect(card.getByTestId('claimed-badge')).toBeVisible()
-    await expect(card).toContainText(/reader/)
+    // Only the e2e member reads it, and a count below three is nobody's to publish (ADR 0041):
+    // tela-api keeps it back, and the card and the blog's page say nothing of readers.
+    const discover = (await (await request.get('/api/v1/public/discover')).json()) as {
+      sites: { id: number; readerCount: number | null }[]
+    }
+    expect(discover.sites.find((s) => s.id === Number(siteId))?.readerCount).toBeNull()
+    await expect(card).not.toContainText(/reader/)
+    await expect(card).toContainText(/Posts|Quiet/)
     await expect(page.getByTestId('topic-chips')).toContainText('Tech')
+    await card.locator('a[href^="/s/"]').first().click()
+    await expect(page.getByTestId('site-articles')).toBeVisible()
+    await expect(page.getByRole('main')).not.toContainText(/readers? on Tela/)
   })
 
   test('the site page lets the owner set topics, and Discover filters by them', async ({

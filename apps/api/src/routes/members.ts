@@ -11,6 +11,7 @@ import {
   currentSeq,
   first,
   gravatarOn,
+  publicReaderCount,
 } from '@tela/data'
 import { isReadingLanguage, isTopic, isValidHandle } from '@tela/shared'
 import { sql } from 'drizzle-orm'
@@ -262,7 +263,7 @@ export function memberRoutes(deps: ApiDeps) {
     const [sites, articles] = (await db.batch([
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
-          s.reader_count as "readerCount",
+          ${publicReaderCount('s')} as "readerCount",
           (select min(id) from feeds where site_id = s.id and merged_into is null) as "feedId"
         from sites s
         where (s.listing in ('listed', 'featured') or s.id in (
@@ -286,6 +287,7 @@ export function memberRoutes(deps: ApiDeps) {
     ] as never)) as unknown as [Record<string, unknown>[], Record<string, unknown>[]]
     const q = (c.req.query('q') ?? '').trim().toLowerCase()
     // Ranked in the app, replacing pg_trgm: a prefix beats a substring, a title beats a host.
+    // A count kept back (below three readers) ranks as none, so the order tells no more than it.
     const score = (s: Record<string, unknown>) => {
       const title = String(s.title ?? '').toLowerCase()
       const host = String(s.homeUrl ?? '')
