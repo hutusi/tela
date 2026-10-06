@@ -226,7 +226,8 @@ const remove: ActHandler = async (ctx, id) => {
  * still the one the operator removed. What an operator or the doors chose for the blog since is
  * kept: its listing, and a translation pause (removal cleared the owner's; a pause set after it
  * is a later choice, which the undo's guard cannot see, since it is the site's and not the
- * claim's).
+ * claim's). Not for Discover is no such choice: it writes the review alone, and changes no listing
+ * (ADR 0041).
  */
 const LISTING_ACTIONS = actionsWriting('listing')
 const TRANSLATION_ACTIONS = actionsWriting('translation')

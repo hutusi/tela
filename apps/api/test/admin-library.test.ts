@@ -1261,6 +1261,31 @@ describe('claims', () => {
     })
   })
 
+  test('an undone removal lists the blog again though it was judged not for Discover since', async () => {
+    const owner = await signedIn('owner@x.test')
+    // Listed only by its claim: removed, it is private and unclaimed, so it can be dismissed.
+    const site = await addSite({ listing: 'listed', claimedBy: owner.userId, readers: 1 })
+    await addPost(await addFeed(site))
+    const claim = await addClaim(site, owner.userId, { status: 'verified' })
+    const removed = await act('claim.remove', [claim])
+    expect((await siteOf(site))?.listing).toBe('private')
+    expect(await outcome('site.dismiss', site)).toBe('done')
+    // A dismissal writes the review alone: no listing was chosen since the removal.
+    expect((await undo(removed.undo?.group)).status).toBe(200)
+    expect(await claimOf(claim)).toMatchObject({ status: 'verified', error: null })
+    expect(await siteOf(site)).toMatchObject({ claimed_by: owner.userId, listing: 'listed' })
+  })
+
+  test('a Hide since still keeps an undone removal from listing the blog', async () => {
+    const owner = await signedIn('owner@x.test')
+    const site = await addSite({ listing: 'listed', claimedBy: owner.userId, readers: 1 })
+    const claim = await addClaim(site, owner.userId, { status: 'verified' })
+    const removed = await act('claim.remove', [claim])
+    expect(await outcome('site.hide', site)).toBe('done')
+    expect((await undo(removed.undo?.group)).status).toBe(200)
+    expect(await siteOf(site)).toMatchObject({ claimed_by: owner.userId, listing: 'rejected' })
+  })
+
   test('an undo is not stopped by a later action that wrote something else', async () => {
     const site = await addSite({ listing: 'listed' })
     await addFeed(site)

@@ -89,9 +89,11 @@ says so in its line, and the record says so above the chips that set them.
   is listed without a person deciding or three readers subscribing.
 - A dismissed blog does not come back to the queue by itself, whoever subscribes next; three
   readers list it, and an operator who changes their mind lists it from Not for Discover.
-- `site.dismiss` counts as writing the listing for the undo's purposes (`ACTION_WRITES`): a List
-  or Hide after it stands in the way of undoing it, which would otherwise clear the stamp of a
-  blog decided since.
+- For the undo's purposes (`ACTION_WRITES`), List, Feature and Hide write the listing and the
+  review, Not for Discover the review alone. So a List or Hide after a dismissal stands in the way
+  of undoing it, which would otherwise clear the review of a blog decided since; but a dismissal
+  is no listing chosen since, and does not keep an undone claim removal from listing the blog
+  again with its claim.
 - Migration 0007 records the review that a listing chosen before it would have recorded: featured
   blogs and unclaimed listed ones are `listed`, hidden ones `dismissed`, each stamped with the
   console's last listing action on it, or else when the blog was added. A claimed listed blog
