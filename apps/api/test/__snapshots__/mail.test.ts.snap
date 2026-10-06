@@ -1,0 +1,252 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`the English mails sign-in is what it has always been 1`] = `
+{
+  "html": 
+"<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
+<h1 style="font-size:18px">Sign in to Tela · 登录 Tela</h1>
+<p>Enter this code to sign in. It expires in one hour.<br>输入下面的验证码登录，一小时内有效。</p>
+<p style="font-size:28px;letter-spacing:6px;font-weight:600">123456</p>
+<p>Or open this link in your browser · 或在浏览器中打开此链接：<br><a href="https://tela.example/login?email=o&#39;neil%2Btela%40x.test&#38;otp=123456">https://tela.example/login?email=o&#39;neil%2Btela%40x.test&#38;otp=123456</a></p>
+<p style="color:#667">If you did not ask for this, you can ignore this email.<br>如果这不是你本人的操作，请忽略这封邮件。</p>
+</body></html>"
+,
+  "subject": "Your Tela sign-in code · Tela 登录验证码: 123456",
+  "text": 
+"Sign in to Tela · 登录 Tela
+
+Enter this code to sign in. It expires in one hour.
+输入下面的验证码登录，一小时内有效。
+
+123456
+
+Or open this link in your browser · 或在浏览器中打开此链接：
+https://tela.example/login?email=o'neil%2Btela%40x.test&otp=123456
+
+If you did not ask for this, you can ignore this email.
+如果这不是你本人的操作，请忽略这封邮件。"
+,
+  "to": "o'neil+tela@x.test",
+}
+`;
+
+exports[`the English mails invited is what it has always been 1`] = `
+{
+  "html": 
+"<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
+<h1 style="font-size:18px">You are invited to Tela · 邀请你加入 Tela</h1>
+<p>Enter this code to sign in. It expires in one hour.<br>输入下面的验证码登录，一小时内有效。</p>
+<p style="font-size:28px;letter-spacing:6px;font-weight:600">123456</p>
+<p>Or open this link in your browser · 或在浏览器中打开此链接：<br><a href="https://tela.example/login?email=o&#39;neil%2Btela%40x.test&#38;otp=123456">https://tela.example/login?email=o&#39;neil%2Btela%40x.test&#38;otp=123456</a></p>
+<p style="color:#667">If you did not ask for this, you can ignore this email.<br>如果这不是你本人的操作，请忽略这封邮件。</p>
+</body></html>"
+,
+  "subject": "You are invited to Tela · 邀请你加入 Tela: 123456",
+  "text": 
+"You are invited to Tela · 邀请你加入 Tela
+
+Enter this code to sign in. It expires in one hour.
+输入下面的验证码登录，一小时内有效。
+
+123456
+
+Or open this link in your browser · 或在浏览器中打开此链接：
+https://tela.example/login?email=o'neil%2Btela%40x.test&otp=123456
+
+If you did not ask for this, you can ignore this email.
+如果这不是你本人的操作，请忽略这封邮件。"
+,
+  "to": "o'neil+tela@x.test",
+}
+`;
+
+exports[`the English mails password reset code is what it has always been 1`] = `
+{
+  "html": 
+"<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
+<h1 style="font-size:18px">Reset your Tela password · 重置 Tela 密码</h1>
+<p>Enter this code to choose a new password. It expires in one hour, and choosing one signs you out everywhere.<br>输入下面的验证码设置新密码，一小时内有效。设置后，所有设备都会退出登录。</p>
+<p style="font-size:28px;letter-spacing:6px;font-weight:600">123456</p>
+<p>Or open this link in your browser · 或在浏览器中打开此链接：<br><a href="https://tela.example/login?reset=1&#38;email=o&#39;neil%2Btela%40x.test&#38;otp=123456">https://tela.example/login?reset=1&#38;email=o&#39;neil%2Btela%40x.test&#38;otp=123456</a></p>
+<p style="color:#667">If you did not ask for this, you can ignore this email: your password stays as it is.<br>如果这不是你本人的操作，请忽略这封邮件，你的密码不会改变。</p>
+</body></html>"
+,
+  "subject": "Reset your Tela password · 重置 Tela 密码: 123456",
+  "text": 
+"Reset your Tela password · 重置 Tela 密码
+
+Enter this code to choose a new password. It expires in one hour, and choosing one signs you out everywhere.
+输入下面的验证码设置新密码，一小时内有效。设置后，所有设备都会退出登录。
+
+123456
+
+Or open this link in your browser · 或在浏览器中打开此链接：
+https://tela.example/login?reset=1&email=o'neil%2Btela%40x.test&otp=123456
+
+If you did not ask for this, you can ignore this email: your password stays as it is.
+如果这不是你本人的操作，请忽略这封邮件，你的密码不会改变。"
+,
+  "to": "o'neil+tela@x.test",
+}
+`;
+
+exports[`the English mails account made with GitHub is what it has always been 1`] = `
+{
+  "html": 
+"<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
+<h1 style="font-size:18px">A new Tela account · 新的 Tela 账号</h1>
+<p>Someone joined Tela as o&#39;neil+tela@x.test, signing in with GitHub. If that was you, there is nothing to do.<br>有人通过 GitHub 登录，以 o&#39;neil+tela@x.test 加入了 Tela。如果是你本人，无需任何操作。</p>
+<p>If it was not you, the account is still yours: sign in at https://tela.example/login with a code sent to this address, then remove GitHub and sign out everywhere in Settings → Account.<br>如果不是你本人，这个账号仍然属于你：在 https://tela.example/login 用发到此邮箱的验证码登录，然后在“设置 → 账户”中移除 GitHub，并退出所有设备。</p>
+</body></html>"
+,
+  "subject": "Your Tela account was made with GitHub · 你的 Tela 账号已通过 GitHub 创建",
+  "text": 
+"A new Tela account · 新的 Tela 账号
+
+Someone joined Tela as o'neil+tela@x.test, signing in with GitHub. If that was you, there is nothing to do.
+有人通过 GitHub 登录，以 o'neil+tela@x.test 加入了 Tela。如果是你本人，无需任何操作。
+
+If it was not you, the account is still yours: sign in at https://tela.example/login with a code sent to this address, then remove GitHub and sign out everywhere in Settings → Account.
+如果不是你本人，这个账号仍然属于你：在 https://tela.example/login 用发到此邮箱的验证码登录，然后在“设置 → 账户”中移除 GitHub，并退出所有设备。"
+,
+  "to": "o'neil+tela@x.test",
+}
+`;
+
+exports[`the English mails account made with a provider Tela has no name for is what it has always been 1`] = `
+{
+  "html": 
+"<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
+<h1 style="font-size:18px">A new Tela account · 新的 Tela 账号</h1>
+<p>Someone joined Tela as o&#39;neil+tela@x.test, signing in with other. If that was you, there is nothing to do.<br>有人通过 other 登录，以 o&#39;neil+tela@x.test 加入了 Tela。如果是你本人，无需任何操作。</p>
+<p>If it was not you, the account is still yours: sign in at https://tela.example/login with a code sent to this address, then remove other and sign out everywhere in Settings → Account.<br>如果不是你本人，这个账号仍然属于你：在 https://tela.example/login 用发到此邮箱的验证码登录，然后在“设置 → 账户”中移除 other，并退出所有设备。</p>
+</body></html>"
+,
+  "subject": "Your Tela account was made with other · 你的 Tela 账号已通过 other 创建",
+  "text": 
+"A new Tela account · 新的 Tela 账号
+
+Someone joined Tela as o'neil+tela@x.test, signing in with other. If that was you, there is nothing to do.
+有人通过 other 登录，以 o'neil+tela@x.test 加入了 Tela。如果是你本人，无需任何操作。
+
+If it was not you, the account is still yours: sign in at https://tela.example/login with a code sent to this address, then remove other and sign out everywhere in Settings → Account.
+如果不是你本人，这个账号仍然属于你：在 https://tela.example/login 用发到此邮箱的验证码登录，然后在“设置 → 账户”中移除 other，并退出所有设备。"
+,
+  "to": "o'neil+tela@x.test",
+}
+`;
+
+exports[`the English mails password set is what it has always been 1`] = `
+{
+  "html": 
+"<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
+<h1 style="font-size:18px">How you sign in to Tela changed · 你的 Tela 登录方式有变动</h1>
+<p>The Tela account for o&#39;neil+tela@x.test now has a password. Every other device was signed out. If that was you, there is nothing to do.<br>o&#39;neil+tela@x.test 的 Tela 账号已设置密码。其他设备都已退出登录。如果是你本人，无需任何操作。</p>
+<p>If it was not you, choose a new password from the sign-in page, https://tela.example/login: a code comes to this address, and the new password signs everyone else out.<br>如果不是你本人，请在登录页 https://tela.example/login 重新设置密码：验证码会发到此邮箱，设置新密码后其他人都会退出登录。</p>
+</body></html>"
+,
+  "subject": "A password was added to your Tela account · 你的 Tela 账号已设置密码",
+  "text": 
+"How you sign in to Tela changed · 你的 Tela 登录方式有变动
+
+The Tela account for o'neil+tela@x.test now has a password. Every other device was signed out. If that was you, there is nothing to do.
+o'neil+tela@x.test 的 Tela 账号已设置密码。其他设备都已退出登录。如果是你本人，无需任何操作。
+
+If it was not you, choose a new password from the sign-in page, https://tela.example/login: a code comes to this address, and the new password signs everyone else out.
+如果不是你本人，请在登录页 https://tela.example/login 重新设置密码：验证码会发到此邮箱，设置新密码后其他人都会退出登录。"
+,
+  "to": "o'neil+tela@x.test",
+}
+`;
+
+exports[`the English mails password changed is what it has always been 1`] = `
+{
+  "html": 
+"<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
+<h1 style="font-size:18px">How you sign in to Tela changed · 你的 Tela 登录方式有变动</h1>
+<p>The password of the Tela account for o&#39;neil+tela@x.test was changed. Every other device was signed out. If that was you, there is nothing to do.<br>o&#39;neil+tela@x.test 的 Tela 账号密码已更改。其他设备都已退出登录。如果是你本人，无需任何操作。</p>
+<p>If it was not you, choose a new password from the sign-in page, https://tela.example/login: a code comes to this address, and the new password signs everyone else out.<br>如果不是你本人，请在登录页 https://tela.example/login 重新设置密码：验证码会发到此邮箱，设置新密码后其他人都会退出登录。</p>
+</body></html>"
+,
+  "subject": "Your Tela password was changed · 你的 Tela 密码已更改",
+  "text": 
+"How you sign in to Tela changed · 你的 Tela 登录方式有变动
+
+The password of the Tela account for o'neil+tela@x.test was changed. Every other device was signed out. If that was you, there is nothing to do.
+o'neil+tela@x.test 的 Tela 账号密码已更改。其他设备都已退出登录。如果是你本人，无需任何操作。
+
+If it was not you, choose a new password from the sign-in page, https://tela.example/login: a code comes to this address, and the new password signs everyone else out.
+如果不是你本人，请在登录页 https://tela.example/login 重新设置密码：验证码会发到此邮箱，设置新密码后其他人都会退出登录。"
+,
+  "to": "o'neil+tela@x.test",
+}
+`;
+
+exports[`the English mails password reset is what it has always been 1`] = `
+{
+  "html": 
+"<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
+<h1 style="font-size:18px">How you sign in to Tela changed · 你的 Tela 登录方式有变动</h1>
+<p>A new password was chosen for the Tela account for o&#39;neil+tela@x.test, with a code sent to this address, and every device was signed out. If that was you, there is nothing to do.<br>o&#39;neil+tela@x.test 的 Tela 账号已用发到此邮箱的验证码设置了新密码，所有设备都已退出登录。如果是你本人，无需任何操作。</p>
+<p>If it was not you, someone can read this mailbox: secure it first, then choose a new password again at https://tela.example/login.<br>如果不是你本人，说明有人能读取这个邮箱：请先保护好邮箱，再到 https://tela.example/login 重新设置密码。</p>
+</body></html>"
+,
+  "subject": "Your Tela password was reset · 你的 Tela 密码已重置",
+  "text": 
+"How you sign in to Tela changed · 你的 Tela 登录方式有变动
+
+A new password was chosen for the Tela account for o'neil+tela@x.test, with a code sent to this address, and every device was signed out. If that was you, there is nothing to do.
+o'neil+tela@x.test 的 Tela 账号已用发到此邮箱的验证码设置了新密码，所有设备都已退出登录。如果是你本人，无需任何操作。
+
+If it was not you, someone can read this mailbox: secure it first, then choose a new password again at https://tela.example/login.
+如果不是你本人，说明有人能读取这个邮箱：请先保护好邮箱，再到 https://tela.example/login 重新设置密码。"
+,
+  "to": "o'neil+tela@x.test",
+}
+`;
+
+exports[`the English mails Google linked is what it has always been 1`] = `
+{
+  "html": 
+"<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
+<h1 style="font-size:18px">How you sign in to Tela changed · 你的 Tela 登录方式有变动</h1>
+<p>Google now signs in to the Tela account for o&#39;neil+tela@x.test. Every other device was signed out. If that was you, there is nothing to do.<br>现在可以用 Google 登录 o&#39;neil+tela@x.test 的 Tela 账号。其他设备都已退出登录。如果是你本人，无需任何操作。</p>
+<p>If it was not you, sign in at https://tela.example/login with a code sent to this address, then remove Google and sign out everywhere in Settings → Account.<br>如果不是你本人，请在 https://tela.example/login 用发到此邮箱的验证码登录，然后在“设置 → 账户”中移除 Google，并退出所有设备。</p>
+</body></html>"
+,
+  "subject": "Google was linked to your Tela account · Google 已关联到你的 Tela 账号",
+  "text": 
+"How you sign in to Tela changed · 你的 Tela 登录方式有变动
+
+Google now signs in to the Tela account for o'neil+tela@x.test. Every other device was signed out. If that was you, there is nothing to do.
+现在可以用 Google 登录 o'neil+tela@x.test 的 Tela 账号。其他设备都已退出登录。如果是你本人，无需任何操作。
+
+If it was not you, sign in at https://tela.example/login with a code sent to this address, then remove Google and sign out everywhere in Settings → Account.
+如果不是你本人，请在 https://tela.example/login 用发到此邮箱的验证码登录，然后在“设置 → 账户”中移除 Google，并退出所有设备。"
+,
+  "to": "o'neil+tela@x.test",
+}
+`;
+
+exports[`the English mails GitHub removed is what it has always been 1`] = `
+{
+  "html": 
+"<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
+<h1 style="font-size:18px">How you sign in to Tela changed · 你的 Tela 登录方式有变动</h1>
+<p>GitHub no longer signs in to the Tela account for o&#39;neil+tela@x.test. If that was you, there is nothing to do.<br>GitHub 不能再登录 o&#39;neil+tela@x.test 的 Tela 账号。如果是你本人，无需任何操作。</p>
+<p>If it was not you, someone is signed in as you: sign in at https://tela.example/login with a code sent to this address, then sign out everywhere in Settings → Account, and link GitHub again.<br>如果不是你本人，说明有人以你的身份登录了：请在 https://tela.example/login 用发到此邮箱的验证码登录，然后在“设置 → 账户”中退出所有设备，并重新关联 GitHub。</p>
+</body></html>"
+,
+  "subject": "GitHub was removed from your Tela account · GitHub 已从你的 Tela 账号移除",
+  "text": 
+"How you sign in to Tela changed · 你的 Tela 登录方式有变动
+
+GitHub no longer signs in to the Tela account for o'neil+tela@x.test. If that was you, there is nothing to do.
+GitHub 不能再登录 o'neil+tela@x.test 的 Tela 账号。如果是你本人，无需任何操作。
+
+If it was not you, someone is signed in as you: sign in at https://tela.example/login with a code sent to this address, then sign out everywhere in Settings → Account, and link GitHub again.
+如果不是你本人，说明有人以你的身份登录了：请在 https://tela.example/login 用发到此邮箱的验证码登录，然后在“设置 → 账户”中退出所有设备，并重新关联 GitHub。"
+,
+  "to": "o'neil+tela@x.test",
+}
+`;
