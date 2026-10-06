@@ -3,6 +3,7 @@
  * which is next-intl's framework-free core, so every key and ICU pattern carries over unchanged.
  */
 import { isUiLocale, negotiateLocale, type UiLocale } from '@tela/shared'
+import type { ProfileRow } from '@tela/sync'
 import { IntlProvider } from 'use-intl'
 import en from '../messages/en.json'
 import fr from '../messages/fr.json'
@@ -20,16 +21,38 @@ export const MESSAGES: Record<UiLocale, typeof en> = {
 export const LOCALE_COOKIE = 'tela_locale'
 
 /**
- * The cookie wins (so the edge renders public pages in the same language), then the browser's
- * languages in its order of preference. A cookie that does not decode is no choice: it would
- * otherwise fail the app's boot and every page the edge renders, for as long as the browser keeps
- * it.
+ * The interface language chosen on this browser, as the `tela_locale` cookie keeps it, or null
+ * for none: no cookie, a language this build does not have, or a cookie that does not decode,
+ * which would otherwise fail the app's boot and every page the edge renders, for as long as the
+ * browser keeps it.
  */
-export function detectLocale(cookie: string, languages: readonly string[]): UiLocale {
+export function chosenLocale(cookie: string): UiLocale | null {
   const match = cookie.match(/(?:^|;\s*)tela_locale=([^;]+)/)
   const chosen = match ? safeDecode(match[1] ?? '') : null
-  if (isUiLocale(chosen)) return chosen
-  return negotiateLocale(languages)
+  return isUiLocale(chosen) ? chosen : null
+}
+
+/**
+ * The cookie wins (so the edge renders public pages in the same language), then the browser's
+ * languages in its order of preference.
+ */
+export function detectLocale(cookie: string, languages: readonly string[]): UiLocale {
+  return chosenLocale(cookie) ?? negotiateLocale(languages)
+}
+
+/**
+ * The interface language an account takes from this browser once its profile is here: the one its
+ * visitor chose before joining, once. Never over the account's own, whatever it says, and only
+ * from the cookie, a choice made here: the browser's own languages are no choice, and an account
+ * that has none follows them already, on each browser its own. A browser shared by two accounts
+ * gives the second whatever it shows, which is what that member is reading anyway.
+ */
+export function localeToAdopt(
+  profile: Pick<ProfileRow, 'uiLocale'> | null,
+  cookie: string,
+): UiLocale | null {
+  if (!profile || profile.uiLocale !== null) return null
+  return chosenLocale(cookie)
 }
 
 export function localeCookie(locale: UiLocale): string {

@@ -5,7 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { useTranslations } from 'use-intl'
 import { AppHeader } from './components/app-header'
 import { FrontDoorProvider, ToReading } from './components/front-door'
-import { chooseLocale, detectLocale, I18n, localeCookie } from './i18n'
+import { chooseLocale, detectLocale, I18n, localeCookie, localeToAdopt } from './i18n'
 import { applyTheme, deviceTheme, PREFS, themeToAdopt, typographyOf } from './lib/typography'
 import { forgetPublic } from './lib/use-public'
 import { AddPage } from './pages/add'
@@ -237,6 +237,20 @@ function Routed() {
     }
     applyTheme(theme)
   }, [synced, chosen, theme, store])
+  // And an account that has never chosen an interface language takes the one its visitor chose
+  // here, once, the same way: only from the cookie, a choice, and only while the account's is
+  // null. Written to the profile, so it follows the member to every device; the page is in it
+  // already, since the cookie chose it.
+  const localeAdoptedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!synced) return
+    const owner = store.userId
+    if (owner === null || localeAdoptedFor.current === owner) return
+    localeAdoptedFor.current = owner
+    // Read now, not from the render: the store and the cookie are as they are when this runs.
+    const adopt = localeToAdopt(store.getSnapshot().tables.profile, document.cookie)
+    if (adopt) store.mutate({ type: 'setProfile', uiLocale: adopt })
+  }, [synced, store])
   const ui = useMemo(() => ({ locale, setLocale }), [locale, setLocale])
   return (
     <UiContext.Provider value={ui}>

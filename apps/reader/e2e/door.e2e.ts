@@ -14,6 +14,7 @@ import {
   joinAndReadCode,
   latestCode,
   measureHeader,
+  memberHeaders,
   STATE_FILE,
   signInRequest,
 } from './helpers'
@@ -264,6 +265,59 @@ test.describe('Join, after choosing a theme', () => {
 
     await page.goto('/settings/reading')
     await expect(page.getByTestId('theme-dark')).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+test.describe('Join, after choosing a language', () => {
+  test.use(visitor(17))
+  /**
+   * An account that has never chosen an interface language takes the one its visitor chose on
+   * this browser, once (ADR 0040): the page stays in it, and so does every other device the
+   * member signs in on, since it is the account's now.
+   */
+  test("the account takes the visitor's language, and the server has it", async ({
+    page,
+    request,
+  }) => {
+    const code = await adminCode(request)
+    const email = `french-joiner-${Date.now()}@e2e.test`
+    await page.goto('/discover')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+    const menu = page.getByTestId('language-menu')
+    await menu.locator('summary').click()
+    await page.getByTestId('language-menu-fr').click()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+
+    const adopted = page.waitForRequest(
+      (r) => r.url().includes('/api/v1/mutations') && (r.postData() ?? '').includes('uiLocale'),
+    )
+    await page.getByTestId('nav-join').click()
+    const sheet = page.getByTestId('front-door')
+    await sheet.getByTestId('join-code').fill(code)
+    await sheet.getByTestId('login-email').fill(email)
+    await sheet.getByTestId('login-submit').click()
+    await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    await sheet.getByTestId('login-submit').click()
+    await expect(page).toHaveURL(/\/discover$/)
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+    expect(JSON.parse((await adopted).postData() ?? '{}').mutations).toContainEqual(
+      expect.objectContaining({ type: 'setProfile', uiLocale: 'fr' }),
+    )
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    // Linked, as a new account is: the member's circle is the interface language.
+    await expect(menu.locator('summary')).toHaveAccessibleName(/^Langue\s: Français$/)
+
+    await expect
+      .poll(async () => {
+        const res = await page.request.get(`${BASE}/api/v1/sync?cursor=0`, {
+          headers: await memberHeaders(page.request),
+        })
+        const body = (await res.json()) as {
+          rows: { profile: { uiLocale: string | null; readingLang: string | null }[] }
+        }
+        return body.rows.profile[0]
+      })
+      .toMatchObject({ uiLocale: 'fr', readingLang: null })
   })
 })
 

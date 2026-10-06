@@ -1,8 +1,11 @@
-/** The header's language circle (ADR 0040): what it shows, and what a choice changes. */
+/**
+ * The header's language circle (ADR 0040): what it shows, what a choice changes, and what an
+ * account takes from the browser its visitor chose a language on.
+ */
 import { describe, expect, test } from 'bun:test'
 import { READING_LANGUAGES } from '@tela/shared'
 import type { ProfileRow } from '@tela/sync'
-import { chooseLocale } from '../src/i18n'
+import { chooseLocale, chosenLocale, detectLocale, localeToAdopt } from '../src/i18n'
 import { circleLabel, pillLabel } from '../src/lib/format'
 import { memoryPersistence } from '../src/store/db'
 import { LocalStore } from '../src/store/local'
@@ -82,5 +85,49 @@ describe('an interface language chosen', () => {
     expect(store.unsent()).toMatchObject([{ type: 'setProfile', uiLocale: 'zh-Hans' }])
     await store.applyPull(pull(5, { profile: [{ ...profile, uiLocale: 'en' }] }, true), store.epoch)
     expect(held(store)?.uiLocale).toBe('zh-Hans')
+  })
+})
+
+describe('the language chosen on this browser', () => {
+  test('is the cookie, among the others', () => {
+    expect(chosenLocale('tela_locale=fr')).toBe('fr')
+    expect(chosenLocale('a=1; tela_locale=zh-Hant; b=2')).toBe('zh-Hant')
+    expect(chosenLocale('tela_locale=zh%2DHans')).toBe('zh-Hans')
+  })
+
+  test('is none without one, for one this build does not have, or one that does not decode', () => {
+    expect(chosenLocale('')).toBeNull()
+    expect(chosenLocale('other_tela_locale=fr')).toBeNull()
+    expect(chosenLocale('tela_locale=ja')).toBeNull()
+    expect(chosenLocale('tela_locale=%')).toBeNull()
+  })
+
+  test("decides the page's language before the browser's own", () => {
+    expect(detectLocale('tela_locale=fr', ['zh-TW', 'en'])).toBe('fr')
+    expect(detectLocale('tela_locale=%', ['zh-TW', 'en'])).toBe('zh-Hant')
+    expect(detectLocale('', [])).toBe('en')
+  })
+})
+
+describe('what an account takes from the browser', () => {
+  test("its visitor's choice, while the account has none", () => {
+    expect(localeToAdopt({ uiLocale: null }, 'tela_locale=fr')).toBe('fr')
+  })
+
+  test("nothing over the account's own, whatever it says", () => {
+    for (const uiLocale of ['en', 'fr', 'zh-Hans', 'ja']) {
+      expect(localeToAdopt({ uiLocale }, 'tela_locale=zh-Hant')).toBeNull()
+    }
+  })
+
+  // The browser's languages are no choice: an account without one follows them already, on each
+  // browser its own, and writing them down would carry one browser's to every other.
+  test('nothing without a choice made here', () => {
+    expect(localeToAdopt({ uiLocale: null }, '')).toBeNull()
+    expect(localeToAdopt({ uiLocale: null }, 'tela_locale=%')).toBeNull()
+  })
+
+  test('nothing before the profile is here to say what the account holds', () => {
+    expect(localeToAdopt(null, 'tela_locale=fr')).toBeNull()
   })
 })

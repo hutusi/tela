@@ -142,7 +142,7 @@ export function MemberLanguage() {
  * A visitor's circle, in the header and on the sign-in page (ADR 0035): it sets the interface
  * language, and with it the language titles are translated into, since a visitor reads in their
  * interface language (`useReadingLang`). The choice is the `tela_locale` cookie, which the edge
- * renders by.
+ * renders by, and an account joining on this browser takes it (`localeToAdopt`).
  */
 export function VisitorLanguage({ className }: { className: string }) {
   const { locale, setLocale } = useUi()
