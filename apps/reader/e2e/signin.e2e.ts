@@ -534,24 +534,24 @@ test.describe("a visitor's language", () => {
     const banner = page.getByRole('banner')
     await expect(banner.getByRole('link', { name: 'Log in', exact: true })).toBeVisible()
     // Reversed on 2026-10-02 (ADR 0035): a visitor needs to know at once whether they can read
-    // the page, so Read in is in the header rather than on the sign-in page alone.
-    // The same menu as a member's: the button names the language, the list each in its own.
-    const readIn = page.getByTestId('visitor-locale')
-    await expect(readIn.locator('summary')).toHaveAccessibleName('Read in EN')
-    await readIn.locator('summary').click()
-    await expect(page.getByTestId('visitor-locale-en')).toHaveAttribute('aria-pressed', 'true')
-    await page.getByTestId('visitor-locale-zh-Hans').click()
+    // the page, so the language is in the header rather than on the sign-in page alone.
+    // The same circle as a member's: it shows the language, the list names each in its own.
+    const menu = page.getByTestId('language-menu')
+    await expect(menu.locator('summary')).toHaveAccessibleName('Language: English')
+    await menu.locator('summary').click()
+    await expect(page.getByTestId('language-menu-en')).toHaveAttribute('aria-pressed', 'true')
+    await page.getByTestId('language-menu-zh-Hans').click()
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
     await expect(banner.getByRole('link', { name: '登录', exact: true })).toBeVisible()
-    await expect(readIn.locator('summary')).toHaveAccessibleName('阅读语言 简体')
-    await expect(page.getByTestId('visitor-locale-zh-Hans')).toHaveAttribute('aria-pressed', 'true')
+    await expect(menu.locator('summary')).toHaveAccessibleName('语言：简体中文')
+    await expect(page.getByTestId('language-menu-zh-Hans')).toHaveAttribute('aria-pressed', 'true')
     // The choice is the cookie the edge reads, so a public page arrives in Chinese too.
     await page.goto('/discover')
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
-    // The sign-in page has the same menu.
+    // The sign-in page has the same circle.
     await page.goto('/login')
-    await readIn.locator('summary').click()
-    await page.getByTestId('visitor-locale-en').click()
+    await menu.locator('summary').click()
+    await page.getByTestId('language-menu-en').click()
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   })
 })

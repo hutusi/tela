@@ -10,8 +10,8 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { DoorForm } from '../components/front-door'
+import { VisitorLanguage } from '../components/language-menu'
 import { LogoMark } from '../components/logo'
-import { VisitorLocale } from '../components/visitor-locale'
 import {
   loginPath,
   type MailLink,
@@ -63,7 +63,7 @@ export function LoginPage() {
           <LogoMark />
           <span>Tela</span>
         </Link>
-        <VisitorLocale className="shrink-0" />
+        <VisitorLanguage className="shrink-0" />
       </header>
       <main className="mx-auto flex w-full max-w-sm flex-1 flex-col px-6 py-16 animate-fade">
         <DoorForm

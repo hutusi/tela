@@ -157,11 +157,11 @@ test.describe('translation', () => {
   test('switching the reading language changes what gets translated', async ({ page }) => {
     await page.goto('/reading')
     await synced(page)
-    const readIn = page.getByTestId('read-in')
-    await readIn.locator('summary').click()
-    await readIn.getByRole('button', { name: '简体中文' }).click()
-    await expect(readIn.locator('summary')).toHaveAccessibleName('Read in 简体')
-    await expect(readIn.getByTestId('read-in-zh-Hans')).toHaveAttribute('aria-pressed', 'true')
+    const menu = page.getByTestId('language-menu')
+    await menu.locator('summary').click()
+    await menu.getByRole('button', { name: '简体中文' }).click()
+    await expect(menu.locator('summary')).toHaveAccessibleName('Translate into: 简体中文')
+    await expect(menu.getByTestId('language-menu-zh-Hans')).toHaveAttribute('aria-pressed', 'true')
     // An English feed is now foreign; its titles in Chinese come from the next sweep.
     await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
     const stop = keepCycling(page)
@@ -172,25 +172,25 @@ test.describe('translation', () => {
     } finally {
       stop()
     }
-    await readIn.locator('summary').click()
-    await readIn.getByRole('button', { name: 'English' }).click()
+    await menu.locator('summary').click()
+    await menu.getByRole('button', { name: 'English' }).click()
     await expect(page.getByTestId('article-row').first()).not.toContainText('EN → ZH')
   })
 
   /**
-   * Four languages do not fit in view, so Read in is a menu: the button names the one chosen,
-   * short, and the list names each in full, in its own script and `lang`. A choice is the member's
-   * reading language, pushed and kept, whatever the interface is in.
+   * Four languages do not fit in view, so the language circle is a menu: the circle shows the one
+   * chosen, short, and the list names each in full, in its own script and `lang`. A choice is the
+   * member's reading language, pushed and kept, whatever the interface is in.
    */
-  test('the Read-in menu offers four languages in their own names, and keeps the choice', async ({
+  test('the language circle offers four languages in their own names, and keeps the choice', async ({
     page,
   }) => {
     try {
       await page.goto('/reading')
       await synced(page)
-      const readIn = page.getByTestId('read-in')
-      const summary = readIn.locator('summary')
-      const choice = (code: string) => readIn.getByTestId(`read-in-${code}`)
+      const menu = page.getByTestId('language-menu')
+      const summary = menu.locator('summary')
+      const choice = (code: string) => menu.getByTestId(`language-menu-${code}`)
       const pushed = (code: string) =>
         page.waitForResponse(
           (r) =>
@@ -198,9 +198,12 @@ test.describe('translation', () => {
             r.ok() &&
             (r.request().postData() ?? '').includes(`"readingLang":"${code}"`),
         )
-      await expect(summary).toHaveAccessibleName('Read in EN')
+      await expect(summary).toHaveAccessibleName('Translate into: English')
+      // What the circle shows is a glyph for it; its name says it in full.
+      const glyph = summary.locator('[aria-hidden="true"]')
+      await expect(glyph).toHaveText('EN')
       await summary.click()
-      await expect(readIn.getByRole('button')).toHaveText([
+      await expect(menu.getByRole('button')).toHaveText([
         '简体中文',
         '繁體中文',
         'English',
@@ -215,7 +218,8 @@ test.describe('translation', () => {
       let push = pushed('zh-Hant')
       await choice('zh-Hant').click()
       await expect(choice('zh-Hant')).toBeHidden()
-      await expect(summary).toHaveAccessibleName('Read in 繁體')
+      await expect(summary).toHaveAccessibleName('Translate into: 繁體中文')
+      await expect(glyph).toHaveText('繁')
       await push
       expect(await serverReadingLang(page.request)).toBe('zh-Hant')
 
@@ -223,16 +227,16 @@ test.describe('translation', () => {
       await summary.click()
       await expect(choice('zh-Hant')).toHaveAttribute('aria-pressed', 'true')
       await choice('fr').click()
-      await expect(summary).toHaveAccessibleName('Read in FR')
+      await expect(summary).toHaveAccessibleName('Translate into: Français')
       await push
       expect(await serverReadingLang(page.request)).toBe('fr')
 
       // Kept, so the next visit opens in it; one choice is marked, and Esc gives focus back.
       await page.reload()
-      await expect(summary).toHaveAccessibleName('Read in FR')
+      await expect(summary).toHaveAccessibleName('Translate into: Français')
       await summary.click()
       await expect(choice('fr')).toHaveAttribute('aria-pressed', 'true')
-      await expect(readIn.locator('[aria-pressed="true"]')).toHaveCount(1)
+      await expect(menu.locator('[aria-pressed="true"]')).toHaveCount(1)
       await page.keyboard.press('Escape')
       await expect(choice('fr')).toBeHidden()
       await expect(summary).toBeFocused()

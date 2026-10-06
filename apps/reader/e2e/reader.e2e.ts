@@ -299,8 +299,10 @@ test.describe('reader', () => {
 
   test('the UI switches to Chinese, in Settings and nowhere in the header', async ({ page }) => {
     await page.goto('/settings/translation')
-    await expect(page.getByTestId('read-in')).toBeVisible()
-    await expect(page.getByTestId('visitor-locale')).toHaveCount(0)
+    // The header's circle is the translation language's, not the interface's.
+    await expect(page.getByTestId('language-menu').locator('summary')).toHaveAccessibleName(
+      'Translate into: English',
+    )
     // Each push is waited for: every spec signs in as this member, and the next one should not
     // inherit Chinese because this page closed before its last change went out.
     const pushed = () =>

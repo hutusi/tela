@@ -59,7 +59,7 @@ export function DiscoverView({
         </div>
         <div className="flex-1" />
         {/* A <details>, so the menu works in the edge-rendered page before any script runs. */}
-        <details className="relative" data-testid="language-menu">
+        <details className="relative" data-testid="discover-language">
           <summary
             className={`flex cursor-pointer list-none items-center gap-1.5 whitespace-nowrap rounded-full border bg-surface px-3 py-1.5 text-[13px] font-medium hover:border-muted ${
               params.lang ? 'border-ink' : 'border-line'

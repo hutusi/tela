@@ -581,19 +581,26 @@ describe('public pages', () => {
     expect(zh).toContain('主题：深色')
   })
 
-  test("mark the visitor's language in the Read-in menu, as the cache is kept per language", async () => {
+  test("mark the visitor's language in the language circle, as the cache is kept per language", async () => {
     const menu = (html: string) =>
-      html.match(/<details[^>]*data-testid="visitor-locale"[^>]*>.*?<\/details>/s)?.[0] ?? ''
+      html.match(/<details[^>]*data-testid="language-menu"[^>]*>.*?<\/details>/s)?.[0] ?? ''
     const summary = (html: string) => html.match(/<summary.*?<\/summary>/s)?.[0] ?? ''
     const en = menu(await (await page('/privacy')).text())
-    // The button names the language the page is in; the list names each in its own script.
-    expect(summary(en)).toMatch(/Read in.*<span lang="en"[^>]*>EN<\/span>/s)
-    expect(en).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="visitor-locale-en"/)
-    expect(en).toMatch(/<button[^>]*aria-pressed="false"[^>]*data-testid="visitor-locale-zh-Hans"/)
+    // The circle shows the language the page is in, short, and names it in full; the list names
+    // each in its own script.
+    expect(summary(en)).toMatch(
+      /<span aria-hidden="true" lang="en">EN<\/span><span class="sr-only">Language: English<\/span>/,
+    )
+    expect(en).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="language-menu-en"/)
+    expect(en).toMatch(/<button[^>]*aria-pressed="false"[^>]*data-testid="language-menu-zh-Hans"/)
     expect(en).toMatch(/<button[^>]*lang="zh-Hans"[^>]*>简体中文<\/button>/)
     const zh = menu(await (await page('/privacy', { cookie: 'tela_locale=zh-Hans' })).text())
-    expect(summary(zh)).toMatch(/阅读语言.*<span lang="zh-Hans"[^>]*>简体<\/span>/s)
-    expect(zh).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="visitor-locale-zh-Hans"/)
+    expect(summary(zh)).toMatch(
+      /<span aria-hidden="true" lang="zh-Hans">简<\/span><span class="sr-only">语言：简体中文<\/span>/,
+    )
+    expect(zh).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="language-menu-zh-Hans"/)
+    const hant = menu(await (await page('/privacy', { cookie: 'tela_locale=zh-Hant' })).text())
+    expect(summary(hant)).toMatch(/<span aria-hidden="true" lang="zh-Hant">繁<\/span>/)
   })
 
   test("an info page renders in the reader's language, cached apart", async () => {

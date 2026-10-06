@@ -29,7 +29,7 @@ test.describe('for a visitor', () => {
       'href',
       '/join',
     )
-    await expect(page.getByTestId('visitor-locale')).toBeVisible()
+    await expect(page.getByTestId('language-menu')).toBeVisible()
     await expect(page.getByTestId('nav-reading')).toHaveCount(0)
 
     const robots = await request.get('/robots.txt')

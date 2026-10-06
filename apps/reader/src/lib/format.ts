@@ -28,12 +28,11 @@ export function swatchColor(id: number): string {
 }
 
 /**
- * A language on the header's Read-in button, which names only the current one: each Chinese in
- * its own script and told apart (简体, 繁體: "中文" alone stopped saying which once Traditional
- * came). Those are what Chinese language switchers say on either side of the strait; a lone 简 or
- * 繁 says too little beside EN, and 简中, 繁中 are game-localization slang. The others are their
- * badge in capitals. Anything else falls back to the badge ("JA"),
- * which is what the article list calls it too.
+ * A language where a short name has room for a word: the admin console's Translation area, which
+ * lists what each post was translated into. Each Chinese in its own script and told apart (简体,
+ * 繁體: "中文" alone stopped saying which once Traditional came), the others their badge in
+ * capitals. Anything else falls back to the badge ("JA"), which is what the article list calls it
+ * too.
  */
 const PILL_LABELS: Record<string, string> = {
   'zh-Hans': '简体',
@@ -43,6 +42,24 @@ const PILL_LABELS: Record<string, string> = {
 }
 export function pillLabel(tag: string): string {
   return PILL_LABELS[tag] ?? languageBadge(tag)
+}
+
+/**
+ * A language inside the header's 34px language circle (ADR 0040), which holds one Chinese
+ * character or two Latin letters: 简, 繁, EN, FR. A lone 简 or 繁 would say too little as a label
+ * on its own, and 简中, 繁中 are game-localization slang; but the circle is not where a reader
+ * learns which language it is. It is the theme menu's size, and like it a glyph for the current
+ * choice: its accessible name says the whole name ("Language: 简体中文"), and the menu it opens
+ * names all four in full, each in its own script. Anything else falls back to the badge ("JA").
+ */
+const CIRCLE_LABELS: Record<string, string> = {
+  'zh-Hans': '简',
+  'zh-Hant': '繁',
+  en: 'EN',
+  fr: 'FR',
+}
+export function circleLabel(tag: string): string {
+  return CIRCLE_LABELS[tag] ?? languageBadge(tag)
 }
 
 export function initialOf(title: string): string {
