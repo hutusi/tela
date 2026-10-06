@@ -41,6 +41,29 @@ export function ensureOriginSite(db: TelaDb, origin: string, now: number, meta: 
 const siteIdOf = (origin: string) => sql`(select id from sites where home_url = ${origin})`
 
 /**
+ * A blog waiting for an operator's review for Discover (ADR 0041), over `sites s`: one a member
+ * added (private, unclaimed, someone reads it), with a live feed that has brought posts, which no
+ * operator has decided about yet. A placeholder no fetch has filled, a blog whose feeds died or
+ * merged away, and one nobody reads any more wait for nothing. The console's queue and the
+ * Monday digest both count it.
+ */
+export const DISCOVER_REVIEW = sql`(s.listing = 'private' and s.claimed_by is null
+  and s.reviewed_at is null and s.reader_count > 0
+  and exists (select 1 from feeds f join articles a on a.feed_id = f.id
+    where f.site_id = s.id and f.merged_into is null and f.status = 'active'))`
+
+/**
+ * A blog's reader count as a public answer may give it, over the sites table aliased `alias`:
+ * the count from the community door's three readers up, null below (ADR 0041). An operator may
+ * list a blog one member reads, and a public "1 reader" would name that member's reading by
+ * elimination; null reads like an editorial pick's nobody yet. Order by `coalesce(…, 0)`, never
+ * by `reader_count`, or the order alone tells 0 from 1 from 2.
+ */
+export const publicReaderCount = (alias: string): SQL =>
+  sql.raw(`(case when ${alias}.reader_count >= ${COMMUNITY_LISTING_MIN_READERS}
+    then ${alias}.reader_count end)`)
+
+/**
  * Recount distinct readers of each site, then open the community door into Discover (ADR 0018):
  * an unclaimed private site with enough readers is listed. One-way, and never touching an
  * editorial pick or a site an operator rejected.

@@ -45,6 +45,7 @@ import {
 } from './queries/invites'
 import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates } from './queries/reader'
+import { DISCOVER_REVIEW, publicReaderCount } from './queries/sites'
 import { readPull } from './queries/sync'
 import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
 import { feeds, sites } from './schema'
@@ -689,6 +690,71 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       ).toEqual([
         { articleId: 2, readAt: null, readUpdatedAt: 6 },
         { articleId: 3, readAt: 7, readUpdatedAt: 7 },
+      ])
+    })
+  })
+
+  describe('the Discover review queue (ADR 0041)', () => {
+    it('holds a blog a member added that a live feed has filled, until someone decides', async () => {
+      const db = await makeDb()
+      await db.run(sql`
+        insert into user (id, name, email, email_verified, created_at, updated_at)
+        values ('u1', 'u', 'u1@x.y', 1, 0, 0)
+      `)
+      // 1 waits. 2 is claimed, 3 reviewed, 4 nobody reads, 5 an empty placeholder, 6 has only a
+      // dead feed and 7 only a merged one, 8 is listed already.
+      await db.run(sql`
+        insert into sites (id, home_url, listing, claimed_by, reviewed_at, reader_count,
+          created_at, updated_at) values
+          (1, 'https://a.test', 'private', null, null, 1, 0, 0),
+          (2, 'https://b.test', 'private', 'u1', null, 1, 0, 0),
+          (3, 'https://c.test', 'private', null, 5, 2, 0, 0),
+          (4, 'https://d.test', 'private', null, null, 0, 0, 0),
+          (5, 'https://e.test', 'private', null, null, 1, 0, 0),
+          (6, 'https://f.test', 'private', null, null, 1, 0, 0),
+          (7, 'https://g.test', 'private', null, null, 1, 0, 0),
+          (8, 'https://h.test', 'listed', null, null, 1, 0, 0)
+      `)
+      await db.run(sql`
+        insert into feeds (id, site_id, feed_url, host, status, merged_into, next_fetch_at,
+          created_at, updated_at) values
+          (1, 1, 'https://a.test/f', 'a.test', 'active', null, 0, 0, 0),
+          (2, 2, 'https://b.test/f', 'b.test', 'active', null, 0, 0, 0),
+          (3, 3, 'https://c.test/f', 'c.test', 'active', null, 0, 0, 0),
+          (4, 4, 'https://d.test/f', 'd.test', 'active', null, 0, 0, 0),
+          (5, 5, 'https://e.test/f', 'e.test', 'active', null, 0, 0, 0),
+          (6, 6, 'https://f.test/f', 'f.test', 'dead', null, 0, 0, 0),
+          (7, 7, 'https://g.test/f', 'g.test', 'active', 1, 0, 0, 0),
+          (8, 8, 'https://h.test/f', 'h.test', 'active', null, 0, 0, 0)
+      `)
+      await db.run(sql`
+        insert into articles (feed_id, dedup_key, fetched_at, sort_at)
+        select value, 'post', 1, 1 from json_each('[1, 2, 3, 4, 6, 7, 8]') where true
+      `)
+      const queued = await db.all<{ id: number }>(
+        sql`select s.id from sites s where ${DISCOVER_REVIEW} order by s.id`,
+      )
+      expect(queued).toEqual([{ id: 1 }])
+    })
+
+    it('gives a public reader count only from three readers, and orders the rest as equals', async () => {
+      const db = await makeDb()
+      await db.run(sql`
+        insert into sites (id, home_url, reader_count, created_at, updated_at) values
+          (1, 'https://a.test', 0, 0, 0), (2, 'https://b.test', 2, 0, 0),
+          (3, 'https://c.test', 1, 0, 0), (4, 'https://d.test', 3, 0, 0),
+          (5, 'https://e.test', 40, 0, 0)
+      `)
+      const count = publicReaderCount('s')
+      const rows = await db.all<{ id: number; n: number | null }>(sql`
+        select s.id, ${count} as n from sites s order by coalesce(${count}, 0) desc, s.id
+      `)
+      expect(rows).toEqual([
+        { id: 5, n: 40 },
+        { id: 4, n: 3 },
+        { id: 1, n: null },
+        { id: 2, n: null },
+        { id: 3, n: null },
       ])
     })
   })
