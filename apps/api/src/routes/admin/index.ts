@@ -6,7 +6,16 @@
  * under `/api/admin/*`, which takes the operator's bearer token and is let through from any
  * origin. A refusal is a 403 the console shows as a page that does not exist.
  */
-import { audit, bumpSeq, first, groupRows, isFenceRefusal, newGroupId, undoGuard } from '@tela/data'
+import {
+  audit,
+  bumpSeq,
+  first,
+  groupRows,
+  isFenceRefusal,
+  laterActionOn,
+  newGroupId,
+  undoGuard,
+} from '@tela/data'
 import {
   ADMIN_BULK_MAX,
   ADMIN_REASON_MAX,
@@ -150,17 +159,18 @@ export function adminRoutes(deps: ApiDeps, auth: Auth) {
       const inverse = inverses[row.action as AdminActionName]
       if (!inverse) return c.json({ error: 'not_found' }, 404)
       const detail = JSON.parse(row.detail) as { from?: unknown; to?: unknown }
-      const change = { targetKey: row.target_key, from: detail.from ?? null, to: detail.to ?? null }
+      const change = {
+        targetKey: row.target_key,
+        from: detail.from ?? null,
+        to: detail.to ?? null,
+        auditId: row.id,
+      }
       const step = inverse(db, change, now)
       synced ||= step.synced
       // A later operator action on the same target is a change since, whatever it left: a target
       // that left the action's value and came back to it would otherwise take stale values back.
       // One that was itself undone is not, so groups can still be undone newest first.
-      const later = sql`exists (select 1 from admin_actions later
-        where later.target_kind = ${row.target_kind} and later.target_key = ${row.target_key}
-          and later.id > ${row.id} and later.group_id <> ${group} and later.action <> 'undo'
-          and not exists (select 1 from admin_actions u where u.action = 'undo'
-            and json_extract(u.detail, '$.group') = later.group_id))`
+      const later = laterActionOn(row.target_kind, row.target_key, row.id, group)
       guards.push(undoGuard(db, group, sql`(${step.changed}) or ${later}`))
       restores.push(...step.restore)
       audits.push(

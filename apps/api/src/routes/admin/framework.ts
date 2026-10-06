@@ -37,7 +37,13 @@ export type ActHandler = (
 ) => Promise<'done' | AdminActError>
 
 /** An audit row as an inverse reads it. */
-export type AuditedChange = { targetKey: string; from: unknown; to: unknown }
+export type AuditedChange = {
+  targetKey: string
+  from: unknown
+  to: unknown
+  /** The audit row's id: what an inverse asks `laterActionOn` about another target with. */
+  auditId: number
+}
 
 /**
  * How to take back one audited change. `changed` is true (as SQL) when the target no longer holds

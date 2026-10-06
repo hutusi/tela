@@ -892,6 +892,31 @@ describe('claims', () => {
     expect(await siteOf(site)).toMatchObject({ claimed_by: owner.userId, translation_opt_out: 1 })
   })
 
+  test('an undone removal keeps what an operator chose for the blog since, even a return', async () => {
+    const owner = await signedIn('owner@x.test')
+    // Paused by its owner; the removal clears that with the owner.
+    const site = await addSite({
+      listing: 'listed',
+      claimedBy: owner.userId,
+      optOut: 1,
+      readers: 3,
+    })
+    const claim = await addClaim(site, owner.userId, { status: 'verified' })
+    const removed = await act('claim.remove', [claim])
+    // Another tab pauses it and then allows it again, and hides it and restores it: each ends
+    // where the removal left it, so the values alone cannot tell anyone chose.
+    expect(await outcome('site.translationOff', site)).toBe('done')
+    expect(await outcome('site.translationOn', site)).toBe('done')
+    expect(await outcome('site.hide', site)).toBe('done')
+    expect(await outcome('site.restore', site)).toBe('done')
+    expect((await undo(removed.undo?.group)).status).toBe(200)
+    expect(await siteOf(site)).toMatchObject({
+      claimed_by: owner.userId,
+      translation_opt_out: 0,
+      listing: 'listed',
+    })
+  })
+
   test('Remove keeps an editor’s listing, and its undo waits for nobody to have claimed the blog', async () => {
     const owner = await signedIn('owner@x.test')
     const next = await signedIn('next@x.test')
