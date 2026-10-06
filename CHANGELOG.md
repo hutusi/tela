@@ -49,6 +49,11 @@ everything so far sits under `[Unreleased]`.
   serves both scripts. The interface language follows the browser's order of preference, so
   `zh-TW` gets Traditional and a preferred English is no longer beaten by a Chinese listed after
   it. Read in is now a menu.
+- **Mail in the reader's language** (#28, ADRs 0013 and 0038 amended). Sign-in codes,
+  invitations, reset codes and account notices come in Simplified, Traditional or French with
+  English second, chosen by the language the reader picked, else their account's, else their
+  browser's; notices follow the account alone. An English mail is English and Simplified as
+  before.
 - **Invite codes** (ADR 0034). Every member can bring in five people, ever, from Settings →
   Invites, which lists the codes they made and who joined with each, and revokes one nobody has
   used. The operator makes codes of their own text for as many people as they choose

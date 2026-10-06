@@ -115,5 +115,15 @@ Now the hint's script decides a tie.
   would be a chunk it never saw. Revisit at a fifth language.
 - Mail stays English plus Simplified Chinese. The sign-in and invite mails go out before an
   account, and so a language, exists.
+  - **Amended 2026-10-07 (#28):** mail is in four languages too. A code mail reads the browser
+    that asked for it: the `tela_locale` cookie, then the account's `ui_locale` when the address
+    has an account, then Accept-Language, then English. tela-api's own call for a join passes on
+    only the joiner's language cookie and Accept-Language. A notice about an account's ways in
+    reads the account alone, since whoever made the change may not hold the address. An English
+    mail is English then Simplified, byte for byte as before; any other leads with its own
+    language and puts English second, subject and heading included. The words are catalogues
+    (`apps/api/src/mail-text/`): French is written by hand, and Traditional is generated from
+    Simplified by `bun run i18n:hant`, with the interface's converter and overrides, so tela-api
+    still bundles no OpenCC (the four catalogues added about 3 KB gzipped).
 - A Traditional reader of a mainland blog, and a Simplified reader of a Taiwanese one, now get the
   post in their own script at no cost. Before, they got it as written.
