@@ -6,7 +6,9 @@
  *
  * Only listed and featured blogs appear. The Postgres app rendered a private or rejected site's
  * page for anyone with its id, which on a cached public page would be a leak. A reader count is
- * given from three readers up and is null below, in the order as well as the value (ADR 0041).
+ * given from three readers up and is null below, in the order as well as the value, and no answer
+ * says how a blog was listed: nothing public renders it, and beside a held-back count it would
+ * tell a blog an operator listed from the queue from an editorial pick (ADR 0041).
  */
 import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first, publicReaderCount } from '@tela/data'
 import { HANDLE, isTopic, RESERVED_HANDLES } from '@tela/shared'
@@ -100,7 +102,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
     const [sites, languages, topics] = (await db.batch([
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
-          s.primary_lang as "primaryLang", s.listing, (s.claimed_by is not null) as claimed,
+          s.primary_lang as "primaryLang", (s.claimed_by is not null) as claimed,
           ${READER_COUNT} as "readerCount",
           (select min(f.id) from feeds f where f.site_id = s.id and f.merged_into is null) as "feedId",
           (select a.title from articles a join feeds f on f.id = a.feed_id where f.site_id = s.id
@@ -151,7 +153,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
     const [sites, feeds, posts, topics, notes] = (await db.batch([
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
-          s.primary_lang as "primaryLang", s.listing, ${READER_COUNT} as "readerCount",
+          s.primary_lang as "primaryLang", ${READER_COUNT} as "readerCount",
           p.handle as "claimedBy", p.display_name as "claimantName", p.bio as "claimantBio",
           ${avatarOf('p')} as "claimantAvatar",
           (select count(*) from articles a join feeds f on f.id = a.feed_id

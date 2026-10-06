@@ -153,6 +153,25 @@ describe('public', () => {
     expect(body.languages).toEqual([{ lang: 'en', count: 2 }])
   })
 
+  test('no public answer says how a blog was listed (ADR 0041)', async () => {
+    // Beside a held-back count, `listing` would tell a blog an operator listed from the review
+    // queue (one member reads it) from an editorial pick nobody reads yet.
+    await blog(1, 'listed')
+    await blog(2, 'featured')
+    const discover = (await (await get('/api/v1/public/discover')).json()) as {
+      sites: Record<string, unknown>[]
+    }
+    expect(discover.sites).toHaveLength(2)
+    for (const site of discover.sites) expect(site).not.toHaveProperty('listing')
+    for (const id of [1, 2]) {
+      const page = (await (await get(`/api/v1/public/sites/${id}`)).json()) as {
+        site: Record<string, unknown>
+      }
+      expect(page.site.id).toBe(id)
+      expect(page.site).not.toHaveProperty('listing')
+    }
+  })
+
   test('a reader count is public from three readers; below, it is neither shown nor ranked', async () => {
     for (const id of [1, 2, 3, 4]) await blog(id, 'listed')
     // An operator can list a blog one member reads (ADR 0041): 1, 2 and 0 readers must look alike.

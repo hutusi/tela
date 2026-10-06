@@ -17,7 +17,6 @@ export type DiscoverSite = {
   description: string | null
   faviconKey: string | null
   primaryLang: string | null
-  listing: string
   claimed: boolean
   /** Null below three readers: a smaller count is nobody's to publish (ADR 0041). */
   readerCount: number | null
@@ -74,7 +73,6 @@ export type SiteData = {
     description: string | null
     faviconKey: string | null
     primaryLang: string | null
-    listing: string
     /** Null below three readers, as on Discover. */
     readerCount: number | null
     /** The claimant's handle. */

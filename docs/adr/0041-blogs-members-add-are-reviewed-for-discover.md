@@ -63,10 +63,13 @@ except that it starts from what members read rather than from a list in the repo
 **A public reader count starts at three.** Every public answer gives a blog's count through
 `publicReaderCount`: the count from three up, null below. That covers Discover, a blog's page and
 member search, and Discover's order too, which ranks a held-back count as none, so 1 and 2 sort
-with 0. The card and the page show nothing rather than "no readers yet", so a blog one member
-reads looks like an editorial pick nobody has subscribed to. The Privacy page says this, and says
-that the person who runs Tela reviews the blogs members add, seeing each blog and how many read
-it, never who.
+with 0. The card and the page show nothing rather than "no readers yet", and no public answer
+says how a blog was listed: Discover and a blog's page leave `listing` out. What anyone can still
+tell is that a listed blog shown without a count has fewer than three readers, not whether that
+is none, one or two. Discover still puts editorial picks first, so a blog's place says whether
+it is one, as it always has; it says nothing more of how many read the rest. The Privacy page
+says the count starts at three, and that the person who runs Tela reviews the blogs members add,
+seeing each blog and how many read it, never who.
 
 **What the review shows.** A row in the queue shows the blog's title, address and language, its
 posts of the last 30 days, its latest post, its reader count and when it was added; its record
