@@ -228,9 +228,12 @@ test.describe('translation', () => {
         await expect(choice(code)).toHaveAttribute('lang', code)
       }
       await expect(choice('en')).toHaveAttribute('aria-pressed', 'true')
-      // Linked, it is the language, not "Translate into", and there is no way off to Settings.
+      // Linked, it is the language, not "Translate into"; Settings is still where to set them apart.
       await expect(menu.getByTestId('language-menu-title')).toHaveCount(0)
-      await expect(menu.getByTestId('language-menu-settings')).toHaveCount(0)
+      await expect(menu.getByTestId('language-menu-settings')).toHaveAttribute(
+        'href',
+        '/settings/translation',
+      )
 
       // Traditional is a language of its own, not Chinese read another way.
       let push = pushed(page, '"uiLocale":"zh-Hant"')

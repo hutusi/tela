@@ -56,8 +56,8 @@ they changed the interface, which is what choosing it said not to do.
 
 **Set apart, the circle changes the translation only, and says so.** When the account holds a
 reading language, a choice is `setProfile {readingLang}`. The circle's name is "Translate into:
-English", its panel opens with *Translate into*, and it ends with *Language settings*, a link to
-`/settings/translation`, where the two are linked again. Which mode a choice is in is read from
+English", its panel opens with *Translate into*, and it ends, as a linked member's does, with
+*Language settings*, a link to `/settings/translation`, where the two are linked again. Which mode a choice is in is read from
 the store when the choice is made, not when the menu rendered, since a sync may have changed it
 in between (AGENTS.md).
 
@@ -102,8 +102,9 @@ interface choice for it to equal, and the reading language was one.
   in the language the account holds. The theme behaves the same. It is documented, not fixed.
 - A browser shared by two accounts gives the second, if it has no language yet, whatever the first
   left in the cookie. That is the language that member is looking at, as with the theme.
-- A linked member has no way from the header to set the two apart; Settings → Language does it,
-  as before. Once apart, the header's panel says so and links back.
+- A member's panel ends with *Language settings*, linked or apart: Settings → Language is where
+  the two are set apart and linked again, and a linked member has no other way to find it from
+  the header. A visitor's has no link, having no Settings.
 - The header has room again. At 640 px the member's row has 141 px to spare (72 px beside the
   button), and the visitor's 161 px; on a phone, 196 px of the member's 247 px nav shows at 360 px
   (122 px before). A fifth language costs the header nothing: it needs a `CIRCLE_LABELS` entry,

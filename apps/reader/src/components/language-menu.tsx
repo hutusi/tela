@@ -25,8 +25,9 @@ const endonym = (code: ReadingLanguage) => asLabel(LANGUAGE_NAMES[code][code] ??
  * 简体中文"). The caller gives it its display and shrink, since the visitor's is hidden below `sm`.
  *
  * `apart` is a member who chose a translation language of their own in Settings: the circle then
- * sets only that, and says so, in its name ("Translate into: English"), as the panel's title, and
- * with a way to Settings, where the two are linked again.
+ * sets only that, and says so, in its name ("Translate into: English") and as the panel's title.
+ * A member's panel also ends with a way to Settings → Language, linked or apart: it is where the
+ * two are set apart, and linked again; a visitor has no Settings to go to.
  *
  * The edge's page marks the language it was rendered in, which is right for every visitor it is
  * cached for, since the cache is kept per language; choosing needs the script.
@@ -36,12 +37,14 @@ export function LanguageMenu<T extends ReadingLanguage>({
   value,
   onChoose,
   apart = false,
+  settings = false,
   className,
 }: {
   options: readonly T[]
   value: T
   onChoose: (code: T) => void
   apart?: boolean
+  settings?: boolean
   className: string
 }) {
   const t = useTranslations('nav')
@@ -90,7 +93,7 @@ export function LanguageMenu<T extends ReadingLanguage>({
             {endonym(code)}
           </button>
         ))}
-        {apart ? (
+        {settings ? (
           <>
             <div className="mx-1 my-1 border-t border-line" />
             <Link
@@ -131,10 +134,17 @@ export function MemberLanguage() {
       value={readingLang}
       onChoose={choose}
       apart
+      settings
       className="shrink-0"
     />
   ) : (
-    <LanguageMenu options={UI_LOCALES} value={locale} onChoose={choose} className="shrink-0" />
+    <LanguageMenu
+      options={UI_LOCALES}
+      value={locale}
+      onChoose={choose}
+      settings
+      className="shrink-0"
+    />
   )
 }
 
