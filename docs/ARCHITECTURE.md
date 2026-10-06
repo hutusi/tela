@@ -151,9 +151,11 @@ and hashes as the `NORM_VERSION` contract.
   The pruning takes old limits and
   mutation ids, and personal data with no further use: invite holds a day past their expiry,
   ended sessions, better-auth's counters after a day, and spent sign-in codes and OAuth states.
-- Mondays (`0 8 * * 1`): the digest. Every five minutes after the tick: the health check and the
-  dead-man's ping (`src/ops.ts`). The health check itself is `health()` in `@tela/data`, so the
-  admin console asks it too; it counts only dead letters nobody has resolved.
+- Mondays (`0 8 * * 1`): the digest, which also counts Discover's review queue (`DISCOVER_REVIEW`
+  in `@tela/data`, the console's predicate, ADR 0041). Every five minutes after the tick: the
+  health check and the dead-man's ping (`src/ops.ts`). The health check itself is `health()` in
+  `@tela/data`, so the admin console asks it too; it counts only dead letters nobody has
+  resolved.
 - Every run leaves a heartbeat in `ops_heartbeats`: `tick` (each kind dispatched, and its
   `config`: the background budget, the article cap, whether a translator, the relay, WebSub and
   the assets bucket are configured), `health`, `daily` and `digest`. tela-api reads the budget
@@ -212,7 +214,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest, with readers to follow; which of them read a blog. Only as far as each shows it (ADR 0031) |
 | `GET /api/v1/export` | "Your data": the member's own rows as one JSON file |
 | `GET /api/v1/public/auth` | Which providers the sign-in sheet may offer, `{google, github}`: each once its app is configured (ADR 0036) |
-| `/api/v1/public/*` | Discover, a blog's page (with its claimant and readers' notes), a profile (with follow counts, and liked posts only if shown): listed and featured blogs only, edge-cacheable |
+| `/api/v1/public/*` | Discover, a blog's page (with its claimant and readers' notes), a profile (with follow counts, and liked posts only if shown): listed and featured blogs only, edge-cacheable. A blog's reader count is given from three readers and is null below, in Discover's order as well as its value (`publicReaderCount`, ADR 0041); member search gives it the same way |
 | `GET /api/v1/public/avatars/:userId?v=` | A member's picture, only at the version it is at (ADR 0032, 0033): the one they uploaded, from R2, else their Gravatar while they show it and the check found one, fetched here by the hash of their email, which never leaves tela-api; raster types only, 512 KB, immutable for 30 days; none is a 404 the letter stands in for |
 | `GET /api/v1/public/front` | The front page's edition (ADR 0035): each public blog's newest post, newest first, from the last seven days, or the latest ones when nobody wrote that week, eleven at most, with its titles and translated excerpts, its blog and its claimant; and the counts the copy states, public blogs and the week's distinct blogs, languages and posts. Each blog's newest post is one seek per live feed down `articles_feed_sort_idx`; future-dated posts wait. Cached as a profile is |
 | `GET /api/v1/public/handles/:handle` | Whether a handle is free, for For writers' card as it is typed: `invalid`, `reserved`, `taken` or `available` (by `@tela/shared`'s rules, read lowercase), and the first free one among it, it plus a digit and it plus `_writes`. `no-store`; a valid shape is counted per IP (`handleCheck`, 300 an hour) |
@@ -349,6 +351,9 @@ A Vite + React SPA that renders from the device.
 - **Every operator change is audited and undone only if nothing moved since:** the audit row is
   read in the change's own batch, and an undo's guards abort its batch through `lease_fence` when
   any target changed after the action.
+- **A small count is not published:** below three readers a blog's public count is null, and
+  Discover orders it as none, so neither the number nor the order names who reads a blog an
+  operator listed from the review queue (ADR 0041).
 
 ## Tests
 

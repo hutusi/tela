@@ -2,7 +2,9 @@
 
 Status: accepted (2026-10-05). Complements 0027 (the digest stays the alarm). Makes an exception
 to 0025 for one operator-only chunk. Gives 0011's "support action" (removing a claim) and 0018's
-veto (`rejected`) a place to be done, and adds an operator's vouch for a claim.
+veto (`rejected`) a place to be done, and adds an operator's vouch for a claim. Amended by 0041
+(2026-10-07): Discover opens on a review queue of the blogs members add, with Not for Discover
+beside List, Feature and Hide, and shows how many members read each blog, never who.
 
 ## Context
 

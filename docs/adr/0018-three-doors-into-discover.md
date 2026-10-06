@@ -1,6 +1,8 @@
 # 0018 — Three doors into Discover: editorial, claimed, community
 
 Status: accepted (2026-09-18). Supersedes ADR 0011's listing rule; its claim mechanics stand.
+Amended by 0041 (2026-10-07): an operator reviews the blogs members add and may list them, and a
+public reader count is given only from three readers. Names corrected 2026-10-07 (below).
 
 ## Context
 
@@ -63,3 +65,19 @@ out of the directory, and an editorial pick or an operator's veto is already dec
 - The seed fetches from wherever the command runs, not through the relay, and passes no region
   policy: a mainland-China host that times out is reported as an error, and the fix is `region:
   'cn'` on its entry.
+
+## Corrected (2026-10-07)
+
+This ADR was written on the Postgres stack; the names it uses are now these (ADR 0020):
+
+- `apps/worker/src/seed/curated-sites.ts` and `worker:once seed-discover` are
+  `apps/api/scripts/curated-sites.ts` and `bun run admin curate`.
+- `curateSite` (`packages/db/src/queries/discover.ts`) is `curate()` in
+  `apps/api/src/routes/curate.ts`.
+- `recomputeReaderCount` is `recountReaders` in `packages/data/src/queries/sites.ts`.
+- The paragraph on RLS policies and `ALTER TYPE`, and the consequence on the Supabase `anon` role,
+  are obsolete: D1 has no roles or policies, and `apps/api/src/routes/public.ts` filters every
+  public answer by listing. Reusing `listed` for community promotion stands on its other reason,
+  that `claimed_by is not null` already tells a claimed blog from one readers listed.
+- "Only the count the card already displays" no longer holds below three readers: ADR 0041 gives
+  a public count only from the community door's threshold up.

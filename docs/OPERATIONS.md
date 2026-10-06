@@ -565,18 +565,20 @@ Nothing here needs watching; three things speak up when something is wrong (ADR 
   - *articles waiting over six hours for their full text* (more than twenty): extraction is
     failing on some host; the dead letters name it.
   - *the last backup is from …* or *failed its check*: see *Backups*.
-- **The Monday digest** to `DIGEST_TO`: new posts and members, failing and dead feeds, dead
-  letters, model use, database size, the last backup, and feeds Cloudflare cannot reach (the case
-  for the relay). Without `DIGEST_TO` or `RESEND_API_KEY` it is built and not sent;
+- **The Monday digest** to `DIGEST_TO`: new posts and members, how many blogs members added wait
+  for review in Discover (with the link to `/admin/discover`, from `PUBLIC_URL`), failing and dead
+  feeds, dead letters, model use, database size, the last backup, and feeds Cloudflare cannot
+  reach (the case for the relay). Without `DIGEST_TO` or `RESEND_API_KEY` it is built and not sent;
   `wrangler tail tela-jobs` on a Monday at 08:00 UTC shows the run.
 - **Resend's and Bailian's own consoles** for their quotas; the digest shows Tela's side of both.
 
 ## The admin console
 
 `/admin` (ADR 0039) is where the operator acts on what the digest and the dead-man's switch
-report: claims to review, feeds to fetch, pause or move to the relay, Discover's listings, members,
-invite codes, translation spend and dead letters. It reads from tela-api over the network, unlike
-the rest of the reader, and every change it makes is audited in `admin_actions`.
+report: claims to review, feeds to fetch, pause or move to the relay, the blogs members added and
+Discover's listings, members, invite codes, translation spend and dead letters. It reads from
+tela-api over the network, unlike the rest of the reader, and every change it makes is audited in
+`admin_actions`.
 
 - **Open it to a member:** `ADMIN_TOKEN=… bun run admin grant you@example.com` (and `ungrant`). The
   account must exist; only the token grants it, so an admin cannot make another admin. The account
@@ -588,8 +590,9 @@ the rest of the reader, and every change it makes is audited in `admin_actions`.
 - **What it changes beats the work in flight.** Pausing a feed, moving it to the relay, rejecting or
   removing a claim break the item's lease in the same batch, so a job already running writes
   nothing over the choice.
-- **Discover** shows a listing change on the public pages within about five minutes: the edge
-  caches them per colo, and nothing purges that cache.
+- **Discover** opens on To review, the blogs members added that wait for a decision (ADR 0041),
+  and badges how many there are; see *Curation*. A listing change reaches the public pages within
+  about five minutes: the edge caches them per colo, and nothing purges that cache.
 - **Sign out everywhere** deletes the member's sessions; a device's signed copy of one still
   answers for up to five minutes wherever only that copy is read.
 - **Retry** on a dead letter makes its row due again for the next tick, with fresh attempts. A body
@@ -602,8 +605,9 @@ the rest of the reader, and every change it makes is audited in `admin_actions`.
   assets bucket are configured), `health` (every fifth minute, what the dead-man's switch heard),
   `daily` (upkeep and the export) and `digest` (once sent). The console reads the budget and the
   relay from the tick's, so after a deploy they show as unknown until the first tick.
-- **What it never shows:** a member's subscriptions, reading, likes, highlights or follows. An
-  audit row never holds an email address.
+- **What it never shows:** a member's subscriptions, reading, likes, highlights or follows, or
+  who added a blog: the review queue shows how many read each blog, never who. An audit row never
+  holds an email address.
 
 ## Backups
 
@@ -634,16 +638,24 @@ the rest of the reader, and every change it makes is audited in `admin_actions`.
 ## Curation
 
 Discover has three doors (ADR 0018): the editorial list, a verified claim, and three distinct
-subscribers on an unclaimed site.
+subscribers on an unclaimed site; and the operator reviews every blog a member adds (ADR 0041).
+A public reader count is shown only from three readers.
 
 - **Apply the editorial list:** `ADMIN_TOKEN=… bun run admin curate` adds each blog in
   `apps/api/scripts/curated-sites.ts` (fetched and parsed, so its declared home is honoured) and
   features it with its topics, one blog a request. Running it again changes nothing that is
   already right. A rejected blog is left alone; a claimed one keeps its owner's topics.
+- **Review the blogs members add:** Discover → To review lists each private, unclaimed blog that
+  someone reads and a live feed has filled, with its language, its posts of the last 30 days, its
+  latest post, its readers and when it was added. List it, or Not for Discover; either takes it
+  out of the queue (`sites.reviewed_at`), and either can be undone, which puts it back. Not for
+  Discover is no veto: three readers still list the blog. A blog listed without topics shows only
+  under All, so give it some in its record. The digest counts the queue every Monday.
 - **Feature or hide a blog:** in the console, Discover or Sites → Feature, List, Hide or
-  Restore. Hide (`rejected`) is the veto curation and every door leave alone; Restore returns a
-  blog to what the doors say. `private` is not offered: an unclaimed blog with three readers is
-  listed again on the next subscribe.
+  Restore. Feature, List and Hide also take a blog out of the review queue. Hide (`rejected`) is
+  the veto curation and every door leave alone; Restore returns a blog to what the doors say, and
+  leaves it reviewed. `private` is not offered: an unclaimed blog with three readers is listed
+  again on the next subscribe.
 - **Take a blog off Tela when its writer asks** (Terms, "Writers' work"): hide it, which takes it
   out of Discover and makes its page a 404, and pause each of its feeds (Feeds → Fetching, searched
   by the blog's address). Fetching, page

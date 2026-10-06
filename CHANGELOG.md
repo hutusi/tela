@@ -49,6 +49,13 @@ everything so far sits under `[Unreleased]`.
   budgets, and System the health check, the scheduled runs and each kind's leases. Every change
   is audited and undone only while nothing has changed since; a member's reading stays out of it.
   `bun run admin grant <email>` opens it to a member.
+- **Blogs members add are reviewed for Discover** (ADR 0041). Every blog a member adds waits in
+  the console's Discover → To review once a feed has filled it, with its language, its pace, its
+  latest post and how many read it, never who. The operator lists it or says it is not for
+  Discover, and can undo either; the sidebar badges the queue and the Monday digest counts it.
+  Three readers still list a blog the operator passed over, and Hide stays the veto. A public
+  reader count now starts at three, on Discover, a blog's page and search, and the Privacy page
+  says so.
 
 - **Traditional Chinese and French** (ADR 0038), as reading languages and as interface
   languages. Traditional is converted from Simplified by OpenCC with Taiwan phrasing, so a

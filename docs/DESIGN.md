@@ -385,7 +385,9 @@ dedicated design for it, so it follows the Discover page's spacing and the site 
 
 Discover card (from the design): 40 px avatar (favicon or initial), name with a green ✓ when
 claimed, host, language chip, serif tagline, "Latest: …", "N readers · cadence", and a
-Subscribe/Subscribed pill. Cadence is derived from posts in the last 30 days.
+Subscribe/Subscribed pill. Cadence is derived from posts in the last 30 days. Below three readers
+tela-api gives no count (ADR 0041), and the line is the cadence alone, in the blog page's words
+("Posts weekly"); the blog page drops its "N readers on Tela" the same way.
 
 Front page (`views/landing.tsx`, from `Tela Landing.dc.html` Turn 2, 2A Night and 2B Day, ADR
 0035): a 1280 px page with 56 px sides (16 px on a phone), at the design's line height of 1.2
@@ -452,7 +454,7 @@ reader's shell.
   mark, *Tela* in the serif and an *Admin* pill; Overview, then Queues (Claims), Library (Sites,
   Feeds, Discover), Members (People, Invitations) and Running (Translation, System) under 11px
   uppercase labels, the current one on `hover`; badges in the accent for what waits (claims to
-  review, failing feeds, dead letters), refreshed after every action; the member's avatar, name
+  review, failing feeds, Discover's blogs to review, dead letters), refreshed after every action; the member's avatar, name
   and *Admin* at the foot, then *← Back to reading*. The content column scrolls on its own. Below
   `md` the sidebar is a strip above the page that scrolls sideways, every item `shrink-0`.
 - **Area header.** The group as an 11px uppercase accent eyebrow, the area in the serif at 40px
@@ -493,10 +495,10 @@ reader's shell.
   Enter on a button presses it.
 - **Overview.** Today's date as the eyebrow, *Overview*, how many decisions wait; the health check
   as one bordered line (a dot, what fails, "checked 13:05 UTC", *System →*); *Needs you*, four
-  `surface` cards (claims to review, failing feeds, dead letters, Discover candidates), each with up
-  to three rows and *Start →*, a row linking under the filter that lists it (a feed timing out
-  under *Timing out*); *This week* in four cells against the week before; *Recent admin activity*,
-  each line opening the record it acted on.
+  `surface` cards (claims to review, failing feeds, dead letters, blogs to review for Discover),
+  each with up to three rows and *Start →*, a row linking under the filter that lists it (a feed
+  timing out under *Timing out*); *This week* in four cells against the week before; *Recent admin
+  activity*, each line opening the record it acted on.
 
 **Strings.** The console's words live in the chunk, in `src/admin/messages/{en,zh-Hans}/*.json`,
 one file per part (`shell`, `library`, `members`, `running`), never in the app's catalogues. English
