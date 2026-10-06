@@ -156,7 +156,7 @@ Defects that already cost time here, not hypotheticals.
 Update whichever covers what you changed, in the same change:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the living system map. Tracks: schema changes, new kinds of work, new routes, new safeguards.
-- [docs/adr/](docs/adr/) — decision records 0001–0039. A reversed decision gets a superseding ADR, not a silent edit.
+- [docs/adr/](docs/adr/) — decision records 0001–0041. A reversed decision gets a superseding ADR, not a silent edit.
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — provisioning, deploys and day-2 runbooks. Anything touching env vars, secrets, deploys, rate limits or failure signatures lands here.
 - [docs/DESIGN.md](docs/DESIGN.md) — tokens, layout rules, components, the i18n string convention.
 - [packages/content/README.md](packages/content/README.md) — the normative spec for sanitization, blocks and hashing. Changing a rule here means bumping `NORM_VERSION`.
