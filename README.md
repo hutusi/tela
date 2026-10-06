@@ -49,7 +49,7 @@ bun run dev           # the reader with tela-api and tela-jobs beside it; see do
 - **Reader**: every screen renders from the device, so opening a post, changing a filter or
   going back never waits on the network; unread bodies are prefetched while idle, and a repeat
   visit paints from a cached shell. Subscribe by URL or OPML, unread counts, smart filters (all /
-  today / liked), mark read and mark all read, likes.
+  today / liked), mark read or unread and mark all read, likes.
 - **Translation**: titles translated eagerly, bodies on open and streamed in as they are
   translated; side-by-side / translation / original modes aligned block by block, one language
   circle in the header for the interface and the translation together (or the translation alone,

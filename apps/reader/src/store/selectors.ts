@@ -29,6 +29,22 @@ export function isRead(t: Tables, a: ArticleRow, now: number): boolean {
   return a.fetchedAt < now - HORIZON_DAYS * DAY
 }
 
+/**
+ * Whether a post shows as read: the list's dot, the reader's Mark as read or Mark as unread, and
+ * which of the two `m` sends all ask this, so they never disagree. The open post counts as read
+ * before its markRead lands while opening reads (`markOnOpen`), but not once the member marks it
+ * unread while it is open: opening read it, and that later choice stands until the next open.
+ */
+export function shownRead(
+  t: Tables,
+  a: ArticleRow,
+  now: number,
+  open: boolean,
+  markOnOpen: boolean,
+): boolean {
+  return isRead(t, a, now) || (open && markOnOpen && !isMarkedUnread(t, a.id))
+}
+
 export const isLiked = (t: Tables, articleId: number) => t.states.get(articleId)?.likedAt != null
 
 export const isRecommended = (t: Tables, articleId: number) =>

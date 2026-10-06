@@ -178,7 +178,8 @@
     "fetchingFullText": "正在從原站取得全文…",
     "upNext": "下一篇",
     "focus": "專注",
-    "markRead": "標為已讀"
+    "markRead": "標為已讀",
+    "markUnread": "標為未讀"
   },
   "add": {
     "title": "新增訂閱",
@@ -678,6 +679,7 @@
     "close": "關閉文章",
     "original": "在新分頁開啟原文",
     "like": "喜歡或取消喜歡這篇文章",
+    "read": "將這篇文章標為已讀或未讀",
     "highlight": "為所選文字劃線",
     "sidebar": "收起或展開側欄",
     "focus": "閱讀時隱藏列表",

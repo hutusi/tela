@@ -1,9 +1,9 @@
 /**
  * The keyboard layer (ADR 0026): j and k through the list, Esc to close, focus back on the row, o
- * for the original and l for a like.
+ * for the original, l for a like and m for read or unread.
  */
 import { expect, type Page, test } from '@playwright/test'
-import { BASE, memberHeaders, synced } from './helpers'
+import { BASE, memberHeaders, readStateOnServer, resetReading, synced } from './helpers'
 
 test('j and k step through the list, and Esc closes back to the row', async ({ page }) => {
   await page.goto('/reading')
@@ -198,16 +198,58 @@ test('l likes the open article and l again unlikes it, on the server too', async
   }
 })
 
-test('o and l typed in a field are typing, not shortcuts', async ({ page, context }) => {
+test('m marks the open article unread and m again reads it, on the server too', async ({
+  page,
+}) => {
+  // Opening reads it, which this spec starts from: whatever an earlier spec left of the pref.
+  await resetReading(page.request)
+  const { first } = await openFirst(page)
+  const row = page.locator(`[data-testid="article-row"][data-article-id="${first}"]`)
+  const dot = row.getByTestId('unread-dot')
+  await expect(dot).toHaveCount(0)
+  await expect(page.getByTestId('mark-unread')).toBeVisible()
+
+  await page.keyboard.press('m')
+  await expect(dot).toHaveCount(1)
+  await expect(page.getByTestId('mark-read')).toBeVisible()
+  // Marked unread: no read, and the clock of a choice made by hand.
+  await expect
+    .poll(() => readStateOnServer(page.request, first))
+    .toEqual({ readAt: false, readUpdatedAt: true })
+
+  await page.keyboard.press('m')
+  await expect(dot).toHaveCount(0)
+  await expect(page.getByTestId('mark-unread')).toBeVisible()
+  await expect
+    .poll(() => readStateOnServer(page.request, first))
+    .toEqual({ readAt: true, readUpdatedAt: true })
+  // The article stays open throughout.
+  await expect(page).toHaveURL(new RegExp(`article=${first}$`))
+
+  // With no article open there is nothing to mark.
+  await page.keyboard.press('Escape')
+  await expect(page).not.toHaveURL(/article=/)
+  await page.keyboard.press('m')
+  await page.keyboard.press('?')
+  await expect(page.getByTestId('shortcuts')).toContainText('Mark the article read or unread')
+  await expect(dot).toHaveCount(0)
+})
+
+test('o, l and m typed in a field are typing, not shortcuts', async ({ page, context }) => {
   await openFirst(page)
   const like = page.getByTestId('like-button')
   const pressed = (await like.getAttribute('aria-pressed')) ?? ''
+  // Mark as read or Mark as unread, whichever an earlier spec left it showing.
+  const mark = page.getByTestId(/^mark-(un)?read$/)
+  const marking = (await mark.getAttribute('data-testid')) ?? ''
   const search = page.getByTestId('search-input')
   await search.focus()
   await page.keyboard.press('o')
   await page.keyboard.press('l')
-  await expect(search).toHaveValue('ol')
+  await page.keyboard.press('m')
+  await expect(search).toHaveValue('olm')
   await expect(like).toHaveAttribute('aria-pressed', pressed)
+  await expect(mark).toHaveAttribute('data-testid', marking)
   await expect(page.getByTestId('reader')).toBeVisible()
   expect(context.pages()).toHaveLength(1)
 })

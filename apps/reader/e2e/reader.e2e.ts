@@ -5,7 +5,7 @@
  */
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
-import { FIXTURES, keepCycling, resetReading, setPrefs, synced } from './helpers'
+import { FIXTURES, keepCycling, readStateOnServer, resetReading, setPrefs, synced } from './helpers'
 
 test.describe('reader', () => {
   test('signed-in home goes to reading, with the subscriptions from the first sync', async ({
@@ -81,9 +81,62 @@ test.describe('reader', () => {
       await page.getByTestId('mark-read').click()
       await expect(row.getByTestId('unread-dot')).toHaveCount(0)
       await expect(page.getByTestId('mark-read')).toHaveCount(0)
+      // And back, with the pref off as with it on.
+      await page.getByTestId('mark-unread').click()
+      await expect(row.getByTestId('unread-dot')).toHaveCount(1)
+      await page.getByTestId('mark-read').click()
+      await expect(row.getByTestId('unread-dot')).toHaveCount(0)
+      // Read on the server before the page goes, so the next spec does not find it unread.
+      const id = await row.getAttribute('data-article-id')
+      await expect
+        .poll(() => readStateOnServer(page.request, id ?? ''))
+        .toEqual({ readAt: true, readUpdatedAt: true })
     } finally {
       await resetReading(page.request)
     }
+  })
+
+  test('Mark as unread keeps a post unread across a reload, until it is opened again', async ({
+    page,
+  }) => {
+    // Opening reads, which is what this spec is about: whatever an earlier spec left of the pref.
+    await resetReading(page.request)
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    await expect(page.getByTestId('article-row').first()).toContainText('Julia Evans')
+    const first = page.getByTestId('article-row').first()
+    const id = (await first.getAttribute('data-article-id')) ?? ''
+    const row = page.locator(`[data-testid="article-row"][data-article-id="${id}"]`)
+    const dot = row.getByTestId('unread-dot')
+    await row.click()
+    await expect(page.locator('.article-body').first()).toBeVisible()
+    // Opening read it, so the action row offers the way back.
+    await expect(dot).toHaveCount(0)
+    await page.getByTestId('mark-unread').click()
+    await expect(dot).toHaveCount(1)
+    await expect(page.getByTestId('mark-read')).toBeVisible()
+    await expect
+      .poll(() => readStateOnServer(page.request, id))
+      .toEqual({ readAt: false, readUpdatedAt: true })
+
+    // Reloaded with the post open would be an open, which reads it: from the list instead.
+    await page.getByTestId('close-article').click()
+    await expect(page).not.toHaveURL(/article=/)
+    await page.reload()
+    await synced(page)
+    await expect(row).toBeVisible()
+    await expect(dot).toHaveCount(1)
+
+    // Opening it again reads it, as opening reads any unread post.
+    await row.click()
+    await expect(page.locator('.article-body').first()).toBeVisible()
+    await expect(dot).toHaveCount(0)
+    await expect(page.getByTestId('mark-unread')).toBeVisible()
+    await expect
+      .poll(() => readStateOnServer(page.request, id))
+      .toEqual({ readAt: true, readUpdatedAt: true })
   })
 
   test('hiding read posts keeps the one being read, until the reader moves to another list', async ({

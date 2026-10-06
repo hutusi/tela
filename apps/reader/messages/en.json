@@ -178,7 +178,8 @@
     "fetchingFullText": "Fetching the full post from the site…",
     "upNext": "Up next",
     "focus": "Focus",
-    "markRead": "Mark as read"
+    "markRead": "Mark as read",
+    "markUnread": "Mark as unread"
   },
   "add": {
     "title": "Add a feed",
@@ -678,6 +679,7 @@
     "close": "Close the article",
     "original": "Open the original in a new tab",
     "like": "Like or unlike the article",
+    "read": "Mark the article read or unread",
     "highlight": "Highlight the selection",
     "sidebar": "Collapse or expand the sidebar",
     "focus": "Hide the list while reading",

@@ -5,6 +5,7 @@ import {
   isMarkedUnread,
   isRead,
   prefetchPlan,
+  shownRead,
   shownTitle,
   subscriptionItems,
   totals,
@@ -59,6 +60,32 @@ describe('what the reading view shows', () => {
       'k4',
       'k2',
     ])
+  })
+
+  test('the open post shows as read while opening reads it, until it is marked unread', () => {
+    const t = tables({
+      subscriptions: [sub(1)],
+      articles: [article(1), article(2), article(3)],
+      // 1 not read yet (its open's markRead has not landed), 2 marked unread, 3 read.
+      states: [
+        {
+          articleId: 2,
+          readAt: null,
+          readUpdatedAt: 5,
+          likedAt: null,
+          likedUpdatedAt: null,
+          seq: 1,
+        },
+        { articleId: 3, readAt: 4, likedAt: null, likedUpdatedAt: null, seq: 1 },
+      ],
+    })
+    const shown = (id: number, open: boolean, markOnOpen: boolean) =>
+      shownRead(t, t.articles.get(id) ?? article(id), NOW, open, markOnOpen)
+    // Open, with opening reading it: only the one marked unread shows unread.
+    expect([1, 2, 3].map((id) => shown(id, true, true))).toEqual([true, false, true])
+    // Marking read by hand, or not open: as the tables say.
+    expect([1, 2, 3].map((id) => shown(id, true, false))).toEqual([false, false, true])
+    expect([1, 2, 3].map((id) => shown(id, false, true))).toEqual([false, false, true])
   })
 
   test('lists newest first; Today is a day; Liked spans feeds the member left', () => {

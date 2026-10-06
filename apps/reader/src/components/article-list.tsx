@@ -7,7 +7,7 @@ import { relativeTime } from '../lib/format'
 import { canonicalReadingHref, type ReadingParams, readingHref } from '../lib/href'
 import { readingPrefsOf } from '../lib/prefs'
 import { useStore, useTables } from '../store/hooks'
-import { feedTitle, isMarkedUnread, isRead, shownTitle } from '../store/selectors'
+import { feedTitle, shownRead, shownTitle } from '../store/selectors'
 import { Swatch } from './swatch'
 
 type Props = {
@@ -105,8 +105,7 @@ export function ArticleList({
           // posts read themselves: then it is unread until they do, and its dot says so. Nor
           // once the member marks it unread while it is open: opening read it, and that later
           // choice stands until the next open reads it again.
-          const read =
-            isRead(tables, a, now) || (active && markOnOpen && !isMarkedUnread(tables, a.id))
+          const read = shownRead(tables, a, now, active, markOnOpen)
           const { title: rowTitle, excerpt, badge } = shownTitle(tables, a, readingLang, never)
           const name = feedTitle(tables, a.feedId)
           // No mode in the href: the remembered mode is the one an open should use (ADR 0017).

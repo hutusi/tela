@@ -616,13 +616,18 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - **Width:** 560 / 640 / 760 px for the single column, and for a stacked pair. Two paired
     columns keep their own 640px measure.
   - **Theme:** Auto / Light / Dark. The header's theme menu writes the same pref.
-- **Marking read and hiding read posts** are the member's (Settings → Reading). With marking on
-  opening off, the open post keeps its unread dot and the action row offers *Mark as read*; liking
-  a post still reads it. With read posts hidden, a list keeps every post it has shown unread or
-  open during the visit, including those the catch-up pull brought after it was painted, so
-  opening a post, `j` and `k` never pull it out from under them; it is gone the next time they
-  come to that list. An empty list then says "all caught up", with a link back to
-  the setting.
+- **Marking read and hiding read posts** are the member's (Settings → Reading). The action row
+  always offers the other state: *Mark as unread* on a read post, *Mark as read* on an unread one,
+  whatever the pref, since on a phone, which has no `m`, it is the only way back to unread. It is
+  one button whose label turns, in the bordered pill style, before "Aa". With marking on opening
+  on, the open post is read, so the button says *Mark as unread*; a post marked unread while open
+  keeps its dot, and the button says *Mark as read*, until the next open reads it. With marking on
+  opening off, the open post keeps its unread dot until the member marks it. Liking a post nobody
+  marked by hand still reads it. With read posts hidden, a list keeps every post it has shown
+  unread or open during the visit, including those the catch-up pull brought after it was
+  painted, so opening a post, `j` and `k` never pull it out from under them; it is gone the next
+  time they come to that list. An empty list then says "all caught up", with a link back to the
+  setting.
 - **Translating is the member's too** (Settings → Translation). With *Translate automatically* off,
   a foreign post opens in the original, and the translation bar says "Written in Japanese." with
   a *Translate into English* button where the mode toggle would be; nothing is requested or
@@ -657,7 +662,8 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - Under the article, *N highlights* lists each quote (in a `<mark>` there, since it is a copy)
     with its note. One the post lost says so in `muted`; one on a layout not showing says where
     it is.
-- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `o`, `l`, `h`, `[`, `f` and `?` in `kbd`
-  chips. `o` opens the original in a new tab and `l` likes or unlikes, both on the open article.
+- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `o`, `l`, `m`, `h`, `[`, `f` and `?` in
+  `kbd` chips. `o` opens the original in a new tab, `l` likes or unlikes, and `m` marks read or
+  unread, as the action row's button would, all on the open article.
   `[` needs AltGr or Option on some non-US layouts, as `?` does on others; neither is worked
   around.

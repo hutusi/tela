@@ -94,6 +94,26 @@ export async function memberHeaders(request: APIRequestContext): Promise<Record<
   return { 'x-tela-client': '2', 'x-tela-member': id }
 }
 
+/**
+ * Which of an article's read clocks the server holds for the member, through a snapshot pull:
+ * `readAt` without `readUpdatedAt` is a plain read, `readUpdatedAt` alone is marked unread, and
+ * both are read again by hand (ADR 0009).
+ */
+export async function readStateOnServer(
+  api: APIRequestContext,
+  articleId: number | string,
+): Promise<{ readAt: boolean; readUpdatedAt: boolean }> {
+  const res = await api.get(`${BASE}/api/v1/sync?cursor=0`, {
+    headers: await memberHeaders(api),
+  })
+  if (!res.ok()) throw new Error(`sync failed: ${res.status()} ${await res.text()}`)
+  const { rows } = (await res.json()) as {
+    rows: { states: { articleId: number; readAt: number | null; readUpdatedAt?: number | null }[] }
+  }
+  const state = rows.states.find((s) => s.articleId === Number(articleId))
+  return { readAt: state?.readAt != null, readUpdatedAt: state?.readUpdatedAt != null }
+}
+
 /** Subscribe the signed-in context to a feed URL, as the add page does. */
 export async function addFeed(
   request: APIRequestContext,

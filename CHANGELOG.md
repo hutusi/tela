@@ -28,6 +28,10 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Mark as unread.** The reader's action row offers *Mark as unread* on a read post and *Mark as
+  read* on an unread one, whether or not opening reads, and `m` does the same from the keyboard. A
+  post marked unread beats an earlier "mark all read" and the 30-day horizon until it is read
+  again, on every device (ADR 0009).
 - **Tela installs as an app** on Android and the desktop: a web app manifest that opens the
   reading page in a window of its own, with 192 and 512 icons and a maskable one for the
   launcher's own shape. The browser's bar is on the page's paper, in either theme.

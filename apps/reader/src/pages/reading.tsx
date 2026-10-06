@@ -22,13 +22,14 @@ import {
   readingHref,
 } from '../lib/href'
 import { gridColumns, toggleFocus, useLayout } from '../lib/layout'
-import { PREF_KEYS, useReadingPrefs } from '../lib/prefs'
+import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
   isLiked,
   isRead,
   prefetchPlan,
+  shownRead,
   shownTitle,
   subscriptionItems,
   totals,
@@ -132,9 +133,10 @@ export function ReadingPage() {
   }, [navigate])
 
   // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
-  // article, [ shows or hides the sidebar, f the list too while one is open, o opens its original
-  // and l likes or unlikes it, ? lists the keys. Typing in a field is never a shortcut, and a
-  // popover that handles Esc itself marks the event so the article stays open.
+  // article, [ shows or hides the sidebar, f the list too while one is open, o opens its original,
+  // l likes or unlikes it and m marks it read or unread, ? lists the keys. Typing in a field is
+  // never a shortcut, and a popover that handles Esc itself marks the event so the article stays
+  // open.
   const [help, setHelp] = useState(false)
   // Read when a key is pressed, not when the listener was bound: a second `j` can come before
   // React has rendered the first one's navigation, and the URL is already right by then.
@@ -166,11 +168,12 @@ export function ReadingPage() {
       } else if (e.key === 'f' && now.articleId !== null) {
         e.preventDefault()
         toggleFocus()
-      } else if ((e.key === 'o' || e.key === 'l') && now.articleId !== null) {
-        // A key held down repeats: one tab and one turn of the like per press, not per repeat.
+      } else if ((e.key === 'o' || e.key === 'l' || e.key === 'm') && now.articleId !== null) {
+        // A key held down repeats: one tab and one turn of the like or the read per press, not
+        // per repeat.
         if (e.repeat) return
-        // The article the URL has open and its like as the store has them now: a j a moment ago
-        // may not have rendered yet, and a like from another tab may have synced since.
+        // The article the URL has open and its state as the store has them now: a j a moment ago
+        // may not have rendered yet, and a like or a read from another tab may have synced since.
         const { tables } = store.getSnapshot()
         const article = store.article(tables, now.articleId)
         if (!article) return
@@ -180,13 +183,20 @@ export function ReadingPage() {
           e.preventDefault()
           // As the meta line's link opens it: a new tab that cannot reach back into this one.
           window.open(article.url, '_blank', 'noopener,noreferrer')
-        } else {
+        } else if (e.key === 'l') {
           e.preventDefault()
           store.mutate({
             type: 'setLiked',
             articleId: article.id,
             liked: !isLiked(tables, article.id),
           })
+        } else {
+          e.preventDefault()
+          // The other way from what the reader's button and the list's dot show, which ask the
+          // same question: the open post counts as read while opening reads it.
+          const { markOnOpen } = readingPrefsOf(tables)
+          const read = shownRead(tables, article, Date.now(), true, markOnOpen)
+          store.mutate({ type: read ? 'markUnread' : 'markRead', articleId: article.id })
         }
       } else if (e.key === '?') {
         e.preventDefault()
