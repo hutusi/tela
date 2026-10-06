@@ -312,6 +312,26 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   expect(readAgain.rows.states).toMatchObject([
     { articleId: 1, readAt: unreadAt, readUpdatedAt: unreadAt },
   ])
+  // Marked unread past the horizon, a post is kept, through a fourth term of the kept union and a
+  // nested select in the horizon's, on D1.
+  const longAgo = now - 40 * 24 * 60 * 60 * 1000
+  await db.batch([
+    bumpSeq(db),
+    db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at, seq)
+      values (2, 1, 'k2', 'Old post', ${longAgo}, ${longAgo}, ${currentSeq})`),
+  ])
+  await call('/api/v1/mutations', {
+    body: {
+      mutations: [{ mid: 'workers-unread-2', at: unreadAt, type: 'markUnread', articleId: 2 }],
+    },
+    ...member,
+  })
+  const oldUnread = (await (
+    await call(`/api/v1/sync?cursor=${readAgain.cursor}`, member)
+  ).json()) as PullResponse
+  expect(oldUnread.rows.articles.map((a) => a.id)).toEqual([2])
+  const kept = (await (await call('/api/v1/sync?cursor=0', member)).json()) as PullResponse
+  expect(kept.rows.articles.map((a) => a.id).sort()).toEqual([1, 2])
 
   // The Following feed: printf keys, nested window functions and the (time, offset, key) cursor, on D1.
   await db.batch([

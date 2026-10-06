@@ -11,9 +11,10 @@
  *   subscription row of a feed since left: its watermark is what says such a post was read once
  *   compaction has dropped its read state.
  *
- * A snapshot (cursor 0) sends all of it within the horizon. A delta sends rows whose seq is above
- * the cursor, plus a horizon snapshot of any feed subscribed since: its articles were written
- * before the subscription, so their seqs are below the cursor.
+ * A snapshot (cursor 0) sends all of it within the horizon, and the posts of feeds followed that
+ * the member marked unread, which beat it (ADR 0009). A delta sends rows whose seq is above the
+ * cursor, plus a horizon snapshot of any feed subscribed since: its articles were written before
+ * the subscription, so their seqs are below the cursor.
  */
 import type { SQL } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
@@ -112,18 +113,30 @@ function scope(userId: string, horizon: number, cursor: number) {
     union select article_id from recommendations where user_id = ${userId} and deleted_at is null
     union select article_id from highlights where user_id = ${userId} and deleted_at is null`
   /**
+   * Posts the member marked unread by hand (ADR 0009). Unread beats the horizon, so a device must
+   * hold them while it holds their feed, or each device counts what it happened to keep.
+   */
+  const markedUnread = (feeds: SQL, since: SQL = sql``) => sql`select article_id
+    from user_article_states where user_id = ${userId} and read_at is null
+      and read_updated_at is not null ${since}
+      and article_id in (select id from articles where feed_id in (${feeds}))`
+  /**
    * Articles the member began to keep since the cursor. They come whole, with their feed, because
    * the article may belong to no feed the member subscribes to (a liked post from a feed since
-   * left), so its row was never sent or has been dropped.
+   * left), so its row was never sent or has been dropped. A post marked unread past the horizon
+   * comes the same way: no device need have held it (a search hit, ADR 0025).
    */
   const newlyKept = sql`select article_id from user_article_states
       where user_id = ${userId} and liked_at is not null and seq > ${cursor}
     union select article_id from recommendations
       where user_id = ${userId} and deleted_at is null and seq > ${cursor}
     union select article_id from highlights
-      where user_id = ${userId} and deleted_at is null and seq > ${cursor}`
+      where user_id = ${userId} and deleted_at is null and seq > ${cursor}
+    union ${markedUnread(activeFeeds, sql`and seq > ${cursor}`)}`
+  /** A feed's horizon, and its posts marked unread, which beat it. */
   const horizonOf = (feeds: SQL) =>
-    sql`select id from articles where feed_id in (${feeds}) and fetched_at >= ${horizon}`
+    sql`select id from articles where feed_id in (${feeds})
+      and (fetched_at >= ${horizon} or id in (${markedUnread(feeds)}))`
   return { activeFeeds, newFeeds, kept, newlyKept, horizonOf }
 }
 

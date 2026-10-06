@@ -514,6 +514,47 @@ describe('push', () => {
       expect(await shown(old)).toBe(false)
     })
 
+    describe('past the horizon, it is kept like a liked post, while its feed is followed', () => {
+      test('a snapshot sends it, so a new device counts it unread', async () => {
+        const old = await addArticle(1, now - 40 * DAY)
+        await addArticle(1, now - 40 * DAY) // another, past the horizon and never touched
+        await push([{ type: 'markUnread', articleId: old }])
+        const snap = await pull(0)
+        expect(snap.rows.articles.map((a) => a.id)).toEqual([old])
+        expect(snap.rows.states).toMatchObject([{ articleId: old, readAt: null }])
+        expect(await shown(old)).toBe(false)
+      })
+
+      test('a delta sends it whole, to devices that never held it (a search hit)', async () => {
+        const old = await addArticle(1, now - 40 * DAY)
+        const snap = await pull(0)
+        expect(snap.rows.articles).toEqual([])
+        await push([{ type: 'markUnread', articleId: old }])
+        const delta = await pull(snap.cursor)
+        expect(delta.rows.articles.map((a) => a.id)).toEqual([old])
+        expect(delta.rows.states).toMatchObject([{ articleId: old, readAt: null }])
+        // Read again, it is an old post like any other: no device is sent it from then on.
+        await push([{ type: 'markRead', articleId: old }])
+        expect((await pull(0)).rows.articles).toEqual([])
+      })
+
+      test('a feed left lets it go; followed again, it comes back with the horizon', async () => {
+        const old = await addArticle(1, now - 40 * DAY)
+        await push([{ type: 'markUnread', articleId: old }])
+        await push([{ type: 'unsubscribe', feedId: 1 }])
+        const left = await pull(0)
+        expect(left.rows.articles).toEqual([])
+        await push([{ type: 'subscribe', feedId: 1 }])
+        const back = await pull(left.cursor)
+        expect(back.rows.articles.map((a) => a.id)).toEqual([old])
+        expect(back.rows.states).toMatchObject([{ articleId: old, readAt: null }])
+        let device: Confirmed = { cursor: 0, tables: emptyTables() }
+        for (const p of [left, back]) device = applyPull(device, p)
+        const article = device.tables.articles.get(old) as ArticleRow
+        expect(isRead(device.tables, article, now)).toBe(false)
+      })
+    })
+
     test('an older read arriving after it loses, and an older unread after a read', async () => {
       const [a, b] = [await addArticle(1), await addArticle(1)]
       await push([{ type: 'markUnread', articleId: a, at: now - 10 }])

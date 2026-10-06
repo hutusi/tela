@@ -32,6 +32,11 @@ every static-site rebuild.
     before it, though not one marked since.
   - Merging a feed (0028) leaves a post marked unread unread, and carries a duplicate's unread
     to the target's copy as it carries a read.
+  - A post marked unread is kept past the horizon while its feed is followed, as a liked post is
+    kept whatever is followed (0025): a snapshot sends it, a delta sends it whole once it is
+    marked (the device may never have held it, as with a search hit), and a resubscription
+    brings it back with the feed's horizon. Without that, a device that took its snapshot after
+    the post left the horizon never received it, and counted one unread fewer for good.
 
   The watermark has no device clock of its own. An unread made on one device before a "mark all
   read" on another, but pushed after it, therefore wins, and the post shows unread. This fails

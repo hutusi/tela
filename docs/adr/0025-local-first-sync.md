@@ -36,7 +36,10 @@ commits meanwhile.
     launch languages, and body translations of those articles;
   - articles they liked or recommended, with those articles' feeds and sites, whatever they
     subscribe to now.
-- Cursor 0 is a **snapshot**: the 30-day horizon (ADR 0009), with `reset` set.
+- Cursor 0 is a **snapshot**: the 30-day horizon (ADR 0009), with `reset` set. A post marked
+  unread beats the horizon, so a feed's horizon includes its posts marked unread (amended
+  2026-10-07), in a snapshot and a resubscription alike, and one marked since the cursor comes
+  whole, as a newly kept article does.
 - Any other cursor is a **delta**: rows with a seq above it.
   - A subscription newer than the cursor brings its feed's horizon whole, because those articles
     were written before the subscription and their seqs are below the cursor.

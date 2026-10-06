@@ -314,7 +314,8 @@ A Vite + React SPA that renders from the device.
 - One `seq` counter: every batch that writes a synced row bumps it and stamps its rows, so a
   device's cursor is simply the last seq it saw, and the server keeps nothing per device.
 - The pull reads a member's own rows and the shared rows of the feeds they follow, plus the
-  articles they keep (liked, recommended, highlighted), in one batch. The members they follow
+  articles they keep (liked, recommended, highlighted) and the posts of feeds they follow that
+  they marked unread, which beat the horizon (ADR 0009), in one batch. The members they follow
   come as their own rows, re-sent when a followee's profile changes; what those members do does
   not sync at all, and arrives by RPC (ADR 0031).
 - The push is guarded per mutation by `applied_mutations` and resolves conflicts by the later
