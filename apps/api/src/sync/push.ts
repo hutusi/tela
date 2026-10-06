@@ -106,16 +106,29 @@ function statementsFor(
           where excluded.updated_at >= user_prefs.updated_at
         `),
       ]
-    case 'setProfile':
+    case 'setProfile': {
+      // Each language to the later `at`, on a clock of its own, as a privacy switch goes (ADR
+      // 0040): the header and Settings change them from every device, and the last push to arrive
+      // is not the last choice. A reading language of null is a value, following the interface;
+      // one left out is left alone, its clock included. Stamped whether or not it won, so the
+      // next pull hands the device the row that beat it.
+      const field = (column: 'ui_locale' | 'reading_lang', v: string | null | undefined) => {
+        if (v === undefined) return sql``
+        const clock = sql.raw(`${column}_at`)
+        const later = sql`${at} >= ${clock}`
+        return sql`${sql.raw(column)} = case when ${later} then ${v} else ${sql.raw(column)} end,
+          ${clock} = case when ${later} then ${at} else ${clock} end,`
+      }
       return [
         db.run(sql`
           update profiles set
-            reading_lang = coalesce(${m.readingLang ?? null}, reading_lang),
-            ui_locale = coalesce(${m.uiLocale ?? null}, ui_locale),
+            ${field('ui_locale', m.uiLocale)}
+            ${field('reading_lang', m.readingLang)}
             updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and ${fresh}
         `),
       ]
+    }
     case 'setPrivacy': {
       // Each switch to the later `at`, on a clock of its own: one switch's change never decides
       // the other's, and an older choice arriving late changes nothing (ADR 0031). Bound as 1 or

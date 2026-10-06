@@ -285,7 +285,8 @@ describe('push', () => {
   })
 
   test('a replay of an older push cannot undo a newer one', async () => {
-    // setProfile has no timestamp to compare; only the applied-mutation guard stops the revert.
+    // Both made at the same `at`, so the clocks cannot tell them apart; the applied-mutation
+    // guard is what stops the replay reverting the newer one.
     const older = { mid: 'profile-older-mid', at: now, type: 'setProfile', readingLang: 'en' }
     const send = (m: Record<string, unknown>) =>
       api.request('/api/v1/mutations', { body: { mutations: [m] }, as: reader })
@@ -297,6 +298,47 @@ describe('push', () => {
       sql`select reading_lang from profiles`,
     )
     expect(profile?.reading_lang).toBe('zh-Hans')
+  })
+
+  test('two devices: each language goes to the later choice, whatever order they arrive in', async () => {
+    const languages = () =>
+      first<{ ui_locale: string | null; reading_lang: string | null }>(
+        db,
+        sql`select ui_locale, reading_lang from profiles`,
+      )
+    await push([{ type: 'setProfile', uiLocale: 'fr', readingLang: 'fr', at: now - 1000 }])
+    // A device offline since before that choice made its own, and pushes only now.
+    await push([{ type: 'setProfile', uiLocale: 'en', readingLang: 'en', at: now - 5000 }])
+    expect(await languages()).toEqual({ ui_locale: 'fr', reading_lang: 'fr' })
+    // Each on its own clock: a later interface choice does not carry an older reading one.
+    await push([{ type: 'setProfile', uiLocale: 'zh-Hant', at: now }])
+    await push([{ type: 'setProfile', readingLang: 'en', at: now - 3000 }])
+    expect(await languages()).toEqual({ ui_locale: 'zh-Hant', reading_lang: 'fr' })
+  })
+
+  test('a reading language of null follows the interface, and one left out is left alone', async () => {
+    const languages = () =>
+      first<{ ui_locale: string | null; reading_lang: string | null; reading_lang_at: number }>(
+        db,
+        sql`select ui_locale, reading_lang, reading_lang_at from profiles`,
+      )
+    await push([{ type: 'setProfile', uiLocale: 'en', readingLang: 'zh-Hans', at: now - 2000 }])
+    await push([{ type: 'setProfile', readingLang: null, at: now - 1000 }])
+    expect(await languages()).toEqual({
+      ui_locale: 'en',
+      reading_lang: null,
+      reading_lang_at: now - 1000,
+    })
+    await push([{ type: 'setProfile', uiLocale: 'fr', at: now }])
+    expect(await languages()).toEqual({
+      ui_locale: 'fr',
+      reading_lang: null,
+      reading_lang_at: now - 1000,
+    })
+    const delta = await pull(0)
+    expect(delta.rows.profile).toMatchObject([
+      { uiLocale: 'fr', readingLang: null, uiLocaleAt: now, readingLangAt: now - 1000 },
+    ])
   })
 
   test('two devices: the later like wins, whatever order they arrive in', async () => {

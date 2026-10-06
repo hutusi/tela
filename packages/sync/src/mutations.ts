@@ -48,10 +48,14 @@ export const mutationSchema = z.discriminatedUnion('type', [
     key: z.string().regex(PREF_KEY),
     value: z.json(),
   }),
+  /**
+   * The member's two languages, each to the later `at` on a clock of its own (ADR 0040). A reading
+   * language of null follows the interface language; one left out is left alone.
+   */
   z.object({
     ...base,
     type: z.literal('setProfile'),
-    readingLang: z.enum(READING_LANGUAGES).optional(),
+    readingLang: z.enum(READING_LANGUAGES).nullable().optional(),
     uiLocale: z.enum(UI_LOCALES).optional(),
   }),
   /**

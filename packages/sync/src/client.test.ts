@@ -235,6 +235,30 @@ describe('follows and privacy flags on the device (ADR 0031)', () => {
     ])
     expect(untouched.profile).toMatchObject({ publicSubscriptions: true, readingLang: 'zh-Hans' })
   })
+
+  test('each language goes to the later choice, and a reading language of null is one', () => {
+    const held = applyPull(
+      start,
+      pull(4, {
+        profile: [
+          { ...profile, uiLocale: 'en', uiLocaleAt: 20, readingLang: 'fr', readingLangAt: 20 },
+        ],
+      }),
+    )
+    // Older than what the account holds: the server will refuse it, so the device does too.
+    const older = view(held, [
+      { mutation: { mid: 'older-lang-pad', at: 10, type: 'setProfile', uiLocale: 'zh-Hans' } },
+    ])
+    expect(older.profile).toMatchObject({ uiLocale: 'en', uiLocaleAt: 20 })
+    const linked = view(held, [
+      { mutation: { mid: 'link-lang-pad', at: 30, type: 'setProfile', readingLang: null } },
+    ])
+    expect(linked.profile).toMatchObject({ uiLocale: 'en', readingLang: null, readingLangAt: 30 })
+    // A row from a tela-api without the clocks keeps the ones this device holds.
+    const { uiLocaleAt: _u, readingLangAt: _r, ...bare } = { ...profile, uiLocale: 'en' }
+    const again = applyPull(held, pull(5, { profile: [bare] }))
+    expect(again.tables.profile).toMatchObject({ uiLocaleAt: 20, readingLangAt: 20 })
+  })
 })
 
 describe('the Gravatar switch on the device (ADR 0032)', () => {

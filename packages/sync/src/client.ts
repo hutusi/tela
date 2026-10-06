@@ -123,6 +123,8 @@ export function applyPull(confirmed: Confirmed, given: PullResponse): Confirmed 
       avatarUploaded: row.avatarUploaded ?? previous?.avatarUploaded ?? false,
       avatar: row.avatar === undefined ? (previous?.avatar ?? null) : row.avatar,
       isAdmin: row.isAdmin ?? previous?.isAdmin ?? false,
+      uiLocaleAt: row.uiLocaleAt ?? previous?.uiLocaleAt ?? 0,
+      readingLangAt: row.readingLangAt ?? previous?.readingLangAt ?? 0,
     }
   }
   for (const row of r.prefs) t.prefs.set(row.key, row)
@@ -256,12 +258,21 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       return t
     }
     case 'setProfile': {
-      if (t.profile) {
-        t.profile = {
-          ...t.profile,
-          ...(m.readingLang ? { readingLang: m.readingLang } : {}),
-          ...(m.uiLocale ? { uiLocale: m.uiLocale } : {}),
+      // Each language to the later `at`, as the server decides (ADR 0040), so a choice that loses
+      // there loses here too, and the page never shows one the account does not hold. A reading
+      // language of null is a value: it follows the interface.
+      const p = t.profile
+      if (p) {
+        const next = { ...p }
+        if (m.uiLocale !== undefined && m.at >= (p.uiLocaleAt ?? 0)) {
+          next.uiLocale = m.uiLocale
+          next.uiLocaleAt = m.at
         }
+        if (m.readingLang !== undefined && m.at >= (p.readingLangAt ?? 0)) {
+          next.readingLang = m.readingLang
+          next.readingLangAt = m.at
+        }
+        t.profile = next
       }
       return t
     }

@@ -49,6 +49,7 @@ export type PullRead = {
 
 const PROFILE = sql.raw(`p.handle, p.display_name as "displayName", p.bio,
   p.ui_locale as "uiLocale", p.reading_lang as "readingLang",
+  p.ui_locale_at as "uiLocaleAt", p.reading_lang_at as "readingLangAt",
   p.public_subscriptions as "publicSubscriptions", p.public_likes as "publicLikes",
   ${gravatarOnSql('p')} as "gravatar", p.gravatar_found as "gravatarFound",
   (p.avatar_key is not null) as "avatarUploaded", ${avatarSql('p')} as "avatar",

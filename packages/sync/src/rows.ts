@@ -9,7 +9,14 @@ export type ProfileRow = {
   displayName: string | null
   bio: string | null
   uiLocale: string | null
+  /** The language posts are translated into; null follows the interface (ADR 0040). */
   readingLang: string | null
+  /**
+   * The `at` that last set each language, so this device predicts as the server decides: the
+   * later choice wins. Absent from a tela-api that predates them.
+   */
+  uiLocaleAt?: number
+  readingLangAt?: number
   publicSubscriptions: boolean
   /** Whether the member's liked posts show on their profile and to their followers (ADR 0031). */
   publicLikes: boolean
