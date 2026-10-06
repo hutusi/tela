@@ -17,6 +17,7 @@ import {
   undoGuard,
 } from '@tela/data'
 import {
+  ACTION_WRITES,
   ADMIN_BULK_MAX,
   ADMIN_REASON_MAX,
   type AdminActArgs,
@@ -24,6 +25,7 @@ import {
   type AdminActionName,
   type AdminActRequest,
   type AdminActResponse,
+  actionsWriting,
   isAdminAction,
   UNDOABLE_ACTIONS,
 } from '@tela/shared/admin'
@@ -170,7 +172,14 @@ export function adminRoutes(deps: ApiDeps, auth: Auth) {
       // A later operator action on the same target is a change since, whatever it left: a target
       // that left the action's value and came back to it would otherwise take stale values back.
       // One that was itself undone is not, so groups can still be undone newest first.
-      const later = laterActionOn(row.target_kind, row.target_key, row.id, group)
+      const writes = ACTION_WRITES[row.action as AdminActionName]
+      const later = laterActionOn(
+        row.target_kind,
+        row.target_key,
+        row.id,
+        writes === null ? [] : actionsWriting(writes),
+        group,
+      )
       guards.push(undoGuard(db, group, sql`(${step.changed}) or ${later}`))
       restores.push(...step.restore)
       audits.push(

@@ -917,6 +917,39 @@ describe('claims', () => {
     })
   })
 
+  test('an undone removal restores what a later action left alone: Fetch now is no choice', async () => {
+    const owner = await signedIn('owner@x.test')
+    // Listed only by its claim (one reader), and paused by its owner.
+    const site = await addSite({
+      listing: 'listed',
+      claimedBy: owner.userId,
+      optOut: 1,
+      readers: 1,
+    })
+    await addFeed(site)
+    const claim = await addClaim(site, owner.userId, { status: 'verified' })
+    const removed = await act('claim.remove', [claim])
+    expect(await siteOf(site)).toMatchObject({ listing: 'private', translation_opt_out: 0 })
+    // Another tab fetches the blog's feeds: it writes neither the listing nor the pause.
+    expect(await outcome('site.fetchAll', site)).toBe('done')
+    expect((await undo(removed.undo?.group)).status).toBe(200)
+    expect(await siteOf(site)).toMatchObject({
+      claimed_by: owner.userId,
+      listing: 'listed',
+      translation_opt_out: 1,
+    })
+  })
+
+  test('an undo is not stopped by a later action that wrote something else', async () => {
+    const site = await addSite({ listing: 'listed' })
+    await addFeed(site)
+    const featured = await act('site.feature', [site])
+    expect(await outcome('site.fetchAll', site)).toBe('done')
+    expect(await outcome('site.translationOff', site)).toBe('done')
+    expect((await undo(featured.undo?.group)).status).toBe(200)
+    expect(await siteOf(site)).toMatchObject({ listing: 'listed', translation_opt_out: 1 })
+  })
+
   test('Remove keeps an editor’s listing, and its undo waits for nobody to have claimed the blog', async () => {
     const owner = await signedIn('owner@x.test')
     const next = await signedIn('next@x.test')

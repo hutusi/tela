@@ -5,7 +5,7 @@
  */
 import { audit, bumpSeq, currentSeq, first, laterActionOn, type TelaDb } from '@tela/data'
 import { COMMUNITY_LISTING_MIN_READERS, type SiteListing } from '@tela/shared'
-import { type AdminActionName, CLAIM_REMOVED_ERROR } from '@tela/shared/admin'
+import { type AdminActionName, actionsWriting, CLAIM_REMOVED_ERROR } from '@tela/shared/admin'
 import { type SQL, sql } from 'drizzle-orm'
 import { checkClaimSoon } from '../../claims'
 import { type ActHandler, type Inverse, returned, runBatch } from '../framework'
@@ -224,6 +224,9 @@ const remove: ActHandler = async (ctx, id) => {
  * is a later choice, which the undo's guard cannot see, since it is the site's and not the
  * claim's).
  */
+const LISTING_ACTIONS = actionsWriting('listing')
+const TRANSLATION_ACTIONS = actionsWriting('translation')
+
 const restoreRemoved: Inverse = (db: TelaDb, change, now) => {
   const claimId = Number(change.targetKey)
   const from = (change.from ?? {}) as RemovedFrom
@@ -235,9 +238,16 @@ const restoreRemoved: Inverse = (db: TelaDb, change, now) => {
     where c.id = ${claimId} and s.id = ${siteId} and c.status = 'failed'
       and c.error = ${CLAIM_REMOVED_ERROR} and s.claimed_by is null)`
   const declared = JSON.stringify(Array.isArray(site.declaredFeedUrls) ? site.declaredFeedUrls : [])
-  // An operator who acted on the blog since (paused its translation and allowed it again, hid it
-  // and restored it) made a later choice its values cannot show: keep them as they are.
-  const since = laterActionOn('site', String(siteId), change.auditId)
+  // An operator who set the blog's listing or translation since (paused it and allowed it again,
+  // hid it and restored it) made a later choice its values cannot show: keep that one as it is.
+  // Each is asked about on its own: Fetch now, or a pause, says nothing of the listing.
+  const listingSince = laterActionOn('site', String(siteId), change.auditId, LISTING_ACTIONS)
+  const translationSince = laterActionOn(
+    'site',
+    String(siteId),
+    change.auditId,
+    TRANSLATION_ACTIONS,
+  )
   return {
     changed: sql`not ${still}`,
     restore: [
@@ -250,10 +260,10 @@ const restoreRemoved: Inverse = (db: TelaDb, change, now) => {
       db.run(sql`
         update sites set claimed_by = ${site.claimedBy ?? null},
           claimed_at = ${site.claimedAt ?? null}, declared_feed_urls = ${declared},
-          translation_opt_out = case when ${since} then translation_opt_out
+          translation_opt_out = case when ${translationSince} then translation_opt_out
             when translation_opt_out = 0 then ${site.translationOptOut ?? 0}
             else translation_opt_out end,
-          listing = case when ${since} then listing
+          listing = case when ${listingSince} then listing
             when listing = ${to.site?.listing ?? null} then ${site.listing ?? 'private'}
             else listing end,
           updated_at = ${now}, seq = ${currentSeq}

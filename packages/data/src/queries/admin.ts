@@ -70,20 +70,23 @@ export function undoGuard(db: TelaDb, group: string, changed: SQL) {
 }
 
 /**
- * Whether an operator acted on a target after the audit row `afterId`: anything but an undo, in a
- * group not undone since, and not in `exceptGroup`. A target that left a value and came back to it
- * (paused, then allowed again) reads as untouched; the log says otherwise, and an undo that would
- * restore an older value over that later choice must not.
+ * Whether an operator acted on a target after the audit row `afterId` with one of `actions` (the
+ * ones that write what an undo would restore, `actionsWriting`), in a group not undone since and
+ * not `exceptGroup`. A target that left a value and came back to it (paused, then allowed again)
+ * reads as untouched; the log says otherwise, and an undo must not restore an older value over
+ * that later choice. An action that wrote something else (Fetch now) is no such choice.
  */
 export function laterActionOn(
   targetKind: string,
   targetKey: string,
   afterId: number,
+  actions: readonly string[],
   exceptGroup?: string,
 ): SQL {
   return sql`exists (select 1 from admin_actions later
     where later.target_kind = ${targetKind} and later.target_key = ${targetKey}
-      and later.id > ${afterId} and later.action <> 'undo'
+      and later.id > ${afterId}
+      and later.action in (select value from json_each(${JSON.stringify(actions)}))
       ${exceptGroup === undefined ? sql`` : sql`and later.group_id <> ${exceptGroup}`}
       and not exists (select 1 from admin_actions u where u.action = 'undo'
         and json_extract(u.detail, '$.group') = later.group_id))`

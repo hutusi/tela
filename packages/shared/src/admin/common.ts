@@ -114,6 +114,51 @@ export const UNDOABLE_ACTIONS = [
   'code.restore',
 ] as const satisfies readonly AdminActionName[]
 
+/**
+ * What each action writes that an undo would restore. A later action stands in an undo's way only
+ * when it wrote the same thing on the same target: Fetch now after Feature leaves the listing as
+ * Feature set it. A fetch, a check, a retry or a sign-out writes nothing an undo restores (null).
+ * The claim's own actions are one thing, since each moves its status or review together.
+ */
+export const ACTION_WRITES = {
+  'site.feature': 'listing',
+  'site.list': 'listing',
+  'site.hide': 'listing',
+  'site.restore': 'listing',
+  'site.topics': 'topics',
+  'site.translationOff': 'translation',
+  'site.translationOn': 'translation',
+  'site.fetchAll': null,
+  'claim.recheck': 'claim',
+  'claim.vouch': 'claim',
+  'claim.reject': 'claim',
+  'claim.dismiss': 'claim',
+  'claim.remove': 'claim',
+  'feed.fetch': null,
+  'feed.pause': 'status',
+  'feed.resume': 'status',
+  'feed.revive': 'status',
+  'feed.relay': 'region',
+  'feed.global': 'region',
+  'dead.retry': 'resolution',
+  'dead.dismiss': 'resolution',
+  'lease.retryNow': null,
+  'member.signOut': null,
+  'code.create': 'code',
+  'code.addUses': 'uses',
+  'code.revoke': 'revoked',
+  'code.restore': 'revoked',
+  'hold.cancel': 'hold',
+  'invite.address': null,
+} as const satisfies Record<AdminActionName, string | null>
+
+/** The actions that write `what`: the ones whose later use stands in the way of an undo of it. */
+export function actionsWriting(what: string): AdminActionName[] {
+  return (Object.keys(ACTION_WRITES) as AdminActionName[]).filter(
+    (action) => ACTION_WRITES[action] === what,
+  )
+}
+
 /** Actions that ask for a word before they run, and what they ask for. */
 export const ACTION_INPUT = {
   'claim.reject': 'reason',
