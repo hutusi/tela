@@ -315,7 +315,8 @@ A Vite + React SPA that renders from the device.
   come as their own rows, re-sent when a followee's profile changes; what those members do does
   not sync at all, and arrives by RPC (ADR 0031).
 - The push is guarded per mutation by `applied_mutations` and resolves conflicts by the later
-  `at`, clamped to the server's clock.
+  `at`, clamped to the server's clock. The privacy switches are the exception: a hide always
+  applies, and a show only against the version it was made against (ADR 0031, issue #16).
 - Every member call names the account the device's rows belong to (`x-tela-member`, protocol 2).
   tela-api answers `409 account_changed` when it is missing or not the session's member, and the
   device's stored copy (IndexedDB `tela-2`, apart from earlier builds' `tela`) has one owner

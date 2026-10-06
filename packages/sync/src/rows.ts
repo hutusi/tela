@@ -20,6 +20,13 @@ export type ProfileRow = {
   publicSubscriptions: boolean
   /** Whether the member's liked posts show on their profile and to their followers (ADR 0031). */
   publicLikes: boolean
+  /**
+   * How many times each privacy switch has changed: a show names the one it was made against, and
+   * the server applies it only while that is still the stored one (issue #16). Absent from a
+   * tela-api that predates them.
+   */
+  publicSubscriptionsVersion?: number
+  publicLikesVersion?: number
   /** Whether the member shows their Gravatar: on until they choose (ADR 0032, 0033). */
   gravatar: boolean
   /** Whether Gravatar has a picture for their email; null until it has been asked (ADR 0033). */

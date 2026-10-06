@@ -216,6 +216,45 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   ).json()) as PullResponse
   expect(renamed.rows.follows).toMatchObject([{ handle: 'anna_k' }])
 
+  // A privacy show names the version it saw (issue #16), its base a bound parameter in a CASE: the
+  // device's own hide-then-show both apply, and a show against a version since passed does not.
+  const flags = (await (
+    await call('/api/v1/mutations', {
+      body: {
+        mutations: [
+          { mid: 'workers-flags-2', at: now, type: 'setPrivacy', publicLikes: false },
+          {
+            mid: 'workers-flags-3',
+            at: now,
+            type: 'setPrivacy',
+            publicLikes: true,
+            base: { publicLikes: 2 },
+          },
+          {
+            mid: 'workers-flags-4',
+            at: now,
+            type: 'setPrivacy',
+            publicSubscriptions: true,
+            base: { publicSubscriptions: 5 },
+          },
+        ],
+      },
+      ...member,
+    })
+  ).json()) as PushResponse
+  expect(flags.applied).toHaveLength(3)
+  const shown = (await (
+    await call(`/api/v1/sync?cursor=${renamed.cursor}`, member)
+  ).json()) as PullResponse
+  expect(shown.rows.profile).toMatchObject([
+    {
+      publicLikes: true,
+      publicLikesVersion: 3,
+      publicSubscriptions: false,
+      publicSubscriptionsVersion: 0,
+    },
+  ])
+
   // The Following feed: printf keys, nested window functions and the (time, offset, key) cursor, on D1.
   await db.batch([
     bumpSeq(db),

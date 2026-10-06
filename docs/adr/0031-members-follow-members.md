@@ -59,7 +59,9 @@ like subscriptions. Authors still see how many likes a post has, never who liked
 **The privacy switches are a mutation of their own, `setPrivacy`**, so a switch flips at once and
 offline. Each switch goes to the later `at`, on a clock of its own (`public_likes_at`,
 `public_subscriptions_at`): a device reconnecting with an older "show" cannot make public what
-the member has since hidden, and one switch's change never decides the other's. It is a type of
+the member has since hidden, and one switch's change never decides the other's (amended
+2026-10-07: a show is now ordered by the version it saw, a hide always applies; see
+Consequences). It is a type of
 its own rather than more fields on `setProfile` because a tela-api that predates it must refuse
 it: an older `setProfile` would strip the fields, acknowledge the change and drop it. The handle,
 name and bio stay behind `PUT /api/v1/profile`, since a handle must be unique; a shell from before
@@ -107,6 +109,20 @@ the last thirty days. Nobody is suggested because of a private subscription or a
   does: a device whose clock runs minutes slow can lose a newer "hide" to an older "show" made
   elsewhere for that long. Making a hide always win would need the protocol to say which version
   a change was made against.
+
+  (Amended 2026-10-07, issue #16.) The protocol now says it. Each switch has a version
+  (`public_subscriptions_version`, `public_likes_version`) that every change counts up, and the
+  profile row carries it. A hide always applies, whatever its `at`. A show names in `base` the
+  version it was made against, read from the device's view, pending changes included, when the
+  member presses. It applies only while that is still the stored version, so a show queued
+  before a hide made elsewhere is refused, whatever the clocks say, and the next pull turns the
+  device's switch back off. The device's own offline hide-then-show both apply, because the show
+  names the version after the hide. An old hide that arrives after a newer show turns the switch
+  off: that fails closed, and the member can show it again. A hide through `PUT /api/v1/profile`
+  counts the version too. Versions rather than the `*_at` clocks, because the server clamps `at`
+  and a device cannot know what clock its own pending hide will store. A show without a base,
+  from a shell before this, still goes to the later `at`, so `MIN_CLIENT` stays where it is. The
+  clocks remain, only ever moving forward, for those shows.
 - The profile says nothing about the languages a member reads. The design's "Reads in" would
   have published the private never-translate list.
 - Out of scope, and absent from Settings rather than shown disabled: follow approval, email

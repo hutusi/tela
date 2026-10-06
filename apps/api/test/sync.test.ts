@@ -709,22 +709,99 @@ describe('follows (ADR 0031)', () => {
     expect(off.rows.profile).toMatchObject([{ publicSubscriptions: true, publicLikes: false }])
   })
 
-  test('each privacy switch goes to the later choice, whatever order the devices push in', async () => {
-    const t = now - 1000
+  describe('a privacy show applies only against the version it saw (issue #16)', () => {
     const flags = async () => (await pull(0)).rows.profile[0]
-    // Hidden on one device at t+200; an older "show" from another device arrives after it.
-    await push([{ type: 'setPrivacy', publicLikes: true, at: t }])
-    await push([{ type: 'setPrivacy', publicLikes: false, at: t + 200 }])
-    await push([{ type: 'setPrivacy', publicLikes: true, at: t + 100 }])
-    expect(await flags()).toMatchObject({ publicLikes: false })
-    // The other way round: a later "show" that arrives first stands.
-    await push([{ type: 'setPrivacy', publicSubscriptions: true, at: t + 300 }])
-    await push([{ type: 'setPrivacy', publicSubscriptions: false, at: t + 250 }])
-    expect(await flags()).toMatchObject({ publicSubscriptions: true })
-    // One switch's change never decides the other's: an older likes change still applies after a
-    // newer subscriptions change, since each has its own clock.
-    await push([{ type: 'setPrivacy', publicLikes: true, at: t + 260 }])
-    expect(await flags()).toMatchObject({ publicLikes: true, publicSubscriptions: true })
+    const clocks = () =>
+      first<{ likes_at: number; subs_at: number }>(
+        db,
+        sql`select public_likes_at as likes_at, public_subscriptions_at as subs_at from profiles
+          where user_id = ${reader.userId}`,
+      )
+
+    test('a hide made elsewhere lands first, and a show made before it is refused', async () => {
+      const t = now - 1000
+      // Device A, offline and with the right clock, shows the likes it holds hidden (version 0).
+      const fromA = { type: 'setPrivacy', publicLikes: true, base: { publicLikes: 0 }, at: t + 300 }
+      // Device B, whose clock runs slow, shows them and hides them again; both land first.
+      await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 0 }, at: t }])
+      await push([{ type: 'setPrivacy', publicLikes: false, at: t + 50 }])
+      expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 2 })
+      // A reconnects. Its show is the later by the clocks, and made against a version the hide
+      // has passed: refused, but acknowledged and stamped, so A's next pull turns it back off.
+      const snap = await pull(0)
+      const res = await push([fromA])
+      expect(res.applied).toHaveLength(1)
+      const after = await pull(snap.cursor)
+      expect(after.rows.profile).toMatchObject([{ publicLikes: false, publicLikesVersion: 2 }])
+    })
+
+    test("a device's own offline hide-then-show both apply, whatever its clock says", async () => {
+      const t = now - 1000
+      await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 0 }, at: t }])
+      // Offline, on a device whose clock runs behind: both older than the switch's clock.
+      await push([
+        { type: 'setPrivacy', publicLikes: false, at: t - 500 },
+        { type: 'setPrivacy', publicLikes: true, base: { publicLikes: 2 }, at: t - 400 },
+      ])
+      expect(await flags()).toMatchObject({ publicLikes: true, publicLikesVersion: 3 })
+      // The clock only ever moves forward, since a show without a base is still decided by it.
+      expect((await clocks())?.likes_at).toBe(t)
+    })
+
+    test('a show without a base, from a shell before it, goes to the later `at`', async () => {
+      const t = now - 1000
+      await push([{ type: 'setPrivacy', publicSubscriptions: false, at: t + 200 }])
+      await push([{ type: 'setPrivacy', publicSubscriptions: true, at: t + 100 }])
+      expect(await flags()).toMatchObject({
+        publicSubscriptions: false,
+        publicSubscriptionsVersion: 1,
+      })
+      await push([{ type: 'setPrivacy', publicSubscriptions: true, at: t + 300 }])
+      // One switch's change never touches the other's: likes keep their version and clock.
+      expect(await flags()).toMatchObject({
+        publicSubscriptions: true,
+        publicSubscriptionsVersion: 2,
+        publicLikes: false,
+        publicLikesVersion: 0,
+      })
+      expect(await clocks()).toEqual({ likes_at: 0, subs_at: t + 300 })
+    })
+
+    test('an old hide arriving after a newer show turns the switch off, failing closed', async () => {
+      const t = now - 1000
+      await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 0 }, at: t + 300 }])
+      await push([{ type: 'setPrivacy', publicLikes: false, at: t + 250 }])
+      expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 2 })
+      expect((await clocks())?.likes_at).toBe(t + 300)
+      // The member shows them again, against what they now see.
+      await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 2 }, at: t + 260 }])
+      expect(await flags()).toMatchObject({ publicLikes: true, publicLikesVersion: 3 })
+    })
+
+    test('a hide through PUT /profile counts the version up, so an older show is refused', async () => {
+      await push([
+        { type: 'setPrivacy', publicSubscriptions: true, base: { publicSubscriptions: 0 } },
+      ])
+      expect(await flags()).toMatchObject({
+        publicSubscriptions: true,
+        publicSubscriptionsVersion: 1,
+      })
+      // A shell from before the switches saves its form, which loaded the switch off.
+      await api.request('/api/v1/profile', {
+        method: 'PUT',
+        body: { displayName: 'R', publicSubscriptions: false },
+        as: reader,
+      })
+      expect(await flags()).toMatchObject({
+        publicSubscriptions: false,
+        publicSubscriptionsVersion: 2,
+      })
+      // A show another device made against version 1, before that save, arrives after it.
+      await push([
+        { type: 'setPrivacy', publicSubscriptions: true, base: { publicSubscriptions: 1 } },
+      ])
+      expect(await flags()).toMatchObject({ publicSubscriptions: false })
+    })
   })
 
   test('the Gravatar switch goes to the later choice, and on again is a new address (ADR 0032)', async () => {

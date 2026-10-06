@@ -125,6 +125,9 @@ export function applyPull(confirmed: Confirmed, given: PullResponse): Confirmed 
       isAdmin: row.isAdmin ?? previous?.isAdmin ?? false,
       uiLocaleAt: row.uiLocaleAt ?? previous?.uiLocaleAt ?? 0,
       readingLangAt: row.readingLangAt ?? previous?.readingLangAt ?? 0,
+      publicSubscriptionsVersion:
+        row.publicSubscriptionsVersion ?? previous?.publicSubscriptionsVersion ?? 0,
+      publicLikesVersion: row.publicLikesVersion ?? previous?.publicLikesVersion ?? 0,
     }
   }
   for (const row of r.prefs) t.prefs.set(row.key, row)
@@ -183,6 +186,34 @@ const blankState = (articleId: number): StateRow => ({
   likedUpdatedAt: null,
   seq: 0,
 })
+
+export type PrivacyFlag = 'publicSubscriptions' | 'publicLikes'
+type SetPrivacy = Extract<Mutation, { type: 'setPrivacy' }>
+
+/** Each privacy switch, with the profile field that counts its changes. */
+const PRIVACY = [
+  ['publicSubscriptions', 'publicSubscriptionsVersion'],
+  ['publicLikes', 'publicLikesVersion'],
+] as const
+
+/**
+ * A privacy switch turned on or off now, as the mutation to make. A show names the version of the
+ * switch it was made against, read from `tables`, which must be the device's view as the member
+ * pressed it, every pending change included (issue #16): a version captured when the page was
+ * drawn is older than a hide still on its way, and the server would refuse the show that follows
+ * it. A hide names none: it always applies.
+ */
+export function privacyChange(
+  tables: Tables,
+  flag: PrivacyFlag,
+  on: boolean,
+): Omit<SetPrivacy, 'mid' | 'at'> {
+  const held =
+    (flag === 'publicLikes'
+      ? tables.profile?.publicLikesVersion
+      : tables.profile?.publicSubscriptionsVersion) ?? 0
+  return { type: 'setPrivacy', [flag]: on, ...(on ? { base: { [flag]: held } } : {}) }
+}
 
 /**
  * Predict one mutation, as the server will apply it (`apps/api/src/sync/push.ts`). Same rules:
@@ -277,16 +308,25 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       return t
     }
     case 'setPrivacy': {
-      // In order, as this device made them; the server decides between devices by `at`, and its
-      // row replaces this one with the next pull. Booleans: `false` is a value, not an absence.
-      if (t.profile) {
-        t.profile = {
-          ...t.profile,
-          ...(m.publicSubscriptions !== undefined
-            ? { publicSubscriptions: m.publicSubscriptions }
-            : {}),
-          ...(m.publicLikes !== undefined ? { publicLikes: m.publicLikes } : {}),
+      // In order, as this device made them, and as the server decides (issue #16): a hide always
+      // applies, and a show with a base only while its switch's version is the one it names, so
+      // a show the server will refuse is refused here too. Every change counts the version up,
+      // which is what lets this device's own hide-then-show both apply: the show was made against
+      // the version after the hide. A show without a base applies here; the server decides it by
+      // `at`, and its row replaces this one with the next pull. `false` is a value.
+      const p = t.profile
+      if (p) {
+        const next = { ...p }
+        for (const [flag, version] of PRIVACY) {
+          const v = m[flag]
+          if (v === undefined) continue
+          const held = p[version] ?? 0
+          const base = m.base?.[flag]
+          if (v && base !== undefined && base !== held) continue
+          next[flag] = v
+          next[version] = held + 1
         }
+        t.profile = next
       }
       return t
     }

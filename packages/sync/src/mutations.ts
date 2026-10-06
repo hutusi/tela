@@ -59,16 +59,24 @@ export const mutationSchema = z.discriminatedUnion('type', [
     uiLocale: z.enum(UI_LOCALES).optional(),
   }),
   /**
-   * Whether the profile shows what the member reads, and what they liked (ADR 0031). Each switch
-   * goes to the later `at`, so a device reconnecting with an older choice cannot make public what
-   * the member has since hidden. A type of its own: a tela-api that predates it refuses it, and
-   * the switch visibly goes back, rather than acknowledging a change it then drops.
+   * Whether the profile shows what the member reads, and what they liked (ADR 0031). A hide always
+   * applies. A show names in `base` the version of its switch it was made against, and applies
+   * only while that is still the stored one, so a show queued before a hide made elsewhere never
+   * reopens what the hide closed, whatever the clocks say (issue #16). A show without a base, from
+   * a shell before it, goes to the later `at`. A type of its own: a tela-api that predates it
+   * refuses it, and the switch visibly goes back, rather than acknowledging a change it then drops.
    */
   z.object({
     ...base,
     type: z.literal('setPrivacy'),
     publicSubscriptions: z.boolean().optional(),
     publicLikes: z.boolean().optional(),
+    base: z
+      .object({
+        publicSubscriptions: z.number().int().nonnegative().optional(),
+        publicLikes: z.number().int().nonnegative().optional(),
+      })
+      .optional(),
   }),
   z.object({
     ...base,

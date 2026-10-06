@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test'
-import { applyPull, type Confirmed, emptyTables, type Pending, settle, view } from './client'
+import {
+  applyPull,
+  type Confirmed,
+  emptyTables,
+  type Pending,
+  privacyChange,
+  settle,
+  view,
+} from './client'
 import type { Mutation } from './mutations'
 import { emptyRows, type PullResponse } from './protocol'
 import type { ArticleRow, FollowRow, ProfileRow, StateRow, SubscriptionRow } from './rows'
@@ -234,6 +242,59 @@ describe('follows and privacy flags on the device (ADR 0031)', () => {
       { mutation: { mid: 'lang-only-pad', at: 10, type: 'setProfile', readingLang: 'zh-Hans' } },
     ])
     expect(untouched.profile).toMatchObject({ publicSubscriptions: true, readingLang: 'zh-Hans' })
+  })
+
+  test("a show names the version it saw; the device's own hide-then-show both apply (#16)", () => {
+    const held = applyPull(start, pull(4, { profile: [{ ...profile, publicLikesVersion: 3 }] }))
+    // Made one after another, each from the view as the member pressed it.
+    const pending: Pending[] = []
+    const press = (on: boolean, at: number) => {
+      const input = privacyChange(view(held, pending), 'publicLikes', on)
+      pending.push({ mutation: { ...input, mid: `likes-${at}-pad`, at } as Mutation })
+      return input
+    }
+    expect(press(true, 10)).toEqual({
+      type: 'setPrivacy',
+      publicLikes: true,
+      base: { publicLikes: 3 },
+    })
+    expect(press(false, 11)).toEqual({ type: 'setPrivacy', publicLikes: false })
+    expect(press(true, 12)).toMatchObject({ base: { publicLikes: 5 } })
+    expect(view(held, pending).profile).toMatchObject({ publicLikes: true, publicLikesVersion: 6 })
+    // The subscriptions switch is counted apart.
+    expect(view(held, pending).profile?.publicSubscriptionsVersion).toBe(0)
+  })
+
+  test('a show made against a version a pull has since passed is refused, as the server will', () => {
+    const held = applyPull(start, pull(4, { profile: [{ ...profile, publicLikesVersion: 3 }] }))
+    const show: Pending = {
+      mutation: {
+        mid: 'show-likes-pad',
+        at: 30,
+        type: 'setPrivacy',
+        publicLikes: true,
+        base: { publicLikes: 3 },
+      },
+    }
+    expect(view(held, [show]).profile).toMatchObject({ publicLikes: true })
+    // Another device hid them meanwhile, with an older clock: the pull brings version 4.
+    const hidden = applyPull(
+      held,
+      pull(5, { profile: [{ ...profile, publicLikes: false, publicLikesVersion: 4 }] }),
+    )
+    expect(view(hidden, [show]).profile).toMatchObject({
+      publicLikes: false,
+      publicLikesVersion: 4,
+    })
+    // A show without a base, from a shell before it, applies in order as it always did.
+    const { base: _b, ...unbased } = show.mutation as Extract<Mutation, { type: 'setPrivacy' }>
+    expect(view(hidden, [{ mutation: unbased }]).profile).toMatchObject({ publicLikes: true })
+    // A row from a tela-api without the versions keeps the ones this device holds.
+    const { publicLikesVersion: _v, ...bare } = { ...profile, seq: 6 }
+    expect(applyPull(hidden, pull(6, { profile: [bare] })).tables.profile).toMatchObject({
+      publicLikesVersion: 4,
+      publicSubscriptionsVersion: 0,
+    })
   })
 
   test('each language goes to the later choice, and a reading language of null is one', () => {

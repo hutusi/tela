@@ -130,20 +130,41 @@ function statementsFor(
       ]
     }
     case 'setPrivacy': {
-      // Each switch to the later `at`, on a clock of its own: one switch's change never decides
-      // the other's, and an older choice arriving late changes nothing (ADR 0031). Bound as 1 or
-      // 0, since `false` is a value; an absent switch is left alone, its clock included.
-      const flag = (column: 'public_subscriptions' | 'public_likes', v: boolean | undefined) => {
+      // Each switch on its own, so one switch's change never decides the other's (ADR 0031), and
+      // a hide and a show are not ordered alike (issue #16):
+      // - a hide always applies, whatever its `at`: an old hide arriving after a newer show turns
+      //   the switch off, which fails closed, and the member can show it again;
+      // - a show with a base applies only while the switch's version is still the one it was made
+      //   against, so a show queued before a hide made elsewhere is refused, whatever the clocks
+      //   say; a device's own hide-then-show both apply, since the show names the hide's version;
+      // - a show without a base, from a shell before it, goes to the later `at` as it always did.
+      // Every change counts the version up, and the clock only ever moves forward, since a show
+      // without a base is still decided by it. SQLite reads the row as it was in every SET, so the
+      // version and clock tested are the ones before this change. Bound as 1 or 0, since `false`
+      // is a value; an absent switch is left alone, its clock and version included. Stamped
+      // whether or not it applied, so the next pull hands the device the row that beat it.
+      const flag = (
+        column: 'public_subscriptions' | 'public_likes',
+        v: boolean | undefined,
+        base: number | undefined,
+      ) => {
         if (v === undefined) return sql``
-        const later = sql`${at} >= ${sql.raw(`${column}_at`)}`
-        return sql`${sql.raw(column)} = case when ${later} then ${v ? 1 : 0} else ${sql.raw(column)} end,
-          ${sql.raw(`${column}_at`)} = case when ${later} then ${at} else ${sql.raw(`${column}_at`)} end,`
+        const value = sql.raw(column)
+        const clock = sql.raw(`${column}_at`)
+        const version = sql.raw(`${column}_version`)
+        if (!v) {
+          return sql`${value} = 0, ${clock} = max(${clock}, ${at}), ${version} = ${version} + 1,`
+        }
+        const applies = base === undefined ? sql`${at} >= ${clock}` : sql`${version} = ${base}`
+        return sql`${value} = case when ${applies} then 1 else ${value} end,
+          ${clock} = case when ${applies} then max(${clock}, ${at}) else ${clock} end,
+          ${version} = case when ${applies} then ${version} + 1 else ${version} end,`
       }
       return [
         db.run(sql`
           update profiles set
-            ${flag('public_subscriptions', m.publicSubscriptions)}
-            ${flag('public_likes', m.publicLikes)}
+            ${flag('public_subscriptions', m.publicSubscriptions, m.base?.publicSubscriptions)}
+            ${flag('public_likes', m.publicLikes, m.base?.publicLikes)}
             updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and ${fresh}
         `),

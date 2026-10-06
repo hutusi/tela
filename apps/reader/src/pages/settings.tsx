@@ -13,7 +13,7 @@ import {
   UI_LOCALES,
   type UiLocale,
 } from '@tela/shared'
-import type { ProfileRow } from '@tela/sync'
+import { type PrivacyFlag, type ProfileRow, privacyChange } from '@tela/sync'
 import { useRef, useState } from 'react'
 import { Link, Navigate, NavLink, useLocation, useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
@@ -836,13 +836,17 @@ function PrivacySection() {
   const t = useTranslations('settings')
   const { store } = useStore()
   const profile = useTables().profile
+  // A show names the version it was made against, read from the view as the member presses, not
+  // as this page was drawn: a hide still on its way has moved it since (issue #16).
+  const set = (flag: PrivacyFlag, on: boolean) =>
+    store.mutate(privacyChange(store.getSnapshot().tables, flag, on))
   return (
     <>
       <Intro>{t('privacyIntro')}</Intro>
       <SettingRow label={t('showLikes')} hint={t('showLikesHint')}>
         <Switch
           checked={profile?.publicLikes ?? false}
-          onChange={(on) => store.mutate({ type: 'setPrivacy', publicLikes: on })}
+          onChange={(on) => set('publicLikes', on)}
           label={t('showLikes')}
           testId="privacy-likes"
         />
@@ -850,7 +854,7 @@ function PrivacySection() {
       <SettingRow label={t('showSubscriptions')} hint={t('showSubscriptionsHint')}>
         <Switch
           checked={profile?.publicSubscriptions ?? false}
-          onChange={(on) => store.mutate({ type: 'setPrivacy', publicSubscriptions: on })}
+          onChange={(on) => set('publicSubscriptions', on)}
           label={t('showSubscriptions')}
           testId="privacy-subscriptions"
         />
