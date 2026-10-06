@@ -87,7 +87,8 @@ says so in its line, and the record says so above the chips that set them.
   they are listed or hidden, and enter it if a Restore returns one to private while it is read.
 - A shell cached before tela-api returned null counts renders one as "no readers yet" for a
   visit, and a cached public page can show an old count for a day (ADR 0024's edge cache).
-- A blog's subscribers still sync its `reader_count` with its row and see it in the reader pane;
-  that count is shown to readers of the blog, not published, and is unchanged here.
+- A blog's subscribers still sync its `reader_count` with its row, but the reader pane shows it
+  only from three readers too: below that, "2 readers on Tela" would tell a subscriber that one
+  other member reads the blog. The row still carries the number; only the page holds it back.
 - Migration 0007 added `sites.reviewed_at`. The digest gained a Discover line, and the console's
   catalogues the words for To review and Not for Discover.

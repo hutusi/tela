@@ -4,6 +4,7 @@
  * tela-api at all (ADR 0025). Highlights, notes and typography are the member's synced rows and
  * prefs (ADR 0026).
  */
+import { COMMUNITY_LISTING_MIN_READERS } from '@tela/shared'
 import type { ArticleRow } from '@tela/sync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
@@ -366,8 +367,15 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
             <div className="flex-1">
               <div className="font-medium">{site?.title ?? name}</div>
               <div className="text-[13px] text-muted">
-                {site?.description ? `${site.description} · ` : ''}
-                {t('readersOnTela', { n: site?.readerCount ?? 0 })}
+                {/* A count below three says who else reads it, as public pages do not (ADR 0041). */}
+                {[
+                  site?.description,
+                  (site?.readerCount ?? 0) >= COMMUNITY_LISTING_MIN_READERS
+                    ? t('readersOnTela', { n: site?.readerCount ?? 0 })
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </div>
             </div>
             <span className="hidden text-[13px] text-muted xl:block">{t('visibleToAuthor')}</span>
