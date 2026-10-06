@@ -41,6 +41,14 @@ every static-site rebuild.
   The watermark has no device clock of its own. An unread made on one device before a "mark all
   read" on another, but pushed after it, therefore wins, and the post shows unread. This fails
   toward unread, and the member can mark it read again.
+
+  Two more cases fail toward unread, documented rather than fixed (review, 2026-10-07). A device
+  whose clock runs behind cannot read, by opening or by hand, a post marked unread elsewhere a
+  moment earlier: the later `at` decides, and tela-api clamps only times in the future, so the
+  read loses until that device's clock passes the unread's. And opening a post under its feed's
+  watermark sends no `markRead`, since the device already shows it read; an unread made elsewhere
+  before the open that arrives after it therefore leaves the post unread. Pushing a read on every
+  open would close that, at a write per post opened.
 - `articles.dedup_key` comes from a ladder: `g:<guid>` when the guid is non-empty, else
   `u:<normalized link>` (https, lowercase host, no fragment, tracking parameters removed,
   parameters sorted, trailing slash trimmed), else `h:<sha256(title|published_at)>`.

@@ -107,6 +107,10 @@ interface choice for it to equal, and the reading language was one.
   visibly goes back.
 - On a device whose clock runs behind another's, a choice can appear to do nothing: the page stays
   in the language the account holds. The theme behaves the same. It is documented, not fixed.
+  (Amended 2026-10-07, review.) Precisely: such a device cannot choose a language against one
+  chosen elsewhere less than its lag ago, since the later `at` decides and tela-api clamps only
+  times in the future. The choice fails visibly, the page staying in the account's language,
+  until that device's clock has passed the other choice's.
 - A browser shared by two accounts gives the second, if it has no language yet, whatever the first
   left in the cookie. That is the language that member is looking at, as with the theme.
 - A member's panel ends with *Language settings*, linked or apart: Settings → Language is where
