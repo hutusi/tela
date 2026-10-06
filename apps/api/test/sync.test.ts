@@ -15,8 +15,14 @@ import {
   type Confirmed,
   emptyTables,
   MEMBER_HEADER,
+  type Mutation,
+  type Pending,
   type PullResponse,
   type PushResponse,
+  privacyChange,
+  privacyUnsettled,
+  settle,
+  view,
 } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { isRead } from '../../reader/src/store/selectors'
@@ -870,7 +876,8 @@ describe('follows (ADR 0031)', () => {
       expect(after.rows.profile).toMatchObject([{ publicLikes: false, publicLikesVersion: 2 }])
     })
 
-    test("a device's own offline hide-then-show both apply, whatever its clock says", async () => {
+    test('a show against the version its own hide made applies, whatever its clock says', async () => {
+      // The device sends such a show only once the hide has come back in a pull (`privacyChange`).
       const t = now - 1000
       await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 0 }, at: t }])
       // Offline, on a device whose clock runs behind: both older than the switch's clock.
@@ -911,6 +918,131 @@ describe('follows (ADR 0031)', () => {
       // The member shows them again, against what they now see.
       await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 2 }, at: t + 260 }])
       expect(await flags()).toMatchObject({ publicLikes: true, publicLikesVersion: 3 })
+    })
+
+    describe('devices that make their changes as Settings does', () => {
+      /** A device: its confirmed rows and the changes it has not had settled. */
+      type Device = { confirmed: Confirmed; pending: Pending[] }
+      const device = (): Device => ({
+        confirmed: { cursor: 0, tables: emptyTables() },
+        pending: [],
+      })
+      const sync = async (d: Device) => {
+        for (;;) {
+          const page = await pull(d.confirmed.cursor)
+          d.confirmed = applyPull(d.confirmed, page)
+          d.pending = settle(d.confirmed, d.pending)
+          if (!page.more) return
+        }
+      }
+      /** Push what is unsent; a lost answer leaves the device knowing nothing of it. */
+      const send = async (d: Device, lost = false) => {
+        const batch = d.pending.filter((p) => p.ackedAt === undefined).map((p) => p.mutation)
+        if (batch.length === 0) return
+        const res = await push(batch as unknown as Record<string, unknown>[])
+        if (lost) return
+        const applied = new Set(res.applied)
+        d.pending = d.pending.map((p) =>
+          applied.has(p.mutation.mid) ? { ...p, ackedAt: res.seq } : p,
+        )
+        d.pending = settle(d.confirmed, d.pending)
+      }
+      /** The member presses the likes switch: false when the show has to wait. */
+      const press = (d: Device, on: boolean) => {
+        const change = privacyChange(d.confirmed, d.pending, 'publicLikes', on)
+        if (change === null) return false
+        api.clock.advance(1)
+        const mutation = { ...change, mid: `press-${++mids}-padding`, at: api.clock.now() }
+        d.pending.push({ mutation: mutation as Mutation })
+        return true
+      }
+      const shown = (d: Device) => view(d.confirmed, d.pending).profile?.publicLikes
+      /** Version 1, on: the member showed their likes, and every device has it. */
+      async function likesShown(...devices: Device[]) {
+        await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 0 } }])
+        for (const d of devices) await sync(d)
+        expect(await flags()).toMatchObject({ publicLikes: true, publicLikesVersion: 1 })
+      }
+
+      test("A: a show waits for the device's own hide to settle, then applies", async () => {
+        const a = device()
+        await likesShown(a)
+        expect(press(a, false)).toBe(true)
+        await send(a, true) // applied; the answer is lost
+        await sync(a) // the pull holds the hide, which is still unsettled here
+        expect(a.confirmed.tables.profile?.publicLikesVersion).toBe(2)
+        expect(shown(a)).toBe(false)
+        // A show now would name version 2 before the device knows its hide made it: it waits.
+        expect(privacyUnsettled(a.confirmed, a.pending, 'publicLikes')).toBe(true)
+        expect(press(a, true)).toBe(false)
+        await send(a) // the retry is a replay, acknowledged
+        await sync(a)
+        expect(a.pending).toEqual([])
+        expect(press(a, true)).toBe(true)
+        await send(a)
+        await sync(a)
+        expect(await flags()).toMatchObject({ publicLikes: true, publicLikesVersion: 3 })
+        expect(shown(a)).toBe(true)
+        expect(a.pending).toEqual([])
+      })
+
+      test("B: a show cannot be queued behind an unsettled hide, so another device's hide stands", async () => {
+        const [a, b] = [device(), device()]
+        await likesShown(a, b)
+        press(a, false)
+        await send(a, true)
+        await sync(a)
+        expect(press(a, true)).toBe(false) // nothing queued to reopen what B closes next
+        press(b, false)
+        await send(b)
+        await sync(b)
+        expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 3 })
+        await send(a)
+        await sync(a)
+        expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 3 })
+        expect([shown(a), shown(b)]).toEqual([false, false])
+        // Once settled, a show names version 3, B's hide included, which the member has now seen.
+        expect(press(a, true)).toBe(true)
+        expect(a.pending.at(-1)?.mutation).toMatchObject({ base: { publicLikes: 3 } })
+      })
+
+      test("B': a show made before another device's hide lands is refused, though sent after", async () => {
+        const [a, b] = [device(), device()]
+        await likesShown(a, b)
+        press(a, false)
+        await send(a)
+        await sync(a)
+        expect(press(a, true)).toBe(true) // base 2, unsent
+        press(b, false)
+        await send(b)
+        await send(a)
+        await sync(a)
+        await sync(b)
+        expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 3 })
+        expect([shown(a), shown(b)]).toEqual([false, false])
+        expect(a.pending).toEqual([])
+      })
+
+      test('C: offline toggling cannot end on over a hide made elsewhere meanwhile', async () => {
+        const [a, b] = [device(), device()]
+        await likesShown(a, b)
+        // A, offline, toggles off, on, off, on: only the hides are made.
+        expect([press(a, false), press(a, true), press(a, false), press(a, true)]).toEqual([
+          true,
+          false,
+          true,
+          false,
+        ])
+        expect(shown(a)).toBe(false)
+        press(b, false) // B hides first
+        await send(b)
+        await send(a)
+        await sync(a)
+        await sync(b)
+        expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 4 })
+        expect([shown(a), shown(b)]).toEqual([false, false])
+        expect(a.pending).toEqual([])
+      })
     })
 
     test('a hide through PUT /profile counts the version up, so an older show is refused', async () => {

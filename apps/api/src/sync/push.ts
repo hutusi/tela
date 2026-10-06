@@ -177,7 +177,8 @@ function statementsFor(
       //   the switch off, which fails closed, and the member can show it again;
       // - a show with a base applies only while the switch's version is still the one it was made
       //   against, so a show queued before a hide made elsewhere is refused, whatever the clocks
-      //   say; a device's own hide-then-show both apply, since the show names the hide's version;
+      //   say; a device names the version its confirmed rows hold, and makes no show while its own
+      //   change to the switch is unsettled, so its show after its own hide names the hide's;
       // - a show without a base, from a shell before it, goes to the later `at` as it always did.
       // Every change counts the version up, and the clock only ever moves forward, since a show
       // without a base is still decided by it. SQLite reads the row as it was in every SET, so the

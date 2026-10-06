@@ -567,6 +567,7 @@
     "showLikesHint": "On your profile, and to people who follow you. A writer's Dashboard shows how many liked a post, not who.",
     "showSubscriptions": "Show subscriptions",
     "showSubscriptionsHint": "On your profile, and to people who follow you.",
+    "privacyWaits": "Turning this back on waits until your last change to it has reached Tela.",
     "privacyDelay": "Your public profile can take a few minutes to catch up with a change.",
     "yourData": "Your data",
     "yourDataHint": "Your profile, subscriptions, likes, recommendations, highlights and the people you follow, as one file.",

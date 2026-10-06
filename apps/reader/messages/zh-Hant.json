@@ -567,6 +567,7 @@
     "showLikesHint": "展示在你的個人頁上，也給追蹤你的人看。作者的儀表板只顯示一篇文章有多少人喜歡，不顯示是誰。",
     "showSubscriptions": "展示訂閱",
     "showSubscriptionsHint": "展示在你的個人頁上，也給追蹤你的人看。",
+    "privacyWaits": "上一次改動送達 Tela 之後，才能重新開啟。",
     "privacyDelay": "公開個人頁可能要幾分鐘才會跟上改動。",
     "yourData": "你的資料",
     "yourDataHint": "你的資料、訂閱、喜歡、推薦、劃線和追蹤的人，打包成一個檔案。",

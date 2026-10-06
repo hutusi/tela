@@ -567,6 +567,7 @@
     "showLikesHint": "展示在你的个人页上，也给关注你的人看。作者的仪表盘只显示一篇文章有多少人喜欢，不显示是谁。",
     "showSubscriptions": "展示订阅",
     "showSubscriptionsHint": "展示在你的个人页上，也给关注你的人看。",
+    "privacyWaits": "上一次改动送达 Tela 之后，才能重新打开。",
     "privacyDelay": "公开个人页可能要几分钟才会跟上改动。",
     "yourData": "你的数据",
     "yourDataHint": "你的资料、订阅、喜欢、推荐、划线和关注的人，打包成一个文件。",

@@ -101,10 +101,22 @@ function live(t: Tables) {
   }
 }
 
-/** One of the member's devices: what it holds, what it has not had confirmed, and its clock. */
-type Device = { confirmed: Confirmed; pending: Pending[]; skew: number }
+type Flag = 'publicSubscriptions' | 'publicLikes'
 
-async function scenario(seed: number, steps: number) {
+/**
+ * One of the member's devices: what it holds, what it has not had confirmed, and its clock; and,
+ * for the privacy invariant, how many hides of each switch the server had applied when it last
+ * pulled, which are the hides its confirmed rows hold.
+ */
+type Device = {
+  confirmed: Confirmed
+  pending: Pending[]
+  skew: number
+  hidesSeen: Record<Flag, number>
+}
+
+/** `only` limits the changes a device makes to those `choice`s, so a rare one is met often. */
+async function scenario(seed: number, steps: number, only?: readonly number[]) {
   const random = rng(seed)
   const pick = <T>(xs: readonly T[]): T | undefined => xs[Math.floor(random() * xs.length)]
   const api: TestApi = await createTestApi()
@@ -149,8 +161,22 @@ async function scenario(seed: number, steps: number) {
     confirmed: { cursor: 0, tables: emptyTables() },
     pending: [],
     skew,
+    hidesSeen: { publicSubscriptions: 0, publicLikes: 0 },
   }))
   let mids = 0
+  // The privacy invariant (issue #16): a show with a base never applies over a hide its device had
+  // not pulled. The server applies a mutation the first time its id arrives, so the hides applied
+  // so far are counted here as they are sent; each show records the count its device had seen.
+  const sent = new Set<string>()
+  const hides: Record<Flag, number> = { publicSubscriptions: 0, publicLikes: 0 }
+  const showSeen = new Map<string, { flag: Flag; hides: number }>()
+  const versionOf = async (flag: Flag) => {
+    const column = flag === 'publicLikes' ? 'public_likes_version' : 'public_subscriptions_version'
+    const rows = await api.db.all<{ v: number }>(
+      sql`select ${sql.raw(column)} as v from profiles where user_id = ${member.userId}`,
+    )
+    return Number(rows[0]?.v ?? 0)
+  }
 
   const pull = async (d: Device) => {
     for (;;) {
@@ -158,23 +184,49 @@ async function scenario(seed: number, steps: number) {
       const body = (await res.json()) as PullResponse
       d.confirmed = applyPull(d.confirmed, body)
       d.pending = settle(d.confirmed, d.pending)
-      if (!body.more) return
+      if (!body.more) break
     }
+    d.hidesSeen = { ...hides }
+  }
+  /**
+   * One request. A batch applies in order, so a device's batch is sent in parts, each privacy show
+   * with a base alone: the version moving then says that the show applied.
+   */
+  const send = async (mutations: Mutation[]) => {
+    const show = mutations.length === 1 ? mutations[0] : undefined
+    const first = show !== undefined && !sent.has(show.mid) ? showSeen.get(show.mid) : undefined
+    const before = first ? await versionOf(first.flag) : 0
+    for (const m of mutations) {
+      if (sent.has(m.mid)) continue
+      sent.add(m.mid)
+      if (m.type !== 'setPrivacy') continue
+      if (m.publicLikes === false) hides.publicLikes++
+      if (m.publicSubscriptions === false) hides.publicSubscriptions++
+    }
+    const res = await api.request('/api/v1/mutations', { body: { mutations }, as: member })
+    if (first && (await versionOf(first.flag)) > before) {
+      // It applied: no hide of its switch had landed that its device had not pulled.
+      expect(hides[first.flag]).toBe(first.hides)
+    }
+    return (await res.json()) as PushResponse
   }
   const push = async (d: Device, loseResponse: boolean) => {
     const batch = d.pending.filter((p) => p.ackedAt === undefined).slice(0, 50)
     if (batch.length === 0) return
-    const res = await api.request('/api/v1/mutations', {
-      body: { mutations: batch.map((p) => p.mutation) },
-      as: member,
-    })
+    const parts: Mutation[][] = [[]]
+    for (const p of batch) {
+      if (showSeen.has(p.mutation.mid)) parts.push([p.mutation], [])
+      else parts.at(-1)?.push(p.mutation)
+    }
+    const answers: PushResponse[] = []
+    for (const part of parts) if (part.length > 0) answers.push(await send(part))
     if (loseResponse) return // applied on the server; the device never hears, and sends again
-    const body = (await res.json()) as PushResponse
-    const applied = new Set(body.applied)
-    const rejected = new Set(body.rejected.map((r) => r.mid))
+    const seq = Math.max(...answers.map((a) => a.seq))
+    const applied = new Set(answers.flatMap((a) => a.applied))
+    const rejected = new Set(answers.flatMap((a) => a.rejected.map((r) => r.mid)))
     d.pending = d.pending
       .filter((p) => !rejected.has(p.mutation.mid))
-      .map((p) => (applied.has(p.mutation.mid) ? { ...p, ackedAt: body.seq } : p))
+      .map((p) => (applied.has(p.mutation.mid) ? { ...p, ackedAt: seq } : p))
   }
   const mutate = (d: Device) => {
     const shown = view(d.confirmed, d.pending)
@@ -182,7 +234,7 @@ async function scenario(seed: number, steps: number) {
     const at = api.clock.now() - d.skew
     api.clock.advance(1 + Math.floor(random() * 5))
     const mid = `seed${seed}-m${++mids}-pad`
-    const choice = Math.floor(random() * 18)
+    const choice = only ? (pick(only) as number) : Math.floor(random() * 18)
     const article = pick(articleIds)
     const feed = pick(FEEDS) as number
     let m: Mutation | null = null
@@ -235,12 +287,14 @@ async function scenario(seed: number, steps: number) {
     if (choice === 12) m = { mid, at, type: 'follow', userId: person }
     if (choice === 13) m = { mid, at, type: 'unfollow', userId: person }
     if (choice === 14) {
-      // As Settings makes it: a show names the version this device's view holds (issue #16).
-      // Now and then one without, as a shell from before the versions sends it.
+      // As Settings makes it: a show names the version in this device's confirmed rows, and waits
+      // while a change to its switch is on its way (issue #16). Now and then one without a base,
+      // as a shell from before the versions sends it.
       const flag = random() < 0.5 ? 'publicSubscriptions' : 'publicLikes'
-      const change = privacyChange(shown, flag, random() < 0.5)
-      if (random() < 0.2) delete change.base
-      m = { mid, at, ...change }
+      const change = privacyChange(d.confirmed, d.pending, flag, random() < 0.5)
+      if (change && random() < 0.2) delete change.base
+      if (change) m = { mid, at, ...change }
+      if (change?.base) showSeen.set(mid, { flag, hides: d.hidesSeen[flag] })
     }
     if (choice === 15) m = { mid, at, type: 'setAvatar', gravatar: random() < 0.5 }
     if (choice === 16) {
@@ -293,6 +347,16 @@ describe('sync converges', () => {
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
     test(`seed ${seed}: two devices, one behind; any interleaving of changes, pushes, lost responses and pulls`, async () => {
       await scenario(seed, 160)
+    })
+  }
+})
+
+describe('a privacy show never applies over a hide its device had not pulled (issue #16)', () => {
+  // The privacy switches alone, so lost answers, pulls and the other device's hides meet them
+  // often: every show that applies is checked as it lands, and the devices still converge.
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    test(`seed ${seed}: two devices toggling both switches`, async () => {
+      await scenario(seed, 160, [14])
     })
   }
 })

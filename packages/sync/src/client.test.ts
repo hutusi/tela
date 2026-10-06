@@ -5,6 +5,7 @@ import {
   emptyTables,
   type Pending,
   privacyChange,
+  privacyUnsettled,
   settle,
   view,
 } from './client'
@@ -300,25 +301,68 @@ describe('follows and privacy flags on the device (ADR 0031)', () => {
     expect(untouched.profile).toMatchObject({ publicSubscriptions: true, readingLang: 'zh-Hans' })
   })
 
-  test("a show names the version it saw; the device's own hide-then-show both apply (#16)", () => {
+  test('a show names the confirmed version, and waits while a change to its switch is on its way (#16)', () => {
     const held = applyPull(start, pull(4, { profile: [{ ...profile, publicLikesVersion: 3 }] }))
-    // Made one after another, each from the view as the member pressed it.
+    let confirmed = held
     const pending: Pending[] = []
     const press = (on: boolean, at: number) => {
-      const input = privacyChange(view(held, pending), 'publicLikes', on)
-      pending.push({ mutation: { ...input, mid: `likes-${at}-pad`, at } as Mutation })
+      const input = privacyChange(confirmed, pending, 'publicLikes', on)
+      if (input) pending.push({ mutation: { ...input, mid: `likes-${at}-pad`, at } as Mutation })
       return input
     }
+    expect(privacyUnsettled(confirmed, pending, 'publicLikes')).toBe(false)
     expect(press(true, 10)).toEqual({
       type: 'setPrivacy',
       publicLikes: true,
       base: { publicLikes: 3 },
     })
+    // A hide never waits; the show after it does, and the other switch is not held back.
     expect(press(false, 11)).toEqual({ type: 'setPrivacy', publicLikes: false })
-    expect(press(true, 12)).toMatchObject({ base: { publicLikes: 5 } })
-    expect(view(held, pending).profile).toMatchObject({ publicLikes: true, publicLikesVersion: 6 })
-    // The subscriptions switch is counted apart.
-    expect(view(held, pending).profile?.publicSubscriptionsVersion).toBe(0)
+    expect(press(true, 12)).toBeNull()
+    expect(privacyUnsettled(confirmed, pending, 'publicLikes')).toBe(true)
+    expect(privacyUnsettled(confirmed, pending, 'publicSubscriptions')).toBe(false)
+    // Nothing on the device counts versions: the view's is the confirmed one.
+    expect(view(confirmed, pending).profile).toMatchObject({
+      publicLikes: false,
+      publicLikesVersion: 3,
+    })
+    // Acknowledged, and not yet pulled: still waiting.
+    for (const p of pending) p.ackedAt = 6
+    expect(privacyUnsettled(confirmed, pending, 'publicLikes')).toBe(true)
+    // The pull that reaches the acknowledgement brings the version the server counted.
+    confirmed = applyPull(
+      confirmed,
+      pull(6, { profile: [{ ...profile, publicLikes: false, publicLikesVersion: 5, seq: 6 }] }),
+    )
+    const settled = settle(confirmed, pending)
+    expect(settled).toEqual([])
+    pending.length = 0
+    expect(press(true, 13)).toMatchObject({ base: { publicLikes: 5 } })
+  })
+
+  test('a show waits until a row has come, since no version is known before it', () => {
+    expect(privacyUnsettled(start, [], 'publicLikes')).toBe(true)
+    expect(privacyChange(start, [], 'publicLikes', true)).toBeNull()
+    expect(privacyChange(start, [], 'publicLikes', false)).toEqual({
+      type: 'setPrivacy',
+      publicLikes: false,
+    })
+  })
+
+  test('replayed over a pull that already holds it, a change counts nothing twice', () => {
+    const held = applyPull(start, pull(4, { profile: [{ ...profile, publicLikesVersion: 1 }] }))
+    // A hide whose answer was lost, and a pull that holds it.
+    const hide: Pending = {
+      mutation: { mid: 'hide-likes-pad', at: 20, type: 'setPrivacy', publicLikes: false },
+    }
+    const pulled = applyPull(
+      held,
+      pull(5, { profile: [{ ...profile, publicLikes: false, publicLikesVersion: 2, seq: 5 }] }),
+    )
+    expect(view(pulled, [hide]).profile).toMatchObject({
+      publicLikes: false,
+      publicLikesVersion: 2,
+    })
   })
 
   test('a show made against a version a pull has since passed is refused, as the server will', () => {

@@ -1,6 +1,6 @@
 /** React's way into the local store: one context, and `useSyncExternalStore` over it. */
 import { READING_LANGUAGES, type ReadingLanguage } from '@tela/shared'
-import type { Tables } from '@tela/sync'
+import type { PrivacyFlag, Tables } from '@tela/sync'
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react'
 import type { SyncEngine } from './engine'
 import type { LocalStore } from './local'
@@ -39,6 +39,16 @@ export function useTables(): Tables {
 export function useConfirmedFollowees(): string {
   const { store } = useStore()
   return useSyncExternalStore(store.subscribe, store.confirmedFollowees, store.confirmedFollowees)
+}
+
+/**
+ * Whether a privacy switch has to wait before it can be turned on: a change this device made to
+ * it is still on its way (`LocalStore.privacyUnsettled`, issue #16).
+ */
+export function usePrivacyUnsettled(flag: PrivacyFlag): boolean {
+  const { store } = useStore()
+  const unsettled = () => store.privacyUnsettled(flag)
+  return useSyncExternalStore(store.subscribe, unsettled, unsettled)
 }
 
 /** The clock, ticking once a minute: relative times and "today" move without a render storm. */

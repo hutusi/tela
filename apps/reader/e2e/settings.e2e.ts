@@ -88,6 +88,19 @@ test.describe('settings', () => {
       publicLikes: true,
       publicSubscriptions: false,
     })
+    // Off goes at once; on again waits until that change is back in a pull, since a show names
+    // the version the server held (issue #16).
+    const off = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+    await likes.click()
+    await expect(likes).toHaveAttribute('aria-checked', 'false')
+    await expect(likes).toHaveAttribute('aria-disabled', 'true')
+    await off
+    expect(await serverProfile(request)).toMatchObject({ publicLikes: false })
+    await expect(likes).not.toHaveAttribute('aria-disabled', 'true')
+    const on = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+    await likes.click()
+    await on
+    expect(await serverProfile(request)).toMatchObject({ publicLikes: true })
     // Off again, so no other spec meets a profile showing likes it did not ask for.
     const again = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
     await likes.click()

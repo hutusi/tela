@@ -190,29 +190,51 @@ const blankState = (articleId: number): StateRow => ({
 export type PrivacyFlag = 'publicSubscriptions' | 'publicLikes'
 type SetPrivacy = Extract<Mutation, { type: 'setPrivacy' }>
 
-/** Each privacy switch, with the profile field that counts its changes. */
-const PRIVACY = [
-  ['publicSubscriptions', 'publicSubscriptionsVersion'],
-  ['publicLikes', 'publicLikesVersion'],
-] as const
+/** Each privacy switch, and the profile field that counts its changes. */
+const VERSION = {
+  publicSubscriptions: 'publicSubscriptionsVersion',
+  publicLikes: 'publicLikesVersion',
+} as const
+const PRIVACY = Object.keys(VERSION) as PrivacyFlag[]
 
 /**
- * A privacy switch turned on or off now, as the mutation to make. A show names the version of the
- * switch it was made against, read from `tables`, which must be the device's view as the member
- * pressed it, every pending change included (issue #16): a version captured when the page was
- * drawn is older than a hide still on its way, and the server would refuse the show that follows
- * it. A hide names none: it always applies.
+ * Whether a privacy switch cannot be turned on yet (issue #16): a change this device made to it is
+ * not in the confirmed rows (still to be pushed, or acknowledged and not yet pulled), or no row
+ * has come at all. A show names the version the server held, and until the change lands in a pull
+ * the device cannot know which version that is: a show sent meanwhile would name the version from
+ * before the change, and be refused. A hide is never held back.
+ */
+export function privacyUnsettled(
+  confirmed: Confirmed,
+  pending: readonly Pending[],
+  flag: PrivacyFlag,
+): boolean {
+  if (confirmed.tables.profile === null) return true
+  return settle(confirmed, pending).some(
+    (p) => p.mutation.type === 'setPrivacy' && p.mutation[flag] !== undefined,
+  )
+}
+
+/**
+ * A privacy switch turned on or off now, as the mutation to make, or null for a show that has to
+ * wait (`privacyUnsettled`). A hide names no version: it always applies. A show names in `base`
+ * the version of its switch in the **confirmed** rows, the one the server held when this device
+ * last heard, never the view's (issue #16). The view replays changes a pull may already hold, and
+ * a show the server will refuse looks applied there, so a version read from it need not be one
+ * the server ever held: a show based on it was refused when it should have applied, or applied
+ * over a hide made elsewhere that this device had never seen. Against the confirmed version, a
+ * show applies only while nothing has changed the switch since this device last pulled.
  */
 export function privacyChange(
-  tables: Tables,
+  confirmed: Confirmed,
+  pending: readonly Pending[],
   flag: PrivacyFlag,
   on: boolean,
-): Omit<SetPrivacy, 'mid' | 'at'> {
-  const held =
-    (flag === 'publicLikes'
-      ? tables.profile?.publicLikesVersion
-      : tables.profile?.publicSubscriptionsVersion) ?? 0
-  return { type: 'setPrivacy', [flag]: on, ...(on ? { base: { [flag]: held } } : {}) }
+): Omit<SetPrivacy, 'mid' | 'at'> | null {
+  if (!on) return { type: 'setPrivacy', [flag]: false }
+  if (privacyUnsettled(confirmed, pending, flag)) return null
+  const held = confirmed.tables.profile?.[VERSION[flag]] ?? 0
+  return { type: 'setPrivacy', [flag]: true, base: { [flag]: held } }
 }
 
 /**
@@ -331,23 +353,23 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       return t
     }
     case 'setPrivacy': {
-      // In order, as this device made them, and as the server decides (issue #16): a hide always
-      // applies, and a show with a base only while its switch's version is the one it names, so
-      // a show the server will refuse is refused here too. Every change counts the version up,
-      // which is what lets this device's own hide-then-show both apply: the show was made against
-      // the version after the hide. A show without a base applies here; the server decides it by
-      // `at`, and its row replaces this one with the next pull. `false` is a value.
+      // As the server decides (issue #16): a hide always applies, and a show with a base only
+      // while it names the version held, so a show a pull has passed is refused here as it is
+      // there. Nothing here counts versions, so the version held is the confirmed one: replayed
+      // over a pull that already holds the change, a count would add it twice. A show this device
+      // makes waits until its other changes to the switch have settled (`privacyChange`), so no
+      // change ahead of it in the queue moves the version it names. A show without a base applies
+      // here; the server decides it by `at`, and its row replaces this one with the next pull.
+      // `false` is a value.
       const p = t.profile
       if (p) {
         const next = { ...p }
-        for (const [flag, version] of PRIVACY) {
+        for (const flag of PRIVACY) {
           const v = m[flag]
           if (v === undefined) continue
-          const held = p[version] ?? 0
           const base = m.base?.[flag]
-          if (v && base !== undefined && base !== held) continue
+          if (v && base !== undefined && base !== (p[VERSION[flag]] ?? 0)) continue
           next[flag] = v
-          next[version] = held + 1
         }
         t.profile = next
       }

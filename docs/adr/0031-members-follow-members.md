@@ -113,16 +113,27 @@ the last thirty days. Nobody is suggested because of a private subscription or a
   (Amended 2026-10-07, issue #16.) The protocol now says it. Each switch has a version
   (`public_subscriptions_version`, `public_likes_version`) that every change counts up, and the
   profile row carries it. A hide always applies, whatever its `at`. A show names in `base` the
-  version it was made against, read from the device's view, pending changes included, when the
-  member presses. It applies only while that is still the stored version, so a show queued
-  before a hide made elsewhere is refused, whatever the clocks say, and the next pull turns the
-  device's switch back off. The device's own offline hide-then-show both apply, because the show
-  names the version after the hide. An old hide that arrives after a newer show turns the switch
-  off: that fails closed, and the member can show it again. A hide through `PUT /api/v1/profile`
-  counts the version too. Versions rather than the `*_at` clocks, because the server clamps `at`
-  and a device cannot know what clock its own pending hide will store. A show without a base,
-  from a shell before this, still goes to the later `at`, so `MIN_CLIENT` stays where it is. The
-  clocks remain, only ever moving forward, for those shows.
+  version it was made against, and applies only while that is still the stored version, so a
+  show queued before a hide made elsewhere is refused, whatever the clocks say, and the next pull
+  turns the device's switch back off. An old hide that arrives after a newer show turns the
+  switch off: that fails closed, and the member can show it again. A hide through
+  `PUT /api/v1/profile` counts the version too. Versions rather than the `*_at` clocks, because
+  the server clamps `at` and a device cannot know what clock its own pending hide will store. A
+  show without a base, from a shell before this, still goes to the later `at`, so `MIN_CLIENT`
+  stays where it is. The clocks remain, only ever moving forward, for those shows.
+
+  (Amended again 2026-10-07, review.) The base was first read from the device's view, pending
+  changes included, with the prediction counting a version up for each. That is not a version
+  the server held: the view replays changes a pull may already hold, and counts shows the server
+  will refuse. A show could then be refused when it should apply (a hide whose answer was lost,
+  then a pull, then a show naming one too many), or apply over a hide made elsewhere that the
+  device never saw, which reopened what #16 closed. Now the base is the version in the
+  **confirmed** rows, and the switch cannot be turned on while a change this device made to it is
+  unsettled: not yet pushed, or acknowledged and not yet pulled (`privacyUnsettled`). Settings
+  dims it then, with the reason for a screen reader, for the moment a push and a pull take
+  online. A hide is never held back. So a show applies only while nothing has changed its switch
+  since its device last pulled, and the prediction counts nothing. What this gives up is the
+  offline hide-then-show: offline, a switch turned off stays off until the device is back.
 - The profile says nothing about the languages a member reads. The design's "Reads in" would
   have published the private never-translate list.
 - Out of scope, and absent from Settings rather than shown disabled: follow approval, email

@@ -13,8 +13,8 @@ import {
   UI_LOCALES,
   type UiLocale,
 } from '@tela/shared'
-import { type PrivacyFlag, type ProfileRow, privacyChange } from '@tela/sync'
-import { useRef, useState } from 'react'
+import type { PrivacyFlag, ProfileRow } from '@tela/sync'
+import { useId, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, useLocation, useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { AvatarCrop } from '../components/avatar-crop'
@@ -39,7 +39,7 @@ import {
   typographyOf,
 } from '../lib/typography'
 import { api, apiJson } from '../store/api'
-import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
+import { useNow, usePrivacyUnsettled, useReadingLang, useStore, useTables } from '../store/hooks'
 import { feedTitle } from '../store/selectors'
 import { useUi } from '../ui'
 import { AccountSection, InvitesSection } from './settings-account'
@@ -839,29 +839,55 @@ function ExportButton({
 // ---------------------------------------------------------------------------------------------
 // Privacy
 
-function PrivacySection() {
+/**
+ * One privacy switch. A hide goes at once; a show waits while this device's last change to the
+ * switch is still on its way (issue #16): it names the version the server held, which the device
+ * knows only once that change has come back in a pull. Online that is well under a second.
+ */
+function PrivacySwitch({
+  flag,
+  label,
+  testId,
+}: {
+  flag: PrivacyFlag
+  label: string
+  testId: string
+}) {
   const t = useTranslations('settings')
   const { store } = useStore()
-  const profile = useTables().profile
-  // A show names the version it was made against, read from the view as the member presses, not
-  // as this page was drawn: a hide still on its way has moved it since (issue #16).
-  const set = (flag: PrivacyFlag, on: boolean) =>
-    store.mutate(privacyChange(store.getSnapshot().tables, flag, on))
+  const on = useTables().profile?.[flag] ?? false
+  const waits = usePrivacyUnsettled(flag) && !on
+  const why = useId()
+  return (
+    <>
+      {waits ? (
+        <span id={why} className="sr-only">
+          {t('privacyWaits')}
+        </span>
+      ) : null}
+      <Switch
+        checked={on}
+        disabled={waits}
+        describedBy={waits ? why : undefined}
+        onChange={(next) => store.setPrivacy(flag, next)}
+        label={label}
+        testId={testId}
+      />
+    </>
+  )
+}
+
+function PrivacySection() {
+  const t = useTranslations('settings')
   return (
     <>
       <Intro>{t('privacyIntro')}</Intro>
       <SettingRow label={t('showLikes')} hint={t('showLikesHint')}>
-        <Switch
-          checked={profile?.publicLikes ?? false}
-          onChange={(on) => set('publicLikes', on)}
-          label={t('showLikes')}
-          testId="privacy-likes"
-        />
+        <PrivacySwitch flag="publicLikes" label={t('showLikes')} testId="privacy-likes" />
       </SettingRow>
       <SettingRow label={t('showSubscriptions')} hint={t('showSubscriptionsHint')}>
-        <Switch
-          checked={profile?.publicSubscriptions ?? false}
-          onChange={(on) => set('publicSubscriptions', on)}
+        <PrivacySwitch
+          flag="publicSubscriptions"
           label={t('showSubscriptions')}
           testId="privacy-subscriptions"
         />
