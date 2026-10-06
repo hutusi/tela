@@ -21,7 +21,14 @@ async function serverProfile(request: APIRequestContext) {
     headers: await memberHeaders(request),
   })
   const body = (await res.json()) as {
-    rows: { profile: { publicLikes: boolean; publicSubscriptions: boolean }[] }
+    rows: {
+      profile: {
+        publicLikes: boolean
+        publicSubscriptions: boolean
+        uiLocale: string | null
+        readingLang: string | null
+      }[]
+    }
   }
   return body.rows.profile[0]
 }
@@ -212,6 +219,44 @@ test.describe('the interface language', () => {
     } finally {
       // Every spec signs in as this member: none should inherit Chinese from this one.
       await setPrefs(request, {}, { uiLocale: 'en' })
+    }
+  })
+})
+
+test.describe('the translation language', () => {
+  /**
+   * Linked is the account holding no translation language of its own (ADR 0040): Settings' first
+   * choice puts that back, and the header's circle goes back to setting the interface, which the
+   * translation then follows.
+   */
+  test('"Same as interface language" links it to the interface again', async ({ page }) => {
+    await setPrefs(page.request, {}, { uiLocale: 'en', readingLang: 'fr' })
+    try {
+      await page.goto('/settings/translation')
+      const select = page.getByTestId('settings-reading-lang')
+      const circle = page.getByTestId('language-menu').locator('summary')
+      await expect(select).toHaveValue('fr')
+      await expect(circle).toHaveAccessibleName('Translate into: Français')
+      // The first choice, before the four languages.
+      await expect(select.locator('option').first()).toHaveText('Same as interface language')
+      const pushed = page.waitForResponse(
+        (r) =>
+          r.url().includes('/api/v1/mutations') &&
+          r.ok() &&
+          (r.request().postData() ?? '').includes('"readingLang":null'),
+      )
+      await select.selectOption('')
+      await pushed
+      await expect(select).toHaveValue('')
+      await expect(circle).toHaveAccessibleName('Language: English')
+      expect(await serverProfile(page.request)).toMatchObject({ uiLocale: 'en', readingLang: null })
+
+      // One that merely equals the interface is a choice of its own: still apart.
+      await select.selectOption('en')
+      await expect(select).toHaveValue('en')
+      await expect(circle).toHaveAccessibleName('Translate into: English')
+    } finally {
+      await setPrefs(page.request, {}, { uiLocale: 'en', readingLang: null })
     }
   })
 })

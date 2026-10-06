@@ -1,13 +1,15 @@
 import {
   asLabel,
+  isUiLocale,
   LANGUAGE_NAMES,
   READING_LANGUAGES,
   type ReadingLanguage,
   UI_LOCALES,
 } from '@tela/shared'
+import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { circleLabel } from '../lib/format'
-import { useReadingLang, useStore } from '../store/hooks'
+import { useReadingLang, useStore, useTables } from '../store/hooks'
 import { useUi } from '../ui'
 import { CONTROL, MENU_PANEL, menuItem, useHeaderMenu } from './header-control'
 
@@ -22,6 +24,10 @@ const endonym = (code: ReadingLanguage) => asLabel(LANGUAGE_NAMES[code][code] ??
  * theirs. The circle's accessible name says the whole name and what it sets ("Language:
  * 简体中文"). The caller gives it its display and shrink, since the visitor's is hidden below `sm`.
  *
+ * `apart` is a member who chose a translation language of their own in Settings: the circle then
+ * sets only that, and says so, in its name ("Translate into: English"), as the panel's title, and
+ * with a way to Settings, where the two are linked again.
+ *
  * The edge's page marks the language it was rendered in, which is right for every visitor it is
  * cached for, since the cache is kept per language; choosing needs the script.
  */
@@ -29,17 +35,17 @@ export function LanguageMenu<T extends ReadingLanguage>({
   options,
   value,
   onChoose,
-  sets,
+  apart = false,
   className,
 }: {
   options: readonly T[]
   value: T
   onChoose: (code: T) => void
-  /** What a choice changes, as the circle's name says it. */
-  sets: 'language' | 'translateInto'
+  apart?: boolean
   className: string
 }) {
   const t = useTranslations('nav')
+  const ts = useTranslations('settings')
   const { box, onToggle, close } = useHeaderMenu()
   const label = circleLabel(value)
   return (
@@ -55,9 +61,19 @@ export function LanguageMenu<T extends ReadingLanguage>({
         <span aria-hidden="true" lang={value}>
           {label}
         </span>
-        <span className="sr-only">{t(sets, { name: endonym(value) })}</span>
+        <span className="sr-only">
+          {t(apart ? 'translateInto' : 'language', { name: endonym(value) })}
+        </span>
       </summary>
       <div className={MENU_PANEL}>
+        {apart ? (
+          <p
+            className="px-2.5 pt-1 pb-1.5 text-[11.5px] font-medium text-muted"
+            data-testid="language-menu-title"
+          >
+            {ts('translateInto')}
+          </p>
+        ) : null}
         {options.map((code) => (
           <button
             key={code}
@@ -74,24 +90,51 @@ export function LanguageMenu<T extends ReadingLanguage>({
             {endonym(code)}
           </button>
         ))}
+        {apart ? (
+          <>
+            <div className="mx-1 my-1 border-t border-line" />
+            <Link
+              to="/settings/translation"
+              onClick={() => close('outside')}
+              data-testid="language-menu-settings"
+              className={`${menuItem(false)} hover:no-underline`}
+            >
+              {t('languageSettings')}
+            </Link>
+          </>
+        ) : null}
       </div>
     </details>
   )
 }
 
-/** A member's circle: the language posts are translated into. The UI locale is in Settings. */
+/**
+ * A member's circle. Linked, as an account is until Settings sets them apart (its reading language
+ * null), a choice is the interface language, and the translation follows it; apart, a choice is
+ * the translation language only. Which, is read when the choice is made, not when the menu
+ * rendered: a sync may have linked them or set them apart in between, and the account's rows say
+ * what a choice changes.
+ */
 export function MemberLanguage() {
   const { store } = useStore()
-  const { locale } = useUi()
+  const { locale, setLocale } = useUi()
   const readingLang = useReadingLang(locale)
-  return (
+  const apart = (useTables().profile?.readingLang ?? null) !== null
+  const choose = (code: ReadingLanguage) => {
+    const linked = (store.getSnapshot().tables.profile?.readingLang ?? null) === null
+    if (linked && isUiLocale(code)) setLocale(code)
+    else store.mutate({ type: 'setProfile', readingLang: code })
+  }
+  return apart ? (
     <LanguageMenu
       options={READING_LANGUAGES}
       value={readingLang}
-      onChoose={(code) => store.mutate({ type: 'setProfile', readingLang: code })}
-      sets="translateInto"
+      onChoose={choose}
+      apart
       className="shrink-0"
     />
+  ) : (
+    <LanguageMenu options={UI_LOCALES} value={locale} onChoose={choose} className="shrink-0" />
   )
 }
 
@@ -104,12 +147,6 @@ export function MemberLanguage() {
 export function VisitorLanguage({ className }: { className: string }) {
   const { locale, setLocale } = useUi()
   return (
-    <LanguageMenu
-      options={UI_LOCALES}
-      value={locale}
-      onChoose={setLocale}
-      sets="language"
-      className={className}
-    />
+    <LanguageMenu options={UI_LOCALES} value={locale} onChoose={setLocale} className={className} />
   )
 }

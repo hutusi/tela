@@ -297,12 +297,12 @@ test.describe('reader', () => {
     ).toHaveText('')
   })
 
-  test('the UI switches to Chinese, in Settings and nowhere in the header', async ({ page }) => {
+  test('the UI switches to Chinese in Settings, and the header says so', async ({ page }) => {
+    await resetReading(page.request)
     await page.goto('/settings/translation')
-    // The header's circle is the translation language's, not the interface's.
-    await expect(page.getByTestId('language-menu').locator('summary')).toHaveAccessibleName(
-      'Translate into: English',
-    )
+    // Linked, the header's circle is the interface language, so it changes with it.
+    const circle = page.getByTestId('language-menu').locator('summary')
+    await expect(circle).toHaveAccessibleName('Language: English')
     // Each push is waited for: every spec signs in as this member, and the next one should not
     // inherit Chinese because this page closed before its last change went out.
     const pushed = () =>
@@ -311,6 +311,7 @@ test.describe('reader', () => {
     await page.getByTestId('ui-locale').selectOption('zh-Hans')
     await expect(page.getByTestId('nav-reading')).toHaveText('阅读')
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+    await expect(circle).toHaveAccessibleName('语言：简体中文')
     await push
     push = pushed()
     await page.getByTestId('ui-locale').selectOption('en')

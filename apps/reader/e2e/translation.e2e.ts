@@ -3,7 +3,7 @@
  * chunks and laid over the original. The mock provider prefixes "en:" and drops a block marked
  * [[drop]], which is how a provider omitting an entry looks.
  */
-import { type APIRequestContext, expect, test } from '@playwright/test'
+import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import {
   BASE,
   ensureFeeds,
@@ -16,13 +16,28 @@ import {
   synced,
 } from './helpers'
 
-/** The member's reading language as the server has it, through a snapshot pull. */
-async function serverReadingLang(request: APIRequestContext): Promise<string | undefined> {
+/** The member's two languages as the server has them, through a snapshot pull. */
+async function serverLanguages(
+  request: APIRequestContext,
+): Promise<{ uiLocale: string | null; readingLang: string | null } | undefined> {
   const res = await request.get(`${BASE}/api/v1/sync?cursor=0`, {
     headers: await memberHeaders(request),
   })
-  const body = (await res.json()) as { rows: { profile: { readingLang: string }[] } }
-  return body.rows.profile[0]?.readingLang
+  const body = (await res.json()) as {
+    rows: { profile: { uiLocale: string | null; readingLang: string | null }[] }
+  }
+  const profile = body.rows.profile[0]
+  return profile && { uiLocale: profile.uiLocale, readingLang: profile.readingLang }
+}
+
+/** The next push that carries `fragment` (a mutation's field, as JSON), once it is answered. */
+function pushed(page: Page, fragment: string) {
+  return page.waitForResponse(
+    (r) =>
+      r.url().includes('/api/v1/mutations') &&
+      r.ok() &&
+      (r.request().postData() ?? '').includes(fragment),
+  )
 }
 
 test.beforeAll(async () => {
@@ -154,13 +169,16 @@ test.describe('translation', () => {
     expect(asked).toEqual([])
   })
 
-  test('switching the reading language changes what gets translated', async ({ page }) => {
+  test('switching the language changes what gets translated', async ({ page }) => {
     await page.goto('/reading')
     await synced(page)
     const menu = page.getByTestId('language-menu')
     await menu.locator('summary').click()
     await menu.getByRole('button', { name: '简体中文' }).click()
-    await expect(menu.locator('summary')).toHaveAccessibleName('Translate into: 简体中文')
+    // Linked, as an account is by default: the interface goes to Chinese, and the translation
+    // follows it.
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+    await expect(menu.locator('summary')).toHaveAccessibleName('语言：简体中文')
     await expect(menu.getByTestId('language-menu-zh-Hans')).toHaveAttribute('aria-pressed', 'true')
     // An English feed is now foreign; its titles in Chinese come from the next sweep.
     await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
@@ -172,17 +190,21 @@ test.describe('translation', () => {
     } finally {
       stop()
     }
+    const back = pushed(page, '"uiLocale":"en"')
     await menu.locator('summary').click()
     await menu.getByRole('button', { name: 'English' }).click()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
     await expect(page.getByTestId('article-row').first()).not.toContainText('EN → ZH')
+    await back
   })
 
   /**
    * Four languages do not fit in view, so the language circle is a menu: the circle shows the one
-   * chosen, short, and the list names each in full, in its own script and `lang`. A choice is the
-   * member's reading language, pushed and kept, whatever the interface is in.
+   * chosen, short, and the list names each in full, in its own script and `lang`. Linked, as an
+   * account is until Settings sets them apart, a choice is the interface language, pushed and
+   * kept, and the translation follows it because the account holds none of its own (ADR 0040).
    */
-  test('the language circle offers four languages in their own names, and keeps the choice', async ({
+  test('linked, the circle offers four languages in their own names, and sets both', async ({
     page,
   }) => {
     try {
@@ -191,14 +213,7 @@ test.describe('translation', () => {
       const menu = page.getByTestId('language-menu')
       const summary = menu.locator('summary')
       const choice = (code: string) => menu.getByTestId(`language-menu-${code}`)
-      const pushed = (code: string) =>
-        page.waitForResponse(
-          (r) =>
-            r.url().includes('/api/v1/mutations') &&
-            r.ok() &&
-            (r.request().postData() ?? '').includes(`"readingLang":"${code}"`),
-        )
-      await expect(summary).toHaveAccessibleName('Translate into: English')
+      await expect(summary).toHaveAccessibleName('Language: English')
       // What the circle shows is a glyph for it; its name says it in full.
       const glyph = summary.locator('[aria-hidden="true"]')
       await expect(glyph).toHaveText('EN')
@@ -213,27 +228,38 @@ test.describe('translation', () => {
         await expect(choice(code)).toHaveAttribute('lang', code)
       }
       await expect(choice('en')).toHaveAttribute('aria-pressed', 'true')
+      // Linked, it is the language, not "Translate into", and there is no way off to Settings.
+      await expect(menu.getByTestId('language-menu-title')).toHaveCount(0)
+      await expect(menu.getByTestId('language-menu-settings')).toHaveCount(0)
 
       // Traditional is a language of its own, not Chinese read another way.
-      let push = pushed('zh-Hant')
+      let push = pushed(page, '"uiLocale":"zh-Hant"')
       await choice('zh-Hant').click()
       await expect(choice('zh-Hant')).toBeHidden()
-      await expect(summary).toHaveAccessibleName('Translate into: 繁體中文')
+      await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant')
+      await expect(page.getByTestId('nav-reading')).toHaveText('閱讀')
+      await expect(summary).toHaveAccessibleName('語言：繁體中文')
       await expect(glyph).toHaveText('繁')
       await push
-      expect(await serverReadingLang(page.request)).toBe('zh-Hant')
+      // The interface is the account's now, and the translation still follows it.
+      expect(await serverLanguages(page.request)).toEqual({
+        uiLocale: 'zh-Hant',
+        readingLang: null,
+      })
 
-      push = pushed('fr')
+      push = pushed(page, '"uiLocale":"fr"')
       await summary.click()
       await expect(choice('zh-Hant')).toHaveAttribute('aria-pressed', 'true')
       await choice('fr').click()
-      await expect(summary).toHaveAccessibleName('Translate into: Français')
+      await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+      await expect(summary).toHaveAccessibleName(/^Langue\s: Français$/)
       await push
-      expect(await serverReadingLang(page.request)).toBe('fr')
+      expect(await serverLanguages(page.request)).toEqual({ uiLocale: 'fr', readingLang: null })
 
       // Kept, so the next visit opens in it; one choice is marked, and Esc gives focus back.
       await page.reload()
-      await expect(summary).toHaveAccessibleName('Translate into: Français')
+      await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+      await expect(summary).toHaveAccessibleName(/^Langue\s: Français$/)
       await summary.click()
       await expect(choice('fr')).toHaveAttribute('aria-pressed', 'true')
       await expect(menu.locator('[aria-pressed="true"]')).toHaveCount(1)
@@ -242,6 +268,56 @@ test.describe('translation', () => {
       await expect(summary).toBeFocused()
     } finally {
       // Every spec signs in as this member: no other one should meet French.
+      await resetReading(page.request)
+    }
+  })
+
+  /**
+   * A member who chose a translation language of their own in Settings has set the two apart:
+   * the circle then changes only the translation, and says so, in its name and as its title, with
+   * the way back to Settings, where "Same as interface language" links them again.
+   */
+  test('set apart in Settings, the circle changes only the translation, and says so', async ({
+    page,
+  }) => {
+    try {
+      await page.goto('/settings/translation')
+      const menu = page.getByTestId('language-menu')
+      const summary = menu.locator('summary')
+      await expect(summary).toHaveAccessibleName('Language: English')
+      let push = pushed(page, '"readingLang":"fr"')
+      await page.getByTestId('settings-reading-lang').selectOption('fr')
+      await push
+      await expect(summary).toHaveAccessibleName('Translate into: Français')
+      await expect(summary.locator('[aria-hidden="true"]')).toHaveText('FR')
+      await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+
+      await page.getByTestId('nav-reading').click()
+      await synced(page)
+      await summary.click()
+      await expect(menu.getByTestId('language-menu-title')).toHaveText('Translate into')
+      await expect(menu.getByTestId('language-menu-fr')).toHaveAttribute('aria-pressed', 'true')
+      push = pushed(page, '"readingLang":"zh-Hans"')
+      await menu.getByTestId('language-menu-zh-Hans').click()
+      await expect(summary).toHaveAccessibleName('Translate into: 简体中文')
+      await push
+      // The interface stays as it was, here and on the account.
+      await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+      await expect(page.getByTestId('nav-reading')).toHaveText('Reading')
+      expect(await serverLanguages(page.request)).toEqual({
+        uiLocale: 'en',
+        readingLang: 'zh-Hans',
+      })
+
+      // The way back to linking them is Settings → Language, and the menu closes on the way.
+      await summary.click()
+      const settings = menu.getByTestId('language-menu-settings')
+      await expect(settings).toHaveText('Language settings')
+      await settings.click()
+      await expect(page).toHaveURL(/\/settings\/translation$/)
+      await expect(settings).toBeHidden()
+      await expect(page.getByTestId('settings-reading-lang')).toHaveValue('zh-Hans')
+    } finally {
       await resetReading(page.request)
     }
   })

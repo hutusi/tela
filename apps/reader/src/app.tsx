@@ -5,7 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { useTranslations } from 'use-intl'
 import { AppHeader } from './components/app-header'
 import { FrontDoorProvider, ToReading } from './components/front-door'
-import { detectLocale, I18n, localeCookie } from './i18n'
+import { chooseLocale, detectLocale, I18n, localeCookie } from './i18n'
 import { applyTheme, deviceTheme, PREFS, themeToAdopt, typographyOf } from './lib/typography'
 import { forgetPublic } from './lib/use-public'
 import { AddPage } from './pages/add'
@@ -190,14 +190,12 @@ function Routed() {
     document.cookie = localeCookie(next)
     setLocaleState(next)
   }, [])
-  // A member's choice is a mutation even before their first sync has brought the profile: it
-  // waits with the others, and lands on the row when that arrives. Skipping it then left only the
-  // cookie, and the row's older choice, applied below, took the page back. A visitor has no owner,
-  // and `mutate` keeps nothing for no one.
+  // What the store makes of a choice, not the choice: one the account's clock refuses leaves the
+  // page in the language the account holds (`chooseLocale`).
   const setLocale = useCallback(
     (next: UiLocale) => {
-      applyLocale(next)
-      store.mutate({ type: 'setProfile', uiLocale: next })
+      const shown = chooseLocale(store, next)
+      if (shown) applyLocale(shown)
     },
     [store, applyLocale],
   )

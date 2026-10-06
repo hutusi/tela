@@ -496,17 +496,24 @@ function TranslationSection() {
           ))}
         </select>
       </SettingRow>
+      {/* Linked unless the account holds a language of its own (ADR 0040): the first option is
+          null, which follows the interface, and one that merely equals it is a choice. */}
       <SettingRow label={t('translateInto')} hint={t('translateIntoHint')}>
         <select
-          value={readingLang}
+          value={tables.profile?.readingLang ?? ''}
           aria-label={t('translateInto')}
           onChange={(e) => {
+            if (e.target.value === '') {
+              store.mutate({ type: 'setProfile', readingLang: null })
+              return
+            }
             const readingLang = READING_LANGUAGES.find((l) => l === e.target.value)
             if (readingLang) store.mutate({ type: 'setProfile', readingLang })
           }}
           className={SELECT}
           data-testid="settings-reading-lang"
         >
+          <option value="">{t('translateIntoInterface')}</option>
           {READING_LANGUAGES.map((code) => (
             <option key={code} value={code}>
               {asLabel(names[code] ?? code, locale)}
