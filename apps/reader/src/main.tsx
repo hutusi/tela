@@ -6,6 +6,7 @@ import './styles.css'
 import { createRoot } from 'react-dom/client'
 import { App } from './app'
 import { leaver } from './leave'
+import { pageTheme, paintChrome } from './lib/typography'
 import { openStore, sessionEvents } from './session'
 import { registerShell } from './shell'
 import { bindApi } from './store/api'
@@ -14,6 +15,9 @@ import { SyncEngine } from './store/engine'
 import { Objects } from './store/objects'
 
 async function boot() {
+  // The browser's bar follows a theme this device chose, which the inline script has put on the
+  // page; a member's synced one applies again once their rows are in.
+  paintChrome(pageTheme())
   // A browser that refuses IndexedDB (some private modes) still reads, just without a memory.
   const persistence = await indexedDbPersistence().catch(() => memoryPersistence())
   const store = await openStore(persistence)

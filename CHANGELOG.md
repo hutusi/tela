@@ -28,6 +28,9 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Tela installs as an app** on Android and the desktop: a web app manifest that opens the
+  reading page in a window of its own, with 192 and 512 icons and a maskable one for the
+  launcher's own shape. The browser's bar is on the page's paper, in either theme.
 - **An admin console** at `/admin` (ADR 0039), after the Claude Design's "Ledger, refined":
   Overview, Claims, Sites, Feeds, Discover, People, Invitations, Translation and System, each a
   searchable, sortable table with its likeliest action on every row, a record beside it, bulk

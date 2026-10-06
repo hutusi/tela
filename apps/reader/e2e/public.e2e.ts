@@ -44,6 +44,33 @@ test.describe('for a visitor', () => {
     expect(missing?.status()).toBe(404)
     await expect(page.getByTestId('not-found')).toBeVisible()
   })
+
+  // The single-page fallback answers a path with no file 200 with the app's HTML (AGENTS.md), so
+  // a 200 alone proves nothing: each must come back as what its name says.
+  test('the manifest and its icons are served as themselves, and every page names it', async ({
+    page,
+    request,
+  }) => {
+    const res = await request.get('/manifest.webmanifest')
+    expect(res.status()).toBe(200)
+    expect(res.headers()['content-type']).toMatch(/^application\/manifest\+json\b/)
+    const manifest = (await res.json()) as { start_url: string; icons: { src: string }[] }
+    expect(manifest.icons.length).toBeGreaterThan(0)
+    for (const { src } of manifest.icons) {
+      const icon = await request.get(src)
+      expect(icon.status(), src).toBe(200)
+      expect(icon.headers()['content-type'], src).toBe('image/png')
+    }
+    // The shell, served without the Worker, and a page the edge rendered into it.
+    for (const path of [manifest.start_url, '/about']) {
+      await page.goto(path)
+      await expect(page.locator('link[rel="manifest"]'), path).toHaveAttribute(
+        'href',
+        '/manifest.webmanifest',
+      )
+    }
+    await expect(page.getByTestId('info-page')).toBeVisible()
+  })
 })
 
 test.describe('discover and claim', () => {

@@ -286,6 +286,10 @@ A Vite + React SPA that renders from the device.
   `/__tela/shell`, a path tela-web never runs for, because `/` is the landing the edge renders
   for visitors (ADR 0035), and keeps it under `/` only if it is the plain shell: an empty
   `#root`, and no `#tela-data`.
+- `public/manifest.webmanifest` makes Tela installable. It opens `/reading`, standalone, rather
+  than `/`, which is two pages and runs tela-web; `/reading` is always the shell. The manifest and
+  its three PNG icons are plain static assets, outside `run_worker_first`, and `sw.js` does not
+  keep them: its icon branch keeps any 200, and a missing file's 200 is the app's HTML.
 
 | Route | Purpose |
 |---|---|

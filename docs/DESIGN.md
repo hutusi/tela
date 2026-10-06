@@ -63,13 +63,20 @@ forms, and the transparent one is primary:
   beside the wordmark. Strands in `currentColor` and `accent`, stroke 3.4 on a 48 viewBox, round
   caps. It sits on the paper; there is no badge behind it. Below `lg` the mark carries the brand
   alone, and the wordmark stays as the link's accessible name.
-- **Tiled** — only where the mark needs a shape of its own: `src/app/icon.svg` (32px weight),
+- **Tiled** — only where the mark needs a shape of its own: `public/icon.svg` (32px weight),
   `favicon.ico` (16 and 32) and `apple-icon.png` (180, square-cornered because iOS masks it
   itself). A dark `ink` tile, `rx=11`, strands in `paper` and the lifted accent, on the inset path.
   The strands thicken as the tile shrinks — 3.3 at 32px, 5.0 at 16px — so the crossing survives.
+- **Installed** — the web app manifest's icons (`apps/reader/public/manifest.webmanifest`):
+  `icon-192.png` and `icon-512.png`, the rounded tile as it is, and `icon-maskable-512.png`, for
+  the launcher to cut its own shape from. That one is square and full-bleed, with the mark at 0.8
+  scale: the tightest mask keeps only the central circle 80% across, and the mark sits as far
+  inside that circle as the tile's mark sits inside the tile. The manifest's `theme_color` and
+  `background_color` are `paper`; index.html's `theme-color` metas give each scheme its own paper,
+  and a theme chosen in Tela sets both to its own (`paintChrome` in `lib/typography.ts`).
 
-All three files come from `cd apps/reader && bun run icons`, which renders them through the Chromium
-Playwright installs. Regenerate and commit them whenever the geometry changes.
+All of these files come from `cd apps/reader && bun run icons`, which renders them through the
+Chromium Playwright installs. Regenerate and commit them whenever the geometry changes.
 
 ## Layout rules
 

@@ -5,6 +5,7 @@ import {
   applyTheme,
   chooseTheme,
   deviceTheme,
+  PAPER,
   PREFS,
   pageTheme,
   type Theme,
@@ -21,6 +22,15 @@ const saved = {
   localStorage: globalThis.localStorage,
 }
 const dataset: Record<string, string> = {}
+/** index.html's two `theme-color` metas, as attributes. */
+const metas = ['light', 'dark'].map((scheme) => {
+  const attributes = new Map([['media', `(prefers-color-scheme: ${scheme})`]])
+  return {
+    getAttribute: (name: string) => attributes.get(name) ?? null,
+    setAttribute: (name: string, value: string) => void attributes.set(name, value),
+  }
+})
+const chrome = () => metas.map((m) => m.getAttribute('content'))
 /** What the system asks for, as `prefers-color-scheme` would say it. */
 let systemDark = false
 const held = new Map<string, string>()
@@ -35,7 +45,11 @@ const storage = {
 }
 beforeAll(() => {
   Object.assign(globalThis, {
-    document: { documentElement: { dataset } },
+    document: {
+      documentElement: { dataset },
+      querySelectorAll: (selector: string) =>
+        selector === 'meta[name="theme-color"]' ? metas : [],
+    },
     window: {
       matchMedia: (query: string) => ({
         matches: query === '(prefers-color-scheme: dark)' && systemDark,
@@ -81,6 +95,15 @@ describe('the theme the page is set to', () => {
     applyTheme('system')
     expect('theme' in dataset).toBe(false)
     expect(held.get('tela.theme')).toBe('system')
+  })
+
+  test("puts the browser's bar on its paper, and each scheme's back on its own for Auto", () => {
+    applyTheme('dark')
+    expect(chrome()).toEqual([PAPER.dark, PAPER.dark])
+    applyTheme('light')
+    expect(chrome()).toEqual([PAPER.light, PAPER.light])
+    applyTheme('system')
+    expect(chrome()).toEqual([PAPER.light, PAPER.dark])
   })
 })
 

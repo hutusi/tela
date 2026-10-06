@@ -18,6 +18,13 @@
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-icon.png" />
+    <!-- What installing Tela opens and shows. The edge pours its public pages into this file, so
+         they name it too. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- The browser's own bar on the page's ground. A theme chosen here sets both to its paper
+         (paintChrome, src/lib/typography.ts). -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f2ea" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1f1c18" />
   </head>
   <body>
     <div id="root"></div>
