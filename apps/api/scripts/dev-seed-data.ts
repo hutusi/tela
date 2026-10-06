@@ -242,6 +242,7 @@ export function seedStatements({ now, sites, actor }: SeedInput): string[] {
     [10, 2, 4],
   ] as const) {
     add(`update sites set listing = 'private', reader_count = ${readers}, claimed_by = null,
+        review = ${q(reviewedDays === null ? null : 'dismissed')},
         reviewed_at = ${q(reviewedDays === null ? null : now - reviewedDays * DAY)},
         seq = ${SEQ} where id = ${site(i).id}`)
   }

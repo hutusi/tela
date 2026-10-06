@@ -7,6 +7,7 @@ import {
   FEED_STATUSES,
   FETCH_REGIONS,
   SITE_LISTINGS,
+  SITE_REVIEWS,
   WEBSUB_STATUSES,
 } from '@tela/shared'
 import {
@@ -41,9 +42,15 @@ export const sites = sqliteTable(
     translationOptOut: flag(),
     assetsCheckedAt: ms(),
     /**
-     * When an operator decided about the site for Discover (ADR 0041): listed, featured, hidden or
-     * "not for Discover". Null keeps a private blog a member added in the review queue. No device
-     * holds it, so writing it alone bumps no seq.
+     * What an operator's review decided about the site for Discover (ADR 0041): `listed` (List,
+     * Feature, curation) or `dismissed` (Not for Discover, or a Hide that found nothing decided).
+     * Null keeps a private blog a member added in the review queue. Restore and a removed claim
+     * return a `listed` blog to listed whatever its readers. No device holds it.
+     */
+    review: text({ enum: SITE_REVIEWS }),
+    /**
+     * When an operator last decided about the site for Discover: written with `review` by every
+     * decision, Hide included. No device holds either, so writing them alone bumps no seq.
      */
     reviewedAt: ms(),
     createdAt: ms().notNull(),
@@ -52,6 +59,7 @@ export const sites = sqliteTable(
   },
   (t) => [
     check('sites_listing_check', oneOf(t.listing, SITE_LISTINGS)),
+    check('sites_review_check', oneOf(t.review, SITE_REVIEWS)),
     check('sites_declared_feed_urls_check', validJson(t.declaredFeedUrls)),
     index('sites_listing_idx').on(t.listing),
     index('sites_claimed_by_idx').on(t.claimedBy),

@@ -6,6 +6,7 @@ import type {
   FeedStatus,
   FetchRegion,
   SiteListing,
+  SiteReview,
 } from '../constants'
 import type { AdminHistoryEntry, AdminPerson, AdminRowBase } from './common'
 
@@ -36,10 +37,13 @@ export type AdminSiteRow = AdminRowBase & {
   latestTitle: string | null
   latestAt: number | null
   /**
-   * When an operator decided about it for Discover (ADR 0041): listed, featured, hidden, or not
-   * for Discover. Null while a blog a member added waits in the review queue. Never who added it:
-   * what a member reads is not the console's to show (ADR 0039).
+   * What an operator's review decided for Discover (ADR 0041): `listed` (List, Feature, curation)
+   * or `dismissed` (Not for Discover, or a Hide over nothing decided). Null while a blog a member
+   * added waits in the review queue. Never who added it: what a member reads is not the
+   * console's to show (ADR 0039).
    */
+  review: SiteReview | null
+  /** When an operator last decided about it for Discover (Hide included); null with `review`. */
   reviewedAt: number | null
 }
 

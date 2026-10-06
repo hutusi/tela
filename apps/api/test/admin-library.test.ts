@@ -87,6 +87,7 @@ async function addSite(
     home?: string
     readers?: number
     optOut?: number
+    review?: 'listed' | 'dismissed' | null
     reviewedAt?: number | null
   } = {},
 ): Promise<number> {
@@ -94,11 +95,11 @@ async function addSite(
   const home = o.home ?? `https://blog${++homes}.test`
   const [row] = await api.db.all<{ id: number }>(sql`
     insert into sites (home_url, title, listing, claimed_by, claimed_at, reader_count,
-      translation_opt_out, declared_feed_urls, reviewed_at, created_at, updated_at)
+      translation_opt_out, declared_feed_urls, review, reviewed_at, created_at, updated_at)
     values (${home}, ${o.title ?? null}, ${o.listing ?? 'private'}, ${o.claimedBy ?? null},
       ${o.claimedBy ? now : null}, ${o.readers ?? 0}, ${o.optOut ?? 0},
-      ${o.claimedBy ? JSON.stringify([`${home}/feed`]) : '[]'}, ${o.reviewedAt ?? null}, ${now},
-      ${now})
+      ${o.claimedBy ? JSON.stringify([`${home}/feed`]) : '[]'}, ${o.review ?? null},
+      ${o.reviewedAt ?? null}, ${now}, ${now})
     returning id
   `)
   return row?.id ?? 0
@@ -236,12 +237,13 @@ const siteOf = (id: number) =>
     claimed_at: number | null
     declared_feed_urls: string
     translation_opt_out: number
+    review: string | null
     reviewed_at: number | null
     seq: number
   }>(
     api.db,
     sql`select listing, claimed_by, claimed_at, declared_feed_urls, translation_opt_out,
-      reviewed_at, seq from sites where id = ${id}`,
+      review, reviewed_at, seq from sites where id = ${id}`,
   )
 const feedOf = (id: number) =>
   one<{
@@ -430,7 +432,11 @@ describe('the ledgers', () => {
     const listed = await addSite({ listing: 'listed' })
     const few = await addReviewable({ readers: 1, title: 'Few' })
     const many = await addReviewable({ readers: 2, title: 'Many' })
-    const dismissed = await addSite({ readers: 2, reviewedAt: api.clock.now() - DAY })
+    const dismissed = await addSite({
+      readers: 2,
+      review: 'dismissed',
+      reviewedAt: api.clock.now() - DAY,
+    })
     await addPost(await addFeed(dismissed))
     await addSite({ listing: 'private', claimedBy: owner.userId, readers: 9 })
     const hidden = await addSite({ listing: 'rejected' })
@@ -461,6 +467,7 @@ describe('the ledgers', () => {
       postsLast30d: 1,
       latestTitle: expect.any(String),
       latestAt: api.clock.now() - DAY,
+      review: null,
       reviewedAt: null,
       owner: null,
     })
@@ -478,6 +485,7 @@ describe('the ledgers', () => {
     expect((await rows('dismissed'))[0]).toMatchObject({
       siteId: dismissed,
       actions: ['site.feature', 'site.list', 'site.hide'],
+      review: 'dismissed',
       reviewedAt: api.clock.now() - DAY,
     })
     expect((await rows('hidden'))[0]).toMatchObject({ siteId: hidden, actions: ['site.restore'] })
@@ -502,7 +510,11 @@ describe('the ledgers', () => {
     // Nobody reads it any more.
     await addPost(await addFeed(await addSite({ readers: 0 })))
     // Decided already.
-    const reviewed = await addSite({ readers: 1, reviewedAt: api.clock.now() })
+    const reviewed = await addSite({
+      readers: 1,
+      review: 'dismissed',
+      reviewedAt: api.clock.now(),
+    })
     await addPost(await addFeed(reviewed))
 
     // Who added it is what they read: neither the row nor the record names them (ADR 0039).
@@ -706,6 +718,17 @@ describe('reviewing for Discover (ADR 0041)', () => {
     for (const n of [1, 2, 3]) await subscribe(await signedIn(`r${n}@x.test`), feedId)
   }
   const queued = async () => ids((await list<AdminSiteRow>('discover', 'candidates')).rows)
+  const notForDiscover = async () => ids((await list<AdminSiteRow>('discover', 'dismissed')).rows)
+  /** The blogs public Discover lists, as anyone sees it. */
+  const publicDiscover = async () =>
+    (
+      (await (await api.request('/api/v1/public/discover')).json()) as { sites: { id: number }[] }
+    ).sites.map((s) => s.id)
+  /** A blog's review and its stamp, as an undo must give them back. */
+  const reviewOf = async (site: number) => {
+    const row = await siteOf(site)
+    return { listing: row?.listing, review: row?.review, reviewedAt: row?.reviewed_at }
+  }
 
   test('Not for Discover: out of the queue, nothing synced, and undone while untouched', async () => {
     const { site } = await addReviewable()
@@ -713,16 +736,20 @@ describe('reviewing for Discover (ADR 0041)', () => {
     const dismissed = await act('site.dismiss', [site])
     expect(dismissed.done).toEqual([String(site)])
     const after = await siteOf(site)
-    expect(after).toMatchObject({ listing: 'private', reviewed_at: api.clock.now() })
-    // The stamp is the console's alone: no device holds it, so no seq moves.
+    expect(after).toMatchObject({
+      listing: 'private',
+      review: 'dismissed',
+      reviewed_at: api.clock.now(),
+    })
+    // The review is the console's alone: no device holds it, so no seq moves.
     expect(after?.seq).toBe(before?.seq)
     expect(await queued()).toEqual([])
-    expect(ids((await list<AdminSiteRow>('discover', 'dismissed')).rows)).toEqual([String(site)])
+    expect(await notForDiscover()).toEqual([String(site)])
     // Once is enough: a dismissed blog has nothing left to dismiss.
     expect(await outcome('site.dismiss', site)).toBe('not_applicable')
 
     expect((await undo(dismissed.undo?.group)).status).toBe(200)
-    expect((await siteOf(site))?.reviewed_at).toBeNull()
+    expect(await reviewOf(site)).toEqual({ listing: 'private', review: null, reviewedAt: null })
     expect(await queued()).toEqual([String(site)])
     const { history } = await record<AdminSiteDetail>('sites', site)
     expect(history.map((h) => h.action)).toEqual(['undo', 'site.dismiss'])
@@ -739,34 +766,80 @@ describe('reviewing for Discover (ADR 0041)', () => {
     expect(await outcome('site.dismiss', 999_999)).toBe('not_found')
   })
 
-  test('List, Feature and Hide decide too, and an undone List puts the blog back in the queue', async () => {
+  test('List and Feature record listed, Hide over nothing dismissed, and an undone List queues again', async () => {
     const listed = await addReviewable()
     const featured = await addReviewable()
     const hidden = await addReviewable()
     const list = await act('site.list', [listed.site])
     await act('site.feature', [featured.site])
     await act('site.hide', [hidden.site])
-    for (const { site } of [listed, featured, hidden]) {
-      expect((await siteOf(site))?.reviewed_at).toBe(api.clock.now())
-    }
+    const now = api.clock.now()
+    expect(await reviewOf(listed.site)).toEqual({
+      listing: 'listed',
+      review: 'listed',
+      reviewedAt: now,
+    })
+    expect(await reviewOf(featured.site)).toEqual({
+      listing: 'featured',
+      review: 'listed',
+      reviewedAt: now,
+    })
+    expect(await reviewOf(hidden.site)).toEqual({
+      listing: 'rejected',
+      review: 'dismissed',
+      reviewedAt: now,
+    })
     expect(await queued()).toEqual([])
 
     api.clock.advance(MIN)
     expect((await undo(list.undo?.group)).status).toBe(200)
-    expect(await siteOf(listed.site)).toMatchObject({ listing: 'private', reviewed_at: null })
+    expect(await reviewOf(listed.site)).toEqual({
+      listing: 'private',
+      review: null,
+      reviewedAt: null,
+    })
     expect(await queued()).toEqual([String(listed.site)])
   })
 
-  test('a decision keeps its first stamp, and its undo goes back to that one', async () => {
+  test('each decision is stamped when made, and its undo gives back the review and stamp before', async () => {
     const { site } = await addReviewable()
     await act('site.dismiss', [site])
-    const first = api.clock.now()
+    const dismissedAt = api.clock.now()
+    const before = { listing: 'private', review: 'dismissed', reviewedAt: dismissedAt }
+    // Each decision over the dismissal: the stamp dates it, not the dismissal it overturned.
+    for (const [action, listing, review] of [
+      ['site.list', 'listed', 'listed'],
+      ['site.feature', 'featured', 'listed'],
+      ['site.hide', 'rejected', 'dismissed'],
+    ] as const) {
+      api.clock.advance(DAY)
+      const decided = await act(action, [site])
+      expect({ action, ...(await reviewOf(site)) }).toEqual({
+        action,
+        listing,
+        review,
+        reviewedAt: api.clock.now(),
+      })
+      expect((await undo(decided.undo?.group)).status).toBe(200)
+      expect({ action, ...(await reviewOf(site)) }).toEqual({ action, ...before })
+    }
+    // And a Hide over a List keeps the List's review, undone back to the List's stamp.
     api.clock.advance(DAY)
-    // Listed after all: still the decision of the day before, and undone back to it.
-    const listed = await act('site.list', [site])
-    expect(await siteOf(site)).toMatchObject({ listing: 'listed', reviewed_at: first })
-    expect((await undo(listed.undo?.group)).status).toBe(200)
-    expect(await siteOf(site)).toMatchObject({ listing: 'private', reviewed_at: first })
+    await act('site.list', [site])
+    const listedAt = api.clock.now()
+    api.clock.advance(DAY)
+    const hidden = await act('site.hide', [site])
+    expect(await reviewOf(site)).toEqual({
+      listing: 'rejected',
+      review: 'listed',
+      reviewedAt: api.clock.now(),
+    })
+    expect((await undo(hidden.undo?.group)).status).toBe(200)
+    expect(await reviewOf(site)).toEqual({
+      listing: 'listed',
+      review: 'listed',
+      reviewedAt: listedAt,
+    })
   })
 
   test('a List since stands in the way of undoing Not for Discover', async () => {
@@ -775,17 +848,78 @@ describe('reviewing for Discover (ADR 0041)', () => {
     await act('site.list', [site])
     const res = await undo(dismissed.undo?.group)
     expect(res.status).toBe(409)
-    expect(await siteOf(site)).toMatchObject({ listing: 'listed', reviewed_at: api.clock.now() })
+    expect(await reviewOf(site)).toEqual({
+      listing: 'listed',
+      review: 'listed',
+      reviewedAt: api.clock.now(),
+    })
   })
 
-  test('Restore leaves the stamp: an unfeatured pick is not asked about again', async () => {
+  test('a blog listed from the queue stays in Discover when it is featured and unfeatured', async () => {
+    const { site } = await addReviewable()
+    await act('site.list', [site])
+    await act('site.feature', [site])
+    const unfeatured = await act('site.restore', [site])
+    expect(unfeatured.done).toEqual([String(site)])
+    expect(await reviewOf(site)).toEqual({
+      listing: 'listed',
+      review: 'listed',
+      reviewedAt: api.clock.now(),
+    })
+    expect(await publicDiscover()).toEqual([site])
+    expect(await queued()).toEqual([])
+    expect(await notForDiscover()).toEqual([])
+    expect((await undo(unfeatured.undo?.group)).status).toBe(200)
+    expect((await siteOf(site))?.listing).toBe('featured')
+  })
+
+  test('a blog featured straight from the queue stays in Discover when unfeatured', async () => {
     const { site } = await addReviewable()
     await act('site.feature', [site])
-    const restored = await act('site.restore', [site])
-    expect(await siteOf(site)).toMatchObject({ listing: 'private', reviewed_at: api.clock.now() })
+    expect(await outcome('site.restore', site)).toBe('done')
+    expect(await reviewOf(site)).toEqual({
+      listing: 'listed',
+      review: 'listed',
+      reviewedAt: api.clock.now(),
+    })
+    expect(await publicDiscover()).toEqual([site])
+    expect(await notForDiscover()).toEqual([])
+  })
+
+  test('Hide and Restore: a listed blog comes back listed, one from the queue private and dismissed', async () => {
+    const listed = await addReviewable()
+    const queuedBlog = await addReviewable()
+    await act('site.list', [listed.site])
+    await act('site.hide', [listed.site, queuedBlog.site])
+    await act('site.restore', [listed.site, queuedBlog.site])
+    expect(await reviewOf(listed.site)).toMatchObject({ listing: 'listed', review: 'listed' })
+    expect(await reviewOf(queuedBlog.site)).toMatchObject({
+      listing: 'private',
+      review: 'dismissed',
+    })
+    // Hiding answered the queue's question: restored, the blog is not asked about again.
     expect(await queued()).toEqual([])
-    expect((await undo(restored.undo?.group)).status).toBe(200)
-    expect((await siteOf(site))?.listing).toBe('featured')
+    expect(await notForDiscover()).toEqual([String(queuedBlog.site)])
+    expect(await publicDiscover()).toEqual([listed.site])
+  })
+
+  test('an operator-listed blog stays listed when the claim made since is removed', async () => {
+    const owner = await signedIn('owner@x.test')
+    const { site } = await addReviewable()
+    await act('site.list', [site])
+    // Its blogger claims it, as a verified check leaves the rows.
+    await api.db.run(sql`update sites set claimed_by = ${owner.userId},
+      claimed_at = ${api.clock.now()} where id = ${site}`)
+    const claim = await addClaim(site, owner.userId, { status: 'verified' })
+    const removed = await act('claim.remove', [claim])
+    expect(removed.done).toEqual([String(claim)])
+    expect(await siteOf(site)).toMatchObject({
+      claimed_by: null,
+      listing: 'listed',
+      review: 'listed',
+    })
+    expect(await publicDiscover()).toEqual([site])
+    expect(await notForDiscover()).toEqual([])
   })
 
   test('three readers still list a blog judged not for Discover; Hide is the veto', async () => {

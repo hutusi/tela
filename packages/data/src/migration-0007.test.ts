@@ -71,3 +71,46 @@ test('migration 0007 leaves a database with nothing to link without a seq', asyn
   const counter = await client.execute(`select count(*) as n from counters`)
   expect(Number(counter.rows[0]?.n)).toBe(0)
 })
+
+test('migration 0007 records the review a listing chosen before it would have recorded', async () => {
+  // Featured and hidden blogs, and listed ones nobody claimed, were an operator's or the curated
+  // list's choice (or three readers', which promotion keeps): each takes the review its action
+  // writes now, so an Unfeature or a removed claim keeps it listed. A claimed blog's listing is
+  // the claim's, and a private one is still to review. Nothing a device holds changes.
+  const { client } = libsqlDb({ url: ':memory:', schema })
+  await client.execute('pragma foreign_keys = on')
+  const migrations = migrationStatements()
+  const at = migrations.findIndex((m) => m.tag.startsWith('0007_'))
+  for (const m of migrations.slice(0, at)) await client.batch(m.statements)
+  await client.batch([
+    `insert into user (id, name, email, email_verified, created_at, updated_at)
+      values ('owner', 'o', 'o@example.com', 1, 0, 0)`,
+    `insert into sites (id, home_url, listing, claimed_by, created_at, updated_at, seq) values
+      (1, 'https://featured.test', 'featured', null, 10, 90, 7),
+      (2, 'https://listed.test', 'listed', null, 20, 90, 7),
+      (3, 'https://hidden.test', 'rejected', null, 30, 90, 7),
+      (4, 'https://claimed.test', 'listed', 'owner', 40, 90, 7),
+      (5, 'https://private.test', 'private', null, 50, 90, 7)`,
+    `insert into admin_actions (group_id, action, target_kind, target_key, at) values
+      ('g1', 'site.list', 'site', '2', 60), ('g2', 'site.fetchAll', 'site', '2', 70)`,
+  ])
+  const migration = migrations[at]
+  if (!migration) throw new Error('no 0007')
+  await client.batch(migration.statements)
+
+  const rows = await client.execute('select id, review, reviewed_at, seq from sites order by id')
+  expect(
+    rows.rows.map((r) => [Number(r.id), r.review, r.reviewed_at, Number(r.seq)] as const),
+  ).toEqual([
+    [1, 'listed', 10, 7],
+    [2, 'listed', 60, 7],
+    [3, 'dismissed', 30, 7],
+    [4, null, null, 7],
+    [5, null, null, 7],
+  ])
+  const bad = await client
+    .execute(`update sites set review = 'maybe' where id = 5`)
+    .then(() => null)
+    .catch((err: unknown) => err)
+  expect(bad).not.toBeNull()
+})

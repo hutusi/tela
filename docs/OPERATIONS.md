@@ -648,14 +648,17 @@ A public reader count is shown only from three readers.
 - **Review the blogs members add:** Discover → To review lists each private, unclaimed blog that
   someone reads and a live feed has filled, with its language, its posts of the last 30 days, its
   latest post, its readers and when it was added. List it, or Not for Discover; either takes it
-  out of the queue (`sites.reviewed_at`), and either can be undone, which puts it back. Not for
+  out of the queue and is recorded as the blog's review (`sites.review`, `listed` or
+  `dismissed`, with `reviewed_at`), and either can be undone, which puts it back. Not for
   Discover is no veto: three readers still list the blog. A blog listed without topics shows only
   under All, so give it some in its record. The digest counts the queue every Monday.
 - **Feature or hide a blog:** in the console, Discover or Sites → Feature, List, Hide or
-  Restore. Feature, List and Hide also take a blog out of the review queue. Hide (`rejected`) is
-  the veto curation and every door leave alone; Restore returns a blog to what the doors say, and
-  leaves it reviewed. `private` is not offered: an unclaimed blog with three readers is listed
-  again on the next subscribe.
+  Restore. Feature and List record the review as listed, curation too, so a blog you listed stays
+  in Discover when you unfeature it or its claim is removed. Hide (`rejected`) is the veto
+  curation and every door leave alone; it keeps the review already made (a listed blog hidden and
+  restored is listed again), and over nothing decided records not for Discover. Restore returns a
+  blog to what the doors and the review say, and leaves the review as it is. `private` is not
+  offered: an unclaimed blog with three readers is listed again on the next subscribe.
 - **Take a blog off Tela when its writer asks** (Terms, "Writers' work"): hide it, which takes it
   out of Discover and makes its page a 404, and pause each of its feeds (Feeds → Fetching, searched
   by the blog's address). Fetching, page
@@ -665,7 +668,7 @@ A public reader count is shown only from three readers.
 - **Release a claim** so another member can claim the site: Claims → Verified → Remove claim. The
   claim stays, failed, so the claimer's device learns it (a deleted row would never reach it); the
   blog loses its owner, their translation opt-out and the feeds it declared, and stays listed only
-  if three people read it.
+  if three people read it or an operator listed it (its review is `listed`).
 - **Vouch for a claim** whose check cannot see the proof (a page behind bot protection, a tag in
   the wrong place): Claims → Verify by hand. The check then skips the proof, and still reads the
   home page for the feeds the blog declares.

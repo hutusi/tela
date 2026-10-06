@@ -151,6 +151,13 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         ),
       )
       expect(badListing === null).toBe(false)
+      // Added by migration 0007 with the column, not by rebuilding the table (ADR 0041).
+      const badReview = await caught(() =>
+        db.run(
+          sql`insert into sites (home_url, review, created_at, updated_at) values ('https://a.b', 'maybe', 1, 1)`,
+        ),
+      )
+      expect(badReview === null).toBe(false)
       await db.run(
         sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 0, 0, 0)`,
       )
@@ -701,19 +708,19 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         insert into user (id, name, email, email_verified, created_at, updated_at)
         values ('u1', 'u', 'u1@x.y', 1, 0, 0)
       `)
-      // 1 waits. 2 is claimed, 3 reviewed, 4 nobody reads, 5 an empty placeholder, 6 has only a
-      // dead feed and 7 only a merged one, 8 is listed already.
+      // 1 waits. 2 is claimed, 3 judged not for Discover, 4 nobody reads, 5 an empty
+      // placeholder, 6 has only a dead feed and 7 only a merged one, 8 is listed already.
       await db.run(sql`
-        insert into sites (id, home_url, listing, claimed_by, reviewed_at, reader_count,
+        insert into sites (id, home_url, listing, claimed_by, review, reviewed_at, reader_count,
           created_at, updated_at) values
-          (1, 'https://a.test', 'private', null, null, 1, 0, 0),
-          (2, 'https://b.test', 'private', 'u1', null, 1, 0, 0),
-          (3, 'https://c.test', 'private', null, 5, 2, 0, 0),
-          (4, 'https://d.test', 'private', null, null, 0, 0, 0),
-          (5, 'https://e.test', 'private', null, null, 1, 0, 0),
-          (6, 'https://f.test', 'private', null, null, 1, 0, 0),
-          (7, 'https://g.test', 'private', null, null, 1, 0, 0),
-          (8, 'https://h.test', 'listed', null, null, 1, 0, 0)
+          (1, 'https://a.test', 'private', null, null, null, 1, 0, 0),
+          (2, 'https://b.test', 'private', 'u1', null, null, 1, 0, 0),
+          (3, 'https://c.test', 'private', null, 'dismissed', 5, 2, 0, 0),
+          (4, 'https://d.test', 'private', null, null, null, 0, 0, 0),
+          (5, 'https://e.test', 'private', null, null, null, 1, 0, 0),
+          (6, 'https://f.test', 'private', null, null, null, 1, 0, 0),
+          (7, 'https://g.test', 'private', null, null, null, 1, 0, 0),
+          (8, 'https://h.test', 'listed', null, null, null, 1, 0, 0)
       `)
       await db.run(sql`
         insert into feeds (id, site_id, feed_url, host, status, merged_into, next_fetch_at,

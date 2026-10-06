@@ -32,22 +32,31 @@ reader, and the console, where the operator sees which blogs members read.
 
 **A review queue of the blogs members add.** A blog waits for review when it is private,
 unclaimed, read by at least one member, has a live, unmerged feed that has brought posts, and no
-operator has decided about it (`sites.reviewed_at` is null). The predicate is `DISCOVER_REVIEW` in
+operator has decided about it (`sites.review` is null). The predicate is `DISCOVER_REVIEW` in
 `@tela/data`, which the console's Discover ledger (the filter keyed `candidates`, shown as "To
 review", and the area's first), its sidebar badge, the Overview's card and the Monday digest all
 count. Unfetched placeholders, dead or merged feeds and blogs nobody reads any more wait for
 nothing.
 
-**Deciding takes a blog out of the queue.** List, Feature and Hide are decisions: each stamps
-`reviewed_at` unless an earlier decision did, and records the stamp it found, so undoing a mistaken
-List puts the blog back in the queue. A new action, Not for Discover (`site.dismiss`), stamps it
-and changes nothing else; the column is the console's alone, so no device's row changes and no
-seq moves, and the action is undone like any other. Restore leaves the stamp: it returns a blog to
-what the doors say after a Feature or a Hide that already decided it, and clearing the stamp
-would ask again the question featuring answered. Curation stamps as Feature does.
+**Deciding takes a blog out of the queue, and the review records what was decided.** List,
+Feature and Hide are decisions, and so is a new action, Not for Discover (`site.dismiss`). Each
+writes `sites.review` and `sites.reviewed_at`: List and Feature record `listed`, Not for Discover
+`dismissed`, and Hide, which is the veto rather than a review, keeps a review already made and
+records `dismissed` only over nothing decided. `reviewed_at` is when the last decision was made,
+so it dates the decision the review holds, or the veto over it, never one since overturned. Each
+decision records the review and stamp it found, so undoing a mistaken List puts the blog back in
+the queue. Not for Discover changes nothing else; both columns are the console's alone, so no
+device's row changes and no seq moves, and the action is undone like any other.
+
+Restore leaves the review. It returns a blog to what the doors say, and a review that listed the
+blog is one of them: a blog listed or featured from the queue stays listed when it is
+unfeatured, and one hidden from the queue comes back private and not for Discover, not asked
+about again. A removed claim closes only the listing the claim opened, so a blog the operator
+listed before its blogger claimed it stays listed when the claim goes. Curation records `listed`,
+as Feature does.
 
 **The doors stay open.** Not for Discover is not a veto. A dismissed blog is listed by the
-community door once three members read it, since `recountReaders` never reads the stamp; Hide
+community door once three members read it, since `recountReaders` never reads the review; Hide
 (`rejected`) remains the veto that sticks. An operator's List is editorial, like a curated pick,
 except that it starts from what members read rather than from a list in the repository.
 
@@ -83,12 +92,16 @@ says so in its line, and the record says so above the chips that set them.
 - `site.dismiss` counts as writing the listing for the undo's purposes (`ACTION_WRITES`): a List
   or Hide after it stands in the way of undoing it, which would otherwise clear the stamp of a
   blog decided since.
-- Blogs featured, listed or hidden before this have no stamp. They are not in the queue while
-  they are listed or hidden, and enter it if a Restore returns one to private while it is read.
+- Migration 0007 records the review that a listing chosen before it would have recorded: featured
+  blogs and unclaimed listed ones are `listed`, hidden ones `dismissed`, each stamped with the
+  console's last listing action on it, or else when the blog was added. A claimed listed blog
+  gets no review, since its listing is the claim's.
 - A shell cached before tela-api returned null counts renders one as "no readers yet" for a
   visit, and a cached public page can show an old count for a day (ADR 0024's edge cache).
 - A blog's subscribers still sync its `reader_count` with its row, but the reader pane shows it
   only from three readers too: below that, "2 readers on Tela" would tell a subscriber that one
   other member reads the blog. The row still carries the number; only the page holds it back.
-- Migration 0007 added `sites.reviewed_at`. The digest gained a Discover line, and the console's
-  catalogues the words for To review and Not for Discover.
+- Migration 0007 added `sites.review`, its check added with the column rather than by rebuilding
+  `sites` (a rebuild drops the table, which on D1, where foreign keys stay enforced, would run the
+  cascades of every table that references it), and `sites.reviewed_at`. The digest gained a
+  Discover line, and the console's catalogues the words for To review and Not for Discover.

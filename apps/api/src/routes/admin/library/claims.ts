@@ -134,12 +134,16 @@ const restoreReview = restoreColumns({
   synced: false,
 })
 
-/** What a site's listing becomes once it has no owner (over `sites`, aliased `prefix`). */
+/**
+ * What a site's listing becomes once it has no owner (over `sites`, aliased `prefix`): a listing
+ * only the claim opened closes, and one that another door holds stays, three readers or an
+ * operator's review that listed it (ADR 0041). Featured and hidden stay as they are.
+ */
 const listingUnclaimed = (prefix: string) => {
   const column = (name: string) => sql.raw(`${prefix}${name}`)
   return sql`(case when ${column('listing')} = 'listed' then
-    (case when ${column('reader_count')} >= ${COMMUNITY_LISTING_MIN_READERS} then 'listed'
-      else 'private' end)
+    (case when ${column('reader_count')} >= ${COMMUNITY_LISTING_MIN_READERS}
+      or ${column('review')} = 'listed' then 'listed' else 'private' end)
     else ${column('listing')} end)`
 }
 

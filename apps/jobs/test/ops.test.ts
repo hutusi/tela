@@ -120,8 +120,8 @@ describe('the weekly digest', () => {
     await feeds(db, 1, NOW + HOUR)
     // Site 1 is read and has a post; site 2 was judged not for Discover already.
     await db.run(sql`update sites set reader_count = 1 where id = 1`)
-    await db.run(sql`insert into sites (id, home_url, reader_count, reviewed_at, created_at,
-      updated_at) values (2, 'https://b.example', 2, ${NOW - HOUR}, 1, 1)`)
+    await db.run(sql`insert into sites (id, home_url, reader_count, review, reviewed_at,
+      created_at, updated_at) values (2, 'https://b.example', 2, 'dismissed', ${NOW - HOUR}, 1, 1)`)
     await db.run(sql`insert into feeds (site_id, feed_url, host, next_fetch_at, created_at,
       updated_at) values (2, 'https://b.example/feed', 'b.example', ${NOW + HOUR}, 1, 1)`)
     await db.run(sql`insert into articles (feed_id, dedup_key, fetched_at, sort_at)

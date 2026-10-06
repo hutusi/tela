@@ -4,7 +4,14 @@
  * also says which actions apply to the row now. Lists and records read the same columns, so a row
  * in a ledger and the same row in a record never disagree.
  */
-import type { ClaimMethod, ClaimStatus, FeedFormat, FeedStatus, FetchRegion } from '@tela/shared'
+import type {
+  ClaimMethod,
+  ClaimStatus,
+  FeedFormat,
+  FeedStatus,
+  FetchRegion,
+  SiteReview,
+} from '@tela/shared'
 import type { AdminActionName, AdminClaimRow, AdminFeedRow, AdminSiteRow } from '@tela/shared/admin'
 import { type SQL, sql } from 'drizzle-orm'
 import { like, personOf } from './common'
@@ -37,7 +44,7 @@ const FEED_TROUBLE = sql`(f.status = 'dead'
 export const siteSelect = (since: number) => sql`
   select s.id, s.title, s.home_url, s.favicon_key, s.listing, s.claimed_by,
     op.handle as owner_handle, op.display_name as owner_name, s.reader_count, s.primary_lang,
-    s.translation_opt_out, s.created_at, s.description, s.claimed_at, s.reviewed_at,
+    s.translation_opt_out, s.created_at, s.description, s.claimed_at, s.review, s.reviewed_at,
     (select count(*) from feeds f where f.site_id = s.id and f.merged_into is null) as feed_count,
     (select max(${FEED_RANK}) from feeds f where f.site_id = s.id and f.merged_into is null)
       as feed_rank,
@@ -71,6 +78,7 @@ export type SiteRaw = {
   created_at: number
   description: string | null
   claimed_at: number | null
+  review: SiteReview | null
   reviewed_at: number | null
   feed_count: number
   feed_rank: number | null
@@ -99,8 +107,8 @@ export function siteMatches(pattern: string | null): SQL {
  * A private blog nobody claimed and no operator has decided about yet: one Not for Discover
  * applies to (ADR 0041). The review queue is these, narrowed to ones read and fetched.
  */
-export const undecided = (raw: Pick<SiteRaw, 'listing' | 'claimed_by' | 'reviewed_at'>) =>
-  raw.listing === 'private' && raw.claimed_by === null && raw.reviewed_at === null
+export const undecided = (raw: Pick<SiteRaw, 'listing' | 'claimed_by' | 'review'>) =>
+  raw.listing === 'private' && raw.claimed_by === null && raw.review === null
 
 /**
  * What a site's listing lets an operator do, the likeliest first. `private` is never offered. In
@@ -109,7 +117,7 @@ export const undecided = (raw: Pick<SiteRaw, 'listing' | 'claimed_by' | 'reviewe
  * Discover, and keeps room for Fetch all feeds.
  */
 export function listingActions(
-  raw: Pick<SiteRaw, 'listing' | 'claimed_by' | 'reviewed_at'>,
+  raw: Pick<SiteRaw, 'listing' | 'claimed_by' | 'review'>,
   area: 'sites' | 'discover',
 ): AdminActionName[] {
   switch (raw.listing) {
@@ -160,6 +168,7 @@ export function siteRow(raw: SiteRaw, area: 'sites' | 'discover'): AdminSiteRow 
     postsLast30d: raw.posts_30d,
     latestTitle: raw.latest_title,
     latestAt: raw.latest_at,
+    review: raw.review,
     reviewedAt: raw.reviewed_at,
   }
 }

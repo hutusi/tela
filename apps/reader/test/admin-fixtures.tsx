@@ -176,6 +176,7 @@ export const candidate: AdminSiteRow = {
   postsLast30d: 6,
   latestTitle: '港の朝',
   latestAt: 1_759_500_000_000,
+  review: null,
   reviewedAt: null,
 }
 

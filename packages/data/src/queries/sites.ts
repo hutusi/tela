@@ -43,12 +43,12 @@ const siteIdOf = (origin: string) => sql`(select id from sites where home_url = 
 /**
  * A blog waiting for an operator's review for Discover (ADR 0041), over `sites s`: one a member
  * added (private, unclaimed, someone reads it), with a live feed that has brought posts, which no
- * operator has decided about yet. A placeholder no fetch has filled, a blog whose feeds died or
- * merged away, and one nobody reads any more wait for nothing. The console's queue and the
- * Monday digest both count it.
+ * operator has decided about yet (`review` is null; every decision writes it with `reviewed_at`).
+ * A placeholder no fetch has filled, a blog whose feeds died or merged away, and one nobody reads
+ * any more wait for nothing. The console's queue and the Monday digest both count it.
  */
 export const DISCOVER_REVIEW = sql`(s.listing = 'private' and s.claimed_by is null
-  and s.reviewed_at is null and s.reader_count > 0
+  and s.review is null and s.reader_count > 0
   and exists (select 1 from feeds f join articles a on a.feed_id = f.id
     where f.site_id = s.id and f.merged_into is null and f.status = 'active'))`
 

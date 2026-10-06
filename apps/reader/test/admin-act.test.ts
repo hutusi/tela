@@ -22,7 +22,7 @@ import {
   type Translate,
   undoMessage,
 } from '../src/admin/act'
-import { discoverDone } from '../src/admin/areas/discover'
+import { discoverDone, discoverWords } from '../src/admin/areas/discover'
 import { describeLibrary, restoreDone } from '../src/admin/areas/sites'
 import { ADMIN_MESSAGES } from '../src/admin/i18n'
 import { healthSummary } from '../src/admin/overview'
@@ -187,6 +187,31 @@ describe('the toast', () => {
     // Any other action, or a listing Restore does not change, keeps the shell's words.
     expect(restoreDone(library('en'), 'featured', 'site.hide')).toBeUndefined()
     expect(restoreDone(library('en'), 'listed', 'site.restore')).toBeUndefined()
+  })
+
+  test('Discover words read the review: judged not for Discover only when dismissed (ADR 0041)', () => {
+    const library = createTranslator({
+      locale: 'en',
+      messages: { admin: ADMIN_MESSAGES.en },
+      namespace: 'admin.library',
+    }) as unknown as Parameters<typeof discoverWords>[0]
+    expect(discoverWords(library, candidate)).toBe('To review')
+    const at = 1_759_400_000_000
+    expect(discoverWords(library, { ...candidate, review: 'dismissed', reviewedAt: at })).toBe(
+      'Not for Discover',
+    )
+    // Listed by the review, whatever the row's stamp: never told as judged against.
+    expect(
+      discoverWords(library, { ...candidate, listing: 'listed', review: 'listed', reviewedAt: at }),
+    ).toBe('Listed')
+    expect(
+      discoverWords(library, {
+        ...candidate,
+        listing: 'private',
+        review: 'listed',
+        reviewedAt: at,
+      }),
+    ).not.toBe('Not for Discover')
   })
 
   test('List or Feature on a blog with no topics says so: Discover files it only under All', () => {

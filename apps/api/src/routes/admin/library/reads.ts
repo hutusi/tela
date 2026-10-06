@@ -61,7 +61,7 @@ const DISCOVER_FILTERS: Record<AdminFilter<'discover'>, SQL> = {
   candidates: DISCOVER_REVIEW,
   featured: sql`s.listing = 'featured'`,
   listed: sql`s.listing = 'listed'`,
-  dismissed: sql`s.listing = 'private' and s.claimed_by is null and s.reviewed_at is not null`,
+  dismissed: sql`s.listing = 'private' and s.claimed_by is null and s.review = 'dismissed'`,
   hidden: sql`s.listing = 'rejected'`,
 }
 

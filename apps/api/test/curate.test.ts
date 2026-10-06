@@ -44,14 +44,14 @@ describe('curating Discover', () => {
       sites: { id: number }[]
     }
     expect(listed.sites.map((s) => s.id)).toEqual([body.siteId])
-    // An editor's pick is a decision for Discover (ADR 0041): unfeatured later, it does not wait
-    // in the review queue for the question featuring answered.
+    // An editor's pick is a decision for Discover (ADR 0041): unfeatured later, it stays listed,
+    // and does not wait in the review queue for the question featuring answered.
     expect(
-      await first<{ reviewed_at: number | null }>(
+      await first<{ review: string | null; reviewed_at: number | null }>(
         api.db,
-        sql`select reviewed_at from sites where id = ${body.siteId}`,
+        sql`select review, reviewed_at from sites where id = ${body.siteId}`,
       ),
-    ).toEqual({ reviewed_at: api.clock.now() })
+    ).toEqual({ review: 'listed', reviewed_at: api.clock.now() })
   })
 
   test('is idempotent, and leaves what a person decided alone', async () => {

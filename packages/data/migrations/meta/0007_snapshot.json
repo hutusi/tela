@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3115f90a-205e-48c2-b179-8be14219bff1",
+  "id": "d735cccc-57b7-43c0-8b55-2abe66ad770f",
   "prevId": "aef2f30c-49e1-477e-9ea7-32e9eb8eb458",
   "tables": {
     "admin_actions": {
@@ -3424,6 +3424,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "review": {
+          "name": "review",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "reviewed_at": {
           "name": "reviewed_at",
           "type": "integer",
@@ -3498,6 +3505,10 @@
         "sites_listing_check": {
           "name": "sites_listing_check",
           "value": "\"sites\".\"listing\" in ('private', 'listed', 'featured', 'rejected')"
+        },
+        "sites_review_check": {
+          "name": "sites_review_check",
+          "value": "\"sites\".\"review\" in ('listed', 'dismissed')"
         },
         "sites_declared_feed_urls_check": {
           "name": "sites_declared_feed_urls_check",

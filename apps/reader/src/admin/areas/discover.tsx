@@ -40,9 +40,16 @@ const loadDiscover = (filter: AdminFilter<'discover'>, q: string, signal?: Abort
 /** A private blog nobody claimed: one a member added, still to review or judged not for Discover. */
 const added = (row: AdminSiteRow) => row.listing === 'private' && row.owner === null
 
+/** A blog a member added that waits for a decision: no review yet (ADR 0041). */
+const toReview = (row: AdminSiteRow) => added(row) && row.review === null
+
+/** A blog a member added that an operator judged not for Discover, or hid over nothing decided. */
+const dismissed = (row: AdminSiteRow) => added(row) && row.review === 'dismissed'
+
 /** Where Discover lists the blog now, in the words its filters use. */
 export function discoverWords(t: Translate, row: AdminSiteRow): string {
-  if (added(row)) return t(row.reviewedAt === null ? 'listing.toReview' : 'listing.dismissed')
+  if (toReview(row)) return t('listing.toReview')
+  if (dismissed(row)) return t('listing.dismissed')
   return listingWords(t, row, true)
 }
 
@@ -53,7 +60,7 @@ export function discoverStatus(t: Translate, row: AdminSiteRow): Status {
       ? 'ok'
       : row.listing === 'rejected'
         ? 'bad'
-        : added(row) && row.reviewedAt === null
+        : toReview(row)
           ? 'info'
           : 'neutral'
   return { tone, label: discoverWords(t, row) }
@@ -231,12 +238,9 @@ function DiscoverRecord({
           [t('kv.about'), detail?.description ?? null],
         ]}
       />
-      {added(site) ? (
-        <Note>
-          {site.reviewedAt === null
-            ? t('notes.review')
-            : t('notes.dismissed', { when: when(site.reviewedAt) })}
-        </Note>
+      {toReview(site) ? <Note>{t('notes.review')}</Note> : null}
+      {dismissed(site) ? (
+        <Note>{t('notes.dismissed', { when: when(site.reviewedAt) })}</Note>
       ) : null}
       {shown(site.listing) && topics.length === 0 ? <Note>{t('notes.noTopics')}</Note> : null}
       <TopicChips topics={topics} busy={busy} onToggle={toggle} />

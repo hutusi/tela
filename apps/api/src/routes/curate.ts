@@ -29,14 +29,15 @@ export async function curate(
   )
   // Featured, unless a person decided otherwise: a rejected blog is left alone entirely, and a
   // claimed one's topics are its owner's to pick. Featuring is an editor's decision for Discover,
-  // so it is stamped as reviewed, as the console's Feature is (ADR 0041).
+  // so it records the review the console's Feature does (ADR 0041): listed, so an Unfeature
+  // leaves the pick in Discover.
   const feature = site?.listing === 'private' || site?.listing === 'listed'
   const retopic = site?.listing !== 'rejected' && site?.claimed_by === null && chosen.length > 0
   const now = deps.clock.now()
   await db.batch([
     bumpSeq(db),
     db.run(sql`
-      update sites set listing = 'featured', reviewed_at = coalesce(reviewed_at, ${now}),
+      update sites set listing = 'featured', review = 'listed', reviewed_at = ${now},
         updated_at = ${now}, seq = ${currentSeq}
       where id = ${added.siteId} and ${feature ? sql`true` : sql`false`}
     `),

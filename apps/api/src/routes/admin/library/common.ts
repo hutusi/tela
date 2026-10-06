@@ -12,13 +12,16 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import { type ActContext, type Inverse, returned, runBatch } from '../framework'
 
 /**
- * What the doors say a site's listing is when no operator has a say (ADR 0018): listed once
- * someone claimed it or enough readers follow it, private otherwise. `site.restore` returns a
- * featured or hidden site here. `private` is never an operator's choice: on an unclaimed site the
- * next subscribe would list it again, so the veto that sticks is `rejected`.
+ * What the doors say a site's listing is when no Feature or Hide has a say (ADRs 0018, 0041):
+ * listed once someone claimed it, enough readers follow it, or an operator's review listed it
+ * (List, Feature, curation), private otherwise. `site.restore` returns a featured or hidden site
+ * here, so a blog featured or listed from the review queue stays in Discover when unfeatured.
+ * `private` is never an operator's choice: on an unclaimed site the next subscribe would list it
+ * again, so the veto that sticks is `rejected`.
  */
 export const DOORS_SAY = sql`(case when claimed_by is not null
-  or reader_count >= ${COMMUNITY_LISTING_MIN_READERS} then 'listed' else 'private' end)`
+  or reader_count >= ${COMMUNITY_LISTING_MIN_READERS} or review = 'listed'
+  then 'listed' else 'private' end)`
 
 /** A row's id from a request's id (`'12'`), or null: positive, safe, and written plainly. */
 export const idOf = (id: string): number | null => {

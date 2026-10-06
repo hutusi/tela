@@ -234,6 +234,7 @@ describe('the badges and the Overview', () => {
         postsLast30d: 1,
         latestTitle: 'Two writes',
         latestAt: now - DAY,
+        review: null,
         reviewedAt: null,
       },
     ])

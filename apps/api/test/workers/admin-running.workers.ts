@@ -126,6 +126,7 @@ it('reads the running areas and retries a dead letter on D1', async () => {
     postsLast30d: 0,
     latestTitle: 'Post',
     latestAt: 0,
+    review: null,
     reviewedAt: null,
   })
   expect((await get<AdminCounts>('counts')).discover).toBe(1)

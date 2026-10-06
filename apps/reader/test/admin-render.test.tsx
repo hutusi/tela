@@ -206,6 +206,7 @@ describe('Discover (ADR 0041)', () => {
     listing: 'listed',
     actions: ['site.feature', 'site.hide'],
     primaryLang: null,
+    review: 'listed',
     reviewedAt: 1_759_400_000_000,
   }
   const LIST: AdminList<AdminSiteRow, 'discover'> = {
