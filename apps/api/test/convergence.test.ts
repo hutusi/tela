@@ -1,13 +1,15 @@
 /**
  * The sync protocol's promise (ADR 0025), tested against the real tela-api: whatever order a
- * device makes changes, pushes them (losing some responses), pulls, and meets articles the server
- * writes meanwhile, once it has pushed and pulled everything its tables equal a fresh snapshot,
- * and nothing is left pending.
+ * member's devices make changes, push them (losing some responses), pull, and meet articles the
+ * server writes meanwhile, once each has pushed and pulled everything its tables equal a fresh
+ * snapshot, and nothing is left pending. Two devices of one member take turns, the second with a
+ * clock that runs a little behind, so a change made later can carry the older `at`.
  *
  * Seeded, so a failure names the seed that reproduces it.
  */
 import { describe, expect, test } from 'bun:test'
 import { bumpSeq, currentSeq } from '@tela/data'
+import { READING_LANGUAGES, UI_LOCALES } from '@tela/shared'
 import {
   applyPull,
   type Confirmed,
@@ -16,12 +18,13 @@ import {
   type Pending,
   type PullResponse,
   type PushResponse,
+  privacyChange,
   settle,
   type Tables,
   view,
 } from '@tela/sync'
 import { sql } from 'drizzle-orm'
-import { createTestApi, signedIn, type TestApi } from './helpers'
+import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 function rng(seed: number) {
   let a = seed >>> 0
@@ -37,6 +40,11 @@ function rng(seed: number) {
 const FEEDS = [1, 2, 3]
 /** Members the device can follow (ADR 0031); they have profiles and never sign in. */
 const PEOPLE = ['person-one-0000001', 'person-two-0000002', 'person-three-00003']
+/**
+ * How far behind the server each device's clock runs, in ms. A change advances the server's clock
+ * by 1 to 5 ms, so the second device's next change often carries an older `at` than the first's.
+ */
+const SKEWS = [0, 3]
 
 /** What a snapshot and a synced device must agree on, independent of how they got there. */
 function live(t: Tables) {
@@ -53,8 +61,18 @@ function live(t: Tables) {
       recommendCount: a.recommendCount,
     })),
     states: [...t.states.values()]
-      .filter((s) => ids.has(s.articleId) && (s.readAt !== null || s.likedAt !== null))
-      .map((s) => ({ articleId: s.articleId, read: s.readAt !== null, liked: s.likedAt !== null }))
+      .filter(
+        (s) =>
+          ids.has(s.articleId) &&
+          (s.readAt !== null || s.likedAt !== null || s.readUpdatedAt != null),
+      )
+      .map((s) => ({
+        articleId: s.articleId,
+        read: s.readAt !== null,
+        // Marked unread by hand, which beats the watermark (ADR 0009).
+        unread: s.readAt === null && s.readUpdatedAt != null,
+        liked: s.likedAt !== null,
+      }))
       .sort((a, b) => a.articleId - b.articleId),
     recommendations: [...t.recommendations.values()]
       .filter((r) => r.deletedAt === null)
@@ -72,16 +90,25 @@ function live(t: Tables) {
     flags: {
       publicSubscriptions: t.profile?.publicSubscriptions,
       publicLikes: t.profile?.publicLikes,
+      publicSubscriptionsVersion: t.profile?.publicSubscriptionsVersion,
+      publicLikesVersion: t.profile?.publicLikesVersion,
       gravatar: t.profile?.gravatar,
+    },
+    languages: {
+      uiLocale: t.profile?.uiLocale,
+      readingLang: t.profile?.readingLang,
     },
   }
 }
+
+/** One of the member's devices: what it holds, what it has not had confirmed, and its clock. */
+type Device = { confirmed: Confirmed; pending: Pending[]; skew: number }
 
 async function scenario(seed: number, steps: number) {
   const random = rng(seed)
   const pick = <T>(xs: readonly T[]): T | undefined => xs[Math.floor(random() * xs.length)]
   const api: TestApi = await createTestApi()
-  const member = await signedIn(api)
+  const member: SignedIn = await signedIn(api)
   let nextArticle = 1
   const write = (...s: ReturnType<typeof api.db.run>[]) =>
     api.db.batch([bumpSeq(api.db), ...s] as never)
@@ -118,21 +145,24 @@ async function scenario(seed: number, steps: number) {
         where user_id = ${id}`),
     )
 
-  let confirmed: Confirmed = { cursor: 0, tables: emptyTables() }
-  let pending: Pending[] = []
+  const devices: Device[] = SKEWS.map((skew) => ({
+    confirmed: { cursor: 0, tables: emptyTables() },
+    pending: [],
+    skew,
+  }))
   let mids = 0
 
-  const pull = async () => {
+  const pull = async (d: Device) => {
     for (;;) {
-      const res = await api.request(`/api/v1/sync?cursor=${confirmed.cursor}`, { as: member })
+      const res = await api.request(`/api/v1/sync?cursor=${d.confirmed.cursor}`, { as: member })
       const body = (await res.json()) as PullResponse
-      confirmed = applyPull(confirmed, body)
-      pending = settle(confirmed, pending)
+      d.confirmed = applyPull(d.confirmed, body)
+      d.pending = settle(d.confirmed, d.pending)
       if (!body.more) return
     }
   }
-  const push = async (loseResponse: boolean) => {
-    const batch = pending.filter((p) => p.ackedAt === undefined).slice(0, 50)
+  const push = async (d: Device, loseResponse: boolean) => {
+    const batch = d.pending.filter((p) => p.ackedAt === undefined).slice(0, 50)
     if (batch.length === 0) return
     const res = await api.request('/api/v1/mutations', {
       body: { mutations: batch.map((p) => p.mutation) },
@@ -142,17 +172,17 @@ async function scenario(seed: number, steps: number) {
     const body = (await res.json()) as PushResponse
     const applied = new Set(body.applied)
     const rejected = new Set(body.rejected.map((r) => r.mid))
-    pending = pending
+    d.pending = d.pending
       .filter((p) => !rejected.has(p.mutation.mid))
       .map((p) => (applied.has(p.mutation.mid) ? { ...p, ackedAt: body.seq } : p))
   }
-  const mutate = () => {
-    const shown = view(confirmed, pending)
+  const mutate = (d: Device) => {
+    const shown = view(d.confirmed, d.pending)
     const articleIds = [...shown.articles.keys()]
-    const at = api.clock.now()
+    const at = api.clock.now() - d.skew
     api.clock.advance(1 + Math.floor(random() * 5))
     const mid = `seed${seed}-m${++mids}-pad`
-    const choice = Math.floor(random() * 16)
+    const choice = Math.floor(random() * 18)
     const article = pick(articleIds)
     const feed = pick(FEEDS) as number
     let m: Mutation | null = null
@@ -204,42 +234,65 @@ async function scenario(seed: number, steps: number) {
     const person = pick(PEOPLE) as string
     if (choice === 12) m = { mid, at, type: 'follow', userId: person }
     if (choice === 13) m = { mid, at, type: 'unfollow', userId: person }
-    if (choice === 14)
-      m =
-        random() < 0.5
-          ? { mid, at, type: 'setPrivacy', publicSubscriptions: random() < 0.5 }
-          : { mid, at, type: 'setPrivacy', publicLikes: random() < 0.5 }
+    if (choice === 14) {
+      // As Settings makes it: a show names the version this device's view holds (issue #16).
+      // Now and then one without, as a shell from before the versions sends it.
+      const flag = random() < 0.5 ? 'publicSubscriptions' : 'publicLikes'
+      const change = privacyChange(shown, flag, random() < 0.5)
+      if (random() < 0.2) delete change.base
+      m = { mid, at, ...change }
+    }
     if (choice === 15) m = { mid, at, type: 'setAvatar', gravatar: random() < 0.5 }
-    if (m) pending.push({ mutation: m })
+    if (choice === 16) {
+      // Either language, or both; a reading language of null follows the interface (ADR 0040).
+      const r = random()
+      const uiLocale = r < 0.66 ? pick(UI_LOCALES) : undefined
+      const readingLang = r > 0.33 ? pick([...READING_LANGUAGES, null]) : undefined
+      m = {
+        mid,
+        at,
+        type: 'setProfile',
+        ...(uiLocale === undefined ? {} : { uiLocale }),
+        ...(readingLang === undefined ? {} : { readingLang }),
+      }
+    }
+    if (choice === 17 && article) m = { mid, at, type: 'markUnread', articleId: article }
+    if (m) d.pending.push({ mutation: m })
   }
 
   for (let i = 0; i < steps; i++) {
+    const d = pick(devices) as Device
     const r = random()
-    if (r < 0.45) mutate()
-    else if (r < 0.65) await push(random() < 0.25)
-    else if (r < 0.88) await pull()
+    if (r < 0.45) mutate(d)
+    else if (r < 0.65) await push(d, random() < 0.25)
+    else if (r < 0.88) await pull(d)
     else if (r < 0.95) await addArticle(pick(FEEDS) as number)
     else await rename(pick(PEOPLE) as string)
   }
 
-  // Quiescence: everything pushed, everything pulled.
-  for (let i = 0; i < 10 && pending.length > 0; i++) {
-    await push(false)
-    await pull()
+  // Quiescence: everything pushed, everything pulled, by every device, and then each pulls once
+  // more, since another device's last push can land after its last pull.
+  for (let i = 0; i < 10 && devices.some((d) => d.pending.length > 0); i++) {
+    for (const d of devices) {
+      await push(d, false)
+      await pull(d)
+    }
   }
-  await pull()
-  expect(pending).toEqual([])
+  for (const d of devices) await pull(d)
   const snapshot = applyPull(
     { cursor: 0, tables: emptyTables() },
     (await (await api.request('/api/v1/sync?cursor=0', { as: member })).json()) as PullResponse,
   )
-  expect(live(view(confirmed, pending))).toEqual(live(snapshot.tables))
+  for (const d of devices) {
+    expect(d.pending).toEqual([])
+    expect(live(view(d.confirmed, d.pending))).toEqual(live(snapshot.tables))
+  }
 }
 
 describe('sync converges', () => {
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
-    test(`seed ${seed}: any interleaving of changes, pushes, lost responses and pulls`, async () => {
-      await scenario(seed, 60)
+    test(`seed ${seed}: two devices, one behind; any interleaving of changes, pushes, lost responses and pulls`, async () => {
+      await scenario(seed, 160)
     })
   }
 })
