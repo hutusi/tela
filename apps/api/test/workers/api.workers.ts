@@ -312,6 +312,25 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   expect(readAgain.rows.states).toMatchObject([
     { articleId: 1, readAt: unreadAt, readUpdatedAt: unreadAt },
   ])
+  // A later read of a read post moves its clock through a three-way max(), and an unread made
+  // between the two reads and pushed after both then loses (Codex review).
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  const laterAt = Date.now()
+  await call('/api/v1/mutations', {
+    body: {
+      mutations: [
+        { mid: 'workers-read-2', at: laterAt, type: 'markRead', articleId: 1 },
+        { mid: 'workers-unread-3', at: laterAt - 1, type: 'markUnread', articleId: 1 },
+      ],
+    },
+    ...member,
+  })
+  const readLater = (await (
+    await call(`/api/v1/sync?cursor=${readAgain.cursor}`, member)
+  ).json()) as PullResponse
+  expect(readLater.rows.states).toMatchObject([
+    { articleId: 1, readAt: unreadAt, readUpdatedAt: laterAt },
+  ])
   // Marked unread past the horizon, a post is kept, through a fourth term of the kept union and a
   // nested select in the horizon's, on D1.
   const longAgo = now - 40 * 24 * 60 * 60 * 1000
@@ -327,7 +346,7 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     ...member,
   })
   const oldUnread = (await (
-    await call(`/api/v1/sync?cursor=${readAgain.cursor}`, member)
+    await call(`/api/v1/sync?cursor=${readLater.cursor}`, member)
   ).json()) as PullResponse
   expect(oldUnread.rows.articles.map((a) => a.id)).toEqual([2])
   const kept = (await (await call('/api/v1/sync?cursor=0', member)).json()) as PullResponse

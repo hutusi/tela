@@ -142,6 +142,33 @@ describe('read and unread on the device (ADR 0009)', () => {
     expect(view(held, [read(8, 3)]).states.get(8)).toMatchObject({ readAt: 3, readUpdatedAt: null })
   })
 
+  test('a later read moves the clock of a read post, so an unread made between loses', () => {
+    // As the server decides (Codex review): marked unread at 6, read at 8 and at 12, in either
+    // order, then an unread from 10.
+    for (const reads of [
+      [8, 12],
+      [12, 8],
+    ]) {
+      const shown = view(held, [unread(7, 6), ...reads.map((at) => read(7, at)), unread(7, 10)])
+      expect(shown.states.get(7)).toMatchObject({ readAt: reads[0], readUpdatedAt: 12 })
+    }
+    // Read at 5 and never marked: a second device's read at 9 moves the clock, not the time.
+    expect(view(held, [read(7, 9), unread(7, 7)]).states.get(7)).toMatchObject({
+      readAt: 5,
+      readUpdatedAt: 9,
+    })
+    const older = view(held, [read(7, 4)]).states.get(7)
+    expect([older?.readAt, older?.readUpdatedAt ?? null]).toEqual([5, null]) // older: nothing moves
+    // Mark all read moves the clock of one read by hand.
+    const all = view(held, [
+      unread(7, 6),
+      read(7, 7),
+      m(11, { type: 'markAllRead', feedId: 1, upTo: 8 }),
+      unread(7, 9),
+    ])
+    expect(all.states.get(7)).toMatchObject({ readAt: 7, readUpdatedAt: 11 })
+  })
+
   test('a like does not read a post marked unread', () => {
     const liked = view(held, [
       unread(8, 2),

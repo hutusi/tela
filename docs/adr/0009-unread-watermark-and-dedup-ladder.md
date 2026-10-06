@@ -25,6 +25,12 @@ every static-site rebuild.
   - A first read stays clock-less, so compaction drops it under the watermark as before.
   - A read or unread over one chosen by hand goes to the later `at`, and a read made after an
     unread keeps its clock.
+  - A read of a post already read keeps the first time but moves the clock to its own when it
+    is later, and "mark all read" moves the clock of a post read by hand the same way (Codex
+    review, 2026-10-08). A read that changed nothing left the older read's time to decide, so an
+    unread made between two reads and pushed after both won over the newer one. The row then has
+    a clock and outlives compaction, which takes two devices reading one post unaware of each
+    other.
   - Compaction keeps every row with the clock: dropped, a post marked unread would read as the
     watermark says, and one read again would lose to an older unread pushed late.
   - A like never moves a choice made by hand, though liking still reads a post nobody chose for.

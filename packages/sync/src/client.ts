@@ -247,12 +247,21 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
   const t = copy(tables)
   switch (m.type) {
     case 'markRead': {
-      // Set once, and clock-less, unless it reads a post marked unread: then the later `at`
-      // decides, and the read keeps its clock (ADR 0009).
+      // As the server decides: a first read is clock-less, unless it reads a post marked unread,
+      // when the later `at` decides and the read keeps its clock (ADR 0009); a later read of a
+      // read post keeps the first time and moves the clock to its own.
       const s = t.states.get(m.articleId) ?? blankState(m.articleId)
       const clock = s.readUpdatedAt ?? null
-      if (s.readAt !== null || (clock !== null && m.at < clock)) return t
-      t.states.set(m.articleId, { ...s, readAt: m.at, readUpdatedAt: clock === null ? null : m.at })
+      if (s.readAt === null) {
+        if (clock !== null && m.at < clock) return t
+        t.states.set(m.articleId, {
+          ...s,
+          readAt: m.at,
+          readUpdatedAt: clock === null ? null : m.at,
+        })
+      } else if (m.at > Math.max(s.readAt, clock ?? 0)) {
+        t.states.set(m.articleId, { ...s, readUpdatedAt: m.at })
+      }
       return t
     }
     case 'markUnread': {
@@ -293,13 +302,15 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         if (target > sub.watermarkId) t.subscriptions.set(feedId, { ...sub, watermarkId: target })
       }
       // A post marked unread beats the watermark, so those this covers are read by hand, with
-      // the mark-all's clock: those marked before it, not one marked since.
+      // the mark-all's clock: those marked before it, not one marked since. One already read by
+      // hand keeps its first time and takes the later clock.
       for (const [id, s] of t.states) {
-        if (s.readAt !== null || s.readUpdatedAt == null || s.readUpdatedAt > m.at) continue
+        if (s.readUpdatedAt == null) continue
+        if (s.readAt === null ? s.readUpdatedAt > m.at : s.readUpdatedAt >= m.at) continue
         const a = t.articles.get(id)
         if (!a || a.id > m.upTo || t.subscriptions.get(a.feedId)?.deletedAt !== null) continue
         if (m.feedId !== undefined && a.feedId !== m.feedId) continue
-        t.states.set(id, { ...s, readAt: m.at, readUpdatedAt: m.at })
+        t.states.set(id, { ...s, readAt: s.readAt ?? m.at, readUpdatedAt: m.at })
       }
       return t
     }

@@ -38,23 +38,31 @@ function statementsFor(
 
   switch (m.type) {
     case 'markRead':
-      // Read is set once, so a first read keeps its time and no clock: compaction may drop it
-      // under the watermark, as ever. Over a post marked unread (ADR 0009) it is a hand-made
-      // choice like the unread was: the later `at` decides, and the read keeps its clock, so an
-      // older unread arriving after it loses, and compaction keeps the row that says so.
+      // A first read keeps its time and no clock: compaction may drop it under the watermark, as
+      // ever. Over a post marked unread (ADR 0009) it is a hand-made choice like the unread was:
+      // the later `at` decides, and the read keeps its clock. And a read of a post already read
+      // keeps the first time but moves the clock to its own when it is later, so an unread made
+      // between the two and pushed after both loses to the newer read (Codex review): a read
+      // that changed nothing would leave the older time to decide. The row then keeps a clock,
+      // and compaction keeps it, which takes two devices reading one post unaware of each other.
       return [
         db.run(sql`
           insert into user_article_states (user_id, article_id, read_at, seq)
           select ${userId}, ${m.articleId}, ${at}, ${currentSeq}
           where ${article(m.articleId)} and ${fresh}
           on conflict (user_id, article_id) do update set
-            read_at = excluded.read_at,
-            read_updated_at = case when user_article_states.read_updated_at is null then null
+            read_at = coalesce(user_article_states.read_at, excluded.read_at),
+            read_updated_at = case
+              when user_article_states.read_at is not null then excluded.read_at
+              when user_article_states.read_updated_at is null then null
               else excluded.read_at end,
             seq = excluded.seq
-          where user_article_states.read_at is null
-            and (user_article_states.read_updated_at is null
-              or excluded.read_at >= user_article_states.read_updated_at)
+          where (user_article_states.read_at is null
+              and (user_article_states.read_updated_at is null
+                or excluded.read_at >= user_article_states.read_updated_at))
+            or (user_article_states.read_at is not null
+              and excluded.read_at > max(user_article_states.read_at,
+                coalesce(user_article_states.read_updated_at, 0)))
         `),
       ]
     case 'markUnread':
@@ -104,11 +112,16 @@ function statementsFor(
             and watermark_id < ${target} and ${fresh}
         `),
         // A post marked unread beats the watermark (ADR 0009), so the ones this covers are read
-        // by hand, with the mark-all's clock: those marked before it, not one marked since.
+        // by hand, with the mark-all's clock: those marked before it, not one marked since. One
+        // read by hand already keeps its first time and takes the later clock, as a second read
+        // would, so an unread made before the mark-all and pushed after it loses there too.
         db.run(sql`
-          update user_article_states set read_at = ${at}, read_updated_at = ${at}, seq = ${currentSeq}
-          where user_id = ${userId} and read_at is null and read_updated_at is not null
-            and read_updated_at <= ${at} and ${fresh}
+          update user_article_states set read_at = coalesce(read_at, ${at}),
+            read_updated_at = ${at}, seq = ${currentSeq}
+          where user_id = ${userId} and read_updated_at is not null
+            and ((read_at is null and read_updated_at <= ${at})
+              or (read_at is not null and read_updated_at < ${at}))
+            and ${fresh}
             and article_id in (
               select a.id from articles a join subscriptions s on s.feed_id = a.feed_id
               where s.user_id = ${userId} and s.deleted_at is null ${feedOf} and a.id <= ${m.upTo}

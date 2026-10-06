@@ -569,6 +569,44 @@ describe('push', () => {
       expect(await states(b)).toEqual({ read_at: now - 10, read_updated_at: null })
     })
 
+    test('a newer read beats an unread made between two reads and pushed after both', async () => {
+      // Codex review: a read of a read post changed nothing, so the older read's time decided.
+      // Marked unread at 10, read at 20 and at 30 (in either order), an unread from 25 last.
+      for (const order of [
+        [now - 80, now - 70],
+        [now - 70, now - 80],
+      ] as const) {
+        const a = await addArticle(1)
+        await push([{ type: 'markUnread', articleId: a, at: now - 90 }])
+        for (const at of order) await push([{ type: 'markRead', articleId: a, at }])
+        await push([{ type: 'markUnread', articleId: a, at: now - 75 }])
+        expect(await states(a)).toEqual({ read_at: order[0], read_updated_at: now - 70 })
+        expect(await shown(a)).toBe(true)
+      }
+      // A post never marked unread: two devices read it unaware of each other, and a third's
+      // unread, made between the two, arrives last.
+      const b = await addArticle(1)
+      await push([{ type: 'markRead', articleId: b, at: now - 80 }])
+      await push([{ type: 'markRead', articleId: b, at: now - 70 }])
+      expect(await states(b)).toEqual({ read_at: now - 80, read_updated_at: now - 70 })
+      await push([{ type: 'markUnread', articleId: b, at: now - 75 }])
+      expect(await shown(b)).toBe(true)
+      // A replayed or older read moves nothing, and stamps no seq.
+      const before = await pull(0)
+      await push([{ type: 'markRead', articleId: b, at: now - 70 }])
+      expect((await pull(before.cursor)).rows.states).toEqual([])
+    })
+
+    test('mark all read moves the clock of a post read by hand, so an older unread loses', async () => {
+      const a = await addArticle(1)
+      await push([{ type: 'markUnread', articleId: a, at: now - 40 }])
+      await push([{ type: 'markRead', articleId: a, at: now - 30 }])
+      await push([{ type: 'markAllRead', feedId: 1, upTo: a, at: now - 10 }])
+      expect(await states(a)).toEqual({ read_at: now - 30, read_updated_at: now - 10 })
+      await push([{ type: 'markUnread', articleId: a, at: now - 20 }]) // made before, pushed after
+      expect(await shown(a)).toBe(true)
+    })
+
     test('mark all read reads one marked before it, not one marked since', async () => {
       await push([{ type: 'subscribe', feedId: 2 }])
       const [a, b, other] = [await addArticle(1), await addArticle(1), await addArticle(2)]

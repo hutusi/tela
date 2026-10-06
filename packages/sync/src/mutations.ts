@@ -32,8 +32,9 @@ const highlightId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
 
 export const mutationSchema = z.discriminatedUnion('type', [
   /**
-   * Opening an article reads it. Set once: a later markRead keeps the first time. Over a post
-   * marked unread, the later `at` decides.
+   * Opening an article reads it. Set once: a later markRead keeps the first time, though it moves
+   * the post's clock to its own, so an unread older than it cannot win. Over a post marked unread,
+   * the later `at` decides.
    */
   z.object({ ...base, type: z.literal('markRead'), articleId: id }),
   /**
