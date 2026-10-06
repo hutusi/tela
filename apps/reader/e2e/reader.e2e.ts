@@ -3,6 +3,7 @@
  * the URL owning the open article still holds; what they asserted about server renders is
  * replaced by the local-first spec, since there is no server render left to count.
  */
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { FIXTURES, keepCycling, readStateOnServer, resetReading, setPrefs, synced } from './helpers'
@@ -390,9 +391,14 @@ test.describe('reader', () => {
 
   test('OPML import subscribes to new feeds and skips bad entries', async ({ page }) => {
     await page.goto('/add')
-    await page
-      .getByTestId('opml-file')
-      .setInputFiles(join(import.meta.dirname, 'fixtures', 'subs.opml'))
+    // The file names the default fixture port; this run's may be another, and a feed on a port
+    // some other stack answers would subscribe this member to that stack's posts.
+    const opml = readFileSync(join(import.meta.dirname, 'fixtures', 'subs.opml'), 'utf8')
+    await page.getByTestId('opml-file').setInputFiles({
+      name: 'subs.opml',
+      mimeType: 'text/x-opml',
+      buffer: Buffer.from(opml.replaceAll('http://127.0.0.1:4790', FIXTURES)),
+    })
     await page.getByTestId('opml-import').click()
     await expect(page.getByTestId('opml-result')).toContainText(/Imported \d+ feed/)
   })
