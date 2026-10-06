@@ -123,6 +123,25 @@ describe('a retried dead item', () => {
     expect(row?.request_id).not.toBe('r1')
   })
 
+  test('titles: only the ones that died with the batch, not one an earlier run failed', async () => {
+    // An earlier run's title whose output did not validate, failed for its own reason.
+    await db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at,
+        source_lang, title_hash) values (2, 1, 'k2', 'Older', 0, 0, 'en', 'h2')`)
+    await db.run(sql`insert into article_titles (article_id, lang, feed_id, status, source_hash,
+        updated_at) values (2, 'fr', 1, 'failed', 'h2', ${NOW - HOUR})`)
+    await exhaust('translate.title', NOW)
+    const { synced, statements } = redue(db, 'translate.title', '1', NOW + 1, { deadAt: NOW })
+    await db.batch([...(synced ? [bumpSeq(db)] : []), ...statements] as never)
+    const rows = await db.all<{ article_id: number; lang: string; source_hash: string }>(
+      sql`select article_id, lang, source_hash from article_titles where status = 'failed'
+        order by article_id, lang`,
+    )
+    // Everything the dead batch failed is due again; the earlier run's French title is not.
+    const kept = (r: { article_id: number; lang: string }) => r.article_id === 2 && r.lang === 'fr'
+    expect(rows.filter((r) => !kept(r)).every((r) => r.source_hash === '')).toBe(true)
+    expect(rows.filter(kept)).toEqual([{ article_id: 2, lang: 'fr', source_hash: 'h2' }])
+  })
+
   test('takes a leftover backoff away, but never a lease someone holds', async () => {
     await db.run(sql`insert into leases (kind, key, owner, until, attempts, not_before)
       values ('feed.fetch', '1', 'old', 0, 3, ${NOW + HOUR}),

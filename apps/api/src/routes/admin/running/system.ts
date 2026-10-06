@@ -289,14 +289,17 @@ const retryDead: ActHandler = async (ctx, id) => {
   const deadId = deadIdOf(id)
   if (deadId === null) return 'not_found'
   const { db } = ctx.deps
-  const letter = await first<{ kind: string; key: string; resolved_at: number | null }>(
+  const letter = await first<{ kind: string; key: string; at: number; resolved_at: number | null }>(
     db,
-    sql`select kind, key, resolved_at from dead_letters where id = ${deadId}`,
+    sql`select kind, key, at, resolved_at from dead_letters where id = ${deadId}`,
   )
   if (!letter) return 'not_found'
   if (letter.resolved_at !== null || !isRedueKind(letter.kind)) return 'not_applicable'
   const body = letter.kind === 'translate.body' ? await bodyAllowance(db) : null
-  const again = redue(db, letter.kind, letter.key, ctx.now, body ? { reserve: body.reserve } : {})
+  const again = redue(db, letter.kind, letter.key, ctx.now, {
+    deadAt: letter.at,
+    ...(body ? { reserve: body.reserve } : {}),
+  })
   // In the batch, so each retry of a bulk sees the tokens the ones before it reserved.
   const overBudget =
     body && body.budget > 0

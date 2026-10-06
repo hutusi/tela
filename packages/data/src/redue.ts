@@ -18,8 +18,11 @@ import { currentSeq } from './seq'
 
 type Statement = ReturnType<TelaDb['run']>
 
-/** What a retry brings with it: for a body, the tokens it reserves on the background budget. */
-export type RedueOptions = { reserve?: number }
+/**
+ * What a retry brings with it: for a body, the tokens it reserves on the background budget; for
+ * titles, when the item died (the dead letter's `at`).
+ */
+export type RedueOptions = { reserve?: number; deadAt?: number }
 
 export type Redue = {
   /** The statements write a row readers sync: the batch starts with `bumpSeq`. */
@@ -100,10 +103,14 @@ export const REDUE: Record<LeaseKind, Redue> = {
   // a row the server no longer has.
   'translate.title': {
     synced: true,
-    statements: (db, key, now) => [
+    // Only the titles the exhaustion failed: it stamps them with the dead letter's own `now`, so a
+    // title an earlier run stored as failed for its own reason (output that did not validate) is
+    // not paid for again. Without `deadAt`, every failed title of the feed.
+    statements: (db, key, now, { deadAt }) => [
       db.run(sql`
         update article_titles set source_hash = '', updated_at = ${now}, seq = ${currentSeq}
         where feed_id = ${id(key)} and status = 'failed'
+          ${deadAt === undefined ? sql`` : sql`and updated_at = ${deadAt}`}
       `),
     ],
   },
