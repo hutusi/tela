@@ -630,6 +630,52 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { articleId: 4, readAt: null, readUpdatedAt: 9 },
       ])
     })
+
+    it("carries a duplicate's later read clock, to a new copy and over an existing one", async () => {
+      // Codex review: a duplicate read at 20 and again at 30 was carried as a read at 20 with no
+      // clock, so an unread from 25 then won on the target.
+      const db = await makeDb()
+      await seedFeeds(db, ['blog.example', 'mirror.example'])
+      await db.run(
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 1, 0, 0)`,
+      )
+      // Copies 1, 3, 5, 7, 9 on feed 1; their duplicates 2, 4, 6, 8, 10 on feed 2.
+      const pairs: [number, number][] = [1, 3, 5, 7, 9].map((copy) => [copy + 1, copy])
+      await db.run(sql`
+        insert into articles (id, feed_id, dedup_key, fetched_at, sort_at)
+        select value, 2 - (value % 2), 'k' || value, 1, 1 from json_each(${JSON.stringify(
+          pairs.flat(),
+        )})
+      `)
+      // No watermark on either side, so only what was written down is carried.
+      await db.run(sql`
+        insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at) values
+          ('u1', 1, 0, 0, 0), ('u1', 2, 0, 0, 0)
+      `)
+      await db.run(sql`
+        insert into user_article_states (user_id, article_id, read_at, read_updated_at) values
+          ('u1', 2, 20, 30),
+          ('u1', 4, 20, 30), ('u1', 3, null, 25),
+          ('u1', 6, 20, 30), ('u1', 5, 10, null),
+          ('u1', 8, 20, 30), ('u1', 7, 35, 40),
+          ('u1', 10, 20, null)
+      `)
+      await db.batch([
+        bumpSeq(db),
+        ...mergeFeed(db, { alias: 2, target: 1, move: [], carry: pairs }, T0),
+      ] as never)
+      expect(
+        await db.all(sql`
+          select article_id as "articleId", read_at as "readAt", read_updated_at as "readUpdatedAt"
+          from user_article_states where article_id in (1, 3, 5, 7, 9) order by article_id`),
+      ).toEqual([
+        { articleId: 1, readAt: 20, readUpdatedAt: 30 }, // no copy yet: the read and its clock
+        { articleId: 3, readAt: 20, readUpdatedAt: 30 }, // marked unread at 25: the read at 30 wins
+        { articleId: 5, readAt: 10, readUpdatedAt: 30 }, // read at 10: its first time, the later clock
+        { articleId: 7, readAt: 35, readUpdatedAt: 40 }, // read later on the copy: unchanged
+        { articleId: 9, readAt: 20, readUpdatedAt: null }, // read once: still no clock to keep
+      ])
+    })
   })
 
   describe('compacting read state (ADR 0009)', () => {

@@ -184,20 +184,30 @@ export function mergeFeed(
       where article_id in (select value from json_each(${move}))
     `),
     // A duplicate's read and unread go to the target's copy, each against a choice the member
-    // made there by hand as markRead and markUnread go: the later decides.
+    // made there by hand as markRead and markUnread go: the later decides. A read is carried with
+    // its clock, and is as late as the later of its first time and its clock: a duplicate read
+    // again moved its clock past its first read (ADR 0009), and carried by its first time alone
+    // it would lose to an unread made between the two (Codex review). Over a copy already read,
+    // it keeps the copy's first time and moves the clock, as a later read does.
     db.run(sql`
-      insert into user_article_states (user_id, article_id, read_at, seq)
-      select s.user_id, p.value->>1, s.read_at, ${currentSeq}
+      insert into user_article_states (user_id, article_id, read_at, read_updated_at, seq)
+      select s.user_id, p.value->>1, s.read_at, s.read_updated_at, ${currentSeq}
       from json_each(${carry}) p join user_article_states s on s.article_id = p.value->>0
       where s.read_at is not null
       on conflict (user_id, article_id) do update set
-        read_at = excluded.read_at,
-        read_updated_at = case when user_article_states.read_updated_at is null then null
-          else excluded.read_at end,
+        read_at = coalesce(user_article_states.read_at, excluded.read_at),
+        read_updated_at = case
+          when user_article_states.read_at is null and user_article_states.read_updated_at is null
+            and excluded.read_updated_at is null then null
+          else max(excluded.read_at, coalesce(excluded.read_updated_at, 0)) end,
         seq = excluded.seq
-      where user_article_states.read_at is null
-        and (user_article_states.read_updated_at is null
-          or excluded.read_at >= user_article_states.read_updated_at)
+      where (user_article_states.read_at is null
+          and (user_article_states.read_updated_at is null
+            or max(excluded.read_at, coalesce(excluded.read_updated_at, 0))
+              >= user_article_states.read_updated_at))
+        or (user_article_states.read_at is not null
+          and max(excluded.read_at, coalesce(excluded.read_updated_at, 0))
+            > max(user_article_states.read_at, coalesce(user_article_states.read_updated_at, 0)))
     `),
     db.run(sql`
       insert into user_article_states (user_id, article_id, read_at, read_updated_at, seq)

@@ -30,7 +30,9 @@ every static-site rebuild.
     review, 2026-10-08). A read that changed nothing left the older read's time to decide, so an
     unread made between two reads and pushed after both won over the newer one. The row then has
     a clock and outlives compaction, which takes two devices reading one post unaware of each
-    other.
+    other. Merging a feed (0028) carries a duplicate's read with that clock, as late as the later
+    of its first time and its clock, and over a copy already read it moves the copy's clock the
+    same way; carried by its first time alone, the later read was lost in the merge.
   - Compaction keeps every row with the clock: dropped, a post marked unread would read as the
     watermark says, and one read again would lose to an older unread pushed late.
   - A like never moves a choice made by hand, though liking still reads a post nobody chose for.

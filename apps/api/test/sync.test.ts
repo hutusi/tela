@@ -1384,6 +1384,44 @@ describe('a feed merged into another (ADR 0028)', () => {
       expect(await shown(copy)).toBe(true)
     })
   })
+
+  test('a duplicate read twice carries its later clock, so an unread made between loses', async () => {
+    // Codex review: carried by its first read alone, the later read was lost in the merge.
+    const shown = async (id: number) => {
+      const device = applyPull({ cursor: 0, tables: emptyTables() }, await pull(0))
+      return isRead(device.tables, device.tables.articles.get(id) as ArticleRow, now)
+    }
+    await push([{ type: 'subscribe', feedId: 2 }])
+    const [fresh, marked] = [await addArticle(2), await addArticle(2)]
+    // The target's copies: one never opened, one marked unread on the target in between.
+    const [copyOfFresh, copyOfMarked] = [await addArticle(1), await addArticle(1)]
+    await push([{ type: 'markUnread', articleId: copyOfMarked, at: now - 78 }])
+    for (const id of [fresh, marked]) {
+      await push([{ type: 'markRead', articleId: id, at: now - 80 }])
+      await push([{ type: 'markRead', articleId: id, at: now - 70 }]) // on a second device
+    }
+    await write(
+      ...mergeFeed(
+        db,
+        {
+          alias: 2,
+          target: 1,
+          move: [],
+          carry: [
+            [fresh, copyOfFresh],
+            [marked, copyOfMarked],
+          ],
+        },
+        now,
+      ),
+    )
+    // A third device's unread, made between the two reads, arrives after the merge.
+    await push([
+      { type: 'markUnread', articleId: copyOfFresh, at: now - 75 },
+      { type: 'markUnread', articleId: copyOfMarked, at: now - 75 },
+    ])
+    expect([await shown(copyOfFresh), await shown(copyOfMarked)]).toEqual([true, true])
+  })
 })
 
 describe('a device holding another account (another tab switched)', () => {
