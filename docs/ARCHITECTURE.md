@@ -353,7 +353,8 @@ A Vite + React SPA that renders from the device.
   any target changed after the action.
 - **A small count is not published:** below three readers a blog's public count is null, and
   Discover orders it as none, so neither the number nor the order names who reads a blog an
-  operator listed from the review queue (ADR 0041).
+  operator listed from the review queue (ADR 0041). A subscriber's device holds it only from
+  three too (0 below), and a recount re-sends the row only when that changes.
 
 ## Tests
 

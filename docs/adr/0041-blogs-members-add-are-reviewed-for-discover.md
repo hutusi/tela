@@ -100,9 +100,12 @@ says so in its line, and the record says so above the chips that set them.
   gets no review, since its listing is the claim's.
 - A shell cached before tela-api returned null counts renders one as "no readers yet" for a
   visit, and a cached public page can show an old count for a day (ADR 0024's edge cache).
-- A blog's subscribers still sync its `reader_count` with its row, but the reader pane shows it
-  only from three readers too: below that, "2 readers on Tela" would tell a subscriber that one
-  other member reads the blog. The row still carries the number; only the page holds it back.
+- A blog's subscribers sync its reader count with its row only from three readers too
+  (`deviceReaderCount`, 0 below, since the row's type is a number), and the reader pane shows
+  nothing below three: "2 readers on Tela" would tell a subscriber that one other member reads
+  the blog. `recountReaders` stamps the row with a new seq only when that value or the listing
+  changes, or the row's arrival after someone else subscribes would tell the same. A claimant's
+  Dashboard reads its count from tela-api, not the device, and still shows the whole number.
 - Migration 0007 added `sites.review`, its check added with the column rather than by rebuilding
   `sites` (a rebuild drops the table, which on D1, where foreign keys stay enforced, would run the
   cascades of every table that references it), and `sites.reviewed_at`. The digest gained a

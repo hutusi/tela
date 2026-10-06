@@ -45,7 +45,7 @@ import {
 } from './queries/invites'
 import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates } from './queries/reader'
-import { DISCOVER_REVIEW, publicReaderCount } from './queries/sites'
+import { DISCOVER_REVIEW, publicReaderCount, recountReaders } from './queries/sites'
 import { readPull } from './queries/sync'
 import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
 import { feeds, sites } from './schema'
@@ -742,6 +742,41 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         sql`select s.id from sites s where ${DISCOVER_REVIEW} order by s.id`,
       )
       expect(queued).toEqual([{ id: 1 }])
+    })
+
+    it('recounts readers, stamping the row only when what a device holds of it changed', async () => {
+      const db = await makeDb()
+      await db.run(sql`
+        insert into user (id, name, email, email_verified, created_at, updated_at)
+        select 'u' || value, 'u', 'u' || value || '@x.y', 1, 0, 0 from json_each('[1,2,3,4]')
+        where true
+      `)
+      await db.run(sql`insert into sites (id, home_url, created_at, updated_at, seq)
+        values (1, 'https://a.test', 0, 0, 0)`)
+      await db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+        updated_at) values (1, 1, 'https://a.test/f', 'a.test', 0, 0, 0)`)
+      const recount = async (change: ReturnType<typeof sql>) => {
+        await db.batch([bumpSeq(db), db.run(change), ...recountReaders(db, sql`1`, 5)] as never)
+        return first<{ reader_count: number; listing: string; seq: number }>(
+          db,
+          sql`select reader_count, listing, seq from sites where id = 1`,
+        )
+      }
+      const subscribe = (user: string) =>
+        recount(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at)
+          values (${user}, 1, 0, 0)`)
+      const leave = (user: string) =>
+        recount(sql`update subscriptions set deleted_at = 1 where user_id = ${user}`)
+      // One reader, then two: a device holds 0 either way, so the seq stays.
+      expect(await subscribe('u1')).toEqual({ reader_count: 1, listing: 'private', seq: 0 })
+      expect(await subscribe('u2')).toEqual({ reader_count: 2, listing: 'private', seq: 0 })
+      // Three: the count and the community door's listing are the device's to hold.
+      expect(await subscribe('u3')).toEqual({ reader_count: 3, listing: 'listed', seq: 3 })
+      expect(await subscribe('u4')).toEqual({ reader_count: 4, listing: 'listed', seq: 4 })
+      // Back to two shows 0 again; and nobody leaving changes nothing.
+      expect(await leave('u4')).toEqual({ reader_count: 3, listing: 'listed', seq: 5 })
+      expect(await leave('u3')).toEqual({ reader_count: 2, listing: 'listed', seq: 6 })
+      expect(await leave('u3')).toEqual({ reader_count: 2, listing: 'listed', seq: 6 })
     })
 
     it('gives a public reader count only from three readers, and orders the rest as equals', async () => {

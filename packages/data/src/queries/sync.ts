@@ -19,6 +19,7 @@ import type { SQL } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
 import { avatarSql, gravatarOnSql } from './people'
+import { deviceReaderCount } from './sites'
 
 /** Raw rows as SQL returns them; the API shapes them into the protocol's row types. */
 export type RawRow = Record<string, unknown>
@@ -96,7 +97,7 @@ const TRANSLATION = sql.raw(`b.content_key as "contentKey", b.lang, b.state,
 function siteColumns(userId: string): SQL {
   return sql`s.id, s.home_url as "homeUrl", s.title, s.description, s.favicon_key as "faviconKey",
     s.primary_lang as "primaryLang", s.listing, (s.claimed_by = ${userId}) as "owned",
-    (s.claimed_by is not null) as "claimed", s.reader_count as "readerCount",
+    (s.claimed_by is not null) as "claimed", ${deviceReaderCount('s')} as "readerCount",
     s.translation_opt_out as "translationOptOut", s.seq`
 }
 

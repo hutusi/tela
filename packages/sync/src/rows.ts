@@ -77,6 +77,7 @@ export type SiteRow = {
   /** The member claimed this blog. */
   owned: boolean
   claimed: boolean
+  /** From three readers up, 0 below: a smaller count says who else reads it (ADR 0041). */
   readerCount: number
   translationOptOut: boolean
   seq: number

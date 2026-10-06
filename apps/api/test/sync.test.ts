@@ -557,6 +557,28 @@ describe('push', () => {
     expect(await readers()).toBe(0)
   })
 
+  test("a subscriber's device holds a blog's reader count only from three, and hears nothing below", async () => {
+    const b = await signedIn(api, 'b@x.test')
+    const c = await signedIn(api, 'c@x.test')
+    const blog = (p: PullResponse) => p.rows.sites.filter((s) => s.id === 2)
+    await push([{ type: 'subscribe', feedId: 2 }])
+    const snap = await pull(0)
+    // One reader: the count would say who reads it (ADR 0041), so the device holds 0.
+    expect(blog(snap)).toMatchObject([{ readerCount: 0 }])
+    // A second reader changes nothing a device holds, so the row is not sent again: its arrival
+    // alone would tell the first reader that someone came.
+    await push([{ type: 'subscribe', feedId: 2 }], b)
+    const quiet = await pull(snap.cursor)
+    expect(blog(quiet)).toEqual([])
+    // A third: now the count is the device's to hold, and the community door lists the blog.
+    await push([{ type: 'subscribe', feedId: 2 }], c)
+    const third = await pull(quiet.cursor)
+    expect(blog(third)).toMatchObject([{ readerCount: 3, listing: 'listed' }])
+    // Down to two, the count is no longer one to show, and the device hears so.
+    await push([{ type: 'unsubscribe', feedId: 2 }], c)
+    expect(blog(await pull(third.cursor))).toMatchObject([{ readerCount: 0 }])
+  })
+
   test('without a session, nothing', async () => {
     const res = await api.request('/api/v1/mutations', {
       body: { mutations: [] },

@@ -64,20 +64,36 @@ export const publicReaderCount = (alias: string): SQL =>
     then ${alias}.reader_count end)`)
 
 /**
+ * A blog's reader count as a member's device holds it, over the sites table aliased `alias`: the
+ * count from three readers up, 0 below (ADR 0041). Below three, "2 readers on Tela" would tell a
+ * subscriber that one other member reads the blog; the row's type is a number, so 0, not null.
+ */
+export const deviceReaderCount = (alias: string): SQL =>
+  sql.raw(`(case when ${alias}.reader_count >= ${COMMUNITY_LISTING_MIN_READERS}
+    then ${alias}.reader_count else 0 end)`)
+
+/**
  * Recount distinct readers of each site, then open the community door into Discover (ADR 0018):
  * an unclaimed private site with enough readers is listed. One-way, and never touching an
- * editorial pick or a site an operator rejected.
+ * editorial pick or a site an operator rejected. The row is stamped with the batch's seq only
+ * when what a device holds of it changed (`deviceReaderCount`, or the listing): a subscribe
+ * that takes a blog from one reader to two changes nothing a device holds, and re-sending the
+ * row to its other readers would tell them, by its arrival, that someone came or went.
  */
 export function recountReaders(db: TelaDb, siteIds: SQL, now: number) {
+  const count = sql`(
+    select count(distinct s.user_id) from subscriptions s
+    join feeds f on f.id = s.feed_id
+    where f.site_id = sites.id and s.deleted_at is null
+  )`
+  const min = COMMUNITY_LISTING_MIN_READERS
   return [
     db.run(sql`
       update sites set
-        reader_count = (
-          select count(distinct s.user_id) from subscriptions s
-          join feeds f on f.id = s.feed_id
-          where f.site_id = sites.id and s.deleted_at is null
-        ),
-        updated_at = ${now}, seq = ${currentSeq}
+        seq = case when ${count} <> reader_count and (${count} >= ${min} or reader_count >= ${min})
+          then ${currentSeq} else seq end,
+        reader_count = ${count},
+        updated_at = ${now}
       where id in (${siteIds})
     `),
     db.run(sql`
