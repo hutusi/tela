@@ -138,6 +138,19 @@ function statementsFor(
         ...recountReaders(db, siteOf(m.feedId), now),
       ]
     case 'setPref':
+      // A value the account takes from this browser (`ifAbsent`, a visitor's theme on joining) is
+      // no choice: it fills only a pref the account has no row for, from a device copy that may
+      // be stale, and carries no clock, so any choice made anywhere beats it. A device that
+      // predicted it and lost hears the row that beat it in its next pull, since it never held it.
+      if (m.ifAbsent) {
+        return [
+          db.run(sql`
+            insert into user_prefs (user_id, key, value_json, updated_at, seq)
+            select ${userId}, ${m.key}, ${JSON.stringify(m.value)}, 0, ${currentSeq} where ${fresh}
+            on conflict (user_id, key) do nothing
+          `),
+        ]
+      }
       return [
         db.run(sql`
           insert into user_prefs (user_id, key, value_json, updated_at, seq)
@@ -152,10 +165,21 @@ function statementsFor(
       // 0040): the header and Settings change them from every device, and the last push to arrive
       // is not the last choice. A reading language of null is a value, following the interface;
       // one left out is left alone, its clock included. Stamped whether or not it won, so the
-      // next pull hands the device the row that beat it.
-      const field = (column: 'ui_locale' | 'reading_lang', v: string | null | undefined) => {
+      // next pull hands the device the row that beat it. An interface language the account takes
+      // from this browser (`adopt`, a visitor's on joining) is no choice: it applies only while
+      // the account has none, whatever the device's copy said, and leaves the clock alone, so any
+      // choice made anywhere beats it. An interface language is never set back to null, so null
+      // means never chosen.
+      const field = (
+        column: 'ui_locale' | 'reading_lang',
+        v: string | null | undefined,
+        adopt = false,
+      ) => {
         if (v === undefined) return sql``
         const clock = sql.raw(`${column}_at`)
+        if (adopt) {
+          return sql`${sql.raw(column)} = coalesce(${sql.raw(column)}, ${v}),`
+        }
         const later = sql`${at} >= ${clock}`
         return sql`${sql.raw(column)} = case when ${later} then ${v} else ${sql.raw(column)} end,
           ${clock} = case when ${later} then ${at} else ${clock} end,`
@@ -163,7 +187,7 @@ function statementsFor(
       return [
         db.run(sql`
           update profiles set
-            ${field('ui_locale', m.uiLocale)}
+            ${field('ui_locale', m.uiLocale, m.adopt === true)}
             ${field('reading_lang', m.readingLang)}
             updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and ${fresh}

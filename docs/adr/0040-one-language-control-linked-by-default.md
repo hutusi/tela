@@ -83,6 +83,13 @@ the language in this browser's `tela_locale` cookie, written as `setProfile {uiL
 follows the member everywhere. It comes only from the cookie, a choice made here, and never from
 `Accept-Language`. A browser's own languages are no choice, and an account without a language
 already follows them on each browser. It is never written over a language the account holds.
+(Amended 2026-10-07, review.) The profile it reads can be the copy the device kept, loaded at boot
+before this visit's first pull, and stamped now, an adoption from that copy beat a language
+chosen elsewhere since. So the account decides, not the copy: it is sent as
+`setProfile {uiLocale, adopt: true}`, which tela-api writes only while `ui_locale` is null (an
+interface language is never set back to null, so null means never chosen), leaving
+`ui_locale_at` alone, so any choice made anywhere beats it; the prediction does the same. A
+tela-api that predates the flag strips it and writes the language as a choice, as before.
 
 **The backfill.** Migration 0007 clears `reading_lang` where it equals `ui_locale`: it bumps the
 sequence, then stamps the rows it changes with it (invariant 7), so devices pull them. Those

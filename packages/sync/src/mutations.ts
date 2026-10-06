@@ -50,21 +50,33 @@ export const mutationSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('markAllRead'), feedId: id.optional(), upTo: id }),
   z.object({ ...base, type: z.literal('subscribe'), feedId: id }),
   z.object({ ...base, type: z.literal('unsubscribe'), feedId: id }),
+  /**
+   * A preference, to the later `at`. With `ifAbsent`, a value the account takes from this browser
+   * rather than one the member chose (a visitor's theme, on joining, ADR 0037): written only
+   * where the account has no row, and with no clock (`updated_at` 0), so any choice made anywhere
+   * beats it. A tela-api that predates the flag strips it and writes the value as a choice.
+   */
   z.object({
     ...base,
     type: z.literal('setPref'),
     key: z.string().regex(PREF_KEY),
     value: z.json(),
+    ifAbsent: z.boolean().optional(),
   }),
   /**
    * The member's two languages, each to the later `at` on a clock of its own (ADR 0040). A reading
-   * language of null follows the interface language; one left out is left alone.
+   * language of null follows the interface language; one left out is left alone. With `adopt`,
+   * the interface language is one the account takes from this browser (a visitor's, on joining):
+   * written only while the account has none, which an interface language never goes back to, and
+   * leaving its clock alone, so any choice made anywhere beats it. A tela-api that predates the
+   * flag strips it and writes the language as a choice.
    */
   z.object({
     ...base,
     type: z.literal('setProfile'),
     readingLang: z.enum(READING_LANGUAGES).nullable().optional(),
     uiLocale: z.enum(UI_LOCALES).optional(),
+    adopt: z.boolean().optional(),
   }),
   /**
    * Whether the profile shows what the member reads, and what they liked (ADR 0031). A hide always

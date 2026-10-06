@@ -327,7 +327,14 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       return t
     }
     case 'setPref': {
+      // One the account takes from this browser fills only a pref no row is held for, with no
+      // clock, as the server writes it; if the server has a row this device never held, the next
+      // pull brings it.
       const held = t.prefs.get(m.key)
+      if (m.ifAbsent) {
+        if (!held) t.prefs.set(m.key, { key: m.key, value: m.value, updatedAt: 0, seq: 0 })
+        return t
+      }
       if (!held || m.at >= held.updatedAt) {
         t.prefs.set(m.key, { key: m.key, value: m.value, updatedAt: m.at, seq: held?.seq ?? 0 })
       }
@@ -340,7 +347,10 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       const p = t.profile
       if (p) {
         const next = { ...p }
-        if (m.uiLocale !== undefined && m.at >= (p.uiLocaleAt ?? 0)) {
+        if (m.uiLocale !== undefined && m.adopt) {
+          // Taken from this browser: only while the account has none, its clock left alone.
+          next.uiLocale = p.uiLocale ?? m.uiLocale
+        } else if (m.uiLocale !== undefined && m.at >= (p.uiLocaleAt ?? 0)) {
           next.uiLocale = m.uiLocale
           next.uiLocaleAt = m.at
         }

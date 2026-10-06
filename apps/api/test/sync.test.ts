@@ -347,6 +347,56 @@ describe('push', () => {
     ])
   })
 
+  describe("adopting a visitor's language or theme, from a copy that may be stale", () => {
+    const locale = () =>
+      first<{ ui_locale: string | null; ui_locale_at: number }>(
+        db,
+        sql`select ui_locale, ui_locale_at from profiles`,
+      )
+    const theme = () =>
+      first<{ value_json: string; updated_at: number }>(
+        db,
+        sql`select value_json, updated_at from user_prefs where key = 'ui.theme'`,
+      )
+
+    test('a language is written only while the account has none, and any choice beats it', async () => {
+      const snap = await pull(0)
+      await push([{ type: 'setProfile', uiLocale: 'fr', adopt: true }])
+      expect(await locale()).toEqual({ ui_locale: 'fr', ui_locale_at: 0 })
+      // Stamped, so the device that adopted hears what the account holds.
+      expect((await pull(snap.cursor)).rows.profile).toMatchObject([{ uiLocale: 'fr' }])
+      // Another browser's cookie, adopted later: the account has one now.
+      await push([{ type: 'setProfile', uiLocale: 'zh-Hans', adopt: true }])
+      expect(await locale()).toEqual({ ui_locale: 'fr', ui_locale_at: 0 })
+      // A choice made before the adoption and pushed after it still wins: adopting chose nothing.
+      await push([{ type: 'setProfile', uiLocale: 'en', at: now - 5000 }])
+      expect(await locale()).toEqual({ ui_locale: 'en', ui_locale_at: now - 5000 })
+    })
+
+    test('a stale copy adopting over a language chosen elsewhere since changes nothing', async () => {
+      await push([{ type: 'setProfile', uiLocale: 'en', at: now - 1000 }])
+      // Its `at` is the later; a write by `at` alone would have taken the account back.
+      await push([{ type: 'setProfile', uiLocale: 'fr', adopt: true, at: now }])
+      expect(await locale()).toEqual({ ui_locale: 'en', ui_locale_at: now - 1000 })
+    })
+
+    test('a theme is written only where the account has no row, and any choice beats it', async () => {
+      const snap = await pull(0)
+      await push([{ type: 'setPref', key: 'ui.theme', value: 'dark', ifAbsent: true }])
+      expect(await theme()).toEqual({ value_json: '"dark"', updated_at: 0 })
+      expect((await pull(snap.cursor)).rows.prefs).toMatchObject([
+        { key: 'ui.theme', value: 'dark' },
+      ])
+      await push([{ type: 'setPref', key: 'ui.theme', value: 'light', ifAbsent: true }])
+      expect(await theme()).toEqual({ value_json: '"dark"', updated_at: 0 })
+      await push([{ type: 'setPref', key: 'ui.theme', value: 'system', at: now - 5000 }])
+      expect(await theme()).toEqual({ value_json: '"system"', updated_at: now - 5000 })
+      // And a stale copy adopting over that choice changes nothing, whatever its `at`.
+      await push([{ type: 'setPref', key: 'ui.theme', value: 'dark', ifAbsent: true }])
+      expect(await theme()).toEqual({ value_json: '"system"', updated_at: now - 5000 })
+    })
+  })
+
   test('two devices: the later like wins, whatever order they arrive in', async () => {
     const a = await addArticle(1)
     await push([{ type: 'setLiked', articleId: a, liked: false, at: now - 1000 }])

@@ -214,10 +214,12 @@ function Routed() {
     document.documentElement.lang = locale
   }, [locale])
   // A member's theme is a synced pref; a visitor keeps whatever this browser last had. An account
-  // that has never chosen one takes the visitor's, once: the first snapshot brings every pref
-  // with the profile, so no row then means none. Written as the pref, never only put on the page,
-  // or the page would be dark while Settings said Auto. A browser shared by two accounts gives
-  // the second whatever it shows, which is what that member is looking at anyway.
+  // that has never chosen one takes the visitor's, once. Written as the pref, never only put on
+  // the page, or the page would be dark while Settings said Auto; and `ifAbsent`, since the rows
+  // here may be the copy this device kept, from before a theme chosen elsewhere since: the server
+  // writes it only where the account has no theme, and a choice anywhere beats it. A browser
+  // shared by two accounts gives the second whatever it shows, which is what that member is
+  // looking at anyway.
   const theme = typographyOf(tables).theme
   const synced = tables.profile !== null
   const chosen = tables.prefs.has(PREFS.theme)
@@ -231,7 +233,7 @@ function Routed() {
       const adopt = themeToAdopt(store.getSnapshot().tables, deviceTheme())
       if (adopt) {
         // The page shows it already; the pref's own render puts it on again.
-        store.mutate({ type: 'setPref', key: PREFS.theme, value: adopt })
+        store.mutate({ type: 'setPref', key: PREFS.theme, value: adopt, ifAbsent: true })
         return
       }
     }
@@ -239,8 +241,9 @@ function Routed() {
   }, [synced, chosen, theme, store])
   // And an account that has never chosen an interface language takes the one its visitor chose
   // here, once, the same way: only from the cookie, a choice, and only while the account's is
-  // null. Written to the profile, so it follows the member to every device; the page is in it
-  // already, since the cookie chose it.
+  // null, which the server decides (`adopt`), not this device's copy, which may predate a choice
+  // made elsewhere. Written to the profile, so it follows the member to every device; the page is
+  // in it already, since the cookie chose it.
   const localeAdoptedFor = useRef<string | null>(null)
   useEffect(() => {
     if (!synced) return
@@ -249,7 +252,7 @@ function Routed() {
     localeAdoptedFor.current = owner
     // Read now, not from the render: the store and the cookie are as they are when this runs.
     const adopt = localeToAdopt(store.getSnapshot().tables.profile, document.cookie)
-    if (adopt) store.mutate({ type: 'setProfile', uiLocale: adopt })
+    if (adopt) store.mutate({ type: 'setProfile', uiLocale: adopt, adopt: true })
   }, [synced, store])
   const ui = useMemo(() => ({ locale, setLocale }), [locale, setLocale])
   return (

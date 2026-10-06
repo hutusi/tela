@@ -257,7 +257,8 @@ it('invites, signs in, pushes and pulls on D1', async () => {
 
   // A post marked unread (ADR 0009): an upsert whose conflict compares max() of two clocks, then
   // the mark-all that reads it again through a join, on D1. With them, a reading language of null,
-  // which follows the interface (ADR 0040).
+  // which follows the interface (ADR 0040), and a visitor's language and theme taken on joining,
+  // each only where the account has none: a coalesce, and an insert that does nothing on conflict.
   const unreadAt = Date.now()
   const unread = (await (
     await call('/api/v1/mutations', {
@@ -265,19 +266,40 @@ it('invites, signs in, pushes and pulls on D1', async () => {
         mutations: [
           { mid: 'workers-unread-1', at: unreadAt, type: 'markUnread', articleId: 1 },
           { mid: 'workers-lang-1', at: unreadAt, type: 'setProfile', readingLang: null },
+          { mid: 'workers-adopt-1', at: unreadAt, type: 'setProfile', uiLocale: 'fr', adopt: true },
+          { mid: 'workers-adopt-2', at: unreadAt, type: 'setProfile', uiLocale: 'en', adopt: true },
+          {
+            mid: 'workers-theme-1',
+            at: unreadAt,
+            type: 'setPref',
+            key: 'ui.theme',
+            value: 'dark',
+            ifAbsent: true,
+          },
+          {
+            mid: 'workers-theme-2',
+            at: unreadAt,
+            type: 'setPref',
+            key: 'ui.theme',
+            value: 'light',
+            ifAbsent: true,
+          },
         ],
       },
       ...member,
     })
   ).json()) as PushResponse
-  expect(unread.applied).toHaveLength(2)
+  expect(unread.applied).toHaveLength(6)
   const marked = (await (
     await call(`/api/v1/sync?cursor=${shown.cursor}`, member)
   ).json()) as PullResponse
   expect(marked.rows.states).toMatchObject([
     { articleId: 1, readAt: null, readUpdatedAt: unreadAt, likedAt: now },
   ])
-  expect(marked.rows.profile).toMatchObject([{ readingLang: null, readingLangAt: unreadAt }])
+  expect(marked.rows.profile).toMatchObject([
+    { readingLang: null, readingLangAt: unreadAt, uiLocale: 'fr', uiLocaleAt: 0 },
+  ])
+  expect(marked.rows.prefs).toMatchObject([{ key: 'ui.theme', value: 'dark', updatedAt: 0 }])
   await call('/api/v1/mutations', {
     body: {
       mutations: [{ mid: 'workers-all-1', at: unreadAt, type: 'markAllRead', feedId: 1, upTo: 1 }],

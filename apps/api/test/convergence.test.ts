@@ -251,13 +251,24 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
     if (choice === 3 || choice === 4) m = { mid, at, type: 'subscribe', feedId: feed }
     if (choice === 5) m = { mid, at, type: 'unsubscribe', feedId: feed }
     if (choice === 6)
-      m = {
-        mid,
-        at,
-        type: 'setPref',
-        key: 'reader.mode',
-        value: pick(['side', 'orig', 'trans']) as string,
-      }
+      m =
+        random() < 0.7
+          ? {
+              mid,
+              at,
+              type: 'setPref',
+              key: 'reader.mode',
+              value: pick(['side', 'orig', 'trans']) as string,
+            }
+          : // A theme, chosen or taken from this browser, which fills only an absent pref.
+            {
+              mid,
+              at,
+              type: 'setPref',
+              key: 'ui.theme',
+              value: pick(['light', 'dark', 'system']) as string,
+              ...(random() < 0.5 ? { ifAbsent: true } : {}),
+            }
     if (choice === 7 && article)
       m = { mid, at, type: 'recommend', articleId: article, note: random() < 0.5 ? 'nice' : null }
     if (choice === 8 && article) m = { mid, at, type: 'unrecommend', articleId: article }
@@ -308,6 +319,8 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
         type: 'setProfile',
         ...(uiLocale === undefined ? {} : { uiLocale }),
         ...(readingLang === undefined ? {} : { readingLang }),
+        // Now and then the interface language a visitor chose, taken only while there is none.
+        ...(uiLocale !== undefined && random() < 0.25 ? { adopt: true } : {}),
       }
     }
     if (choice === 17 && article) m = { mid, at, type: 'markUnread', articleId: article }

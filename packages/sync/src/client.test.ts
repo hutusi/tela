@@ -422,6 +422,69 @@ describe('follows and privacy flags on the device (ADR 0031)', () => {
   })
 })
 
+describe("adopting a visitor's language or theme on the device", () => {
+  const profile: ProfileRow = {
+    handle: 'me',
+    displayName: null,
+    bio: null,
+    uiLocale: null,
+    readingLang: null,
+    publicSubscriptions: false,
+    publicLikes: false,
+    gravatar: false,
+    gravatarFound: null,
+    avatarUploaded: false,
+    avatar: null,
+    seq: 1,
+  }
+  const adopt = (uiLocale: 'fr' | 'en', at: number): Pending => ({
+    mutation: { mid: `adopt-${uiLocale}-${at}`, at, type: 'setProfile', uiLocale, adopt: true },
+  })
+
+  test('a language fills only an account that has none, and leaves its clock', () => {
+    const blank = applyPull(start, pull(4, { profile: [profile] }))
+    expect(view(blank, [adopt('fr', 50)]).profile).toMatchObject({ uiLocale: 'fr', uiLocaleAt: 0 })
+    const chosen = applyPull(
+      start,
+      pull(4, { profile: [{ ...profile, uiLocale: 'en', uiLocaleAt: 20 }] }),
+    )
+    expect(view(chosen, [adopt('fr', 50)]).profile).toMatchObject({
+      uiLocale: 'en',
+      uiLocaleAt: 20,
+    })
+    // A choice after an adoption wins, whatever its clock.
+    const choice: Pending = {
+      mutation: { mid: 'choose-en-pad', at: 10, type: 'setProfile', uiLocale: 'en' },
+    }
+    expect(view(blank, [adopt('fr', 50), choice]).profile).toMatchObject({ uiLocale: 'en' })
+  })
+
+  test('a theme fills only a pref no row is held for, with no clock', () => {
+    const theme = (value: string, at: number, ifAbsent?: boolean): Pending => ({
+      mutation: {
+        mid: `theme-${value}-${at}`,
+        at,
+        type: 'setPref',
+        key: 'ui.theme',
+        value,
+        ...(ifAbsent ? { ifAbsent } : {}),
+      },
+    })
+    expect(view(start, [theme('dark', 50, true)]).prefs.get('ui.theme')).toMatchObject({
+      value: 'dark',
+      updatedAt: 0,
+    })
+    const held = applyPull(
+      start,
+      pull(4, { prefs: [{ key: 'ui.theme', value: 'light', updatedAt: 20, seq: 4 }] }),
+    )
+    expect(view(held, [theme('dark', 50, true)]).prefs.get('ui.theme')?.value).toBe('light')
+    expect(
+      view(start, [theme('dark', 50, true), theme('light', 10)]).prefs.get('ui.theme'),
+    ).toMatchObject({ value: 'light', updatedAt: 10 })
+  })
+})
+
 describe('the Gravatar switch on the device (ADR 0032)', () => {
   const profile: ProfileRow = {
     handle: 'me',

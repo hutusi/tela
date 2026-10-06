@@ -259,7 +259,8 @@ test.describe('Join, after choosing a theme', () => {
     await expect(page).toHaveURL(/\/discover$/)
     await expect(page.getByTestId('account-menu')).toBeVisible()
     expect(JSON.parse((await adopted).postData() ?? '{}').mutations).toContainEqual(
-      expect.objectContaining({ type: 'setPref', key: 'ui.theme', value: 'dark' }),
+      // Taken only where the account has no theme, which the server decides, not this copy.
+      expect.objectContaining({ type: 'setPref', key: 'ui.theme', value: 'dark', ifAbsent: true }),
     )
     expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark')
 
@@ -301,7 +302,8 @@ test.describe('Join, after choosing a language', () => {
     await expect(page).toHaveURL(/\/discover$/)
     await expect(page.getByTestId('account-menu')).toBeVisible()
     expect(JSON.parse((await adopted).postData() ?? '{}').mutations).toContainEqual(
-      expect.objectContaining({ type: 'setProfile', uiLocale: 'fr' }),
+      // Taken only while the account has no language, which the server decides, not this copy.
+      expect.objectContaining({ type: 'setProfile', uiLocale: 'fr', adopt: true }),
     )
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
     // Linked, as a new account is: the member's circle is the interface language.
