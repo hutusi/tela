@@ -1,0 +1,58 @@
+{
+  "between": " ",
+  "colon": " :",
+  "openLink": "Ou ouvrez ce lien dans votre navigateur",
+  "signIn": {
+    "subject": "Votre code de connexion à Tela",
+    "heading": "Se connecter à Tela",
+    "intro": "Saisissez ce code pour vous connecter. Il expire dans une heure.",
+    "outro": "Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet e-mail."
+  },
+  "invited": {
+    "subject": "Votre invitation à rejoindre Tela",
+    "heading": "Votre invitation à rejoindre Tela"
+  },
+  "reset": {
+    "subject": "Réinitialiser votre mot de passe Tela",
+    "heading": "Réinitialiser votre mot de passe Tela",
+    "intro": "Saisissez ce code pour choisir un nouveau mot de passe. Il expire dans une heure, et le choisir met fin à vos sessions sur tous les appareils.",
+    "outro": "Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet e-mail : votre mot de passe reste inchangé."
+  },
+  "notice": {
+    "ifYou": "Si c’était vous, il n’y a rien à faire.",
+    "othersOut": "Tous les autres appareils ont été déconnectés."
+  },
+  "providerAccount": {
+    "subject": "Votre compte Tela a été créé avec {provider}",
+    "heading": "Un nouveau compte Tela",
+    "what": "Quelqu’un s’est inscrit sur Tela avec l’adresse {to}, en se connectant avec {provider}.",
+    "ifNot": "Si ce n’était pas vous, le compte vous appartient toujours : connectez-vous sur {login} avec un code envoyé à cette adresse, puis dissociez {provider} et déconnectez-vous partout dans Paramètres → Compte."
+  },
+  "accountChange": {
+    "heading": "Vos moyens de connexion à Tela ont changé",
+    "newPassword": "Si ce n’était pas vous, choisissez un nouveau mot de passe depuis la page de connexion, {login} : un code arrive à cette adresse, et le nouveau mot de passe déconnecte tous les autres appareils.",
+    "password-set": {
+      "subject": "Un mot de passe a été ajouté à votre compte Tela",
+      "what": "Le compte Tela de {to} a désormais un mot de passe."
+    },
+    "password-changed": {
+      "subject": "Le mot de passe de votre compte Tela a été modifié",
+      "what": "Le mot de passe du compte Tela de {to} a été modifié."
+    },
+    "password-reset": {
+      "subject": "Le mot de passe de votre compte Tela a été réinitialisé",
+      "what": "Un nouveau mot de passe a été choisi pour le compte Tela de {to}, avec un code envoyé à cette adresse, et tous les appareils ont été déconnectés.",
+      "ifNot": "Si ce n’était pas vous, quelqu’un peut lire cette boîte mail : sécurisez-la d’abord, puis choisissez de nouveau un mot de passe sur {login}."
+    },
+    "linked": {
+      "subject": "{provider} a été associé à votre compte Tela",
+      "what": "{provider} permet désormais de se connecter au compte Tela de {to}.",
+      "ifNot": "Si ce n’était pas vous, connectez-vous sur {login} avec un code envoyé à cette adresse, puis dissociez {provider} et déconnectez-vous partout dans Paramètres → Compte."
+    },
+    "unlinked": {
+      "subject": "{provider} a été dissocié de votre compte Tela",
+      "what": "{provider} ne permet plus de se connecter au compte Tela de {to}.",
+      "ifNot": "Si ce n’était pas vous, quelqu’un est connecté à votre place : connectez-vous sur {login} avec un code envoyé à cette adresse, puis déconnectez-vous partout dans Paramètres → Compte, et associez de nouveau {provider}."
+    }
+  }
+}

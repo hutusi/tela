@@ -26,9 +26,9 @@ import { isAPIError } from 'better-auth/api'
 import { type Context, Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { ApiEnv, Member } from '../app'
-import { type Auth, endOtherSessions, FRESH_SECONDS, PASSWORD_LENGTH } from '../auth'
+import { type Auth, endOtherSessions, FRESH_SECONDS, notifyMember, PASSWORD_LENGTH } from '../auth'
 import type { ApiDeps } from '../deps'
-import { type AccountChange, accountChangeMail } from '../mail'
+import type { AccountChange } from '../mail'
 
 /** The session a call came with, as D1 has it now: its token, and when it was made (ms). */
 type Session = { token: string; createdAt: number }
@@ -70,11 +70,11 @@ export function accountRoutes(deps: ApiDeps, auth: Auth) {
   const spend = async (action: LimitedAction, member: Member) =>
     (await consumeLimit(db, action, member.id, deps.clock.now())).allowed
 
-  /** Tell the member what changed. A notice that fails to go is logged: the change is made. */
-  const notify = (member: Member, change: AccountChange) =>
-    deps.mail
-      .send(accountChangeMail({ to: member.email, change, publicUrl: deps.config.publicUrl }))
-      .catch((err) => console.error('account notice not sent', member.id, err))
+  /**
+   * Tell the member what changed, in their interface language, never the browser's: the notice is
+   * for whoever holds the address. A notice that fails to go is logged: the change is made.
+   */
+  const notify = (member: Member, change: AccountChange) => notifyMember(deps, member, change)
 
   /** The linked providers, oldest first, and whether a password is set. */
   const waysIn = async (headers: Headers) => {

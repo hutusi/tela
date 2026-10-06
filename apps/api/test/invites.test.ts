@@ -232,6 +232,43 @@ describe("joining with a member's code", () => {
     expect((await d.signIn('new@x.test')).status).toBe(200)
     expect((await listOf(api, inviter)).codes[0]?.handle).toMatch(/^u_/)
   })
+
+  test("the code mail is in the joiner's language, with English beside it", async () => {
+    const api = await createTestApi()
+    expect((await operator(api, { body: { code: 'WELCOME', uses: 5 } })).status).toBe(200)
+    let n = 0
+    const join = (email: string, headers: Record<string, string>) =>
+      api.request('/api/v1/join', {
+        body: { code: 'WELCOME', email },
+        headers: { 'cf-connecting-ip': `203.0.113.${++n}`, ...headers },
+      })
+    const subjectOf = (email: string) => mailsTo(api, email).at(-1)?.subject
+    // The language the visitor picked here, over what their browser says…
+    const picked = await join('tw@x.test', {
+      cookie: 'tela.session_data=x; tela_locale=zh-Hant',
+      'accept-language': 'fr',
+    })
+    expect(picked.status).toBe(200)
+    expect(subjectOf('tw@x.test')).toBe(
+      `邀請你加入 Tela · You are invited to Tela: ${codeFor(api, 'tw@x.test')}`,
+    )
+    // …else what their browser says…
+    await join('fr@x.test', { 'accept-language': 'fr-FR,fr;q=0.9' })
+    expect(subjectOf('fr@x.test')).toBe(
+      `Votre invitation à rejoindre Tela · You are invited to Tela: ${codeFor(api, 'fr@x.test')}`,
+    )
+    // …else English and Simplified, as before.
+    await join('en@x.test', { cookie: 'theme=dark' })
+    expect(subjectOf('en@x.test')).toBe(
+      `You are invited to Tela · 邀请你加入 Tela: ${codeFor(api, 'en@x.test')}`,
+    )
+    // A member who joins again is mailed a plain code, in their language too.
+    await signedIn(api, 'member@x.test')
+    await join('member@x.test', { cookie: 'tela_locale=zh-Hans' })
+    expect(subjectOf('member@x.test')).toBe(
+      `Tela 登录验证码 · Your Tela sign-in code: ${codeFor(api, 'member@x.test')}`,
+    )
+  })
 })
 
 describe("the operator's codes", () => {

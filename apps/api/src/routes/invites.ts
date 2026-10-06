@@ -29,6 +29,7 @@ import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { Auth } from '../auth'
 import type { ApiDeps } from '../deps'
+import { languageHeaders } from '../mail-locale'
 import { fromOperator } from '../operator'
 
 /**
@@ -101,8 +102,13 @@ export function inviteRoutes(deps: ApiDeps, auth: Auth) {
     const outcome = await holdJoin(db, { code, email, now })
     if (outcome === 'invalid') return c.json({ error: 'invalid_code' }, 400)
     if (outcome === 'used') return c.json({ error: 'code_used' }, 409)
-    // The mail gate (`auth.ts`) finds the hold, or the account, and mails accordingly.
-    await auth.api.sendVerificationOTP({ body: { email, type: 'sign-in' } })
+    // The mail gate (`auth.ts`) finds the hold, or the account, and mails accordingly, in the
+    // joiner's language: their language cookie and Accept-Language go along, and nothing else of
+    // their request does.
+    await auth.api.sendVerificationOTP({
+      body: { email, type: 'sign-in' },
+      headers: languageHeaders(c.req.raw.headers),
+    })
     return c.json({ ok: true })
   })
 

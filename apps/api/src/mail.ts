@@ -1,24 +1,37 @@
 /**
  * The mails Tela sends a member. Two carry a code: one to sign in, one to choose a new password.
- * Each leads with the code, in both UI languages, because the member may open it on another
- * device than the one waiting for it (ADR 0013). The link carries the same code, so whichever
- * device opens it can finish there. The rest are notices about the account's ways in, which
- * carry no code and sign nobody in (ADR 0036).
+ * Each leads with the code, in two languages, because the member may open it on another device
+ * than the one waiting for it (ADR 0013). The link carries the same code, so whichever device
+ * opens it can finish there. The rest are notices about the account's ways in, which carry no
+ * code and sign nobody in (ADR 0036).
+ *
+ * Every mail is in the reader's language with English beside it (`mail-locale.ts` says which):
+ * Simplified, Traditional or French first and English second, and an English mail English first
+ * and Simplified second, as every mail was before there were four languages. A guess at someone's
+ * language that is wrong still leaves them a language they are likely to read.
  *
  * The words are in catalogues, one per language (`mail-text/*.json`), with `{to}`, `{provider}`
  * and `{login}` filled in here. Besides each mail's lines, a catalogue says how its language puts
  * them together: `between` goes between two sentences (a space, or nothing in Chinese), and
- * `colon` ends the line before the link.
+ * `colon` ends the line before the link. French is written by hand; `zh-Hant.json` is generated
+ * from `zh-Hans.json` by `bun run i18n:hant`, never edited, because converting at send time would
+ * bundle OpenCC's dictionaries into tela-api (ADR 0038).
  */
 import type { MailMessage } from '@tela/platform'
+import type { UiLocale } from '@tela/shared'
 import en from './mail-text/en.json'
+import fr from './mail-text/fr.json'
 import zhHans from './mail-text/zh-Hans.json'
+import zhHant from './mail-text/zh-Hant.json'
 
 /** One language's mail text. Every catalogue has the English one's shape. */
 type MailText = typeof en
 
-/** The languages a mail is written in, in the order it shows them: English, then Simplified. */
-const LANGUAGES: readonly [MailText, MailText] = [en, zhHans]
+const TEXT: Record<UiLocale, MailText> = { 'zh-Hans': zhHans, 'zh-Hant': zhHant, en, fr }
+
+/** The two languages a mail in `locale` is written in, in the order it shows them. */
+const languagesOf = (locale: UiLocale): readonly [MailText, MailText] =>
+  locale === 'en' ? [en, zhHans] : [TEXT[locale], en]
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 
@@ -37,25 +50,34 @@ function fill(line: string, values: Values): string {
 /** A line in each language: one line each in the text, one paragraph in HTML. */
 type Both = readonly [first: string, second: string]
 
-/** The same line in both languages, read from each catalogue and filled in. */
-const both = (line: (text: MailText) => string, values: Values = {}): Both => [
-  fill(line(LANGUAGES[0]), values),
-  fill(line(LANGUAGES[1]), values),
-]
-
 /** A line said in both languages on one line, as subjects and headings are. */
 const together = ([first, second]: Both) => `${first} · ${second}`
 
-/** Sentences of each language, in turn, made one line in each. */
-const sentences = (...lines: Both[]): Both => [
-  lines.map((line) => line[0]).join(LANGUAGES[0].between),
-  lines.map((line) => line[1]).join(LANGUAGES[1].between),
-]
+/** How a mail in `locale` says things in its two languages. */
+function writer(locale: UiLocale) {
+  const [first, second] = languagesOf(locale)
+  return {
+    /** The same line in both languages, read from each catalogue and filled in. */
+    both: (line: (text: MailText) => string, values: Values = {}): Both => [
+      fill(line(first), values),
+      fill(line(second), values),
+    ],
+    /** Sentences of each language, in turn, made one line in each. */
+    sentences: (...lines: Both[]): Both => [
+      lines.map((line) => line[0]).join(first.between),
+      lines.map((line) => line[1]).join(second.between),
+    ],
+    /** The line before the link, which the second language ends. */
+    openLink: () => `${first.openLink} · ${second.openLink}${second.colon}`,
+  }
+}
+type Writer = ReturnType<typeof writer>
 
 const paragraph = ([first, second]: Both) => `${escapeHtml(first)}<br>${escapeHtml(second)}`
 
 /** A code's mail: the heading, what the code is for, the code, its link, and what else to know. */
 function codeMail(options: {
+  write: Writer
   to: string
   subject: string
   heading: string
@@ -64,8 +86,8 @@ function codeMail(options: {
   link: string
   outro: Both
 }): MailMessage {
-  const { to, subject, heading, intro, code, link, outro } = options
-  const openLink = `${together(both((t) => t.openLink))}${LANGUAGES[1].colon}`
+  const { write, to, subject, heading, intro, code, link, outro } = options
+  const openLink = write.openLink()
   const lines = [heading, '', ...intro, '', code, '', openLink, link, '', ...outro]
   const html = `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
 <h1 style="font-size:18px">${escapeHtml(heading)}</h1>
@@ -86,10 +108,14 @@ export function signInMail(options: {
    * account the operator made that has not signed in yet.
    */
   invited: boolean
+  locale: UiLocale
 }): MailMessage {
   const { to, code, publicUrl, invited } = options
+  const write = writer(options.locale)
+  const { both } = write
   const kind = (t: MailText) => (invited ? t.invited : t.signIn)
   return codeMail({
+    write,
     to,
     code,
     subject: `${together(both((t) => kind(t).subject))}: ${code}`,
@@ -109,9 +135,13 @@ export function passwordResetMail(options: {
   to: string
   code: string
   publicUrl: string
+  locale: UiLocale
 }): MailMessage {
   const { to, code, publicUrl } = options
+  const write = writer(options.locale)
+  const { both } = write
   return codeMail({
+    write,
     to,
     code,
     subject: `${together(both((t) => t.reset.subject))}: ${code}`,
@@ -153,8 +183,10 @@ export function providerAccountMail(options: {
   to: string
   provider: string
   publicUrl: string
+  locale: UiLocale
 }): MailMessage {
   const { to, publicUrl } = options
+  const { both, sentences } = writer(options.locale)
   const provider = PROVIDER_NAMES[options.provider] ?? options.provider
   const values = { to, provider, login: `${publicUrl}/login` }
   return noticeMail({
@@ -192,8 +224,10 @@ export function accountChangeMail(options: {
   to: string
   change: AccountChange
   publicUrl: string
+  locale: UiLocale
 }): MailMessage {
   const { to, change, publicUrl } = options
+  const { both, sentences } = writer(options.locale)
   const provider = 'provider' in change ? (PROVIDER_NAMES[change.provider] ?? change.provider) : ''
   const values = { to, provider, login: `${publicUrl}/login` }
   const { kind } = change

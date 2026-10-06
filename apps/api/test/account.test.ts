@@ -534,6 +534,60 @@ describe('a provider', () => {
   })
 })
 
+describe("a notice's language", () => {
+  /** The member's interface language, as Settings would have saved it. */
+  const speaks = (api: TestApi, as: SignedIn, locale: string) =>
+    api.db.run(sql`update profiles set ui_locale = ${locale} where user_id = ${as.userId}`)
+  /**
+   * The member's client, in a browser that says another language: the notice is for whoever
+   * holds the address, who may not be whoever made the change.
+   */
+  const elsewhere = (as: SignedIn): SignedIn => ({
+    ...as,
+    cookie: `${as.cookie}; tela_locale=zh-Hans`,
+    headers: { ...as.headers, 'accept-language': 'zh-CN' },
+  })
+
+  test("is the member's interface language, with English beside it, whatever the browser says", async () => {
+    const api = await createTestApi({ oauth: { github: GITHUB } })
+    const member = await signedIn(api, 'a@x.test')
+    await speaks(api, member, 'fr')
+    const set = await account(api, elsewhere(member), '/password', { newPassword: PASSWORD })
+    expect(set.status).toBe(200)
+    await speaks(api, member, 'zh-Hant')
+    const back = await linkGithub(api, elsewhere(member))
+    expect(back.status).toBe(302)
+    expect(notices(api, 'a@x.test')).toEqual([
+      'Un mot de passe a été ajouté à votre compte Tela · A password was added to your Tela account',
+      'GitHub 已連結到你的 Tela 帳號 · GitHub was linked to your Tela account',
+    ])
+    const [french] = api.mail.outbox.filter((m) => m.subject.startsWith('Un mot de passe'))
+    expect(french?.text.split('\n').slice(2, 4)).toEqual([
+      'Le compte Tela de a@x.test a désormais un mot de passe. Tous les autres appareils ont été déconnectés. Si c’était vous, il n’y a rien à faire.',
+      'The Tela account for a@x.test now has a password. Every other device was signed out. If that was you, there is nothing to do.',
+    ])
+  })
+
+  test("of a reset, is the member's, though its code followed the browser", async () => {
+    const api = await createTestApi()
+    const member = await signedIn(api, 'a@x.test')
+    await speaks(api, member, 'zh-Hant')
+    await api.request('/api/auth/email-otp/request-password-reset', {
+      body: { email: 'a@x.test' },
+      headers: { 'cf-connecting-ip': ip(), cookie: 'tela_locale=fr' },
+    })
+    expect(api.mail.outbox.at(-1)?.subject).toMatch(/^Réinitialiser votre mot de passe Tela · /)
+    const reset = await api.request('/api/auth/email-otp/reset-password', {
+      body: { email: 'a@x.test', otp: codeFor(api, 'a@x.test'), password: PASSWORD },
+      headers: { 'cf-connecting-ip': ip(), cookie: 'tela_locale=fr' },
+    })
+    expect(reset.status).toBe(200)
+    expect(notices(api, 'a@x.test')).toEqual([
+      '你的 Tela 密碼已重設 · Your Tela password was reset',
+    ])
+  })
+})
+
 describe('signing out everywhere', () => {
   test('ends every other session of the member’s, from a stale session too, and is not counted', async () => {
     const api = await createTestApi()

@@ -293,7 +293,7 @@ it("reads the front page's edition and checks a handle, on D1", async () => {
 })
 
 it("joins with a code, signs in, and shows on the inviter's list, on D1", async () => {
-  const { db, call, codeFor, cookiesOf } = stack()
+  const { db, mail, call, codeFor, cookiesOf } = stack()
   // A member, made by the operator, who makes a code: the five are counted in one insert…select.
   await call('/api/admin/invite', {
     body: { email: 'inviter@x.test' },
@@ -312,12 +312,13 @@ it("joins with a code, signs in, and shows on the inviter's list, on D1", async 
 
   // A visitor joins: the limits, then the hold, in one batch with the state it answers from.
   // The address's mails count with the login page's (`otpSend`), though better-auth's hook never
-  // sees tela-api's own call.
+  // sees tela-api's own call. That call carries the visitor's language, and the mail is in it.
   const joined = await call('/api/v1/join', {
     body: { code, email: 'joiner@x.test' },
-    headers: { 'cf-connecting-ip': '198.51.100.7' },
+    headers: { 'cf-connecting-ip': '198.51.100.7', cookie: 'tela_locale=zh-Hant' },
   })
   expect(joined.status).toBe(200)
+  expect(mail.outbox.at(-1)?.subject).toMatch(/^邀請你加入 Tela · You are invited to Tela: \d{6}$/)
   expect(
     await db.all<{ key: string; count: number }>(
       sql`select key, count from action_limits where key like 'join%' or key like 'otpSend:%'
@@ -354,6 +355,15 @@ it("joins with a code, signs in, and shows on the inviter's list, on D1", async 
   })
   expect(again.status).toBe(409)
   expect((await call(`/api/v1/invites/${code}`, { method: 'DELETE', ...inviter })).status).toBe(404)
+  // A member's code mail is in their account's language, read in the select that finds them.
+  await db.run(sql`update profiles set ui_locale = 'fr' where user_id = ${inviterId}`)
+  await call('/api/auth/email-otp/send-verification-otp', {
+    body: { email: 'inviter@x.test', type: 'sign-in' },
+    headers: { 'cf-connecting-ip': '198.51.100.9' },
+  })
+  expect(mail.outbox.at(-1)?.subject).toMatch(
+    /^Votre code de connexion à Tela · Your Tela sign-in code: \d{6}$/,
+  )
 })
 
 it('sets a password and logs in with it, hashed by scrypt in workerd, on D1', async () => {
