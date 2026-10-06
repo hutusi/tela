@@ -115,6 +115,12 @@ export type TitleRow = {
 export type StateRow = {
   articleId: number
   readAt: number | null
+  /**
+   * When the member last chose read or unread by hand; null until they first mark it unread. No
+   * `readAt` and this set is marked unread, which beats the watermark and the horizon (ADR 0009).
+   * Absent from a tela-api that predates it, which never marks a post unread.
+   */
+  readUpdatedAt?: number | null
   likedAt: number | null
   likedUpdatedAt: number | null
   seq: number

@@ -38,25 +38,54 @@ function statementsFor(
 
   switch (m.type) {
     case 'markRead':
+      // Read is set once, so a first read keeps its time and no clock: compaction may drop it
+      // under the watermark, as ever. Over a post marked unread (ADR 0009) it is a hand-made
+      // choice like the unread was: the later `at` decides, and the read keeps its clock, so an
+      // older unread arriving after it loses, and compaction keeps the row that says so.
       return [
         db.run(sql`
           insert into user_article_states (user_id, article_id, read_at, seq)
           select ${userId}, ${m.articleId}, ${at}, ${currentSeq}
           where ${article(m.articleId)} and ${fresh}
-          on conflict (user_id, article_id) do update set read_at = excluded.read_at, seq = excluded.seq
+          on conflict (user_id, article_id) do update set
+            read_at = excluded.read_at,
+            read_updated_at = case when user_article_states.read_updated_at is null then null
+              else excluded.read_at end,
+            seq = excluded.seq
           where user_article_states.read_at is null
+            and (user_article_states.read_updated_at is null
+              or excluded.read_at >= user_article_states.read_updated_at)
+        `),
+      ]
+    case 'markUnread':
+      // Unread by hand: no `read_at`, and the clock that says when (ADR 0009). It beats the
+      // watermark and the horizon until a later read, and goes to the later `at` against any read
+      // or unread already made, the first read's own time included.
+      return [
+        db.run(sql`
+          insert into user_article_states (user_id, article_id, read_at, read_updated_at, seq)
+          select ${userId}, ${m.articleId}, null, ${at}, ${currentSeq}
+          where ${article(m.articleId)} and ${fresh}
+          on conflict (user_id, article_id) do update set
+            read_at = null, read_updated_at = excluded.read_updated_at, seq = excluded.seq
+          where excluded.read_updated_at >= max(coalesce(user_article_states.read_updated_at, 0),
+            coalesce(user_article_states.read_at, 0))
         `),
       ]
     case 'setLiked':
       return [
-        // Liking also reads; the later of two devices' likes decides.
+        // Liking also reads, unless the member has chosen read or unread by hand: a like never
+        // moves that choice. The later of two devices' likes decides.
         db.run(sql`
           insert into user_article_states (user_id, article_id, read_at, liked_at, liked_updated_at, seq)
           select ${userId}, ${m.articleId}, ${at}, ${m.liked ? at : null}, ${at}, ${currentSeq}
           where ${article(m.articleId)} and ${fresh}
           on conflict (user_id, article_id) do update set
             liked_at = excluded.liked_at, liked_updated_at = excluded.liked_updated_at,
-            read_at = coalesce(user_article_states.read_at, excluded.read_at), seq = excluded.seq
+            read_at = case when user_article_states.read_updated_at is not null
+              then user_article_states.read_at
+              else coalesce(user_article_states.read_at, excluded.read_at) end,
+            seq = excluded.seq
           where user_article_states.liked_updated_at is null
             or excluded.liked_updated_at > user_article_states.liked_updated_at
         `),
@@ -67,11 +96,23 @@ function statementsFor(
       // feed would mark posts read before they arrive.
       const feed = m.feedId === undefined ? sql`` : sql`and feed_id = ${m.feedId}`
       const target = sql`min(${m.upTo}, (select coalesce(max(id), 0) from articles where feed_id = subscriptions.feed_id))`
+      const feedOf = m.feedId === undefined ? sql`` : sql`and s.feed_id = ${m.feedId}`
       return [
         db.run(sql`
           update subscriptions set watermark_id = ${target}, updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and deleted_at is null ${feed}
             and watermark_id < ${target} and ${fresh}
+        `),
+        // A post marked unread beats the watermark (ADR 0009), so the ones this covers are read
+        // by hand, with the mark-all's clock: those marked before it, not one marked since.
+        db.run(sql`
+          update user_article_states set read_at = ${at}, read_updated_at = ${at}, seq = ${currentSeq}
+          where user_id = ${userId} and read_at is null and read_updated_at is not null
+            and read_updated_at <= ${at} and ${fresh}
+            and article_id in (
+              select a.id from articles a join subscriptions s on s.feed_id = a.feed_id
+              where s.user_id = ${userId} and s.deleted_at is null ${feedOf} and a.id <= ${m.upTo}
+            )
         `),
       ]
     }

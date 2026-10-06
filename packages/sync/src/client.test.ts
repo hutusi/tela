@@ -111,6 +111,62 @@ function readState(articleId: number, readAt: number): StateRow {
   return { articleId, readAt, likedAt: null, likedUpdatedAt: null, seq: 5 }
 }
 
+describe('read and unread on the device (ADR 0009)', () => {
+  const held = applyPull(
+    start,
+    pull(3, {
+      subscriptions: [sub(1), sub(2)],
+      articles: [article(7), article(8), article(9, 2), article(10)],
+      states: [readState(7, 5)],
+    }),
+  )
+  let n = 0
+  const m = (at: number, change: Record<string, unknown>) =>
+    ({ mutation: { mid: `state-${++n}-pad`, at, ...change } as Mutation }) as Pending
+  const unread = (articleId: number, at: number) => m(at, { type: 'markUnread', articleId })
+  const read = (articleId: number, at: number) => m(at, { type: 'markRead', articleId })
+
+  test('an unread goes to the later `at`; a read after it keeps a clock, a first read none', () => {
+    expect(view(held, [unread(7, 4)]).states.get(7)).toMatchObject({ readAt: 5 }) // older
+    const marked = view(held, [unread(7, 6)])
+    expect(marked.states.get(7)).toMatchObject({ readAt: null, readUpdatedAt: 6 })
+    expect(view(held, [unread(7, 6), read(7, 5)]).states.get(7)).toMatchObject({
+      readAt: null,
+      readUpdatedAt: 6,
+    })
+    expect(view(held, [unread(7, 6), read(7, 8)]).states.get(7)).toMatchObject({
+      readAt: 8,
+      readUpdatedAt: 8,
+    })
+    expect(view(held, [read(8, 3)]).states.get(8)).toMatchObject({ readAt: 3, readUpdatedAt: null })
+  })
+
+  test('a like does not read a post marked unread', () => {
+    const liked = view(held, [
+      unread(8, 2),
+      m(3, { type: 'setLiked', articleId: 8, liked: true }),
+      m(3, { type: 'setLiked', articleId: 10, liked: true }),
+    ])
+    expect(liked.states.get(8)).toMatchObject({ readAt: null, likedAt: 3, readUpdatedAt: 2 })
+    expect(liked.states.get(10)).toMatchObject({ readAt: 3, likedAt: 3 })
+  })
+
+  test('mark all read reads one marked before it, in what it covers, not one marked since', () => {
+    const shown = view(held, [
+      unread(7, 6),
+      unread(8, 9),
+      unread(9, 6),
+      unread(10, 6),
+      m(7, { type: 'markAllRead', feedId: 1, upTo: 8 }),
+    ])
+    expect(shown.states.get(7)).toMatchObject({ readAt: 7, readUpdatedAt: 7 })
+    expect(shown.states.get(8)).toMatchObject({ readAt: null, readUpdatedAt: 9 }) // marked since
+    expect(shown.states.get(9)).toMatchObject({ readAt: null }) // another feed
+    expect(shown.states.get(10)).toMatchObject({ readAt: null }) // past what was shown
+    expect(shown.subscriptions.get(1)?.watermarkId).toBe(8)
+  })
+})
+
 describe('highlights on the device', () => {
   const put = (id: string, articleId: number, at: number, note: string | null = null) =>
     ({

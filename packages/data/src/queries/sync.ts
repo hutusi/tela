@@ -69,8 +69,9 @@ export const ARTICLE_COLUMNS = sql.raw(`a.id, a.feed_id as "feedId", a.url, a.ti
   a.extract_state as "extractState", a.like_count as "likeCount",
   a.recommend_count as "recommendCount", a.seq`)
 const TITLE = sql.raw(`t.article_id as "articleId", t.lang, t.title, t.excerpt, t.status, t.seq`)
-const STATE = sql.raw(`article_id as "articleId", read_at as "readAt", liked_at as "likedAt",
-  liked_updated_at as "likedUpdatedAt", seq`)
+const STATE = sql.raw(`article_id as "articleId", read_at as "readAt",
+  read_updated_at as "readUpdatedAt", liked_at as "likedAt", liked_updated_at as "likedUpdatedAt",
+  seq`)
 const RECOMMENDATION = sql.raw(`article_id as "articleId", note, created_at as "createdAt",
   deleted_at as "deletedAt", seq`)
 const HIGHLIGHT = sql.raw(`id, article_id as "articleId", content_key as "contentKey", side, lang,

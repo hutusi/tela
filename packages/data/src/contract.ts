@@ -578,6 +578,50 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { lang: 'zh-Hant', feedId: 1, status: 'failed', title: null },
       ])
     })
+
+    it("leaves a post marked unread unread, and carries a duplicate's unread to its copy", async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['blog.example', 'mirror.example'])
+      await db.run(
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 1, 0, 0)`,
+      )
+      // Feed 2 mirrors feed 1: duplicates 2 and 5 of copies 1 and 4, and post 3 only it has.
+      await db.run(sql`
+        insert into articles (id, feed_id, dedup_key, url, fetched_at, sort_at) values
+          (1, 1, 'a', 'https://blog.example/a', 1, 1),
+          (2, 2, 'mirror-a', 'https://blog.example/a', 1, 1),
+          (3, 2, 'mirror-b', 'https://blog.example/b', 1, 1),
+          (4, 1, 'c', 'https://blog.example/c', 1, 1),
+          (5, 2, 'mirror-c', 'https://blog.example/c', 1, 1)
+      `)
+      // The alias's watermark covers all three of its posts; the reader marked 2 and 3 unread
+      // there, read 5 and then marked its copy, 4, unread on the target, later.
+      await db.run(sql`
+        insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at) values
+          ('u1', 1, 0, 0, 0), ('u1', 2, 5, 0, 0)
+      `)
+      await db.run(sql`
+        insert into user_article_states (user_id, article_id, read_at, read_updated_at) values
+          ('u1', 2, null, 8), ('u1', 3, null, 7), ('u1', 5, 6, null), ('u1', 4, null, 9)
+      `)
+      const carry: [number, number][] = [
+        [2, 1],
+        [5, 4],
+      ]
+      await db.batch([
+        bumpSeq(db),
+        ...mergeFeed(db, { alias: 2, target: 1, move: [3], carry }, T0),
+      ] as never)
+      expect(
+        await db.all(sql`
+          select article_id as "articleId", read_at as "readAt", read_updated_at as "readUpdatedAt"
+          from user_article_states where article_id in (1, 3, 4) order by article_id`),
+      ).toEqual([
+        { articleId: 1, readAt: null, readUpdatedAt: 8 },
+        { articleId: 3, readAt: null, readUpdatedAt: 7 },
+        { articleId: 4, readAt: null, readUpdatedAt: 9 },
+      ])
+    })
   })
 
   describe('compacting read state (ADR 0009)', () => {
@@ -613,6 +657,38 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { userId: 'u1', articleId: 3 },
         { userId: 'u1', articleId: 4 },
         { userId: 'u2', articleId: 1 },
+      ])
+    })
+
+    it('keeps a read or an unread the member chose by hand, under the watermark too', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['h1'])
+      await db.run(sql`
+        insert into user (id, name, email, email_verified, created_at, updated_at)
+        values ('u1', 'u', 'u1@x.y', 1, 0, 0)
+      `)
+      await db.run(sql`
+        insert into articles (id, feed_id, dedup_key, fetched_at, sort_at) values
+          (1, 1, 'a', 1, 1), (2, 1, 'b', 1, 1), (3, 1, 'c', 1, 1)
+      `)
+      await db.run(sql`
+        insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at)
+        values ('u1', 1, 3, 0, 0)
+      `)
+      // 1 read once, 2 marked unread, 3 marked unread and then read again.
+      await db.run(sql`
+        insert into user_article_states (user_id, article_id, read_at, read_updated_at)
+        values ('u1', 1, 5, null), ('u1', 2, null, 6), ('u1', 3, 7, 7)
+      `)
+      const [dropped] = await db.batch([compactReadStates(db)])
+      expect(dropped).toEqual([{ article_id: 1 }])
+      expect(
+        await db.all(sql`
+          select article_id as "articleId", read_at as "readAt", read_updated_at as "readUpdatedAt"
+          from user_article_states order by article_id`),
+      ).toEqual([
+        { articleId: 2, readAt: null, readUpdatedAt: 6 },
+        { articleId: 3, readAt: 7, readUpdatedAt: 7 },
       ])
     })
   })

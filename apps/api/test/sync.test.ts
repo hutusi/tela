@@ -414,6 +414,119 @@ describe('push', () => {
     expect((await sub())?.watermark_id).toBe(b + 1) // never backwards
   })
 
+  describe('a post marked unread (ADR 0009)', () => {
+    const states = (id: number) =>
+      first<{ read_at: number | null; read_updated_at: number | null }>(
+        db,
+        sql`select read_at, read_updated_at from user_article_states where article_id = ${id}`,
+      )
+    /** Read or not, as a device that took a snapshot now shows it. */
+    const shown = async (id: number) => {
+      const device = applyPull({ cursor: 0, tables: emptyTables() }, await pull(0))
+      const article = device.tables.articles.get(id)
+      expect(article).toBeDefined()
+      return isRead(device.tables, article as ArticleRow, now)
+    }
+
+    test('beats the watermark until it is read again, which keeps a clock', async () => {
+      const [a, b] = [await addArticle(1), await addArticle(1)]
+      await push([{ type: 'markRead', articleId: a, at: now - 40 }])
+      await push([{ type: 'markAllRead', feedId: 1, upTo: b, at: now - 30 }])
+      expect([await shown(a), await shown(b)]).toEqual([true, true])
+      // One read by hand, one only by the watermark, which has no row to change.
+      await push([
+        { type: 'markUnread', articleId: a, at: now - 20 },
+        { type: 'markUnread', articleId: b, at: now - 20 },
+      ])
+      expect(await states(a)).toEqual({ read_at: null, read_updated_at: now - 20 })
+      expect(await states(b)).toEqual({ read_at: null, read_updated_at: now - 20 })
+      expect([await shown(a), await shown(b)]).toEqual([false, false])
+      // A first read keeps no clock; a read after an unread is a choice, and keeps its own.
+      await push([{ type: 'markRead', articleId: a, at: now - 10 }])
+      expect(await states(a)).toEqual({ read_at: now - 10, read_updated_at: now - 10 })
+      expect(await shown(a)).toBe(true)
+    })
+
+    test('beats the horizon too', async () => {
+      const old = await addArticle(1, now - 29 * DAY)
+      // Kept, so a snapshot still sends it past the horizon; a recommendation reads nothing.
+      await push([{ type: 'recommend', articleId: old, note: null }])
+      api.clock.advance(2 * DAY)
+      now = api.clock.now()
+      expect(await shown(old)).toBe(true)
+      await push([{ type: 'markUnread', articleId: old }])
+      expect(await shown(old)).toBe(false)
+    })
+
+    test('an older read arriving after it loses, and an older unread after a read', async () => {
+      const [a, b] = [await addArticle(1), await addArticle(1)]
+      await push([{ type: 'markUnread', articleId: a, at: now - 10 }])
+      await push([{ type: 'markRead', articleId: a, at: now - 20 }]) // made before, pushed after
+      expect(await states(a)).toEqual({ read_at: null, read_updated_at: now - 10 })
+      await push([{ type: 'markRead', articleId: a, at: now - 5 }])
+      await push([{ type: 'markUnread', articleId: a, at: now - 8 }])
+      expect(await states(a)).toEqual({ read_at: now - 5, read_updated_at: now - 5 })
+      // Against a first read, its own time is the clock.
+      await push([{ type: 'markRead', articleId: b, at: now - 10 }])
+      await push([{ type: 'markUnread', articleId: b, at: now - 20 }])
+      expect(await states(b)).toEqual({ read_at: now - 10, read_updated_at: null })
+    })
+
+    test('mark all read reads one marked before it, not one marked since', async () => {
+      await push([{ type: 'subscribe', feedId: 2 }])
+      const [a, b, other] = [await addArticle(1), await addArticle(1), await addArticle(2)]
+      const after = await addArticle(1) // past what the list showed
+      await push([
+        { type: 'markUnread', articleId: a, at: now - 30 },
+        { type: 'markUnread', articleId: b, at: now - 10 },
+        { type: 'markUnread', articleId: other, at: now - 30 },
+        { type: 'markUnread', articleId: after, at: now - 30 },
+      ])
+      await push([{ type: 'markAllRead', feedId: 1, upTo: b, at: now - 20 }])
+      expect(await states(a)).toEqual({ read_at: now - 20, read_updated_at: now - 20 })
+      expect(await states(b)).toEqual({ read_at: null, read_updated_at: now - 10 })
+      expect([await shown(a), await shown(b), await shown(other), await shown(after)]).toEqual([
+        true,
+        false,
+        false,
+        false,
+      ])
+      // Every feed, without one named.
+      await push([{ type: 'markAllRead', upTo: after, at: now - 5 }])
+      expect([await shown(b), await shown(other), await shown(after)]).toEqual([true, true, true])
+    })
+
+    test('a like does not read it', async () => {
+      const [a, b] = [await addArticle(1), await addArticle(1)]
+      await push([{ type: 'markUnread', articleId: a, at: now - 20 }])
+      await push([{ type: 'setLiked', articleId: a, liked: true, at: now - 10 }])
+      expect(await state(a)).toMatchObject({ read_at: null, liked_at: now - 10 })
+      expect(await shown(a)).toBe(false)
+      // Where the member chose nothing, liking reads, as ever.
+      await push([{ type: 'setLiked', articleId: b, liked: true }])
+      expect((await state(b))?.read_at).toBe(now)
+    })
+
+    test('compaction keeps it, and one read again after it, but not a plain read', async () => {
+      const [a, b, c] = [await addArticle(1), await addArticle(1), await addArticle(1)]
+      await push([{ type: 'markAllRead', feedId: 1, upTo: c, at: now - 50 }])
+      await push([
+        { type: 'markRead', articleId: a, at: now - 40 },
+        { type: 'markUnread', articleId: b, at: now - 40 },
+        { type: 'markUnread', articleId: c, at: now - 40 },
+        { type: 'markRead', articleId: c, at: now - 30 },
+      ])
+      await compactReadStates(db)
+      expect(await states(a)).toBeUndefined() // the watermark says it
+      expect(await states(b)).toEqual({ read_at: null, read_updated_at: now - 40 })
+      expect(await states(c)).toEqual({ read_at: now - 30, read_updated_at: now - 30 })
+      expect([await shown(a), await shown(b), await shown(c)]).toEqual([true, false, true])
+      // c's clock outlived compaction, so an unread made before the read and pushed after loses.
+      await push([{ type: 'markUnread', articleId: c, at: now - 35 }])
+      expect(await shown(c)).toBe(true)
+    })
+  })
+
   test('prefs, profile and recommendations round-trip through a pull', async () => {
     const snap = await pull(0)
     const a = await addArticle(1)

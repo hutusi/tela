@@ -31,8 +31,16 @@ const memberId = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/)
 const highlightId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
 
 export const mutationSchema = z.discriminatedUnion('type', [
-  /** Opening an article reads it. Set once: a later markRead keeps the first time. */
+  /**
+   * Opening an article reads it. Set once: a later markRead keeps the first time. Over a post
+   * marked unread, the later `at` decides.
+   */
   z.object({ ...base, type: z.literal('markRead'), articleId: id }),
+  /**
+   * The member marks a post unread by hand (ADR 0009). It beats the feed's watermark and the
+   * horizon until a later read; the later `at` decides against any read or unread already made.
+   */
+  z.object({ ...base, type: z.literal('markUnread'), articleId: id }),
   /** Absolute, not a toggle, so two devices agree; the later `at` wins. */
   z.object({ ...base, type: z.literal('setLiked'), articleId: id, liked: z.boolean() }),
   /**

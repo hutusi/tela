@@ -93,7 +93,9 @@ export function ReadingPage() {
   // The mode a URL without one means: this member's last choice, synced like any other pref.
   const mode = params.mode ?? prefs.mode
 
-  // Opening an article reads it, unless the member marks posts read themselves (a pref).
+  // Opening an article reads it, unless the member marks posts read themselves (a pref). Once per
+  // open, so a post the member marks unread while it is open stays unread until the next open; one
+  // marked unread before is read by opening it, like any unread post.
   const articleId = article?.id ?? null
   // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened
   useEffect(() => {

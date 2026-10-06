@@ -46,7 +46,8 @@ export async function daily(db: TelaDb, now: number): Promise<DailyReport> {
       returning mid
     `),
     // A read state under a member's watermark that never held a like says nothing the watermark
-    // does not (ADR 0009). One that did keeps when the like last changed, so it stays.
+    // does not (ADR 0009). One that did keeps when the like last changed, so it stays, and so does
+    // a read or unread chosen by hand, which beats the watermark.
     compactReadStates(db),
     // Personal data with no further use: an address that held an invite and never joined (ADR
     // 0034), a session that has ended (it keeps an IP and a browser), better-auth's per-IP

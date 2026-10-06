@@ -217,15 +217,28 @@ export function privacyChange(
 
 /**
  * Predict one mutation, as the server will apply it (`apps/api/src/sync/push.ts`). Same rules:
- * read is set once; likes, recommendations and prefs go to the later `at`; a watermark never
- * moves backwards. Counts move with the member's own change, which is all a device can know.
+ * read is set once, unless the member marks the post unread, and then read and unread go to the
+ * later `at`; likes, recommendations and prefs go to the later `at`; a watermark never moves
+ * backwards. Counts move with the member's own change, which is all a device can know.
  */
 export function applyMutation(tables: Tables, m: Mutation): Tables {
   const t = copy(tables)
   switch (m.type) {
     case 'markRead': {
+      // Set once, and clock-less, unless it reads a post marked unread: then the later `at`
+      // decides, and the read keeps its clock (ADR 0009).
       const s = t.states.get(m.articleId) ?? blankState(m.articleId)
-      if (s.readAt === null) t.states.set(m.articleId, { ...s, readAt: m.at })
+      const clock = s.readUpdatedAt ?? null
+      if (s.readAt !== null || (clock !== null && m.at < clock)) return t
+      t.states.set(m.articleId, { ...s, readAt: m.at, readUpdatedAt: clock === null ? null : m.at })
+      return t
+    }
+    case 'markUnread': {
+      // To the later `at` against any read or unread already made, the first read's own time
+      // included.
+      const s = t.states.get(m.articleId) ?? blankState(m.articleId)
+      if (m.at < Math.max(s.readUpdatedAt ?? 0, s.readAt ?? 0)) return t
+      t.states.set(m.articleId, { ...s, readAt: null, readUpdatedAt: m.at })
       return t
     }
     case 'setLiked': {
@@ -236,7 +249,8 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         ...s,
         likedAt: m.liked ? m.at : null,
         likedUpdatedAt: m.at,
-        readAt: s.readAt ?? m.at,
+        // Liking reads, unless the member chose read or unread by hand: a like never moves that.
+        readAt: s.readUpdatedAt != null ? s.readAt : (s.readAt ?? m.at),
       })
       const article = t.articles.get(m.articleId)
       if (article && wasLiked !== m.liked) {
@@ -255,6 +269,15 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         for (const a of t.articles.values()) if (a.feedId === feedId && a.id > newest) newest = a.id
         const target = Math.min(m.upTo, newest)
         if (target > sub.watermarkId) t.subscriptions.set(feedId, { ...sub, watermarkId: target })
+      }
+      // A post marked unread beats the watermark, so those this covers are read by hand, with
+      // the mark-all's clock: those marked before it, not one marked since.
+      for (const [id, s] of t.states) {
+        if (s.readAt !== null || s.readUpdatedAt == null || s.readUpdatedAt > m.at) continue
+        const a = t.articles.get(id)
+        if (!a || a.id > m.upTo || t.subscriptions.get(a.feedId)?.deletedAt !== null) continue
+        if (m.feedId !== undefined && a.feedId !== m.feedId) continue
+        t.states.set(id, { ...s, readAt: m.at, readUpdatedAt: m.at })
       }
       return t
     }

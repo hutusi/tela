@@ -255,6 +255,42 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     },
   ])
 
+  // A post marked unread (ADR 0009): an upsert whose conflict compares max() of two clocks, then
+  // the mark-all that reads it again through a join, on D1. With them, a reading language of null,
+  // which follows the interface (ADR 0040).
+  const unreadAt = Date.now()
+  const unread = (await (
+    await call('/api/v1/mutations', {
+      body: {
+        mutations: [
+          { mid: 'workers-unread-1', at: unreadAt, type: 'markUnread', articleId: 1 },
+          { mid: 'workers-lang-1', at: unreadAt, type: 'setProfile', readingLang: null },
+        ],
+      },
+      ...member,
+    })
+  ).json()) as PushResponse
+  expect(unread.applied).toHaveLength(2)
+  const marked = (await (
+    await call(`/api/v1/sync?cursor=${shown.cursor}`, member)
+  ).json()) as PullResponse
+  expect(marked.rows.states).toMatchObject([
+    { articleId: 1, readAt: null, readUpdatedAt: unreadAt, likedAt: now },
+  ])
+  expect(marked.rows.profile).toMatchObject([{ readingLang: null, readingLangAt: unreadAt }])
+  await call('/api/v1/mutations', {
+    body: {
+      mutations: [{ mid: 'workers-all-1', at: unreadAt, type: 'markAllRead', feedId: 1, upTo: 1 }],
+    },
+    ...member,
+  })
+  const readAgain = (await (
+    await call(`/api/v1/sync?cursor=${marked.cursor}`, member)
+  ).json()) as PullResponse
+  expect(readAgain.rows.states).toMatchObject([
+    { articleId: 1, readAt: unreadAt, readUpdatedAt: unreadAt },
+  ])
+
   // The Following feed: printf keys, nested window functions and the (time, offset, key) cursor, on D1.
   await db.batch([
     bumpSeq(db),

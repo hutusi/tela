@@ -67,7 +67,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `block_translations` | The content-addressed block cache: source hash × target language × `NORM_VERSION` |
 | `body_translations` | A body per content version and language: state, reservation, streamed `chunk_keys`, the finished object (ADR 0023) |
 | `subscriptions` | `(user_id, feed_id)` with `watermark_id`: everything at or below it is read (ADR 0009) |
-| `user_article_states`, `recommendations`, `highlights` | The member's read and like state (a row with `read_updated_at` and no `read_at` is marked unread, which beats the watermark until a later read), public recommendations with notes, private highlights with notes (ADR 0026) |
+| `user_article_states`, `recommendations`, `highlights` | The member's read and like state (a row with `read_updated_at` and no `read_at` is marked unread, which beats the watermark and the horizon until a later read; compaction keeps every row with that clock, ADR 0009), public recommendations with notes, private highlights with notes (ADR 0026) |
 | `follows` | `(follower_id, followee_id)`: one member following another, one-way and public, soft-deleted, synced to the follower (ADR 0031) |
 | `websub_subscriptions` | One per feed with a hub: topic, secret, status, lease |
 | `leases`, `lease_fence` | Who holds which piece of background work, and the fence that aborts a stale holder's batch |
@@ -147,7 +147,8 @@ and hashes as the `NORM_VERSION` contract.
 - The cron and queue handlers only call `SELF.fetch()`, whose handler placement pins beside D1.
 - Nightly (`17 3 * * *`): upkeep in one batch (relay re-probes, dead-feed revival, pruning,
   compacting read state under watermarks, `compactReadStates`, which keeps any row that ever held
-  a like), then the export and its verification (`backUp`). The pruning takes old limits and
+  a like or a read or unread chosen by hand), then the export and its verification (`backUp`).
+  The pruning takes old limits and
   mutation ids, and personal data with no further use: invite holds a day past their expiry,
   ended sessions, better-auth's counters after a day, and spent sign-in codes and OAuth states.
 - Mondays (`0 8 * * 1`): the digest. Every five minutes after the tick: the health check and the
