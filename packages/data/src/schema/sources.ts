@@ -40,6 +40,12 @@ export const sites = sqliteTable(
     readerCount: integer().notNull().default(0),
     translationOptOut: flag(),
     assetsCheckedAt: ms(),
+    /**
+     * When an operator decided about the site for Discover (ADR 0041): listed, featured, hidden or
+     * "not for Discover". Null keeps a private blog a member added in the review queue. No device
+     * holds it, so writing it alone bumps no seq.
+     */
+    reviewedAt: ms(),
     createdAt: ms().notNull(),
     updatedAt: ms().notNull(),
     seq: seq(),

@@ -50,6 +50,13 @@
       "when": 1791203049502,
       "tag": "0006_red_machine_man",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1791306378084,
+      "tag": "0007_vengeful_edwin_jarvis",
+      "breakpoints": true
     }
   ]
 }

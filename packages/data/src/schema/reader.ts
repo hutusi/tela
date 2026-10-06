@@ -53,6 +53,12 @@ export const userArticleStates = sqliteTable(
       .notNull()
       .references(() => articles.id, { onDelete: 'cascade' }),
     readAt: ms(),
+    /**
+     * When the member last chose read or unread by hand, null until they first mark it unread. A
+     * row with no `read_at` and this set is marked unread: it beats the feed's watermark, and
+     * compaction keeps it, until a later read (ADR 0009).
+     */
+    readUpdatedAt: ms(),
     likedAt: ms(),
     /** When the liked flag last changed; last writer wins across devices. */
     likedUpdatedAt: ms(),
