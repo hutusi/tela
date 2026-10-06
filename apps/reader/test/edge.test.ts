@@ -586,17 +586,17 @@ describe('public pages', () => {
       html.match(/<details[^>]*data-testid="language-menu"[^>]*>.*?<\/details>/s)?.[0] ?? ''
     const summary = (html: string) => html.match(/<summary.*?<\/summary>/s)?.[0] ?? ''
     const en = menu(await (await page('/privacy')).text())
-    // The circle shows the language the page is in, short, and names it in full; the list names
-    // each in its own script.
+    // The circle shows the language the page is in, short, and names it in full, the name in its
+    // own `lang` for a screen reader's voice; the list names each in its own script.
     expect(summary(en)).toMatch(
-      /<span aria-hidden="true" lang="en">EN<\/span><span class="sr-only">Language: English<\/span>/,
+      /<span aria-hidden="true" lang="en">EN<\/span><span class="sr-only">Language: <span lang="en">English<\/span><\/span>/,
     )
     expect(en).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="language-menu-en"/)
     expect(en).toMatch(/<button[^>]*aria-pressed="false"[^>]*data-testid="language-menu-zh-Hans"/)
     expect(en).toMatch(/<button[^>]*lang="zh-Hans"[^>]*>简体中文<\/button>/)
     const zh = menu(await (await page('/privacy', { cookie: 'tela_locale=zh-Hans' })).text())
     expect(summary(zh)).toMatch(
-      /<span aria-hidden="true" lang="zh-Hans">简<\/span><span class="sr-only">语言：简体中文<\/span>/,
+      /<span aria-hidden="true" lang="zh-Hans">简<\/span><span class="sr-only">语言：<span lang="zh-Hans">简体中文<\/span><\/span>/,
     )
     expect(zh).toMatch(/<button[^>]*aria-pressed="true"[^>]*data-testid="language-menu-zh-Hans"/)
     const hant = menu(await (await page('/privacy', { cookie: 'tela_locale=zh-Hant' })).text())

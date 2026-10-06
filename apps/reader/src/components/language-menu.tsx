@@ -64,8 +64,12 @@ export function LanguageMenu<T extends ReadingLanguage>({
         <span aria-hidden="true" lang={value}>
           {label}
         </span>
+        {/* The name in its own `lang`, so a screen reader says 简体中文 in a Chinese voice. */}
         <span className="sr-only">
-          {t(apart ? 'translateInto' : 'language', { name: endonym(value) })}
+          {t.rich(apart ? 'translateInto' : 'language', {
+            name: endonym(value),
+            lang: (chunks) => <span lang={value}>{chunks}</span>,
+          })}
         </span>
       </summary>
       <div className={MENU_PANEL}>

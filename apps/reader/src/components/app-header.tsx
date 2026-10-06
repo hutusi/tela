@@ -70,8 +70,9 @@ function usePill() {
 /**
  * From `sm` up: the lockup, Discover and For writers, then the theme menu, the language circle,
  * Log in and Join; below `sm` only Join is left beside the nav, which stays the one item that
- * shrinks. At 360px the two pills and Join fit with some 35px to spare (Figtree, measured), which
- * the two circles, hidden there, would take. No Reading and no search: both are a member's. Log in
+ * shrinks. At 360px the two pills and Join fit with some 35px to spare in English (Figtree,
+ * measured), which the two circles, hidden there, would take; in French the nav is 30px short
+ * there, and scrolls, as the one item that shrinks may. No Reading and no search: both are a member's. Log in
  * and Join are links, so they work before the script does, and open the sheet over the page once
  * it runs.
  */

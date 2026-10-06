@@ -90,8 +90,8 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
   member (a guest, or a session still `unknown` with no stored account), so it never waits for
   `/me`. From `sm` up: the lockup, the Discover and *For writers* pills, then the theme menu, the
   language circle (`VisitorLanguage`), *Log in* as a quiet pill and *Join* filled in `primary`;
-  below `sm` the lockup, the nav and Join, which at 360px leaves the two pills some 35px to spare,
-  too little for the two circles. No Reading pill and no search, both a member's. The circle sets
+  below `sm` the lockup, the nav and Join, which at 360px leaves the two pills some 35px to spare
+  in English, too little for the two circles; in French the nav is 30px short there and scrolls. No Reading pill and no search, both a member's. The circle sets
   the interface language and with it the language titles are translated into, which reverses the
   rule of 2026-10-01 that a visitor changed it only on the sign-in page: the first thing a visitor
   needs to know is whether they can read the page. It is the member's circle (`LanguageMenu`), and
