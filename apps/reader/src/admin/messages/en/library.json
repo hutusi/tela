@@ -1,0 +1,184 @@
+{
+  "search": {
+    "claims": "Search blogs or members",
+    "sites": "Search blogs, feeds or owners",
+    "feeds": "Search feeds, blogs or owners",
+    "discover": "Search blogs or owners"
+  },
+  "filters": {
+    "claims": { "review": "Needs review", "checking": "Checking", "verified": "Verified" },
+    "sites": {
+      "discover": "In Discover",
+      "private": "Private",
+      "attention": "Needs attention",
+      "hidden": "Hidden"
+    },
+    "feeds": {
+      "failing": "Failing",
+      "timeout": "Timing out",
+      "dead": "Dead",
+      "paused": "Paused",
+      "merged": "Merged",
+      "fetching": "Fetching"
+    },
+    "discover": {
+      "featured": "Featured",
+      "listed": "Listed",
+      "candidates": "Candidates",
+      "hidden": "Hidden"
+    }
+  },
+  "names": { "blog": "Blog", "site": "Site", "feed": "Feed" },
+  "columns": {
+    "claimant": "Claimant",
+    "method": "Method",
+    "opened": "Opened",
+    "owner": "Owner",
+    "feeds": "Feeds",
+    "readers": "Readers",
+    "blog": "Blog",
+    "region": "Region",
+    "lastError": "Last error",
+    "topics": "Topics",
+    "language": "Language"
+  },
+  "methods": { "meta": "Meta tag", "rel_me": "rel=\"me\" link", "dns": "DNS record" },
+  "regions": { "global": "Direct", "cn": "China relay" },
+  "formats": { "rss": "RSS", "atom": "Atom", "rdf": "RDF", "json": "JSON Feed" },
+  "listing": {
+    "featured": "Featured",
+    "listed": "Listed",
+    "private": "Private",
+    "rejected": "Hidden",
+    "unclaimed": "Unclaimed"
+  },
+  "health": {
+    "ok": "healthy",
+    "failing": "failing",
+    "timeout": "timing out",
+    "dead": "dead",
+    "paused": "paused",
+    "none": "none left"
+  },
+  "feedCount": "{n} · {health}",
+  "siteStatus": {
+    "failing": "Feed failing",
+    "timeout": "Feed timing out",
+    "dead": "Feed dead",
+    "claim": "Claim failing"
+  },
+  "claimStatus": {
+    "verified": "Verified",
+    "checking": "Checking",
+    "disputed": "Disputed",
+    "review": "Needs review",
+    "failed": "Check failed",
+    "reviewed": "Reviewed",
+    "removed": "Removed"
+  },
+  "feedStatus": {
+    "ok": "Healthy",
+    "timeout": "Timing out",
+    "dead": "Dead",
+    "paused": "Paused",
+    "merged": "Merged"
+  },
+  "feedErrors": {
+    "notFound": "404",
+    "gone": "Gone",
+    "http": "HTTP {status}",
+    "rateLimited": "Rate limited",
+    "parse": "Parse error",
+    "tls": "TLS error",
+    "dns": "DNS error",
+    "network": "Network error",
+    "timeout": "Timed out",
+    "tooLarge": "Too large",
+    "redirects": "Redirect loop",
+    "blocked": "Blocked",
+    "other": "Failing"
+  },
+  "actions": { "unfeature": "Unfeature", "restoreDefault": "Restore to default" },
+  "actionsDone": { "unfeature": "Unfeatured", "restoreDefault": "Restored to default" },
+  "topics": {
+    "essays": "Essays",
+    "tech": "Tech",
+    "cities": "Cities",
+    "food": "Food",
+    "design": "Design",
+    "outdoors": "Outdoors",
+    "life": "Life",
+    "photography": "Photography",
+    "science": "Science"
+  },
+  "person": "{name}, @{handle}",
+  "handle": "@{handle}",
+  "none": "—",
+  "listSeparator": ", ",
+  "unknownLanguage": "Not known",
+  "kv": {
+    "blog": "Blog",
+    "blogValue": "{title} · {n, plural, one {# reader} other {# readers}}",
+    "claimant": "Claimant",
+    "owner": "Owner",
+    "ownerValue": "{person} · {method}, {when}",
+    "currentOwner": "Current owner",
+    "method": "Method",
+    "attempts": "Attempts",
+    "nextTry": "Next try",
+    "opened": "Opened",
+    "lastChecked": "Last checked",
+    "verified": "Verified",
+    "reviewed": "Reviewed",
+    "token": "Token",
+    "tokenValue": "{head}…",
+    "listing": "Listing",
+    "listingValue": "{listing} · {topics}",
+    "readers": "Readers",
+    "language": "Language",
+    "translation": "Translation",
+    "translationOn": "Translated",
+    "translationOff": "Paused",
+    "tokens": "Tokens, 30 days",
+    "added": "Added",
+    "about": "About",
+    "status": "Status",
+    "errors": "Errors in a row",
+    "timeouts": "Timeouts in a row",
+    "lastFetched": "Last fetched",
+    "newestPost": "Newest post",
+    "nextFetch": "Next fetch",
+    "region": "Region",
+    "format": "Format",
+    "address": "Address",
+    "mergedInto": "Merged into"
+  },
+  "status": {
+    "active": "Active",
+    "paused": "Paused by an operator",
+    "dead": "Dead",
+    "merged": "Paused, merged into another feed"
+  },
+  "sections": {
+    "feeds": "Feeds",
+    "claims": "Claims",
+    "topics": "Topics",
+    "lastCheck": "Last check · {when}",
+    "lastError": "Last error"
+  },
+  "history": {
+    "topics": "{action}: {topics}",
+    "rejected": "{action}: “{reason}”"
+  },
+  "feedLine": "{url} · {state}",
+  "claimLine": "{who} · {status}",
+  "openFeed": "Open feed #{id}",
+  "notes": {
+    "vouched": "An operator vouched for this claim. Its check skips the proof and still reads the home page for the feeds it declares; the member’s own re-check clears the vouch.",
+    "disputed": "Someone else owns this blog. A check never takes a blog from its owner: their claim has to be removed first.",
+    "merged": "This feed lists the same posts as another feed of the blog, so it was merged into it: adding this address subscribes to that one. It can’t be unmerged; its next fetch would merge it again.",
+    "noRelay": "No China relay is configured, so this feed can only be fetched directly.",
+    "discoverLag": "Changes reach the public pages within about five minutes: the edge caches them.",
+    "topicsHint": "Topics decide where Discover shows the blog. Click one to add or remove it."
+  }
+}

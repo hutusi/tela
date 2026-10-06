@@ -56,6 +56,12 @@ export type LlmCall = {
   job: 'translate.title' | 'translate.body'
   contentKey: string | null
   articleId: number | null
+  /**
+   * The blog's feed the call was for (ADR 0039), which is how the console charges a blog: a title
+   * job knows it (its lease is the feed). Null lets the row find it from `contentKey`: a body is
+   * keyed by content, which two articles may share, so the first article with it answers.
+   */
+  feedId: number | null
   targetLang: string
   userId: string | null
   model: string
@@ -65,11 +71,16 @@ export type LlmCall = {
 }
 
 export function recordLlmCall(db: TelaDb, call: LlmCall, now: number) {
+  const feedId =
+    call.feedId !== null || call.contentKey === null
+      ? sql`${call.feedId}`
+      : sql`(select feed_id from articles where content_key = ${call.contentKey} order by id limit 1)`
   return db.run(sql`
-    insert into llm_calls (job, content_key, article_id, target_lang, user_id, model, input_tokens,
-      output_tokens, latency_ms, created_at)
-    values (${call.job}, ${call.contentKey}, ${call.articleId}, ${call.targetLang}, ${call.userId},
-      ${call.model}, ${call.inputTokens}, ${call.outputTokens}, ${call.latencyMs}, ${now})
+    insert into llm_calls (job, content_key, article_id, feed_id, target_lang, user_id, model,
+      input_tokens, output_tokens, latency_ms, created_at)
+    values (${call.job}, ${call.contentKey}, ${call.articleId}, ${feedId}, ${call.targetLang},
+      ${call.userId}, ${call.model}, ${call.inputTokens}, ${call.outputTokens}, ${call.latencyMs},
+      ${now})
   `)
 }
 

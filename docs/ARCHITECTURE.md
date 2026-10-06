@@ -55,10 +55,11 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 |---|---|
 | `user`, `account`, `session`, `verification`, `rate_limit` | better-auth's, through its Drizzle adapter (ADR 0024). `account` is also unique on `(provider_id, account_id)`, which `auth generate` leaves out: better-auth refuses an identity it finds twice (ADR 0036) |
 | `invite_codes`, `invite_redemptions` | Invite codes, not synced (ADR 0034). A code is a member's (`created_by`, one place) or the operator's (null, `max_uses` places), until `revoked_at`. A redemption is an address beside a code, or the operator's invitation to one address (code null): a hold until `redeemed_at`, lapsing at `expires_at` without taking a place, then a place for good, settled once the account it made exists (`user_id`, and `settled_at`, which outlives a deleted member). A claim never settled admits the same address again. A code's places are its redeemed rows; every claim is one statement (`packages/data/src/queries/invites.ts`) |
-| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it), their picture (ADR 0032, 0033): the R2 key of one they uploaded (`avatar_key`), whether they show their Gravatar (`gravatar`, with its `gravatar_at`; never set counts as on), whether Gravatar has one for them (`gravatar_found`, asked at `gravatar_checked_at`), and `avatar_version`, the picture's version, which every change of picture counts up |
+| `admin_actions` | What operators did in the admin console (ADR 0039), not synced: one row per target, with the group a request shares (the undo token), the actor, the action, the target, and `detail` holding `{from, to}`, read by an `insert … select` in the change's own batch. Never an email address |
+| `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale`, `reading_lang`, whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it), their picture (ADR 0032, 0033): the R2 key of one they uploaded (`avatar_key`), whether they show their Gravatar (`gravatar`, with its `gravatar_at`; never set counts as on), whether Gravatar has one for them (`gravatar_found`, asked at `gravatar_checked_at`), and `avatar_version`, the picture's version, which every change of picture counts up, and `is_admin`, who may open the admin console (granted only by the operator's token, ADR 0039) |
 | `user_prefs` | Synced preferences, one row per key: reading mode, text size, measure, theme (`lib/typography.ts`), and the Reading and Translation settings `reader.mark_on_open`, `reader.hide_read`, `translate.auto`, `translate.never` (`lib/prefs.ts`) |
 | `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out` |
-| `site_topics`, `site_claims` | A blog's topics; claim attempts (meta or `rel="me"`) |
+| `site_topics`, `site_claims` | A blog's topics; claim attempts (meta or `rel="me"`), with the operator who vouched for one (`vouched_by`, so its check skips only the proof) and when an operator last decided on it (`reviewed_at`, ADR 0039) |
 | `feeds` | The fetch unit: validators, schedule (`next_fetch_at`, `fetch_interval_sec`), `fetch_region`, `timeout_streak`, `status`, `content_mode`, `hub_url`, `merged_into` (another address for the blog's canonical feed, ADR 0028) |
 | `articles` | `dedup_key` unique per feed, `sort_at`, `source_lang`, `current_version`, `content_key`, `extract_state`, counts. `AUTOINCREMENT` ids, so the unread watermark never meets a reused id |
 | `article_versions` | Every body an article has had: provenance (feed or readability), `content_key`, `raw_key` (ADR 0022) |
@@ -70,8 +71,8 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `follows` | `(follower_id, followee_id)`: one member following another, one-way and public, soft-deleted, synced to the follower (ADR 0031) |
 | `websub_subscriptions` | One per feed with a hub: topic, secret, status, lease |
 | `leases`, `lease_fence` | Who holds which piece of background work, and the fence that aborts a stale holder's batch |
-| `dead_letters`, `ops_heartbeats` | Work that gave up; the tick's last run |
-| `llm_calls`, `usage_daily` | Every model call; reserved and used tokens per member and day (`'*'` is background) |
+| `dead_letters`, `ops_heartbeats` | Work that gave up, until an operator retries or dismisses it (`resolved_at`, `resolution`, `resolved_by`); the last `tick`, `health`, `daily` and `digest` runs, the tick's with the switches tela-jobs runs with (ADR 0039) |
+| `llm_calls`, `usage_daily` | Every model call, with the feed it was for (`feed_id`); reserved and used tokens per member and day (`'*'` is background) |
 | `action_limits`, `applied_mutations`, `tombstones`, `counters` | Reader action limits, and sign-in limits per email address; pushed mutation ids (replays change nothing); hard deletes for sync; the `seq` counter |
 
 ## Content pipeline
@@ -150,7 +151,15 @@ and hashes as the `NORM_VERSION` contract.
   mutation ids, and personal data with no further use: invite holds a day past their expiry,
   ended sessions, better-auth's counters after a day, and spent sign-in codes and OAuth states.
 - Mondays (`0 8 * * 1`): the digest. Every five minutes after the tick: the health check and the
-  dead-man's ping (`src/ops.ts`).
+  dead-man's ping (`src/ops.ts`). The health check itself is `health()` in `@tela/data`, so the
+  admin console asks it too; it counts only dead letters nobody has resolved.
+- Every run leaves a heartbeat in `ops_heartbeats`: `tick` (each kind dispatched, and its
+  `config`: the background budget, the article cap, whether a translator, the relay, WebSub and
+  the assets bucket are configured), `health`, `daily` and `digest`. tela-api reads the budget
+  and the relay there rather than from a second copy of the configuration.
+- `REDUE` (`@tela/data`) says, per kind, how a dead item is made due again: the admin console's
+  Retry runs it with the dead letter's resolution in one batch, and the next tick claims the item
+  with fresh attempts.
 - `src/portable.ts` runs the same tick and jobs on a timer with an in-process queue: the exit path,
   and what the test-mode `cycle()` uses.
 
@@ -207,6 +216,8 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `GET /api/v1/public/front` | The front page's edition (ADR 0035): each public blog's newest post, newest first, from the last seven days, or the latest ones when nobody wrote that week, eleven at most, with its titles and translated excerpts, its blog and its claimant; and the counts the copy states, public blogs and the week's distinct blogs, languages and posts. Each blog's newest post is one seek per live feed down `articles_feed_sort_idx`; future-dated posts wait. Cached as a profile is |
 | `GET /api/v1/public/handles/:handle` | Whether a handle is free, for For writers' card as it is typed: `invalid`, `reserved`, `taken` or `available` (by `@tela/shared`'s rules, read lowercase), and the first free one among it, it plus a digit and it plus `_writes`. `no-store`; a valid shape is counted per IP (`handleCheck`, 300 an hour) |
 | `PUT`, `DELETE /api/v1/avatar` | A member's own picture (ADR 0033): its bytes say what it is (PNG, JPEG or WebP, square, 64–1024 px, 512 KB), kept in R2 `tela-content` under `avatars/<userId>/<random id>.<ext>`, a key never used twice, so a deletion can only take the object its own change replaced; the body is read no further than 512 KB, and twenty an hour are counted before any is read; each change moves the version and deletes the object it replaces |
+| `POST /api/admin/admins` | Bearer `ADMIN_TOKEN`: open or close the admin console to a member (`profiles.is_admin`, ADR 0039); only the token grants it |
+| `/api/v1/admin/*` | The admin console (ADR 0039), for a member with `is_admin`, read from D1 on every call past the signed session copy: `counts` and `overview`; `claims`, `sites`, `feeds`, `discover`, `people`, `invites`, `translation` and `system` as filtered, searched lists (500 rows at most; People and Invitations take a search as a POST body, since it is often an email address and a URL reaches the Workers' logs) and their records; `translation/report` and `system/report`; `POST act` (an action on up to 50 targets, each its own audited batch) and `POST undo` (a group restored only while every target still holds what the action wrote). Under `/api/v1`, never `/api/admin`, so its writes are held to the same origin |
 | `/api/websub/:feedId` | The hub callback: intent checks, and signed pings that make the feed due |
 | `/api/health` | Liveness and D1 latency |
 
@@ -289,6 +300,7 @@ A Vite + React SPA that renders from the device.
 | `/writers` | For writers: a calling card made as you type, beside a labelled sample (ADR 0037); SPA-only (ADR 0035) |
 | `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out), Privacy (with "Your data"); Invites and Account read `/api/v1/invites` and `/api/v1/account` live, not synced rows (`lib/account-api.ts`) |
 | `/dashboard` | The author's view |
+| `/admin/:area?f=&q=&id=&sort=&dir=` | The admin console (ADR 0039), its own chunk loaded only when an admin opens it, reading tela-api over the network; anyone else sees Not found. The URL alone holds the area, filter, search, open record and sort |
 
 ## Sync (`packages/sync`, `packages/data/src/queries/sync.ts`, `apps/api/src/sync`, ADR 0025)
 
@@ -325,6 +337,12 @@ A Vite + React SPA that renders from the device.
   the account missed: the profile, and the invitation's settlement.
 - **Knowing it runs:** the dead-man's switch, the Monday digest, a verified nightly export, and
   D1's Time Travel (`docs/OPERATIONS.md`).
+- **An operator's change beats the work in flight:** the admin console's pause, region, claim
+  rejection, removal and vouch delete the item's lease in their batch, so a job already running
+  finds its fence refused and writes nothing over the choice (ADR 0039).
+- **Every operator change is audited and undone only if nothing moved since:** the audit row is
+  read in the change's own batch, and an undo's guards abort its batch through `lease_fence` when
+  any target changed after the action.
 
 ## Tests
 

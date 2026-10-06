@@ -97,6 +97,11 @@ export function AccountMenu() {
           <Link to="/settings/invites" className={ITEM} onClick={done} data-testid="nav-invites">
             {t('invites')}
           </Link>
+          {profile?.isAdmin ? (
+            <Link to="/admin" className={ITEM} onClick={done} data-testid="nav-admin">
+              {t('admin')}
+            </Link>
+          ) : null}
           <div className="my-1 h-px bg-line" />
           <button
             type="button"

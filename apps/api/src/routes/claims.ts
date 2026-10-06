@@ -16,6 +16,30 @@ import type { ApiDeps } from '../deps'
 const CLAIM_TTL_MS = 4 * 60_000
 const META_NAME = 'tela-site-verification'
 
+/**
+ * Claim one pending claim's check and send it on, so the member (or an operator re-checking or
+ * vouching for it) sees the answer in seconds rather than at the next sweep. Nothing is sent when
+ * the claim is not pending or a check of it is already held; the sweep finds it then.
+ */
+export async function checkClaimSoon(
+  deps: Pick<ApiDeps, 'db' | 'jobs'>,
+  claimId: number,
+  now: number,
+) {
+  const owner = `site.claim:api:${now.toString(36)}`
+  const claimed = await claimDue(deps.db, {
+    kind: 'site.claim',
+    owner,
+    now,
+    ttlMs: CLAIM_TTL_MS,
+    limit: 1,
+    due: sql`select * from (${dueClaims()}) where key = ${claimId}`,
+  })
+  if (claimed.length > 0) {
+    await deps.jobs.send('misc', { kind: 'site.claim', key: String(claimId), owner })
+  }
+}
+
 export async function claimToken(secret: string, siteId: number, userId: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',
@@ -99,32 +123,22 @@ export function claimRoutes(deps: ApiDeps) {
       return c.json({ error: 'rate_limited' }, 429)
     }
     const token = await claimToken(config.authSecret, siteId, member.id)
+    // A member asking again clears an operator's vouch (ADR 0039): the check they asked for is
+    // the one that reads their proof.
     const [, rows] = (await db.batch([
       bumpSeq(db),
       db.all(sql`
         insert into site_claims (site_id, user_id, method, token, status, created_at, seq)
         values (${siteId}, ${member.id}, 'meta', ${token}, 'pending', ${now}, ${currentSeq})
         on conflict (site_id, user_id) do update set
-          token = excluded.token, status = 'pending', error = null, seq = excluded.seq
+          token = excluded.token, status = 'pending', error = null, vouched_by = null,
+          seq = excluded.seq
         where site_claims.status <> 'verified'
         returning id
       `),
     ] as never)) as unknown as [unknown, { id: number }[]]
     const claimId = rows[0]?.id
-    if (claimId !== undefined) {
-      const owner = `site.claim:api:${now.toString(36)}`
-      const claimed = await claimDue(db, {
-        kind: 'site.claim',
-        owner,
-        now,
-        ttlMs: CLAIM_TTL_MS,
-        limit: 1,
-        due: sql`select * from (${dueClaims()}) where key = ${claimId}`,
-      })
-      if (claimed.length > 0) {
-        await deps.jobs.send('misc', { kind: 'site.claim', key: String(claimId), owner })
-      }
-    }
+    if (claimId !== undefined) await checkClaimSoon(deps, claimId, now)
     return c.json(await standing(siteId, member.id))
   })
 

@@ -4,6 +4,7 @@
  */
 import { sql } from 'drizzle-orm'
 import { check, index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { user } from './auth'
 import { ms } from './columns'
 
 /**
@@ -49,7 +50,11 @@ export const leases = sqliteTable(
   ],
 )
 
-/** Work that exhausted its attempts. Nothing retries it; the weekly digest reports it. */
+/**
+ * Work that exhausted its attempts. Nothing retries it on its own; the weekly digest reports it,
+ * and an operator resolves it in the admin console (ADR 0039): `retried` made its domain row due
+ * again, `dismissed` let it be. The health check counts only the unresolved.
+ */
 export const deadLetters = sqliteTable(
   'dead_letters',
   {
@@ -59,8 +64,15 @@ export const deadLetters = sqliteTable(
     attempts: integer().notNull(),
     error: text(),
     at: ms().notNull(),
+    resolvedAt: ms(),
+    /** `retried` or `dismissed` (`DEAD_LETTER_RESOLUTIONS`); no CHECK, which would rebuild the table. */
+    resolution: text(),
+    resolvedBy: text().references(() => user.id, { onDelete: 'set null' }),
   },
-  (t) => [index('dead_letters_at_idx').on(t.at)],
+  (t) => [
+    index('dead_letters_at_idx').on(t.at),
+    index('dead_letters_resolved_idx').on(t.resolvedAt, t.at),
+  ],
 )
 
 /**

@@ -8,7 +8,10 @@
  * pairs, applied in order, for what OpenCC leaves in mainland usage (郵箱, 賬號, 關注, 儀表盤) or
  * converts wrongly in an interface (釋出 for "publish", 麵板 for "panel").
  *
- * Run `bun run i18n:hant` after changing either Simplified file and commit what it writes;
+ * The admin console's catalogues (`src/admin/messages/zh-Hans/*.json`, ADR 0039) are converted the
+ * same way, into `src/admin/messages/zh-Hant/`.
+ *
+ * Run `bun run i18n:hant` after changing a Simplified file and commit what it writes;
  * `test/hant.test.ts` fails while they disagree. `@tela/llm` is a devDependency that only this
  * script and that test import, so OpenCC never reaches a bundle.
  *
@@ -20,7 +23,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { toTraditional } from '@tela/llm/zh-script'
@@ -29,6 +32,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BIOME = join(ROOT, '../../node_modules/.bin/biome')
 
 const OVERRIDES = 'messages/zh-Hant.overrides.json'
+const ADMIN_MESSAGES = 'src/admin/messages'
 
 type Pair = readonly [from: string, to: string]
 
@@ -124,6 +128,15 @@ export function generate(): Generated[] {
   const info =
     INFO_HEADER + convert('info/zh-Hans.ts', source.slice(header.length)).replace(from, to)
 
+  const admin = readdirSync(join(ROOT, ADMIN_MESSAGES, 'zh-Hans'))
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .map((name) => {
+      const text = convert(`admin/${name}`, read(`${ADMIN_MESSAGES}/zh-Hans/${name}`))
+      JSON.parse(text)
+      return { path: `${ADMIN_MESSAGES}/zh-Hant/${name}`, text }
+    })
+
   const stale = unused()
   if (stale.length > 0) {
     throw new Error(
@@ -133,6 +146,7 @@ export function generate(): Generated[] {
   return [
     { path: 'messages/zh-Hant.json', text: messages },
     { path: 'src/content/info/zh-Hant.ts', text: info },
+    ...admin,
   ].map(({ path, text }) => ({ path, text: formatted(path, text) }))
 }
 

@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Runtime-agnostic constants and helpers shared by web and worker",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./admin": "./src/admin/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

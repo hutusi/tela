@@ -5,7 +5,7 @@
  * `lib/account-api.ts`.
  */
 import { groupInviteCode } from '@tela/shared'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { SettingRow } from '../components/setting-row'
@@ -31,6 +31,7 @@ import {
   unlinkProvider,
 } from '../lib/account-api'
 import { monthYear } from '../lib/format'
+import { useLive } from '../lib/use-live'
 import { PASSWORD_MAX, PASSWORD_MIN } from '../lib/use-sign-in'
 import { useSession } from '../session'
 import { useUi } from '../ui'
@@ -48,32 +49,6 @@ const FIELD =
 
 function Intro({ children }: { children: React.ReactNode }) {
   return <p className="mb-7 text-[14px] text-muted">{children}</p>
-}
-
-/** Load once on mount, and again on `reload()`; a page left mid-call drops the answer. */
-function useLive<T>(load: (signal?: AbortSignal) => Promise<T | null>) {
-  const [value, setValue] = useState<T | null>(null)
-  const [failed, setFailed] = useState(false)
-  const reload = useCallback(
-    async (signal?: AbortSignal) => {
-      try {
-        const answer = await load(signal)
-        if (signal?.aborted) return
-        setValue(answer)
-        setFailed(answer === null)
-      } catch {
-        // Signed out or another account: api() has told the session. Offline: say it failed.
-        if (!signal?.aborted) setFailed(true)
-      }
-    },
-    [load],
-  )
-  useEffect(() => {
-    const controller = new AbortController()
-    void reload(controller.signal)
-    return () => controller.abort()
-  }, [reload])
-  return { value, failed, reload }
 }
 
 // ---------------------------------------------------------------------------------------------

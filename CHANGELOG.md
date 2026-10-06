@@ -28,6 +28,18 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **An admin console** at `/admin` (ADR 0039), after the Claude Design's "Ledger, refined":
+  Overview, Claims, Sites, Feeds, Discover, People, Invitations, Translation and System, each a
+  searchable, sortable table with its likeliest action on every row, a record beside it, bulk
+  actions, undo, and the keyboard for all of it, in English and Chinese. An operator reviews,
+  vouches for, rejects or removes claims; features, lists, hides or restores blogs; fetches,
+  pauses, revives or moves feeds to the relay; signs a member out everywhere; makes, extends,
+  revokes and restores invite codes; and retries or dismisses dead work, which the health check
+  then stops counting. Translation shows tokens by blog, job and model against the daily
+  budgets, and System the health check, the scheduled runs and each kind's leases. Every change
+  is audited and undone only while nothing has changed since; a member's reading stays out of it.
+  `bun run admin grant <email>` opens it to a member.
+
 - **Traditional Chinese and French** (ADR 0038), as reading languages and as interface
   languages. Traditional is converted from Simplified by OpenCC with Taiwan phrasing, so a
   Simplified post costs nothing to read in Traditional and the reverse, and one paid translation

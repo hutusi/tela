@@ -22,10 +22,14 @@ beforeAll(async () => {
       body += chunk
     })
     req.on('end', () => {
-      const sent = JSON.parse(body) as { code: string; uses: number }
+      const sent = JSON.parse(body) as { code?: string; uses?: number; email?: string }
       asked.push(sent)
       res.writeHead(200, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ code: sent.code, maxUses: sent.uses }))
+      if (req.url === '/api/admin/admins') {
+        res.end(JSON.stringify({ userId: 'u1', admin: true, changed: true }))
+      } else {
+        res.end(JSON.stringify({ code: sent.code, maxUses: sent.uses }))
+      }
     })
   })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -73,5 +77,19 @@ describe('bun run admin code', () => {
     expect(await admin('code', 'WELCOME', '--uses', '0')).toEqual(refused)
     expect(await admin('code', 'WELCOME', '-u', '20')).toEqual(refused)
     expect(await admin('code', '--', '-WELCOME')).toEqual(refused)
+  })
+})
+
+describe('bun run admin grant', () => {
+  test('opens the console to an address, and ungrant closes it', async () => {
+    expect(await admin('grant', 'ops@x.test')).toEqual({
+      exit: 0,
+      asked: [{ email: 'ops@x.test', admin: true }],
+    })
+    expect(await admin('ungrant', 'ops@x.test')).toEqual({
+      exit: 0,
+      asked: [{ email: 'ops@x.test', admin: false }],
+    })
+    expect(await admin('grant')).toEqual({ exit: 2, asked: [] })
   })
 })

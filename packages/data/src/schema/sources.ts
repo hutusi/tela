@@ -136,6 +136,13 @@ export const siteClaims = sqliteTable(
     error: text(),
     verifiedAt: ms(),
     createdAt: ms().notNull(),
+    /**
+     * An operator who vouched for the claim (ADR 0039): its check skips only the proof, and still
+     * reads the home page for the feeds it declares. A member's own re-check clears it.
+     */
+    vouchedBy: text().references(() => user.id, { onDelete: 'set null' }),
+    /** When an operator last decided on it; a failed claim checked since needs review again. */
+    reviewedAt: ms(),
     seq: seq(),
   },
   (t) => [

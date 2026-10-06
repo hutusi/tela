@@ -1,0 +1,236 @@
+{
+  "title": "管理",
+  "badge": "管理",
+  "role": "管理员",
+  "back": "← 返回阅读",
+  "navLabel": "管理区域",
+  "nav": {
+    "overview": "概览",
+    "claims": "认领",
+    "sites": "博客",
+    "feeds": "订阅源",
+    "discover": "发现",
+    "people": "成员",
+    "invites": "邀请",
+    "translation": "翻译",
+    "system": "系统"
+  },
+  "groups": {
+    "queues": "待处理",
+    "library": "内容库",
+    "members": "成员",
+    "running": "运行"
+  },
+  "about": {
+    "claims": "作者用 meta 标签或 rel=\"me\" 链接证明博客是自己的，博客就归入其名下。检查会自动进行；这里是它无法判定的认领、仍在检查的认领，以及已经验证的认领。",
+    "sites": "Tela 收录的每个博客：它的订阅源、主人、读者，以及是否列在发现里。各个队列都链接到这里。",
+    "feeds": "每个订阅源按自己的节奏抓取。这里是停下来的那些：出错的、从 Cloudflare 访问超时的、已失效的、被手动暂停的，以及并入其他订阅源的。",
+    "discover": "博客被认领或有三位读者后，就会列在发现里。是否精选由运营者决定；被隐藏的博客无论是否认领都不会出现。更改会在五分钟内出现在发现里。",
+    "people": "成员及其账号基本信息。管理员只能看到成员的公开名片，看不到他们读了什么、订阅了什么、喜欢或划线了什么。",
+    "invites": "Tela 目前仅限邀请加入。每位成员有五个邀请码可以送出；运营者的邀请码可供设定的人数使用。",
+    "translation": "过去 30 天翻译消耗的 token。成员按每日上限预留额度；所有人的标题翻译都出自同一份后台预算。",
+    "system": "健康检查及其关注的后台任务。用完重试次数的任务会成为死信，除非有人处理，否则不会再重试。"
+  },
+  "actions": {
+    "site": {
+      "feature": { "label": "设为精选", "short": "精选", "done": "已设为精选" },
+      "list": { "label": "列入发现", "short": "列入", "done": "已列入发现" },
+      "hide": { "label": "从发现中隐藏", "short": "隐藏", "done": "已隐藏" },
+      "restore": { "label": "恢复默认", "short": "恢复", "done": "已恢复默认" },
+      "topics": { "label": "话题", "short": "话题", "done": "话题已保存" },
+      "translationOff": { "label": "暂停翻译", "short": "暂停", "done": "翻译已暂停" },
+      "translationOn": { "label": "恢复翻译", "short": "恢复", "done": "翻译已恢复" },
+      "fetchAll": { "label": "抓取全部订阅源", "short": "抓取", "done": "已加入抓取队列" }
+    },
+    "claim": {
+      "recheck": { "label": "立即重新检查", "short": "重新检查", "done": "已加入检查队列" },
+      "vouch": { "label": "人工验证", "short": "验证", "done": "已担保，正在检查" },
+      "reject": { "label": "驳回", "short": "驳回", "done": "已驳回" },
+      "dismiss": { "label": "暂不处理", "short": "暂不处理", "done": "已移出队列" },
+      "remove": { "label": "撤销认领", "short": "撤销", "done": "认领已撤销" }
+    },
+    "feed": {
+      "fetch": { "label": "立即抓取", "short": "抓取", "done": "已加入抓取队列" },
+      "pause": { "label": "暂停", "short": "暂停", "done": "已暂停" },
+      "resume": { "label": "恢复", "short": "恢复", "done": "已恢复" },
+      "revive": { "label": "重新启用", "short": "启用", "done": "已重新启用，正在抓取" },
+      "relay": { "label": "通过中国中转抓取", "short": "用中转", "done": "改为通过中转抓取" },
+      "global": { "label": "直接抓取", "short": "直连", "done": "改为直接抓取" }
+    },
+    "dead": {
+      "retry": { "label": "立即重试", "short": "重试", "done": "已重新排队" },
+      "dismiss": { "label": "忽略", "short": "忽略", "done": "已忽略" }
+    },
+    "lease": {
+      "retryNow": { "label": "立即重试", "short": "重试", "done": "一分钟内重试" }
+    },
+    "member": {
+      "signOut": {
+        "label": "在所有设备上退出",
+        "short": "退出登录",
+        "done": "五分钟内将在所有设备上退出"
+      }
+    },
+    "code": {
+      "create": { "label": "新建邀请码", "short": "新建邀请码", "done": "邀请码已创建" },
+      "addUses": { "label": "增加名额", "short": "增加名额", "done": "名额已增加" },
+      "revoke": { "label": "作废", "short": "作废", "done": "已作废" },
+      "restore": { "label": "恢复", "short": "恢复", "done": "已恢复" }
+    },
+    "hold": {
+      "cancel": { "label": "取消邀请", "short": "取消", "done": "已取消" }
+    },
+    "invite": {
+      "address": { "label": "按邮箱邀请", "short": "邀请", "done": "邀请已发出" }
+    }
+  },
+  "confirm": {
+    "claim": {
+      "vouch": "确定为这次认领担保吗？检查将跳过证明，把博客交给认领人。",
+      "remove": "确定撤销这次认领吗？博客将没有主人，只有读者足够多时才会列在发现里。"
+    },
+    "member": {
+      "signOut": "确定让这位成员在所有设备上退出吗？最多需要五分钟。"
+    },
+    "code": {
+      "revoke": "确定作废这个邀请码吗？之后没人能再用它加入；已经加入的人保留账号。"
+    },
+    "hold": {
+      "cancel": "确定取消这份邀请吗？这个邮箱将无法再用它完成加入。"
+    },
+    "yes": "确定",
+    "no": "取消"
+  },
+  "confirmMany": {
+    "claim": {
+      "vouch": "确定为这 {n} 次认领担保吗？检查将跳过证明，把每个博客交给各自的认领人。",
+      "remove": "确定撤销这 {n} 次认领吗？这些博客将没有主人，只有读者足够多时才会列在发现里。"
+    },
+    "member": {
+      "signOut": "确定让这 {n} 位成员在所有设备上退出吗？最多需要五分钟。"
+    },
+    "code": {
+      "revoke": "确定作废这 {n} 个邀请码吗？之后没人能再用它们加入；已经加入的人保留账号。"
+    },
+    "hold": {
+      "cancel": "确定取消这 {n} 份邀请吗？这些邮箱将无法再用它们完成加入。"
+    }
+  },
+  "input": {
+    "reason": "原因？认领人会看到。",
+    "uses": "再增加几个人",
+    "code": "邀请码：4 到 32 个字母或数字",
+    "uses_new": "可供几个人使用",
+    "email": "对方的邮箱",
+    "submit": "确定",
+    "cancel": "取消"
+  },
+  "errors": {
+    "not_found": "已经不存在了",
+    "not_applicable": "没有需要更改的",
+    "invalid": "无效",
+    "taken": "已被占用",
+    "no_relay": "尚未配置中国中转",
+    "limit": "超出上限",
+    "failed": "无法连接 Tela，请重试。"
+  },
+  "toast": {
+    "one": "{action} · {target}",
+    "many": "{action} · {n} 项",
+    "partial": "{done} 项完成，{failed} 项未完成：{reason}",
+    "undo": "撤销",
+    "undone": "已撤销",
+    "changedSince": "之后已有其他更改，未撤销任何内容"
+  },
+  "ledger": {
+    "search": "搜索",
+    "count": "{filter}中共 {n} 项 · 点击列名排序",
+    "matches": "{filter}中有 {n} 项匹配",
+    "truncated": "只显示前 {n} 项，搜索可缩小范围。",
+    "status": "状态",
+    "selectAll": "全选",
+    "selectRow": "选择“{title}”",
+    "actionColumn": "操作",
+    "queueClear": "队列已清空。",
+    "queueClearBody": "{filter}中已没有待处理项。新的项目出现时会来到这里。",
+    "nothingHere": "这里没有内容。",
+    "nothingHereBody": "{filter}中暂时没有内容。",
+    "noMatches": "没有匹配项",
+    "noMatchesBody": "{filter}中没有与“{q}”匹配的内容。",
+    "loading": "加载中…",
+    "loadFailed": "加载失败。",
+    "retry": "重试",
+    "selected": "已选 {n} 项",
+    "bulkMax": "一次最多 {n} 项",
+    "clear": "清除",
+    "position": "第 {i} 项，共 {n} 项",
+    "previous": "上一项",
+    "next": "下一项",
+    "close": "关闭",
+    "record": "详情",
+    "backToList": "← 返回列表",
+    "history": "记录",
+    "justNow": "刚刚",
+    "byCli": "运营者（命令行）",
+    "undo": "撤销：{action}",
+    "unbuilt": "这个区域尚未完成。"
+  },
+  "keys": {
+    "move": "移动",
+    "select": "选择",
+    "open": "打开",
+    "act": "操作",
+    "undo": "撤销",
+    "search": "搜索",
+    "close": "关闭"
+  },
+  "tones": {
+    "ok": "正常",
+    "warn": "注意",
+    "bad": "有问题",
+    "info": "进行中",
+    "neutral": "空闲"
+  },
+  "audit": {
+    "grant": "设为管理员",
+    "ungrant": "取消管理员"
+  },
+  "overview": {
+    "waiting": "四个队列中共有 {n} 项待处理。",
+    "calm": "没有待处理的事项，Tela 正在自行运转。",
+    "needsYou": "待你处理",
+    "queues": {
+      "claims": "待审核的认领",
+      "feeds": "出错的订阅源",
+      "dead": "死信",
+      "candidates": "发现候选"
+    },
+    "start": "开始 →",
+    "nothingWaiting": "没有待处理的。",
+    "readers": "{n} 位读者",
+    "thisWeek": "本周",
+    "week": {
+      "members": "新成员",
+      "claimsVerified": "验证的认领",
+      "feedsAdded": "新增订阅源",
+      "tokens": "翻译 token"
+    },
+    "weekBefore": "上周 {n}",
+    "activity": "最近的管理操作",
+    "noActivity": "还没有管理操作。",
+    "cli": "命令行"
+  },
+  "health": {
+    "label": "健康",
+    "allOk": "一切都在正常范围内。",
+    "restOk": "其余都在正常范围内。",
+    "checked": "检查于 {time}",
+    "system": "系统 →",
+    "overdueFeeds": "{value} 个订阅源已逾期两小时以上，超过上限 {limit}。",
+    "deadLetters": "过去一天有 {value} 个任务成了死信且尚未处理，超过上限 {limit}。",
+    "stuckBodies": "{value} 篇正文翻译已等待超过 30 分钟。",
+    "extractionBacklog": "{value} 篇文章等待全文已超过六小时，超过上限 {limit}。",
+    "backupAge": "最近一次备份已是 {value} 小时前，超过上限 {limit} 小时。",
+    "backupVerified": "最近一次备份校验失败。"
+  }
+}

@@ -38,6 +38,11 @@
   /* A form field's ground: white on paper, and below the ground (not lifted) on a dark one. */
   --color-field: #fff;
   --color-danger: oklch(0.5 0.15 25);
+  /* The admin console's status dots (ADR 0039): fine, worth a look, under way. A problem is
+     --color-danger. From the design's Day and Night palettes. */
+  --color-ok: oklch(0.52 0.11 150);
+  --color-warn: oklch(0.66 0.13 70);
+  --color-info: oklch(0.52 0.09 240);
   /* A highlight is a marker's stroke over the text, never a box around it. */
   --color-highlight: oklch(0.91 0.1 95);
   --color-highlight-strong: oklch(0.8 0.14 90);
@@ -88,6 +93,9 @@
     --color-accent: oklch(0.74 0.12 150);
     --color-accent-strong: oklch(0.8 0.12 150);
     --color-danger: oklch(0.72 0.15 25);
+    --color-ok: oklch(0.74 0.12 150);
+    --color-warn: oklch(0.8 0.12 80);
+    --color-info: oklch(0.74 0.08 240);
     --color-field: #171511;
     --color-highlight: oklch(0.5 0.09 90 / 0.55);
     --color-highlight-strong: oklch(0.7 0.12 90);
@@ -110,6 +118,9 @@
   --color-accent: oklch(0.74 0.12 150);
   --color-accent-strong: oklch(0.8 0.12 150);
   --color-danger: oklch(0.72 0.15 25);
+  --color-ok: oklch(0.74 0.12 150);
+  --color-warn: oklch(0.8 0.12 80);
+  --color-info: oklch(0.74 0.08 240);
   --color-field: #171511;
   --color-highlight: oklch(0.5 0.09 90 / 0.55);
   --color-highlight-strong: oklch(0.7 0.12 90);
@@ -161,6 +172,9 @@
   --color-accent-strong: oklch(0.4 0.1 150);
   --color-knob: #fff;
   --color-danger: oklch(0.5 0.15 25);
+  --color-ok: oklch(0.52 0.11 150);
+  --color-warn: oklch(0.66 0.13 70);
+  --color-info: oklch(0.52 0.09 240);
   --color-highlight: oklch(0.91 0.1 95);
   --color-highlight-strong: oklch(0.8 0.14 90);
   --color-primary: #1f1c18;
@@ -261,6 +275,26 @@
   ::-webkit-scrollbar-thumb {
     background: var(--color-thumb);
     border-radius: 4px;
+  }
+}
+
+/*
+ * The admin console's side ground (ADR 0039, the design's `--side`): its sidebar and its table
+ * heads sit a shade below the paper, on either ground. By day that is toward `hover`; at night
+ * toward `field`, since `hover` lifts there. Derived, not a new token, and layered, so a utility
+ * on the same element still wins. The dark rule is written twice, as the token blocks are.
+ */
+@layer components {
+  .admin-side {
+    background: color-mix(in oklab, var(--color-paper) 45%, var(--color-hover));
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .admin-side {
+      background: color-mix(in oklab, var(--color-paper) 50%, var(--color-field));
+    }
+  }
+  :root[data-theme="dark"] .admin-side {
+    background: color-mix(in oklab, var(--color-paper) 50%, var(--color-field));
   }
 }
 

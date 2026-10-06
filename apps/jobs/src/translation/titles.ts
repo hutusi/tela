@@ -255,6 +255,8 @@ export async function translateTitlesJob(
               job: 'translate.title',
               contentKey: null,
               articleId: fresh.length === 1 ? (fresh[0] as Member).article.id : null,
+              // The lease is the feed: a call that carries several posts is still one blog's.
+              feedId,
               // What the model wrote: Simplified, for Traditional readers as well.
               targetLang: target,
               userId: null,

@@ -1,0 +1,101 @@
+{
+  "signIn": {
+    "code": "邮箱验证码",
+    "credential": "密码",
+    "google": "Google",
+    "github": "GitHub"
+  },
+  "listing": {
+    "private": "未公开",
+    "listed": "已列入",
+    "featured": "精选",
+    "rejected": "已隐藏"
+  },
+  "people": {
+    "filters": { "admins": "管理员", "members": "成员" },
+    "search": "按用户名、昵称或邮箱搜索",
+    "name": "成员",
+    "columns": { "role": "角色", "signIn": "登录方式", "joined": "加入时间" },
+    "role": { "admin": "管理员", "member": "成员" },
+    "privacy": "阅读记录、订阅和点赞都是私密的，管理员也看不到。",
+    "kv": {
+      "email": "邮箱",
+      "signIn": "登录方式",
+      "joined": "加入",
+      "invites": "邀请",
+      "sessions": "会话",
+      "bio": "简介"
+    },
+    "separator": "、",
+    "joinedBy": {
+      "operator": "{date}，由运营者邀请",
+      "member": "{date}，由 <who>@{handle}</who> 用邀请码 {code} 邀请",
+      "someone": "{date}，用成员的邀请码 {code}",
+      "code": "{date}，用邀请码 {code}",
+      "none": "{date}"
+    },
+    "invitesUsed": "已用 {used} 个，共 {allowance} 个",
+    "sessions": "{n, plural, =0 {无} other {# 台设备}}",
+    "lastSeen": "{sessions}，最近活跃于{when}",
+    "blogs": "认领的博客",
+    "blogLine": "{listing} · {readers, plural, other {# 位读者}}",
+    "codes": "名下的邀请码",
+    "joinedWith": "加入者：",
+    "history": {
+      "signOut": "退出了 {n, plural, other {# 个会话}}",
+      "invited": "已按邮箱邀请",
+      "mailed": "已重新发送登录验证码",
+      "grant": "已开通管理后台",
+      "ungrant": "已关闭管理后台"
+    }
+  },
+  "invites": {
+    "filters": { "codes": "邀请码", "waiting": "等待中", "revoked": "已作废" },
+    "search": "按邀请码、邀请人或邮箱搜索",
+    "name": "邀请码或邮箱",
+    "columns": { "createdBy": "创建者", "uses": "名额", "when": "创建或到期" },
+    "operator": "运营者",
+    "sub": {
+      "operator": "运营者的邀请码",
+      "member": "@{handle} 的邀请码",
+      "someone": "成员的邀请码",
+      "hold": "等待使用 {code}",
+      "holdOperator": "运营者的邀请"
+    },
+    "uses": "{used} / {max}",
+    "created": "{when}创建",
+    "expires": "{when}到期",
+    "status": {
+      "active": "已用 {used}/{max}",
+      "full": "已满",
+      "revoked": "已作废",
+      "waiting": "等待中 · {when}到期",
+      "lapsed": "已过期"
+    },
+    "kv": {
+      "code": "邀请码",
+      "createdBy": "创建者",
+      "created": "创建时间",
+      "uses": "名额",
+      "waiting": "等待中",
+      "revoked": "作废时间",
+      "email": "邮箱",
+      "with": "邀请码",
+      "invitedBy": "邀请人",
+      "asked": "申请时间",
+      "expires": "到期时间"
+    },
+    "usesOf": "已用 {used} 个，共 {max} 个",
+    "waitingCount": "{n, plural, =0 {无人} other {# 个邮箱}}等待登录",
+    "joined": "用它加入的人",
+    "nobody": "还没有人。",
+    "latestTen": "只显示最近十位。",
+    "revokeNote": "作废时，等待使用这个邀请码的邀请也会被永久取消：撤销能恢复邀请码，但这些邮箱需要重新申请加入。",
+    "memberNote": "成员的邀请码只能邀请一个人。在未使用就作废之前，它占用成员的五个名额之一。",
+    "holdNote": "邮箱只在这里显示。审计日志只用编号记录这份邀请，从不记录邮箱。",
+    "history": {
+      "created": "已创建，可供 {n, plural, other {# 人}}使用",
+      "addUses": "名额从 {from} 增加到 {to}"
+    }
+  }
+}

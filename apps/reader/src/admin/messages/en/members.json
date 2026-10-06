@@ -1,0 +1,101 @@
+{
+  "signIn": {
+    "code": "Email code",
+    "credential": "Password",
+    "google": "Google",
+    "github": "GitHub"
+  },
+  "listing": {
+    "private": "Private",
+    "listed": "Listed",
+    "featured": "Featured",
+    "rejected": "Hidden"
+  },
+  "people": {
+    "filters": { "admins": "Admins", "members": "Members" },
+    "search": "Search by handle, name or email",
+    "name": "Member",
+    "columns": { "role": "Role", "signIn": "Sign-in", "joined": "Joined" },
+    "role": { "admin": "Admin", "member": "Member" },
+    "privacy": "Reading history, subscriptions and likes are private. Admins never see them.",
+    "kv": {
+      "email": "Email",
+      "signIn": "Sign-in",
+      "joined": "Joined",
+      "invites": "Invites",
+      "sessions": "Sessions",
+      "bio": "Bio"
+    },
+    "separator": ", ",
+    "joinedBy": {
+      "operator": "{date}, invited by the operator",
+      "member": "{date}, invited by <who>@{handle}</who> with {code}",
+      "someone": "{date}, with a member's code, {code}",
+      "code": "{date}, with the code {code}",
+      "none": "{date}"
+    },
+    "invitesUsed": "{used} of {allowance} used",
+    "sessions": "{n, plural, =0 {None} one {# device} other {# devices}}",
+    "lastSeen": "{sessions}, last seen {when}",
+    "blogs": "Claimed blogs",
+    "blogLine": "{listing} · {readers, plural, one {# reader} other {# readers}}",
+    "codes": "Their codes",
+    "joinedWith": "Joined:",
+    "history": {
+      "signOut": "Signed out of {n, plural, one {# session} other {# sessions}}",
+      "invited": "Invited by email",
+      "mailed": "Mailed a fresh sign-in code",
+      "grant": "Given the admin console",
+      "ungrant": "Admin console taken away"
+    }
+  },
+  "invites": {
+    "filters": { "codes": "Codes", "waiting": "Waiting", "revoked": "Revoked" },
+    "search": "Search by code, inviter or email",
+    "name": "Code or email",
+    "columns": { "createdBy": "Created by", "uses": "Uses", "when": "Created or expires" },
+    "operator": "The operator",
+    "sub": {
+      "operator": "The operator's code",
+      "member": "@{handle}'s code",
+      "someone": "A member's code",
+      "hold": "Waiting on {code}",
+      "holdOperator": "The operator's invitation"
+    },
+    "uses": "{used} / {max}",
+    "created": "Created {when}",
+    "expires": "Expires {when}",
+    "status": {
+      "active": "{used} of {max} used",
+      "full": "Full",
+      "revoked": "Revoked",
+      "waiting": "Waiting · expires {when}",
+      "lapsed": "Lapsed"
+    },
+    "kv": {
+      "code": "Code",
+      "createdBy": "Created by",
+      "created": "Created",
+      "uses": "Uses",
+      "waiting": "Waiting",
+      "revoked": "Revoked",
+      "email": "Email",
+      "with": "Code",
+      "invitedBy": "Invited by",
+      "asked": "Asked",
+      "expires": "Expires"
+    },
+    "usesOf": "{used} of {max} used",
+    "waitingCount": "{n, plural, =0 {Nobody} one {# address} other {# addresses}} waiting to sign in",
+    "joined": "Joined with it",
+    "nobody": "Nobody yet.",
+    "latestTen": "The latest ten.",
+    "revokeNote": "Revoking also cancels the invitations waiting on this code, for good: an undo opens the code again, but those addresses must ask to join again.",
+    "memberNote": "A member's code admits one person. It counts toward their five until it is revoked unused.",
+    "holdNote": "The address shows only here. The audit log names this invitation by its number, never by the address.",
+    "history": {
+      "created": "Made, for {n, plural, one {# person} other {# people}}",
+      "addUses": "Places raised from {from} to {to}"
+    }
+  }
+}

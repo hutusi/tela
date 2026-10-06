@@ -21,6 +21,11 @@ export type ProfileRow = {
   avatarUploaded: boolean
   /** Their picture's address (`/avatar/…`), or null: the server's to say, never built here. */
   avatar: string | null
+  /**
+   * Whether they may open the admin console (ADR 0039). Absent from a tela-api that predates it,
+   * which is the same answer: no. tela-api checks again on every admin call.
+   */
+  isAdmin?: boolean
   seq: number
 }
 

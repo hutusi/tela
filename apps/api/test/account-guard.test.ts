@@ -21,6 +21,8 @@ const nameless = { [MEMBER_HEADER]: undefined }
 const B_CODE = 'BCDEFGHJKMNP'
 /** b's GitHub, linked, for b to unlink (ADR 0036). */
 const B_GITHUB = 'b-github-account'
+/** An admin action of b's, for b to undo (ADR 0039). */
+const ADMIN_GROUP = 'guard-admin-group'
 
 let server: FixtureServer
 let api: TestApi
@@ -79,6 +81,20 @@ beforeEach(async () => {
   await createMemberCode(db, { userId: b.userId, now: 0, code: B_CODE })
   await db.run(sql`insert into account (id, account_id, provider_id, user_id, created_at, updated_at)
     values (${B_GITHUB}, '4242', 'github', ${b.userId}, 0, 0)`)
+  // b runs the admin console (ADR 0039), and hid blog 3 there, for b to undo.
+  await db.batch([
+    db.run(sql`update profiles set is_admin = 1 where user_id = ${b.userId}`),
+    db.run(sql`update sites set listing = 'rejected' where id = 3`),
+    db.run(sql`insert into admin_actions (group_id, actor_id, action, target_kind, target_key, detail, at)
+      values (${ADMIN_GROUP}, ${b.userId}, 'site.hide', 'site', '3',
+        '{"from":{"listing":"listed"},"to":{"listing":"rejected"}}', 0)`),
+    // Work that gave up, for the System area's record.
+    db.run(sql`insert into dead_letters (id, kind, key, attempts, error, at)
+      values (1, 'feed.fetch', '3', 5, 'timed out', 0)`),
+    // a's failed claim on blog 2, for the Claims area's record.
+    db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status, created_at)
+      values (1, 2, ${a.userId}, 'meta', 'guard-token', 'failed', 0)`),
+  ] as never)
 })
 
 const subsOf = (userId: string) =>
@@ -203,6 +219,77 @@ const OPML = `<?xml version="1.0"?><opml version="2.0"><head><title>s</title></h
 /** Every authenticated /api/v1 route but /me, each as a request that does something for b. */
 const MEMBER_ROUTES: MemberRoute[] = [
   { route: 'GET /api/v1/sync', path: '/api/v1/sync?cursor=0', effect: 'reads' },
+  // The admin console (ADR 0039): b is an admin.
+  {
+    route: 'POST /api/v1/admin/act',
+    path: '/api/v1/admin/act',
+    body: () => ({ action: 'site.feature', ids: ['2'] }),
+    effect: 'writes',
+  },
+  {
+    route: 'POST /api/v1/admin/undo',
+    path: '/api/v1/admin/undo',
+    body: () => ({ group: ADMIN_GROUP }),
+    effect: 'writes',
+  },
+  { route: 'GET /api/v1/admin/people', path: '/api/v1/admin/people?f=admins', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/people/:id',
+    // b is signed in by the beforeEach, after this table is built.
+    get path() {
+      return `/api/v1/admin/people/${b.userId}`
+    },
+    effect: 'reads',
+  },
+  { route: 'GET /api/v1/admin/invites', path: '/api/v1/admin/invites?f=codes', effect: 'reads' },
+  // Searches are posted, so an address never reaches a URL (ADR 0039).
+  {
+    route: 'POST /api/v1/admin/people',
+    path: '/api/v1/admin/people',
+    body: () => ({ f: 'admins', q: 'b' }),
+    effect: 'reads',
+  },
+  {
+    route: 'POST /api/v1/admin/invites',
+    path: '/api/v1/admin/invites',
+    body: () => ({ f: 'codes', q: 'B' }),
+    effect: 'reads',
+  },
+  { route: 'GET /api/v1/admin/claims', path: '/api/v1/admin/claims?f=review', effect: 'reads' },
+  { route: 'GET /api/v1/admin/claims/:id', path: '/api/v1/admin/claims/1', effect: 'reads' },
+  { route: 'GET /api/v1/admin/sites', path: '/api/v1/admin/sites?f=discover', effect: 'reads' },
+  { route: 'GET /api/v1/admin/sites/:id', path: '/api/v1/admin/sites/1', effect: 'reads' },
+  { route: 'GET /api/v1/admin/feeds', path: '/api/v1/admin/feeds?f=failing', effect: 'reads' },
+  { route: 'GET /api/v1/admin/feeds/:id', path: '/api/v1/admin/feeds/1', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/discover',
+    path: '/api/v1/admin/discover?f=featured',
+    effect: 'reads',
+  },
+  { route: 'GET /api/v1/admin/counts', path: '/api/v1/admin/counts', effect: 'reads' },
+  { route: 'GET /api/v1/admin/overview', path: '/api/v1/admin/overview', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/translation',
+    path: '/api/v1/admin/translation?f=blogs',
+    effect: 'reads',
+  },
+  {
+    route: 'GET /api/v1/admin/translation/report',
+    path: '/api/v1/admin/translation/report',
+    effect: 'reads',
+  },
+  { route: 'GET /api/v1/admin/system', path: '/api/v1/admin/system?f=dead', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/system/report',
+    path: '/api/v1/admin/system/report',
+    effect: 'reads',
+  },
+  { route: 'GET /api/v1/admin/system/:id', path: '/api/v1/admin/system/dead:1', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/invites/:id',
+    path: `/api/v1/admin/invites/code:${B_CODE}`,
+    effect: 'reads',
+  },
   {
     route: 'POST /api/v1/mutations',
     path: '/api/v1/mutations',

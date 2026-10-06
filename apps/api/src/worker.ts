@@ -13,8 +13,15 @@ import type { Env } from './env'
 
 let cached: { env: Env; app: ReturnType<typeof createApp>['app'] } | undefined
 
+/**
+ * Test mode's outbox, one per isolate rather than one per app. Under `vite dev` every request
+ * brings an `env` of its own, so `appFor` builds an app per request, and an outbox of its own
+ * would be empty by the time `/api/test/outbox` asked it for the code the invite just mailed.
+ */
+const testOutbox = memoryMail()
+
 function mailFor(env: Env): Mail {
-  if (env.ENV === 'test') return memoryMail()
+  if (env.ENV === 'test') return testOutbox
   if (!env.RESEND_API_KEY) {
     // No key: fail loudly at send time rather than pretend a code went out.
     return {
