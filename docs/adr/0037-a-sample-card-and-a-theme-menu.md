@@ -3,7 +3,8 @@
 Status: accepted (2026-10-04). Supersedes three parts of 0035: For writers' example card is no
 longer the owner's live `@hutusi` profile, the visitor header gains a theme menu, and a visitor's
 Read in is the member's pill rather than a dropdown. The rest of 0035 stands, including that the
-copy says only what Tela does.
+copy says only what Tela does. Superseded in part by 0040 (2026-10-07): both headers carry one
+language circle, not the Read-in pill.
 
 ## Context
 

@@ -3,7 +3,8 @@
 Status: accepted (2026-10-04). Supersedes 0006's list of targets (`zh-Hans`, `en`) and 0037's
 two-button Read in pill. Corrects 0010's catalog path (`apps/reader/messages`, not
 `apps/web/messages`). The rest of 0006, including the eager-title, lazy-body policy and the cost
-controls, stands.
+controls, stands. Superseded in part by 0040 (2026-10-07): Read in became the language circle, and a
+member chooses the interface language from it as well as from Settings.
 
 ## Context
 

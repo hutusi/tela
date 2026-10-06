@@ -21,7 +21,8 @@ function onPageTheme(changed: () => void): () => void {
  * copy for every visitor, so it holds all three with their names, and the inline script's
  * `data-theme` shows the right one before any script of the app's runs. For the same reason the
  * edge marks no item as chosen; the app marks the one the page is set to. A native `<details>`,
- * as Read in is (`useHeaderMenu`), so it opens before the script runs; choosing needs the script.
+ * as the language circle is (`useHeaderMenu`), so it opens before the script runs; choosing needs
+ * the script.
  *
  * A member's choice is their synced `ui.theme`, and the page shows what the store makes of it, as
  * Settings does; a visitor's goes on the page and stays on this device, and their account takes it

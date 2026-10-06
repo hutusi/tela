@@ -1,6 +1,7 @@
 # 0010 — next-intl without i18n routing
 
-Status: accepted (2026-09-04)
+Status: accepted (2026-09-04). Superseded in part by 0040 (2026-10-07): a null `reading_lang`
+follows the interface, and only a stored one is independent of it.
 
 ## Context
 

@@ -31,6 +31,13 @@ everything so far sits under `[Unreleased]`.
 - **Tela installs as an app** on Android and the desktop: a web app manifest that opens the
   reading page in a window of its own, with 192 and 512 icons and a maskable one for the
   launcher's own shape. The browser's bar is on the page's paper, in either theme.
+- **One language control** (ADR 0040): a 34 px circle in both headers and on the sign-in page,
+  beside the theme menu, showing 简, 繁, EN or FR and opening the four languages, each in its own
+  name. A member's sets the interface language and the translation follows it, until Settings →
+  Language gives the translation a language of its own; then the circle changes the translation
+  only, and says so ("Translate into"), and *Same as interface language* links the two again. A
+  visitor's choice comes with them when they join. Between devices each language goes to the
+  later choice, not the last push to arrive. It replaces *Read in*.
 - **An admin console** at `/admin` (ADR 0039), after the Claude Design's "Ledger, refined":
   Overview, Claims, Sites, Feeds, Discover, People, Invitations, Translation and System, each a
   searchable, sortable table with its likeliest action on every row, a record beside it, bulk
@@ -48,7 +55,7 @@ everything so far sits under `[Unreleased]`.
   Simplified post costs nothing to read in Traditional and the reverse, and one paid translation
   serves both scripts. The interface language follows the browser's order of preference, so
   `zh-TW` gets Traditional and a preferred English is no longer beaten by a Chinese listed after
-  it. Read in is now a menu.
+  it.
 - **Mail in the reader's language** (#28, ADRs 0013 and 0038 amended). Sign-in codes,
   invitations, reset codes and account notices come in Simplified, Traditional or French with
   English second, chosen by the language the reader picked, else their account's, else their
@@ -77,8 +84,7 @@ everything so far sits under `[Unreleased]`.
   bring, all of it only what Tela does and none of it a link (ADR 0037).
 - **A theme menu in the header**, for visitors and members alike, from 640 px up: Auto, Light
   or Dark. A member's choice is their synced theme, as Settings sets it; a visitor's stays on the
-  device and comes with them when they join. A visitor's *Read in* is now the member's one-press
-  pill, both languages in view (ADR 0037).
+  device and comes with them when they join (ADR 0037).
 - **About, Privacy and Terms**, in English and Chinese, rendered at the edge from the bundle;
   every statement on them is checked against what the code does (ADR 0035).
 - **Highlights and notes**, private, on either side of a translation, and found again when the
@@ -98,9 +104,9 @@ everything so far sits under `[Unreleased]`.
   translated, and "Your data" as one file.
 - **Pictures and languages.** A member can show their Gravatar wherever their name appears,
   served from Tela's own origin so it loads in mainland China and their email's hash stays
-  private; Refresh shows a picture changed on Gravatar (ADR 0032). The interface language moved
-  from the header to Settings → Language and follows the member to every device; the header keeps
-  *Read in 中文 EN*. A Manage link beside Subscriptions opens their list in Settings.
+  private; Refresh shows a picture changed on Gravatar (ADR 0032). The interface language is the
+  member's, set in Settings → Language, and follows them to every device. A Manage link beside
+  Subscriptions opens their list in Settings.
 - **Pictures of their own.** A member can upload a picture, cropped and zoomed in a dialog, and it
   comes before their Gravatar; the Gravatar is now on by default, shown once Gravatar is known to
   have one, and members without one keep their letter with no request made (ADR 0033).
