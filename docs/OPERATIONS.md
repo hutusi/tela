@@ -151,6 +151,33 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
      the same build that puts `/` in `run_worker_first`: one deploy, never one without the other,
      since a v2 worker takes its shell from `/`, which the edge now renders for visitors. Then
      check one browser (below, *The app shell*).
+   - The language circle, the Discover review and mark as unread (ADRs 0040, 0041, migration
+     0007) are additive and keep protocol 2, with no `MIN_CLIENT` bump. Before applying, note
+     the Time Travel bookmark (`wrangler d1 time-travel info tela`) and count what the backfill
+     will touch: `select reading_lang = ui_locale, count(*) from profiles group by 1` and
+     `select listing, claimed_by is null, count(*) from sites group by 1, 2`. Then apply the
+     migration and deploy tela-jobs, tela-api, tela-web:
+     - tela-jobs first, because its nightly compaction must keep rows marked unread before any
+       exists, and its digest reads `sites.review`.
+     - tela-api before tela-web, because the new shell sends `readingLang: null`, `adopt`,
+       `ifAbsent`, `base` and `markUnread`, which an older tela-api refuses, or strips and applies
+       unconditionally (`adopt`, `ifAbsent`). The console's new `dismissed` filter would answer
+       400 from an older tela-api.
+     - **Any Worker may go back alone.** An older tela-web ignores the new fields and shows a post
+       marked unread below its feed's watermark as read. An older tela-api refuses the new
+       mutations visibly, takes a show without its `base` by `at` again, and returns public
+       reader counts below three. An older tela-jobs's compaction drops marked-unread rows under
+       the watermark, so those posts read as read again.
+     - The migration is additive. Its two backfills are undone only by Time Travel, which loses
+       every write since: `reading_lang` cleared where it equalled `ui_locale` (an older shell
+       reads null the same way), and `sites.review` set from each blog's listing.
+     - After deploy, check that:
+       - the circle shows in both headers and on `/login`;
+       - a linked choice on one device changes both languages on another;
+       - `/admin/discover` opens on To review;
+       - `/discover` shows no count below three;
+       - `curl -sI https://tela.ainaive.com/manifest.webmanifest` is `application/manifest+json`;
+       - a code requested from a French browser arrives in French.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
