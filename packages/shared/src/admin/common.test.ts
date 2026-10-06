@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   ACTION_WRITES,
+  ADMIN_FILTERS,
   actionsWriting,
   isAdminFilter,
   isLedgerArea,
@@ -17,6 +18,10 @@ describe("the console's areas", () => {
     expect(isAdminFilter('feeds', 'fetching')).toBe(true)
     expect(isAdminFilter('feeds', 'review')).toBe(false)
   })
+
+  test('Discover opens on its review queue (ADR 0041)', () => {
+    expect(ADMIN_FILTERS.discover[0]).toBe('candidates')
+  })
 })
 
 describe('what actions write', () => {
@@ -27,6 +32,7 @@ describe('what actions write', () => {
       expect(actionsWriting(writes ?? '')).toContain(action)
     }
     expect(actionsWriting('listing').sort()).toEqual([
+      'site.dismiss',
       'site.feature',
       'site.hide',
       'site.list',

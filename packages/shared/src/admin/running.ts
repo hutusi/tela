@@ -135,6 +135,8 @@ export type AdminCounts = {
   feeds: number
   /** Unresolved dead letters. */
   dead: number
+  /** Blogs members added that wait for review for Discover (ADR 0041). */
+  discover: number
 }
 
 export type AdminOverview = {

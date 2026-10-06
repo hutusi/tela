@@ -29,7 +29,18 @@ export type AdminSiteRow = AdminRowBase & {
   primaryLang: string | null
   translationOptOut: boolean
   topics: string[]
+  /** When it was added: its first feed. */
   createdAt: number
+  /** Posts its live feeds brought in the last 30 days, the newest one's title and time. */
+  postsLast30d: number
+  latestTitle: string | null
+  latestAt: number | null
+  /**
+   * When an operator decided about it for Discover (ADR 0041): listed, featured, hidden, or not
+   * for Discover. Null while a blog a member added waits in the review queue. Never who added it:
+   * what a member reads is not the console's to show (ADR 0039).
+   */
+  reviewedAt: number | null
 }
 
 export type AdminClaimRow = AdminRowBase & {

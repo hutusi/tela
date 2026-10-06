@@ -22,9 +22,10 @@
       "fetching": "Fetching"
     },
     "discover": {
+      "candidates": "To review",
       "featured": "Featured",
       "listed": "Listed",
-      "candidates": "Candidates",
+      "dismissed": "Not for Discover",
       "hidden": "Hidden"
     }
   },
@@ -40,7 +41,9 @@
     "region": "Region",
     "lastError": "Last error",
     "topics": "Topics",
-    "language": "Language"
+    "language": "Language",
+    "latest": "Latest post",
+    "posts30d": "Posts, 30 days"
   },
   "methods": { "meta": "Meta tag", "rel_me": "rel=\"me\" link", "dns": "DNS record" },
   "regions": { "global": "Direct", "cn": "China relay" },
@@ -50,7 +53,9 @@
     "listed": "Listed",
     "private": "Private",
     "rejected": "Hidden",
-    "unclaimed": "Unclaimed"
+    "unclaimed": "Unclaimed",
+    "toReview": "To review",
+    "dismissed": "Not for Discover"
   },
   "health": {
     "ok": "healthy",
@@ -99,7 +104,12 @@
     "other": "Failing"
   },
   "actions": { "unfeature": "Unfeature", "restoreDefault": "Restore to default" },
-  "actionsDone": { "unfeature": "Unfeatured", "restoreDefault": "Restored to default" },
+  "actionsDone": {
+    "unfeature": "Unfeatured",
+    "restoreDefault": "Restored to default",
+    "listedNoTopics": "Listed, with no topics yet",
+    "featuredNoTopics": "Featured, with no topics yet"
+  },
   "topics": {
     "essays": "Essays",
     "tech": "Tech",
@@ -116,6 +126,8 @@
   "none": "—",
   "listSeparator": ", ",
   "unknownLanguage": "Not known",
+  "addedWhen": "added {when}",
+  "noTopics": "no topics yet",
   "kv": {
     "blog": "Blog",
     "blogValue": "{title} · {n, plural, one {# reader} other {# readers}}",
@@ -141,6 +153,9 @@
     "translationOff": "Paused",
     "tokens": "Tokens, 30 days",
     "added": "Added",
+    "posts30d": "Posts, 30 days",
+    "latest": "Latest post",
+    "latestValue": "{title} · {when}",
     "about": "About",
     "status": "Status",
     "errors": "Errors in a row",
@@ -179,6 +194,9 @@
     "merged": "This feed lists the same posts as another feed of the blog, so it was merged into it: adding this address subscribes to that one. It can’t be unmerged; its next fetch would merge it again.",
     "noRelay": "No China relay is configured, so this feed can only be fetched directly.",
     "discoverLag": "Changes reach the public pages within about five minutes: the edge caches them.",
-    "topicsHint": "Topics decide where Discover shows the blog. Click one to add or remove it."
+    "topicsHint": "Topics decide where Discover shows the blog. Click one to add or remove it.",
+    "noTopics": "No topics yet, so Discover shows this blog only under All. Pick one or more below.",
+    "review": "A member added this blog. List it, or say it is not for Discover: either takes it out of this queue. Three readers list it whatever is decided here, unless it is hidden. Only how many read it is shown, never who.",
+    "dismissed": "Judged not for Discover {when}. Three readers still list it; Hide keeps it out for good."
   }
 }

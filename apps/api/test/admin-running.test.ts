@@ -60,7 +60,9 @@ beforeEach(async () => {
     api.db.run(sql`insert into articles (id, feed_id, dedup_key, title, url, url_host, fetched_at,
         sort_at, extract_state, content_key, seq)
       values (1, 1, 'a', 'Post', 'https://one.example/1', 'one.example', 0, 0, 'failed', 'ck1',
-        ${currentSeq})`),
+        ${currentSeq}),
+        (2, 2, 'b', 'Two writes', 'https://two.example/1', 'two.example', ${now - DAY},
+          ${now - DAY}, 'none', 'ck2', ${currentSeq})`),
     api.db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status, error,
         last_checked_at, reviewed_at, created_at, seq)
       values (1, 2, ${claimant.userId}, 'meta', 'tok', 'failed', 'no meta tag', ${now - HOUR},
@@ -101,8 +103,38 @@ describe('the badges and the Overview', () => {
     await deadLetter('feed.fetch', '1', now - 2 * HOUR, true)
     const { status, body } = await get<AdminCounts>('counts')
     expect(status).toBe(200)
-    // Claim 2 was reviewed after its last check; feed 1 is fine.
-    expect(body).toEqual({ claims: 1, feeds: 2, dead: 1 })
+    // Claim 2 was reviewed after its last check; feed 1 is fine. Site 2 waits for review for
+    // Discover; site 3 has no post yet, so there is nothing to review.
+    expect(body).toEqual({ claims: 1, feeds: 2, dead: 1, discover: 1 })
+  })
+
+  test('the Discover badge and card count only blogs waiting for review (ADR 0041)', async () => {
+    // Site 3 is read but has brought no post; site 4 has posts and nobody reads it.
+    await api.db.batch([
+      bumpSeq(api.db),
+      api.db.run(sql`insert into sites (id, home_url, listing, reader_count, created_at,
+          updated_at, seq) values (4, 'https://four.example', 'private', 0, 0, 0, ${currentSeq})`),
+      api.db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+          updated_at, seq) values (4, 4, 'https://four.example/feed', 'four.example', 0, 0, 0,
+          ${currentSeq})`),
+      api.db.run(sql`insert into articles (feed_id, dedup_key, fetched_at, sort_at, seq)
+        values (4, 'd', 0, 0, ${currentSeq})`),
+    ] as never)
+    const waiting = async () => {
+      const counts = (await get<AdminCounts>('counts')).body
+      const overview = (await get<AdminOverview>('overview')).body
+      return [counts.discover, overview.queues.candidates.rows.map((r) => r.id)]
+    }
+    expect(await waiting()).toEqual([1, ['2']])
+    const dismissed = await act('site.dismiss', ['2'])
+    expect(dismissed.done).toEqual(['2'])
+    expect(await waiting()).toEqual([0, []])
+    const res = await api.request('/api/v1/admin/undo', {
+      as: ops,
+      body: { group: dismissed.undo?.group },
+    })
+    expect(res.status).toBe(200)
+    expect(await waiting()).toEqual([1, ['2']])
   })
 
   test('is refused to a member who is not an admin', async () => {
@@ -179,12 +211,12 @@ describe('the badges and the Overview', () => {
         },
       ],
     })
-    // Site 3 was hidden just now: only site 2 is still a candidate.
+    // Site 3 was hidden just now, and had brought no post: only site 2 waits for review.
     expect(candidates.count).toBe(1)
     expect(candidates.rows).toEqual([
       {
         id: '2',
-        actions: ['site.feature', 'site.list', 'site.hide'],
+        actions: ['site.list', 'site.dismiss', 'site.feature', 'site.hide'],
         siteId: 2,
         title: null,
         homeUrl: 'https://two.example',
@@ -199,6 +231,10 @@ describe('the badges and the Overview', () => {
         translationOptOut: false,
         topics: ['art', 'tech'],
         createdAt: 0,
+        postsLast30d: 1,
+        latestTitle: 'Two writes',
+        latestAt: now - DAY,
+        reviewedAt: null,
       },
     ])
 

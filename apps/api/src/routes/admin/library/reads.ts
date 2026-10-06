@@ -4,7 +4,7 @@
  * search, and the filter's rows up to the limit. A record is one batch too, with the history an
  * operator left read after it (the log only grows, so a moment's difference shows one entry more).
  */
-import { historyOf, type TelaDb } from '@tela/data'
+import { DISCOVER_REVIEW, historyOf, type TelaDb } from '@tela/data'
 import {
   ADMIN_FILTERS,
   ADMIN_LIST_LIMIT,
@@ -35,10 +35,10 @@ import {
   RELAY_SELECT,
   relayOf,
   SITE_ATTENTION,
-  SITE_SELECT,
   type SiteRaw,
   siteMatches,
   siteRow,
+  siteSelect,
 } from './rows'
 
 const DAY = 24 * 3600 * 1000
@@ -52,10 +52,16 @@ const SITE_FILTERS: Record<AdminFilter<'sites'>, SQL> = {
   hidden: sql`s.listing = 'rejected'`,
 }
 
+/**
+ * Discover's filters. To review (`candidates`) is the queue of blogs members added (ADR 0041);
+ * Not for Discover (`dismissed`) the ones an operator decided against, which three readers can
+ * still list. A private blog that waits for nothing (unread, unfetched) is the Sites ledger's.
+ */
 const DISCOVER_FILTERS: Record<AdminFilter<'discover'>, SQL> = {
+  candidates: DISCOVER_REVIEW,
   featured: sql`s.listing = 'featured'`,
   listed: sql`s.listing = 'listed'`,
-  candidates: sql`s.listing = 'private' and s.claimed_by is null`,
+  dismissed: sql`s.listing = 'private' and s.claimed_by is null and s.reviewed_at is not null`,
   hidden: sql`s.listing = 'rejected'`,
 }
 
@@ -115,12 +121,13 @@ async function siteLedger<A extends 'sites' | 'discover'>(
   filters: Record<AdminFilter<A>, SQL>,
   filter: AdminFilter<A>,
   pattern: string | null,
+  now: number,
 ): Promise<AdminList<ReturnType<typeof siteRow>, A>> {
   const matches = siteMatches(pattern)
   const [counts, rows] = await runBatch(db, [
     db.all(countsOf(filters, SITES_FROM, matches)),
     db.all(sql`
-      ${SITE_SELECT} where ${filters[filter]} and ${matches}
+      ${siteSelect(now - 30 * DAY)} where ${filters[filter]} and ${matches}
       order by s.reader_count desc, s.id desc ${OVER_LIMIT}
     `),
   ])
@@ -174,13 +181,17 @@ export function libraryReads(deps: ApiDeps) {
   routes.get('/sites', async (c) => {
     const query = ledgerQuery(c, 'sites')
     if (!query) return c.json({ error: 'invalid' }, 400)
-    return c.json(await siteLedger(db, 'sites', SITE_FILTERS, query.filter, query.pattern))
+    const now = deps.clock.now()
+    return c.json(await siteLedger(db, 'sites', SITE_FILTERS, query.filter, query.pattern, now))
   })
 
   routes.get('/discover', async (c) => {
     const query = ledgerQuery(c, 'discover')
     if (!query) return c.json({ error: 'invalid' }, 400)
-    return c.json(await siteLedger(db, 'discover', DISCOVER_FILTERS, query.filter, query.pattern))
+    const now = deps.clock.now()
+    return c.json(
+      await siteLedger(db, 'discover', DISCOVER_FILTERS, query.filter, query.pattern, now),
+    )
   })
 
   routes.get('/sites/:id', async (c) => {
@@ -188,7 +199,7 @@ export function libraryReads(deps: ApiDeps) {
     if (id === null) return c.json({ error: 'not_found' }, 404)
     const now = deps.clock.now()
     const [sites, feeds, claims, tokens, relay] = await runBatch(db, [
-      db.all(sql`${SITE_SELECT} where s.id = ${id}`),
+      db.all(sql`${siteSelect(now - 30 * DAY)} where s.id = ${id}`),
       db.all(sql`${FEED_SELECT} where f.site_id = ${id}
         order by f.merged_into is not null, f.id`),
       db.all(sql`${CLAIM_SELECT} where c.site_id = ${id} order by c.created_at desc, c.id desc`),

@@ -22,9 +22,10 @@
       "fetching": "正常抓取"
     },
     "discover": {
+      "candidates": "待审核",
       "featured": "精选",
       "listed": "已列入",
-      "candidates": "候选",
+      "dismissed": "不列入发现",
       "hidden": "已隐藏"
     }
   },
@@ -40,7 +41,9 @@
     "region": "线路",
     "lastError": "最近的错误",
     "topics": "话题",
-    "language": "语言"
+    "language": "语言",
+    "latest": "最新文章",
+    "posts30d": "30 天内文章"
   },
   "methods": { "meta": "Meta 标签", "rel_me": "rel=\"me\" 链接", "dns": "DNS 记录" },
   "regions": { "global": "直连", "cn": "中国中转" },
@@ -50,7 +53,9 @@
     "listed": "已列入",
     "private": "未公开",
     "rejected": "已隐藏",
-    "unclaimed": "无人认领"
+    "unclaimed": "无人认领",
+    "toReview": "待审核",
+    "dismissed": "不列入发现"
   },
   "health": {
     "ok": "正常",
@@ -99,7 +104,12 @@
     "other": "抓取失败"
   },
   "actions": { "unfeature": "取消精选", "restoreDefault": "恢复默认" },
-  "actionsDone": { "unfeature": "已取消精选", "restoreDefault": "已恢复默认" },
+  "actionsDone": {
+    "unfeature": "已取消精选",
+    "restoreDefault": "已恢复默认",
+    "listedNoTopics": "已列入，还没有话题",
+    "featuredNoTopics": "已设为精选，还没有话题"
+  },
   "topics": {
     "essays": "随笔",
     "tech": "技术",
@@ -116,6 +126,8 @@
   "none": "—",
   "listSeparator": "、",
   "unknownLanguage": "未知",
+  "addedWhen": "{when}添加",
+  "noTopics": "还没有话题",
   "kv": {
     "blog": "博客",
     "blogValue": "{title} · {n, plural, other {# 位读者}}",
@@ -141,6 +153,9 @@
     "translationOff": "已暂停",
     "tokens": "近 30 天用量（token）",
     "added": "加入于",
+    "posts30d": "30 天内文章",
+    "latest": "最新文章",
+    "latestValue": "{title} · {when}",
     "about": "简介",
     "status": "状态",
     "errors": "连续错误",
@@ -179,6 +194,9 @@
     "merged": "这个订阅源和同一博客的另一个订阅源列出的文章相同，所以已经合并过去：添加这个地址会订阅那一个。合并无法撤回，下次抓取时会再次合并。",
     "noRelay": "没有配置中国中转，这个订阅源只能直接抓取。",
     "discoverLag": "改动大约五分钟内出现在公开页面上：边缘节点有缓存。",
-    "topicsHint": "话题决定博客在发现里出现在哪里。点击一个话题来添加或移除。"
+    "topicsHint": "话题决定博客在发现里出现在哪里。点击一个话题来添加或移除。",
+    "noTopics": "还没有话题，所以发现只会在「全部」下显示这个博客。在下面选一个或几个。",
+    "review": "这是成员添加的博客。列入发现，或标为不列入发现，都会把它移出这个队列。无论这里怎么决定，有三位读者后它都会列入发现，除非被隐藏。这里只显示有多少人在读，从不显示是谁。",
+    "dismissed": "{when}标为不列入发现。有三位读者后它仍会列入；隐藏才能让它一直不出现。"
   }
 }

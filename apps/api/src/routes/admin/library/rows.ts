@@ -29,11 +29,15 @@ const FEED_TROUBLE = sql`(f.status = 'dead'
 // ---------------------------------------------------------------------------------------------
 // Sites
 
-/** Every column a site row needs, from `sites s left join profiles op` (the owner). */
-export const SITE_SELECT = sql`
+/**
+ * Every column a site row needs, from `sites s left join profiles op` (the owner), with what its
+ * feeds brought since `since` (30 days back) and its newest post. Never who added it (ADR 0039).
+ * The post subqueries are index seeks per feed (`articles_feed_sort_idx`), as on Discover.
+ */
+export const siteSelect = (since: number) => sql`
   select s.id, s.title, s.home_url, s.favicon_key, s.listing, s.claimed_by,
     op.handle as owner_handle, op.display_name as owner_name, s.reader_count, s.primary_lang,
-    s.translation_opt_out, s.created_at, s.description, s.claimed_at,
+    s.translation_opt_out, s.created_at, s.description, s.claimed_at, s.reviewed_at,
     (select count(*) from feeds f where f.site_id = s.id and f.merged_into is null) as feed_count,
     (select max(${FEED_RANK}) from feeds f where f.site_id = s.id and f.merged_into is null)
       as feed_rank,
@@ -42,7 +46,14 @@ export const SITE_SELECT = sql`
       and f.error_count > 0) as fetch_helps,
     exists (select 1 from site_claims c where c.site_id = s.id and ${NEEDS_REVIEW})
       as claim_failing,
-    (select json_group_array(t.topic) from site_topics t where t.site_id = s.id) as topics
+    (select json_group_array(t.topic) from site_topics t where t.site_id = s.id) as topics,
+    (select count(*) from articles a join feeds f on f.id = a.feed_id
+      where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since}) as posts_30d,
+    (select a.title from articles a join feeds f on f.id = a.feed_id
+      where f.site_id = s.id and f.merged_into is null
+      order by a.sort_at desc, a.id desc limit 1) as latest_title,
+    (select max(a.sort_at) from articles a join feeds f on f.id = a.feed_id
+      where f.site_id = s.id and f.merged_into is null) as latest_at
   from sites s left join profiles op on op.user_id = s.claimed_by`
 
 export type SiteRaw = {
@@ -60,12 +71,16 @@ export type SiteRaw = {
   created_at: number
   description: string | null
   claimed_at: number | null
+  reviewed_at: number | null
   feed_count: number
   feed_rank: number | null
   fetchable: number
   fetch_helps: number
   claim_failing: number
   topics: string
+  posts_30d: number
+  latest_title: string | null
+  latest_at: number | null
 }
 
 /** A site that needs attention (alias `s`): a feed in trouble, or a claim to review. */
@@ -80,15 +95,32 @@ export function siteMatches(pattern: string | null): SQL {
     or exists (select 1 from feeds f where f.site_id = s.id and ${like(sql`f.feed_url`, pattern)}))`
 }
 
-/** What a site's listing lets an operator do, the likeliest first. `private` is never offered. */
-export function listingActions(listing: AdminSiteRow['listing']): AdminActionName[] {
-  switch (listing) {
+/**
+ * A private blog nobody claimed and no operator has decided about yet: one Not for Discover
+ * applies to (ADR 0041). The review queue is these, narrowed to ones read and fetched.
+ */
+export const undecided = (raw: Pick<SiteRaw, 'listing' | 'claimed_by' | 'reviewed_at'>) =>
+  raw.listing === 'private' && raw.claimed_by === null && raw.reviewed_at === null
+
+/**
+ * What a site's listing lets an operator do, the likeliest first. `private` is never offered. In
+ * Discover, an undecided blog asks the review queue's question first: list it, or not for
+ * Discover; Feature and Hide are the stronger answers either way. Sites leaves that question to
+ * Discover, and keeps room for Fetch all feeds.
+ */
+export function listingActions(
+  raw: Pick<SiteRaw, 'listing' | 'claimed_by' | 'reviewed_at'>,
+  area: 'sites' | 'discover',
+): AdminActionName[] {
+  switch (raw.listing) {
     case 'featured':
       return ['site.restore', 'site.hide']
     case 'listed':
       return ['site.feature', 'site.hide']
     case 'private':
-      return ['site.feature', 'site.list', 'site.hide']
+      return area === 'discover' && undecided(raw)
+        ? ['site.list', 'site.dismiss', 'site.feature', 'site.hide']
+        : ['site.feature', 'site.list', 'site.hide']
     case 'rejected':
       return ['site.restore']
   }
@@ -100,7 +132,7 @@ export function listingActions(listing: AdminSiteRow['listing']): AdminActionNam
  * Discover offers the listing alone.
  */
 export function siteRow(raw: SiteRaw, area: 'sites' | 'discover'): AdminSiteRow {
-  let actions = listingActions(raw.listing)
+  let actions = listingActions(raw, area)
   if (area === 'sites' && raw.fetchable === 1) {
     actions = raw.fetch_helps === 1 ? ['site.fetchAll', ...actions] : [...actions, 'site.fetchAll']
   }
@@ -125,6 +157,10 @@ export function siteRow(raw: SiteRaw, area: 'sites' | 'discover'): AdminSiteRow 
     translationOptOut: raw.translation_opt_out === 1,
     topics,
     createdAt: raw.created_at,
+    postsLast30d: raw.posts_30d,
+    latestTitle: raw.latest_title,
+    latestAt: raw.latest_at,
+    reviewedAt: raw.reviewed_at,
   }
 }
 

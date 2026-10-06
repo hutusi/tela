@@ -1,12 +1,22 @@
 /**
  * The admin console (ADR 0039): only a member the operator granted it opens it, and to anyone else
  * (a visitor too) it is a page that does not exist; an admin hides a featured blog from Discover
- * and takes it back, works a ledger from the keyboard, pauses a feed, opens a claim no filter
- * lists, and reads it all in Chinese; and the console fits a phone. Each member here is new and
- * comes from an address of its own (sign-in is limited per address).
+ * and takes it back, lists a blog a member added from the review queue and takes that back too
+ * (ADR 0041), works a ledger from the keyboard, pauses a feed, opens a claim no filter lists, and
+ * reads it all in Chinese; and the console fits a phone. Each member here is new and comes from an
+ * address of its own (sign-in is limited per address).
  */
 import { type Browser, expect, type Page, test } from '@playwright/test'
-import { ADMIN_TOKEN, BASE, FIXTURES, fromAccountMenu, signInRequest } from './helpers'
+import { FRESH } from './fresh'
+import {
+  ADMIN_TOKEN,
+  addFeed,
+  BASE,
+  cycle,
+  FIXTURES,
+  fromAccountMenu,
+  signInRequest,
+} from './helpers'
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
@@ -120,6 +130,9 @@ test('an admin hides a featured blog from Discover, and takes it back with Undo'
 
   await page.locator('[data-testid="admin-nav-item"][data-area="discover"]').click()
   await expect(page).toHaveURL(/\/admin\/discover/)
+  // Discover opens on its review queue (ADR 0041); a featured blog is under Featured.
+  await page.locator('[data-testid="admin-filter"][data-filter="featured"]').click()
+  await expect(page).toHaveURL(/f=featured/)
   const row = page.locator(`[data-testid="admin-row"][data-row-id="${siteId}"]`)
   await row.click()
   await expect(page.getByTestId('admin-record')).toBeVisible()
@@ -135,6 +148,41 @@ test('an admin hides a featured blog from Discover, and takes it back with Undo'
   await expect(page.getByTestId('admin-toast')).toContainText('Undone')
   await expect(row).toBeVisible()
   expect(await listingOf(page, siteId)).toBe('featured')
+})
+
+test('a blog a member added waits under To review; List lists it, and Undo puts it back', async ({
+  browser,
+}) => {
+  const page = await member(browser, 17, { admin: true })
+  // A blog of its own (`./fresh.ts`), added as any member adds one: private, one reader, posts.
+  await addFeed(page.request, `${FIXTURES}/fresh/es.xml`)
+  await cycle(page.request)
+  await page.goto('/admin')
+  const nav = page.locator('[data-testid="admin-nav-item"][data-area="discover"]')
+  await expect(nav.getByTestId('admin-badge')).toBeVisible()
+  await nav.click()
+  await expect(page).toHaveURL(/\/admin\/discover$/)
+  await expect(
+    page.locator('[data-testid="admin-filter"][data-filter="candidates"]'),
+  ).toHaveAttribute('aria-pressed', 'true')
+  const row = page.getByTestId('admin-row').filter({ hasText: FRESH.es.blog })
+  await expect(row).toContainText('To review')
+  await row.click()
+  const record = page.getByTestId('admin-record')
+  // How many read it, never who: the record names no member.
+  await expect(record).toContainText('A member added this blog.')
+  await expect(record).not.toContainText('@')
+  await record.locator('[data-testid="admin-record-action"][data-action="site.list"]').click()
+  // It has no topics yet, so Discover would file it only under All: the toast says so.
+  await expect(page.getByTestId('admin-toast')).toContainText('Listed, with no topics yet')
+  await expect(row).toHaveCount(0)
+  await page.locator('[data-testid="admin-filter"][data-filter="listed"]').click()
+  await expect(page.getByTestId('admin-row').filter({ hasText: FRESH.es.blog })).toBeVisible()
+
+  await page.getByTestId('admin-undo').click()
+  await expect(page.getByTestId('admin-toast')).toContainText('Undone')
+  await page.locator('[data-testid="admin-filter"][data-filter="candidates"]').click()
+  await expect(page.getByTestId('admin-row').filter({ hasText: FRESH.es.blog })).toBeVisible()
 })
 
 test('the keyboard moves, checks, opens and closes; Escape clears the checks', async ({

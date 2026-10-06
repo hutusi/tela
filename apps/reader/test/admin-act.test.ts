@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   ACTION_CONFIRM,
   ADMIN_ACTIONS,
+  ADMIN_FILTERS,
   type AdminHealth,
   type AdminRowBase,
 } from '@tela/shared/admin'
@@ -21,12 +22,13 @@ import {
   type Translate,
   undoMessage,
 } from '../src/admin/act'
+import { discoverDone } from '../src/admin/areas/discover'
 import { describeLibrary, restoreDone } from '../src/admin/areas/sites'
 import { ADMIN_MESSAGES } from '../src/admin/i18n'
 import { healthSummary } from '../src/admin/overview'
-import { OVERVIEW } from './admin-fixtures'
+import { candidate, OVERVIEW } from './admin-fixtures'
 
-const translator = (locale: 'en' | 'zh-Hans'): Translate =>
+const translator = (locale: 'en' | 'zh-Hans' | 'zh-Hant'): Translate =>
   createTranslator({
     locale,
     messages: { admin: ADMIN_MESSAGES[locale] },
@@ -40,7 +42,7 @@ const titleOf = (id: string) => titles[id] ?? null
 describe('the words', () => {
   // use-intl reads a dot in a key as nesting, so `actions.site.feature.label` must be nested in the
   // catalogue: a key written "site.feature" would never be found, in any language.
-  test.each(['en', 'zh-Hans'] as const)(
+  test.each(['en', 'zh-Hans', 'zh-Hant'] as const)(
     '%s has every action’s label, short form and past tense',
     (lang) => {
       const words = translator(lang)
@@ -58,6 +60,21 @@ describe('the words', () => {
       }
     },
   )
+
+  test.each(['en', 'zh-Hans', 'zh-Hant'] as const)('%s names every ledger’s filters', (lang) => {
+    const library = createTranslator({
+      locale: lang,
+      messages: { admin: ADMIN_MESSAGES[lang] },
+      namespace: 'admin.library',
+    }) as unknown as Translate
+    // The library's four ledgers keep their filter names in the library's catalogue.
+    for (const area of ['claims', 'sites', 'feeds', 'discover'] as const) {
+      for (const filter of ADMIN_FILTERS[area]) {
+        const key = `filters.${area}.${filter}`
+        expect({ key, text: library(key) }).not.toEqual({ key, text: `admin.library.${key}` })
+      }
+    }
+  })
 })
 
 describe('asking first', () => {
@@ -170,6 +187,32 @@ describe('the toast', () => {
     // Any other action, or a listing Restore does not change, keeps the shell's words.
     expect(restoreDone(library('en'), 'featured', 'site.hide')).toBeUndefined()
     expect(restoreDone(library('en'), 'listed', 'site.restore')).toBeUndefined()
+  })
+
+  test('List or Feature on a blog with no topics says so: Discover files it only under All', () => {
+    const library = (locale: 'en' | 'zh-Hans') =>
+      createTranslator({
+        locale,
+        messages: { admin: ADMIN_MESSAGES[locale] },
+        namespace: 'admin.library',
+      }) as unknown as Parameters<typeof discoverDone>[0]
+    expect(discoverDone(library('en'), candidate, 'site.list')).toBe('Listed, with no topics yet')
+    expect(discoverDone(library('en'), candidate, 'site.feature')).toBe(
+      'Featured, with no topics yet',
+    )
+    expect(discoverDone(library('zh-Hans'), candidate, 'site.list')).toBe('已列入，还没有话题')
+    const topical = { ...candidate, topics: ['food'] }
+    expect(discoverDone(library('en'), topical, 'site.list')).toBeUndefined()
+    expect(discoverDone(library('en'), candidate, 'site.dismiss')).toBeUndefined()
+    const response = { done: ['30'], failed: [], undo: { group: 'g' } }
+    expect(
+      actMessage(t, {
+        action: 'site.list',
+        response,
+        titleOf: () => '日々の海',
+        words: discoverDone(library('en'), candidate, 'site.list'),
+      }),
+    ).toBe('Listed, with no topics yet · 日々の海')
   })
 
   test('a row the ledger did not show: the action alone', () => {

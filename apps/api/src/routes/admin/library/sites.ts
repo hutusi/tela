@@ -1,6 +1,8 @@
 /**
- * What an operator does to a blog: its listing, its topics, whether it is translated, and a fetch
- * of every feed it has. A blog's row syncs to its readers, so every change bumps the sequence.
+ * What an operator does to a blog: its listing and its review for Discover, its topics, whether
+ * it is translated, and a fetch of every feed it has. A blog's row syncs to its readers, so every
+ * change bumps the sequence, bar Not for Discover, which writes only the review stamp no device
+ * holds.
  */
 import { audit, bumpSeq, currentSeq, type TelaDb } from '@tela/data'
 import { isTopic, type SiteListing } from '@tela/shared'
@@ -10,13 +12,22 @@ import { fetchSoon } from '../../feeds'
 import { type ActHandler, type Inverse, returned, runBatch } from '../framework'
 import { applyChange, DOORS_SAY, idOf, restoreColumns, stamped } from './common'
 
-const SET_LISTING: Partial<Record<AdminActionName, { to: SQL; applies: SQL }>> = {
-  'site.feature': { to: sql`'featured'`, applies: sql`listing <> 'featured'` },
-  'site.list': { to: sql`'listed'`, applies: sql`listing <> 'listed'` },
-  'site.hide': { to: sql`'rejected'`, applies: sql`listing <> 'rejected'` },
+/**
+ * What each listing action sets, and whether it decides the blog for Discover (ADR 0041). Feature,
+ * List and Hide are decisions: each stamps `reviewed_at` unless an earlier one did, and records
+ * the stamp it found, so an undo of a mistaken List puts the blog back in the review queue.
+ * Restore is not a decision about the blog but a return to what the doors say, after a decision
+ * that was one (a Feature or a Hide stamped it), so it leaves the stamp alone: unfeaturing a pick
+ * one member reads should not ask the operator the question they answered by featuring it.
+ */
+const SET_LISTING: Partial<Record<AdminActionName, { to: SQL; applies: SQL; decides: boolean }>> = {
+  'site.feature': { to: sql`'featured'`, applies: sql`listing <> 'featured'`, decides: true },
+  'site.list': { to: sql`'listed'`, applies: sql`listing <> 'listed'`, decides: true },
+  'site.hide': { to: sql`'rejected'`, applies: sql`listing <> 'rejected'`, decides: true },
   'site.restore': {
     to: DOORS_SAY,
     applies: sql`listing in ('featured', 'rejected') and listing <> ${DOORS_SAY}`,
+    decides: false,
   },
 }
 
@@ -27,34 +38,79 @@ export function setListing(action: AdminActionName): ActHandler {
   return async (ctx, id) => {
     const siteId = idOf(id)
     if (siteId === null) return 'not_found'
+    const reviewed = sql`coalesce(reviewed_at, ${ctx.now})`
     return applyChange(ctx, {
       action,
       table: 'sites',
       id: siteId,
       applies: rule.applies,
-      set: sql`listing = ${rule.to}`,
-      from: sql`json_object('listing', listing)`,
-      to: sql`json_object('listing', ${rule.to})`,
+      set: rule.decides
+        ? sql`listing = ${rule.to}, reviewed_at = ${reviewed}`
+        : sql`listing = ${rule.to}`,
+      from: rule.decides
+        ? sql`json_object('listing', listing, 'reviewedAt', reviewed_at)`
+        : sql`json_object('listing', listing)`,
+      to: rule.decides
+        ? sql`json_object('listing', ${rule.to}, 'reviewedAt', ${reviewed})`
+        : sql`json_object('listing', ${rule.to})`,
     })
   }
 }
 
-/** Put a site's listing back, while it still holds what the action set. */
+/**
+ * Put a site's listing back, while it still holds what the action set, and the review stamp the
+ * action found when it recorded one (an audit row from before ADR 0041 has none, and leaves the
+ * stamp as it is).
+ */
 export const restoreListing: Inverse = (db: TelaDb, change, now) => {
   const siteId = Number(change.targetKey)
-  const from = (change.from as { listing?: SiteListing } | null)?.listing ?? null
-  const to = (change.to as { listing?: SiteListing } | null)?.listing ?? null
+  const from = (change.from ?? {}) as { listing?: SiteListing; reviewedAt?: number | null }
+  const to = (change.to ?? {}) as { listing?: SiteListing; reviewedAt?: number | null }
+  const stamp = 'reviewedAt' in from && 'reviewedAt' in to
+  const holds = stamp
+    ? sql`listing = ${to.listing ?? null} and reviewed_at is ${to.reviewedAt ?? null}`
+    : sql`listing = ${to.listing ?? null}`
   return {
-    changed: sql`not exists (select 1 from sites where id = ${siteId} and listing = ${to})`,
+    changed: sql`not exists (select 1 from sites where id = ${siteId} and ${holds})`,
     restore: [
       db.run(sql`
-        update sites set listing = ${from}, updated_at = ${now}, seq = ${currentSeq}
-        where id = ${siteId} and listing = ${to}
+        update sites set listing = ${from.listing ?? null},
+          ${stamp ? sql`reviewed_at = ${from.reviewedAt ?? null},` : sql``}
+          updated_at = ${now}, seq = ${currentSeq}
+        where id = ${siteId} and ${holds}
       `),
     ],
     synced: true,
   }
 }
+
+/**
+ * Not for Discover (ADR 0041): take a blog a member added out of the review queue, deciding
+ * against listing it. Only the review stamp changes, and no device holds it, so nothing syncs.
+ * The community door still lists the blog once three members read it (`recountReaders` does not
+ * look at the stamp); Hide is the veto.
+ */
+const dismiss: ActHandler = async (ctx, id) => {
+  const siteId = idOf(id)
+  if (siteId === null) return 'not_found'
+  return applyChange(ctx, {
+    action: 'site.dismiss',
+    table: 'sites',
+    id: siteId,
+    applies: sql`listing = 'private' and claimed_by is null and reviewed_at is null`,
+    set: sql`reviewed_at = ${ctx.now}`,
+    from: sql`json_object('reviewedAt', reviewed_at)`,
+    to: { reviewedAt: ctx.now },
+    synced: false,
+  })
+}
+
+/** Back to the review queue, while the stamp is still the one the dismiss wrote. */
+const restoreReview = restoreColumns({
+  table: 'sites',
+  columns: { reviewedAt: 'reviewed_at' },
+  synced: false,
+})
 
 /** A site's topics as a JSON array in topic order: what `site.topics` replaced. */
 const topicsOf = (siteId: number) =>
@@ -187,6 +243,7 @@ const fetchAll: ActHandler = async (ctx, id) => {
 export const siteActions = {
   'site.feature': setListing('site.feature'),
   'site.list': setListing('site.list'),
+  'site.dismiss': dismiss,
   'site.hide': setListing('site.hide'),
   'site.restore': setListing('site.restore'),
   'site.topics': setTopics,
@@ -198,6 +255,7 @@ export const siteActions = {
 export const siteInverses = {
   'site.feature': restoreListing,
   'site.list': restoreListing,
+  'site.dismiss': restoreReview,
   'site.hide': restoreListing,
   'site.restore': restoreListing,
   'site.topics': restoreTopics,

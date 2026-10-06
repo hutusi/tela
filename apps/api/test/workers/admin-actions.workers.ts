@@ -1,6 +1,7 @@
 /**
  * The admin console's write path on D1 (ADR 0039): an audit row read by `insert … select` with
- * `json_set`, an undo whose guards abort the batch through `lease_fence`, and the invite
+ * `json_set`, an undo whose guards abort the batch through `lease_fence`, the unsynced review
+ * stamp of Not for Discover and the queue it leaves (ADR 0041), and the invite
  * allowance's subquery, which names `invite_codes` again inside a statement over `invite_codes`.
  * libSQL takes all of it; this is where D1 would disagree.
  */
@@ -16,7 +17,7 @@ import { createApp } from '../../src/app'
 
 const ORIGIN = 'http://tela.test'
 
-it('audits, undoes and holds the invite allowance on D1', async () => {
+it('audits, undoes, reviews for Discover and holds the invite allowance on D1', async () => {
   const db = d1Db(env.DB, schema)
   const mail = memoryMail()
   const jobs: Jobs<JobQueues> = { send: async () => {}, sendBatch: async () => {} }
@@ -75,14 +76,45 @@ it('audits, undoes and holds the invite allowance on D1', async () => {
   const [row] = await db.all<{ detail: string }>(
     sql`select detail from admin_actions where action = 'site.hide'`,
   )
+  // Hiding decides the blog for Discover (ADR 0041): the stamp it found is kept, null included.
   expect(JSON.parse(row?.detail ?? '{}')).toEqual({
-    from: { listing: 'listed' },
-    to: { listing: 'rejected' },
+    from: { listing: 'listed', reviewedAt: null },
+    to: { listing: 'rejected', reviewedAt: now },
   })
   expect((await undo(hidden.undo?.group ?? '')).status).toBe(200)
-  expect(await db.all(sql`select listing from sites where id = 1`)).toEqual([{ listing: 'listed' }])
+  expect(await db.all(sql`select listing, reviewed_at from sites where id = 1`)).toEqual([
+    { listing: 'listed', reviewed_at: null },
+  ])
   // Undone once, the group is spent: the guard aborts the batch.
   expect((await undo(hidden.undo?.group ?? '')).status).toBe(409)
+
+  // Not for Discover: a blog a member added leaves the review queue with no seq moved, and an
+  // undo puts it back.
+  await db.run(sql`insert into sites (id, home_url, listing, reader_count, created_at, updated_at)
+    values (2, 'https://b.example', 'private', 1, 0, 0)`)
+  await db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+    updated_at) values (2, 2, 'https://b.example/feed', 'b.example', 0, 0, 0)`)
+  await db.run(sql`insert into articles (feed_id, dedup_key, title, fetched_at, sort_at)
+    values (2, 'b1', 'A post', ${now}, ${now})`)
+  const queue = async () =>
+    (
+      (await (await call('/api/v1/admin/discover', { headers: as })).json()) as {
+        rows: { id: string; postsLast30d: number }[]
+      }
+    ).rows
+  expect(await queue()).toMatchObject([{ id: '2', postsLast30d: 1 }])
+  const seqBefore = await db.all(sql`select seq from sites where id = 2`)
+  const dismissed = await act('site.dismiss', ['2'])
+  expect(dismissed.done).toEqual(['2'])
+  expect(await db.all(sql`select reviewed_at, seq from sites where id = 2`)).toEqual([
+    { reviewed_at: now, seq: (seqBefore[0] as { seq: number }).seq },
+  ])
+  expect(await queue()).toEqual([])
+  expect((await undo(dismissed.undo?.group ?? '')).status).toBe(200)
+  expect(await db.all(sql`select reviewed_at from sites where id = 2`)).toEqual([
+    { reviewed_at: null },
+  ])
+  expect(await queue()).toMatchObject([{ id: '2' }])
 
   // Five codes of the member's own count; a sixth cannot be opened by restoring one.
   await db.run(sql`insert into invite_codes (code, created_by, max_uses, created_at)

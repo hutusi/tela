@@ -24,7 +24,9 @@ export const ADMIN_FILTERS = {
   claims: ['review', 'checking', 'verified'],
   sites: ['discover', 'private', 'attention', 'hidden'],
   feeds: ['failing', 'timeout', 'dead', 'paused', 'merged', 'fetching'],
-  discover: ['featured', 'listed', 'candidates', 'hidden'],
+  // `candidates` is the review queue (ADR 0041), "To review"; `dismissed`, the blogs judged not
+  // for Discover, which three readers can still list.
+  discover: ['candidates', 'featured', 'listed', 'dismissed', 'hidden'],
   people: ['admins', 'members'],
   invites: ['codes', 'waiting', 'revoked'],
   translation: ['blogs', 'jobs', 'models'],
@@ -57,6 +59,7 @@ export type AdminTone = (typeof ADMIN_TONES)[number]
 export const ADMIN_ACTIONS = [
   'site.feature',
   'site.list',
+  'site.dismiss',
   'site.hide',
   'site.restore',
   'site.topics',
@@ -98,6 +101,7 @@ export function isAdminAction(value: unknown): value is AdminActionName {
 export const UNDOABLE_ACTIONS = [
   'site.feature',
   'site.list',
+  'site.dismiss',
   'site.hide',
   'site.restore',
   'site.topics',
@@ -123,6 +127,9 @@ export const UNDOABLE_ACTIONS = [
 export const ACTION_WRITES = {
   'site.feature': 'listing',
   'site.list': 'listing',
+  // Not for Discover writes only the review stamp, but a later List or Hide decides the same
+  // question, and an undo of the dismiss must not put back a queue entry that was settled since.
+  'site.dismiss': 'listing',
   'site.hide': 'listing',
   'site.restore': 'listing',
   'site.topics': 'topics',
