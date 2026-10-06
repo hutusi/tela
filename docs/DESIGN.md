@@ -643,5 +643,7 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - Under the article, *N highlights* lists each quote (in a `<mark>` there, since it is a copy)
     with its note. One the post lost says so in `muted`; one on a layout not showing says where
     it is.
-- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `h`, `[`, `f` and `?` in `kbd` chips. `[`
-  needs AltGr or Option on some non-US layouts, as `?` does on others; neither is worked around.
+- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `o`, `l`, `h`, `[`, `f` and `?` in `kbd`
+  chips. `o` opens the original in a new tab and `l` likes or unlikes, both on the open article.
+  `[` needs AltGr or Option on some non-US layouts, as `?` does on others; neither is worked
+  around.

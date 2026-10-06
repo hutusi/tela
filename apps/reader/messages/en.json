@@ -673,6 +673,8 @@
     "next": "Next article",
     "previous": "Previous article",
     "close": "Close the article",
+    "original": "Open the original in a new tab",
+    "like": "Like or unlike the article",
     "highlight": "Highlight the selection",
     "sidebar": "Collapse or expand the sidebar",
     "focus": "Hide the list while reading",

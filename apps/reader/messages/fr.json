@@ -673,6 +673,8 @@
     "next": "Article suivant",
     "previous": "Article précédent",
     "close": "Fermer l’article",
+    "original": "Ouvrir l’original dans un nouvel onglet",
+    "like": "Aimer l’article, ou ne plus l’aimer",
     "highlight": "Surligner la sélection",
     "sidebar": "Replier ou déplier la barre latérale",
     "focus": "Masquer la liste pendant la lecture",

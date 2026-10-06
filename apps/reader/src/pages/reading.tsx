@@ -26,6 +26,7 @@ import { PREF_KEYS, useReadingPrefs } from '../lib/prefs'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
+  isLiked,
   isRead,
   prefetchPlan,
   shownTitle,
@@ -129,8 +130,9 @@ export function ReadingPage() {
   }, [navigate])
 
   // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
-  // article, [ shows or hides the sidebar, f the list too while one is open, ? lists the keys. Typing in a field is never a shortcut, and a popover that handles
-  // Esc itself marks the event so the article stays open.
+  // article, [ shows or hides the sidebar, f the list too while one is open, o opens its original
+  // and l likes or unlikes it, ? lists the keys. Typing in a field is never a shortcut, and a
+  // popover that handles Esc itself marks the event so the article stays open.
   const [help, setHelp] = useState(false)
   // Read when a key is pressed, not when the listener was bound: a second `j` can come before
   // React has rendered the first one's navigation, and the URL is already right by then.
@@ -162,6 +164,28 @@ export function ReadingPage() {
       } else if (e.key === 'f' && now.articleId !== null) {
         e.preventDefault()
         toggleFocus()
+      } else if ((e.key === 'o' || e.key === 'l') && now.articleId !== null) {
+        // A key held down repeats: one tab and one turn of the like per press, not per repeat.
+        if (e.repeat) return
+        // The article the URL has open and its like as the store has them now: a j a moment ago
+        // may not have rendered yet, and a like from another tab may have synced since.
+        const { tables } = store.getSnapshot()
+        const article = store.article(tables, now.articleId)
+        if (!article) return
+        if (e.key === 'o') {
+          // Ingest keeps only http(s) links; a script opening one checks again all the same.
+          if (!article.url || !/^https?:\/\//i.test(article.url)) return
+          e.preventDefault()
+          // As the meta line's link opens it: a new tab that cannot reach back into this one.
+          window.open(article.url, '_blank', 'noopener,noreferrer')
+        } else {
+          e.preventDefault()
+          store.mutate({
+            type: 'setLiked',
+            articleId: article.id,
+            liked: !isLiked(tables, article.id),
+          })
+        }
       } else if (e.key === '?') {
         e.preventDefault()
         setHelp((shown) => !shown)
@@ -169,7 +193,7 @@ export function ReadingPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate])
+  }, [navigate, store])
 
   // The row of the open article stays in view as j and k move; closing puts focus back on it, so
   // the keyboard carries on from where the reader was. Leaving focus with an article open brings

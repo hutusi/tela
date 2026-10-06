@@ -1,7 +1,8 @@
 # 0026 — Highlights anchored to leaves, typography as synced prefs, and a small keyboard layer
 
 Status: accepted (2026-09-29). Builds on 0022 (content versions), 0023 (translations aligned by
-block) and 0025 (the member's rows sync to the device).
+block) and 0025 (the member's rows sync to the device). Amended 2026-10-07: two more keys, `o`
+and `l`.
 
 ## Context
 
@@ -66,6 +67,13 @@ chosen theme is cached in localStorage and applied by an inline script before an
 focus back on its row, `h` highlights the selection, and `?` lists the keys. Typing in a field is
 never a shortcut, and a popover that handles `Esc` itself keeps the article open.
 
+(Amended on 2026-10-07: `o` opens the open article's original in a new tab, with no opener and
+no referrer, as the link in its meta line does, and `l` likes or unlikes it with the like
+button's `setLiked`. Each reads the article from the URL and its like from the store when the
+key is pressed, not from the render that bound the listener, for the reason below; neither does
+anything without an article open. With `[` for the sidebar and `f` for focus, `?` now lists nine
+keys.)
+
 The row that gets focus is the article the URL had open when `Esc` was pressed. A `j` just before
 it may already have rendered another article, so the close pushes the list with that id in the
 entry's navigation state rather than leaving it for a later render to find. Back to that entry
@@ -89,4 +97,5 @@ ignores the state too, and, with no article shown yet, focuses nothing.
   - detached once the passage is gone;
   - on the translation side, and shown as elsewhere in the original-only layout;
   - the keyboard layer, including `Esc` inside a popover, an `Esc` that lands while a `j` is
-    being committed, and Back to a list a close left.
+    being committed, and Back to a list a close left; `o` opening the original without an
+    opener, `l` reaching the server both ways, and both typed into a field doing nothing.
