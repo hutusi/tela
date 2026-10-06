@@ -163,7 +163,7 @@ export default {
               to: env.DIGEST_TO,
             }
           : undefined
-      return Response.json(await weekly(ctx.db, ctx.blobs, Date.now(), outbox))
+      return Response.json(await weekly(ctx.db, ctx.blobs, Date.now(), outbox, ctx.publicUrl))
     }
     if (request.method === 'POST' && url.pathname === '/jobs/run') {
       const message = (await request.json()) as JobMessage
