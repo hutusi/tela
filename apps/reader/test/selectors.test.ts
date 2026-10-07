@@ -2,11 +2,14 @@ import { describe, expect, test } from 'bun:test'
 import { applyPull, emptyTables, type Tables, titleKey, view } from '@tela/sync'
 import {
   articlesFor,
+  isMarkedUnread,
   isRead,
   prefetchPlan,
+  shownRead,
   shownTitle,
   subscriptionItems,
   totals,
+  withoutRead,
 } from '../src/store/selectors'
 import { article, DAY, NOW, pull, sub } from './rows'
 
@@ -23,6 +26,66 @@ describe('what the reading view shows', () => {
     })
     const read = (id: number) => isRead(t, t.articles.get(id) ?? article(id), NOW)
     expect([1, 3, 4, 5].map(read)).toEqual([true, false, true, true])
+  })
+
+  test('a post marked unread beats the watermark and the horizon, until it is read again', () => {
+    const state = (articleId: number, readAt: number | null, readUpdatedAt: number | null) => ({
+      articleId,
+      readAt,
+      readUpdatedAt,
+      likedAt: null,
+      likedUpdatedAt: null,
+      seq: 1,
+    })
+    const t = tables({
+      subscriptions: [sub(1, { watermarkId: 3 })],
+      articles: [
+        article(1),
+        article(2, { fetchedAt: NOW - 31 * DAY, contentKey: 'k2' }),
+        article(3),
+        article(4, { contentKey: 'k4' }),
+      ],
+      // 1 marked unread under the watermark, 2 past the horizon, 3 read again since; 4 is new.
+      states: [state(1, null, 5), state(2, null, 5), state(3, 6, 6)],
+    })
+    const read = (id: number) => isRead(t, t.articles.get(id) ?? article(id), NOW)
+    expect([1, 2, 3, 4].map(read)).toEqual([false, false, true, false])
+    expect([1, 2, 3, 4].map((id) => isMarkedUnread(t, id))).toEqual([true, true, false, false])
+    // Everything that asks whether a post is read agrees: counts, hide-read and the prefetch.
+    expect(totals(t, NOW).all).toBe(3)
+    expect(subscriptionItems(t, NOW).map((s) => s.unread)).toEqual([3])
+    const list = articlesFor(t, { filter: 'all', feedId: null }, NOW)
+    expect(withoutRead(t, list, NOW, null, new Set()).map((a) => a.id)).toEqual([4, 2, 1])
+    expect(prefetchPlan(t, list, NOW, 'en', { autoTranslate: false, never: [] }).bodies).toEqual([
+      'k4',
+      'k2',
+    ])
+  })
+
+  test('the open post shows as read while opening reads it, until it is marked unread', () => {
+    const t = tables({
+      subscriptions: [sub(1)],
+      articles: [article(1), article(2), article(3)],
+      // 1 not read yet (its open's markRead has not landed), 2 marked unread, 3 read.
+      states: [
+        {
+          articleId: 2,
+          readAt: null,
+          readUpdatedAt: 5,
+          likedAt: null,
+          likedUpdatedAt: null,
+          seq: 1,
+        },
+        { articleId: 3, readAt: 4, likedAt: null, likedUpdatedAt: null, seq: 1 },
+      ],
+    })
+    const shown = (id: number, open: boolean, markOnOpen: boolean) =>
+      shownRead(t, t.articles.get(id) ?? article(id), NOW, open, markOnOpen)
+    // Open, with opening reading it: only the one marked unread shows unread.
+    expect([1, 2, 3].map((id) => shown(id, true, true))).toEqual([true, false, true])
+    // Marking read by hand, or not open: as the tables say.
+    expect([1, 2, 3].map((id) => shown(id, true, false))).toEqual([false, false, true])
+    expect([1, 2, 3].map((id) => shown(id, false, true))).toEqual([false, false, true])
   })
 
   test('lists newest first; Today is a day; Liked spans feeds the member left', () => {

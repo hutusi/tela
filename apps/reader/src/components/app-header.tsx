@@ -1,16 +1,14 @@
 import { Link, useLocation } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { useSession } from '../session'
-import { useReadingLang, useStore } from '../store/hooks'
-import { useUi } from '../ui'
+import { useStore } from '../store/hooks'
 import { AccountMenu } from './account-menu'
 import { type DoorRequest, opensSheet, useFrontDoor } from './front-door'
 import { CONTROL } from './header-control'
+import { MemberLanguage, VisitorLanguage } from './language-menu'
 import { LogoMark } from './logo'
-import { MemberReadIn } from './read-in-menu'
 import { SearchField } from './search-field'
 import { ThemeMenu } from './theme-menu'
-import { VisitorLocale } from './visitor-locale'
 
 type NavKey = 'reading' | 'discover' | 'following' | 'writers'
 
@@ -44,8 +42,8 @@ function Lockup() {
  * allowed to shrink, because it is the one that scrolls). A member's profile, dashboard, settings
  * and sign-out are in the menu under their avatar (Tela v2). A visitor gets a header of their own
  * (ADR 0035), as soon as the device is known to hold no member: it does not wait for /me. Both
- * carry the theme menu from `sm` up, and the same Read-in menu; the controls on the right are one
- * family (`header-control.ts`).
+ * carry the theme menu from `sm` up, and the same language circle (ADR 0040); the controls on the
+ * right are one family (`header-control.ts`).
  */
 export function AppHeader() {
   const { status } = useSession()
@@ -70,11 +68,13 @@ function usePill() {
 }
 
 /**
- * From `sm` up: the lockup, Discover and For writers, then the theme menu, Read in, Log in and
- * Join; below `sm` only Join is left beside the nav, which stays the one item that shrinks. At
- * 360px the two pills and Join fit with some 35px to spare (Figtree, measured), which the menu and
- * Read in, hidden there, leave alone. No Reading and no search: both are a member's. Log in and Join are
- * links, so they work before the script does, and open the sheet over the page once it runs.
+ * From `sm` up: the lockup, Discover and For writers, then the theme menu, the language circle,
+ * Log in and Join; below `sm` only Join is left beside the nav, which stays the one item that
+ * shrinks. At 360px the two pills and Join fit with some 35px to spare in English (Figtree,
+ * measured), which the two circles, hidden there, would take; in French the nav is 30px short
+ * there, and scrolls, as the one item that shrinks may. No Reading and no search: both are a member's. Log in
+ * and Join are links, so they work before the script does, and open the sheet over the page once
+ * it runs.
  */
 function VisitorHeader() {
   const t = useTranslations('nav')
@@ -94,7 +94,7 @@ function VisitorHeader() {
       </nav>
       <div className="flex-1" />
       <ThemeMenu />
-      <VisitorLocale className="hidden shrink-0 sm:block" />
+      <VisitorLanguage className="hidden shrink-0 sm:block" />
       <div className="flex shrink-0 items-center gap-1.5">
         <Link
           to="/login"
@@ -119,12 +119,11 @@ function VisitorHeader() {
 
 /**
  * A member's header, and the one a device holding a member's rows shows until /me answers. From
- * `sm` up the theme menu sits after search and before Read in.
+ * `sm` up the theme menu sits after search and before the language circle, which shows at every
+ * width: it is a member's one way to their language from a phone's header.
  */
 function MemberHeader() {
   const { status } = useSession()
-  const { locale } = useUi()
-  const readingLang = useReadingLang(locale)
   const location = useLocation()
   const pill = usePill()
   const t = useTranslations('nav')
@@ -155,8 +154,7 @@ function MemberHeader() {
         className="hidden w-60 min-w-0 items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] text-muted focus-within:border-muted xl:flex"
       />
       <ThemeMenu />
-      {/* The UI locale is in Settings for a member. */}
-      {member ? <MemberReadIn readingLang={readingLang} /> : null}
+      {member ? <MemberLanguage /> : null}
       {member ? <AccountMenu /> : null}
     </header>
   )

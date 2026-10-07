@@ -29,7 +29,7 @@ test.describe('for a visitor', () => {
       'href',
       '/join',
     )
-    await expect(page.getByTestId('visitor-locale')).toBeVisible()
+    await expect(page.getByTestId('language-menu')).toBeVisible()
     await expect(page.getByTestId('nav-reading')).toHaveCount(0)
 
     const robots = await request.get('/robots.txt')
@@ -43,6 +43,33 @@ test.describe('for a visitor', () => {
     const missing = await page.goto('/s/999999')
     expect(missing?.status()).toBe(404)
     await expect(page.getByTestId('not-found')).toBeVisible()
+  })
+
+  // The single-page fallback answers a path with no file 200 with the app's HTML (AGENTS.md), so
+  // a 200 alone proves nothing: each must come back as what its name says.
+  test('the manifest and its icons are served as themselves, and every page names it', async ({
+    page,
+    request,
+  }) => {
+    const res = await request.get('/manifest.webmanifest')
+    expect(res.status()).toBe(200)
+    expect(res.headers()['content-type']).toMatch(/^application\/manifest\+json\b/)
+    const manifest = (await res.json()) as { start_url: string; icons: { src: string }[] }
+    expect(manifest.icons.length).toBeGreaterThan(0)
+    for (const { src } of manifest.icons) {
+      const icon = await request.get(src)
+      expect(icon.status(), src).toBe(200)
+      expect(icon.headers()['content-type'], src).toBe('image/png')
+    }
+    // The shell, served without the Worker, and a page the edge rendered into it.
+    for (const path of [manifest.start_url, '/about']) {
+      await page.goto(path)
+      await expect(page.locator('link[rel="manifest"]'), path).toHaveAttribute(
+        'href',
+        '/manifest.webmanifest',
+      )
+    }
+    await expect(page.getByTestId('info-page')).toBeVisible()
   })
 })
 
@@ -82,8 +109,18 @@ test.describe('discover and claim', () => {
     const card = page.locator(`[data-testid="site-card"][data-site-id="${siteId}"]`)
     await expect(card).toBeVisible()
     await expect(card.getByTestId('claimed-badge')).toBeVisible()
-    await expect(card).toContainText(/reader/)
+    // Only the e2e member reads it, and a count below three is nobody's to publish (ADR 0041):
+    // tela-api keeps it back, and the card and the blog's page say nothing of readers.
+    const discover = (await (await request.get('/api/v1/public/discover')).json()) as {
+      sites: { id: number; readerCount: number | null }[]
+    }
+    expect(discover.sites.find((s) => s.id === Number(siteId))?.readerCount).toBeNull()
+    await expect(card).not.toContainText(/reader/)
+    await expect(card).toContainText(/Posts|Quiet/)
     await expect(page.getByTestId('topic-chips')).toContainText('Tech')
+    await card.locator('a[href^="/s/"]').first().click()
+    await expect(page.getByTestId('site-articles')).toBeVisible()
+    await expect(page.getByRole('main')).not.toContainText(/readers? on Tela/)
   })
 
   test('the site page lets the owner set topics, and Discover filters by them', async ({

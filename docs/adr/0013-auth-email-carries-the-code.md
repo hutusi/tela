@@ -1,6 +1,10 @@
 # 0013 — Auth email carries the code, and its link makes a session
 
 Status: accepted (2026-09-06). Amends ADR 0012, whose provider and session decisions stand.
+Amended (2026-10-07, #28): the mail, written by tela-api since ADR 0024 (`apps/api/src/mail.ts`),
+is in the reader's language with English beside it, rather than in English and Simplified Chinese
+for everyone. The code still comes first, the subject still ends with it, and the link still works
+on any device. How the language is chosen is in ADR 0038's amendment.
 
 ## Context
 

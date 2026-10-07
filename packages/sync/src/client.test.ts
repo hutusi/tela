@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test'
-import { applyPull, type Confirmed, emptyTables, type Pending, settle, view } from './client'
+import {
+  applyPull,
+  type Confirmed,
+  emptyTables,
+  type Pending,
+  privacyChange,
+  privacyUnsettled,
+  settle,
+  view,
+} from './client'
 import type { Mutation } from './mutations'
 import { emptyRows, type PullResponse } from './protocol'
 import type { ArticleRow, FollowRow, ProfileRow, StateRow, SubscriptionRow } from './rows'
@@ -102,6 +111,89 @@ describe('the device view', () => {
 function readState(articleId: number, readAt: number): StateRow {
   return { articleId, readAt, likedAt: null, likedUpdatedAt: null, seq: 5 }
 }
+
+describe('read and unread on the device (ADR 0009)', () => {
+  const held = applyPull(
+    start,
+    pull(3, {
+      subscriptions: [sub(1), sub(2)],
+      articles: [article(7), article(8), article(9, 2), article(10)],
+      states: [readState(7, 5)],
+    }),
+  )
+  let n = 0
+  const m = (at: number, change: Record<string, unknown>) =>
+    ({ mutation: { mid: `state-${++n}-pad`, at, ...change } as Mutation }) as Pending
+  const unread = (articleId: number, at: number) => m(at, { type: 'markUnread', articleId })
+  const read = (articleId: number, at: number) => m(at, { type: 'markRead', articleId })
+
+  test('an unread goes to the later `at`; a read after it keeps a clock, a first read none', () => {
+    expect(view(held, [unread(7, 4)]).states.get(7)).toMatchObject({ readAt: 5 }) // older
+    const marked = view(held, [unread(7, 6)])
+    expect(marked.states.get(7)).toMatchObject({ readAt: null, readUpdatedAt: 6 })
+    expect(view(held, [unread(7, 6), read(7, 5)]).states.get(7)).toMatchObject({
+      readAt: null,
+      readUpdatedAt: 6,
+    })
+    expect(view(held, [unread(7, 6), read(7, 8)]).states.get(7)).toMatchObject({
+      readAt: 8,
+      readUpdatedAt: 8,
+    })
+    expect(view(held, [read(8, 3)]).states.get(8)).toMatchObject({ readAt: 3, readUpdatedAt: null })
+  })
+
+  test('a later read moves the clock of a read post, so an unread made between loses', () => {
+    // As the server decides (Codex review): marked unread at 6, read at 8 and at 12, in either
+    // order, then an unread from 10.
+    for (const reads of [
+      [8, 12],
+      [12, 8],
+    ]) {
+      const shown = view(held, [unread(7, 6), ...reads.map((at) => read(7, at)), unread(7, 10)])
+      expect(shown.states.get(7)).toMatchObject({ readAt: reads[0], readUpdatedAt: 12 })
+    }
+    // Read at 5 and never marked: a second device's read at 9 moves the clock, not the time.
+    expect(view(held, [read(7, 9), unread(7, 7)]).states.get(7)).toMatchObject({
+      readAt: 5,
+      readUpdatedAt: 9,
+    })
+    const older = view(held, [read(7, 4)]).states.get(7)
+    expect([older?.readAt, older?.readUpdatedAt ?? null]).toEqual([5, null]) // older: nothing moves
+    // Mark all read moves the clock of one read by hand.
+    const all = view(held, [
+      unread(7, 6),
+      read(7, 7),
+      m(11, { type: 'markAllRead', feedId: 1, upTo: 8 }),
+      unread(7, 9),
+    ])
+    expect(all.states.get(7)).toMatchObject({ readAt: 7, readUpdatedAt: 11 })
+  })
+
+  test('a like does not read a post marked unread', () => {
+    const liked = view(held, [
+      unread(8, 2),
+      m(3, { type: 'setLiked', articleId: 8, liked: true }),
+      m(3, { type: 'setLiked', articleId: 10, liked: true }),
+    ])
+    expect(liked.states.get(8)).toMatchObject({ readAt: null, likedAt: 3, readUpdatedAt: 2 })
+    expect(liked.states.get(10)).toMatchObject({ readAt: 3, likedAt: 3 })
+  })
+
+  test('mark all read reads one marked before it, in what it covers, not one marked since', () => {
+    const shown = view(held, [
+      unread(7, 6),
+      unread(8, 9),
+      unread(9, 6),
+      unread(10, 6),
+      m(7, { type: 'markAllRead', feedId: 1, upTo: 8 }),
+    ])
+    expect(shown.states.get(7)).toMatchObject({ readAt: 7, readUpdatedAt: 7 })
+    expect(shown.states.get(8)).toMatchObject({ readAt: null, readUpdatedAt: 9 }) // marked since
+    expect(shown.states.get(9)).toMatchObject({ readAt: null }) // another feed
+    expect(shown.states.get(10)).toMatchObject({ readAt: null }) // past what was shown
+    expect(shown.subscriptions.get(1)?.watermarkId).toBe(8)
+  })
+})
 
 describe('highlights on the device', () => {
   const put = (id: string, articleId: number, at: number, note: string | null = null) =>
@@ -234,6 +326,189 @@ describe('follows and privacy flags on the device (ADR 0031)', () => {
       { mutation: { mid: 'lang-only-pad', at: 10, type: 'setProfile', readingLang: 'zh-Hans' } },
     ])
     expect(untouched.profile).toMatchObject({ publicSubscriptions: true, readingLang: 'zh-Hans' })
+  })
+
+  test('a show names the confirmed version, and waits while a change to its switch is on its way (#16)', () => {
+    const held = applyPull(start, pull(4, { profile: [{ ...profile, publicLikesVersion: 3 }] }))
+    let confirmed = held
+    const pending: Pending[] = []
+    const press = (on: boolean, at: number) => {
+      const input = privacyChange(confirmed, pending, 'publicLikes', on)
+      if (input) pending.push({ mutation: { ...input, mid: `likes-${at}-pad`, at } as Mutation })
+      return input
+    }
+    expect(privacyUnsettled(confirmed, pending, 'publicLikes')).toBe(false)
+    expect(press(true, 10)).toEqual({
+      type: 'setPrivacy',
+      publicLikes: true,
+      base: { publicLikes: 3 },
+    })
+    // A hide never waits; the show after it does, and the other switch is not held back.
+    expect(press(false, 11)).toEqual({ type: 'setPrivacy', publicLikes: false })
+    expect(press(true, 12)).toBeNull()
+    expect(privacyUnsettled(confirmed, pending, 'publicLikes')).toBe(true)
+    expect(privacyUnsettled(confirmed, pending, 'publicSubscriptions')).toBe(false)
+    // Nothing on the device counts versions: the view's is the confirmed one.
+    expect(view(confirmed, pending).profile).toMatchObject({
+      publicLikes: false,
+      publicLikesVersion: 3,
+    })
+    // Acknowledged, and not yet pulled: still waiting.
+    for (const p of pending) p.ackedAt = 6
+    expect(privacyUnsettled(confirmed, pending, 'publicLikes')).toBe(true)
+    // The pull that reaches the acknowledgement brings the version the server counted.
+    confirmed = applyPull(
+      confirmed,
+      pull(6, { profile: [{ ...profile, publicLikes: false, publicLikesVersion: 5, seq: 6 }] }),
+    )
+    const settled = settle(confirmed, pending)
+    expect(settled).toEqual([])
+    pending.length = 0
+    expect(press(true, 13)).toMatchObject({ base: { publicLikes: 5 } })
+  })
+
+  test('a show waits until a row has come, since no version is known before it', () => {
+    expect(privacyUnsettled(start, [], 'publicLikes')).toBe(true)
+    expect(privacyChange(start, [], 'publicLikes', true)).toBeNull()
+    expect(privacyChange(start, [], 'publicLikes', false)).toEqual({
+      type: 'setPrivacy',
+      publicLikes: false,
+    })
+  })
+
+  test('replayed over a pull that already holds it, a change counts nothing twice', () => {
+    const held = applyPull(start, pull(4, { profile: [{ ...profile, publicLikesVersion: 1 }] }))
+    // A hide whose answer was lost, and a pull that holds it.
+    const hide: Pending = {
+      mutation: { mid: 'hide-likes-pad', at: 20, type: 'setPrivacy', publicLikes: false },
+    }
+    const pulled = applyPull(
+      held,
+      pull(5, { profile: [{ ...profile, publicLikes: false, publicLikesVersion: 2, seq: 5 }] }),
+    )
+    expect(view(pulled, [hide]).profile).toMatchObject({
+      publicLikes: false,
+      publicLikesVersion: 2,
+    })
+  })
+
+  test('a show made against a version a pull has since passed is refused, as the server will', () => {
+    const held = applyPull(start, pull(4, { profile: [{ ...profile, publicLikesVersion: 3 }] }))
+    const show: Pending = {
+      mutation: {
+        mid: 'show-likes-pad',
+        at: 30,
+        type: 'setPrivacy',
+        publicLikes: true,
+        base: { publicLikes: 3 },
+      },
+    }
+    expect(view(held, [show]).profile).toMatchObject({ publicLikes: true })
+    // Another device hid them meanwhile, with an older clock: the pull brings version 4.
+    const hidden = applyPull(
+      held,
+      pull(5, { profile: [{ ...profile, publicLikes: false, publicLikesVersion: 4 }] }),
+    )
+    expect(view(hidden, [show]).profile).toMatchObject({
+      publicLikes: false,
+      publicLikesVersion: 4,
+    })
+    // A show without a base, from a shell before it, applies in order as it always did.
+    const { base: _b, ...unbased } = show.mutation as Extract<Mutation, { type: 'setPrivacy' }>
+    expect(view(hidden, [{ mutation: unbased }]).profile).toMatchObject({ publicLikes: true })
+    // A row from a tela-api without the versions keeps the ones this device holds.
+    const { publicLikesVersion: _v, ...bare } = { ...profile, seq: 6 }
+    expect(applyPull(hidden, pull(6, { profile: [bare] })).tables.profile).toMatchObject({
+      publicLikesVersion: 4,
+      publicSubscriptionsVersion: 0,
+    })
+  })
+
+  test('each language goes to the later choice, and a reading language of null is one', () => {
+    const held = applyPull(
+      start,
+      pull(4, {
+        profile: [
+          { ...profile, uiLocale: 'en', uiLocaleAt: 20, readingLang: 'fr', readingLangAt: 20 },
+        ],
+      }),
+    )
+    // Older than what the account holds: the server will refuse it, so the device does too.
+    const older = view(held, [
+      { mutation: { mid: 'older-lang-pad', at: 10, type: 'setProfile', uiLocale: 'zh-Hans' } },
+    ])
+    expect(older.profile).toMatchObject({ uiLocale: 'en', uiLocaleAt: 20 })
+    const linked = view(held, [
+      { mutation: { mid: 'link-lang-pad', at: 30, type: 'setProfile', readingLang: null } },
+    ])
+    expect(linked.profile).toMatchObject({ uiLocale: 'en', readingLang: null, readingLangAt: 30 })
+    // A row from a tela-api without the clocks keeps the ones this device holds.
+    const { uiLocaleAt: _u, readingLangAt: _r, ...bare } = { ...profile, uiLocale: 'en' }
+    const again = applyPull(held, pull(5, { profile: [bare] }))
+    expect(again.tables.profile).toMatchObject({ uiLocaleAt: 20, readingLangAt: 20 })
+  })
+})
+
+describe("adopting a visitor's language or theme on the device", () => {
+  const profile: ProfileRow = {
+    handle: 'me',
+    displayName: null,
+    bio: null,
+    uiLocale: null,
+    readingLang: null,
+    publicSubscriptions: false,
+    publicLikes: false,
+    gravatar: false,
+    gravatarFound: null,
+    avatarUploaded: false,
+    avatar: null,
+    seq: 1,
+  }
+  const adopt = (uiLocale: 'fr' | 'en', at: number): Pending => ({
+    mutation: { mid: `adopt-${uiLocale}-${at}`, at, type: 'setProfile', uiLocale, adopt: true },
+  })
+
+  test('a language fills only an account that has none, and leaves its clock', () => {
+    const blank = applyPull(start, pull(4, { profile: [profile] }))
+    expect(view(blank, [adopt('fr', 50)]).profile).toMatchObject({ uiLocale: 'fr', uiLocaleAt: 0 })
+    const chosen = applyPull(
+      start,
+      pull(4, { profile: [{ ...profile, uiLocale: 'en', uiLocaleAt: 20 }] }),
+    )
+    expect(view(chosen, [adopt('fr', 50)]).profile).toMatchObject({
+      uiLocale: 'en',
+      uiLocaleAt: 20,
+    })
+    // A choice after an adoption wins, whatever its clock.
+    const choice: Pending = {
+      mutation: { mid: 'choose-en-pad', at: 10, type: 'setProfile', uiLocale: 'en' },
+    }
+    expect(view(blank, [adopt('fr', 50), choice]).profile).toMatchObject({ uiLocale: 'en' })
+  })
+
+  test('a theme fills only a pref no row is held for, with no clock', () => {
+    const theme = (value: string, at: number, ifAbsent?: boolean): Pending => ({
+      mutation: {
+        mid: `theme-${value}-${at}`,
+        at,
+        type: 'setPref',
+        key: 'ui.theme',
+        value,
+        ...(ifAbsent ? { ifAbsent } : {}),
+      },
+    })
+    expect(view(start, [theme('dark', 50, true)]).prefs.get('ui.theme')).toMatchObject({
+      value: 'dark',
+      updatedAt: 0,
+    })
+    const held = applyPull(
+      start,
+      pull(4, { prefs: [{ key: 'ui.theme', value: 'light', updatedAt: 20, seq: 4 }] }),
+    )
+    expect(view(held, [theme('dark', 50, true)]).prefs.get('ui.theme')?.value).toBe('light')
+    expect(
+      view(start, [theme('dark', 50, true), theme('light', 10)]).prefs.get('ui.theme'),
+    ).toMatchObject({ value: 'light', updatedAt: 10 })
   })
 })
 

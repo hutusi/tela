@@ -8,13 +8,15 @@
  *   convention: the URL when healthy, `/fail` with the problems when not). Silence is the alarm
  *   for everything that stops the tick itself: a broken deploy, an account problem, D1 down.
  * - `nightly` is the daily cron: the sweep, the export and its pruning.
- * - `digest` is the Monday mail to the owner: what a week of running looked like.
+ * - `digest` is the Monday mail to the owner: what a week of running looked like, and what waits
+ *   on them in the admin console.
  *
  * Each periodic run leaves a heartbeat (`ops_heartbeats`), so the console can say when it last
  * ran and what it saw. The cron handlers in `worker.ts` only call these, so the suite runs them.
  */
 import {
   backUp,
+  DISCOVER_REVIEW,
   type Health,
   health,
   heartbeat,
@@ -93,8 +95,9 @@ export async function weekly(
   blobs: Blobs,
   now: number,
   outbox?: { mail: Mail; to: string },
+  publicUrl?: string,
 ): Promise<{ sent: boolean; subject: string; text: string }> {
-  const mail = await digest(db, blobs, now)
+  const mail = await digest(db, blobs, now, publicUrl)
   if (outbox) await outbox.mail.send({ to: outbox.to, ...mail })
   await heartbeat(db, 'digest', now, { sent: Boolean(outbox), subject: mail.subject })
   return { sent: Boolean(outbox), ...mail }
@@ -117,11 +120,15 @@ export async function pingDeadman(
 
 type Row = Record<string, unknown>
 
-/** The Monday mail, as text: what the last week of running looked like. */
+/**
+ * The Monday mail, as text: what the last week of running looked like. `publicUrl` is Tela's own
+ * origin, for the links into the admin console; without it they are paths.
+ */
 export async function digest(
   db: TelaDb,
   blobs: Blobs,
   now: number,
+  publicUrl = '',
 ): Promise<{ subject: string; text: string }> {
   const since = now - 7 * DAY
   const [
@@ -135,6 +142,7 @@ export async function digest(
     members,
     active,
     slow,
+    review,
   ] = (await db.batch([
     db.all(sql`select status, count(*) as n from feeds group by status order by status`),
     db.all(sql`
@@ -162,6 +170,8 @@ export async function digest(
     db.all(
       sql`select feed_url as url, timeout_streak as streak from feeds where timeout_streak >= 3`,
     ),
+    // Blogs members added that wait for the operator's review for Discover (ADR 0041).
+    db.all(sql`select count(*) as n from sites s where ${DISCOVER_REVIEW}`),
   ] as never)) as unknown as Row[][]
   const size = await db
     .all<{ bytes: number }>(
@@ -186,6 +196,12 @@ export async function digest(
   section('Reading', [
     `${count(posts)} new posts this week`,
     `${count(members)} members, ${count(active)} signed in this week`,
+  ])
+  const waiting = count(review)
+  section('Discover', [
+    waiting === 0
+      ? 'no blog members added waits for review'
+      : `${waiting} blogs members added wait for review: ${publicUrl.replace(/\/+$/, '')}/admin/discover`,
   ])
   section('Feeds', [
     (statuses ?? []).map((r) => `${r.n} ${r.status}`).join(', ') || 'none',

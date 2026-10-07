@@ -17,6 +17,13 @@
  *   favicon.ico     16 and 32, each at its own weight, for everything that does not
  *   apple-icon.png  180, square-cornered: iOS applies its own mask, and rounding it here first
  *                   would round the corners twice
+ *
+ * and, named by manifest.webmanifest, for installing Tela on Android and the desktop:
+ *   icon-192.png, icon-512.png   the rounded tile, purpose `any`: shown as they are
+ *   icon-maskable-512.png        purpose `maskable`: full-bleed and square, since the launcher
+ *                                cuts its own shape, with the mark drawn smaller so that the
+ *                                tightest of those shapes, the central circle 80% across, still
+ *                                leaves it the margin the rounded tile gives it
  */
 
 import { writeFile } from 'node:fs/promises'
@@ -31,14 +38,46 @@ const ACCENT_ON_DARK = '#4eb068'
 
 const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public')
 
-function tile({ size, stroke, radius }: { size: number; stroke: number; radius: number }) {
+/**
+ * The maskable icon's mark, scaled about the tile's centre. Unscaled, its strands reach 18.3 of
+ * the viewBox's 48 from the centre (√(14² + 9²), plus half a 3.3 stroke for the round cap): 76% of
+ * the way to the rounded tile's edge. At 0.8 they reach 76% of the way to the safe circle's edge
+ * (radius 19.2), so a round launcher icon frames the mark as the tile does.
+ */
+const MASKABLE_SCALE = 0.8
+const SAFE_RADIUS = 0.4 * 48
+
+function tile({
+  size,
+  stroke,
+  radius,
+  scale = 1,
+}: {
+  size: number
+  stroke: number
+  radius: number
+  scale?: number
+}) {
+  const strands = `<path d="M10 15c7 0 9 9 14 9s7 9 14 9" fill="none" stroke="${PAPER}" stroke-width="${stroke}" stroke-linecap="round"/>
+  <path d="M10 33c7 0 9-9 14-9s7-9 14-9" fill="none" stroke="${ACCENT_ON_DARK}" stroke-width="${stroke}" stroke-linecap="round"/>`
+  const mark =
+    scale === 1
+      ? strands
+      : `<g transform="translate(24 24) scale(${scale}) translate(-24 -24)">
+  ${strands}
+  </g>`
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="${size}" height="${size}">
   <title>Tela</title>
   <rect width="48" height="48" rx="${radius}" fill="${INK}"/>
-  <path d="M10 15c7 0 9 9 14 9s7 9 14 9" fill="none" stroke="${PAPER}" stroke-width="${stroke}" stroke-linecap="round"/>
-  <path d="M10 33c7 0 9-9 14-9s7-9 14-9" fill="none" stroke="${ACCENT_ON_DARK}" stroke-width="${stroke}" stroke-linecap="round"/>
+  ${mark}
 </svg>
 `
+}
+
+// A round launcher cuts a maskable icon down to its safe circle: a mark that reached past it
+// would lose the ends of its strands.
+if ((Math.hypot(14, 9) + 3.3 / 2) * MASKABLE_SCALE > SAFE_RADIUS) {
+  throw new Error('the maskable mark leaves the safe zone')
 }
 
 /**
@@ -67,7 +106,8 @@ function ico(images: { size: number; png: Buffer }[]) {
 }
 
 const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 256, height: 256 }, deviceScaleFactor: 1 })
+// As large as the largest icon: a screenshot's clip cannot reach past the viewport.
+const page = await browser.newPage({ viewport: { width: 512, height: 512 }, deviceScaleFactor: 1 })
 
 /**
  * Clipped rather than sized to the viewport: Chromium clamps very small viewports, and 16 is well
@@ -97,5 +137,19 @@ await writeFile(
   await raster(tile({ size: 180, stroke: 3.3, radius: 0 }), 180),
 )
 
+for (const size of [192, 512]) {
+  await writeFile(
+    join(APP_DIR, `icon-${size}.png`),
+    await raster(tile({ size, stroke: 3.3, radius: 11 }), size),
+  )
+}
+
+await writeFile(
+  join(APP_DIR, 'icon-maskable-512.png'),
+  await raster(tile({ size: 512, stroke: 3.3, radius: 0, scale: MASKABLE_SCALE }), 512),
+)
+
 await browser.close()
-console.log('wrote icon.svg, favicon.ico, apple-icon.png')
+console.log(
+  'wrote icon.svg, favicon.ico, apple-icon.png, icon-192.png, icon-512.png, icon-maskable-512.png',
+)

@@ -22,12 +22,14 @@ import {
   readingHref,
 } from '../lib/href'
 import { gridColumns, toggleFocus, useLayout } from '../lib/layout'
-import { PREF_KEYS, useReadingPrefs } from '../lib/prefs'
+import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
+  isLiked,
   isRead,
   prefetchPlan,
+  shownRead,
   shownTitle,
   subscriptionItems,
   totals,
@@ -92,7 +94,9 @@ export function ReadingPage() {
   // The mode a URL without one means: this member's last choice, synced like any other pref.
   const mode = params.mode ?? prefs.mode
 
-  // Opening an article reads it, unless the member marks posts read themselves (a pref).
+  // Opening an article reads it, unless the member marks posts read themselves (a pref). Once per
+  // open, so a post the member marks unread while it is open stays unread until the next open; one
+  // marked unread before is read by opening it, like any unread post.
   const articleId = article?.id ?? null
   // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened
   useEffect(() => {
@@ -129,8 +133,10 @@ export function ReadingPage() {
   }, [navigate])
 
   // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
-  // article, [ shows or hides the sidebar, f the list too while one is open, ? lists the keys. Typing in a field is never a shortcut, and a popover that handles
-  // Esc itself marks the event so the article stays open.
+  // article, [ shows or hides the sidebar, f the list too while one is open, o opens its original,
+  // l likes or unlikes it and m marks it read or unread, ? lists the keys. Typing in a field is
+  // never a shortcut, and a popover that handles Esc itself marks the event so the article stays
+  // open.
   const [help, setHelp] = useState(false)
   // Read when a key is pressed, not when the listener was bound: a second `j` can come before
   // React has rendered the first one's navigation, and the URL is already right by then.
@@ -162,6 +168,36 @@ export function ReadingPage() {
       } else if (e.key === 'f' && now.articleId !== null) {
         e.preventDefault()
         toggleFocus()
+      } else if ((e.key === 'o' || e.key === 'l' || e.key === 'm') && now.articleId !== null) {
+        // A key held down repeats: one tab and one turn of the like or the read per press, not
+        // per repeat.
+        if (e.repeat) return
+        // The article the URL has open and its state as the store has them now: a j a moment ago
+        // may not have rendered yet, and a like or a read from another tab may have synced since.
+        const { tables } = store.getSnapshot()
+        const article = store.article(tables, now.articleId)
+        if (!article) return
+        if (e.key === 'o') {
+          // Ingest keeps only http(s) links; a script opening one checks again all the same.
+          if (!article.url || !/^https?:\/\//i.test(article.url)) return
+          e.preventDefault()
+          // As the meta line's link opens it: a new tab that cannot reach back into this one.
+          window.open(article.url, '_blank', 'noopener,noreferrer')
+        } else if (e.key === 'l') {
+          e.preventDefault()
+          store.mutate({
+            type: 'setLiked',
+            articleId: article.id,
+            liked: !isLiked(tables, article.id),
+          })
+        } else {
+          e.preventDefault()
+          // The other way from what the reader's button and the list's dot show, which ask the
+          // same question: the open post counts as read while opening reads it.
+          const { markOnOpen } = readingPrefsOf(tables)
+          const read = shownRead(tables, article, Date.now(), true, markOnOpen)
+          store.mutate({ type: read ? 'markUnread' : 'markRead', articleId: article.id })
+        }
       } else if (e.key === '?') {
         e.preventDefault()
         setHelp((shown) => !shown)
@@ -169,7 +205,7 @@ export function ReadingPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate])
+  }, [navigate, store])
 
   // The row of the open article stays in view as j and k move; closing puts focus back on it, so
   // the keyboard carries on from where the reader was. Leaving focus with an article open brings

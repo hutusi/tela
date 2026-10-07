@@ -616,6 +616,106 @@ describe('signing in with a code', () => {
   })
 })
 
+describe("a code mail's language", () => {
+  // Each request from an IP of its own and each case to an address of its own, so neither
+  // better-auth's three a minute per IP nor Tela's five an hour per address is what is tested.
+  let n = 0
+  const ip = () => `203.0.113.${++n}`
+  const ask = (api: TestApi, email: string, headers: Record<string, string> = {}) =>
+    api.request('/api/auth/email-otp/send-verification-otp', {
+      body: { email, type: 'sign-in' },
+      headers: { 'cf-connecting-ip': ip(), ...headers },
+    })
+  const subjectTo = (api: TestApi, email: string) =>
+    [...api.mail.outbox].reverse().find((m) => m.to === email)?.subject
+  /** The member's interface language, as Settings would have saved it. */
+  const speaks = (api: TestApi, userId: string, locale: string) =>
+    api.db.run(sql`update profiles set ui_locale = ${locale} where user_id = ${userId}`)
+  const ENGLISH = 'Your Tela sign-in code · Tela 登录验证码'
+
+  test('is the language the reader picked, by its cookie, over everything else', async () => {
+    const api = await createTestApi()
+    const { userId } = await signedIn(api, 'fr@x.test')
+    await speaks(api, userId, 'zh-Hans')
+    await ask(api, 'fr@x.test', {
+      cookie: 'tela.session_data=x; tela_locale=fr',
+      'accept-language': 'zh-TW',
+    })
+    expect(subjectTo(api, 'fr@x.test')).toBe(
+      `Votre code de connexion à Tela · Your Tela sign-in code: ${codeFor(api, 'fr@x.test')}`,
+    )
+  })
+
+  test("else the account's language, else the browser's: zh-TW reads Traditional", async () => {
+    const api = await createTestApi()
+    await signedIn(api, 'tw@x.test')
+    await ask(api, 'tw@x.test', { 'accept-language': 'zh-TW,zh;q=0.9,en;q=0.8' })
+    expect(subjectTo(api, 'tw@x.test')).toBe(
+      `Tela 登入驗證碼 · Your Tela sign-in code: ${codeFor(api, 'tw@x.test')}`,
+    )
+    // An account that chose a language keeps it, whatever the browser says…
+    const { userId } = await signedIn(api, 'cn@x.test')
+    await speaks(api, userId, 'zh-Hans')
+    await ask(api, 'cn@x.test', { 'accept-language': 'fr' })
+    expect(subjectTo(api, 'cn@x.test')).toBe(
+      `Tela 登录验证码 · Your Tela sign-in code: ${codeFor(api, 'cn@x.test')}`,
+    )
+    // …until the reader picks another here.
+    await ask(api, 'cn@x.test', { cookie: 'tela_locale=en' })
+    expect(subjectTo(api, 'cn@x.test')).toBe(`${ENGLISH}: ${codeFor(api, 'cn@x.test')}`)
+  })
+
+  test('with neither, is English and Simplified as it always was', async () => {
+    const api = await createTestApi()
+    await signedIn(api, 'a@x.test')
+    await ask(api, 'a@x.test')
+    expect(subjectTo(api, 'a@x.test')).toBe(`${ENGLISH}: ${codeFor(api, 'a@x.test')}`)
+    // A language Tela does not have is the same as none.
+    await signedIn(api, 'b@x.test')
+    await ask(api, 'b@x.test', { 'accept-language': 'de-DE,ja;q=0.5', cookie: 'tela_locale=de' })
+    expect(subjectTo(api, 'b@x.test')).toBe(`${ENGLISH}: ${codeFor(api, 'b@x.test')}`)
+  })
+
+  test('a reset code is in the same language', async () => {
+    const api = await createTestApi()
+    await signedIn(api, 'a@x.test')
+    await api.request('/api/auth/email-otp/request-password-reset', {
+      body: { email: 'a@x.test' },
+      headers: { 'cf-connecting-ip': ip(), cookie: 'tela_locale=zh-Hant' },
+    })
+    expect(subjectTo(api, 'a@x.test')).toBe(
+      `重設 Tela 密碼 · Reset your Tela password: ${codeFor(api, 'a@x.test')}`,
+    )
+  })
+
+  test("tela-api's own call, which has no request, passes the language in its headers", async () => {
+    const api = await createTestApi()
+    await signedIn(api, 'a@x.test')
+    await api.auth.api.sendVerificationOTP({
+      body: { email: 'a@x.test', type: 'sign-in' },
+      headers: new Headers({ cookie: 'tela_locale=fr' }),
+    })
+    expect(subjectTo(api, 'a@x.test')).toMatch(/^Votre code de connexion à Tela · /)
+    await api.auth.api.sendVerificationOTP({ body: { email: 'a@x.test', type: 'sign-in' } })
+    expect(subjectTo(api, 'a@x.test')).toBe(`${ENGLISH}: ${codeFor(api, 'a@x.test')}`)
+  })
+
+  test("a missing context says nothing of the browser: the account's language, else English", async () => {
+    const api = await createTestApi()
+    const { userId } = await signedIn(api, 'a@x.test')
+    const plugin = api.auth.options.plugins.find((p) => p.id === 'email-otp')
+    const send = plugin?.options?.sendVerificationOTP
+    if (!send) throw new Error('the email-otp plugin has no sendVerificationOTP')
+    await send({ email: 'a@x.test', otp: '654321', type: 'sign-in' }, undefined)
+    expect(subjectTo(api, 'a@x.test')).toBe(`${ENGLISH}: 654321`)
+    await speaks(api, userId, 'fr')
+    await send({ email: 'a@x.test', otp: '654322', type: 'sign-in' }, undefined)
+    expect(subjectTo(api, 'a@x.test')).toBe(
+      'Votre code de connexion à Tela · Your Tela sign-in code: 654322',
+    )
+  })
+})
+
 describe('/api/auth', () => {
   // What tela-api serves, as better-auth names its endpoints; `/callback/:id` only for Google and
   // GitHub. Written out here rather than read from the app, so the test is a second opinion.

@@ -5,7 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { useTranslations } from 'use-intl'
 import { AppHeader } from './components/app-header'
 import { FrontDoorProvider, ToReading } from './components/front-door'
-import { detectLocale, I18n, localeCookie } from './i18n'
+import { chooseLocale, detectLocale, I18n, localeCookie, localeToAdopt } from './i18n'
 import { applyTheme, deviceTheme, PREFS, themeToAdopt, typographyOf } from './lib/typography'
 import { forgetPublic } from './lib/use-public'
 import { AddPage } from './pages/add'
@@ -190,14 +190,12 @@ function Routed() {
     document.cookie = localeCookie(next)
     setLocaleState(next)
   }, [])
-  // A member's choice is a mutation even before their first sync has brought the profile: it
-  // waits with the others, and lands on the row when that arrives. Skipping it then left only the
-  // cookie, and the row's older choice, applied below, took the page back. A visitor has no owner,
-  // and `mutate` keeps nothing for no one.
+  // What the store makes of a choice, not the choice: one the account's clock refuses leaves the
+  // page in the language the account holds (`chooseLocale`).
   const setLocale = useCallback(
     (next: UiLocale) => {
-      applyLocale(next)
-      store.mutate({ type: 'setProfile', uiLocale: next })
+      const shown = chooseLocale(store, next)
+      if (shown) applyLocale(shown)
     },
     [store, applyLocale],
   )
@@ -216,10 +214,12 @@ function Routed() {
     document.documentElement.lang = locale
   }, [locale])
   // A member's theme is a synced pref; a visitor keeps whatever this browser last had. An account
-  // that has never chosen one takes the visitor's, once: the first snapshot brings every pref
-  // with the profile, so no row then means none. Written as the pref, never only put on the page,
-  // or the page would be dark while Settings said Auto. A browser shared by two accounts gives
-  // the second whatever it shows, which is what that member is looking at anyway.
+  // that has never chosen one takes the visitor's, once. Written as the pref, never only put on
+  // the page, or the page would be dark while Settings said Auto; and `ifAbsent`, since the rows
+  // here may be the copy this device kept, from before a theme chosen elsewhere since: the server
+  // writes it only where the account has no theme, and a choice anywhere beats it. A browser
+  // shared by two accounts gives the second whatever it shows, which is what that member is
+  // looking at anyway.
   const theme = typographyOf(tables).theme
   const synced = tables.profile !== null
   const chosen = tables.prefs.has(PREFS.theme)
@@ -233,12 +233,27 @@ function Routed() {
       const adopt = themeToAdopt(store.getSnapshot().tables, deviceTheme())
       if (adopt) {
         // The page shows it already; the pref's own render puts it on again.
-        store.mutate({ type: 'setPref', key: PREFS.theme, value: adopt })
+        store.mutate({ type: 'setPref', key: PREFS.theme, value: adopt, ifAbsent: true })
         return
       }
     }
     applyTheme(theme)
   }, [synced, chosen, theme, store])
+  // And an account that has never chosen an interface language takes the one its visitor chose
+  // here, once, the same way: only from the cookie, a choice, and only while the account's is
+  // null, which the server decides (`adopt`), not this device's copy, which may predate a choice
+  // made elsewhere. Written to the profile, so it follows the member to every device; the page is
+  // in it already, since the cookie chose it.
+  const localeAdoptedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!synced) return
+    const owner = store.userId
+    if (owner === null || localeAdoptedFor.current === owner) return
+    localeAdoptedFor.current = owner
+    // Read now, not from the render: the store and the cookie are as they are when this runs.
+    const adopt = localeToAdopt(store.getSnapshot().tables.profile, document.cookie)
+    if (adopt) store.mutate({ type: 'setProfile', uiLocale: adopt, adopt: true })
+  }, [synced, store])
   const ui = useMemo(() => ({ locale, setLocale }), [locale, setLocale])
   return (
     <UiContext.Provider value={ui}>

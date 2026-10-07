@@ -3,11 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- The member's theme before anything paints (src/lib/typography.ts keeps it current). -->
+    <!-- The browser's own bar on the page's ground. A theme chosen here sets both to its paper
+         (paintChrome, src/lib/typography.ts), and so does the script below, before the app. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f2ea" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1f1c18" />
+    <!-- The member's theme before anything paints (src/lib/typography.ts keeps it current), and the
+         bar's with it: the metas above are parsed by now, the app's paintChrome not loaded yet. -->
     <script>
       try {
         const theme = localStorage.getItem('tela.theme')
-        if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme
+        if (theme === 'dark' || theme === 'light') {
+          document.documentElement.dataset.theme = theme
+          const paper = theme === 'dark' ? '#1f1c18' : '#f6f2ea'
+          for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+            meta.setAttribute('content', paper)
+          }
+        }
       } catch {}
     </script>
     <title>Tela</title>
@@ -18,6 +29,9 @@
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-icon.png" />
+    <!-- What installing Tela opens and shows. The edge pours its public pages into this file, so
+         they name it too. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
   </head>
   <body>
     <div id="root"></div>

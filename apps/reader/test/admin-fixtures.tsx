@@ -156,9 +156,9 @@ const feed: AdminFeedRow = {
   readerCount: 5,
 }
 
-const candidate: AdminSiteRow = {
+export const candidate: AdminSiteRow = {
   id: '30',
-  actions: ['site.feature', 'site.list', 'site.hide'],
+  actions: ['site.list', 'site.dismiss', 'site.feature', 'site.hide'],
   siteId: 30,
   title: '日々の海',
   homeUrl: 'https://hibi.example/',
@@ -173,6 +173,11 @@ const candidate: AdminSiteRow = {
   translationOptOut: false,
   topics: [],
   createdAt: 1_759_000_000_000,
+  postsLast30d: 6,
+  latestTitle: '港の朝',
+  latestAt: 1_759_500_000_000,
+  review: null,
+  reviewedAt: null,
 }
 
 export const OVERVIEW: AdminOverview = {

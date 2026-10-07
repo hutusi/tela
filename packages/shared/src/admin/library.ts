@@ -6,6 +6,7 @@ import type {
   FeedStatus,
   FetchRegion,
   SiteListing,
+  SiteReview,
 } from '../constants'
 import type { AdminHistoryEntry, AdminPerson, AdminRowBase } from './common'
 
@@ -29,7 +30,21 @@ export type AdminSiteRow = AdminRowBase & {
   primaryLang: string | null
   translationOptOut: boolean
   topics: string[]
+  /** When it was added: its first feed. */
   createdAt: number
+  /** Posts its live feeds brought in the last 30 days, the newest one's title and time. */
+  postsLast30d: number
+  latestTitle: string | null
+  latestAt: number | null
+  /**
+   * What an operator's review decided for Discover (ADR 0041): `listed` (List, Feature, curation)
+   * or `dismissed` (Not for Discover, or a Hide over nothing decided). Null while a blog a member
+   * added waits in the review queue. Never who added it: what a member reads is not the
+   * console's to show (ADR 0039).
+   */
+  review: SiteReview | null
+  /** When an operator last decided about it for Discover (Hide included); null with `review`. */
+  reviewedAt: number | null
 }
 
 export type AdminClaimRow = AdminRowBase & {

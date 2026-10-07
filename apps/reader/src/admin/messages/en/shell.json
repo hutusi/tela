@@ -25,7 +25,7 @@
     "claims": "A blog becomes its author's once they prove it with a meta tag or a rel=\"me\" link. The check runs on its own; here are the claims it could not settle, the ones still checking, and the ones it verified.",
     "sites": "Every blog Tela knows: its feeds, its owner, its readers, and whether Discover lists it. The queues link here.",
     "feeds": "Each feed is fetched on its own schedule. These are the ones that stopped: errors, timeouts from Cloudflare, feeds that died, feeds paused by hand, and feeds merged into another.",
-    "discover": "A blog is listed once it is claimed or three people read it. Featuring is the operator's call, and a hidden blog never appears, whatever its claims. Changes reach Discover within five minutes.",
+    "discover": "A blog is listed once it is claimed or three people read it, or when an operator lists it. The blogs members add wait under To review: list each, or say it is not for Discover. Featuring is the operator's call, and a hidden blog never appears, whatever its claims. Changes reach Discover within five minutes.",
     "people": "Members and their account basics. Admins see a member's public card, never what they read, subscribe to, like or highlight.",
     "invites": "Tela is invitation-only. Each member has five codes to give; an operator's code admits as many people as it was given.",
     "translation": "What translation costs, in tokens, over the last 30 days. Members reserve against a daily cap; titles for everyone come out of one background budget.",
@@ -35,6 +35,7 @@
     "site": {
       "feature": { "label": "Feature", "short": "Feature", "done": "Featured" },
       "list": { "label": "List in Discover", "short": "List", "done": "Listed" },
+      "dismiss": { "label": "Not for Discover", "short": "Decline", "done": "Not for Discover" },
       "hide": { "label": "Hide from Discover", "short": "Hide", "done": "Hidden" },
       "restore": { "label": "Restore", "short": "Restore", "done": "Restored" },
       "topics": { "label": "Topics", "short": "Topics", "done": "Topics saved" },
@@ -219,7 +220,7 @@
       "claims": "Claims to review",
       "feeds": "Failing feeds",
       "dead": "Dead letters",
-      "candidates": "Discover candidates"
+      "candidates": "Blogs to review"
     },
     "start": "Start →",
     "nothingWaiting": "Nothing waiting.",

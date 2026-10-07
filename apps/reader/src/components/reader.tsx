@@ -4,6 +4,7 @@
  * tela-api at all (ADR 0025). Highlights, notes and typography are the member's synced rows and
  * prefs (ADR 0026).
  */
+import { COMMUNITY_LISTING_MIN_READERS } from '@tela/shared'
 import type { ArticleRow } from '@tela/sync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
@@ -22,8 +23,8 @@ import type { ContentObject } from '../store/objects'
 import {
   feedTitle,
   isLiked,
-  isRead,
   isRecommended,
+  shownRead,
   shownTitle,
   siteOfFeed,
 } from '../store/selectors'
@@ -197,6 +198,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
   const name = feedTitle(tables, article.feedId) || store.sourceName(article.feedId)
   const site = siteOfFeed(tables, article.feedId)
   const titles = shownTitle(tables, article, readingLang, prefs.never)
+  const read = shownRead(tables, article, now, true, prefs.markOnOpen)
   const title = showTrans ? titles.title : article.title
   const runs = showTrans
     ? runsOf(pairs, 'translated')
@@ -232,17 +234,19 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
           <FocusToggle />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Only for a member who marks posts read themselves: otherwise opening did it. */}
-          {!prefs.markOnOpen && !isRead(tables, article, now) ? (
-            <button
-              type="button"
-              onClick={() => store.mutate({ type: 'markRead', articleId: article.id })}
-              className="whitespace-nowrap rounded-full border border-thumb px-3.5 py-[7px] font-medium text-ink hover:border-ink"
-              data-testid="mark-read"
-            >
-              {t('markRead')}
-            </button>
-          ) : null}
+          {/* Mark as unread on a read post, Mark as read on an unread one, whatever the pref:
+              a phone has no `m`, so this is its only way back to unread. One button whose label
+              turns, so focus stays on it, and it sends what the label says. */}
+          <button
+            type="button"
+            onClick={() =>
+              store.mutate({ type: read ? 'markUnread' : 'markRead', articleId: article.id })
+            }
+            className="whitespace-nowrap rounded-full border border-thumb px-3.5 py-[7px] font-medium text-ink hover:border-ink"
+            data-testid={read ? 'mark-unread' : 'mark-read'}
+          >
+            {t(read ? 'markUnread' : 'markRead')}
+          </button>
           <TypographyMenu />
           <LikeButton
             articleId={article.id}
@@ -366,8 +370,15 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
             <div className="flex-1">
               <div className="font-medium">{site?.title ?? name}</div>
               <div className="text-[13px] text-muted">
-                {site?.description ? `${site.description} · ` : ''}
-                {t('readersOnTela', { n: site?.readerCount ?? 0 })}
+                {/* A count below three says who else reads it, as public pages do not (ADR 0041). */}
+                {[
+                  site?.description,
+                  (site?.readerCount ?? 0) >= COMMUNITY_LISTING_MIN_READERS
+                    ? t('readersOnTela', { n: site?.readerCount ?? 0 })
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </div>
             </div>
             <span className="hidden text-[13px] text-muted xl:block">{t('visibleToAuthor')}</span>

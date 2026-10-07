@@ -15,8 +15,14 @@ import {
   type Confirmed,
   emptyTables,
   MEMBER_HEADER,
+  type Mutation,
+  type Pending,
   type PullResponse,
   type PushResponse,
+  privacyChange,
+  privacyUnsettled,
+  settle,
+  view,
 } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { isRead } from '../../reader/src/store/selectors'
@@ -285,7 +291,8 @@ describe('push', () => {
   })
 
   test('a replay of an older push cannot undo a newer one', async () => {
-    // setProfile has no timestamp to compare; only the applied-mutation guard stops the revert.
+    // Both made at the same `at`, so the clocks cannot tell them apart; the applied-mutation
+    // guard is what stops the replay reverting the newer one.
     const older = { mid: 'profile-older-mid', at: now, type: 'setProfile', readingLang: 'en' }
     const send = (m: Record<string, unknown>) =>
       api.request('/api/v1/mutations', { body: { mutations: [m] }, as: reader })
@@ -297,6 +304,97 @@ describe('push', () => {
       sql`select reading_lang from profiles`,
     )
     expect(profile?.reading_lang).toBe('zh-Hans')
+  })
+
+  test('two devices: each language goes to the later choice, whatever order they arrive in', async () => {
+    const languages = () =>
+      first<{ ui_locale: string | null; reading_lang: string | null }>(
+        db,
+        sql`select ui_locale, reading_lang from profiles`,
+      )
+    await push([{ type: 'setProfile', uiLocale: 'fr', readingLang: 'fr', at: now - 1000 }])
+    // A device offline since before that choice made its own, and pushes only now.
+    await push([{ type: 'setProfile', uiLocale: 'en', readingLang: 'en', at: now - 5000 }])
+    expect(await languages()).toEqual({ ui_locale: 'fr', reading_lang: 'fr' })
+    // Each on its own clock: a later interface choice does not carry an older reading one.
+    await push([{ type: 'setProfile', uiLocale: 'zh-Hant', at: now }])
+    await push([{ type: 'setProfile', readingLang: 'en', at: now - 3000 }])
+    expect(await languages()).toEqual({ ui_locale: 'zh-Hant', reading_lang: 'fr' })
+  })
+
+  test('a reading language of null follows the interface, and one left out is left alone', async () => {
+    const languages = () =>
+      first<{ ui_locale: string | null; reading_lang: string | null; reading_lang_at: number }>(
+        db,
+        sql`select ui_locale, reading_lang, reading_lang_at from profiles`,
+      )
+    await push([{ type: 'setProfile', uiLocale: 'en', readingLang: 'zh-Hans', at: now - 2000 }])
+    await push([{ type: 'setProfile', readingLang: null, at: now - 1000 }])
+    expect(await languages()).toEqual({
+      ui_locale: 'en',
+      reading_lang: null,
+      reading_lang_at: now - 1000,
+    })
+    await push([{ type: 'setProfile', uiLocale: 'fr', at: now }])
+    expect(await languages()).toEqual({
+      ui_locale: 'fr',
+      reading_lang: null,
+      reading_lang_at: now - 1000,
+    })
+    const delta = await pull(0)
+    expect(delta.rows.profile).toMatchObject([
+      { uiLocale: 'fr', readingLang: null, uiLocaleAt: now, readingLangAt: now - 1000 },
+    ])
+  })
+
+  describe("adopting a visitor's language or theme, from a copy that may be stale", () => {
+    const locale = () =>
+      first<{ ui_locale: string | null; ui_locale_at: number }>(
+        db,
+        sql`select ui_locale, ui_locale_at from profiles`,
+      )
+    const theme = () =>
+      first<{ value_json: string; updated_at: number }>(
+        db,
+        sql`select value_json, updated_at from user_prefs where key = 'ui.theme'`,
+      )
+
+    test('a language is written only while the account has none, and any choice beats it', async () => {
+      const snap = await pull(0)
+      await push([{ type: 'setProfile', uiLocale: 'fr', adopt: true }])
+      expect(await locale()).toEqual({ ui_locale: 'fr', ui_locale_at: 0 })
+      // Stamped, so the device that adopted hears what the account holds.
+      expect((await pull(snap.cursor)).rows.profile).toMatchObject([{ uiLocale: 'fr' }])
+      // Another browser's cookie, adopted later: the account has one now.
+      await push([{ type: 'setProfile', uiLocale: 'zh-Hans', adopt: true }])
+      expect(await locale()).toEqual({ ui_locale: 'fr', ui_locale_at: 0 })
+      // A choice made before the adoption and pushed after it still wins: adopting chose nothing.
+      await push([{ type: 'setProfile', uiLocale: 'en', at: now - 5000 }])
+      expect(await locale()).toEqual({ ui_locale: 'en', ui_locale_at: now - 5000 })
+    })
+
+    test('a stale copy adopting over a language chosen elsewhere since changes nothing', async () => {
+      await push([{ type: 'setProfile', uiLocale: 'en', at: now - 1000 }])
+      // Its `at` is the later; a write by `at` alone would have taken the account back.
+      await push([{ type: 'setProfile', uiLocale: 'fr', adopt: true, at: now }])
+      expect(await locale()).toEqual({ ui_locale: 'en', ui_locale_at: now - 1000 })
+    })
+
+    test('a theme is written only where the account has no row, and any choice beats it', async () => {
+      const snap = await pull(0)
+      await push([{ type: 'setPref', key: 'ui.theme', value: 'dark', ifAbsent: true }])
+      expect(await theme()).toEqual({ value_json: '"dark"', updated_at: 0 })
+      expect((await pull(snap.cursor)).rows.prefs).toMatchObject([
+        { key: 'ui.theme', value: 'dark' },
+      ])
+      await push([{ type: 'setPref', key: 'ui.theme', value: 'light', ifAbsent: true }])
+      expect(await theme()).toEqual({ value_json: '"dark"', updated_at: 0 })
+      await push([{ type: 'setPref', key: 'ui.theme', value: 'system', at: now - 5000 }])
+      expect(await theme()).toEqual({ value_json: '"system"', updated_at: now - 5000 })
+      // And a stale copy adopting over that choice changes nothing, whatever its `at`.
+      await push([{ type: 'setPref', key: 'ui.theme', value: 'dark', ifAbsent: true }])
+      expect(await theme()).toEqual({ value_json: '"system"', updated_at: now - 5000 })
+    })
   })
 
   test('two devices: the later like wins, whatever order they arrive in', async () => {
@@ -372,6 +470,198 @@ describe('push', () => {
     expect((await sub())?.watermark_id).toBe(b + 1) // never backwards
   })
 
+  describe('a post marked unread (ADR 0009)', () => {
+    const states = (id: number) =>
+      first<{ read_at: number | null; read_updated_at: number | null }>(
+        db,
+        sql`select read_at, read_updated_at from user_article_states where article_id = ${id}`,
+      )
+    /** Read or not, as a device that took a snapshot now shows it. */
+    const shown = async (id: number) => {
+      const device = applyPull({ cursor: 0, tables: emptyTables() }, await pull(0))
+      const article = device.tables.articles.get(id)
+      expect(article).toBeDefined()
+      return isRead(device.tables, article as ArticleRow, now)
+    }
+
+    test('beats the watermark until it is read again, which keeps a clock', async () => {
+      const [a, b] = [await addArticle(1), await addArticle(1)]
+      await push([{ type: 'markRead', articleId: a, at: now - 40 }])
+      await push([{ type: 'markAllRead', feedId: 1, upTo: b, at: now - 30 }])
+      expect([await shown(a), await shown(b)]).toEqual([true, true])
+      // One read by hand, one only by the watermark, which has no row to change.
+      await push([
+        { type: 'markUnread', articleId: a, at: now - 20 },
+        { type: 'markUnread', articleId: b, at: now - 20 },
+      ])
+      expect(await states(a)).toEqual({ read_at: null, read_updated_at: now - 20 })
+      expect(await states(b)).toEqual({ read_at: null, read_updated_at: now - 20 })
+      expect([await shown(a), await shown(b)]).toEqual([false, false])
+      // A first read keeps no clock; a read after an unread is a choice, and keeps its own.
+      await push([{ type: 'markRead', articleId: a, at: now - 10 }])
+      expect(await states(a)).toEqual({ read_at: now - 10, read_updated_at: now - 10 })
+      expect(await shown(a)).toBe(true)
+    })
+
+    test('beats the horizon too', async () => {
+      const old = await addArticle(1, now - 29 * DAY)
+      // Kept, so a snapshot still sends it past the horizon; a recommendation reads nothing.
+      await push([{ type: 'recommend', articleId: old, note: null }])
+      api.clock.advance(2 * DAY)
+      now = api.clock.now()
+      expect(await shown(old)).toBe(true)
+      await push([{ type: 'markUnread', articleId: old }])
+      expect(await shown(old)).toBe(false)
+    })
+
+    describe('past the horizon, it is kept like a liked post, while its feed is followed', () => {
+      test('a snapshot sends it, so a new device counts it unread', async () => {
+        const old = await addArticle(1, now - 40 * DAY)
+        await addArticle(1, now - 40 * DAY) // another, past the horizon and never touched
+        await push([{ type: 'markUnread', articleId: old }])
+        const snap = await pull(0)
+        expect(snap.rows.articles.map((a) => a.id)).toEqual([old])
+        expect(snap.rows.states).toMatchObject([{ articleId: old, readAt: null }])
+        expect(await shown(old)).toBe(false)
+      })
+
+      test('a delta sends it whole, to devices that never held it (a search hit)', async () => {
+        const old = await addArticle(1, now - 40 * DAY)
+        const snap = await pull(0)
+        expect(snap.rows.articles).toEqual([])
+        await push([{ type: 'markUnread', articleId: old }])
+        const delta = await pull(snap.cursor)
+        expect(delta.rows.articles.map((a) => a.id)).toEqual([old])
+        expect(delta.rows.states).toMatchObject([{ articleId: old, readAt: null }])
+        // Read again, it is an old post like any other: no device is sent it from then on.
+        await push([{ type: 'markRead', articleId: old }])
+        expect((await pull(0)).rows.articles).toEqual([])
+      })
+
+      test('a feed left lets it go; followed again, it comes back with the horizon', async () => {
+        const old = await addArticle(1, now - 40 * DAY)
+        await push([{ type: 'markUnread', articleId: old }])
+        await push([{ type: 'unsubscribe', feedId: 1 }])
+        const left = await pull(0)
+        expect(left.rows.articles).toEqual([])
+        await push([{ type: 'subscribe', feedId: 1 }])
+        const back = await pull(left.cursor)
+        expect(back.rows.articles.map((a) => a.id)).toEqual([old])
+        expect(back.rows.states).toMatchObject([{ articleId: old, readAt: null }])
+        let device: Confirmed = { cursor: 0, tables: emptyTables() }
+        for (const p of [left, back]) device = applyPull(device, p)
+        const article = device.tables.articles.get(old) as ArticleRow
+        expect(isRead(device.tables, article, now)).toBe(false)
+      })
+    })
+
+    test('an older read arriving after it loses, and an older unread after a read', async () => {
+      const [a, b] = [await addArticle(1), await addArticle(1)]
+      await push([{ type: 'markUnread', articleId: a, at: now - 10 }])
+      await push([{ type: 'markRead', articleId: a, at: now - 20 }]) // made before, pushed after
+      expect(await states(a)).toEqual({ read_at: null, read_updated_at: now - 10 })
+      await push([{ type: 'markRead', articleId: a, at: now - 5 }])
+      await push([{ type: 'markUnread', articleId: a, at: now - 8 }])
+      expect(await states(a)).toEqual({ read_at: now - 5, read_updated_at: now - 5 })
+      // Against a first read, its own time is the clock.
+      await push([{ type: 'markRead', articleId: b, at: now - 10 }])
+      await push([{ type: 'markUnread', articleId: b, at: now - 20 }])
+      expect(await states(b)).toEqual({ read_at: now - 10, read_updated_at: null })
+    })
+
+    test('a newer read beats an unread made between two reads and pushed after both', async () => {
+      // Codex review: a read of a read post changed nothing, so the older read's time decided.
+      // Marked unread at 10, read at 20 and at 30 (in either order), an unread from 25 last.
+      for (const order of [
+        [now - 80, now - 70],
+        [now - 70, now - 80],
+      ] as const) {
+        const a = await addArticle(1)
+        await push([{ type: 'markUnread', articleId: a, at: now - 90 }])
+        for (const at of order) await push([{ type: 'markRead', articleId: a, at }])
+        await push([{ type: 'markUnread', articleId: a, at: now - 75 }])
+        expect(await states(a)).toEqual({ read_at: order[0], read_updated_at: now - 70 })
+        expect(await shown(a)).toBe(true)
+      }
+      // A post never marked unread: two devices read it unaware of each other, and a third's
+      // unread, made between the two, arrives last.
+      const b = await addArticle(1)
+      await push([{ type: 'markRead', articleId: b, at: now - 80 }])
+      await push([{ type: 'markRead', articleId: b, at: now - 70 }])
+      expect(await states(b)).toEqual({ read_at: now - 80, read_updated_at: now - 70 })
+      await push([{ type: 'markUnread', articleId: b, at: now - 75 }])
+      expect(await shown(b)).toBe(true)
+      // A replayed or older read moves nothing, and stamps no seq.
+      const before = await pull(0)
+      await push([{ type: 'markRead', articleId: b, at: now - 70 }])
+      expect((await pull(before.cursor)).rows.states).toEqual([])
+    })
+
+    test('mark all read moves the clock of a post read by hand, so an older unread loses', async () => {
+      const a = await addArticle(1)
+      await push([{ type: 'markUnread', articleId: a, at: now - 40 }])
+      await push([{ type: 'markRead', articleId: a, at: now - 30 }])
+      await push([{ type: 'markAllRead', feedId: 1, upTo: a, at: now - 10 }])
+      expect(await states(a)).toEqual({ read_at: now - 30, read_updated_at: now - 10 })
+      await push([{ type: 'markUnread', articleId: a, at: now - 20 }]) // made before, pushed after
+      expect(await shown(a)).toBe(true)
+    })
+
+    test('mark all read reads one marked before it, not one marked since', async () => {
+      await push([{ type: 'subscribe', feedId: 2 }])
+      const [a, b, other] = [await addArticle(1), await addArticle(1), await addArticle(2)]
+      const after = await addArticle(1) // past what the list showed
+      await push([
+        { type: 'markUnread', articleId: a, at: now - 30 },
+        { type: 'markUnread', articleId: b, at: now - 10 },
+        { type: 'markUnread', articleId: other, at: now - 30 },
+        { type: 'markUnread', articleId: after, at: now - 30 },
+      ])
+      await push([{ type: 'markAllRead', feedId: 1, upTo: b, at: now - 20 }])
+      expect(await states(a)).toEqual({ read_at: now - 20, read_updated_at: now - 20 })
+      expect(await states(b)).toEqual({ read_at: null, read_updated_at: now - 10 })
+      expect([await shown(a), await shown(b), await shown(other), await shown(after)]).toEqual([
+        true,
+        false,
+        false,
+        false,
+      ])
+      // Every feed, without one named.
+      await push([{ type: 'markAllRead', upTo: after, at: now - 5 }])
+      expect([await shown(b), await shown(other), await shown(after)]).toEqual([true, true, true])
+    })
+
+    test('a like does not read it', async () => {
+      const [a, b] = [await addArticle(1), await addArticle(1)]
+      await push([{ type: 'markUnread', articleId: a, at: now - 20 }])
+      await push([{ type: 'setLiked', articleId: a, liked: true, at: now - 10 }])
+      expect(await state(a)).toMatchObject({ read_at: null, liked_at: now - 10 })
+      expect(await shown(a)).toBe(false)
+      // Where the member chose nothing, liking reads, as ever.
+      await push([{ type: 'setLiked', articleId: b, liked: true }])
+      expect((await state(b))?.read_at).toBe(now)
+    })
+
+    test('compaction keeps it, and one read again after it, but not a plain read', async () => {
+      const [a, b, c] = [await addArticle(1), await addArticle(1), await addArticle(1)]
+      await push([{ type: 'markAllRead', feedId: 1, upTo: c, at: now - 50 }])
+      await push([
+        { type: 'markRead', articleId: a, at: now - 40 },
+        { type: 'markUnread', articleId: b, at: now - 40 },
+        { type: 'markUnread', articleId: c, at: now - 40 },
+        { type: 'markRead', articleId: c, at: now - 30 },
+      ])
+      await compactReadStates(db)
+      expect(await states(a)).toBeUndefined() // the watermark says it
+      expect(await states(b)).toEqual({ read_at: null, read_updated_at: now - 40 })
+      expect(await states(c)).toEqual({ read_at: now - 30, read_updated_at: now - 30 })
+      expect([await shown(a), await shown(b), await shown(c)]).toEqual([true, false, true])
+      // c's clock outlived compaction, so an unread made before the read and pushed after loses.
+      await push([{ type: 'markUnread', articleId: c, at: now - 35 }])
+      expect(await shown(c)).toBe(true)
+    })
+  })
+
   test('prefs, profile and recommendations round-trip through a pull', async () => {
     const snap = await pull(0)
     const a = await addArticle(1)
@@ -400,6 +690,28 @@ describe('push', () => {
     expect(await readers()).toBe(1)
     await push([{ type: 'unsubscribe', feedId: 2 }])
     expect(await readers()).toBe(0)
+  })
+
+  test("a subscriber's device holds a blog's reader count only from three, and hears nothing below", async () => {
+    const b = await signedIn(api, 'b@x.test')
+    const c = await signedIn(api, 'c@x.test')
+    const blog = (p: PullResponse) => p.rows.sites.filter((s) => s.id === 2)
+    await push([{ type: 'subscribe', feedId: 2 }])
+    const snap = await pull(0)
+    // One reader: the count would say who reads it (ADR 0041), so the device holds 0.
+    expect(blog(snap)).toMatchObject([{ readerCount: 0 }])
+    // A second reader changes nothing a device holds, so the row is not sent again: its arrival
+    // alone would tell the first reader that someone came.
+    await push([{ type: 'subscribe', feedId: 2 }], b)
+    const quiet = await pull(snap.cursor)
+    expect(blog(quiet)).toEqual([])
+    // A third: now the count is the device's to hold, and the community door lists the blog.
+    await push([{ type: 'subscribe', feedId: 2 }], c)
+    const third = await pull(quiet.cursor)
+    expect(blog(third)).toMatchObject([{ readerCount: 3, listing: 'listed' }])
+    // Down to two, the count is no longer one to show, and the device hears so.
+    await push([{ type: 'unsubscribe', feedId: 2 }], c)
+    expect(blog(await pull(third.cursor))).toMatchObject([{ readerCount: 0 }])
   })
 
   test('without a session, nothing', async () => {
@@ -667,22 +979,225 @@ describe('follows (ADR 0031)', () => {
     expect(off.rows.profile).toMatchObject([{ publicSubscriptions: true, publicLikes: false }])
   })
 
-  test('each privacy switch goes to the later choice, whatever order the devices push in', async () => {
-    const t = now - 1000
+  describe('a privacy show applies only against the version it saw (issue #16)', () => {
     const flags = async () => (await pull(0)).rows.profile[0]
-    // Hidden on one device at t+200; an older "show" from another device arrives after it.
-    await push([{ type: 'setPrivacy', publicLikes: true, at: t }])
-    await push([{ type: 'setPrivacy', publicLikes: false, at: t + 200 }])
-    await push([{ type: 'setPrivacy', publicLikes: true, at: t + 100 }])
-    expect(await flags()).toMatchObject({ publicLikes: false })
-    // The other way round: a later "show" that arrives first stands.
-    await push([{ type: 'setPrivacy', publicSubscriptions: true, at: t + 300 }])
-    await push([{ type: 'setPrivacy', publicSubscriptions: false, at: t + 250 }])
-    expect(await flags()).toMatchObject({ publicSubscriptions: true })
-    // One switch's change never decides the other's: an older likes change still applies after a
-    // newer subscriptions change, since each has its own clock.
-    await push([{ type: 'setPrivacy', publicLikes: true, at: t + 260 }])
-    expect(await flags()).toMatchObject({ publicLikes: true, publicSubscriptions: true })
+    const clocks = () =>
+      first<{ likes_at: number; subs_at: number }>(
+        db,
+        sql`select public_likes_at as likes_at, public_subscriptions_at as subs_at from profiles
+          where user_id = ${reader.userId}`,
+      )
+
+    test('a hide made elsewhere lands first, and a show made before it is refused', async () => {
+      const t = now - 1000
+      // Device A, offline and with the right clock, shows the likes it holds hidden (version 0).
+      const fromA = { type: 'setPrivacy', publicLikes: true, base: { publicLikes: 0 }, at: t + 300 }
+      // Device B, whose clock runs slow, shows them and hides them again; both land first.
+      await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 0 }, at: t }])
+      await push([{ type: 'setPrivacy', publicLikes: false, at: t + 50 }])
+      expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 2 })
+      // A reconnects. Its show is the later by the clocks, and made against a version the hide
+      // has passed: refused, but acknowledged and stamped, so A's next pull turns it back off.
+      const snap = await pull(0)
+      const res = await push([fromA])
+      expect(res.applied).toHaveLength(1)
+      const after = await pull(snap.cursor)
+      expect(after.rows.profile).toMatchObject([{ publicLikes: false, publicLikesVersion: 2 }])
+    })
+
+    test('a show against the version its own hide made applies, whatever its clock says', async () => {
+      // The device sends such a show only once the hide has come back in a pull (`privacyChange`).
+      const t = now - 1000
+      await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 0 }, at: t }])
+      // Offline, on a device whose clock runs behind: both older than the switch's clock.
+      await push([
+        { type: 'setPrivacy', publicLikes: false, at: t - 500 },
+        { type: 'setPrivacy', publicLikes: true, base: { publicLikes: 2 }, at: t - 400 },
+      ])
+      expect(await flags()).toMatchObject({ publicLikes: true, publicLikesVersion: 3 })
+      // The clock only ever moves forward, since a show without a base is still decided by it.
+      expect((await clocks())?.likes_at).toBe(t)
+    })
+
+    test('a show without a base, from a shell before it, goes to the later `at`', async () => {
+      const t = now - 1000
+      await push([{ type: 'setPrivacy', publicSubscriptions: false, at: t + 200 }])
+      await push([{ type: 'setPrivacy', publicSubscriptions: true, at: t + 100 }])
+      expect(await flags()).toMatchObject({
+        publicSubscriptions: false,
+        publicSubscriptionsVersion: 1,
+      })
+      await push([{ type: 'setPrivacy', publicSubscriptions: true, at: t + 300 }])
+      // One switch's change never touches the other's: likes keep their version and clock.
+      expect(await flags()).toMatchObject({
+        publicSubscriptions: true,
+        publicSubscriptionsVersion: 2,
+        publicLikes: false,
+        publicLikesVersion: 0,
+      })
+      expect(await clocks()).toEqual({ likes_at: 0, subs_at: t + 300 })
+    })
+
+    test('an old hide arriving after a newer show turns the switch off, failing closed', async () => {
+      const t = now - 1000
+      await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 0 }, at: t + 300 }])
+      await push([{ type: 'setPrivacy', publicLikes: false, at: t + 250 }])
+      expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 2 })
+      expect((await clocks())?.likes_at).toBe(t + 300)
+      // The member shows them again, against what they now see.
+      await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 2 }, at: t + 260 }])
+      expect(await flags()).toMatchObject({ publicLikes: true, publicLikesVersion: 3 })
+    })
+
+    describe('devices that make their changes as Settings does', () => {
+      /** A device: its confirmed rows and the changes it has not had settled. */
+      type Device = { confirmed: Confirmed; pending: Pending[] }
+      const device = (): Device => ({
+        confirmed: { cursor: 0, tables: emptyTables() },
+        pending: [],
+      })
+      const sync = async (d: Device) => {
+        for (;;) {
+          const page = await pull(d.confirmed.cursor)
+          d.confirmed = applyPull(d.confirmed, page)
+          d.pending = settle(d.confirmed, d.pending)
+          if (!page.more) return
+        }
+      }
+      /** Push what is unsent; a lost answer leaves the device knowing nothing of it. */
+      const send = async (d: Device, lost = false) => {
+        const batch = d.pending.filter((p) => p.ackedAt === undefined).map((p) => p.mutation)
+        if (batch.length === 0) return
+        const res = await push(batch as unknown as Record<string, unknown>[])
+        if (lost) return
+        const applied = new Set(res.applied)
+        d.pending = d.pending.map((p) =>
+          applied.has(p.mutation.mid) ? { ...p, ackedAt: res.seq } : p,
+        )
+        d.pending = settle(d.confirmed, d.pending)
+      }
+      /** The member presses the likes switch: false when the show has to wait. */
+      const press = (d: Device, on: boolean) => {
+        const change = privacyChange(d.confirmed, d.pending, 'publicLikes', on)
+        if (change === null) return false
+        api.clock.advance(1)
+        const mutation = { ...change, mid: `press-${++mids}-padding`, at: api.clock.now() }
+        d.pending.push({ mutation: mutation as Mutation })
+        return true
+      }
+      const shown = (d: Device) => view(d.confirmed, d.pending).profile?.publicLikes
+      /** Version 1, on: the member showed their likes, and every device has it. */
+      async function likesShown(...devices: Device[]) {
+        await push([{ type: 'setPrivacy', publicLikes: true, base: { publicLikes: 0 } }])
+        for (const d of devices) await sync(d)
+        expect(await flags()).toMatchObject({ publicLikes: true, publicLikesVersion: 1 })
+      }
+
+      test("A: a show waits for the device's own hide to settle, then applies", async () => {
+        const a = device()
+        await likesShown(a)
+        expect(press(a, false)).toBe(true)
+        await send(a, true) // applied; the answer is lost
+        await sync(a) // the pull holds the hide, which is still unsettled here
+        expect(a.confirmed.tables.profile?.publicLikesVersion).toBe(2)
+        expect(shown(a)).toBe(false)
+        // A show now would name version 2 before the device knows its hide made it: it waits.
+        expect(privacyUnsettled(a.confirmed, a.pending, 'publicLikes')).toBe(true)
+        expect(press(a, true)).toBe(false)
+        await send(a) // the retry is a replay, acknowledged
+        await sync(a)
+        expect(a.pending).toEqual([])
+        expect(press(a, true)).toBe(true)
+        await send(a)
+        await sync(a)
+        expect(await flags()).toMatchObject({ publicLikes: true, publicLikesVersion: 3 })
+        expect(shown(a)).toBe(true)
+        expect(a.pending).toEqual([])
+      })
+
+      test("B: a show cannot be queued behind an unsettled hide, so another device's hide stands", async () => {
+        const [a, b] = [device(), device()]
+        await likesShown(a, b)
+        press(a, false)
+        await send(a, true)
+        await sync(a)
+        expect(press(a, true)).toBe(false) // nothing queued to reopen what B closes next
+        press(b, false)
+        await send(b)
+        await sync(b)
+        expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 3 })
+        await send(a)
+        await sync(a)
+        expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 3 })
+        expect([shown(a), shown(b)]).toEqual([false, false])
+        // Once settled, a show names version 3, B's hide included, which the member has now seen.
+        expect(press(a, true)).toBe(true)
+        expect(a.pending.at(-1)?.mutation).toMatchObject({ base: { publicLikes: 3 } })
+      })
+
+      test("B': a show made before another device's hide lands is refused, though sent after", async () => {
+        const [a, b] = [device(), device()]
+        await likesShown(a, b)
+        press(a, false)
+        await send(a)
+        await sync(a)
+        expect(press(a, true)).toBe(true) // base 2, unsent
+        press(b, false)
+        await send(b)
+        await send(a)
+        await sync(a)
+        await sync(b)
+        expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 3 })
+        expect([shown(a), shown(b)]).toEqual([false, false])
+        expect(a.pending).toEqual([])
+      })
+
+      test('C: offline toggling cannot end on over a hide made elsewhere meanwhile', async () => {
+        const [a, b] = [device(), device()]
+        await likesShown(a, b)
+        // A, offline, toggles off, on, off, on: only the hides are made.
+        expect([press(a, false), press(a, true), press(a, false), press(a, true)]).toEqual([
+          true,
+          false,
+          true,
+          false,
+        ])
+        expect(shown(a)).toBe(false)
+        press(b, false) // B hides first
+        await send(b)
+        await send(a)
+        await sync(a)
+        await sync(b)
+        expect(await flags()).toMatchObject({ publicLikes: false, publicLikesVersion: 4 })
+        expect([shown(a), shown(b)]).toEqual([false, false])
+        expect(a.pending).toEqual([])
+      })
+    })
+
+    test('a hide through PUT /profile counts the version up, so an older show is refused', async () => {
+      await push([
+        { type: 'setPrivacy', publicSubscriptions: true, base: { publicSubscriptions: 0 } },
+      ])
+      expect(await flags()).toMatchObject({
+        publicSubscriptions: true,
+        publicSubscriptionsVersion: 1,
+      })
+      // A shell from before the switches saves its form, which loaded the switch off.
+      await api.request('/api/v1/profile', {
+        method: 'PUT',
+        body: { displayName: 'R', publicSubscriptions: false },
+        as: reader,
+      })
+      expect(await flags()).toMatchObject({
+        publicSubscriptions: false,
+        publicSubscriptionsVersion: 2,
+      })
+      // A show another device made against version 1, before that save, arrives after it.
+      await push([
+        { type: 'setPrivacy', publicSubscriptions: true, base: { publicSubscriptions: 1 } },
+      ])
+      expect(await flags()).toMatchObject({ publicSubscriptions: false })
+    })
   })
 
   test('the Gravatar switch goes to the later choice, and on again is a new address (ADR 0032)', async () => {
@@ -868,6 +1383,44 @@ describe('a feed merged into another (ADR 0028)', () => {
       await merge([], [[duplicate, copy]])
       expect(await shown(copy)).toBe(true)
     })
+  })
+
+  test('a duplicate read twice carries its later clock, so an unread made between loses', async () => {
+    // Codex review: carried by its first read alone, the later read was lost in the merge.
+    const shown = async (id: number) => {
+      const device = applyPull({ cursor: 0, tables: emptyTables() }, await pull(0))
+      return isRead(device.tables, device.tables.articles.get(id) as ArticleRow, now)
+    }
+    await push([{ type: 'subscribe', feedId: 2 }])
+    const [fresh, marked] = [await addArticle(2), await addArticle(2)]
+    // The target's copies: one never opened, one marked unread on the target in between.
+    const [copyOfFresh, copyOfMarked] = [await addArticle(1), await addArticle(1)]
+    await push([{ type: 'markUnread', articleId: copyOfMarked, at: now - 78 }])
+    for (const id of [fresh, marked]) {
+      await push([{ type: 'markRead', articleId: id, at: now - 80 }])
+      await push([{ type: 'markRead', articleId: id, at: now - 70 }]) // on a second device
+    }
+    await write(
+      ...mergeFeed(
+        db,
+        {
+          alias: 2,
+          target: 1,
+          move: [],
+          carry: [
+            [fresh, copyOfFresh],
+            [marked, copyOfMarked],
+          ],
+        },
+        now,
+      ),
+    )
+    // A third device's unread, made between the two reads, arrives after the merge.
+    await push([
+      { type: 'markUnread', articleId: copyOfFresh, at: now - 75 },
+      { type: 'markUnread', articleId: copyOfMarked, at: now - 75 },
+    ])
+    expect([await shown(copyOfFresh), await shown(copyOfMarked)]).toEqual([true, true])
   })
 })
 

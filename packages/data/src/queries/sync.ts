@@ -11,14 +11,16 @@
  *   subscription row of a feed since left: its watermark is what says such a post was read once
  *   compaction has dropped its read state.
  *
- * A snapshot (cursor 0) sends all of it within the horizon. A delta sends rows whose seq is above
- * the cursor, plus a horizon snapshot of any feed subscribed since: its articles were written
- * before the subscription, so their seqs are below the cursor.
+ * A snapshot (cursor 0) sends all of it within the horizon, and the posts of feeds followed that
+ * the member marked unread, which beat it (ADR 0009). A delta sends rows whose seq is above the
+ * cursor, plus a horizon snapshot of any feed subscribed since: its articles were written before
+ * the subscription, so their seqs are below the cursor.
  */
 import type { SQL } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
 import { avatarSql, gravatarOnSql } from './people'
+import { deviceReaderCount } from './sites'
 
 /** Raw rows as SQL returns them; the API shapes them into the protocol's row types. */
 export type RawRow = Record<string, unknown>
@@ -49,7 +51,10 @@ export type PullRead = {
 
 const PROFILE = sql.raw(`p.handle, p.display_name as "displayName", p.bio,
   p.ui_locale as "uiLocale", p.reading_lang as "readingLang",
+  p.ui_locale_at as "uiLocaleAt", p.reading_lang_at as "readingLangAt",
   p.public_subscriptions as "publicSubscriptions", p.public_likes as "publicLikes",
+  p.public_subscriptions_version as "publicSubscriptionsVersion",
+  p.public_likes_version as "publicLikesVersion",
   ${gravatarOnSql('p')} as "gravatar", p.gravatar_found as "gravatarFound",
   (p.avatar_key is not null) as "avatarUploaded", ${avatarSql('p')} as "avatar",
   p.is_admin as "isAdmin", p.seq`)
@@ -66,8 +71,9 @@ export const ARTICLE_COLUMNS = sql.raw(`a.id, a.feed_id as "feedId", a.url, a.ti
   a.extract_state as "extractState", a.like_count as "likeCount",
   a.recommend_count as "recommendCount", a.seq`)
 const TITLE = sql.raw(`t.article_id as "articleId", t.lang, t.title, t.excerpt, t.status, t.seq`)
-const STATE = sql.raw(`article_id as "articleId", read_at as "readAt", liked_at as "likedAt",
-  liked_updated_at as "likedUpdatedAt", seq`)
+const STATE = sql.raw(`article_id as "articleId", read_at as "readAt",
+  read_updated_at as "readUpdatedAt", liked_at as "likedAt", liked_updated_at as "likedUpdatedAt",
+  seq`)
 const RECOMMENDATION = sql.raw(`article_id as "articleId", note, created_at as "createdAt",
   deleted_at as "deletedAt", seq`)
 const HIGHLIGHT = sql.raw(`id, article_id as "articleId", content_key as "contentKey", side, lang,
@@ -92,7 +98,7 @@ const TRANSLATION = sql.raw(`b.content_key as "contentKey", b.lang, b.state,
 function siteColumns(userId: string): SQL {
   return sql`s.id, s.home_url as "homeUrl", s.title, s.description, s.favicon_key as "faviconKey",
     s.primary_lang as "primaryLang", s.listing, (s.claimed_by = ${userId}) as "owned",
-    (s.claimed_by is not null) as "claimed", s.reader_count as "readerCount",
+    (s.claimed_by is not null) as "claimed", ${deviceReaderCount('s')} as "readerCount",
     s.translation_opt_out as "translationOptOut", s.seq`
 }
 
@@ -107,18 +113,30 @@ function scope(userId: string, horizon: number, cursor: number) {
     union select article_id from recommendations where user_id = ${userId} and deleted_at is null
     union select article_id from highlights where user_id = ${userId} and deleted_at is null`
   /**
+   * Posts the member marked unread by hand (ADR 0009). Unread beats the horizon, so a device must
+   * hold them while it holds their feed, or each device counts what it happened to keep.
+   */
+  const markedUnread = (feeds: SQL, since: SQL = sql``) => sql`select article_id
+    from user_article_states where user_id = ${userId} and read_at is null
+      and read_updated_at is not null ${since}
+      and article_id in (select id from articles where feed_id in (${feeds}))`
+  /**
    * Articles the member began to keep since the cursor. They come whole, with their feed, because
    * the article may belong to no feed the member subscribes to (a liked post from a feed since
-   * left), so its row was never sent or has been dropped.
+   * left), so its row was never sent or has been dropped. A post marked unread past the horizon
+   * comes the same way: no device need have held it (a search hit, ADR 0025).
    */
   const newlyKept = sql`select article_id from user_article_states
       where user_id = ${userId} and liked_at is not null and seq > ${cursor}
     union select article_id from recommendations
       where user_id = ${userId} and deleted_at is null and seq > ${cursor}
     union select article_id from highlights
-      where user_id = ${userId} and deleted_at is null and seq > ${cursor}`
+      where user_id = ${userId} and deleted_at is null and seq > ${cursor}
+    union ${markedUnread(activeFeeds, sql`and seq > ${cursor}`)}`
+  /** A feed's horizon, and its posts marked unread, which beat it. */
   const horizonOf = (feeds: SQL) =>
-    sql`select id from articles where feed_id in (${feeds}) and fetched_at >= ${horizon}`
+    sql`select id from articles where feed_id in (${feeds})
+      and (fetched_at >= ${horizon} or id in (${markedUnread(feeds)}))`
   return { activeFeeds, newFeeds, kept, newlyKept, horizonOf }
 }
 

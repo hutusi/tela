@@ -24,7 +24,9 @@ export const ADMIN_FILTERS = {
   claims: ['review', 'checking', 'verified'],
   sites: ['discover', 'private', 'attention', 'hidden'],
   feeds: ['failing', 'timeout', 'dead', 'paused', 'merged', 'fetching'],
-  discover: ['featured', 'listed', 'candidates', 'hidden'],
+  // `candidates` is the review queue (ADR 0041), "To review"; `dismissed`, the blogs judged not
+  // for Discover, which three readers can still list.
+  discover: ['candidates', 'featured', 'listed', 'dismissed', 'hidden'],
   people: ['admins', 'members'],
   invites: ['codes', 'waiting', 'revoked'],
   translation: ['blogs', 'jobs', 'models'],
@@ -57,6 +59,7 @@ export type AdminTone = (typeof ADMIN_TONES)[number]
 export const ADMIN_ACTIONS = [
   'site.feature',
   'site.list',
+  'site.dismiss',
   'site.hide',
   'site.restore',
   'site.topics',
@@ -98,6 +101,7 @@ export function isAdminAction(value: unknown): value is AdminActionName {
 export const UNDOABLE_ACTIONS = [
   'site.feature',
   'site.list',
+  'site.dismiss',
   'site.hide',
   'site.restore',
   'site.topics',
@@ -116,14 +120,18 @@ export const UNDOABLE_ACTIONS = [
 
 /**
  * What each action writes that an undo would restore. A later action stands in an undo's way only
- * when it wrote the same thing on the same target: Fetch now after Feature leaves the listing as
- * Feature set it. A fetch, a check, a retry or a sign-out writes nothing an undo restores (null).
- * The claim's own actions are one thing, since each moves its status or review together.
+ * when it wrote something the same on the same target: Fetch now after Feature leaves the listing
+ * as Feature set it. A fetch, a check, a retry or a sign-out writes nothing an undo restores
+ * (null). The claim's own actions are one thing, since each moves its status or review together.
  */
 export const ACTION_WRITES = {
-  'site.feature': 'listing',
-  'site.list': 'listing',
-  'site.hide': 'listing',
+  // A blog's review for Discover (ADR 0041) is written by List, Feature and Hide with its
+  // listing, and by Not for Discover alone: a later List or Hide stands in the way of undoing a
+  // dismissal, but a dismissal, which changes no listing, is no listing chosen since.
+  'site.feature': ['listing', 'review'],
+  'site.list': ['listing', 'review'],
+  'site.dismiss': 'review',
+  'site.hide': ['listing', 'review'],
   'site.restore': 'listing',
   'site.topics': 'topics',
   'site.translationOff': 'translation',
@@ -150,12 +158,29 @@ export const ACTION_WRITES = {
   'code.restore': 'revoked',
   'hold.cancel': 'hold',
   'invite.address': null,
-} as const satisfies Record<AdminActionName, string | null>
+} as const satisfies Record<AdminActionName, string | readonly string[] | null>
 
-/** The actions that write `what`: the ones whose later use stands in the way of an undo of it. */
+/** What an action writes that an undo would restore, as a list (empty for none). */
+export function writesOf(action: AdminActionName): readonly string[] {
+  const writes: string | readonly string[] | null = ACTION_WRITES[action]
+  return writes === null ? [] : typeof writes === 'string' ? [writes] : writes
+}
+
+/** The actions that write `what`. */
 export function actionsWriting(what: string): AdminActionName[] {
-  return (Object.keys(ACTION_WRITES) as AdminActionName[]).filter(
-    (action) => ACTION_WRITES[action] === what,
+  return (Object.keys(ACTION_WRITES) as AdminActionName[]).filter((action) =>
+    writesOf(action).includes(what),
+  )
+}
+
+/**
+ * The actions whose later use stands in the way of an undo of `action`: those that wrote any of
+ * what it wrote, on the same target.
+ */
+export function actionsCrossing(action: AdminActionName): AdminActionName[] {
+  const writes = writesOf(action)
+  return (Object.keys(ACTION_WRITES) as AdminActionName[]).filter((other) =>
+    writesOf(other).some((what) => writes.includes(what)),
   )
 }
 

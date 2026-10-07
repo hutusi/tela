@@ -3,7 +3,8 @@
  * tables and the clock, so a click is a function call, not a request (ADR 0025).
  *
  * Unread follows ADR 0009: an article is read once opened, once under its feed's watermark, or
- * once older than the 30-day horizon.
+ * once older than the 30-day horizon, unless the member marked it unread, which beats both until
+ * they read it again. Everything that asks whether a post is read asks `isRead`.
  */
 
 import type { ArticleRow, SiteRow } from '@tela/sync'
@@ -14,11 +15,34 @@ export type Filter = 'all' | 'today' | 'liked'
 export const FILTERS: Filter[] = ['all', 'today', 'liked']
 const DAY = 86_400_000
 
+/** Whether the member marked the post unread by hand, and has not read it since. */
+export function isMarkedUnread(t: Tables, articleId: number): boolean {
+  const s = t.states.get(articleId)
+  return s !== undefined && s.readAt === null && s.readUpdatedAt != null
+}
+
 export function isRead(t: Tables, a: ArticleRow, now: number): boolean {
   if (t.states.get(a.id)?.readAt != null) return true
+  if (isMarkedUnread(t, a.id)) return false
   const sub = t.subscriptions.get(a.feedId)
   if (sub && a.id <= sub.watermarkId) return true
   return a.fetchedAt < now - HORIZON_DAYS * DAY
+}
+
+/**
+ * Whether a post shows as read: the list's dot, the reader's Mark as read or Mark as unread, and
+ * which of the two `m` sends all ask this, so they never disagree. The open post counts as read
+ * before its markRead lands while opening reads (`markOnOpen`), but not once the member marks it
+ * unread while it is open: opening read it, and that later choice stands until the next open.
+ */
+export function shownRead(
+  t: Tables,
+  a: ArticleRow,
+  now: number,
+  open: boolean,
+  markOnOpen: boolean,
+): boolean {
+  return isRead(t, a, now) || (open && markOnOpen && !isMarkedUnread(t, a.id))
 }
 
 export const isLiked = (t: Tables, articleId: number) => t.states.get(articleId)?.likedAt != null

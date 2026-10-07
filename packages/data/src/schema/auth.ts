@@ -121,7 +121,14 @@ export const profiles = sqliteTable(
     displayName: text(),
     bio: text(),
     uiLocale: text(),
+    /** The language posts are translated into; null follows the interface language (ADR 0040). */
     readingLang: text(),
+    /**
+     * When each language was last set, by the `at` of the change that set it: the later choice
+     * wins, whichever device's push arrives last (ADR 0040), as for the privacy switches.
+     */
+    uiLocaleAt: ms().notNull().default(0),
+    readingLangAt: ms().notNull().default(0),
     publicSubscriptions: integer({ mode: 'boolean' }).notNull().default(false),
     /** Whether the member's liked posts show on their profile and to their followers (ADR 0031). */
     publicLikes: integer({ mode: 'boolean' }).notNull().default(false),
@@ -131,6 +138,13 @@ export const profiles = sqliteTable(
      */
     publicSubscriptionsAt: ms().notNull().default(0),
     publicLikesAt: ms().notNull().default(0),
+    /**
+     * One more on every change of each switch. A "show" names the version it was made against and
+     * applies only if that is still the stored one, so a show queued before a later hide never
+     * reopens what the hide closed, whatever the clocks say (issue #16).
+     */
+    publicSubscriptionsVersion: integer().notNull().default(0),
+    publicLikesVersion: integer().notNull().default(0),
     /**
      * Whether the member shows their Gravatar, and the `at` that last set it: the later wins. Never
      * set (`gravatar_at` 0) counts as on (ADR 0033); `gravatarOnSql` says so in one place.

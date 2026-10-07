@@ -45,9 +45,26 @@ export function applyTheme(theme: Theme): void {
   const root = document.documentElement
   if (theme === 'system') delete root.dataset.theme
   else root.dataset.theme = theme
+  paintChrome(theme)
   try {
     localStorage.setItem(THEME_KEY, theme)
   } catch {}
+}
+
+/** Each scheme's `--color-paper`, as `styles.css` has it (`test/manifest.test.ts` holds them). */
+export const PAPER = { light: '#f6f2ea', dark: '#1f1c18' } as const
+
+/**
+ * The browser's own bar (a phone's status bar, an installed app's title bar) on the page's ground.
+ * index.html's two `theme-color` metas name each scheme's paper by `prefers-color-scheme`, which is
+ * right while the page follows the system; a theme chosen here is the page's whatever the system
+ * says, so both metas take its paper.
+ */
+export function paintChrome(theme: Theme): void {
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+    const scheme = meta.getAttribute('media')?.includes('dark') ? 'dark' : 'light'
+    meta.setAttribute('content', PAPER[theme === 'system' ? scheme : theme])
+  }
 }
 
 /** The theme the page is set to: its `data-theme`, or `system` without one. */

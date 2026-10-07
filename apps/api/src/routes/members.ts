@@ -11,6 +11,7 @@ import {
   currentSeq,
   first,
   gravatarOn,
+  publicReaderCount,
 } from '@tela/data'
 import { isReadingLanguage, isTopic, isValidHandle } from '@tela/shared'
 import { sql } from 'drizzle-orm'
@@ -50,9 +51,13 @@ export function memberRoutes(deps: ApiDeps) {
     const now = deps.clock.now()
     // The privacy switches are `setPrivacy` mutations now (ADR 0031). A shell from before them
     // still sends its form's `publicSubscriptions` with every save, as the form loaded it, so it
-    // may only hide: a stale form never makes public what the member hid since.
+    // may only hide: a stale form never makes public what the member hid since. A hide here is a
+    // hide like any other (issue #16): it counts the version up, so a show another device made
+    // against the version before it is refused.
     if (body.publicSubscriptions === false) {
-      sets.push(sql`public_subscriptions = 0, public_subscriptions_at = ${now}`)
+      sets.push(sql`public_subscriptions = 0,
+        public_subscriptions_at = max(public_subscriptions_at, ${now}),
+        public_subscriptions_version = public_subscriptions_version + 1`)
     }
     if (sets.length === 0) return c.json({ ok: true })
     // Taken handles are refused in the statement itself, so two members racing for one cannot
@@ -258,7 +263,7 @@ export function memberRoutes(deps: ApiDeps) {
     const [sites, articles] = (await db.batch([
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
-          s.reader_count as "readerCount",
+          ${publicReaderCount('s')} as "readerCount",
           (select min(id) from feeds where site_id = s.id and merged_into is null) as "feedId"
         from sites s
         where (s.listing in ('listed', 'featured') or s.id in (
@@ -282,6 +287,7 @@ export function memberRoutes(deps: ApiDeps) {
     ] as never)) as unknown as [Record<string, unknown>[], Record<string, unknown>[]]
     const q = (c.req.query('q') ?? '').trim().toLowerCase()
     // Ranked in the app, replacing pg_trgm: a prefix beats a substring, a title beats a host.
+    // A count kept back (below three readers) ranks as none, so the order tells no more than it.
     const score = (s: Record<string, unknown>) => {
       const title = String(s.title ?? '').toLowerCase()
       const host = String(s.homeUrl ?? '')

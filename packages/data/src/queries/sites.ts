@@ -41,20 +41,59 @@ export function ensureOriginSite(db: TelaDb, origin: string, now: number, meta: 
 const siteIdOf = (origin: string) => sql`(select id from sites where home_url = ${origin})`
 
 /**
+ * A blog waiting for an operator's review for Discover (ADR 0041), over `sites s`: one a member
+ * added (private, unclaimed, someone reads it), with a live feed that has brought posts, which no
+ * operator has decided about yet (`review` is null; every decision writes it with `reviewed_at`).
+ * A placeholder no fetch has filled, a blog whose feeds died or merged away, and one nobody reads
+ * any more wait for nothing. The console's queue and the Monday digest both count it.
+ */
+export const DISCOVER_REVIEW = sql`(s.listing = 'private' and s.claimed_by is null
+  and s.review is null and s.reader_count > 0
+  and exists (select 1 from feeds f join articles a on a.feed_id = f.id
+    where f.site_id = s.id and f.merged_into is null and f.status = 'active'))`
+
+/**
+ * A blog's reader count as a public answer may give it, over the sites table aliased `alias`:
+ * the count from the community door's three readers up, null below (ADR 0041). An operator may
+ * list a blog one member reads, and a public "1 reader" would name that member's reading by
+ * elimination; null reads like an editorial pick's nobody yet. Order by `coalesce(…, 0)`, never
+ * by `reader_count`, or the order alone tells 0 from 1 from 2.
+ */
+export const publicReaderCount = (alias: string): SQL =>
+  sql.raw(`(case when ${alias}.reader_count >= ${COMMUNITY_LISTING_MIN_READERS}
+    then ${alias}.reader_count end)`)
+
+/**
+ * A blog's reader count as a member's device holds it, over the sites table aliased `alias`: the
+ * count from three readers up, 0 below (ADR 0041). Below three, "2 readers on Tela" would tell a
+ * subscriber that one other member reads the blog; the row's type is a number, so 0, not null.
+ */
+export const deviceReaderCount = (alias: string): SQL =>
+  sql.raw(`(case when ${alias}.reader_count >= ${COMMUNITY_LISTING_MIN_READERS}
+    then ${alias}.reader_count else 0 end)`)
+
+/**
  * Recount distinct readers of each site, then open the community door into Discover (ADR 0018):
  * an unclaimed private site with enough readers is listed. One-way, and never touching an
- * editorial pick or a site an operator rejected.
+ * editorial pick or a site an operator rejected. The row is stamped with the batch's seq only
+ * when what a device holds of it changed (`deviceReaderCount`, or the listing): a subscribe
+ * that takes a blog from one reader to two changes nothing a device holds, and re-sending the
+ * row to its other readers would tell them, by its arrival, that someone came or went.
  */
 export function recountReaders(db: TelaDb, siteIds: SQL, now: number) {
+  const count = sql`(
+    select count(distinct s.user_id) from subscriptions s
+    join feeds f on f.id = s.feed_id
+    where f.site_id = sites.id and s.deleted_at is null
+  )`
+  const min = COMMUNITY_LISTING_MIN_READERS
   return [
     db.run(sql`
       update sites set
-        reader_count = (
-          select count(distinct s.user_id) from subscriptions s
-          join feeds f on f.id = s.feed_id
-          where f.site_id = sites.id and s.deleted_at is null
-        ),
-        updated_at = ${now}, seq = ${currentSeq}
+        seq = case when ${count} <> reader_count and (${count} >= ${min} or reader_count >= ${min})
+          then ${currentSeq} else seq end,
+        reader_count = ${count},
+        updated_at = ${now}
       where id in (${siteIds})
     `),
     db.run(sql`

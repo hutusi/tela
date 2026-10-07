@@ -20,6 +20,15 @@ export const SITE_LISTINGS = ['private', 'listed', 'featured', 'rejected'] as co
 export type SiteListing = (typeof SITE_LISTINGS)[number]
 
 /**
+ * What an operator's review decided about a blog for Discover (ADR 0041): `listed` by List,
+ * Feature or curation, `dismissed` by Not for Discover, or by a Hide that found nothing decided.
+ * Null while nobody has decided. The listing says where the blog is now; this says what the
+ * review chose, so a Restore or a removed claim returns a blog an operator listed to listed.
+ */
+export const SITE_REVIEWS = ['listed', 'dismissed'] as const
+export type SiteReview = (typeof SITE_REVIEWS)[number]
+
+/**
  * Distinct subscribers that list a site in Discover without anyone claiming it. Three, not one:
  * at one, "a site somebody subscribed to" is one member's reading list, published. Three makes
  * the signal an aggregate nobody can read backwards, and costs nothing while the beta is small

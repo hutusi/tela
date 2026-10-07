@@ -84,7 +84,9 @@ export function SiteView({
             {site.postsLast30d !== null ? (
               <span>{t('cadence', { key: cadenceKey(site.postsLast30d) })}</span>
             ) : null}
-            <span>{t('readersOnTela', { n: site.readerCount })}</span>
+            {site.readerCount === null ? null : (
+              <span>{t('readersOnTela', { n: site.readerCount })}</span>
+            )}
           </div>
           {data.topics.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">

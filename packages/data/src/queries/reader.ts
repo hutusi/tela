@@ -69,13 +69,15 @@ export async function subscribeMany(
  * watermark of the feed's subscription, and holding nothing about a like. A row with
  * `liked_updated_at` set, liked or not, is when the last like or unlike was decided, and a like
  * pushed later from a device that made it earlier is compared against it: dropped, an unliked
- * post would take that older like. One statement for the nightly batch; returns the article ids
- * it dropped.
+ * post would take that older like. A row with `read_updated_at` set is a read or unread chosen by
+ * hand, and stays for the same reason: dropped, a post marked unread would read as the watermark
+ * says, and one read again would take an older unread pushed late. One statement for the nightly
+ * batch; returns the article ids it dropped.
  */
 export function compactReadStates(db: TelaDb) {
   return db.all<{ article_id: number }>(sql`
     delete from user_article_states
-    where liked_at is null and liked_updated_at is null and exists (
+    where liked_at is null and liked_updated_at is null and read_updated_at is null and exists (
       select 1 from articles a join subscriptions s
         on s.feed_id = a.feed_id and s.user_id = user_article_states.user_id
       where a.id = user_article_states.article_id and a.id <= s.watermark_id

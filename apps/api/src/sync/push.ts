@@ -38,25 +38,62 @@ function statementsFor(
 
   switch (m.type) {
     case 'markRead':
+      // A first read keeps its time and no clock: compaction may drop it under the watermark, as
+      // ever. Over a post marked unread (ADR 0009) it is a hand-made choice like the unread was:
+      // the later `at` decides, and the read keeps its clock. And a read of a post already read
+      // keeps the first time but moves the clock to its own when it is later, so an unread made
+      // between the two and pushed after both loses to the newer read (Codex review): a read
+      // that changed nothing would leave the older time to decide. The row then keeps a clock,
+      // and compaction keeps it, which takes two devices reading one post unaware of each other.
       return [
         db.run(sql`
           insert into user_article_states (user_id, article_id, read_at, seq)
           select ${userId}, ${m.articleId}, ${at}, ${currentSeq}
           where ${article(m.articleId)} and ${fresh}
-          on conflict (user_id, article_id) do update set read_at = excluded.read_at, seq = excluded.seq
-          where user_article_states.read_at is null
+          on conflict (user_id, article_id) do update set
+            read_at = coalesce(user_article_states.read_at, excluded.read_at),
+            read_updated_at = case
+              when user_article_states.read_at is not null then excluded.read_at
+              when user_article_states.read_updated_at is null then null
+              else excluded.read_at end,
+            seq = excluded.seq
+          where (user_article_states.read_at is null
+              and (user_article_states.read_updated_at is null
+                or excluded.read_at >= user_article_states.read_updated_at))
+            or (user_article_states.read_at is not null
+              and excluded.read_at > max(user_article_states.read_at,
+                coalesce(user_article_states.read_updated_at, 0)))
+        `),
+      ]
+    case 'markUnread':
+      // Unread by hand: no `read_at`, and the clock that says when (ADR 0009). It beats the
+      // watermark and the horizon until a later read, and goes to the later `at` against any read
+      // or unread already made, the first read's own time included.
+      return [
+        db.run(sql`
+          insert into user_article_states (user_id, article_id, read_at, read_updated_at, seq)
+          select ${userId}, ${m.articleId}, null, ${at}, ${currentSeq}
+          where ${article(m.articleId)} and ${fresh}
+          on conflict (user_id, article_id) do update set
+            read_at = null, read_updated_at = excluded.read_updated_at, seq = excluded.seq
+          where excluded.read_updated_at >= max(coalesce(user_article_states.read_updated_at, 0),
+            coalesce(user_article_states.read_at, 0))
         `),
       ]
     case 'setLiked':
       return [
-        // Liking also reads; the later of two devices' likes decides.
+        // Liking also reads, unless the member has chosen read or unread by hand: a like never
+        // moves that choice. The later of two devices' likes decides.
         db.run(sql`
           insert into user_article_states (user_id, article_id, read_at, liked_at, liked_updated_at, seq)
           select ${userId}, ${m.articleId}, ${at}, ${m.liked ? at : null}, ${at}, ${currentSeq}
           where ${article(m.articleId)} and ${fresh}
           on conflict (user_id, article_id) do update set
             liked_at = excluded.liked_at, liked_updated_at = excluded.liked_updated_at,
-            read_at = coalesce(user_article_states.read_at, excluded.read_at), seq = excluded.seq
+            read_at = case when user_article_states.read_updated_at is not null
+              then user_article_states.read_at
+              else coalesce(user_article_states.read_at, excluded.read_at) end,
+            seq = excluded.seq
           where user_article_states.liked_updated_at is null
             or excluded.liked_updated_at > user_article_states.liked_updated_at
         `),
@@ -67,11 +104,28 @@ function statementsFor(
       // feed would mark posts read before they arrive.
       const feed = m.feedId === undefined ? sql`` : sql`and feed_id = ${m.feedId}`
       const target = sql`min(${m.upTo}, (select coalesce(max(id), 0) from articles where feed_id = subscriptions.feed_id))`
+      const feedOf = m.feedId === undefined ? sql`` : sql`and s.feed_id = ${m.feedId}`
       return [
         db.run(sql`
           update subscriptions set watermark_id = ${target}, updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and deleted_at is null ${feed}
             and watermark_id < ${target} and ${fresh}
+        `),
+        // A post marked unread beats the watermark (ADR 0009), so the ones this covers are read
+        // by hand, with the mark-all's clock: those marked before it, not one marked since. One
+        // read by hand already keeps its first time and takes the later clock, as a second read
+        // would, so an unread made before the mark-all and pushed after it loses there too.
+        db.run(sql`
+          update user_article_states set read_at = coalesce(read_at, ${at}),
+            read_updated_at = ${at}, seq = ${currentSeq}
+          where user_id = ${userId} and read_updated_at is not null
+            and ((read_at is null and read_updated_at <= ${at})
+              or (read_at is not null and read_updated_at < ${at}))
+            and ${fresh}
+            and article_id in (
+              select a.id from articles a join subscriptions s on s.feed_id = a.feed_id
+              where s.user_id = ${userId} and s.deleted_at is null ${feedOf} and a.id <= ${m.upTo}
+            )
         `),
       ]
     }
@@ -97,6 +151,19 @@ function statementsFor(
         ...recountReaders(db, siteOf(m.feedId), now),
       ]
     case 'setPref':
+      // A value the account takes from this browser (`ifAbsent`, a visitor's theme on joining) is
+      // no choice: it fills only a pref the account has no row for, from a device copy that may
+      // be stale, and carries no clock, so any choice made anywhere beats it. A device that
+      // predicted it and lost hears the row that beat it in its next pull, since it never held it.
+      if (m.ifAbsent) {
+        return [
+          db.run(sql`
+            insert into user_prefs (user_id, key, value_json, updated_at, seq)
+            select ${userId}, ${m.key}, ${JSON.stringify(m.value)}, 0, ${currentSeq} where ${fresh}
+            on conflict (user_id, key) do nothing
+          `),
+        ]
+      }
       return [
         db.run(sql`
           insert into user_prefs (user_id, key, value_json, updated_at, seq)
@@ -106,31 +173,77 @@ function statementsFor(
           where excluded.updated_at >= user_prefs.updated_at
         `),
       ]
-    case 'setProfile':
-      return [
-        db.run(sql`
-          update profiles set
-            reading_lang = coalesce(${m.readingLang ?? null}, reading_lang),
-            ui_locale = coalesce(${m.uiLocale ?? null}, ui_locale),
-            updated_at = ${now}, seq = ${currentSeq}
-          where user_id = ${userId} and ${fresh}
-        `),
-      ]
-    case 'setPrivacy': {
-      // Each switch to the later `at`, on a clock of its own: one switch's change never decides
-      // the other's, and an older choice arriving late changes nothing (ADR 0031). Bound as 1 or
-      // 0, since `false` is a value; an absent switch is left alone, its clock included.
-      const flag = (column: 'public_subscriptions' | 'public_likes', v: boolean | undefined) => {
+    case 'setProfile': {
+      // Each language to the later `at`, on a clock of its own, as a privacy switch goes (ADR
+      // 0040): the header and Settings change them from every device, and the last push to arrive
+      // is not the last choice. A reading language of null is a value, following the interface;
+      // one left out is left alone, its clock included. Stamped whether or not it won, so the
+      // next pull hands the device the row that beat it. An interface language the account takes
+      // from this browser (`adopt`, a visitor's on joining) is no choice: it applies only while
+      // the account has none, whatever the device's copy said, and leaves the clock alone, so any
+      // choice made anywhere beats it. An interface language is never set back to null, so null
+      // means never chosen.
+      const field = (
+        column: 'ui_locale' | 'reading_lang',
+        v: string | null | undefined,
+        adopt = false,
+      ) => {
         if (v === undefined) return sql``
-        const later = sql`${at} >= ${sql.raw(`${column}_at`)}`
-        return sql`${sql.raw(column)} = case when ${later} then ${v ? 1 : 0} else ${sql.raw(column)} end,
-          ${sql.raw(`${column}_at`)} = case when ${later} then ${at} else ${sql.raw(`${column}_at`)} end,`
+        const clock = sql.raw(`${column}_at`)
+        if (adopt) {
+          return sql`${sql.raw(column)} = coalesce(${sql.raw(column)}, ${v}),`
+        }
+        const later = sql`${at} >= ${clock}`
+        return sql`${sql.raw(column)} = case when ${later} then ${v} else ${sql.raw(column)} end,
+          ${clock} = case when ${later} then ${at} else ${clock} end,`
       }
       return [
         db.run(sql`
           update profiles set
-            ${flag('public_subscriptions', m.publicSubscriptions)}
-            ${flag('public_likes', m.publicLikes)}
+            ${field('ui_locale', m.uiLocale, m.adopt === true)}
+            ${field('reading_lang', m.readingLang)}
+            updated_at = ${now}, seq = ${currentSeq}
+          where user_id = ${userId} and ${fresh}
+        `),
+      ]
+    }
+    case 'setPrivacy': {
+      // Each switch on its own, so one switch's change never decides the other's (ADR 0031), and
+      // a hide and a show are not ordered alike (issue #16):
+      // - a hide always applies, whatever its `at`: an old hide arriving after a newer show turns
+      //   the switch off, which fails closed, and the member can show it again;
+      // - a show with a base applies only while the switch's version is still the one it was made
+      //   against, so a show queued before a hide made elsewhere is refused, whatever the clocks
+      //   say; a device names the version its confirmed rows hold, and makes no show while its own
+      //   change to the switch is unsettled, so its show after its own hide names the hide's;
+      // - a show without a base, from a shell before it, goes to the later `at` as it always did.
+      // Every change counts the version up, and the clock only ever moves forward, since a show
+      // without a base is still decided by it. SQLite reads the row as it was in every SET, so the
+      // version and clock tested are the ones before this change. Bound as 1 or 0, since `false`
+      // is a value; an absent switch is left alone, its clock and version included. Stamped
+      // whether or not it applied, so the next pull hands the device the row that beat it.
+      const flag = (
+        column: 'public_subscriptions' | 'public_likes',
+        v: boolean | undefined,
+        base: number | undefined,
+      ) => {
+        if (v === undefined) return sql``
+        const value = sql.raw(column)
+        const clock = sql.raw(`${column}_at`)
+        const version = sql.raw(`${column}_version`)
+        if (!v) {
+          return sql`${value} = 0, ${clock} = max(${clock}, ${at}), ${version} = ${version} + 1,`
+        }
+        const applies = base === undefined ? sql`${at} >= ${clock}` : sql`${version} = ${base}`
+        return sql`${value} = case when ${applies} then 1 else ${value} end,
+          ${clock} = case when ${applies} then max(${clock}, ${at}) else ${clock} end,
+          ${version} = case when ${applies} then ${version} + 1 else ${version} end,`
+      }
+      return [
+        db.run(sql`
+          update profiles set
+            ${flag('public_subscriptions', m.publicSubscriptions, m.base?.publicSubscriptions)}
+            ${flag('public_likes', m.publicLikes, m.base?.publicLikes)}
             updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and ${fresh}
         `),

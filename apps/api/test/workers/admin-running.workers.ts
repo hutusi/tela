@@ -9,6 +9,7 @@ import type { Ingest } from '@tela/ingest/pipeline'
 import { type Blobs, type Jobs, memoryMail } from '@tela/platform'
 import { d1Db } from '@tela/platform/cloudflare'
 import type {
+  AdminCounts,
   AdminList,
   AdminOverview,
   AdminSystemReport,
@@ -91,8 +92,9 @@ it('reads the running areas and retries a dead letter on D1', async () => {
   const DAY = 86_400_000
   await db.batch([
     bumpSeq(db),
-    db.run(sql`insert into sites (id, home_url, title, created_at, updated_at, seq)
-      values (1, 'https://a.example', 'A', 0, 0, ${currentSeq})`),
+    // Read by one member and fetched: a blog waiting for review for Discover (ADR 0041).
+    db.run(sql`insert into sites (id, home_url, title, reader_count, created_at, updated_at, seq)
+      values (1, 'https://a.example', 'A', 1, 0, 0, ${currentSeq})`),
     db.run(sql`insert into site_topics (site_id, topic) values (1, 'tech')`),
     db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, error_count,
         created_at, updated_at, seq)
@@ -121,7 +123,13 @@ it('reads the running areas and retries a dead letter on D1', async () => {
   expect(overview.queues.candidates.rows[0]).toMatchObject({
     topics: ['tech'],
     feedHealth: 'failing',
+    postsLast30d: 0,
+    latestTitle: 'Post',
+    latestAt: 0,
+    review: null,
+    reviewedAt: null,
   })
+  expect((await get<AdminCounts>('counts')).discover).toBe(1)
   expect(overview.week.tokens[0]).toBe(182)
 
   const blogs = await get<AdminList<AdminTranslationRow, 'translation'>>('translation?f=blogs')

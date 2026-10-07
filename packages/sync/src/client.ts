@@ -123,6 +123,11 @@ export function applyPull(confirmed: Confirmed, given: PullResponse): Confirmed 
       avatarUploaded: row.avatarUploaded ?? previous?.avatarUploaded ?? false,
       avatar: row.avatar === undefined ? (previous?.avatar ?? null) : row.avatar,
       isAdmin: row.isAdmin ?? previous?.isAdmin ?? false,
+      uiLocaleAt: row.uiLocaleAt ?? previous?.uiLocaleAt ?? 0,
+      readingLangAt: row.readingLangAt ?? previous?.readingLangAt ?? 0,
+      publicSubscriptionsVersion:
+        row.publicSubscriptionsVersion ?? previous?.publicSubscriptionsVersion ?? 0,
+      publicLikesVersion: row.publicLikesVersion ?? previous?.publicLikesVersion ?? 0,
     }
   }
   for (const row of r.prefs) t.prefs.set(row.key, row)
@@ -182,17 +187,89 @@ const blankState = (articleId: number): StateRow => ({
   seq: 0,
 })
 
+export type PrivacyFlag = 'publicSubscriptions' | 'publicLikes'
+type SetPrivacy = Extract<Mutation, { type: 'setPrivacy' }>
+
+/** Each privacy switch, and the profile field that counts its changes. */
+const VERSION = {
+  publicSubscriptions: 'publicSubscriptionsVersion',
+  publicLikes: 'publicLikesVersion',
+} as const
+const PRIVACY = Object.keys(VERSION) as PrivacyFlag[]
+
+/**
+ * Whether a privacy switch cannot be turned on yet (issue #16): a change this device made to it is
+ * not in the confirmed rows (still to be pushed, or acknowledged and not yet pulled), or no row
+ * has come at all. A show names the version the server held, and until the change lands in a pull
+ * the device cannot know which version that is: a show sent meanwhile would name the version from
+ * before the change, and be refused. A hide is never held back.
+ */
+export function privacyUnsettled(
+  confirmed: Confirmed,
+  pending: readonly Pending[],
+  flag: PrivacyFlag,
+): boolean {
+  if (confirmed.tables.profile === null) return true
+  return settle(confirmed, pending).some(
+    (p) => p.mutation.type === 'setPrivacy' && p.mutation[flag] !== undefined,
+  )
+}
+
+/**
+ * A privacy switch turned on or off now, as the mutation to make, or null for a show that has to
+ * wait (`privacyUnsettled`). A hide names no version: it always applies. A show names in `base`
+ * the version of its switch in the **confirmed** rows, the one the server held when this device
+ * last heard, never the view's (issue #16). The view replays changes a pull may already hold, and
+ * a show the server will refuse looks applied there, so a version read from it need not be one
+ * the server ever held: a show based on it was refused when it should have applied, or applied
+ * over a hide made elsewhere that this device had never seen. Against the confirmed version, a
+ * show applies only while nothing has changed the switch since this device last pulled.
+ */
+export function privacyChange(
+  confirmed: Confirmed,
+  pending: readonly Pending[],
+  flag: PrivacyFlag,
+  on: boolean,
+): Omit<SetPrivacy, 'mid' | 'at'> | null {
+  if (!on) return { type: 'setPrivacy', [flag]: false }
+  if (privacyUnsettled(confirmed, pending, flag)) return null
+  const held = confirmed.tables.profile?.[VERSION[flag]] ?? 0
+  return { type: 'setPrivacy', [flag]: true, base: { [flag]: held } }
+}
+
 /**
  * Predict one mutation, as the server will apply it (`apps/api/src/sync/push.ts`). Same rules:
- * read is set once; likes, recommendations and prefs go to the later `at`; a watermark never
- * moves backwards. Counts move with the member's own change, which is all a device can know.
+ * read is set once, unless the member marks the post unread, and then read and unread go to the
+ * later `at`; likes, recommendations and prefs go to the later `at`; a watermark never moves
+ * backwards. Counts move with the member's own change, which is all a device can know.
  */
 export function applyMutation(tables: Tables, m: Mutation): Tables {
   const t = copy(tables)
   switch (m.type) {
     case 'markRead': {
+      // As the server decides: a first read is clock-less, unless it reads a post marked unread,
+      // when the later `at` decides and the read keeps its clock (ADR 0009); a later read of a
+      // read post keeps the first time and moves the clock to its own.
       const s = t.states.get(m.articleId) ?? blankState(m.articleId)
-      if (s.readAt === null) t.states.set(m.articleId, { ...s, readAt: m.at })
+      const clock = s.readUpdatedAt ?? null
+      if (s.readAt === null) {
+        if (clock !== null && m.at < clock) return t
+        t.states.set(m.articleId, {
+          ...s,
+          readAt: m.at,
+          readUpdatedAt: clock === null ? null : m.at,
+        })
+      } else if (m.at > Math.max(s.readAt, clock ?? 0)) {
+        t.states.set(m.articleId, { ...s, readUpdatedAt: m.at })
+      }
+      return t
+    }
+    case 'markUnread': {
+      // To the later `at` against any read or unread already made, the first read's own time
+      // included.
+      const s = t.states.get(m.articleId) ?? blankState(m.articleId)
+      if (m.at < Math.max(s.readUpdatedAt ?? 0, s.readAt ?? 0)) return t
+      t.states.set(m.articleId, { ...s, readAt: null, readUpdatedAt: m.at })
       return t
     }
     case 'setLiked': {
@@ -203,7 +280,8 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         ...s,
         likedAt: m.liked ? m.at : null,
         likedUpdatedAt: m.at,
-        readAt: s.readAt ?? m.at,
+        // Liking reads, unless the member chose read or unread by hand: a like never moves that.
+        readAt: s.readUpdatedAt != null ? s.readAt : (s.readAt ?? m.at),
       })
       const article = t.articles.get(m.articleId)
       if (article && wasLiked !== m.liked) {
@@ -222,6 +300,17 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         for (const a of t.articles.values()) if (a.feedId === feedId && a.id > newest) newest = a.id
         const target = Math.min(m.upTo, newest)
         if (target > sub.watermarkId) t.subscriptions.set(feedId, { ...sub, watermarkId: target })
+      }
+      // A post marked unread beats the watermark, so those this covers are read by hand, with
+      // the mark-all's clock: those marked before it, not one marked since. One already read by
+      // hand keeps its first time and takes the later clock.
+      for (const [id, s] of t.states) {
+        if (s.readUpdatedAt == null) continue
+        if (s.readAt === null ? s.readUpdatedAt > m.at : s.readUpdatedAt >= m.at) continue
+        const a = t.articles.get(id)
+        if (!a || a.id > m.upTo || t.subscriptions.get(a.feedId)?.deletedAt !== null) continue
+        if (m.feedId !== undefined && a.feedId !== m.feedId) continue
+        t.states.set(id, { ...s, readAt: s.readAt ?? m.at, readUpdatedAt: m.at })
       }
       return t
     }
@@ -249,33 +338,61 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       return t
     }
     case 'setPref': {
+      // One the account takes from this browser fills only a pref no row is held for, with no
+      // clock, as the server writes it; if the server has a row this device never held, the next
+      // pull brings it.
       const held = t.prefs.get(m.key)
+      if (m.ifAbsent) {
+        if (!held) t.prefs.set(m.key, { key: m.key, value: m.value, updatedAt: 0, seq: 0 })
+        return t
+      }
       if (!held || m.at >= held.updatedAt) {
         t.prefs.set(m.key, { key: m.key, value: m.value, updatedAt: m.at, seq: held?.seq ?? 0 })
       }
       return t
     }
     case 'setProfile': {
-      if (t.profile) {
-        t.profile = {
-          ...t.profile,
-          ...(m.readingLang ? { readingLang: m.readingLang } : {}),
-          ...(m.uiLocale ? { uiLocale: m.uiLocale } : {}),
+      // Each language to the later `at`, as the server decides (ADR 0040), so a choice that loses
+      // there loses here too, and the page never shows one the account does not hold. A reading
+      // language of null is a value: it follows the interface.
+      const p = t.profile
+      if (p) {
+        const next = { ...p }
+        if (m.uiLocale !== undefined && m.adopt) {
+          // Taken from this browser: only while the account has none, its clock left alone.
+          next.uiLocale = p.uiLocale ?? m.uiLocale
+        } else if (m.uiLocale !== undefined && m.at >= (p.uiLocaleAt ?? 0)) {
+          next.uiLocale = m.uiLocale
+          next.uiLocaleAt = m.at
         }
+        if (m.readingLang !== undefined && m.at >= (p.readingLangAt ?? 0)) {
+          next.readingLang = m.readingLang
+          next.readingLangAt = m.at
+        }
+        t.profile = next
       }
       return t
     }
     case 'setPrivacy': {
-      // In order, as this device made them; the server decides between devices by `at`, and its
-      // row replaces this one with the next pull. Booleans: `false` is a value, not an absence.
-      if (t.profile) {
-        t.profile = {
-          ...t.profile,
-          ...(m.publicSubscriptions !== undefined
-            ? { publicSubscriptions: m.publicSubscriptions }
-            : {}),
-          ...(m.publicLikes !== undefined ? { publicLikes: m.publicLikes } : {}),
+      // As the server decides (issue #16): a hide always applies, and a show with a base only
+      // while it names the version held, so a show a pull has passed is refused here as it is
+      // there. Nothing here counts versions, so the version held is the confirmed one: replayed
+      // over a pull that already holds the change, a count would add it twice. A show this device
+      // makes waits until its other changes to the switch have settled (`privacyChange`), so no
+      // change ahead of it in the queue moves the version it names. A show without a base applies
+      // here; the server decides it by `at`, and its row replaces this one with the next pull.
+      // `false` is a value.
+      const p = t.profile
+      if (p) {
+        const next = { ...p }
+        for (const flag of PRIVACY) {
+          const v = m[flag]
+          if (v === undefined) continue
+          const base = m.base?.[flag]
+          if (v && base !== undefined && base !== (p[VERSION[flag]] ?? 0)) continue
+          next[flag] = v
         }
+        t.profile = next
       }
       return t
     }

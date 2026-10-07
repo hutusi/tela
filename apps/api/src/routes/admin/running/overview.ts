@@ -3,7 +3,7 @@
  * on an operator with the first few of each, this week against the week before, and what
  * operators did lately.
  */
-import { recentActivity, type TelaDb } from '@tela/data'
+import { DISCOVER_REVIEW, recentActivity, type TelaDb } from '@tela/data'
 import type { AdminCounts, AdminOverview } from '@tela/shared/admin'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -20,12 +20,12 @@ import {
   NEEDS_REVIEW,
   RELAY_SELECT,
   relayOf,
-  SITE_SELECT,
   type SiteRaw,
   siteRow,
+  siteSelect,
 } from '../library/rows'
 import { auditedLabel, lookUp, wantAudited, wanted, wantJob } from './names'
-import { DEAD_UNRESOLVED, DISCOVER_CANDIDATE, deadRows, FEED_FAILING, toDeadRow } from './rows'
+import { DEAD_UNRESOLVED, deadRows, FEED_FAILING, toDeadRow } from './rows'
 import { liveHealth } from './system'
 
 const DAY = 86_400_000
@@ -41,7 +41,7 @@ const queueCounts = (db: TelaDb) =>
       (select count(*) from site_claims c where ${NEEDS_REVIEW}) as claims,
       (select count(*) from feeds f where ${FEED_FAILING}) as feeds,
       (select count(*) from dead_letters d where ${DEAD_UNRESOLVED}) as dead,
-      (select count(*) from sites s where ${DISCOVER_CANDIDATE}) as candidates
+      (select count(*) from sites s where ${DISCOVER_REVIEW}) as candidates
   `)
 
 async function counts(db: TelaDb): Promise<AdminCounts> {
@@ -50,6 +50,7 @@ async function counts(db: TelaDb): Promise<AdminCounts> {
     claims: Number(row.claims ?? 0),
     feeds: Number(row.feeds ?? 0),
     dead: Number(row.dead ?? 0),
+    discover: Number(row.candidates ?? 0),
   }
 }
 
@@ -84,7 +85,7 @@ async function overview(deps: ApiDeps, now: number): Promise<AdminOverview> {
       db.all(sql`${FEED_SELECT} where ${FEED_FAILING}
         order by f.error_count desc, f.timeout_streak desc, f.id limit ${QUEUE_ROWS}`),
       deadRows(db, DEAD_UNRESOLVED, sql`d.at desc, d.id desc`, QUEUE_ROWS),
-      db.all(sql`${SITE_SELECT} where ${DISCOVER_CANDIDATE}
+      db.all(sql`${siteSelect(now - 30 * DAY)} where ${DISCOVER_REVIEW}
         order by s.reader_count desc, s.id limit ${QUEUE_ROWS}`),
       weekly(db, now),
       db.all(RELAY_SELECT),

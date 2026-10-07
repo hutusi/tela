@@ -17,10 +17,12 @@ export type CuratedSite = {
 }
 
 /**
- * The editorial door into Discover (ADR 0018). A claim is the only thing that lists a site
- * automatically, so before any blogger has claimed theirs the directory is empty — which reads
- * as a broken page, not as an empty one. These are independent blogs written by people, which
- * is what the directory is for; a publication with a masthead does not belong here.
+ * The editorial door into Discover (ADR 0018). The other doors are slow to open: a claim needs a
+ * blogger to join and prove their blog, the community door three readers of one blog, and the
+ * operator's review of the blogs members add (ADR 0041) needs members to have added some. Before
+ * any of that the directory is empty, which reads as a broken page, not as an empty one. These
+ * are independent blogs written by people, which is what the directory is for; a publication with
+ * a masthead does not belong here.
  *
  * All nine topics are covered on purpose: /discover renders every chip whether or not anything
  * is behind it, and a chip that lands on "No blogs listed here yet" is worse than no chip.

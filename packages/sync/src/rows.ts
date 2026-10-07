@@ -9,10 +9,24 @@ export type ProfileRow = {
   displayName: string | null
   bio: string | null
   uiLocale: string | null
+  /** The language posts are translated into; null follows the interface (ADR 0040). */
   readingLang: string | null
+  /**
+   * The `at` that last set each language, so this device predicts as the server decides: the
+   * later choice wins. Absent from a tela-api that predates them.
+   */
+  uiLocaleAt?: number
+  readingLangAt?: number
   publicSubscriptions: boolean
   /** Whether the member's liked posts show on their profile and to their followers (ADR 0031). */
   publicLikes: boolean
+  /**
+   * How many times each privacy switch has changed: a show names the one it was made against, and
+   * the server applies it only while that is still the stored one (issue #16). Absent from a
+   * tela-api that predates them.
+   */
+  publicSubscriptionsVersion?: number
+  publicLikesVersion?: number
   /** Whether the member shows their Gravatar: on until they choose (ADR 0032, 0033). */
   gravatar: boolean
   /** Whether Gravatar has a picture for their email; null until it has been asked (ADR 0033). */
@@ -63,6 +77,7 @@ export type SiteRow = {
   /** The member claimed this blog. */
   owned: boolean
   claimed: boolean
+  /** From three readers up, 0 below: a smaller count says who else reads it (ADR 0041). */
   readerCount: number
   translationOptOut: boolean
   seq: number
@@ -101,6 +116,12 @@ export type TitleRow = {
 export type StateRow = {
   articleId: number
   readAt: number | null
+  /**
+   * When the member last chose read or unread by hand; null until they first mark it unread. No
+   * `readAt` and this set is marked unread, which beats the watermark and the horizon (ADR 0009).
+   * Absent from a tela-api that predates it, which never marks a post unread.
+   */
+  readUpdatedAt?: number | null
   likedAt: number | null
   likedUpdatedAt: number | null
   seq: number

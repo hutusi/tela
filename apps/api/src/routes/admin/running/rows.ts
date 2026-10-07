@@ -1,7 +1,8 @@
 /**
  * The Overview's queues and the System ledger: which rows wait on an operator, and dead letters as
  * the contract's rows. Claims, feeds and sites come from the library's own row builders
- * (`../library/rows`), so a queue and its ledger agree on a row and on what it offers.
+ * (`../library/rows`), so a queue and its ledger agree on a row and on what it offers; the
+ * Discover queue is `DISCOVER_REVIEW` in `@tela/data`, which tela-jobs' digest counts too.
  */
 import { isRedueKind, type TelaDb } from '@tela/data'
 import type { AdminActionName, AdminDeadRow } from '@tela/shared/admin'
@@ -16,9 +17,6 @@ const strOrNull = (v: unknown): string | null => (v === null || v === undefined 
 
 /** A feed that is failing or timing out, while it is still being fetched. */
 export const FEED_FAILING = sql`f.status = 'active' and (f.error_count > 0 or f.timeout_streak >= 3)`
-
-/** A blog Discover could list: nobody has claimed it, and the doors keep it private. */
-export const DISCOVER_CANDIDATE = sql`s.listing = 'private' and s.claimed_by is null`
 
 export const DEAD_UNRESOLVED = sql`d.resolved_at is null`
 

@@ -45,25 +45,25 @@ test.describe('mobile fallback', () => {
     )
   })
 
-  test('the Read-in menu stays on one line on a phone, and its list on screen', async ({
-    page,
-  }) => {
-    // Two characters can break between them where "EN" never could, and the phone's header has
-    // no room to spare: each of the button's words stays one line all the same.
+  test('the language circle stays round on a phone, and its list on screen', async ({ page }) => {
+    // The one header control for a language at every width: the phone's header has no room to
+    // spare, and the circle is the theme menu's size whatever it shows.
     await setPrefs(page.request, {}, { readingLang: 'zh-Hant' })
     try {
       await page.goto('/reading')
-      const readIn = page.getByTestId('read-in')
-      const summary = readIn.locator('summary')
-      await expect(summary).toHaveAccessibleName('Read in 繁體')
-      const heights = await summary
-        .locator('span')
-        .evaluateAll((spans) => spans.map((s) => Math.round(s.getBoundingClientRect().height)))
-      for (const height of heights) expect(height, `span heights ${heights}`).toBeLessThan(24)
-      // The list opens under the button, right-aligned to it, and fits the phone.
+      const menu = page.getByTestId('language-menu')
+      const summary = menu.locator('summary')
+      await expect(summary).toHaveAccessibleName('Translate into: 繁體中文')
+      await expect(summary.locator('[aria-hidden="true"]')).toHaveText('繁')
+      const box = await summary.boundingBox()
+      expect(box && { width: Math.round(box.width), height: Math.round(box.height) }).toEqual({
+        width: 34,
+        height: 34,
+      })
+      // The list opens under the circle, right-aligned to it, and fits the phone.
       await summary.click()
-      await expect(readIn.getByTestId('read-in-zh-Hant')).toBeVisible()
-      const panel = await readIn.evaluate((el) => {
+      await expect(menu.getByTestId('language-menu-zh-Hant')).toBeVisible()
+      const panel = await menu.evaluate((el) => {
         const box = el.querySelector('div')?.getBoundingClientRect()
         const viewport = document.documentElement.clientWidth
         return { left: box?.left ?? -1, right: box?.right ?? viewport + 1, viewport }

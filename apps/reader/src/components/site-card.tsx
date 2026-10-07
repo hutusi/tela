@@ -23,6 +23,7 @@ export function SiteCard({
   next: string
 }) {
   const t = useTranslations('discover')
+  const ts = useTranslations('site')
   const title = site.title ?? displayHost(site.homeUrl)
   const subscribed = site.feedId !== null && member?.isSubscribed(site.feedId) === true
   return (
@@ -68,10 +69,16 @@ export function SiteCard({
       ) : null}
       <div className="mt-auto flex items-center justify-between pt-1">
         <span className="text-[12.5px] text-muted">
-          {t('readers', { n: site.readerCount })}
-          {site.postsLast30d === undefined
-            ? null
-            : ` · ${t(`cadence.${cadenceKey(site.postsLast30d)}`)}`}
+          {site.readerCount === null
+            ? // Kept back below three readers (ADR 0041): the card says nothing of readers, not
+              // "no readers yet", and the cadence stands alone in the blog page's own words.
+              site.postsLast30d === undefined
+              ? null
+              : ts('cadence', { key: cadenceKey(site.postsLast30d) })
+            : t('readers', { n: site.readerCount }) +
+              (site.postsLast30d === undefined
+                ? ''
+                : ` · ${t(`cadence.${cadenceKey(site.postsLast30d)}`)}`)}
         </span>
         {site.feedId === null ? null : member ? (
           <button

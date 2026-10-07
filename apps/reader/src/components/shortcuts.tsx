@@ -1,11 +1,24 @@
 import { useTranslations } from 'use-intl'
 
-type What = 'next' | 'previous' | 'close' | 'highlight' | 'sidebar' | 'focus' | 'help'
+type What =
+  | 'next'
+  | 'previous'
+  | 'close'
+  | 'original'
+  | 'like'
+  | 'read'
+  | 'highlight'
+  | 'sidebar'
+  | 'focus'
+  | 'help'
 
 const KEYS: [string, What][] = [
   ['j', 'next'],
   ['k', 'previous'],
   ['Esc', 'close'],
+  ['o', 'original'],
+  ['l', 'like'],
+  ['m', 'read'],
   ['h', 'highlight'],
   ['[', 'sidebar'],
   ['f', 'focus'],

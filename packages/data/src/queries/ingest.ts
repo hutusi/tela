@@ -122,7 +122,9 @@ export async function siteFeedPosts(db: TelaDb, siteId: number): Promise<SiteFee
  *
  * A read the alias's watermark implied is written down as a read, for the moved posts and the
  * target's copies alike, and for readers who left the alias too: once a post is the target's,
- * no alias watermark covers it, and compaction may have dropped the row that said so.
+ * no alias watermark covers it, and compaction may have dropped the row that said so. A post the
+ * member marked unread is not one the watermark said (ADR 0009): it stays unread, and a
+ * duplicate's unread goes to the target's copy like its read.
  */
 export function mergeFeed(
   db: TelaDb,
@@ -167,6 +169,7 @@ export function mergeFeed(
         select content_key from articles where id in (select value from json_each(${move}))
       )
     `),
+    // A post marked unread beats the watermark (ADR 0009): it stays unread, wherever it moves.
     db.run(sql`
       insert into user_article_states (user_id, article_id, read_at, seq)
       select s.user_id, p.value, ${now}, ${currentSeq}
@@ -174,26 +177,61 @@ export function mergeFeed(
       where s.feed_id = ${alias}
       on conflict (user_id, article_id) do update set
         read_at = coalesce(user_article_states.read_at, excluded.read_at), seq = excluded.seq
+      where user_article_states.read_updated_at is null
     `),
     db.run(sql`
       update user_article_states set seq = ${currentSeq}
       where article_id in (select value from json_each(${move}))
     `),
+    // A duplicate's read and unread go to the target's copy, each against a choice the member
+    // made there by hand as markRead and markUnread go: the later decides. A read is carried with
+    // its clock, and is as late as the later of its first time and its clock: a duplicate read
+    // again moved its clock past its first read (ADR 0009), and carried by its first time alone
+    // it would lose to an unread made between the two (Codex review). Over a copy already read,
+    // it keeps the copy's first time and moves the clock, as a later read does.
     db.run(sql`
-      insert into user_article_states (user_id, article_id, read_at, seq)
-      select s.user_id, p.value->>1, s.read_at, ${currentSeq}
+      insert into user_article_states (user_id, article_id, read_at, read_updated_at, seq)
+      select s.user_id, p.value->>1, s.read_at, s.read_updated_at, ${currentSeq}
       from json_each(${carry}) p join user_article_states s on s.article_id = p.value->>0
       where s.read_at is not null
-      on conflict (user_id, article_id) do update set read_at = excluded.read_at, seq = excluded.seq
-      where user_article_states.read_at is null
+      on conflict (user_id, article_id) do update set
+        read_at = coalesce(user_article_states.read_at, excluded.read_at),
+        read_updated_at = case
+          when user_article_states.read_at is null and user_article_states.read_updated_at is null
+            and excluded.read_updated_at is null then null
+          else max(excluded.read_at, coalesce(excluded.read_updated_at, 0)) end,
+        seq = excluded.seq
+      where (user_article_states.read_at is null
+          and (user_article_states.read_updated_at is null
+            or max(excluded.read_at, coalesce(excluded.read_updated_at, 0))
+              >= user_article_states.read_updated_at))
+        or (user_article_states.read_at is not null
+          and max(excluded.read_at, coalesce(excluded.read_updated_at, 0))
+            > max(user_article_states.read_at, coalesce(user_article_states.read_updated_at, 0)))
     `),
+    db.run(sql`
+      insert into user_article_states (user_id, article_id, read_at, read_updated_at, seq)
+      select s.user_id, p.value->>1, null, s.read_updated_at, ${currentSeq}
+      from json_each(${carry}) p join user_article_states s on s.article_id = p.value->>0
+      where s.read_at is null and s.read_updated_at is not null
+      on conflict (user_id, article_id) do update set
+        read_at = null, read_updated_at = excluded.read_updated_at, seq = excluded.seq
+      where excluded.read_updated_at >= max(coalesce(user_article_states.read_updated_at, 0),
+        coalesce(user_article_states.read_at, 0))
+    `),
+    // What the alias's watermark said, except of a duplicate marked unread, which beat it; and
+    // never over a copy the member chose read or unread by hand.
     db.run(sql`
       insert into user_article_states (user_id, article_id, read_at, seq)
       select s.user_id, p.value->>1, ${now}, ${currentSeq}
       from json_each(${carry}) p join subscriptions s on p.value->>0 <= s.watermark_id
-      where s.feed_id = ${alias}
+      where s.feed_id = ${alias} and not exists (
+        select 1 from user_article_states u
+        where u.user_id = s.user_id and u.article_id = p.value->>0
+          and u.read_at is null and u.read_updated_at is not null
+      )
       on conflict (user_id, article_id) do update set read_at = excluded.read_at, seq = excluded.seq
-      where user_article_states.read_at is null
+      where user_article_states.read_at is null and user_article_states.read_updated_at is null
     `),
   ] as const
 }

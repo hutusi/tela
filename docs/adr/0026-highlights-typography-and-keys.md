@@ -1,7 +1,8 @@
 # 0026 — Highlights anchored to leaves, typography as synced prefs, and a small keyboard layer
 
 Status: accepted (2026-09-29). Builds on 0022 (content versions), 0023 (translations aligned by
-block) and 0025 (the member's rows sync to the device).
+block) and 0025 (the member's rows sync to the device). Amended 2026-10-07: three more keys, `o`,
+`l` and `m`.
 
 ## Context
 
@@ -66,6 +67,16 @@ chosen theme is cached in localStorage and applied by an inline script before an
 focus back on its row, `h` highlights the selection, and `?` lists the keys. Typing in a field is
 never a shortcut, and a popover that handles `Esc` itself keeps the article open.
 
+(Amended on 2026-10-07: `o` opens the open article's original in a new tab, with no opener and
+no referrer, as the link in its meta line does, and `l` likes or unlikes it with the like
+button's `setLiked`. `m` marks it unread when it shows as read and read when it shows as unread
+(ADR 0009's `markUnread` and `markRead`), asking the same question as the list's dot and the
+action row's *Mark as read* or *Mark as unread*: while opening reads, the open post counts as
+read until it is marked unread. Each reads the article from the URL and its like or read from the
+store when the key is pressed, not from the render that bound the listener, for the reason below;
+none does anything without an article open, and a key held down acts once. With `[` for the
+sidebar and `f` for focus, `?` now lists ten keys.)
+
 The row that gets focus is the article the URL had open when `Esc` was pressed. A `j` just before
 it may already have rendered another article, so the close pushes the list with that id in the
 entry's navigation state rather than leaving it for a later render to find. Back to that entry
@@ -89,4 +100,6 @@ ignores the state too, and, with no article shown yet, focuses nothing.
   - detached once the passage is gone;
   - on the translation side, and shown as elsewhere in the original-only layout;
   - the keyboard layer, including `Esc` inside a popover, an `Esc` that lands while a `j` is
-    being committed, and Back to a list a close left.
+    being committed, and Back to a list a close left; `o` opening the original without an
+    opener, `l` and `m` reaching the server both ways, and all three typed into a field doing
+    nothing.

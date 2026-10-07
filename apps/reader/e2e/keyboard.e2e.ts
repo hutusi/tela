@@ -1,6 +1,9 @@
-/** The keyboard layer (ADR 0026): j and k through the list, Esc to close, focus back on the row. */
+/**
+ * The keyboard layer (ADR 0026): j and k through the list, Esc to close, focus back on the row, o
+ * for the original, l for a like and m for read or unread.
+ */
 import { expect, type Page, test } from '@playwright/test'
-import { synced } from './helpers'
+import { BASE, memberHeaders, readStateOnServer, resetReading, synced } from './helpers'
 
 test('j and k step through the list, and Esc closes back to the row', async ({ page }) => {
   await page.goto('/reading')
@@ -134,4 +137,119 @@ test('Esc in the account menu closes the menu, not the article, and gives the av
   await button.click()
   await page.getByTestId('sidebar').getByText('Library').click()
   await expect(page.getByTestId('account-panel')).toHaveCount(0)
+})
+
+/** Whether the server has the member liking an article, through a snapshot pull. */
+async function likedOnServer(page: Page, articleId: string): Promise<boolean> {
+  const res = await page.request.get(`${BASE}/api/v1/sync?cursor=0`, {
+    headers: await memberHeaders(page.request),
+  })
+  const { rows } = (await res.json()) as {
+    rows: { states: { articleId: number; likedAt: number | null }[] }
+  }
+  return rows.states.find((s) => s.articleId === Number(articleId))?.likedAt != null
+}
+
+test("o opens the open article's original in a new tab that cannot reach back", async ({
+  page,
+  context,
+}) => {
+  const { first } = await openFirst(page)
+  const href = await page
+    .getByTestId('reader')
+    .getByRole('link', { name: /Open the original/ })
+    .getAttribute('href')
+  if (!href) throw new Error('the fixture post has an original')
+  // The fixture's posts link to the real blogs: answered here, so the run never leaves the machine.
+  await context.route(
+    (url) => url.href === new URL(href).href,
+    (route) => route.fulfill({ contentType: 'text/html', body: '<title>The original</title>' }),
+  )
+  const [original] = await Promise.all([context.waitForEvent('page'), page.keyboard.press('o')])
+  await expect(original).toHaveURL(href)
+  await expect(original).toHaveTitle('The original')
+  expect(await original.evaluate(() => window.opener)).toBeNull()
+  // The reader stays where it was.
+  await expect(page).toHaveURL(new RegExp(`article=${first}$`))
+  await original.close()
+
+  // With no article open there is nothing to open.
+  await page.keyboard.press('Escape')
+  await expect(page).not.toHaveURL(/article=/)
+  await page.keyboard.press('o')
+  await page.keyboard.press('?')
+  await expect(page.getByTestId('shortcuts')).toContainText('Open the original in a new tab')
+  expect(context.pages()).toHaveLength(1)
+})
+
+test('l likes the open article and l again unlikes it, on the server too', async ({ page }) => {
+  const { first } = await openFirst(page)
+  const like = page.getByTestId('like-button')
+  const pushed = () =>
+    page.waitForResponse((r) => new URL(r.url()).pathname === '/api/v1/mutations' && r.ok())
+  // Whatever an earlier run left, l turns it over, and over again.
+  const before = (await like.getAttribute('aria-pressed')) === 'true'
+  for (const liked of [!before, before]) {
+    const sent = pushed()
+    await page.keyboard.press('l')
+    await expect(like).toHaveAttribute('aria-pressed', String(liked))
+    await sent
+    await expect.poll(() => likedOnServer(page, first)).toBe(liked)
+  }
+})
+
+test('m marks the open article unread and m again reads it, on the server too', async ({
+  page,
+}) => {
+  // Opening reads it, which this spec starts from: whatever an earlier spec left of the pref.
+  await resetReading(page.request)
+  const { first } = await openFirst(page)
+  const row = page.locator(`[data-testid="article-row"][data-article-id="${first}"]`)
+  const dot = row.getByTestId('unread-dot')
+  await expect(dot).toHaveCount(0)
+  await expect(page.getByTestId('mark-unread')).toBeVisible()
+
+  await page.keyboard.press('m')
+  await expect(dot).toHaveCount(1)
+  await expect(page.getByTestId('mark-read')).toBeVisible()
+  // Marked unread: no read, and the clock of a choice made by hand.
+  await expect
+    .poll(() => readStateOnServer(page.request, first))
+    .toEqual({ readAt: false, readUpdatedAt: true })
+
+  await page.keyboard.press('m')
+  await expect(dot).toHaveCount(0)
+  await expect(page.getByTestId('mark-unread')).toBeVisible()
+  await expect
+    .poll(() => readStateOnServer(page.request, first))
+    .toEqual({ readAt: true, readUpdatedAt: true })
+  // The article stays open throughout.
+  await expect(page).toHaveURL(new RegExp(`article=${first}$`))
+
+  // With no article open there is nothing to mark.
+  await page.keyboard.press('Escape')
+  await expect(page).not.toHaveURL(/article=/)
+  await page.keyboard.press('m')
+  await page.keyboard.press('?')
+  await expect(page.getByTestId('shortcuts')).toContainText('Mark the article read or unread')
+  await expect(dot).toHaveCount(0)
+})
+
+test('o, l and m typed in a field are typing, not shortcuts', async ({ page, context }) => {
+  await openFirst(page)
+  const like = page.getByTestId('like-button')
+  const pressed = (await like.getAttribute('aria-pressed')) ?? ''
+  // Mark as read or Mark as unread, whichever an earlier spec left it showing.
+  const mark = page.getByTestId(/^mark-(un)?read$/)
+  const marking = (await mark.getAttribute('data-testid')) ?? ''
+  const search = page.getByTestId('search-input')
+  await search.focus()
+  await page.keyboard.press('o')
+  await page.keyboard.press('l')
+  await page.keyboard.press('m')
+  await expect(search).toHaveValue('olm')
+  await expect(like).toHaveAttribute('aria-pressed', pressed)
+  await expect(mark).toHaveAttribute('data-testid', marking)
+  await expect(page.getByTestId('reader')).toBeVisible()
+  expect(context.pages()).toHaveLength(1)
 })

@@ -94,6 +94,26 @@ export async function memberHeaders(request: APIRequestContext): Promise<Record<
   return { 'x-tela-client': '2', 'x-tela-member': id }
 }
 
+/**
+ * Which of an article's read clocks the server holds for the member, through a snapshot pull:
+ * `readAt` without `readUpdatedAt` is a plain read, `readUpdatedAt` alone is marked unread, and
+ * both are read again by hand (ADR 0009).
+ */
+export async function readStateOnServer(
+  api: APIRequestContext,
+  articleId: number | string,
+): Promise<{ readAt: boolean; readUpdatedAt: boolean }> {
+  const res = await api.get(`${BASE}/api/v1/sync?cursor=0`, {
+    headers: await memberHeaders(api),
+  })
+  if (!res.ok()) throw new Error(`sync failed: ${res.status()} ${await res.text()}`)
+  const { rows } = (await res.json()) as {
+    rows: { states: { articleId: number; readAt: number | null; readUpdatedAt?: number | null }[] }
+  }
+  const state = rows.states.find((s) => s.articleId === Number(articleId))
+  return { readAt: state?.readAt != null, readUpdatedAt: state?.readUpdatedAt != null }
+}
+
 /** Subscribe the signed-in context to a feed URL, as the add page does. */
 export async function addFeed(
   request: APIRequestContext,
@@ -168,8 +188,8 @@ export async function setPrefs(
 }
 
 /**
- * Put the member's synced reading state back to its defaults: English to read and to use Tela in,
- * side by side, the default text, line length and theme, posts read on opening, read posts listed,
+ * Put the member's synced reading state back to its defaults: English to use Tela in, the
+ * translation language linked to it (null, as a new account has it: ADR 0040), side by side, the default text, line length and theme, posts read on opening, read posts listed,
  * translation on opening and nothing left untranslated. Every spec signs in as the same member, and a spec's last change
  * is lost when its page closes before the push goes out, so a spec that depends on this state
  * resets it first instead of trusting the last spec to have put it back.
@@ -187,7 +207,7 @@ export async function resetReading(api: APIRequestContext): Promise<void> {
       'translate.auto': true,
       'translate.never': [],
     },
-    { readingLang: 'en', uiLocale: 'en' },
+    { readingLang: null, uiLocale: 'en' },
   )
 }
 
@@ -389,12 +409,13 @@ export async function measureHeader(page: Page, controls: string[]) {
 /**
  * What every header must hold at `width`. The page never scrolls sideways, and the nav is never
  * squeezed below one pill (a 4px nav was what `md` once rendered); from `sm` up it is not clipped
- * at all. On macOS with the theme menu and the Read-in menu in: the member's pill row is 247px
- * (Reading, Discover, Following), and 640px, the tightest case, leaves it about 72px to spare
- * with the widest label (简体, 繁體: the button is 104px there, where the two-language pill it
- * replaced was 138px and left 38px), where CI's Linux Chromium sets text about 2% wider (an older
- * 335px row measured 341px there). The visitor's row is 175px, with about 90px to spare at 640.
- * Below `sm` the member's nav scrolls: about 122px of it shows at 360.
+ * at all. On macOS with the theme menu and the language circle in (34px, whatever it shows): the
+ * member's pill row is 247px (Reading, Discover, Following), and 640px, the tightest case, leaves
+ * it 141px to spare (161px in French, whose row is 227px), where the Read-in button the circle
+ * replaced was 104px with 简体 and left 72px; CI's Linux Chromium sets text about 2% wider (an
+ * older 335px row measured 341px there). The visitor's row is 175px, with 161px to spare at 640
+ * (65px in French, whose Log in and Join run longer). Below `sm` the member's nav scrolls: 196px
+ * of it shows at 360, where 122px did beside the button.
  */
 export function expectHeaderFits(m: Awaited<ReturnType<typeof measureHeader>>, width: number) {
   expect(m.overflow, 'horizontal overflow').toBeLessThanOrEqual(0)

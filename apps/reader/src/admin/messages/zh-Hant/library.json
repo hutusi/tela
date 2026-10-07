@@ -22,9 +22,10 @@
       "fetching": "正常抓取"
     },
     "discover": {
+      "candidates": "待稽核",
       "featured": "精選",
       "listed": "已列入",
-      "candidates": "候選",
+      "dismissed": "不列入發現",
       "hidden": "已隱藏"
     }
   },
@@ -40,7 +41,9 @@
     "region": "線路",
     "lastError": "最近的錯誤",
     "topics": "話題",
-    "language": "語言"
+    "language": "語言",
+    "latest": "最新文章",
+    "posts30d": "30 天內文章"
   },
   "methods": { "meta": "Meta 標籤", "rel_me": "rel=\"me\" 連結", "dns": "DNS 記錄" },
   "regions": { "global": "直連", "cn": "中國中轉" },
@@ -50,7 +53,9 @@
     "listed": "已列入",
     "private": "未公開",
     "rejected": "已隱藏",
-    "unclaimed": "無人認領"
+    "unclaimed": "無人認領",
+    "toReview": "待稽核",
+    "dismissed": "不列入發現"
   },
   "health": {
     "ok": "正常",
@@ -99,7 +104,12 @@
     "other": "抓取失敗"
   },
   "actions": { "unfeature": "取消精選", "restoreDefault": "恢復預設" },
-  "actionsDone": { "unfeature": "已取消精選", "restoreDefault": "已恢復預設" },
+  "actionsDone": {
+    "unfeature": "已取消精選",
+    "restoreDefault": "已恢復預設",
+    "listedNoTopics": "已列入，還沒有話題",
+    "featuredNoTopics": "已設為精選，還沒有話題"
+  },
   "topics": {
     "essays": "隨筆",
     "tech": "技術",
@@ -116,6 +126,8 @@
   "none": "—",
   "listSeparator": "、",
   "unknownLanguage": "未知",
+  "addedWhen": "{when}新增",
+  "noTopics": "還沒有話題",
   "kv": {
     "blog": "部落格",
     "blogValue": "{title} · {n, plural, other {# 位讀者}}",
@@ -141,6 +153,9 @@
     "translationOff": "已暫停",
     "tokens": "近 30 天用量（token）",
     "added": "加入於",
+    "posts30d": "30 天內文章",
+    "latest": "最新文章",
+    "latestValue": "{title} · {when}",
     "about": "簡介",
     "status": "狀態",
     "errors": "連續錯誤",
@@ -179,6 +194,9 @@
     "merged": "這個訂閱源和同一部落格的另一個訂閱源列出的文章相同，所以已經合併過去：新增這個地址會訂閱那一個。合併無法撤回，下次抓取時會再次合併。",
     "noRelay": "沒有配置中國中轉，這個訂閱源只能直接抓取。",
     "discoverLag": "改動大約五分鐘內出現在公開頁面上：邊緣節點有快取。",
-    "topicsHint": "話題決定部落格在發現裡出現在哪裡。點選一個話題來新增或移除。"
+    "topicsHint": "話題決定部落格在發現裡出現在哪裡。點選一個話題來新增或移除。",
+    "noTopics": "還沒有話題，所以發現只會在「全部」下顯示這個部落格。在下面選一個或幾個。",
+    "review": "這是成員新增的部落格。列入發現，或標為不列入發現，都會把它移出這個佇列。無論這裡怎麼決定，有三位讀者後它都會列入發現，除非被隱藏。這裡只顯示有多少人在讀，從不顯示是誰。",
+    "dismissed": "{when}標為不列入發現。有三位讀者後它仍會列入；隱藏才能讓它一直不出現。"
   }
 }

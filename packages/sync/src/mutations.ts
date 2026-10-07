@@ -31,8 +31,17 @@ const memberId = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/)
 const highlightId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
 
 export const mutationSchema = z.discriminatedUnion('type', [
-  /** Opening an article reads it. Set once: a later markRead keeps the first time. */
+  /**
+   * Opening an article reads it. Set once: a later markRead keeps the first time, though it moves
+   * the post's clock to its own, so an unread older than it cannot win. Over a post marked unread,
+   * the later `at` decides.
+   */
   z.object({ ...base, type: z.literal('markRead'), articleId: id }),
+  /**
+   * The member marks a post unread by hand (ADR 0009). It beats the feed's watermark and the
+   * horizon until a later read; the later `at` decides against any read or unread already made.
+   */
+  z.object({ ...base, type: z.literal('markUnread'), articleId: id }),
   /** Absolute, not a toggle, so two devices agree; the later `at` wins. */
   z.object({ ...base, type: z.literal('setLiked'), articleId: id, liked: z.boolean() }),
   /**
@@ -42,29 +51,53 @@ export const mutationSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('markAllRead'), feedId: id.optional(), upTo: id }),
   z.object({ ...base, type: z.literal('subscribe'), feedId: id }),
   z.object({ ...base, type: z.literal('unsubscribe'), feedId: id }),
+  /**
+   * A preference, to the later `at`. With `ifAbsent`, a value the account takes from this browser
+   * rather than one the member chose (a visitor's theme, on joining, ADR 0037): written only
+   * where the account has no row, and with no clock (`updated_at` 0), so any choice made anywhere
+   * beats it. A tela-api that predates the flag strips it and writes the value as a choice.
+   */
   z.object({
     ...base,
     type: z.literal('setPref'),
     key: z.string().regex(PREF_KEY),
     value: z.json(),
+    ifAbsent: z.boolean().optional(),
   }),
+  /**
+   * The member's two languages, each to the later `at` on a clock of its own (ADR 0040). A reading
+   * language of null follows the interface language; one left out is left alone. With `adopt`,
+   * the interface language is one the account takes from this browser (a visitor's, on joining):
+   * written only while the account has none, which an interface language never goes back to, and
+   * leaving its clock alone, so any choice made anywhere beats it. A tela-api that predates the
+   * flag strips it and writes the language as a choice.
+   */
   z.object({
     ...base,
     type: z.literal('setProfile'),
-    readingLang: z.enum(READING_LANGUAGES).optional(),
+    readingLang: z.enum(READING_LANGUAGES).nullable().optional(),
     uiLocale: z.enum(UI_LOCALES).optional(),
+    adopt: z.boolean().optional(),
   }),
   /**
-   * Whether the profile shows what the member reads, and what they liked (ADR 0031). Each switch
-   * goes to the later `at`, so a device reconnecting with an older choice cannot make public what
-   * the member has since hidden. A type of its own: a tela-api that predates it refuses it, and
-   * the switch visibly goes back, rather than acknowledging a change it then drops.
+   * Whether the profile shows what the member reads, and what they liked (ADR 0031). A hide always
+   * applies. A show names in `base` the version of its switch it was made against, and applies
+   * only while that is still the stored one, so a show queued before a hide made elsewhere never
+   * reopens what the hide closed, whatever the clocks say (issue #16). A show without a base, from
+   * a shell before it, goes to the later `at`. A type of its own: a tela-api that predates it
+   * refuses it, and the switch visibly goes back, rather than acknowledging a change it then drops.
    */
   z.object({
     ...base,
     type: z.literal('setPrivacy'),
     publicSubscriptions: z.boolean().optional(),
     publicLikes: z.boolean().optional(),
+    base: z
+      .object({
+        publicSubscriptions: z.number().int().nonnegative().optional(),
+        publicLikes: z.number().int().nonnegative().optional(),
+      })
+      .optional(),
   }),
   z.object({
     ...base,

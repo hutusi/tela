@@ -127,31 +127,27 @@ test.describe('stylesheet', () => {
     test(`the header fits and keeps its nav at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 })
       await page.goto('/reading')
-      // The Read-in menu appears once the session is known ("Read in EN ▾", 97px). Measuring
-      // before it lands reads a header ~107px lighter than the one a member sees, which passes
-      // when it shouldn't.
-      await page.getByTestId('read-in').waitFor({ state: 'attached' })
+      // The member's controls appear once the session is known. Measuring before they land reads
+      // the visitor's header, which has a language circle too, or a member's without its avatar
+      // and circle, and either passes when it shouldn't: wait for the avatar, a member's alone.
+      await page.getByTestId('account-menu').waitFor({ state: 'attached' })
 
-      const m = await measureHeader(page, ['account-menu', 'theme-menu', 'read-in'])
+      const m = await measureHeader(page, ['account-menu', 'theme-menu', 'language-menu'])
       expectHeaderFits(m, width)
       // The one way to Settings, the Dashboard and signing out: whole, and on screen.
       expect(m.controls['account-menu']?.width, 'account menu squeezed').toBe(30)
-      // The theme menu is a circle beside search, never pressed into an oval, and Read in is of
-      // the same family: as tall.
-      expect(m.controls['theme-menu'], 'theme menu squeezed').toMatchObject({
-        width: 34,
-        height: 34,
-      })
-      expect(m.controls['read-in']?.height, 'Read in off the family').toBe(34)
-      // Four languages went into a menu so that the header would not grow: the button stays
-      // narrower than the two-language pill it replaced ("Read in 中文 EN", 137px).
-      expect(m.controls['read-in']?.width, 'Read in wider than the pill').toBeLessThan(137)
+      // The theme menu and the language circle are circles beside search, never pressed into an
+      // oval: four languages went into a menu so that the header would not grow, and a fifth
+      // language or a longer label cannot quietly take the room back.
+      for (const id of ['theme-menu', 'language-menu']) {
+        expect(m.controls[id], `${id} squeezed`).toMatchObject({ width: 34, height: 34 })
+      }
     })
   }
 
   /**
-   * The width budget above is spent in English. French labels run longer ("Tableau de bord",
-   * "Lire en"), and every control but the nav is `shrink-0`, so a longer label takes its room from
+   * The width budget above is spent in English. French labels run longer ("Tableau de bord"),
+   * and every control but the nav is `shrink-0`, so a longer label takes its room from
    * the nav or pushes the header past the viewport: measure each interface language. The account's
    * language is the member's, so it is set there, and put back.
    */
@@ -163,8 +159,8 @@ test.describe('stylesheet', () => {
           await page.setViewportSize({ width, height: 900 })
           await page.goto('/reading')
           await expect(page.locator('html')).toHaveAttribute('lang', locale)
-          await page.getByTestId('read-in').waitFor({ state: 'attached' })
-          const ids = ['account-menu', 'theme-menu', 'read-in']
+          await page.getByTestId('account-menu').waitFor({ state: 'attached' })
+          const ids = ['account-menu', 'theme-menu', 'language-menu']
           const m = await measureHeader(page, ids)
           expectHeaderFits(m, width)
           for (const id of ids) {

@@ -1,7 +1,8 @@
 /**
  * What `bun run dev:seed` writes into a local database: the states an operator acts on in the
  * admin console (ADR 0039), which a handful of healthy blogs fetched in dev never reach. Members
- * and the way each came in, codes and holds, claims to review, feeds in trouble, a month of
+ * and the way each came in, codes and holds, claims to review, blogs to review for Discover,
+ * feeds in trouble, a month of
  * translation spend, work that gave up, the runs' heartbeats, and what operators did. Pure, so
  * `test/dev-seed.test.ts` holds it to the schema: a migration that renames a column it writes
  * fails there, not on someone's laptop.
@@ -232,12 +233,17 @@ export function seedStatements({ now, sites, actor }: SeedInput): string[] {
   for (const i of [1, 2, 4, 7]) {
     add(`update sites set listing = 'listed', seq = ${SEQ} where id = ${site(i).id}`)
   }
-  for (const [i, readers] of [
-    [16, 2],
-    [17, 1],
-    [18, 2],
+  // Blogs members added: three wait in Discover's review queue (ADR 0041), and one an operator
+  // already judged not for Discover.
+  for (const [i, readers, reviewedDays] of [
+    [16, 2, null],
+    [17, 1, null],
+    [18, 2, null],
+    [10, 2, 4],
   ] as const) {
     add(`update sites set listing = 'private', reader_count = ${readers}, claimed_by = null,
+        review = ${q(reviewedDays === null ? null : 'dismissed')},
+        reviewed_at = ${q(reviewedDays === null ? null : now - reviewedDays * DAY)},
         seq = ${SEQ} where id = ${site(i).id}`)
   }
   add(`update sites set listing = 'rejected', seq = ${SEQ} where id = ${site(22).id}`)
@@ -394,6 +400,14 @@ export function seedStatements({ now, sites, actor }: SeedInput): string[] {
     ],
     [8, 'site.hide', 'site', String(site(22).id), { listing: 'featured' }, { listing: 'rejected' }],
     [6, 'claim.dismiss', 'claim', '9008', { reviewedAt: null }, { reviewedAt: now - 5 * DAY }],
+    [
+      4,
+      'site.dismiss',
+      'site',
+      String(site(10).id),
+      { reviewedAt: null },
+      { reviewedAt: now - 4 * DAY },
+    ],
     [5, 'feed.pause', 'feed', String(site(13).feedId), { status: 'active' }, { status: 'paused' }],
     [2, 'code.create', 'code', 'WRITERS2026', null, { maxUses: 100 }],
     [

@@ -1,0 +1,58 @@
+{
+  "between": "",
+  "colon": "：",
+  "openLink": "或在瀏覽器中開啟此連結",
+  "signIn": {
+    "subject": "Tela 登入驗證碼",
+    "heading": "登入 Tela",
+    "intro": "輸入下面的驗證碼登入，一小時內有效。",
+    "outro": "如果這不是你本人的操作，請忽略這封郵件。"
+  },
+  "invited": {
+    "subject": "邀請你加入 Tela",
+    "heading": "邀請你加入 Tela"
+  },
+  "reset": {
+    "subject": "重設 Tela 密碼",
+    "heading": "重設 Tela 密碼",
+    "intro": "輸入下面的驗證碼設定新密碼，一小時內有效。設定後，所有裝置都會登出。",
+    "outro": "如果這不是你本人的操作，請忽略這封郵件，你的密碼不會改變。"
+  },
+  "notice": {
+    "ifYou": "如果是你本人，無需任何操作。",
+    "othersOut": "其他裝置都已登出。"
+  },
+  "providerAccount": {
+    "subject": "你的 Tela 帳號已透過 {provider} 建立",
+    "heading": "新的 Tela 帳號",
+    "what": "有人透過 {provider} 登入，以 {to} 加入了 Tela。",
+    "ifNot": "如果不是你本人，這個帳號仍然屬於你：在 {login} 用寄到這個信箱的驗證碼登入，然後在「設定 → 帳戶」中移除 {provider}，並登出所有裝置。"
+  },
+  "accountChange": {
+    "heading": "你的 Tela 登入方式有變動",
+    "newPassword": "如果不是你本人，請在登入頁 {login} 重新設定密碼：驗證碼會寄到這個信箱，設定新密碼後其他人都會登出。",
+    "password-set": {
+      "subject": "你的 Tela 帳號已設定密碼",
+      "what": "{to} 的 Tela 帳號已設定密碼。"
+    },
+    "password-changed": {
+      "subject": "你的 Tela 密碼已更改",
+      "what": "{to} 的 Tela 帳號密碼已更改。"
+    },
+    "password-reset": {
+      "subject": "你的 Tela 密碼已重設",
+      "what": "{to} 的 Tela 帳號已用寄到這個信箱的驗證碼設定了新密碼，所有裝置都已登出。",
+      "ifNot": "如果不是你本人，表示有人能讀取這個信箱：請先保護好信箱，再到 {login} 重新設定密碼。"
+    },
+    "linked": {
+      "subject": "{provider} 已連結到你的 Tela 帳號",
+      "what": "現在可以用 {provider} 登入 {to} 的 Tela 帳號。",
+      "ifNot": "如果不是你本人，請在 {login} 用寄到這個信箱的驗證碼登入，然後在「設定 → 帳戶」中移除 {provider}，並登出所有裝置。"
+    },
+    "unlinked": {
+      "subject": "{provider} 已從你的 Tela 帳號移除",
+      "what": "{provider} 不能再登入 {to} 的 Tela 帳號。",
+      "ifNot": "如果不是你本人，表示有人以你的身份登入了：請在 {login} 用寄到這個信箱的驗證碼登入，然後在「設定 → 帳戶」中登出所有裝置，並重新連結 {provider}。"
+    }
+  }
+}

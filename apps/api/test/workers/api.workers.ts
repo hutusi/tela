@@ -216,6 +216,142 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   ).json()) as PullResponse
   expect(renamed.rows.follows).toMatchObject([{ handle: 'anna_k' }])
 
+  // A privacy show names the version it saw (issue #16), its base a bound parameter in a CASE: the
+  // device's own hide-then-show both apply, and a show against a version since passed does not.
+  const flags = (await (
+    await call('/api/v1/mutations', {
+      body: {
+        mutations: [
+          { mid: 'workers-flags-2', at: now, type: 'setPrivacy', publicLikes: false },
+          {
+            mid: 'workers-flags-3',
+            at: now,
+            type: 'setPrivacy',
+            publicLikes: true,
+            base: { publicLikes: 2 },
+          },
+          {
+            mid: 'workers-flags-4',
+            at: now,
+            type: 'setPrivacy',
+            publicSubscriptions: true,
+            base: { publicSubscriptions: 5 },
+          },
+        ],
+      },
+      ...member,
+    })
+  ).json()) as PushResponse
+  expect(flags.applied).toHaveLength(3)
+  const shown = (await (
+    await call(`/api/v1/sync?cursor=${renamed.cursor}`, member)
+  ).json()) as PullResponse
+  expect(shown.rows.profile).toMatchObject([
+    {
+      publicLikes: true,
+      publicLikesVersion: 3,
+      publicSubscriptions: false,
+      publicSubscriptionsVersion: 0,
+    },
+  ])
+
+  // A post marked unread (ADR 0009): an upsert whose conflict compares max() of two clocks, then
+  // the mark-all that reads it again through a join, on D1. With them, a reading language of null,
+  // which follows the interface (ADR 0040), and a visitor's language and theme taken on joining,
+  // each only where the account has none: a coalesce, and an insert that does nothing on conflict.
+  const unreadAt = Date.now()
+  const unread = (await (
+    await call('/api/v1/mutations', {
+      body: {
+        mutations: [
+          { mid: 'workers-unread-1', at: unreadAt, type: 'markUnread', articleId: 1 },
+          { mid: 'workers-lang-1', at: unreadAt, type: 'setProfile', readingLang: null },
+          { mid: 'workers-adopt-1', at: unreadAt, type: 'setProfile', uiLocale: 'fr', adopt: true },
+          { mid: 'workers-adopt-2', at: unreadAt, type: 'setProfile', uiLocale: 'en', adopt: true },
+          {
+            mid: 'workers-theme-1',
+            at: unreadAt,
+            type: 'setPref',
+            key: 'ui.theme',
+            value: 'dark',
+            ifAbsent: true,
+          },
+          {
+            mid: 'workers-theme-2',
+            at: unreadAt,
+            type: 'setPref',
+            key: 'ui.theme',
+            value: 'light',
+            ifAbsent: true,
+          },
+        ],
+      },
+      ...member,
+    })
+  ).json()) as PushResponse
+  expect(unread.applied).toHaveLength(6)
+  const marked = (await (
+    await call(`/api/v1/sync?cursor=${shown.cursor}`, member)
+  ).json()) as PullResponse
+  expect(marked.rows.states).toMatchObject([
+    { articleId: 1, readAt: null, readUpdatedAt: unreadAt, likedAt: now },
+  ])
+  expect(marked.rows.profile).toMatchObject([
+    { readingLang: null, readingLangAt: unreadAt, uiLocale: 'fr', uiLocaleAt: 0 },
+  ])
+  expect(marked.rows.prefs).toMatchObject([{ key: 'ui.theme', value: 'dark', updatedAt: 0 }])
+  await call('/api/v1/mutations', {
+    body: {
+      mutations: [{ mid: 'workers-all-1', at: unreadAt, type: 'markAllRead', feedId: 1, upTo: 1 }],
+    },
+    ...member,
+  })
+  const readAgain = (await (
+    await call(`/api/v1/sync?cursor=${marked.cursor}`, member)
+  ).json()) as PullResponse
+  expect(readAgain.rows.states).toMatchObject([
+    { articleId: 1, readAt: unreadAt, readUpdatedAt: unreadAt },
+  ])
+  // A later read of a read post moves its clock through a three-way max(), and an unread made
+  // between the two reads and pushed after both then loses (Codex review).
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  const laterAt = Date.now()
+  await call('/api/v1/mutations', {
+    body: {
+      mutations: [
+        { mid: 'workers-read-2', at: laterAt, type: 'markRead', articleId: 1 },
+        { mid: 'workers-unread-3', at: laterAt - 1, type: 'markUnread', articleId: 1 },
+      ],
+    },
+    ...member,
+  })
+  const readLater = (await (
+    await call(`/api/v1/sync?cursor=${readAgain.cursor}`, member)
+  ).json()) as PullResponse
+  expect(readLater.rows.states).toMatchObject([
+    { articleId: 1, readAt: unreadAt, readUpdatedAt: laterAt },
+  ])
+  // Marked unread past the horizon, a post is kept, through a fourth term of the kept union and a
+  // nested select in the horizon's, on D1.
+  const longAgo = now - 40 * 24 * 60 * 60 * 1000
+  await db.batch([
+    bumpSeq(db),
+    db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at, seq)
+      values (2, 1, 'k2', 'Old post', ${longAgo}, ${longAgo}, ${currentSeq})`),
+  ])
+  await call('/api/v1/mutations', {
+    body: {
+      mutations: [{ mid: 'workers-unread-2', at: unreadAt, type: 'markUnread', articleId: 2 }],
+    },
+    ...member,
+  })
+  const oldUnread = (await (
+    await call(`/api/v1/sync?cursor=${readLater.cursor}`, member)
+  ).json()) as PullResponse
+  expect(oldUnread.rows.articles.map((a) => a.id)).toEqual([2])
+  const kept = (await (await call('/api/v1/sync?cursor=0', member)).json()) as PullResponse
+  expect(kept.rows.articles.map((a) => a.id).sort()).toEqual([1, 2])
+
   // The Following feed: printf keys, nested window functions and the (time, offset, key) cursor, on D1.
   await db.batch([
     bumpSeq(db),
@@ -293,7 +429,7 @@ it("reads the front page's edition and checks a handle, on D1", async () => {
 })
 
 it("joins with a code, signs in, and shows on the inviter's list, on D1", async () => {
-  const { db, call, codeFor, cookiesOf } = stack()
+  const { db, mail, call, codeFor, cookiesOf } = stack()
   // A member, made by the operator, who makes a code: the five are counted in one insert…select.
   await call('/api/admin/invite', {
     body: { email: 'inviter@x.test' },
@@ -312,12 +448,13 @@ it("joins with a code, signs in, and shows on the inviter's list, on D1", async 
 
   // A visitor joins: the limits, then the hold, in one batch with the state it answers from.
   // The address's mails count with the login page's (`otpSend`), though better-auth's hook never
-  // sees tela-api's own call.
+  // sees tela-api's own call. That call carries the visitor's language, and the mail is in it.
   const joined = await call('/api/v1/join', {
     body: { code, email: 'joiner@x.test' },
-    headers: { 'cf-connecting-ip': '198.51.100.7' },
+    headers: { 'cf-connecting-ip': '198.51.100.7', cookie: 'tela_locale=zh-Hant' },
   })
   expect(joined.status).toBe(200)
+  expect(mail.outbox.at(-1)?.subject).toMatch(/^邀請你加入 Tela · You are invited to Tela: \d{6}$/)
   expect(
     await db.all<{ key: string; count: number }>(
       sql`select key, count from action_limits where key like 'join%' or key like 'otpSend:%'
@@ -354,6 +491,15 @@ it("joins with a code, signs in, and shows on the inviter's list, on D1", async 
   })
   expect(again.status).toBe(409)
   expect((await call(`/api/v1/invites/${code}`, { method: 'DELETE', ...inviter })).status).toBe(404)
+  // A member's code mail is in their account's language, read in the select that finds them.
+  await db.run(sql`update profiles set ui_locale = 'fr' where user_id = ${inviterId}`)
+  await call('/api/auth/email-otp/send-verification-otp', {
+    body: { email: 'inviter@x.test', type: 'sign-in' },
+    headers: { 'cf-connecting-ip': '198.51.100.9' },
+  })
+  expect(mail.outbox.at(-1)?.subject).toMatch(
+    /^Votre code de connexion à Tela · Your Tela sign-in code: \d{6}$/,
+  )
 })
 
 it('sets a password and logs in with it, hashed by scrypt in workerd, on D1', async () => {

@@ -3,7 +3,8 @@
 Status: accepted (2026-10-04). Supersedes three parts of 0035: For writers' example card is no
 longer the owner's live `@hutusi` profile, the visitor header gains a theme menu, and a visitor's
 Read in is the member's pill rather than a dropdown. The rest of 0035 stands, including that the
-copy says only what Tela does.
+copy says only what Tela does. Superseded in part by 0040 (2026-10-07): both headers carry one
+language circle, not the Read-in pill.
 
 ## Context
 
@@ -57,7 +58,13 @@ from. The menu offers the three choices Settings does.
   For the same reason the edge marks no item as chosen; the app marks the one the page is set to.
 - **A visitor's choice carries into their account.** If the account has no `ui.theme` row once its
   rows arrive, and this browser chose light or dark, that choice is written to the account once.
-  Otherwise the account's pref wins, as before.
+  Otherwise the account's pref wins, as before. (Amended 2026-10-07, review.) The rows that
+  "arrive" include the copy the device kept, loaded before this visit's first pull, which can
+  predate a theme chosen elsewhere since; written as an ordinary pref stamped now, the adoption
+  beat that choice by its clock. It is now `setPref {ifAbsent: true}`: tela-api writes it only
+  where the account has no row, with no clock (`updated_at` 0), so any choice made anywhere beats
+  it, and the prediction does the same. A tela-api that predates the flag strips it and writes
+  the pref as a choice, as before.
 
 **A visitor's Read in is a member's pill.** 0035 gave visitors "Read in EN ▾", a dropdown that sets
 the interface language, while members had "Read in 中文 EN", two buttons that set the reading

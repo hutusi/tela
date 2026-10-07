@@ -14,6 +14,7 @@ import {
   joinAndReadCode,
   latestCode,
   measureHeader,
+  memberHeaders,
   STATE_FILE,
   signInRequest,
 } from './helpers'
@@ -48,13 +49,15 @@ test.describe('a zh-TW browser', () => {
     await page.goto('/')
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant')
     await expect(page.getByTestId('nav-join')).toHaveText('加入')
-    await expect(page.getByTestId('visitor-locale').locator('summary')).toContainText('繁體')
+    await expect(page.getByTestId('language-menu').locator('summary')).toHaveAccessibleName(
+      '語言：繁體中文',
+    )
   })
 })
 
 test.describe('a fr-FR browser', () => {
   test.use({ locale: 'fr-FR' })
-  test('lands in French, and Read in takes it to Traditional Chinese and back', async ({
+  test('lands in French, and the language circle takes it to Traditional Chinese and back', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1024, height: 900 })
@@ -62,9 +65,10 @@ test.describe('a fr-FR browser', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
     await expect(page.getByTestId('nav-join')).toHaveText('S’inscrire')
 
-    const menu = page.getByTestId('visitor-locale')
+    const menu = page.getByTestId('language-menu')
+    await expect(menu.locator('summary')).toHaveAccessibleName(/^Langue\s: Français$/)
     await menu.locator('summary').click()
-    await page.getByTestId('visitor-locale-zh-Hant').click()
+    await page.getByTestId('language-menu-zh-Hant').click()
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant')
     await expect(page.getByTestId('nav-join')).toHaveText('加入')
     // The choice is the cookie's, so the edge renders the next page in it.
@@ -72,7 +76,7 @@ test.describe('a fr-FR browser', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hant')
 
     await menu.locator('summary').click()
-    await page.getByTestId('visitor-locale-fr').click()
+    await page.getByTestId('language-menu-fr').click()
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
     await expect(page.getByTestId('nav-join')).toHaveText('S’inscrire')
   })
@@ -80,9 +84,9 @@ test.describe('a fr-FR browser', () => {
 
 test.describe('the visitor header', () => {
   /**
-   * The member's header is measured in styles.e2e.ts; a visitor's has controls of its own (Read
-   * in, Log in, Join), and the width budget is the gotcha that hid a 4px nav from 768 to 1100px.
-   * Below `sm` only Join stays beside the nav.
+   * The member's header is measured in styles.e2e.ts; a visitor's has controls of its own (Log
+   * in, Join), and the width budget is the gotcha that hid a 4px nav from 768 to 1100px. Below
+   * `sm` only Join stays beside the nav.
    */
   for (const width of [360, 412, 640, 768, 800, 1024, 1280]) {
     test(`fits, and keeps its nav whole, at ${width}px`, async ({ page }) => {
@@ -92,7 +96,7 @@ test.describe('the visitor header', () => {
       await page.getByTestId('nav-join').waitFor()
       const wide = width >= 640
       const controls = wide
-        ? ['nav-join', 'nav-login', 'visitor-locale', 'theme-menu']
+        ? ['nav-join', 'nav-login', 'language-menu', 'theme-menu']
         : ['nav-join']
       const m = await measureHeader(page, controls)
       expectHeaderFits(m, width)
@@ -103,14 +107,15 @@ test.describe('the visitor header', () => {
         expect(m.controls[id]?.height, `${id} wrapped`).toBeLessThanOrEqual(36)
       }
       if (wide) {
-        expect(m.controls['theme-menu']?.width, 'theme menu squeezed').toBe(34)
-        expect(m.controls['visitor-locale']?.height, 'Read in off the family').toBe(34)
-        // One language named on the button, the rest in its menu: narrower than the pill was.
-        expect(m.controls['visitor-locale']?.width, 'Read in wider than the pill').toBeLessThan(137)
+        // Both circles of the family, never pressed into an oval: a fifth language or a longer
+        // label cannot quietly take the room back.
+        for (const id of ['theme-menu', 'language-menu']) {
+          expect(m.controls[id], `${id} squeezed`).toMatchObject({ width: 34, height: 34 })
+        }
       } else {
         await expect(page.getByTestId('nav-login')).toBeHidden()
-        await expect(page.getByTestId('visitor-locale')).toBeHidden()
-        // The menu is in the page, and left out of the 360px budget.
+        // Both circles are in the page, and left out of the 360px budget.
+        await expect(page.getByTestId('language-menu')).toBeHidden()
         await expect(page.getByTestId('theme-menu')).toBeHidden()
       }
       // Reading and search are a member's.
@@ -121,7 +126,7 @@ test.describe('the visitor header', () => {
 
   /**
    * The same budget in the other interface languages: French labels run longer ("S’inscrire",
-   * "Lire en", "Pour les auteurs"), and the controls do not shrink. The header's Log in is
+   * "Pour les auteurs"), and the controls do not shrink. The header's Log in is
    * "Connexion" for this: "Se connecter" clipped the nav by 4px at 640.
    */
   for (const locale of ['zh-Hans', 'zh-Hant', 'fr'] as const) {
@@ -132,7 +137,7 @@ test.describe('the visitor header', () => {
         await page.goto('/')
         await expect(page.locator('html')).toHaveAttribute('lang', locale)
         await page.getByTestId('nav-join').waitFor()
-        const controls = ['nav-join', 'nav-login', 'visitor-locale', 'theme-menu']
+        const controls = ['nav-join', 'nav-login', 'language-menu', 'theme-menu']
         const m = await measureHeader(page, controls)
         expectHeaderFits(m, width)
         expect(m.client, 'nav is clipped').toBe(m.scroll)
@@ -254,12 +259,67 @@ test.describe('Join, after choosing a theme', () => {
     await expect(page).toHaveURL(/\/discover$/)
     await expect(page.getByTestId('account-menu')).toBeVisible()
     expect(JSON.parse((await adopted).postData() ?? '{}').mutations).toContainEqual(
-      expect.objectContaining({ type: 'setPref', key: 'ui.theme', value: 'dark' }),
+      // Taken only where the account has no theme, which the server decides, not this copy.
+      expect.objectContaining({ type: 'setPref', key: 'ui.theme', value: 'dark', ifAbsent: true }),
     )
     expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark')
 
     await page.goto('/settings/reading')
     await expect(page.getByTestId('theme-dark')).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+test.describe('Join, after choosing a language', () => {
+  test.use(visitor(17))
+  /**
+   * An account that has never chosen an interface language takes the one its visitor chose on
+   * this browser, once (ADR 0040): the page stays in it, and so does every other device the
+   * member signs in on, since it is the account's now.
+   */
+  test("the account takes the visitor's language, and the server has it", async ({
+    page,
+    request,
+  }) => {
+    const code = await adminCode(request)
+    const email = `french-joiner-${Date.now()}@e2e.test`
+    await page.goto('/discover')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+    const menu = page.getByTestId('language-menu')
+    await menu.locator('summary').click()
+    await page.getByTestId('language-menu-fr').click()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+
+    const adopted = page.waitForRequest(
+      (r) => r.url().includes('/api/v1/mutations') && (r.postData() ?? '').includes('uiLocale'),
+    )
+    await page.getByTestId('nav-join').click()
+    const sheet = page.getByTestId('front-door')
+    await sheet.getByTestId('join-code').fill(code)
+    await sheet.getByTestId('login-email').fill(email)
+    await sheet.getByTestId('login-submit').click()
+    await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    await sheet.getByTestId('login-submit').click()
+    await expect(page).toHaveURL(/\/discover$/)
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+    expect(JSON.parse((await adopted).postData() ?? '{}').mutations).toContainEqual(
+      // Taken only while the account has no language, which the server decides, not this copy.
+      expect.objectContaining({ type: 'setProfile', uiLocale: 'fr', adopt: true }),
+    )
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    // Linked, as a new account is: the member's circle is the interface language.
+    await expect(menu.locator('summary')).toHaveAccessibleName(/^Langue\s: Français$/)
+
+    await expect
+      .poll(async () => {
+        const res = await page.request.get(`${BASE}/api/v1/sync?cursor=0`, {
+          headers: await memberHeaders(page.request),
+        })
+        const body = (await res.json()) as {
+          rows: { profile: { uiLocale: string | null; readingLang: string | null }[] }
+        }
+        return body.rows.profile[0]
+      })
+      .toMatchObject({ uiLocale: 'fr', readingLang: null })
   })
 })
 

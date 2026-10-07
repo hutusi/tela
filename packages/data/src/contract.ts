@@ -45,6 +45,7 @@ import {
 } from './queries/invites'
 import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates } from './queries/reader'
+import { DISCOVER_REVIEW, publicReaderCount, recountReaders } from './queries/sites'
 import { readPull } from './queries/sync'
 import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
 import { feeds, sites } from './schema'
@@ -150,6 +151,13 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         ),
       )
       expect(badListing === null).toBe(false)
+      // Added by migration 0007 with the column, not by rebuilding the table (ADR 0041).
+      const badReview = await caught(() =>
+        db.run(
+          sql`insert into sites (home_url, review, created_at, updated_at) values ('https://a.b', 'maybe', 1, 1)`,
+        ),
+      )
+      expect(badReview === null).toBe(false)
       await db.run(
         sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 0, 0, 0)`,
       )
@@ -578,6 +586,96 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { lang: 'zh-Hant', feedId: 1, status: 'failed', title: null },
       ])
     })
+
+    it("leaves a post marked unread unread, and carries a duplicate's unread to its copy", async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['blog.example', 'mirror.example'])
+      await db.run(
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 1, 0, 0)`,
+      )
+      // Feed 2 mirrors feed 1: duplicates 2 and 5 of copies 1 and 4, and post 3 only it has.
+      await db.run(sql`
+        insert into articles (id, feed_id, dedup_key, url, fetched_at, sort_at) values
+          (1, 1, 'a', 'https://blog.example/a', 1, 1),
+          (2, 2, 'mirror-a', 'https://blog.example/a', 1, 1),
+          (3, 2, 'mirror-b', 'https://blog.example/b', 1, 1),
+          (4, 1, 'c', 'https://blog.example/c', 1, 1),
+          (5, 2, 'mirror-c', 'https://blog.example/c', 1, 1)
+      `)
+      // The alias's watermark covers all three of its posts; the reader marked 2 and 3 unread
+      // there, read 5 and then marked its copy, 4, unread on the target, later.
+      await db.run(sql`
+        insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at) values
+          ('u1', 1, 0, 0, 0), ('u1', 2, 5, 0, 0)
+      `)
+      await db.run(sql`
+        insert into user_article_states (user_id, article_id, read_at, read_updated_at) values
+          ('u1', 2, null, 8), ('u1', 3, null, 7), ('u1', 5, 6, null), ('u1', 4, null, 9)
+      `)
+      const carry: [number, number][] = [
+        [2, 1],
+        [5, 4],
+      ]
+      await db.batch([
+        bumpSeq(db),
+        ...mergeFeed(db, { alias: 2, target: 1, move: [3], carry }, T0),
+      ] as never)
+      expect(
+        await db.all(sql`
+          select article_id as "articleId", read_at as "readAt", read_updated_at as "readUpdatedAt"
+          from user_article_states where article_id in (1, 3, 4) order by article_id`),
+      ).toEqual([
+        { articleId: 1, readAt: null, readUpdatedAt: 8 },
+        { articleId: 3, readAt: null, readUpdatedAt: 7 },
+        { articleId: 4, readAt: null, readUpdatedAt: 9 },
+      ])
+    })
+
+    it("carries a duplicate's later read clock, to a new copy and over an existing one", async () => {
+      // Codex review: a duplicate read at 20 and again at 30 was carried as a read at 20 with no
+      // clock, so an unread from 25 then won on the target.
+      const db = await makeDb()
+      await seedFeeds(db, ['blog.example', 'mirror.example'])
+      await db.run(
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 1, 0, 0)`,
+      )
+      // Copies 1, 3, 5, 7, 9 on feed 1; their duplicates 2, 4, 6, 8, 10 on feed 2.
+      const pairs: [number, number][] = [1, 3, 5, 7, 9].map((copy) => [copy + 1, copy])
+      await db.run(sql`
+        insert into articles (id, feed_id, dedup_key, fetched_at, sort_at)
+        select value, 2 - (value % 2), 'k' || value, 1, 1 from json_each(${JSON.stringify(
+          pairs.flat(),
+        )})
+      `)
+      // No watermark on either side, so only what was written down is carried.
+      await db.run(sql`
+        insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at) values
+          ('u1', 1, 0, 0, 0), ('u1', 2, 0, 0, 0)
+      `)
+      await db.run(sql`
+        insert into user_article_states (user_id, article_id, read_at, read_updated_at) values
+          ('u1', 2, 20, 30),
+          ('u1', 4, 20, 30), ('u1', 3, null, 25),
+          ('u1', 6, 20, 30), ('u1', 5, 10, null),
+          ('u1', 8, 20, 30), ('u1', 7, 35, 40),
+          ('u1', 10, 20, null)
+      `)
+      await db.batch([
+        bumpSeq(db),
+        ...mergeFeed(db, { alias: 2, target: 1, move: [], carry: pairs }, T0),
+      ] as never)
+      expect(
+        await db.all(sql`
+          select article_id as "articleId", read_at as "readAt", read_updated_at as "readUpdatedAt"
+          from user_article_states where article_id in (1, 3, 5, 7, 9) order by article_id`),
+      ).toEqual([
+        { articleId: 1, readAt: 20, readUpdatedAt: 30 }, // no copy yet: the read and its clock
+        { articleId: 3, readAt: 20, readUpdatedAt: 30 }, // marked unread at 25: the read at 30 wins
+        { articleId: 5, readAt: 10, readUpdatedAt: 30 }, // read at 10: its first time, the later clock
+        { articleId: 7, readAt: 35, readUpdatedAt: 40 }, // read later on the copy: unchanged
+        { articleId: 9, readAt: 20, readUpdatedAt: null }, // read once: still no clock to keep
+      ])
+    })
   })
 
   describe('compacting read state (ADR 0009)', () => {
@@ -613,6 +711,138 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { userId: 'u1', articleId: 3 },
         { userId: 'u1', articleId: 4 },
         { userId: 'u2', articleId: 1 },
+      ])
+    })
+
+    it('keeps a read or an unread the member chose by hand, under the watermark too', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['h1'])
+      await db.run(sql`
+        insert into user (id, name, email, email_verified, created_at, updated_at)
+        values ('u1', 'u', 'u1@x.y', 1, 0, 0)
+      `)
+      await db.run(sql`
+        insert into articles (id, feed_id, dedup_key, fetched_at, sort_at) values
+          (1, 1, 'a', 1, 1), (2, 1, 'b', 1, 1), (3, 1, 'c', 1, 1)
+      `)
+      await db.run(sql`
+        insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at)
+        values ('u1', 1, 3, 0, 0)
+      `)
+      // 1 read once, 2 marked unread, 3 marked unread and then read again.
+      await db.run(sql`
+        insert into user_article_states (user_id, article_id, read_at, read_updated_at)
+        values ('u1', 1, 5, null), ('u1', 2, null, 6), ('u1', 3, 7, 7)
+      `)
+      const [dropped] = await db.batch([compactReadStates(db)])
+      expect(dropped).toEqual([{ article_id: 1 }])
+      expect(
+        await db.all(sql`
+          select article_id as "articleId", read_at as "readAt", read_updated_at as "readUpdatedAt"
+          from user_article_states order by article_id`),
+      ).toEqual([
+        { articleId: 2, readAt: null, readUpdatedAt: 6 },
+        { articleId: 3, readAt: 7, readUpdatedAt: 7 },
+      ])
+    })
+  })
+
+  describe('the Discover review queue (ADR 0041)', () => {
+    it('holds a blog a member added that a live feed has filled, until someone decides', async () => {
+      const db = await makeDb()
+      await db.run(sql`
+        insert into user (id, name, email, email_verified, created_at, updated_at)
+        values ('u1', 'u', 'u1@x.y', 1, 0, 0)
+      `)
+      // 1 waits. 2 is claimed, 3 judged not for Discover, 4 nobody reads, 5 an empty
+      // placeholder, 6 has only a dead feed and 7 only a merged one, 8 is listed already.
+      await db.run(sql`
+        insert into sites (id, home_url, listing, claimed_by, review, reviewed_at, reader_count,
+          created_at, updated_at) values
+          (1, 'https://a.test', 'private', null, null, null, 1, 0, 0),
+          (2, 'https://b.test', 'private', 'u1', null, null, 1, 0, 0),
+          (3, 'https://c.test', 'private', null, 'dismissed', 5, 2, 0, 0),
+          (4, 'https://d.test', 'private', null, null, null, 0, 0, 0),
+          (5, 'https://e.test', 'private', null, null, null, 1, 0, 0),
+          (6, 'https://f.test', 'private', null, null, null, 1, 0, 0),
+          (7, 'https://g.test', 'private', null, null, null, 1, 0, 0),
+          (8, 'https://h.test', 'listed', null, null, null, 1, 0, 0)
+      `)
+      await db.run(sql`
+        insert into feeds (id, site_id, feed_url, host, status, merged_into, next_fetch_at,
+          created_at, updated_at) values
+          (1, 1, 'https://a.test/f', 'a.test', 'active', null, 0, 0, 0),
+          (2, 2, 'https://b.test/f', 'b.test', 'active', null, 0, 0, 0),
+          (3, 3, 'https://c.test/f', 'c.test', 'active', null, 0, 0, 0),
+          (4, 4, 'https://d.test/f', 'd.test', 'active', null, 0, 0, 0),
+          (5, 5, 'https://e.test/f', 'e.test', 'active', null, 0, 0, 0),
+          (6, 6, 'https://f.test/f', 'f.test', 'dead', null, 0, 0, 0),
+          (7, 7, 'https://g.test/f', 'g.test', 'active', 1, 0, 0, 0),
+          (8, 8, 'https://h.test/f', 'h.test', 'active', null, 0, 0, 0)
+      `)
+      await db.run(sql`
+        insert into articles (feed_id, dedup_key, fetched_at, sort_at)
+        select value, 'post', 1, 1 from json_each('[1, 2, 3, 4, 6, 7, 8]') where true
+      `)
+      const queued = await db.all<{ id: number }>(
+        sql`select s.id from sites s where ${DISCOVER_REVIEW} order by s.id`,
+      )
+      expect(queued).toEqual([{ id: 1 }])
+    })
+
+    it('recounts readers, stamping the row only when what a device holds of it changed', async () => {
+      const db = await makeDb()
+      await db.run(sql`
+        insert into user (id, name, email, email_verified, created_at, updated_at)
+        select 'u' || value, 'u', 'u' || value || '@x.y', 1, 0, 0 from json_each('[1,2,3,4]')
+        where true
+      `)
+      await db.run(sql`insert into sites (id, home_url, created_at, updated_at, seq)
+        values (1, 'https://a.test', 0, 0, 0)`)
+      await db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+        updated_at) values (1, 1, 'https://a.test/f', 'a.test', 0, 0, 0)`)
+      const recount = async (change: ReturnType<typeof sql>) => {
+        await db.batch([bumpSeq(db), db.run(change), ...recountReaders(db, sql`1`, 5)] as never)
+        return first<{ reader_count: number; listing: string; seq: number }>(
+          db,
+          sql`select reader_count, listing, seq from sites where id = 1`,
+        )
+      }
+      const subscribe = (user: string) =>
+        recount(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at)
+          values (${user}, 1, 0, 0)`)
+      const leave = (user: string) =>
+        recount(sql`update subscriptions set deleted_at = 1 where user_id = ${user}`)
+      // One reader, then two: a device holds 0 either way, so the seq stays.
+      expect(await subscribe('u1')).toEqual({ reader_count: 1, listing: 'private', seq: 0 })
+      expect(await subscribe('u2')).toEqual({ reader_count: 2, listing: 'private', seq: 0 })
+      // Three: the count and the community door's listing are the device's to hold.
+      expect(await subscribe('u3')).toEqual({ reader_count: 3, listing: 'listed', seq: 3 })
+      expect(await subscribe('u4')).toEqual({ reader_count: 4, listing: 'listed', seq: 4 })
+      // Back to two shows 0 again; and nobody leaving changes nothing.
+      expect(await leave('u4')).toEqual({ reader_count: 3, listing: 'listed', seq: 5 })
+      expect(await leave('u3')).toEqual({ reader_count: 2, listing: 'listed', seq: 6 })
+      expect(await leave('u3')).toEqual({ reader_count: 2, listing: 'listed', seq: 6 })
+    })
+
+    it('gives a public reader count only from three readers, and orders the rest as equals', async () => {
+      const db = await makeDb()
+      await db.run(sql`
+        insert into sites (id, home_url, reader_count, created_at, updated_at) values
+          (1, 'https://a.test', 0, 0, 0), (2, 'https://b.test', 2, 0, 0),
+          (3, 'https://c.test', 1, 0, 0), (4, 'https://d.test', 3, 0, 0),
+          (5, 'https://e.test', 40, 0, 0)
+      `)
+      const count = publicReaderCount('s')
+      const rows = await db.all<{ id: number; n: number | null }>(sql`
+        select s.id, ${count} as n from sites s order by coalesce(${count}, 0) desc, s.id
+      `)
+      expect(rows).toEqual([
+        { id: 5, n: 40 },
+        { id: 4, n: 3 },
+        { id: 1, n: null },
+        { id: 2, n: null },
+        { id: 3, n: null },
       ])
     })
   })

@@ -3,9 +3,10 @@
  * the URL owning the open article still holds; what they asserted about server renders is
  * replaced by the local-first spec, since there is no server render left to count.
  */
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
-import { FIXTURES, keepCycling, resetReading, setPrefs, synced } from './helpers'
+import { FIXTURES, keepCycling, readStateOnServer, resetReading, setPrefs, synced } from './helpers'
 
 test.describe('reader', () => {
   test('signed-in home goes to reading, with the subscriptions from the first sync', async ({
@@ -81,9 +82,62 @@ test.describe('reader', () => {
       await page.getByTestId('mark-read').click()
       await expect(row.getByTestId('unread-dot')).toHaveCount(0)
       await expect(page.getByTestId('mark-read')).toHaveCount(0)
+      // And back, with the pref off as with it on.
+      await page.getByTestId('mark-unread').click()
+      await expect(row.getByTestId('unread-dot')).toHaveCount(1)
+      await page.getByTestId('mark-read').click()
+      await expect(row.getByTestId('unread-dot')).toHaveCount(0)
+      // Read on the server before the page goes, so the next spec does not find it unread.
+      const id = await row.getAttribute('data-article-id')
+      await expect
+        .poll(() => readStateOnServer(page.request, id ?? ''))
+        .toEqual({ readAt: true, readUpdatedAt: true })
     } finally {
       await resetReading(page.request)
     }
+  })
+
+  test('Mark as unread keeps a post unread across a reload, until it is opened again', async ({
+    page,
+  }) => {
+    // Opening reads, which is what this spec is about: whatever an earlier spec left of the pref.
+    await resetReading(page.request)
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    await expect(page.getByTestId('article-row').first()).toContainText('Julia Evans')
+    const first = page.getByTestId('article-row').first()
+    const id = (await first.getAttribute('data-article-id')) ?? ''
+    const row = page.locator(`[data-testid="article-row"][data-article-id="${id}"]`)
+    const dot = row.getByTestId('unread-dot')
+    await row.click()
+    await expect(page.locator('.article-body').first()).toBeVisible()
+    // Opening read it, so the action row offers the way back.
+    await expect(dot).toHaveCount(0)
+    await page.getByTestId('mark-unread').click()
+    await expect(dot).toHaveCount(1)
+    await expect(page.getByTestId('mark-read')).toBeVisible()
+    await expect
+      .poll(() => readStateOnServer(page.request, id))
+      .toEqual({ readAt: false, readUpdatedAt: true })
+
+    // Reloaded with the post open would be an open, which reads it: from the list instead.
+    await page.getByTestId('close-article').click()
+    await expect(page).not.toHaveURL(/article=/)
+    await page.reload()
+    await synced(page)
+    await expect(row).toBeVisible()
+    await expect(dot).toHaveCount(1)
+
+    // Opening it again reads it, as opening reads any unread post.
+    await row.click()
+    await expect(page.locator('.article-body').first()).toBeVisible()
+    await expect(dot).toHaveCount(0)
+    await expect(page.getByTestId('mark-unread')).toBeVisible()
+    await expect
+      .poll(() => readStateOnServer(page.request, id))
+      .toEqual({ readAt: true, readUpdatedAt: true })
   })
 
   test('hiding read posts keeps the one being read, until the reader moves to another list', async ({
@@ -297,10 +351,12 @@ test.describe('reader', () => {
     ).toHaveText('')
   })
 
-  test('the UI switches to Chinese, in Settings and nowhere in the header', async ({ page }) => {
+  test('the UI switches to Chinese in Settings, and the header says so', async ({ page }) => {
+    await resetReading(page.request)
     await page.goto('/settings/translation')
-    await expect(page.getByTestId('read-in')).toBeVisible()
-    await expect(page.getByTestId('visitor-locale')).toHaveCount(0)
+    // Linked, the header's circle is the interface language, so it changes with it.
+    const circle = page.getByTestId('language-menu').locator('summary')
+    await expect(circle).toHaveAccessibleName('Language: English')
     // Each push is waited for: every spec signs in as this member, and the next one should not
     // inherit Chinese because this page closed before its last change went out.
     const pushed = () =>
@@ -309,6 +365,7 @@ test.describe('reader', () => {
     await page.getByTestId('ui-locale').selectOption('zh-Hans')
     await expect(page.getByTestId('nav-reading')).toHaveText('阅读')
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
+    await expect(circle).toHaveAccessibleName('语言：简体中文')
     await push
     push = pushed()
     await page.getByTestId('ui-locale').selectOption('en')
@@ -334,9 +391,14 @@ test.describe('reader', () => {
 
   test('OPML import subscribes to new feeds and skips bad entries', async ({ page }) => {
     await page.goto('/add')
-    await page
-      .getByTestId('opml-file')
-      .setInputFiles(join(import.meta.dirname, 'fixtures', 'subs.opml'))
+    // The file names the default fixture port; this run's may be another, and a feed on a port
+    // some other stack answers would subscribe this member to that stack's posts.
+    const opml = readFileSync(join(import.meta.dirname, 'fixtures', 'subs.opml'), 'utf8')
+    await page.getByTestId('opml-file').setInputFiles({
+      name: 'subs.opml',
+      mimeType: 'text/x-opml',
+      buffer: Buffer.from(opml.replaceAll('http://127.0.0.1:4790', FIXTURES)),
+    })
     await page.getByTestId('opml-import').click()
     await expect(page.getByTestId('opml-result')).toContainText(/Imported \d+ feed/)
   })

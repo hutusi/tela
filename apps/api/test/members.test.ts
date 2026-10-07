@@ -153,6 +153,58 @@ describe('public', () => {
     expect(body.languages).toEqual([{ lang: 'en', count: 2 }])
   })
 
+  test('no public answer says how a blog was listed (ADR 0041)', async () => {
+    // Beside a held-back count, `listing` would tell a blog an operator listed from the review
+    // queue (one member reads it) from an editorial pick nobody reads yet.
+    await blog(1, 'listed')
+    await blog(2, 'featured')
+    const discover = (await (await get('/api/v1/public/discover')).json()) as {
+      sites: Record<string, unknown>[]
+    }
+    expect(discover.sites).toHaveLength(2)
+    for (const site of discover.sites) expect(site).not.toHaveProperty('listing')
+    for (const id of [1, 2]) {
+      const page = (await (await get(`/api/v1/public/sites/${id}`)).json()) as {
+        site: Record<string, unknown>
+      }
+      expect(page.site.id).toBe(id)
+      expect(page.site).not.toHaveProperty('listing')
+    }
+  })
+
+  test('a reader count is public from three readers; below, it is neither shown nor ranked', async () => {
+    for (const id of [1, 2, 3, 4]) await blog(id, 'listed')
+    // An operator can list a blog one member reads (ADR 0041): 1, 2 and 0 readers must look alike.
+    await db.run(sql`update sites set reader_count = case id
+      when 1 then 1 when 2 then 2 when 3 then 0 else 3 end`)
+    const discover = (await (await get('/api/v1/public/discover')).json()) as {
+      sites: { id: number; readerCount: number | null }[]
+    }
+    expect(discover.sites.map((s) => [s.id, s.readerCount])).toEqual([
+      [4, 3],
+      [1, null],
+      [2, null],
+      [3, null],
+    ])
+    const page = async (id: number) =>
+      (
+        (await (await get(`/api/v1/public/sites/${id}`)).json()) as {
+          site: { readerCount: unknown }
+        }
+      ).site.readerCount
+    expect(await page(2)).toBeNull()
+    expect(await page(4)).toBe(3)
+    const found = (await (await api.request('/api/v1/search?q=blog', { as: reader })).json()) as {
+      sites: { id: number; readerCount: number | null }[]
+    }
+    expect(found.sites[0]).toEqual(expect.objectContaining({ id: 4, readerCount: 3 }))
+    expect(found.sites.filter((s) => s.id !== 4).map((s) => s.readerCount)).toEqual([
+      null,
+      null,
+      null,
+    ])
+  })
+
   test("a private blog's page is not found, a listed one's is", async () => {
     await blog(1, 'listed', reader.userId)
     await blog(2, 'private')

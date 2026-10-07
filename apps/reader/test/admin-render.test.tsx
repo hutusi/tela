@@ -5,16 +5,18 @@
  */
 import { describe, expect, test } from 'bun:test'
 import type { UiLocale } from '@tela/shared'
+import type { AdminList, AdminSiteRow } from '@tela/shared/admin'
 import { renderToString } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
 import type { AnyAreaSpec } from '../src/admin/area'
+import { useDiscoverArea } from '../src/admin/areas/discover'
 import { ActionPrompt } from '../src/admin/components/prompt'
 import { AdminContext } from '../src/admin/context'
 import { AdminI18n } from '../src/admin/i18n'
 import { Ledger } from '../src/admin/ledger/ledger'
 import { OverviewView } from '../src/admin/overview'
 import { UiContext } from '../src/ui'
-import { BLOG_LIST, blogSpec, OVERVIEW, QUIET_ADMIN } from './admin-fixtures'
+import { BLOG_LIST, blogSpec, candidate, OVERVIEW, QUIET_ADMIN } from './admin-fixtures'
 
 function render(node: React.ReactNode, path: string, locale: UiLocale = 'en'): string {
   return renderToString(
@@ -194,6 +196,67 @@ describe('the ledger', () => {
   })
 })
 
+describe('Discover (ADR 0041)', () => {
+  const listed: AdminSiteRow = {
+    ...candidate,
+    id: '31',
+    siteId: 31,
+    title: 'Pfadwerk',
+    homeUrl: 'https://pfadwerk.example/',
+    listing: 'listed',
+    actions: ['site.feature', 'site.hide'],
+    primaryLang: null,
+    review: 'listed',
+    reviewedAt: 1_759_400_000_000,
+  }
+  const LIST: AdminList<AdminSiteRow, 'discover'> = {
+    counts: { candidates: 1, featured: 0, listed: 1, dismissed: 2, hidden: 0 },
+    rows: [candidate, listed],
+    truncated: false,
+  }
+  function Discover() {
+    return <Ledger area="discover" spec={useDiscoverArea()} initial={LIST} />
+  }
+
+  test('opens on the review queue, each blog with what a review needs and nobody who added it', () => {
+    const html = render(<Discover />, '/admin/discover')
+    expect(html).toMatch(/aria-pressed="true"[^>]*data-filter="candidates"/)
+    expect(order(html, ['To review', 'Featured', 'Listed', 'Not for Discover', 'Hidden'])).toEqual([
+      'To review',
+      'Featured',
+      'Listed',
+      'Not for Discover',
+      'Hidden',
+    ])
+    // The blog, its language and when it came; its latest post, its pace and its readers.
+    expect(html).toContain('hibi.example · Japanese · added ')
+    for (const text of ['Latest post', '港の朝', 'Posts, 30 days', '>6<', 'Readers']) {
+      expect(html).toContain(text)
+    }
+    expect(html).toMatch(/data-row-id="30"[\s\S]*To review/)
+    expect(html).toContain('data-action="site.list"')
+    expect(html).toContain('>List<')
+    // A listed blog with no topics says so: Discover files it only under All.
+    expect(html).toContain('pfadwerk.example · no topics yet')
+  })
+
+  test('a blog to review offers List and Not for Discover first, and says what deciding does', () => {
+    const html = render(<Discover />, '/admin/discover?id=30')
+    expect(html).toMatch(/data-action="site.list">List in Discover<kbd[^>]*>1</)
+    expect(html).toMatch(/data-action="site.dismiss">Not for Discover<kbd[^>]*>2</)
+    expect(html).toContain('A member added this blog.')
+    expect(html).toContain('never who')
+    const zh = render(<Discover />, '/admin/discover?id=30', 'zh-Hans')
+    expect(zh).toContain('待审核')
+    expect(zh).toContain('不列入发现')
+  })
+
+  test('a listed blog with no topics is told so in its record', () => {
+    const html = render(<Discover />, '/admin/discover?id=31')
+    expect(html).toContain('No topics yet, so Discover shows this blog only under All.')
+  })
+})
+
 describe('a confirmation', () => {
   test('asks in the plural for several, and its yes is described by what it does', () => {
     const html = render(
@@ -229,24 +292,20 @@ describe('the Overview', () => {
     // In UTC, as System says it.
     expect(html).toContain('checked 13:05 UTC')
     // The four queues, each with its count and the way in.
-    for (const label of [
-      'Claims to review',
-      'Failing feeds',
-      'Dead letters',
-      'Discover candidates',
-    ]) {
+    for (const label of ['Claims to review', 'Failing feeds', 'Dead letters', 'Blogs to review']) {
       expect(html).toContain(label)
     }
     expect(html).toContain('href="/admin/feeds"')
     // A queue's filter is its area's first, which a plain address already opens.
     expect(html).toContain('href="/admin/system"')
-    expect(html).toContain('href="/admin/discover?f=candidates"')
+    // To review is Discover's first filter (ADR 0041), so its card opens the area as it is.
+    expect(html).toContain('href="/admin/discover"')
     // A claim on an untitled blog reads as its host, and opens in its queue.
     expect(html).toContain('pfadwerk.example')
     expect(html).toContain('@mara · No tela-verify tag on the home page')
     expect(html).toContain('href="/admin/claims?id=41"')
     expect(html).toContain('href="/admin/feeds?id=88"')
-    expect(html).toContain('href="/admin/discover?f=candidates&amp;id=30"')
+    expect(html).toContain('href="/admin/discover?id=30"')
     expect(html).toContain('2 readers')
     expect(html).toContain('Nothing waiting.')
     // This week against the last.

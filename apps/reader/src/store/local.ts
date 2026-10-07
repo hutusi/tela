@@ -17,8 +17,11 @@ import {
   type FollowRow,
   type Mutation,
   type Pending,
+  type PrivacyFlag,
   type PullResponse,
   type PushResponse,
+  privacyChange,
+  privacyUnsettled,
   rowsOf,
   settle,
   type TableRows,
@@ -200,6 +203,22 @@ export class LocalStore {
     this.recompute()
     void this.write(owner, this.epoch, { put: [entry] })
     this.onMutation?.()
+  }
+
+  /**
+   * Whether a privacy switch has to wait before it can be turned on (`privacyUnsettled`, issue
+   * #16): a change this device made to it has not come back in a pull yet.
+   */
+  privacyUnsettled = (flag: PrivacyFlag): boolean =>
+    privacyUnsettled(this.confirmed, this.pending, flag)
+
+  /**
+   * Turn a privacy switch on or off now. A show names the version in the confirmed rows, never
+   * the view's, and one that has to wait changes nothing (`privacyChange`, issue #16).
+   */
+  setPrivacy(flag: PrivacyFlag, on: boolean): void {
+    const change = privacyChange(this.confirmed, this.pending, flag, on)
+    if (change) this.mutate(change)
   }
 
   /**

@@ -28,6 +28,8 @@ export function badgeOf(area: AdminArea, counts: AdminCounts | null): number {
   if (!counts) return 0
   if (area === 'claims') return counts.claims
   if (area === 'feeds') return counts.feeds
+  // A tela-api from before ADR 0041 counts no review queue.
+  if (area === 'discover') return counts.discover ?? 0
   if (area === 'system') return counts.dead
   return 0
 }

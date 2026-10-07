@@ -28,6 +28,20 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Mark as unread.** The reader's action row offers *Mark as unread* on a read post and *Mark as
+  read* on an unread one, whether or not opening reads, and `m` does the same from the keyboard. A
+  post marked unread beats an earlier "mark all read" and the 30-day horizon until it is read
+  again, on every device (ADR 0009).
+- **Tela installs as an app** on Android and the desktop: a web app manifest that opens the
+  reading page in a window of its own, with 192 and 512 icons and a maskable one for the
+  launcher's own shape. The browser's bar is on the page's paper, in either theme.
+- **One language control** (ADR 0040): a 34 px circle in both headers and on the sign-in page,
+  beside the theme menu, showing 简, 繁, EN or FR and opening the four languages, each in its own
+  name. A member's sets the interface language and the translation follows it, until Settings →
+  Language gives the translation a language of its own; then the circle changes the translation
+  only, and says so ("Translate into"), and *Same as interface language* links the two again. A
+  visitor's choice comes with them when they join. Between devices each language goes to the
+  later choice, not the last push to arrive. It replaces *Read in*.
 - **An admin console** at `/admin` (ADR 0039), after the Claude Design's "Ledger, refined":
   Overview, Claims, Sites, Feeds, Discover, People, Invitations, Translation and System, each a
   searchable, sortable table with its likeliest action on every row, a record beside it, bulk
@@ -39,13 +53,25 @@ everything so far sits under `[Unreleased]`.
   budgets, and System the health check, the scheduled runs and each kind's leases. Every change
   is audited and undone only while nothing has changed since; a member's reading stays out of it.
   `bun run admin grant <email>` opens it to a member.
+- **Blogs members add are reviewed for Discover** (ADR 0041). Every blog a member adds waits in
+  the console's Discover → To review once a feed has filled it, with its language, its pace, its
+  latest post and how many read it, never who. The operator lists it or says it is not for
+  Discover, and can undo either; the sidebar badges the queue and the Monday digest counts it.
+  Three readers still list a blog the operator passed over, and Hide stays the veto. A public
+  reader count now starts at three, on Discover, a blog's page and search, and the Privacy page
+  says so.
 
 - **Traditional Chinese and French** (ADR 0038), as reading languages and as interface
   languages. Traditional is converted from Simplified by OpenCC with Taiwan phrasing, so a
   Simplified post costs nothing to read in Traditional and the reverse, and one paid translation
   serves both scripts. The interface language follows the browser's order of preference, so
   `zh-TW` gets Traditional and a preferred English is no longer beaten by a Chinese listed after
-  it. Read in is now a menu.
+  it.
+- **Mail in the reader's language** (#28, ADRs 0013 and 0038 amended). Sign-in codes,
+  invitations, reset codes and account notices come in Simplified, Traditional or French with
+  English second, chosen by the language the reader picked, else their account's, else their
+  browser's; notices follow the account alone. An English mail is English and Simplified as
+  before.
 - **Invite codes** (ADR 0034). Every member can bring in five people, ever, from Settings →
   Invites, which lists the codes they made and who joined with each, and revokes one nobody has
   used. The operator makes codes of their own text for as many people as they choose
@@ -69,10 +95,10 @@ everything so far sits under `[Unreleased]`.
   bring, all of it only what Tela does and none of it a link (ADR 0037).
 - **A theme menu in the header**, for visitors and members alike, from 640 px up: Auto, Light
   or Dark. A member's choice is their synced theme, as Settings sets it; a visitor's stays on the
-  device and comes with them when they join. A visitor's *Read in* is now the member's one-press
-  pill, both languages in view (ADR 0037).
-- **About, Privacy and Terms**, in English and Chinese, rendered at the edge from the bundle;
-  every statement on them is checked against what the code does (ADR 0035).
+  device and comes with them when they join (ADR 0037).
+- **About, Privacy and Terms**, in English, Simplified and Traditional Chinese, and French,
+  rendered at the edge from the bundle; every statement on them is checked against what the code
+  does (ADR 0035).
 - **Highlights and notes**, private, on either side of a translation, and found again when the
   post is edited; text size, line length and a dark theme, synced across devices; `j`/`k`, `Esc`
   and `h` on the reading page (ADR 0026).
@@ -90,9 +116,9 @@ everything so far sits under `[Unreleased]`.
   translated, and "Your data" as one file.
 - **Pictures and languages.** A member can show their Gravatar wherever their name appears,
   served from Tela's own origin so it loads in mainland China and their email's hash stays
-  private; Refresh shows a picture changed on Gravatar (ADR 0032). The interface language moved
-  from the header to Settings → Language and follows the member to every device; the header keeps
-  *Read in 中文 EN*. A Manage link beside Subscriptions opens their list in Settings.
+  private; Refresh shows a picture changed on Gravatar (ADR 0032). The interface language is the
+  member's, set in Settings → Language, and follows them to every device. A Manage link beside
+  Subscriptions opens their list in Settings.
 - **Pictures of their own.** A member can upload a picture, cropped and zoomed in a dialog, and it
   comes before their Gravatar; the Gravatar is now on by default, shown once Gravatar is known to
   have one, and members without one keep their letter with no request made (ADR 0033).

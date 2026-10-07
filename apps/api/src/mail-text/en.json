@@ -1,0 +1,58 @@
+{
+  "between": " ",
+  "colon": ":",
+  "openLink": "Or open this link in your browser",
+  "signIn": {
+    "subject": "Your Tela sign-in code",
+    "heading": "Sign in to Tela",
+    "intro": "Enter this code to sign in. It expires in one hour.",
+    "outro": "If you did not ask for this, you can ignore this email."
+  },
+  "invited": {
+    "subject": "You are invited to Tela",
+    "heading": "You are invited to Tela"
+  },
+  "reset": {
+    "subject": "Reset your Tela password",
+    "heading": "Reset your Tela password",
+    "intro": "Enter this code to choose a new password. It expires in one hour, and choosing one signs you out everywhere.",
+    "outro": "If you did not ask for this, you can ignore this email: your password stays as it is."
+  },
+  "notice": {
+    "ifYou": "If that was you, there is nothing to do.",
+    "othersOut": "Every other device was signed out."
+  },
+  "providerAccount": {
+    "subject": "Your Tela account was made with {provider}",
+    "heading": "A new Tela account",
+    "what": "Someone joined Tela as {to}, signing in with {provider}.",
+    "ifNot": "If it was not you, the account is still yours: sign in at {login} with a code sent to this address, then remove {provider} and sign out everywhere in Settings → Account."
+  },
+  "accountChange": {
+    "heading": "How you sign in to Tela changed",
+    "newPassword": "If it was not you, choose a new password from the sign-in page, {login}: a code comes to this address, and the new password signs everyone else out.",
+    "password-set": {
+      "subject": "A password was added to your Tela account",
+      "what": "The Tela account for {to} now has a password."
+    },
+    "password-changed": {
+      "subject": "Your Tela password was changed",
+      "what": "The password of the Tela account for {to} was changed."
+    },
+    "password-reset": {
+      "subject": "Your Tela password was reset",
+      "what": "A new password was chosen for the Tela account for {to}, with a code sent to this address, and every device was signed out.",
+      "ifNot": "If it was not you, someone can read this mailbox: secure it first, then choose a new password again at {login}."
+    },
+    "linked": {
+      "subject": "{provider} was linked to your Tela account",
+      "what": "{provider} now signs in to the Tela account for {to}.",
+      "ifNot": "If it was not you, sign in at {login} with a code sent to this address, then remove {provider} and sign out everywhere in Settings → Account."
+    },
+    "unlinked": {
+      "subject": "{provider} was removed from your Tela account",
+      "what": "{provider} no longer signs in to the Tela account for {to}.",
+      "ifNot": "If it was not you, someone is signed in as you: sign in at {login} with a code sent to this address, then sign out everywhere in Settings → Account, and link {provider} again."
+    }
+  }
+}

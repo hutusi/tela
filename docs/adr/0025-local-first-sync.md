@@ -7,7 +7,8 @@ is open. Amends 0010: still no i18n routing and a locale cookie, now read by use
 and by the edge renderer. Amended by 0031 (2026-09-30): a member also holds the people they
 follow, and `follow`, `unfollow` and `setPrivacy` join the mutations. Amended by 0035
 (2026-10-02): `/` and the info pages join the public pages the edge renders, for visitors only, and
-the service worker takes its shell from `/__tela/shell` rather than `/`.
+the service worker takes its shell from `/__tela/shell` rather than `/`. Amended by 0040
+(2026-10-07): `setProfile` goes to the later `at`, each language on a clock of its own.
 
 ## Context
 
@@ -35,7 +36,10 @@ commits meanwhile.
     launch languages, and body translations of those articles;
   - articles they liked or recommended, with those articles' feeds and sites, whatever they
     subscribe to now.
-- Cursor 0 is a **snapshot**: the 30-day horizon (ADR 0009), with `reset` set.
+- Cursor 0 is a **snapshot**: the 30-day horizon (ADR 0009), with `reset` set. A post marked
+  unread beats the horizon, so a feed's horizon includes its posts marked unread (amended
+  2026-10-07), in a snapshot and a resubscription alike, and one marked since the cursor comes
+  whole, as a newly kept article does.
 - Any other cursor is a **delta**: rows with a seq above it.
   - A subscription newer than the cursor brings its feed's horizon whole, because those articles
     were written before the subscription and their seqs are below the cursor.

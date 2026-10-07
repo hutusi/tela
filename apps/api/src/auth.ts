@@ -23,7 +23,7 @@ import {
   type TelaDb,
   waitsOnFullCode,
 } from '@tela/data'
-import { normalizeInviteCode } from '@tela/shared'
+import { DEFAULT_UI_LOCALE, normalizeInviteCode } from '@tela/shared'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import {
@@ -36,7 +36,14 @@ import {
 import { emailOTP } from 'better-auth/plugins'
 import { and, eq, gt, ne, sql } from 'drizzle-orm'
 import type { ApiConfig, ApiDeps } from './deps'
-import { accountChangeMail, passwordResetMail, providerAccountMail, signInMail } from './mail'
+import {
+  type AccountChange,
+  accountChangeMail,
+  passwordResetMail,
+  providerAccountMail,
+  signInMail,
+} from './mail'
+import { accountLocale, mailLocale } from './mail-locale'
 
 /** Cookie names start `tela.`; tela-web reads `tela.session_data` to authorize /o and /img. */
 export const COOKIE_PREFIX = 'tela'
@@ -306,6 +313,22 @@ async function repairMember(db: TelaDb, userId: string, now: number) {
   if (found.unsettled) await settleInvite(db, { email: found.email, userId, now })
 }
 
+/**
+ * Tell a member about a change to their ways in (ADR 0036), in their interface language beside
+ * English. A notice that fails to go is logged rather than fail the change, which is made by then;
+ * a language that cannot be read is English, since the notice matters more than its language.
+ */
+export async function notifyMember(
+  deps: Pick<ApiDeps, 'db' | 'mail' | 'config'>,
+  member: { id: string; email: string },
+  change: AccountChange,
+): Promise<void> {
+  const locale = await accountLocale(deps.db, member.id).catch(() => DEFAULT_UI_LOCALE)
+  await deps.mail
+    .send(accountChangeMail({ to: member.email, change, publicUrl: deps.config.publicUrl, locale }))
+    .catch((err) => console.error('account notice not sent', member.id, err))
+}
+
 export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config'>) {
   const { db, mail, clock, config } = deps
   return betterAuth({
@@ -364,17 +387,7 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       revokeSessionsOnPasswordReset: true,
       // The member is told, as at every change to their ways in. A notice that fails to go is
       // logged rather than fail the reset, which has set the password by then.
-      onPasswordReset: async ({ user }) => {
-        await mail
-          .send(
-            accountChangeMail({
-              to: user.email,
-              change: { kind: 'password-reset' },
-              publicUrl: config.publicUrl,
-            }),
-          )
-          .catch((err) => console.error('account notice not sent', user.id, err))
-      },
+      onPasswordReset: ({ user }) => notifyMember(deps, user, { kind: 'password-reset' }),
     },
     advanced: {
       cookiePrefix: COOKIE_PREFIX,
@@ -477,11 +490,19 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
               console.error('invitation not settled', user.id, err),
             )
             await createProfile(db, user.id, now)
+            // In the account's language, like every notice, never the browser's: whoever signed in
+            // with the provider may not be whoever holds the address.
             const provider: unknown = context?.params?.id
             if (context?.path === PROVIDER_RETURN && typeof provider === 'string') {
+              const locale = await accountLocale(db, user.id).catch(() => DEFAULT_UI_LOCALE)
               await mail
                 .send(
-                  providerAccountMail({ to: user.email, provider, publicUrl: config.publicUrl }),
+                  providerAccountMail({
+                    to: user.email,
+                    provider,
+                    publicUrl: config.publicUrl,
+                    locale,
+                  }),
                 )
                 .catch((err) => console.error('provider notice not sent', user.id, err))
             }
@@ -536,15 +557,11 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
             await endOtherSessions(db, link.userId, typeof token === 'string' ? token : null).catch(
               (err) => console.error('sessions not ended', link.userId, err),
             )
-            await mail
-              .send(
-                accountChangeMail({
-                  to: link.email,
-                  change: { kind: 'linked', provider: account.providerId },
-                  publicUrl: config.publicUrl,
-                }),
-              )
-              .catch((err) => console.error('account notice not sent', link.userId, err))
+            await notifyMember(
+              deps,
+              { id: link.userId, email: link.email },
+              { kind: 'linked', provider: account.providerId },
+            )
           },
         },
         update: { before: async () => ({ data: NO_TOKENS }) },
@@ -571,10 +588,23 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
         storeOTP: 'hashed',
         async sendVerificationOTP({ email, otp, type }, ctx) {
           const address = email.toLowerCase()
-          const member = await first<{ email_verified: number }>(
+          const member = await first<{ email_verified: number; ui_locale: string | null }>(
             db,
-            sql`select email_verified from user where email = ${address}`,
+            sql`select u.email_verified, p.ui_locale from user u
+              left join profiles p on p.user_id = u.id where u.email = ${address}`,
           )
+          // In the language the asking browser picked (its cookie), else the account's, else the
+          // one its Accept-Language prefers (`mail-locale.ts`). better-auth hands an endpoint the
+          // request's headers as `ctx.headers`, both for a request and for tela-api's own
+          // `auth.api` call, which passes the joiner's two (`routes/invites.ts`); `ctx.request` is
+          // there only for a request. A missing context says nothing of the browser: the
+          // account's language is used, else English.
+          const headers = ctx?.headers ?? ctx?.request?.headers
+          const locale = mailLocale({
+            cookie: headers?.get('cookie'),
+            acceptLanguage: headers?.get('accept-language'),
+            account: member?.ui_locale,
+          })
           // Two kinds of code are mailed: a sign-in code, and a reset code, which better-auth
           // makes only for an address that has an account. Any other kind (an address check,
           // which nothing in Tela asks for) is deleted unsent; mailed as a sign-in code it would
@@ -582,7 +612,7 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
           if (type === 'forget-password') {
             if (member)
               await mail.send(
-                passwordResetMail({ to: email, code: otp, publicUrl: config.publicUrl }),
+                passwordResetMail({ to: email, code: otp, publicUrl: config.publicUrl, locale }),
               )
             return
           }
@@ -609,7 +639,7 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
             invited = true
           }
           await mail.send(
-            signInMail({ to: email, code: otp, publicUrl: config.publicUrl, invited }),
+            signInMail({ to: email, code: otp, publicUrl: config.publicUrl, invited, locale }),
           )
         },
       }),

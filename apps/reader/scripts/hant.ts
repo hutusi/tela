@@ -9,7 +9,10 @@
  * converts wrongly in an interface (釋出 for "publish", 麵板 for "panel").
  *
  * The admin console's catalogues (`src/admin/messages/zh-Hans/*.json`, ADR 0039) are converted the
- * same way, into `src/admin/messages/zh-Hant/`.
+ * same way, into `src/admin/messages/zh-Hant/`, and so is the mail tela-api sends
+ * (`apps/api/src/mail-text/zh-Hans.json`), which tela-api cannot convert as it sends: the
+ * dictionaries would add about 560 KB gzipped to a Worker that only needs these few lines. Where a
+ * mail says 邮箱 for the mailbox rather than the address, the overrides make it 信箱.
  *
  * Run `bun run i18n:hant` after changing a Simplified file and commit what it writes;
  * `test/hant.test.ts` fails while they disagree. `@tela/llm` is a devDependency that only this
@@ -33,6 +36,8 @@ const BIOME = join(ROOT, '../../node_modules/.bin/biome')
 
 const OVERRIDES = 'messages/zh-Hant.overrides.json'
 const ADMIN_MESSAGES = 'src/admin/messages'
+/** tela-api's mail catalogues, from this app's directory. */
+const MAIL_TEXT = '../api/src/mail-text'
 
 type Pair = readonly [from: string, to: string]
 
@@ -137,6 +142,9 @@ export function generate(): Generated[] {
       return { path: `${ADMIN_MESSAGES}/zh-Hant/${name}`, text }
     })
 
+  const mail = convert('mail-text/zh-Hans.json', read(`${MAIL_TEXT}/zh-Hans.json`))
+  JSON.parse(mail)
+
   const stale = unused()
   if (stale.length > 0) {
     throw new Error(
@@ -147,6 +155,7 @@ export function generate(): Generated[] {
     { path: 'messages/zh-Hant.json', text: messages },
     { path: 'src/content/info/zh-Hant.ts', text: info },
     ...admin,
+    { path: `${MAIL_TEXT}/zh-Hant.json`, text: mail },
   ].map(({ path, text }) => ({ path, text: formatted(path, text) }))
 }
 
