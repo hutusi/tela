@@ -59,7 +59,7 @@ function relocate(path: string, vars: Record<string, string>) {
   }
   // Gate G2's shadow environment has no business in a test run.
   delete config.env
-  // A route makes `wrangler dev` present every request as tela.ainaive.com, and the edge then
+  // A route makes `wrangler dev` present every request as telaread.com, and the edge then
   // refuses the suite's own writes from localhost as cross-origin.
   delete config.routes
   delete config.configPath

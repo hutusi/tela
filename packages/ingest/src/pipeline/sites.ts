@@ -245,7 +245,7 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
     return fail(`could not fetch ${claim.home_url} (${why})`)
   }
   if (page.status !== 200 || !page.body) return fail(`home page returned HTTP ${page.status}`)
-  const base = (ctx.publicUrl ?? 'https://tela.ainaive.com').replace(/\/+$/, '')
+  const base = (ctx.publicUrl ?? 'https://telaread.com').replace(/\/+$/, '')
   const vouched = claim.vouched_by !== null
   const proof = vouched
     ? { method: claim.method }

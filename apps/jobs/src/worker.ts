@@ -55,7 +55,7 @@ function context(env: Env): JobsContext {
     db: d1Db(env.DB, schema),
     blobs: r2Blobs(env.BLOBS),
     ...(env.ASSETS ? { assets: r2Blobs(env.ASSETS) } : {}),
-    publicUrl: env.PUBLIC_URL ?? 'https://tela.ainaive.com',
+    publicUrl: env.PUBLIC_URL ?? 'https://telaread.com',
     ...(env.GRAVATAR_URL ? { gravatarUrl: env.GRAVATAR_URL } : {}),
     jobs: queueJobs<JobQueues>({
       fetch: env.FETCH_QUEUE,
@@ -65,7 +65,7 @@ function context(env: Env): JobsContext {
     }),
     clock: systemClock,
     http: createHttpClient({
-      userAgent: env.WORKER_USER_AGENT ?? 'Tela/0.1 (+https://tela.ainaive.com; feed reader)',
+      userAgent: env.WORKER_USER_AGENT ?? 'Tela/0.1 (+https://telaread.com; feed reader)',
       timeoutMs: Number(env.FETCH_TIMEOUT_MS ?? 20_000),
       // Politeness is the lease table's job now: one live lease per host, across every kind.
       politenessMs: 0,

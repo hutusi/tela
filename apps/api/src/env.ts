@@ -15,7 +15,7 @@ export type Env = {
     /** Test mode only (tela-jobs refuses otherwise): run its sweeps to completion now. */
     cycle(options?: { refetch?: boolean }): Promise<unknown>
   }
-  /** The public origin, e.g. https://tela.ainaive.com. */
+  /** The public origin, e.g. https://telaread.com. */
   PUBLIC_URL: string
   MAIL_FROM: string
   /** Secret: signs sessions and the cookie cache. tela-web holds the same value. */
