@@ -158,7 +158,7 @@ export default {
           ? {
               mail: resendMail({
                 apiKey: env.RESEND_API_KEY,
-                from: env.MAIL_FROM ?? 'Tela <noreply@ainaive.com>',
+                from: env.MAIL_FROM ?? 'Tela <noreply@telaread.com>',
               }),
               to: env.DIGEST_TO,
             }

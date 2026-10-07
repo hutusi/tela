@@ -31,7 +31,7 @@ directory.
 | `RESEND_API_KEY` | tela-api, tela-jobs (secret) | Sending-only Resend key for the verified domain: sign-in codes (api) and the weekly digest (jobs). Without it, api fails a code loudly and jobs skips the digest |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | tela-api (secret) | Tela's Google OAuth client (ADR 0036), a Web client whose redirect URI is `PUBLIC_URL/api/auth/callback/google`. Google sign-in is offered only while both are set |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | tela-api (secret) | Tela's GitHub OAuth app (ADR 0036), its callback URL `PUBLIC_URL/api/auth/callback/github`. GitHub sign-in is offered only while both are set |
-| `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@ainaive.com>` until Resend has verified telaread.com (*The address*) |
+| `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@telaread.com>`, a domain Resend has verified (ainaive.com is verified too, and was the sender until 2026-10-08) |
 | `PUBLIC_URL` | tela-api, tela-jobs | The one public origin, `https://telaread.com`: better-auth's base URL and trusted origin, claim `rel="me"` targets, the WebSub callback |
 | `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var. `/` now passes the Worker (the front page, ADR 0035), so both of its answers, a visitor's page and a member's plain shell, carry the header too |
 | `GRAVATAR_URL` | tela-api, tela-jobs | Where members' pictures are fetched from (tela-api, ADR 0032) and asked about (tela-jobs, ADR 0033), default `https://gravatar.com/avatar`. The e2e points it at its fixture server. A picture is cached for 30 days in each colo and browser under an address with its version, and turning the switch off cannot purge a colo: a copy already held stays, at an address nothing links to any more |
@@ -299,12 +299,11 @@ Keep tela-redirect on the old address for as long as `ainaive.com` is held.
    `www.telaread.com` from tela-redirect (Workers → tela-redirect → Domains), since it would
    redirect to a dark host.
 
-**Mail, after the move.** In Resend, add `telaread.com` (Domains → Add domain; it offers to
-write its DNS records into Cloudflare). Once it shows Verified, set `MAIL_FROM` to
-`Tela <noreply@telaread.com>` in `apps/api/wrangler.jsonc` and `apps/jobs/wrangler.jsonc`, and
-deploy tela-jobs, then tela-api. A sending key restricted to one domain cannot send from another:
-if `RESEND_API_KEY` was made for ainaive.com only, put a key that may send from telaread.com on
-both Workers first. Otherwise every code request fails, Resend refusing the sender.
+**Mail followed on 2026-10-08.** `telaread.com` is verified in Resend, and `MAIL_FROM` is
+`Tela <noreply@telaread.com>` on both Workers. A sending key restricted to one domain cannot send
+from another: if `RESEND_API_KEY` is ever replaced, it must be allowed to send from telaread.com,
+or every code request fails, Resend refusing the sender. Going back is the old `MAIL_FROM`
+(ainaive.com stays verified) and a deploy of tela-jobs and tela-api.
 
 ## Running locally
 

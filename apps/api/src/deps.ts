@@ -16,7 +16,7 @@ export type ApiConfig = {
   authSecret: string
   /** Bearer token for `/api/admin/*`; unset turns those routes off. */
   adminToken?: string
-  /** Sender of sign-in mail, e.g. `Tela <noreply@ainaive.com>`. */
+  /** Sender of sign-in mail, e.g. `Tela <noreply@telaread.com>`. */
   mailFrom: string
   /** Test mode: exposes the mail outbox. Never set in production. */
   testMode?: boolean
