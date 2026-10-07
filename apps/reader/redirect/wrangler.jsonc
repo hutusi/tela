@@ -13,5 +13,8 @@
     { "pattern": "tela.ainaive.com", "custom_domain": true },
     { "pattern": "www.telaread.com", "custom_domain": true }
   ],
-  "observability": { "enabled": true }
+  // Paths are logged, query strings never: an old `/join?code=…` or `/login?email=…&otp=…` link
+  // carries its code there, and anyone who reads Workers Logs could use it (the same reason
+  // tela-web never runs for `/*`).
+  "observability": { "enabled": true, "redact_query_string": true }
 }

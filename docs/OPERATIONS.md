@@ -252,6 +252,9 @@ navigation from its cache, so without the kill switch it would never see a redir
 `/sw.js` a redirect, either: the browser refuses a redirected worker script and keeps the old one.
 Keep tela-redirect on the old address for as long as `ainaive.com` is held.
 
+- **Logs** show which old paths are still visited, never their query strings
+  (`redact_query_string`): `/join?code=…` and the mail's `/login?…&otp=…` carry codes there.
+  Keep it on. `wrangler tail` is live and may show the full URL; tail it only when you must.
 - **Deploy:** `cd apps/reader/redirect && wrangler deploy -c wrangler.jsonc`. Without `-c`, wrangler
   also finds the deploy config `vite build` leaves in `apps/reader` and refuses to choose.
 - **A custom domain belongs to one Worker.** A deploy sets its Worker's domains to the list in its

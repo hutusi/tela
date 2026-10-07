@@ -4,6 +4,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import redirect, { KILL_SW, ORIGIN } from '../redirect/index'
 
 const at = (url: string, method = 'GET') => redirect.fetch(new Request(url, { method }))
@@ -39,6 +40,16 @@ describe('tela-redirect', () => {
     expect(res.headers.get('location')).toBeNull()
     expect(res.headers.get('content-type')).toContain('javascript')
     expect(await res.text()).toBe(KILL_SW)
+  })
+
+  test('its logs keep no query string, where an invite or sign-in code travels', () => {
+    const config = JSON.parse(
+      readFileSync(join(import.meta.dir, '..', 'redirect', 'wrangler.jsonc'), 'utf8')
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('//'))
+        .join('\n'),
+    ) as { observability: { enabled?: boolean; redact_query_string?: boolean } }
+    expect(config.observability.redact_query_string).toBe(true)
   })
 
   test('the kill switch is shell/kill-sw.js, code for code', () => {
