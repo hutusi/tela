@@ -27,7 +27,7 @@ every static-site rebuild.
     unread keeps its clock.
   - A read of a post already read keeps the first time but moves the clock to its own when it
     is later, and "mark all read" moves the clock of a post read by hand the same way (Codex
-    review, 2026-10-08). A read that changed nothing left the older read's time to decide, so an
+    review, 2026-10-07). A read that changed nothing left the older read's time to decide, so an
     unread made between two reads and pushed after both won over the newer one. The row then has
     a clock and outlives compaction, which takes two devices reading one post unaware of each
     other. Merging a feed (0028) carries a duplicate's read with that clock, as late as the later
