@@ -18,6 +18,8 @@ Browser ──▶ tela-web (edge, unpinned): static SPA, public pages, /o/* obje
               └── cron and queue handlers only call SELF.fetch(): placement pins fetch handlers
    tela-jobs ──▶ Bailian (translation) · Resend (mail) · healthchecks.io (dead-man's switch)
    apps/relay (Node, HK box, not provisioned until a feed needs it) ◀── signed POST /fetch
+
+tela.ainaive.com, www.telaread.com ──▶ tela-redirect: 301 to the same path on telaread.com; /sw.js the kill switch
 ```
 
 The reader never waits on that picture: every screen renders from the rows the device holds,
@@ -26,7 +28,8 @@ and a sync keeps them current behind it (ADR 0025).
 ## Monorepo
 
 ```
-apps/reader       tela-web: the Vite + React SPA (src/) and the edge Worker (worker/)
+apps/reader       tela-web: the Vite + React SPA (src/) and the edge Worker (worker/);
+                  tela-redirect, the old address's Worker (redirect/)
 apps/api          tela-api: Hono, better-auth, sync, every reader RPC
 apps/jobs         tela-jobs: the sweeps, queue consumers, the Ingest RPC, upkeep, backups, digest
 apps/relay        the China fetch relay, the one Node process (ADR 0008)

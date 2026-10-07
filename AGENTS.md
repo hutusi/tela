@@ -4,7 +4,7 @@ Guidance for AI coding agents (Claude Code, Codex, Cursor, …) working in this 
 
 ## Project
 
-Tela is a multilingual reader and gathering place for independent blogs: readers subscribe to feeds, bloggers claim theirs and see who reads them, and LLM translation shows a post beside its original block by block. Bun workspaces and TypeScript throughout; three Cloudflare Workers (tela-web at the edge, tela-api and tela-jobs pinned beside a D1 primary in Singapore), R2 and Queues, a Vite + React reader that renders from the device, and one Node process (the China relay) that runs only if a feed ever needs it.
+Tela is a multilingual reader and gathering place for independent blogs: readers subscribe to feeds, bloggers claim theirs and see who reads them, and LLM translation shows a post beside its original block by block. Bun workspaces and TypeScript throughout; three Cloudflare Workers (tela-web at the edge, tela-api and tela-jobs pinned beside a D1 primary in Singapore) and a fourth, tela-redirect, for Tela's old address; R2 and Queues; a Vite + React reader that renders from the device, and one Node process (the China relay) that runs only if a feed ever needs it.
 
 Decisions that look odd but are deliberate:
 
@@ -15,13 +15,13 @@ Decisions that look odd but are deliberate:
 - **Titles translate eagerly, bodies lazily and streamed**, so a reader never pays for a post they do not open and sees the first paragraphs in seconds (ADRs 0006, 0023).
 - **Portable by construction.** Only `packages/platform/src/cloudflare.ts` touches a binding; the suite runs everything on libSQL, memory blobs and an in-process queue, and the nightly export restores into any SQLite. Leaving Cloudflare is a weekend (ADR 0021).
 - **Background work is state, not messages.** A domain row says what is due, a lease says who holds it, and a queue only speeds that up (ADR 0020).
-- **The custom domain is the only public origin.** `workers.dev` is off on purpose: it is blocked in mainland China, so that URL is a dead link for part of the audience.
+- **`telaread.com` is the only public origin.** `workers.dev` is off on purpose: it is blocked in mainland China, so that URL is a dead link for part of the audience. The old address, `tela.ainaive.com`, and `www.telaread.com` only redirect there, through `tela-redirect`, whose `/sw.js` is the kill switch that retires the old address's shell worker: it must never become a redirect (ADR 0042).
 
 ## Repo map
 
 | Path | What |
 | --- | --- |
-| `apps/reader` | The reader, deployed as `tela-web`: one Vite project, one Worker. `src/` is the local-first SPA (ADR 0025): `store/` holds the device's rows in IndexedDB, syncs them and caches bodies; `views/` are the public pages, rendered by the SPA and by the edge (`src/ssr.tsx`); `lib/anchor.ts` and `lib/use-highlights.ts` are highlights (ADR 0026); `admin/` is the admin console (ADR 0039), its own lazy chunk that reads tela-api over the network, with its own catalogues in `admin/messages`. `worker/edge.ts` is the one public Worker, at the edge and with no D1: `/api/*` to tela-api (writes must carry its origin), `/o/*` objects and `/o/bundle` from R2 through the colo cache, the `/img/<key>/<i>` proxy, and the public pages. `e2e/` runs all three Workers in one `wrangler dev` |
+| `apps/reader` | The reader, deployed as `tela-web`: one Vite project, one Worker. `src/` is the local-first SPA (ADR 0025): `store/` holds the device's rows in IndexedDB, syncs them and caches bodies; `views/` are the public pages, rendered by the SPA and by the edge (`src/ssr.tsx`); `lib/anchor.ts` and `lib/use-highlights.ts` are highlights (ADR 0026); `admin/` is the admin console (ADR 0039), its own lazy chunk that reads tela-api over the network, with its own catalogues in `admin/messages`. `worker/edge.ts` is the one public Worker, at the edge and with no D1: `/api/*` to tela-api (writes must carry its origin), `/o/*` objects and `/o/bundle` from R2 through the colo cache, the `/img/<key>/<i>` proxy, and the public pages. `redirect/` is `tela-redirect`, the Worker on the old address and `www` (ADR 0042). `e2e/` runs tela-web, tela-api and tela-jobs in one `wrangler dev` |
 | `apps/api` | The `tela-api` Worker (ADR 0024): Hono, pinned beside D1, no public route. `src/app.ts` builds every route from portable deps (`createApp`), so the bun suite runs it on libSQL; `src/auth.ts` is better-auth (email codes, passwords, Google and GitHub, the invitation gate, Drizzle adapter over `TelaDb`); `src/mail.ts` is every mail, its words in `src/mail-text/` and its language chosen by `src/mail-locale.ts`; `src/routes/invites.ts` is joining with an invite code, a member's five and the operator's codes; `src/routes/admin/` is the admin console's API (ADR 0039): the gate, `act` and `undo` in `index.ts`, and one module per group of areas (`library`, `members`, `running`); `src/sync/` is the pull and the push; `src/worker.ts` is the Cloudflare entry; `scripts/admin.ts` is `bun run admin` (invite, code, codes, revoke, curate, grant, ungrant) |
 | `apps/jobs` | The `tela-jobs` Worker. `src/kinds.ts` is every kind of background work (due query, lease, backoff, queue, handler). `src/runner.ts` holds `tick` and `runJob`, both portable. `src/ops.ts` is the health check, the dead-man's ping and the weekly digest. `src/worker.ts` is the Cloudflare entry: its cron and queue handlers only dispatch to the Singapore-pinned fetch handler over `SELF`, which also exports the `Ingest` RPC. `src/portable.ts` runs the same work on a timer |
 | `apps/relay` | The China fetch relay (ADR 0008) as its own Node app: `src/server.ts` over `node:http`, `src/safe-fetch.ts` (DNS-pinned undici), `src/config.ts`, and a Dockerfile. It is the only Node process Tela would run, and no box runs it until a feed times out from Cloudflare (OPERATIONS.md) |
@@ -56,6 +56,7 @@ bun run admin curate                 # add and feature the curated blogs (apps/a
 bun run admin grant <email>          # open the admin console (/admin) to a member; ungrant closes it (ADR 0039)
 cd apps/jobs && wrangler deploy      # deploy order: tela-jobs, tela-api, then tela-web
 cd apps/reader && bunx vite build && wrangler deploy
+cd apps/reader/redirect && wrangler deploy -c wrangler.jsonc   # tela-redirect (ADR 0042), after tela-web
 ```
 
 ## Development workflow
@@ -64,7 +65,7 @@ cd apps/reader && bunx vite build && wrangler deploy
 - **Commit in focused slices**, keeping lint green at each so branches stay bisectable. Conventional Commits. **No `Co-Authored-By` trailers and no AI-attribution lines anywhere** — commits or PR descriptions.
 - **Explain the why in the commit body.** The subject says what changed; the body says why, and names any non-obvious trade-off. `git log` should make sense without opening the PR.
 - **Docs and tests ship *with* the change.** The Docs section below says what each page tracks; `test/docs.test.ts` catches the drift that can be caught mechanically, which is not most of it.
-- **Verify gate**, the list CI runs: `bun run lint && bun run typecheck && bun run test && bun run test:workers && bun run e2e`. CI also bundles the three Workers and builds the relay image; run those when you touch build config, a `wrangler.jsonc`, the Dockerfile, or a dependency.
+- **Verify gate**, the list CI runs: `bun run lint && bun run typecheck && bun run test && bun run test:workers && bun run e2e`. CI also bundles the four Workers and builds the relay image; run those when you touch build config, a `wrangler.jsonc`, the Dockerfile, or a dependency.
 - **Pushing, opening PRs and deploying are user-authorized** — don't do any of them unless asked.
 
 ## Hard invariants — do not break casually
@@ -157,7 +158,7 @@ Defects that already cost time here, not hypotheticals.
 Update whichever covers what you changed, in the same change:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the living system map. Tracks: schema changes, new kinds of work, new routes, new safeguards.
-- [docs/adr/](docs/adr/) — decision records 0001–0041. A reversed decision gets a superseding ADR, not a silent edit.
+- [docs/adr/](docs/adr/) — decision records 0001–0042. A reversed decision gets a superseding ADR, not a silent edit.
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — provisioning, deploys and day-2 runbooks. Anything touching env vars, secrets, deploys, rate limits or failure signatures lands here.
 - [docs/DESIGN.md](docs/DESIGN.md) — tokens, layout rules, components, the i18n string convention.
 - [packages/content/README.md](packages/content/README.md) — the normative spec for sanitization, blocks and hashing. Changing a rule here means bumping `NORM_VERSION`.

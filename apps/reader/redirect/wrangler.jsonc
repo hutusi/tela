@@ -1,0 +1,17 @@
+{
+  // tela-redirect (ADR 0042): the old address and the `www` name, each redirected to the same
+  // path on telaread.com, with the shell's kill switch at /sw.js. No bindings, no assets: it
+  // runs for every request, which is why it is not tela-web (`run_worker_first` never lists
+  // `/*`). Deploy with `cd apps/reader/redirect && wrangler deploy -c wrangler.jsonc`, after
+  // tela-web: without `-c`, wrangler finds the deploy config `vite build` left in apps/reader and
+  // refuses to choose.
+  "name": "tela-redirect",
+  "main": "index.ts",
+  "compatibility_date": "2026-06-01",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "tela.ainaive.com", "custom_domain": true },
+    { "pattern": "www.telaread.com", "custom_domain": true }
+  ],
+  "observability": { "enabled": true }
+}
