@@ -31,9 +31,9 @@ jobs:
         run: bun run test:workers
 
   build-workers:
-    # The three Workers, bundled as a deploy would (no credentials needed): a Node-only import or
+    # The four Workers, bundled as a deploy would (no credentials needed): a Node-only import or
     # a missing entrypoint fails here, not on deploy day.
-    name: Build tela-web, tela-api and tela-jobs (dry run), and the relay image
+    name: Build tela-web, tela-api, tela-jobs and tela-redirect (dry run), and the relay image
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -51,6 +51,8 @@ jobs:
       # tela-web is built by Vite with the SPA; wrangler then deploys the config the build wrote.
       - name: Build tela-web and bundle it
         run: cd apps/reader && bunx vite build && ./node_modules/.bin/wrangler deploy --dry-run --outdir "$RUNNER_TEMP/reader"
+      - name: Bundle tela-redirect
+        run: cd apps/reader/redirect && ../node_modules/.bin/wrangler deploy -c wrangler.jsonc --dry-run --outdir "$RUNNER_TEMP/redirect"
       - uses: docker/setup-buildx-action@v4
       - name: Build the relay image
         uses: docker/build-push-action@v7

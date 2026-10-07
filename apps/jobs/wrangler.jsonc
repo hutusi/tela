@@ -22,7 +22,7 @@
   "r2_buckets": [
     // Members-only content objects (served through tela-web's /o/*).
     { "binding": "BLOBS", "bucket_name": "tela-content" },
-    // Public favicons, the existing bucket behind assets.tela.ainaive.com.
+    // Public favicons, served at assets.telaread.com (and still at assets.tela.ainaive.com).
     { "binding": "ASSETS", "bucket_name": "tela-assets" }
   ],
   "services": [{ "binding": "SELF", "service": "tela-jobs" }],
@@ -68,10 +68,10 @@
   // Every minute: the sweeps. Nightly: upkeep and the backup. Monday 08:00 UTC: the digest.
   "triggers": { "crons": ["* * * * *", "17 3 * * *", "0 8 * * 1"] },
   "vars": {
-    "WORKER_USER_AGENT": "Tela/0.1 (+https://tela.ainaive.com; feed reader)",
+    "WORKER_USER_AGENT": "Tela/0.1 (+https://telaread.com; feed reader)",
     "FETCH_TIMEOUT_MS": "20000",
     "WEBSUB_ENABLED": "0",
-    "PUBLIC_URL": "https://tela.ainaive.com",
+    "PUBLIC_URL": "https://telaread.com",
     "MAIL_FROM": "Tela <noreply@ainaive.com>",
     // The day's ceiling on background title translation, kept in the config so every deploy
     // carries it: until 2026-10-04 it was set nowhere, and titles ran uncapped. A new reading
@@ -135,10 +135,10 @@
       },
       "triggers": { "crons": ["* * * * *", "17 3 * * *"] },
       "vars": {
-        "WORKER_USER_AGENT": "Tela/0.1 (+https://tela.ainaive.com; feed reader)",
+        "WORKER_USER_AGENT": "Tela/0.1 (+https://telaread.com; feed reader)",
         "FETCH_TIMEOUT_MS": "20000",
         "WEBSUB_ENABLED": "0",
-        "PUBLIC_URL": "https://tela.ainaive.com"
+        "PUBLIC_URL": "https://telaread.com"
       }
     }
   }

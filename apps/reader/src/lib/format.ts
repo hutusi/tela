@@ -77,7 +77,7 @@ export function displayHost(input: string): string {
 }
 
 /** The public bucket favicons are served from (the jobs Worker fills it). */
-const ASSETS_BASE = (import.meta.env?.VITE_ASSETS_URL ?? 'https://assets.tela.ainaive.com').replace(
+const ASSETS_BASE = (import.meta.env?.VITE_ASSETS_URL ?? 'https://assets.telaread.com').replace(
   /\/+$/,
   '',
 )

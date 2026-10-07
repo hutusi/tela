@@ -9,6 +9,10 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **Tela lives at telaread.com.** The reader moved from `tela.ainaive.com` to a domain of its own.
+  The old address and `www` go to the same page on telaread.com, and a browser that kept the old
+  site's app is made to let it go and follow (ADR 0042). Members sign in once more on the new
+  address.
 - **The local-first stack.** Tela moved all-in onto Cloudflare — three Workers, D1, R2, Queues
   and Cron — and Fly, Supabase, Hyperdrive, Next.js and pg-boss went (ADR 0020).
   - **The reader renders from the device.** Every screen reads the rows the browser holds in

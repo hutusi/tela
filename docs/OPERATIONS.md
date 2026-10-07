@@ -1,19 +1,20 @@
 # Operations
 
 How Tela is provisioned, deployed and kept running: three Cloudflare Workers, D1, R2 and Queues
-(ADRs 0020–0027). Until the cutover below, tela.ainaive.com still serves the Postgres app from
-`main`; this branch is the stack that replaces it.
+(ADRs 0020–0027), at https://telaread.com. The old address, tela.ainaive.com, redirects there
+through a fourth Worker (*The address*, ADR 0042).
 
 ## Environments
 
 | Component | Where | Notes |
 |---|---|---|
-| tela-web | Worker at the reader's edge, unpinned (`apps/reader`) | The only public Worker: static SPA, public pages, `/o/*`, `/img/*`, the `/api/*` forward. Custom domain only; `workers.dev` stays off (blocked in mainland China) |
+| tela-web | Worker at the reader's edge, unpinned (`apps/reader`) | The only public Worker: static SPA, public pages, `/o/*`, `/img/*`, the `/api/*` forward. Custom domain `telaread.com` only; `workers.dev` stays off (blocked in mainland China) |
 | tela-api | Worker pinned to `aws:ap-southeast-1` (`apps/api`) | Sign-in, sync, mutations, every reader RPC. No public route: tela-web reaches it over a service binding |
 | tela-jobs | Worker pinned to `aws:ap-southeast-1` (`apps/jobs`) | Crons, queue consumers, the `Ingest` RPC. No public route |
+| tela-redirect | Worker, no bindings (`apps/reader/redirect`) | `tela.ainaive.com` and `www.telaread.com`: a redirect to the same path on telaread.com, and the shell's kill switch at `/sw.js` (*The address*) |
 | D1 `tela` | Primary in Singapore (`--location apac`) | 6–10 ms from the pinned Workers; Time Travel keeps 30 days |
 | R2 `tela-content` | Private | Content, translation and chunk objects (served by tela-web to members), raw item HTML, members' uploaded pictures (`avatars/`, served by tela-api at `/avatar/…`, ADR 0033), and the nightly `backup/`. The pictures are member data the D1 export does not hold: a move off Cloudflare copies `avatars/` too |
-| R2 `tela-assets` | Public at `assets.tela.ainaive.com` | Favicons |
+| R2 `tela-assets` | Public at `assets.telaread.com`, and still at `assets.tela.ainaive.com` | Favicons |
 | Queues | `tela-fetch`, `tela-extract`, `tela-translate`, `tela-misc`, DLQ `tela-dlq` | Accelerators only: every job is also found from state by the minute sweep |
 | Relay | Not provisioned (`apps/relay`) | A Node box in HK, only once a feed times out from Cloudflare; see *The relay* |
 | Outside | Resend (mail), Bailian (translation), healthchecks.io (the dead-man's switch) | |
@@ -30,8 +31,8 @@ directory.
 | `RESEND_API_KEY` | tela-api, tela-jobs (secret) | Sending-only Resend key for the verified domain: sign-in codes (api) and the weekly digest (jobs). Without it, api fails a code loudly and jobs skips the digest |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | tela-api (secret) | Tela's Google OAuth client (ADR 0036), a Web client whose redirect URI is `PUBLIC_URL/api/auth/callback/google`. Google sign-in is offered only while both are set |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | tela-api (secret) | Tela's GitHub OAuth app (ADR 0036), its callback URL `PUBLIC_URL/api/auth/callback/github`. GitHub sign-in is offered only while both are set |
-| `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@ainaive.com>` |
-| `PUBLIC_URL` | tela-api, tela-jobs | The one public origin: better-auth's base URL and trusted origin, claim `rel="me"` targets, the WebSub callback |
+| `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@ainaive.com>` until Resend has verified telaread.com (*The address*) |
+| `PUBLIC_URL` | tela-api, tela-jobs | The one public origin, `https://telaread.com`: better-auth's base URL and trusted origin, claim `rel="me"` targets, the WebSub callback |
 | `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var. `/` now passes the Worker (the front page, ADR 0035), so both of its answers, a visitor's page and a member's plain shell, carry the header too |
 | `GRAVATAR_URL` | tela-api, tela-jobs | Where members' pictures are fetched from (tela-api, ADR 0032) and asked about (tela-jobs, ADR 0033), default `https://gravatar.com/avatar`. The e2e points it at its fixture server. A picture is cached for 30 days in each colo and browser under an address with its version, and turning the switch off cannot purge a colo: a copy already held stays, at an address nothing links to any more |
 | `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, and fetches to private addresses. Never deployed |
@@ -51,8 +52,8 @@ directory.
 | `RELAY_SECRET`, `RELAY_SECRET_PREVIOUS`, `RELAY_PORT` | the relay | Accepted secrets (the previous one during rotation) and the listen port (8787) |
 | `DEADMAN_URL` | tela-jobs (secret) | The healthchecks.io ping URL; see *Knowing it runs* |
 | `DIGEST_TO` | tela-jobs (secret) | Who gets the Monday digest (the owner). Unset, it is built but not sent |
-| `VITE_ASSETS_URL` | tela-web build | Public base of `tela-assets`; defaults to `https://assets.tela.ainaive.com` |
-| `TELA_URL` | the admin script | Where `bun run admin` talks to; defaults to `https://tela.ainaive.com` |
+| `VITE_ASSETS_URL` | tela-web build | Public base of `tela-assets`; defaults to `https://assets.telaread.com` |
+| `TELA_URL` | the admin script | Where `bun run admin` talks to; defaults to `https://telaread.com` |
 
 ## Provisioning, once per account
 
@@ -69,7 +70,8 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
 2. **R2:** `wrangler r2 bucket create tela-content --location apac`, and a lifecycle rule for the
    streamed-translation chunks, which are only read while a translation runs:
    `wrangler r2 bucket lifecycle add tela-content chunks tc/ --expire-days 7`. `tela-assets`
-   already exists, behind `assets.tela.ainaive.com`.
+   already exists, public at `assets.telaread.com` (an R2 custom domain) and at
+   `assets.tela.ainaive.com`.
 3. **Queues:** `wrangler queues create tela-fetch`, and the same for `tela-extract`,
    `tela-translate`, `tela-misc` and the alarm-only `tela-dlq`.
 4. **Schema:** `cd apps/api && wrangler d1 migrations apply tela --remote`. The files are
@@ -90,7 +92,9 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
    3. `cd apps/reader && bunx vite build && wrangler deploy`. Vite builds the SPA and the Worker
       together and writes the config wrangler deploys (`dist/tela_web/wrangler.json`). The
       custom domain is the `routes` entry in `apps/reader/wrangler.jsonc`, so the deploy claims
-      tela.ainaive.com itself.
+      telaread.com itself.
+   4. `cd apps/reader/redirect && wrangler deploy -c wrangler.jsonc`: tela-redirect, which holds
+      the old address and `www` (*The address*). It changes rarely; deploy it only when it does.
 
    **A release that bumps `MIN_CLIENT` reverses the last two:** tela-web first, then tela-api
    within minutes. A shell on the new protocol still works against the old tela-api, but the new
@@ -176,7 +180,7 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        - a linked choice on one device changes both languages on another;
        - `/admin/discover` opens on To review;
        - `/discover` shows no count below three;
-       - `curl -sI https://tela.ainaive.com/manifest.webmanifest` is `application/manifest+json`;
+       - `curl -sI https://telaread.com/manifest.webmanifest` is `application/manifest+json`;
        - a code requested from a French browser arrives in French.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
@@ -236,6 +240,71 @@ compare and step 1's cleanup left to finish beside the new stack; steps 6–9 ar
    - the R2 API token the Fly worker used.
 
    Then merge this branch.
+
+## The address
+
+Tela is served from `https://telaread.com`, the apex, by tela-web (ADR 0042). Two hosts only
+redirect there, through tela-redirect (`apps/reader/redirect`, no bindings): the old address
+`tela.ainaive.com` and `www.telaread.com`. Every request goes to the same path and query on
+telaread.com, 301 (308 for a write). `/sw.js` alone is answered 200 with the shell's kill switch,
+which retires the service worker a browser kept from the old address: that worker answers every
+navigation from its cache, so without the kill switch it would never see a redirect. Never make
+`/sw.js` a redirect, either: the browser refuses a redirected worker script and keeps the old one.
+Keep tela-redirect on the old address for as long as `ainaive.com` is held.
+
+- **Logs** show which old paths are still visited, never their query strings
+  (`redact_query_string`): `/join?code=…` and the mail's `/login?…&otp=…` carry codes there.
+  Keep it on. `wrangler tail` is live and may show the full URL; tail it only when you must.
+- **Deploy:** `cd apps/reader/redirect && wrangler deploy -c wrangler.jsonc`. Without `-c`, wrangler
+  also finds the deploy config `vite build` leaves in `apps/reader` and refuses to choose.
+- **A custom domain belongs to one Worker.** A deploy sets its Worker's domains to the list in its
+  config: it takes over a listed domain from whichever Worker holds it (a deploy without a TTY does
+  so without asking) and releases any it no longer lists. So tela.ainaive.com never goes back into
+  tela-web's `routes` unless it is a rollback.
+- **Favicons** are at `assets.telaread.com`, an R2 custom domain on `tela-assets`.
+  `assets.tela.ainaive.com` stays attached to the same bucket.
+- **Check:** `curl -sI 'https://tela.ainaive.com/@hutusi?tab=liked'` is a 301 to
+  `https://telaread.com/@hutusi?tab=liked`, and `curl -s https://tela.ainaive.com/sw.js` is the kill
+  switch (it calls `registration.unregister()`).
+
+**The move, once:**
+
+1. In the telaread.com zone: Always Use HTTPS on, and the minimum TLS version ainaive.com uses.
+   Nothing may sit on `@`, `www` or `assets` in its DNS: a Worker deploy or an R2 domain
+   overwrites a record there.
+2. `wrangler r2 bucket domain add tela-assets --domain assets.telaread.com --zone-id <zone id>`
+   (or R2 → tela-assets → Settings → Custom Domains). A favicon key must answer 200 there before
+   tela-web deploys, since the new build asks for favicons there.
+3. Open Tela on every device, online, so nothing is left unsent. Cookies and IndexedDB belong to
+   an origin: the copy on the old address is never read again, and every member signs in afresh
+   on telaread.com, each device starting over.
+4. Deploy, one at a time: tela-jobs, tela-api, tela-web, tela-redirect. Two short gaps are
+   expected:
+   - tela-web's deploy releases tela.ainaive.com, which is dark until tela-redirect's deploy
+     takes it, about a minute later;
+   - from the tela-api deploy until tela-web's, a sign-in on either host fails the origin check,
+     since better-auth trusts only `PUBLIC_URL`.
+5. Check:
+   - `https://telaread.com/` is 200 with `x-robots-tag: noindex`; `/api/health` answers `ok` and
+     `/api/v1/me` 401 signed out; `http://telaread.com/` redirects to https;
+   - the two redirects above, and `https://www.telaread.com/discover`;
+   - a favicon from assets.telaread.com;
+   - a code sign-in, whose mail links to telaread.com;
+   - one browser that had the old worker: reopening `tela.ainaive.com/reading` ends at
+     `telaread.com/reading`, and DevTools → Application shows no service worker and no
+     `tela-shell-v3` cache left for tela.ainaive.com.
+6. **Rollback:** revert the move's commit and deploy tela-api and tela-web from it. tela-web
+   takes tela.ainaive.com back from tela-redirect and releases telaread.com. A browser that took
+   the kill switch registers the shell worker again on its next visit. Then remove
+   `www.telaread.com` from tela-redirect (Workers → tela-redirect → Domains), since it would
+   redirect to a dark host.
+
+**Mail, after the move.** In Resend, add `telaread.com` (Domains → Add domain; it offers to
+write its DNS records into Cloudflare). Once it shows Verified, set `MAIL_FROM` to
+`Tela <noreply@telaread.com>` in `apps/api/wrangler.jsonc` and `apps/jobs/wrangler.jsonc`, and
+deploy tela-jobs, then tela-api. A sending key restricted to one domain cannot send from another:
+if `RESEND_API_KEY` was made for ainaive.com only, put a key that may send from telaread.com on
+both Workers first. Otherwise every code request fails, Resend refusing the sender.
 
 ## Running locally
 
@@ -343,7 +412,7 @@ is tela-api.
   readers on the shell before, and the next navigation tries again.
 
   **After a deploy that changes the shell**, check one browser that had the old worker: open
-  tela.ainaive.com, then DevTools → Application → Service workers shows the new one activated,
+  telaread.com, then DevTools → Application → Service workers shows the new one activated,
   and Cache Storage → `tela-shell-v3` → `/` is the plain shell: its body has an empty
   `<div id="root"></div>` and no `tela-data`. A `/` holding `tela-data` is a rendered page kept as
   the shell, which would paint the front page over every screen: bump `SHELL` and deploy again.
@@ -378,15 +447,15 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
     a hold; `redeemed_at`: a place; `settled_at`, `user_id`: the account it made), and who made
     it: `select created_by, max_uses, revoked_at from invite_codes where code = '<CODE>'`.
 - **Google and GitHub apps** (ADR 0036). Register one app per provider for production and a
-  separate one for development, so a dev secret never signs anything in on tela.ainaive.com:
+  separate one for development, so a dev secret never signs anything in on telaread.com:
   - **Google** (Google Cloud console → APIs & Services): the OAuth consent screen as *External*,
     with the app name, the support address, the privacy policy URL
-    `https://tela.ainaive.com/privacy`, and `ainaive.com` among the authorized domains; scopes
+    `https://telaread.com/privacy`, and `telaread.com` among the authorized domains; scopes
     `openid` and `email` only. Then **publish it to production**: while it is in *Testing* only
     the listed test users can sign in. The credential is a *Web application* client whose
-    authorized redirect URI is `https://tela.ainaive.com/api/auth/callback/google`, nothing else.
-  - **GitHub** (Settings → Developer settings → OAuth Apps): homepage `https://tela.ainaive.com`,
-    authorization callback URL `https://tela.ainaive.com/api/auth/callback/github`.
+    authorized redirect URI is `https://telaread.com/api/auth/callback/google`, nothing else.
+  - **GitHub** (Settings → Developer settings → OAuth Apps): homepage `https://telaread.com`,
+    authorization callback URL `https://telaread.com/api/auth/callback/github`.
   - **Development:** the same, with `http://localhost:5173/api/auth/callback/google` (or
     `/github`) as the redirect URI, in `apps/api/.dev.vars` (see *Running locally*).
   - **Secrets**, on tela-api: `cd apps/api`, then `wrangler secret put GOOGLE_CLIENT_ID`,

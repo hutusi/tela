@@ -151,7 +151,7 @@ export const en = {
         heading: "What's public",
         blocks: [
           {
-            p: "Anyone can see your profile at tela.ainaive.com/@yourhandle. It shows your handle, display name, bio and picture, the month you joined, how many people you follow and how many follow you, how many posts you've recommended, the blogs you've claimed, and the posts you recommend with your notes. It also carries the random account number Tela uses for follows.",
+            p: "Anyone can see your profile at telaread.com/@yourhandle. It shows your handle, display name, bio and picture, the month you joined, how many people you follow and how many follow you, how many posts you've recommended, the blogs you've claimed, and the posts you recommend with your notes. It also carries the random account number Tela uses for follows.",
           },
           {
             list: [
@@ -329,7 +329,7 @@ export const en = {
         heading: 'Who we are',
         blocks: [
           {
-            p: 'Tela (tela.ainaive.com) is a personal, non-commercial project made by [hutusi](https://hutusi.com) under the name [AI Naive](https://ainaive.com). It\'s free. "We" on these pages means the person who runs it.',
+            p: 'Tela (telaread.com) is a personal, non-commercial project made by [hutusi](https://hutusi.com) under the name [AI Naive](https://ainaive.com). It\'s free. "We" on these pages means the person who runs it.',
           },
         ],
       },

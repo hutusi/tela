@@ -15,7 +15,7 @@ import { parseArgs } from 'node:util'
 import { CURATED_SITES } from './curated-sites'
 
 const [command, ...args] = process.argv.slice(2)
-const base = (process.env.TELA_URL ?? 'https://tela.ainaive.com').replace(/\/$/, '')
+const base = (process.env.TELA_URL ?? 'https://telaread.com').replace(/\/$/, '')
 const token = process.env.ADMIN_TOKEN
 
 function usage(): never {

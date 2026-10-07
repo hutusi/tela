@@ -32,7 +32,7 @@
     ]
   },
   "vars": {
-    "PUBLIC_URL": "https://tela.ainaive.com",
+    "PUBLIC_URL": "https://telaread.com",
     "MAIL_FROM": "Tela <noreply@ainaive.com>"
   }
   // Secrets (wrangler secret put): AUTH_SECRET (shared with tela-web), ADMIN_TOKEN, RESEND_API_KEY.

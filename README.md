@@ -7,7 +7,7 @@ original, so anyone can read the world's indie blogs.
 
 Every feed here has a specific human behind it.
 
-Tela is in private testing: the site is at <https://tela.ainaive.com>, and every new account
+Tela is in private testing: the site is at <https://telaread.com>, and every new account
 needs an invitation, an invite code from a member (each may invite five people) or from the person
 who runs it.
 

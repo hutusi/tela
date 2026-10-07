@@ -157,7 +157,7 @@ export const fr = {
         heading: 'Ce qui est public',
         blocks: [
           {
-            p: 'Tout le monde peut voir votre profil à l’adresse tela.ainaive.com/@votreidentifiant. Il montre votre identifiant, votre nom affiché, votre bio et votre photo, le mois de votre arrivée, combien de personnes vous suivez et combien vous suivent, combien d’articles vous avez recommandés, les blogs que vous avez revendiqués, et les articles que vous recommandez avec vos mots. Il porte aussi le numéro de compte aléatoire que Tela utilise pour les suivis.',
+            p: 'Tout le monde peut voir votre profil à l’adresse telaread.com/@votreidentifiant. Il montre votre identifiant, votre nom affiché, votre bio et votre photo, le mois de votre arrivée, combien de personnes vous suivez et combien vous suivent, combien d’articles vous avez recommandés, les blogs que vous avez revendiqués, et les articles que vous recommandez avec vos mots. Il porte aussi le numéro de compte aléatoire que Tela utilise pour les suivis.',
           },
           {
             list: [
@@ -335,7 +335,7 @@ export const fr = {
         heading: 'Qui nous sommes',
         blocks: [
           {
-            p: 'Tela (tela.ainaive.com) est un projet personnel et non commercial réalisé par [hutusi](https://hutusi.com) sous le nom d’[AI Naive](https://ainaive.com). Il est gratuit. « Nous », sur ces pages, désigne la personne qui le gère.',
+            p: 'Tela (telaread.com) est un projet personnel et non commercial réalisé par [hutusi](https://hutusi.com) sous le nom d’[AI Naive](https://ainaive.com). Il est gratuit. « Nous », sur ces pages, désigne la personne qui le gère.',
           },
         ],
       },

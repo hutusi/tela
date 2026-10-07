@@ -9,8 +9,12 @@ self.addEventListener('activate', (event) => {
     (async () => {
       for (const key of await caches.keys()) await caches.delete(key)
       await self.registration.unregister()
-      for (const client of await self.clients.matchAll({ type: 'window' }))
-        client.navigate(client.url)
+      // Awaited, so the worker is not stopped before every tab has been sent on its way.
+      await Promise.all(
+        (await self.clients.matchAll({ type: 'window' })).map((client) =>
+          client.navigate(client.url).catch(() => null),
+        ),
+      )
     })(),
   )
 })

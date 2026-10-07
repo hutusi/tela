@@ -151,7 +151,7 @@ export const zhHant = {
         heading: '哪些是公開的',
         blocks: [
           {
-            p: '任何人都可以在 tela.ainaive.com/@你的使用者名稱 看到你的個人頁。上面有你的使用者名稱、顯示名稱、簡介和頭像，你加入的月份，你追蹤了多少人、有多少人追蹤你，你推薦了多少篇文章，你認領的部落格，以及你推薦的文章和推薦語。它還帶有 Tela 在追蹤功能裡使用的一串隨機帳戶編號。',
+            p: '任何人都可以在 telaread.com/@你的使用者名稱 看到你的個人頁。上面有你的使用者名稱、顯示名稱、簡介和頭像，你加入的月份，你追蹤了多少人、有多少人追蹤你，你推薦了多少篇文章，你認領的部落格，以及你推薦的文章和推薦語。它還帶有 Tela 在追蹤功能裡使用的一串隨機帳戶編號。',
           },
           {
             list: [
@@ -329,7 +329,7 @@ export const zhHant = {
         heading: '我們是誰',
         blocks: [
           {
-            p: 'Tela（tela.ainaive.com）是 [hutusi](https://hutusi.com) 以 [AI Naive](https://ainaive.com) 之名製作的個人非商業專案，免費使用。這些頁面裡的「我們」，指的是營運它的那個人。',
+            p: 'Tela（telaread.com）是 [hutusi](https://hutusi.com) 以 [AI Naive](https://ainaive.com) 之名製作的個人非商業專案，免費使用。這些頁面裡的「我們」，指的是營運它的那個人。',
           },
         ],
       },

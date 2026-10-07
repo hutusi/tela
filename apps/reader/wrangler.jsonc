@@ -6,9 +6,11 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  // The custom domain is the only public origin: workers.dev is blocked in mainland China.
+  // The custom domain is the only public origin: workers.dev is blocked in mainland China. The old
+  // address and www are tela-redirect's (`redirect/`, ADR 0042): never list them here, since a
+  // deploy takes every domain it lists from whichever Worker holds it.
   "workers_dev": false,
-  "routes": [{ "pattern": "tela.ainaive.com", "custom_domain": true }],
+  "routes": [{ "pattern": "telaread.com", "custom_domain": true }],
   "observability": { "enabled": true },
   // The SPA's static assets answer every other path for free, without running the Worker; a
   // path with no asset is the app itself. The Worker runs first only where it has work to do:

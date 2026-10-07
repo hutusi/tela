@@ -151,7 +151,7 @@ export const zhHans = {
         heading: '哪些是公开的',
         blocks: [
           {
-            p: '任何人都可以在 tela.ainaive.com/@你的用户名 看到你的个人页。上面有你的用户名、显示名、简介和头像，你加入的月份，你关注了多少人、有多少人关注你，你推荐了多少篇文章，你认领的博客，以及你推荐的文章和推荐语。它还带有 Tela 在关注功能里使用的一串随机账户编号。',
+            p: '任何人都可以在 telaread.com/@你的用户名 看到你的个人页。上面有你的用户名、显示名、简介和头像，你加入的月份，你关注了多少人、有多少人关注你，你推荐了多少篇文章，你认领的博客，以及你推荐的文章和推荐语。它还带有 Tela 在关注功能里使用的一串随机账户编号。',
           },
           {
             list: [
@@ -329,7 +329,7 @@ export const zhHans = {
         heading: '我们是谁',
         blocks: [
           {
-            p: 'Tela（tela.ainaive.com）是 [hutusi](https://hutusi.com) 以 [AI Naive](https://ainaive.com) 之名制作的个人非商业项目，免费使用。这些页面里的「我们」，指的是运行它的那个人。',
+            p: 'Tela（telaread.com）是 [hutusi](https://hutusi.com) 以 [AI Naive](https://ainaive.com) 之名制作的个人非商业项目，免费使用。这些页面里的「我们」，指的是运行它的那个人。',
           },
         ],
       },
