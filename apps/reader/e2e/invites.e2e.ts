@@ -55,6 +55,7 @@ test('a member makes a code, a visitor joins with its link, and the member sees 
   await guest.getByTestId('login-submit').click()
   await expect(guest.getByTestId('login-code')).toBeVisible()
   await guest.getByTestId('login-code').fill(await latestCode(request, email))
+  await guest.getByTestId('join-password').fill(`joined on ${stamp}`)
   await guest.getByTestId('login-submit').click()
   await expect(guest).toHaveURL(/\/discover/)
   // The menu is drawn once the session is known; its handle comes with the first pull after.
@@ -106,7 +107,6 @@ test('a member sets a password in Settings, then logs in with it', async ({ brow
   // The log-in sheet, by password this time.
   await page.goto('/login')
   await page.getByTestId('login-email').fill(email)
-  await page.getByRole('button', { name: /log in with a password/i }).click()
   await page.locator('input[type="password"]').fill(password)
   await page.getByTestId('login-submit').click()
   await expect(page).toHaveURL(/\/reading$/)

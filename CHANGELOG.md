@@ -9,6 +9,9 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **Log in opens on the password.** The sheet asks for the address and the password, so a
+  password manager fills both, and *Email me a code instead* is under the button. Joining by
+  email chooses a password, at the code step or from the mail's link (ADR 0043).
 - **Tela lives at telaread.com.** The reader moved from `tela.ainaive.com` to a domain of its own.
   The old address and `www` go to the same page on telaread.com, and a browser that kept the old
   site's app is made to let it go and follow (ADR 0042). Members sign in once more on the new

@@ -4,8 +4,8 @@
  *
  * - **An emailed code**, which is also how an account starts. Joining first holds an invite code
  *   beside the address (`/api/v1/join`), and the code's sign-in claims it.
- * - **A password**, chosen at that code step or set by a reset code: never before a code has
- *   proved the address.
+ * - **A password**, chosen when joining, at the code step or from the mail's link, or set by a
+ *   reset code: never before a code has proved the address. Log in opens on it (ADR 0043).
  * - **Google or GitHub**, started here and finished by tela-api's callback, which sends a refusal
  *   back to the page with `?error=`.
  * - **The mail's link**, which fills the code in and waits for a press. A link that signed in by
@@ -17,7 +17,8 @@
 import { normalizeInviteCode } from '@tela/shared'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { useSession } from '../session'
+import { holdLeaving } from '../leave'
+import { type SignedIn, useSession } from '../session'
 import { api } from '../store/api'
 import { type CardClaim, finishCard, keepClaim, takeClaim } from './claim-card'
 
@@ -68,14 +69,18 @@ export function doorRoutes(
   }
 }
 
-/** What a mailed link carries: a sign-in code, or with `reset=1` a password reset's code. */
-export type MailLink = { email: string; otp: string; reset: boolean }
+/**
+ * What a mailed link carries: a sign-in code, or with `reset=1` a password reset's code. A first
+ * sign-in's code says `join=1`, and its link asks for the password the joiner chooses (ADR 0043).
+ */
+export type MailLink = { email: string; otp: string; reset: boolean; join: boolean }
 
 export function mailLink(search: URLSearchParams): MailLink | null {
   const email = search.get('email')
   const otp = search.get('otp')
   if (!email || !otp) return null
-  return { email, otp, reset: search.get('reset') === '1' }
+  const reset = search.get('reset') === '1'
+  return { email, otp, reset, join: !reset && search.get('join') === '1' }
 }
 
 /** The address bar once a link's code or an error is out of it: only where to go next stays. */
@@ -236,9 +241,9 @@ export function takeInvite(): string | null {
 
 /**
  * Where the form is. `start`: the address (with a password, or an invite code to join). `code`:
- * the emailed code, and when joining an optional password. `reset`: a reset code and the new
- * password. `link`: a mailed link waiting for a press. `unsaved`: signed in, but the password
- * chosen at the code step was not saved.
+ * the emailed code, and when joining the password they choose. `reset`: a reset code and the new
+ * password. `link`: a mailed link waiting for a press, and for a join's the password. `unsaved`:
+ * signed in, but the password chosen when joining was not saved.
  */
 export type SignInStep =
   | { kind: 'start' }
@@ -291,17 +296,26 @@ async function fields(res: Response): Promise<Record<string, unknown>> {
 const clean = (email: string) => email.trim().toLowerCase()
 
 /**
- * Set the new member's password: a member call, so it names them (AGENTS invariant 8). tela-api
- * takes a first password on the fresh session the code just made (`POST /api/v1/account/password
+ * Set the new member's password: a member call, so it names them (AGENTS invariant 8), by the id
+ * the code's sign-in answered with, since the tab does not hold their account yet. tela-api takes
+ * a first password on the fresh session the code just made (`POST /api/v1/account/password
  * {newPassword}`); any refusal leaves the member signed in without one.
  */
-export async function savePassword(newPassword: string): Promise<boolean> {
+export async function savePassword(newPassword: string, member: string): Promise<boolean> {
   try {
-    const res = await api('/api/v1/account/password', { body: { newPassword } })
+    const res = await api('/api/v1/account/password', { body: { newPassword }, member })
     return res.ok
   } catch {
     return false
   }
+}
+
+/** Whom a code's sign-in signed in: better-auth answers `{token, user}`. */
+function signedInAs(body: Record<string, unknown>): string | null {
+  const { user } = body
+  if (typeof user !== 'object' || user === null) return null
+  const { id } = user as { id?: unknown }
+  return typeof id === 'string' && id ? id : null
 }
 
 export function useSignIn(options: SignInOptions) {
@@ -315,9 +329,6 @@ export function useSignIn(options: SignInOptions) {
   const [busy, setBusy] = useState(false)
   // Signed in, and waiting for /me to say as whom: the code is spent, so the form stays shut.
   const [waiting, setWaiting] = useState(false)
-  // The password chosen at a join's code step, saved once the session is the new member's. Held
-  // in memory only, for as long as that takes.
-  const chosen = useRef<string | null>(null)
   const left = useRef(false)
   const latest = useRef(options)
   latest.current = options
@@ -333,27 +344,56 @@ export function useSignIn(options: SignInOptions) {
     navigate(to, { replace: latest.current.replace ?? false })
   }
 
-  /** Signed in as the member: save the password they chose, if any, then go on. */
-  const finish = async () => {
-    const password = chosen.current
-    chosen.current = null
-    if (password && !(await savePassword(password))) {
-      setStep({ kind: 'unsaved' })
-      return
-    }
-    await leave()
-  }
-  const finishing = useRef(finish)
-  finishing.current = finish
+  const leaving = useRef(leave)
+  leaving.current = leave
 
+  // From a sign-in's request until the tab has settled, the tab's leaving is this form's to hold
+  // (leave.ts): the cookie may be another account's from the answer on, and a call naming the old
+  // one would otherwise send the tab to '/' under the form, a joiner's password save and all.
+  const holding = useRef<((replay: boolean) => void) | null>(null)
+  const letGo = (replay: boolean) => {
+    holding.current?.(replay)
+    holding.current = null
+  }
+  // A form that goes while it holds (the sheet closed some other way) lets go of it.
+  useEffect(
+    () => () => {
+      holding.current?.(true)
+      holding.current = null
+    },
+    [],
+  )
+
+  /** Make a sign-in's request, holding the tab's leaving from then on unless it is refused. */
+  const signingIn = async (request: () => Promise<Response>): Promise<Response> => {
+    letGo(true)
+    holding.current = holdLeaving()
+    try {
+      const res = await request()
+      if (!res.ok) letGo(true)
+      return res
+    } catch (err) {
+      letGo(true)
+      throw err
+    }
+  }
+
+  /** Signed in: learn as whom, which may load a fresh page, and go on. */
   const enter = async () => {
-    const outcome = await signedIn(latest.current.next)
+    let outcome: SignedIn | null = null
+    try {
+      outcome = await signedIn(latest.current.next)
+    } finally {
+      // A fresh page loading at `next` is already the new member's: a leave kept meanwhile would
+      // only send it to '/' instead. Otherwise the tab leaves as it was asked to.
+      letGo(outcome !== 'reloading')
+    }
     // The page may go before the session is known (a reload at `next`), or the sheet be closed
     // while it waits: the card is kept for the app to finish once it is the member's.
     const { claim } = latest.current
     if (claim && (outcome === 'waiting' || outcome === 'reloading')) keepClaim(claim)
     if (outcome === 'waiting') setWaiting(true)
-    else if (outcome !== 'reloading') await finish()
+    else if (outcome !== 'reloading') await leave()
   }
 
   // /me answered at last, on the session's own retry: carry on as the sign-in would have. Busy
@@ -362,7 +402,7 @@ export function useSignIn(options: SignInOptions) {
     if (!waiting || status !== 'member') return
     setWaiting(false)
     setBusy(true)
-    void finishing.current().finally(() => setBusy(false))
+    void leaving.current().finally(() => setBusy(false))
   }, [waiting, status])
 
   // A member has nothing to do at the start: they go on, where a member goes rather than where one
@@ -412,17 +452,32 @@ export function useSignIn(options: SignInOptions) {
 
   const verify = (email: string, otp: string, password = '') =>
     run(async () => {
-      if (password && password.length < PASSWORD_MIN) return setError('password_short')
-      const res = await post('/api/auth/sign-in/email-otp', { email, otp: otp.trim() })
+      // Joining chooses a password, whether the code is typed or comes in the mail's link (ADR
+      // 0043); any other sign-in by code sets none.
+      const joining =
+        (step.kind === 'code' && step.joining) || (step.kind === 'link' && step.link.join)
+      if ((joining || password) && password.length < PASSWORD_MIN) {
+        return setError('password_short')
+      }
+      const res = await signingIn(() =>
+        post('/api/auth/sign-in/email-otp', { email, otp: otp.trim() }),
+      )
       if (!res.ok) {
         const why = codeError(res.status, (await fields(res)).code)
         // The gate's refusal has spent the code: only a fresh start can go on.
         const refused = why === 'not_invited' || why === 'invite_used'
-        const joining = step.kind === 'code' && step.joining
         setStep(refused ? { kind: 'start' } : { kind: 'code', email, joining })
         return setError(why)
       }
-      chosen.current = password || null
+      // The password a joiner chose is saved before the tab learns who signed in: a tab that held
+      // another account loads a fresh page then, and nothing typed into this one outlives it. A
+      // save that fails says so first, still holding, and Continue goes on from there.
+      if (password) {
+        const member = signedInAs(await fields(res))
+        if (!member || !(await savePassword(password, member))) {
+          return setStep({ kind: 'unsaved' })
+        }
+      }
       await enter()
     })
 
@@ -430,7 +485,7 @@ export function useSignIn(options: SignInOptions) {
     run(async () => {
       const email = clean(input)
       if (!EMAIL.test(email)) return setError('invalid_email')
-      const res = await post('/api/auth/sign-in/email', { email, password })
+      const res = await signingIn(() => post('/api/auth/sign-in/email', { email, password }))
       // One answer for an unknown address, an account without a password and a wrong one.
       if (!res.ok) {
         return setError(
@@ -460,7 +515,7 @@ export function useSignIn(options: SignInOptions) {
         password,
       })
       if (!done.ok) return setError(done.status === 429 ? 'rate_limited' : 'reset_failed')
-      const res = await post('/api/auth/sign-in/email', { email, password })
+      const res = await signingIn(() => post('/api/auth/sign-in/email', { email, password }))
       if (!res.ok) {
         // The code is spent and the password set: what is left is signing in, by code for now.
         setStep({ kind: 'start' })
@@ -469,11 +524,15 @@ export function useSignIn(options: SignInOptions) {
       await enter()
     })
 
-  /** Answer a mailed link: its code signs in, or with a reset link sets `password` first. */
+  /**
+   * Answer a mailed link: its code signs in, a join's with the password chosen beside it, or with
+   * a reset link sets `password` first.
+   */
   const confirmLink = (password: string) => {
     if (step.kind !== 'link') return Promise.resolve()
-    const { email, otp, reset: resetting } = step.link
-    return resetting ? reset(email, otp, password) : verify(email, otp)
+    const { email, otp, reset: resetting, join } = step.link
+    if (resetting) return reset(email, otp, password)
+    return join ? verify(email, otp, password) : verify(email, otp)
   }
 
   /**
@@ -545,7 +604,7 @@ export function useSignIn(options: SignInOptions) {
     confirmLink,
     provider,
     restart,
-    /** Past an unsaved password: go on to `next` anyway. */
-    goOn: () => void leave(),
+    /** Past an unsaved password: go on in as the member, to `next`, anyway. */
+    goOn: () => void run(enter),
   }
 }

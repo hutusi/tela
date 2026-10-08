@@ -32,6 +32,19 @@ async function mails(request: APIRequestContext, email: string): Promise<number>
   return ((await res.json()) as unknown[]).length
 }
 
+/** The link in the last mail to `email`. */
+async function mailedLink(request: APIRequestContext, email: string): Promise<string> {
+  const outbox = (await (
+    await request.get(`${BASE}/api/test/outbox?email=${encodeURIComponent(email)}`)
+  ).json()) as { text: string }[]
+  const link = outbox
+    .at(-1)
+    ?.text.split('\n')
+    .find((line) => line.startsWith(`${BASE}/login?`))
+  if (!link) throw new Error(`no link in the outbox for ${email}`)
+  return link
+}
+
 /** The code of the mail after the first `before` of them, once it has been sent. */
 async function codeAfter(request: APIRequestContext, email: string, before: number) {
   await expect.poll(() => mails(request, email)).toBeGreaterThan(before)
@@ -257,6 +270,7 @@ test.describe('Join, after choosing a theme', () => {
     await sheet.getByTestId('login-email').fill(email)
     await sheet.getByTestId('login-submit').click()
     await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    await sheet.getByTestId('join-password').fill(`chosen on ${Date.now()}`)
     await sheet.getByTestId('login-submit').click()
     await expect(page).toHaveURL(/\/discover$/)
     await expect(page.getByTestId('account-menu')).toBeVisible()
@@ -300,6 +314,7 @@ test.describe('Join, after choosing a language', () => {
     await sheet.getByTestId('login-email').fill(email)
     await sheet.getByTestId('login-submit').click()
     await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    await sheet.getByTestId('join-password').fill(`chosen on ${Date.now()}`)
     await sheet.getByTestId('login-submit').click()
     await expect(page).toHaveURL(/\/discover$/)
     await expect(page.getByTestId('account-menu')).toBeVisible()
@@ -347,6 +362,10 @@ test.describe('the Log in sheet, by code', () => {
 
     await page.getByTestId('nav-login').click()
     const before = await mails(request, email)
+    // The sheet opens on the password (ADR 0043): the code is the toggle under the button.
+    await sheet.getByTestId('login-mode').click()
+    await expect(sheet.getByTestId('login-password')).toHaveCount(0)
+    await expect(sheet.getByTestId('login-submit')).toHaveText('Email me a code')
     await sheet.getByTestId('login-email').fill(email)
     await sheet.getByTestId('login-submit').click()
     // The new step takes the focus: the field that held it is gone.
@@ -385,12 +404,17 @@ test.describe('the Log in sheet, by password', () => {
     await page.goto('/discover')
     await page.getByTestId('nav-login').click()
     const sheet = page.getByTestId('front-door')
-    await sheet.getByTestId('login-mode').click()
+    // It opens on the password (ADR 0043), with the code one press away.
+    await expect(sheet.getByTestId('login-password')).toBeVisible()
+    await expect(sheet.getByTestId('login-submit')).toHaveText('Log in')
+    await expect(sheet.getByTestId('login-mode')).toHaveText('Email me a code instead')
+    await expect(sheet.getByTestId('login-email')).toHaveAttribute('autocomplete', 'username')
     await sheet.getByTestId('login-email').fill(email)
     await sheet.getByTestId('login-password').fill('not the password at all')
     await sheet.getByTestId('login-submit').click()
+    // The way out for a member who never set one, without saying whether this one has.
     await expect(sheet.getByTestId('door-error')).toHaveText(
-      'That email and password do not match.',
+      'That email and password do not match. No password yet? Choose “Email me a code instead”.',
     )
     await sheet.getByTestId('login-password').fill(password)
     await sheet.getByTestId('login-submit').click()
@@ -401,7 +425,7 @@ test.describe('the Log in sheet, by password', () => {
 
 test.describe('Join, with an invite code', () => {
   test.use(visitor(13))
-  test('makes the account, keeps the password chosen at the code step, and lands on Discover', async ({
+  test('makes the account only with a password chosen at the code step, and lands on Discover', async ({
     page,
     request,
   }) => {
@@ -431,6 +455,15 @@ test.describe('Join, with an invite code', () => {
     await sheet.getByTestId('login-submit').click()
     await expect(sheet.getByTestId('login-code')).toBeVisible()
     await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    // Joining chooses a password (ADR 0043): without one nothing is sent, and nobody is in.
+    await expect(sheet.getByTestId('join-password')).toHaveAttribute('required', '')
+    await expect(sheet.getByTestId('join-password')).toHaveAttribute(
+      'placeholder',
+      'Choose a password',
+    )
+    await sheet.getByTestId('login-submit').click()
+    await expect(sheet.getByTestId('login-code')).toBeVisible()
+    expect((await page.request.get('/api/v1/me')).status()).toBe(401)
     await sheet.getByTestId('join-password').fill(password)
     await sheet.getByTestId('login-submit').click()
     await expect(page).toHaveURL(/\/discover$/)
@@ -438,6 +471,137 @@ test.describe('Join, with an invite code', () => {
     await expect(page.getByTestId('account-menu')).toBeVisible()
 
     // The password is the member's now, from any browser.
+    const signedIn = await request.post(`${BASE}/api/auth/sign-in/email`, {
+      headers: ORIGIN,
+      data: { email, password },
+    })
+    expect(signedIn.ok()).toBe(true)
+  })
+})
+
+test.describe("Join, from the mail's link", () => {
+  test.use(visitor(18))
+  test('asks for the password the joiner chooses, then lands on Discover', async ({
+    page,
+    request,
+  }) => {
+    const email = `link-joiner-${Date.now()}@e2e.test`
+    await joinAndReadCode(request, await adminCode(request), email)
+    const link = await mailedLink(request, email)
+    // A first sign-in's link says so (ADR 0043).
+    expect(link).toMatch(/&join=1$/)
+
+    await page.goto(link)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Join Tela')
+    await expect(page.getByTestId('login-link-as')).toHaveText(
+      `Choose a password for ${email} to finish joining.`,
+    )
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByTestId('login-submit')).toHaveText('Set the password and join')
+    // Not without the password.
+    await page.getByTestId('login-submit').click()
+    expect((await page.request.get('/api/v1/me')).status()).toBe(401)
+
+    const password = `joined by link ${Date.now()}`
+    await page.getByTestId('join-password').fill(password)
+    await page.getByTestId('login-submit').click()
+    await expect(page).toHaveURL(/\/discover$/)
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+    const signedIn = await request.post(`${BASE}/api/auth/sign-in/email`, {
+      headers: ORIGIN,
+      data: { email, password },
+    })
+    expect(signedIn.ok()).toBe(true)
+  })
+})
+
+test.describe("Join, from the mail's link in a tab signed in as someone else", () => {
+  test.use(visitor(19))
+  /**
+   * Found in Codex's review: learning that the tab held another account loads a fresh page, and
+   * the password was saved only after that, so it never was, and nothing said so.
+   */
+  test('saves the password before the tab starts over as the new member', async ({
+    page,
+    request,
+  }) => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    await signInRequest(page.request, `first-${stamp}@e2e.test`)
+    await page.goto('/reading')
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+
+    const email = `switching-joiner-${stamp}@e2e.test`
+    await joinAndReadCode(request, await adminCode(request), email)
+    const saves: number[] = []
+    page.on('response', (r) => {
+      if (new URL(r.url()).pathname === '/api/v1/account/password') saves.push(r.status())
+    })
+    await page.goto(await mailedLink(request, email))
+    // A member's tab answers the link too: it may be for another account, which is how one switches.
+    await expect(page.getByTestId('login-link-as')).toContainText(email)
+    const password = `switched on ${Date.now()}`
+    await page.getByTestId('join-password').fill(password)
+    await page.getByTestId('login-submit').click()
+    await expect(page).toHaveURL(/\/discover$/)
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+    expect(saves).toEqual([200])
+
+    const me = (await (await page.request.get('/api/v1/me')).json()) as { email: string }
+    expect(me.email).toBe(email)
+    const signedIn = await request.post(`${BASE}/api/auth/sign-in/email`, {
+      headers: ORIGIN,
+      data: { email, password },
+    })
+    expect(signedIn.ok()).toBe(true)
+  })
+})
+
+test.describe("Join, from the mail's link, while the old account's sync runs", () => {
+  test.use(visitor(44))
+  /**
+   * Found in Codex's second review: while the password saved, the cookie was the joiner's and the
+   * sync engine still named the old account. A pull then (a timer, the tab coming into view) was
+   * refused `account_changed`, and leaving sent the tab to '/' and on to /reading, cancelling the
+   * save. The sign-in holds the tab's leaving until it has settled the tab itself.
+   */
+  test('saves the password, and the refused pull does not take the tab away', async ({
+    page,
+    request,
+  }) => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    await signInRequest(page.request, `first-${stamp}@e2e.test`)
+    await page.goto('/reading')
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+
+    const email = `synced-joiner-${stamp}@e2e.test`
+    await joinAndReadCode(request, await adminCode(request), email)
+    const refusedPulls: number[] = []
+    const saves: number[] = []
+    page.on('response', (r) => {
+      const path = new URL(r.url()).pathname
+      if (path === '/api/v1/sync' && r.status() === 409) refusedPulls.push(r.status())
+      if (path === '/api/v1/account/password') saves.push(r.status())
+    })
+    // The save is held until the old account's engine has pulled under the new cookie, and been
+    // refused for it.
+    await page.route('**/api/v1/account/password', async (route) => {
+      const refused = page.waitForResponse(
+        (r) => new URL(r.url()).pathname === '/api/v1/sync' && r.status() === 409,
+      )
+      await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+      await refused
+      await route.continue().catch(() => {})
+    })
+    await page.goto(await mailedLink(request, email))
+    await expect(page.getByTestId('login-link-as')).toContainText(email)
+    const password = `synced on ${Date.now()}`
+    await page.getByTestId('join-password').fill(password)
+    await page.getByTestId('login-submit').click()
+
+    await expect(page).toHaveURL(/\/discover$/)
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+    expect(refusedPulls.length).toBeGreaterThan(0)
+    expect(saves).toEqual([200])
     const signedIn = await request.post(`${BASE}/api/auth/sign-in/email`, {
       headers: ORIGIN,
       data: { email, password },
@@ -463,6 +627,7 @@ test.describe('Join, from the front page', () => {
     await sheet.getByTestId('login-submit').click()
     await expect(sheet.getByTestId('login-code')).toBeFocused()
     await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    await sheet.getByTestId('join-password').fill(`chosen on ${Date.now()}`)
     await sheet.getByTestId('login-submit').click()
     // Not the reading the front page sends a member to: a newcomer has nothing to read yet.
     await expect(page).toHaveURL(/\/discover$/)
@@ -473,9 +638,10 @@ test.describe('Join, from the front page', () => {
 
 test.describe('Join, while the chosen password saves', () => {
   /**
-   * `/` and `/join` send a member to their reading, and the joiner is one before the password they
-   * chose is saved. Until the sheet has finished, it says where they go: the save, held back here
-   * and then answered by `answer`, is still its own. Returns every path the page was at.
+   * `/` and `/join` send a member to their reading, and the joiner is signed in before the
+   * password they chose is saved. Until the sheet has finished, it says where they go: the save,
+   * held back here and then answered by `answer`, is still its own. Returns every path the page
+   * was at.
    */
   async function join(
     page: Page,

@@ -195,12 +195,24 @@ describe('answers the pages turn into messages', () => {
       email: 'a@x.test',
       otp: '123456',
       reset: false,
+      join: false,
     })
     expect(mailLink(link('reset=1&email=a%40x.test&otp=123456'))).toEqual({
       email: 'a@x.test',
       otp: '123456',
       reset: true,
+      join: false,
     })
+    // A first sign-in's link asks for a password (ADR 0043); a reset is never a join.
+    expect(mailLink(link('email=a%40x.test&otp=123456&join=1'))).toMatchObject({
+      reset: false,
+      join: true,
+    })
+    expect(mailLink(link('reset=1&join=1&email=a%40x.test&otp=123456'))).toMatchObject({
+      reset: true,
+      join: false,
+    })
+    expect(loginPath(link('email=a%40x.test&otp=123456&join=1'))).toBe('/login')
     for (const query of ['email=a%40x.test', 'otp=123456', 'email=&otp=123456', 'next=%2Fs%2F1'])
       expect(mailLink(link(query))).toBeNull()
     expect(loginPath(link('email=a%40x.test&otp=123456&next=%2Fsettings'))).toBe(

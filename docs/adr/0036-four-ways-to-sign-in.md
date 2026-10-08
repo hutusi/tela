@@ -1,7 +1,8 @@
 # 0036 — Four ways to sign in: a code, a password, Google or GitHub, behind one invitation gate
 
 Status: accepted (2026-10-02). Supersedes 0024's "Email codes only" and "OAuth is deferred"; the
-rest of 0024 stands. Every new account still passes 0034's gate, whichever way it signs in.
+rest of 0024 stands. Every new account still passes 0034's gate, whichever way it signs in. The
+sheet's opening on the code is superseded by 0043: it opens on the password.
 
 ## Context
 

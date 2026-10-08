@@ -2,9 +2,10 @@
  * `/login`: the front door as a page (ADRs 0024, 0036), where a page only members see sends a
  * visitor with `?next=`, and where the mails' links land. The sign-in mail's link,
  * `/login?email=…&otp=…`, and the reset mail's, `/login?reset=1&email=…&otp=…`, only fill the
- * code in: the page names the account and waits for a press. Google and GitHub come back here
- * with `?error=` when tela-api has no other page to send them to. Each is taken out of the address
- * bar as soon as it is read.
+ * code in: the page names the account and waits for a press. A first sign-in's link adds
+ * `join=1`, and asks for the password the joiner chooses before going on to Discover (ADR 0043).
+ * Google and GitHub come back here with `?error=` when tela-api has no other page to send them
+ * to. Each is taken out of the address bar as soon as it is read.
  */
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
@@ -39,9 +40,12 @@ function loginReturn(next: string, provider: Provider): string {
 
 export function LoginPage() {
   const t = useTranslations('login')
+  const door = useTranslations('door')
   const [search] = useSearchParams()
-  const next = safeNext(search.get('next'))
   const [arrival, setArrival] = useState(() => arrivalOf(search))
+  // A joiner has nothing to read yet: unless the link says otherwise, they start at Discover.
+  const asked = search.get('next')
+  const next = !asked && arrival.link?.join ? NEWCOMER : safeNext(asked)
 
   // Take the code or the error out of the address bar at once, and keep it here. A link followed
   // inside a page already open here comes through too, as a fresh form.
@@ -70,7 +74,7 @@ export function LoginPage() {
           key={link ? `${link.reset ? 'reset' : 'link'} ${link.email} ${link.otp}` : 'form'}
           mode="login"
           place="page"
-          title={t('title')}
+          title={link?.join ? door('join.title') : t('title')}
           next={next}
           newcomer={NEWCOMER}
           errorReturn={(provider) => loginReturn(next, provider)}

@@ -114,6 +114,9 @@ export function signInMail(options: {
   const write = writer(options.locale)
   const { both } = write
   const kind = (t: MailText) => (invited ? t.invited : t.signIn)
+  // A first sign-in's link asks for the password the joiner chooses, as the join's code step does
+  // (ADR 0043). Only a hint to the page: the code alone still signs in.
+  const join = invited ? '&join=1' : ''
   return codeMail({
     write,
     to,
@@ -121,7 +124,7 @@ export function signInMail(options: {
     subject: `${together(both((t) => kind(t).subject))}: ${code}`,
     heading: together(both((t) => kind(t).heading)),
     intro: both((t) => t.signIn.intro),
-    link: `${publicUrl}/login?email=${encodeURIComponent(to)}&otp=${encodeURIComponent(code)}`,
+    link: `${publicUrl}/login?email=${encodeURIComponent(to)}&otp=${encodeURIComponent(code)}${join}`,
     outro: both((t) => t.signIn.outro),
   })
 }

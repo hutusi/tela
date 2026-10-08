@@ -300,7 +300,7 @@ A Vite + React SPA that renders from the device.
 | Route | Purpose |
 |---|---|
 | `/`, `/?titles=translated` | The front page for visitors (ADR 0035), rendered at the edge: the count of public blogs, this week's edition (one post a blog; the latest when the week has none), titles as written or in the reader's language; members go to `/reading` |
-| `/login` | Email code; the mail's sign-in and reset links fill their code in and ask before using it (ADR 0036) |
+| `/login` | Password first, or an emailed code (ADR 0043); the mail's sign-in and reset links fill their code in and ask before using it (ADR 0036), and a first sign-in's (`join=1`) asks for the joiner's password and goes on to Discover |
 | `/reading?filter=&feed=&article=&mode=` | Sidebar, list and the open article |
 | `/discover?topic=&lang=`, `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart |
 | `/about`, `/privacy`, `/terms` | The info pages, for anyone; copy from `src/content/info`, rendered at the edge too, with no data |
