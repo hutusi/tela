@@ -32,9 +32,10 @@ So the join's code step asks for the password beside the code, no longer "(optio
 continues only with one of 10 characters or more. The mail's link does the same: a first sign-in's
 code (an address joining with an invite, or an account the operator made that has not signed in)
 is mailed with `/login?email=…&otp=…&join=1`, and that link names the address, asks for the
-password and goes on to Discover, under *Join Tela*. The password is saved after the code's
-sign-in, as before, on the session it made; a save that fails still says so and lets the member
-in.
+password and goes on to Discover, under *Join Tela*. The password is saved on the session the
+code's sign-in made, naming the account it answered with, before the tab asks who signed in: a
+tab that held another account loads a fresh page then, and a password saved after that would be
+lost with it. A save that fails says so, and Continue lets the member in.
 
 The requirement is the form's, not the server's, and `join=1` is a hint to the page that protects
 nothing: the code's sign-in makes the account before the password can be saved, and D1 has no

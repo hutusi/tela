@@ -32,6 +32,19 @@ async function mails(request: APIRequestContext, email: string): Promise<number>
   return ((await res.json()) as unknown[]).length
 }
 
+/** The link in the last mail to `email`. */
+async function mailedLink(request: APIRequestContext, email: string): Promise<string> {
+  const outbox = (await (
+    await request.get(`${BASE}/api/test/outbox?email=${encodeURIComponent(email)}`)
+  ).json()) as { text: string }[]
+  const link = outbox
+    .at(-1)
+    ?.text.split('\n')
+    .find((line) => line.startsWith(`${BASE}/login?`))
+  if (!link) throw new Error(`no link in the outbox for ${email}`)
+  return link
+}
+
 /** The code of the mail after the first `before` of them, once it has been sent. */
 async function codeAfter(request: APIRequestContext, email: string, before: number) {
   await expect.poll(() => mails(request, email)).toBeGreaterThan(before)
@@ -474,17 +487,11 @@ test.describe("Join, from the mail's link", () => {
   }) => {
     const email = `link-joiner-${Date.now()}@e2e.test`
     await joinAndReadCode(request, await adminCode(request), email)
-    const outbox = (await (
-      await request.get(`${BASE}/api/test/outbox?email=${encodeURIComponent(email)}`)
-    ).json()) as { text: string }[]
-    const link = outbox
-      .at(-1)
-      ?.text.split('\n')
-      .find((line) => line.startsWith(`${BASE}/login?`))
+    const link = await mailedLink(request, email)
     // A first sign-in's link says so (ADR 0043).
     expect(link).toMatch(/&join=1$/)
 
-    await page.goto(link ?? '')
+    await page.goto(link)
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Join Tela')
     await expect(page.getByTestId('login-link-as')).toHaveText(
       `Choose a password for ${email} to finish joining.`,
@@ -500,6 +507,47 @@ test.describe("Join, from the mail's link", () => {
     await page.getByTestId('login-submit').click()
     await expect(page).toHaveURL(/\/discover$/)
     await expect(page.getByTestId('account-menu')).toBeVisible()
+    const signedIn = await request.post(`${BASE}/api/auth/sign-in/email`, {
+      headers: ORIGIN,
+      data: { email, password },
+    })
+    expect(signedIn.ok()).toBe(true)
+  })
+})
+
+test.describe("Join, from the mail's link in a tab signed in as someone else", () => {
+  test.use(visitor(19))
+  /**
+   * Found in Codex's review: learning that the tab held another account loads a fresh page, and
+   * the password was saved only after that, so it never was, and nothing said so.
+   */
+  test('saves the password before the tab starts over as the new member', async ({
+    page,
+    request,
+  }) => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    await signInRequest(page.request, `first-${stamp}@e2e.test`)
+    await page.goto('/reading')
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+
+    const email = `switching-joiner-${stamp}@e2e.test`
+    await joinAndReadCode(request, await adminCode(request), email)
+    const saves: number[] = []
+    page.on('response', (r) => {
+      if (new URL(r.url()).pathname === '/api/v1/account/password') saves.push(r.status())
+    })
+    await page.goto(await mailedLink(request, email))
+    // A member's tab answers the link too: it may be for another account, which is how one switches.
+    await expect(page.getByTestId('login-link-as')).toContainText(email)
+    const password = `switched on ${Date.now()}`
+    await page.getByTestId('join-password').fill(password)
+    await page.getByTestId('login-submit').click()
+    await expect(page).toHaveURL(/\/discover$/)
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+    expect(saves).toEqual([200])
+
+    const me = (await (await page.request.get('/api/v1/me')).json()) as { email: string }
+    expect(me.email).toBe(email)
     const signedIn = await request.post(`${BASE}/api/auth/sign-in/email`, {
       headers: ORIGIN,
       data: { email, password },
@@ -536,9 +584,10 @@ test.describe('Join, from the front page', () => {
 
 test.describe('Join, while the chosen password saves', () => {
   /**
-   * `/` and `/join` send a member to their reading, and the joiner is one before the password they
-   * chose is saved. Until the sheet has finished, it says where they go: the save, held back here
-   * and then answered by `answer`, is still its own. Returns every path the page was at.
+   * `/` and `/join` send a member to their reading, and the joiner is signed in before the
+   * password they chose is saved. Until the sheet has finished, it says where they go: the save,
+   * held back here and then answered by `answer`, is still its own. Returns every path the page
+   * was at.
    */
   async function join(
     page: Page,

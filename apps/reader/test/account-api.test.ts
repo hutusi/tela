@@ -170,16 +170,18 @@ describe("a link's return", () => {
   })
 })
 
-describe("the sheet's password, chosen at a join's code step", () => {
-  test('is a first password on the fresh session the code made, for the member', async () => {
+describe("the sheet's password, chosen when joining", () => {
+  test('is a first password on the fresh session the code made, naming whom it signed in', async () => {
     const calls = answer(200, { ok: true })
-    expect(await savePassword('joined on a monday')).toBe(true)
+    // Saved before the tab learns who signed in, so not the account the tab holds (Codex's
+    // review: a tab holding another account loaded a fresh page, and the password went with it).
+    expect(await savePassword('joined on a monday', 'joiner-2')).toBe(true)
     expect(calls).toEqual([
       {
         path: '/api/v1/account/password',
         method: 'POST',
         body: { newPassword: 'joined on a monday' },
-        member: 'member-1',
+        member: 'joiner-2',
       },
     ])
   })
@@ -192,7 +194,7 @@ describe("the sheet's password, chosen at a join's code step", () => {
       [429, 'rate_limited'],
     ] as const) {
       answer(status, { error })
-      expect(await savePassword('joined on a monday')).toBe(false)
+      expect(await savePassword('joined on a monday', 'joiner-2')).toBe(false)
     }
   })
 })

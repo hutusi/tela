@@ -295,17 +295,26 @@ async function fields(res: Response): Promise<Record<string, unknown>> {
 const clean = (email: string) => email.trim().toLowerCase()
 
 /**
- * Set the new member's password: a member call, so it names them (AGENTS invariant 8). tela-api
- * takes a first password on the fresh session the code just made (`POST /api/v1/account/password
+ * Set the new member's password: a member call, so it names them (AGENTS invariant 8), by the id
+ * the code's sign-in answered with, since the tab does not hold their account yet. tela-api takes
+ * a first password on the fresh session the code just made (`POST /api/v1/account/password
  * {newPassword}`); any refusal leaves the member signed in without one.
  */
-export async function savePassword(newPassword: string): Promise<boolean> {
+export async function savePassword(newPassword: string, member: string): Promise<boolean> {
   try {
-    const res = await api('/api/v1/account/password', { body: { newPassword } })
+    const res = await api('/api/v1/account/password', { body: { newPassword }, member })
     return res.ok
   } catch {
     return false
   }
+}
+
+/** Whom a code's sign-in signed in: better-auth answers `{token, user}`. */
+function signedInAs(body: Record<string, unknown>): string | null {
+  const { user } = body
+  if (typeof user !== 'object' || user === null) return null
+  const { id } = user as { id?: unknown }
+  return typeof id === 'string' && id ? id : null
 }
 
 export function useSignIn(options: SignInOptions) {
@@ -319,9 +328,6 @@ export function useSignIn(options: SignInOptions) {
   const [busy, setBusy] = useState(false)
   // Signed in, and waiting for /me to say as whom: the code is spent, so the form stays shut.
   const [waiting, setWaiting] = useState(false)
-  // The password chosen at a join's code step, saved once the session is the new member's. Held
-  // in memory only, for as long as that takes.
-  const chosen = useRef<string | null>(null)
   const left = useRef(false)
   const latest = useRef(options)
   latest.current = options
@@ -337,19 +343,10 @@ export function useSignIn(options: SignInOptions) {
     navigate(to, { replace: latest.current.replace ?? false })
   }
 
-  /** Signed in as the member: save the password they chose, if any, then go on. */
-  const finish = async () => {
-    const password = chosen.current
-    chosen.current = null
-    if (password && !(await savePassword(password))) {
-      setStep({ kind: 'unsaved' })
-      return
-    }
-    await leave()
-  }
-  const finishing = useRef(finish)
-  finishing.current = finish
+  const leaving = useRef(leave)
+  leaving.current = leave
 
+  /** Signed in: learn as whom, which may load a fresh page, and go on. */
   const enter = async () => {
     const outcome = await signedIn(latest.current.next)
     // The page may go before the session is known (a reload at `next`), or the sheet be closed
@@ -357,7 +354,7 @@ export function useSignIn(options: SignInOptions) {
     const { claim } = latest.current
     if (claim && (outcome === 'waiting' || outcome === 'reloading')) keepClaim(claim)
     if (outcome === 'waiting') setWaiting(true)
-    else if (outcome !== 'reloading') await finish()
+    else if (outcome !== 'reloading') await leave()
   }
 
   // /me answered at last, on the session's own retry: carry on as the sign-in would have. Busy
@@ -366,7 +363,7 @@ export function useSignIn(options: SignInOptions) {
     if (!waiting || status !== 'member') return
     setWaiting(false)
     setBusy(true)
-    void finishing.current().finally(() => setBusy(false))
+    void leaving.current().finally(() => setBusy(false))
   }, [waiting, status])
 
   // A member has nothing to do at the start: they go on, where a member goes rather than where one
@@ -431,7 +428,15 @@ export function useSignIn(options: SignInOptions) {
         setStep(refused ? { kind: 'start' } : { kind: 'code', email, joining })
         return setError(why)
       }
-      chosen.current = password || null
+      // The password a joiner chose is saved before the tab learns who signed in: a tab that held
+      // another account loads a fresh page then, and nothing typed into this one outlives it. A
+      // save that fails says so first, and Continue goes on from there.
+      if (password) {
+        const member = signedInAs(await fields(res))
+        if (!member || !(await savePassword(password, member))) {
+          return setStep({ kind: 'unsaved' })
+        }
+      }
       await enter()
     })
 
@@ -558,7 +563,7 @@ export function useSignIn(options: SignInOptions) {
     confirmLink,
     provider,
     restart,
-    /** Past an unsaved password: go on to `next` anyway. */
-    goOn: () => void leave(),
+    /** Past an unsaved password: go on in as the member, to `next`, anyway. */
+    goOn: () => void run(enter),
   }
 }
