@@ -372,4 +372,6 @@ A Vite + React SPA that renders from the device.
 - `bun run e2e` (`apps/reader/e2e`): the built reader, tela-api and tela-jobs in one `wrangler dev`
   on fresh local D1, R2 and queues, against the fixture feed server. Test mode (`ENV=test`) adds
   the sign-in outbox and `POST /api/test/cycle`, which runs tela-jobs' sweeps to completion,
-  because local dev fires no crons.
+  because local dev fires no crons. Service workers are blocked there, except in the
+  `shell-worker` project, where `redirect.e2e.ts` runs the real `public/sw.js` and tela-redirect's
+  kill switch in Chromium on two local origins.

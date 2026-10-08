@@ -34,5 +34,16 @@ export default defineConfig({
     // The stacked layout below the desktop breakpoint. A Chromium device profile, so CI needs only
     // one browser download.
     { name: 'mobile', testMatch: /mobile\.e2e\.ts/, use: { ...devices['Pixel 7'] } },
+    // tela-redirect retiring the shell's worker (ADR 0042): the one spec that lets a worker run,
+    // on two local origins of its own, apart from the stack and its member.
+    {
+      name: 'shell-worker',
+      testMatch: /redirect\.e2e\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        serviceWorkers: 'allow',
+        storageState: { cookies: [], origins: [] },
+      },
+    },
   ],
 })

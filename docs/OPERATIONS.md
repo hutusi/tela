@@ -361,6 +361,11 @@ writing `.dev.vars` beside the real configs would clobber a developer's own.
 - **Ports:** `E2E_READER_PORT` (8811), `E2E_FIXTURE_PORT` (4790), `E2E_INSPECTOR_PORT` (9311). The
   script refuses to start if one is taken: a stack left running would answer the health check,
   and every spec would test it instead.
+- **Service workers are blocked**, so every spec measures the app, not a cached shell. The one
+  exception is the `shell-worker` project, `redirect.e2e.ts`: on two local origins of its own it
+  installs the real `public/sw.js`, then answers as tela-redirect, and checks that a redirect
+  rule alone leaves the old shell painting while the kill switch at `/sw.js` takes both open tabs
+  to the new origin and leaves nothing behind (ADR 0042).
 - **Logs:** `.e2e-logs/reader/{build,workers,fixtures}.log`; traces in `apps/reader/test-results`.
 - First run: `cd apps/reader && bunx playwright install chromium`.
 

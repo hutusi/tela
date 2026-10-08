@@ -33,7 +33,9 @@ or 308 for a method other than GET or HEAD. The one exception is `/sw.js`, which
 with the code of the existing kill switch (`shell/kill-sw.js`). On the next visit, the browser's
 update check installs the kill switch, which drops every cached shell, unregisters the worker and
 navigates each open tab again. That navigation reaches the network and the redirect. A test holds
-the served code to the kill switch's file. Its logs keep paths and drop query strings
+the served code to the kill switch's file, and `redirect.e2e.ts` runs the whole retirement in
+Chromium: the real shell worker installed, a plain redirect that leaves it painting, then the kill
+switch that takes two open tabs to the new origin. Its logs keep paths and drop query strings
 (`redact_query_string`): an old invite or sign-in link carries its code in the query, and anyone
 who reads Workers Logs could use it. That is the same reason tela-web never runs for `/*`.
 
