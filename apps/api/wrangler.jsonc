@@ -35,5 +35,7 @@
     "PUBLIC_URL": "https://telaread.com",
     "MAIL_FROM": "Tela <noreply@telaread.com>"
   }
-  // Secrets (wrangler secret put): AUTH_SECRET (shared with tela-web), ADMIN_TOKEN, RESEND_API_KEY.
+  // Secrets (wrangler secret put): AUTH_SECRET (shared with tela-web), ADMIN_TOKEN, RESEND_API_KEY;
+  // and GOOGLE_CLIENT_ID with GOOGLE_CLIENT_SECRET, GITHUB_CLIENT_ID with GITHUB_CLIENT_SECRET, each
+  // provider offered once both of its are set (ADR 0036, OPERATIONS "Google and GitHub apps").
 }
