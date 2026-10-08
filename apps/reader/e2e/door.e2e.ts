@@ -257,6 +257,7 @@ test.describe('Join, after choosing a theme', () => {
     await sheet.getByTestId('login-email').fill(email)
     await sheet.getByTestId('login-submit').click()
     await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    await sheet.getByTestId('join-password').fill(`chosen on ${Date.now()}`)
     await sheet.getByTestId('login-submit').click()
     await expect(page).toHaveURL(/\/discover$/)
     await expect(page.getByTestId('account-menu')).toBeVisible()
@@ -300,6 +301,7 @@ test.describe('Join, after choosing a language', () => {
     await sheet.getByTestId('login-email').fill(email)
     await sheet.getByTestId('login-submit').click()
     await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    await sheet.getByTestId('join-password').fill(`chosen on ${Date.now()}`)
     await sheet.getByTestId('login-submit').click()
     await expect(page).toHaveURL(/\/discover$/)
     await expect(page.getByTestId('account-menu')).toBeVisible()
@@ -410,7 +412,7 @@ test.describe('the Log in sheet, by password', () => {
 
 test.describe('Join, with an invite code', () => {
   test.use(visitor(13))
-  test('makes the account, keeps the password chosen at the code step, and lands on Discover', async ({
+  test('makes the account only with a password chosen at the code step, and lands on Discover', async ({
     page,
     request,
   }) => {
@@ -440,6 +442,15 @@ test.describe('Join, with an invite code', () => {
     await sheet.getByTestId('login-submit').click()
     await expect(sheet.getByTestId('login-code')).toBeVisible()
     await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    // Joining chooses a password (ADR 0043): without one nothing is sent, and nobody is in.
+    await expect(sheet.getByTestId('join-password')).toHaveAttribute('required', '')
+    await expect(sheet.getByTestId('join-password')).toHaveAttribute(
+      'placeholder',
+      'Choose a password',
+    )
+    await sheet.getByTestId('login-submit').click()
+    await expect(sheet.getByTestId('login-code')).toBeVisible()
+    expect((await page.request.get('/api/v1/me')).status()).toBe(401)
     await sheet.getByTestId('join-password').fill(password)
     await sheet.getByTestId('login-submit').click()
     await expect(page).toHaveURL(/\/discover$/)
@@ -447,6 +458,48 @@ test.describe('Join, with an invite code', () => {
     await expect(page.getByTestId('account-menu')).toBeVisible()
 
     // The password is the member's now, from any browser.
+    const signedIn = await request.post(`${BASE}/api/auth/sign-in/email`, {
+      headers: ORIGIN,
+      data: { email, password },
+    })
+    expect(signedIn.ok()).toBe(true)
+  })
+})
+
+test.describe("Join, from the mail's link", () => {
+  test.use(visitor(18))
+  test('asks for the password the joiner chooses, then lands on Discover', async ({
+    page,
+    request,
+  }) => {
+    const email = `link-joiner-${Date.now()}@e2e.test`
+    await joinAndReadCode(request, await adminCode(request), email)
+    const outbox = (await (
+      await request.get(`${BASE}/api/test/outbox?email=${encodeURIComponent(email)}`)
+    ).json()) as { text: string }[]
+    const link = outbox
+      .at(-1)
+      ?.text.split('\n')
+      .find((line) => line.startsWith(`${BASE}/login?`))
+    // A first sign-in's link says so (ADR 0043).
+    expect(link).toMatch(/&join=1$/)
+
+    await page.goto(link ?? '')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Join Tela')
+    await expect(page.getByTestId('login-link-as')).toHaveText(
+      `Choose a password for ${email} to finish joining.`,
+    )
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByTestId('login-submit')).toHaveText('Set the password and join')
+    // Not without the password.
+    await page.getByTestId('login-submit').click()
+    expect((await page.request.get('/api/v1/me')).status()).toBe(401)
+
+    const password = `joined by link ${Date.now()}`
+    await page.getByTestId('join-password').fill(password)
+    await page.getByTestId('login-submit').click()
+    await expect(page).toHaveURL(/\/discover$/)
+    await expect(page.getByTestId('account-menu')).toBeVisible()
     const signedIn = await request.post(`${BASE}/api/auth/sign-in/email`, {
       headers: ORIGIN,
       data: { email, password },
@@ -472,6 +525,7 @@ test.describe('Join, from the front page', () => {
     await sheet.getByTestId('login-submit').click()
     await expect(sheet.getByTestId('login-code')).toBeFocused()
     await sheet.getByTestId('login-code').fill(await codeAfter(request, email, 0))
+    await sheet.getByTestId('join-password').fill(`chosen on ${Date.now()}`)
     await sheet.getByTestId('login-submit').click()
     // Not the reading the front page sends a member to: a newcomer has nothing to read yet.
     await expect(page).toHaveURL(/\/discover$/)

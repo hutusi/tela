@@ -282,7 +282,8 @@ with GitHub*, quiet 44 px pills, only once tela-api says they are configured, th
 *Log in with a password*. Log in opens in password mode (ADR 0043), its email field then
 `autocomplete="username"` so a password manager fills the pair. Inputs are 44 px, 10 px corners, a `thumb` border that turns `ink` on
 focus, on `paper` inside the sheet and `surface` on the page. The code step asks for the 6-digit
-code, and when joining an optional *Choose a password*, set once the code has made the account. A
+code, and when joining *Choose a password* (required, ADR 0043), set once the code has made the
+account; a first sign-in's mailed link asks for it too, under *Join Tela*. A
 log-in's code step says a code is on its way *if* the address has an account or an invitation,
 since the form never says which; a join's says it was sent. Each new step takes the focus to its
 first field. Joining says "No code? Tela is invite-only for now: ask a member for one." and "By

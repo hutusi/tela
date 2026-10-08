@@ -55,6 +55,17 @@ describe('the English mails', () => {
   }
 })
 
+describe("a sign-in code's link", () => {
+  test('asks for a password only on a first sign-in (ADR 0043)', () => {
+    const link = (invited: boolean) =>
+      lines(signInMail({ to: TO, code: CODE, publicUrl: PUBLIC_URL, locale: 'en', invited })).find(
+        (line) => line.startsWith(`${PUBLIC_URL}/login?`),
+      )
+    expect(link(true)).toBe(`${PUBLIC_URL}/login?email=o'neil%2Btela%40x.test&otp=${CODE}&join=1`)
+    expect(link(false)).toBe(`${PUBLIC_URL}/login?email=o'neil%2Btela%40x.test&otp=${CODE}`)
+  })
+})
+
 describe('a mail in another language', () => {
   test('leads with that language, with English second', () => {
     const base = (locale: UiLocale) => ({ to: TO, code: CODE, publicUrl: PUBLIC_URL, locale })
@@ -76,7 +87,8 @@ describe('a mail in another language', () => {
       CODE,
       '',
       'Ou ouvrez ce lien dans votre navigateur · Or open this link in your browser:',
-      `${PUBLIC_URL}/login?email=o'neil%2Btela%40x.test&otp=${CODE}`,
+      // A first sign-in's link asks for a password (ADR 0043).
+      `${PUBLIC_URL}/login?email=o'neil%2Btela%40x.test&otp=${CODE}&join=1`,
       '',
       'Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet e-mail.',
       'If you did not ask for this, you can ignore this email.',

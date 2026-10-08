@@ -4,8 +4,8 @@
  *
  * - **An emailed code**, which is also how an account starts. Joining first holds an invite code
  *   beside the address (`/api/v1/join`), and the code's sign-in claims it.
- * - **A password**, chosen at that code step or set by a reset code: never before a code has
- *   proved the address.
+ * - **A password**, chosen when joining, at the code step or from the mail's link, or set by a
+ *   reset code: never before a code has proved the address. Log in opens on it (ADR 0043).
  * - **Google or GitHub**, started here and finished by tela-api's callback, which sends a refusal
  *   back to the page with `?error=`.
  * - **The mail's link**, which fills the code in and waits for a press. A link that signed in by
@@ -68,14 +68,18 @@ export function doorRoutes(
   }
 }
 
-/** What a mailed link carries: a sign-in code, or with `reset=1` a password reset's code. */
-export type MailLink = { email: string; otp: string; reset: boolean }
+/**
+ * What a mailed link carries: a sign-in code, or with `reset=1` a password reset's code. A first
+ * sign-in's code says `join=1`, and its link asks for the password the joiner chooses (ADR 0043).
+ */
+export type MailLink = { email: string; otp: string; reset: boolean; join: boolean }
 
 export function mailLink(search: URLSearchParams): MailLink | null {
   const email = search.get('email')
   const otp = search.get('otp')
   if (!email || !otp) return null
-  return { email, otp, reset: search.get('reset') === '1' }
+  const reset = search.get('reset') === '1'
+  return { email, otp, reset, join: !reset && search.get('join') === '1' }
 }
 
 /** The address bar once a link's code or an error is out of it: only where to go next stays. */
@@ -236,9 +240,9 @@ export function takeInvite(): string | null {
 
 /**
  * Where the form is. `start`: the address (with a password, or an invite code to join). `code`:
- * the emailed code, and when joining an optional password. `reset`: a reset code and the new
- * password. `link`: a mailed link waiting for a press. `unsaved`: signed in, but the password
- * chosen at the code step was not saved.
+ * the emailed code, and when joining the password they choose. `reset`: a reset code and the new
+ * password. `link`: a mailed link waiting for a press, and for a join's the password. `unsaved`:
+ * signed in, but the password chosen when joining was not saved.
  */
 export type SignInStep =
   | { kind: 'start' }
@@ -412,13 +416,18 @@ export function useSignIn(options: SignInOptions) {
 
   const verify = (email: string, otp: string, password = '') =>
     run(async () => {
-      if (password && password.length < PASSWORD_MIN) return setError('password_short')
+      // Joining chooses a password, whether the code is typed or comes in the mail's link (ADR
+      // 0043); any other sign-in by code sets none.
+      const joining =
+        (step.kind === 'code' && step.joining) || (step.kind === 'link' && step.link.join)
+      if ((joining || password) && password.length < PASSWORD_MIN) {
+        return setError('password_short')
+      }
       const res = await post('/api/auth/sign-in/email-otp', { email, otp: otp.trim() })
       if (!res.ok) {
         const why = codeError(res.status, (await fields(res)).code)
         // The gate's refusal has spent the code: only a fresh start can go on.
         const refused = why === 'not_invited' || why === 'invite_used'
-        const joining = step.kind === 'code' && step.joining
         setStep(refused ? { kind: 'start' } : { kind: 'code', email, joining })
         return setError(why)
       }
@@ -469,11 +478,15 @@ export function useSignIn(options: SignInOptions) {
       await enter()
     })
 
-  /** Answer a mailed link: its code signs in, or with a reset link sets `password` first. */
+  /**
+   * Answer a mailed link: its code signs in, a join's with the password chosen beside it, or with
+   * a reset link sets `password` first.
+   */
   const confirmLink = (password: string) => {
     if (step.kind !== 'link') return Promise.resolve()
-    const { email, otp, reset: resetting } = step.link
-    return resetting ? reset(email, otp, password) : verify(email, otp)
+    const { email, otp, reset: resetting, join } = step.link
+    if (resetting) return reset(email, otp, password)
+    return join ? verify(email, otp, password) : verify(email, otp)
   }
 
   /**

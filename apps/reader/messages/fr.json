@@ -91,7 +91,7 @@
     "codeSent": "Si {email} a un compte Tela ou une invitation, un code est en route. Saisissez-le ici, ou ouvrez le lien du même e-mail.",
     "joinSent": "Nous avons envoyé un code à {email}. Saisissez-le ici, ou ouvrez le lien du même e-mail.",
     "codePlaceholder": "Code à 6 chiffres",
-    "choosePassword": "Choisissez un mot de passe (facultatif)",
+    "choosePassword": "Choisissez un mot de passe",
     "passwordHint": "{min} caractères ou plus. Vous pourrez toujours vous connecter avec un code.",
     "verify": "Continuer",
     "otherAddress": "Utiliser une autre adresse",
@@ -103,6 +103,8 @@
     "linkAs": "Se connecter en tant que <b>{email}</b> ?",
     "linkHint": "Ne continuez que si vous avez demandé ce lien vous-même : un lien envoyé par quelqu’un d’autre vous connecterait à son compte.",
     "linkConfirm": "Se connecter",
+    "joinAs": "Choisissez un mot de passe pour <b>{email}</b> afin de terminer votre inscription.",
+    "joinConfirm": "Définir le mot de passe et rejoindre Tela",
     "resetAs": "Choisissez un nouveau mot de passe pour <b>{email}</b>.",
     "resetHint": "Ne continuez que si vous avez vous-même demandé à réinitialiser ce mot de passe.",
     "errors": {

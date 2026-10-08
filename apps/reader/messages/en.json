@@ -91,7 +91,7 @@
     "codeSent": "If {email} has a Tela account or an invitation, a code is on its way. Enter it here, or open the link in the same email.",
     "joinSent": "We sent a code to {email}. Enter it here, or open the link in the same email.",
     "codePlaceholder": "6-digit code",
-    "choosePassword": "Choose a password (optional)",
+    "choosePassword": "Choose a password",
     "passwordHint": "{min} characters or more. You can always log in with a code instead.",
     "verify": "Continue",
     "otherAddress": "Use a different address",
@@ -103,6 +103,8 @@
     "linkAs": "Sign in as <b>{email}</b>?",
     "linkHint": "Go on only if you asked for this link yourself: one sent by someone else would sign you in to their account.",
     "linkConfirm": "Sign in",
+    "joinAs": "Choose a password for <b>{email}</b> to finish joining.",
+    "joinConfirm": "Set the password and join",
     "resetAs": "Choose a new password for <b>{email}</b>.",
     "resetHint": "Go on only if you asked to reset this password yourself.",
     "errors": {

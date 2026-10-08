@@ -202,6 +202,7 @@ test.describe('Claim your card', () => {
     await sheet.getByTestId('login-submit').click()
     await expect(sheet.getByTestId('login-code')).toBeVisible()
     await sheet.getByTestId('login-code').fill(await mailedCode(request, email))
+    await sheet.getByTestId('join-password').fill(`claimed on ${Date.now()}`)
     await sheet.getByTestId('login-submit').click()
 
     const blog = `https://${handle}.e2e.test`

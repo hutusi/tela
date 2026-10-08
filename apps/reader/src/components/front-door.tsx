@@ -265,7 +265,7 @@ export function DoorForm(props: DoorFormProps) {
 
   const primary =
     step.kind === 'link'
-      ? t(step.link.reset ? 'resetConfirm' : 'linkConfirm')
+      ? t(step.link.reset ? 'resetConfirm' : step.link.join ? 'joinConfirm' : 'linkConfirm')
       : step.kind === 'code' || step.kind === 'unsaved'
         ? t('verify')
         : step.kind === 'reset'
@@ -290,6 +290,15 @@ export function DoorForm(props: DoorFormProps) {
       data-testid={testId}
       className={field}
     />
+  )
+  // Joining chooses a password, at the code step or from the mail's link (ADR 0043).
+  const joinPassword = (
+    <>
+      {newPasswordField('join-password', t('choosePassword'), true)}
+      <p className="text-[12.5px] leading-snug text-muted">
+        {t('passwordHint', { min: PASSWORD_MIN })}
+      </p>
+    </>
   )
   const codeField = (
     <input
@@ -417,14 +426,7 @@ export function DoorForm(props: DoorFormProps) {
               {t(step.joining ? 'joinSent' : 'codeSent', { email: step.email })}
             </p>
             {codeField}
-            {step.joining ? (
-              <>
-                {newPasswordField('join-password', t('choosePassword'), false)}
-                <p className="text-[12.5px] leading-snug text-muted">
-                  {t('passwordHint', { min: PASSWORD_MIN })}
-                </p>
-              </>
-            ) : null}
+            {step.joining ? joinPassword : null}
           </>
         ) : step.kind === 'reset' ? (
           <>
@@ -437,7 +439,7 @@ export function DoorForm(props: DoorFormProps) {
         ) : step.kind === 'link' ? (
           <>
             <p className="text-[17px] leading-snug text-ink" data-testid="login-link-as">
-              {t.rich(step.link.reset ? 'resetAs' : 'linkAs', {
+              {t.rich(step.link.reset ? 'resetAs' : step.link.join ? 'joinAs' : 'linkAs', {
                 email: step.link.email,
                 b: (chunks) => <b className="font-medium break-all">{chunks}</b>,
               })}
@@ -453,7 +455,9 @@ export function DoorForm(props: DoorFormProps) {
                   t('newPassword', { min: PASSWORD_MIN }),
                   true,
                 )
-              : null}
+              : step.link.join
+                ? joinPassword
+                : null}
           </>
         ) : (
           <p className="text-sm leading-relaxed text-ink-2" data-testid="door-unsaved">
