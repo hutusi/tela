@@ -556,6 +556,60 @@ test.describe("Join, from the mail's link in a tab signed in as someone else", (
   })
 })
 
+test.describe("Join, from the mail's link, while the old account's sync runs", () => {
+  test.use(visitor(44))
+  /**
+   * Found in Codex's second review: while the password saved, the cookie was the joiner's and the
+   * sync engine still named the old account. A pull then (a timer, the tab coming into view) was
+   * refused `account_changed`, and leaving sent the tab to '/' and on to /reading, cancelling the
+   * save. The sign-in holds the tab's leaving until it has settled the tab itself.
+   */
+  test('saves the password, and the refused pull does not take the tab away', async ({
+    page,
+    request,
+  }) => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    await signInRequest(page.request, `first-${stamp}@e2e.test`)
+    await page.goto('/reading')
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+
+    const email = `synced-joiner-${stamp}@e2e.test`
+    await joinAndReadCode(request, await adminCode(request), email)
+    const refusedPulls: number[] = []
+    const saves: number[] = []
+    page.on('response', (r) => {
+      const path = new URL(r.url()).pathname
+      if (path === '/api/v1/sync' && r.status() === 409) refusedPulls.push(r.status())
+      if (path === '/api/v1/account/password') saves.push(r.status())
+    })
+    // The save is held until the old account's engine has pulled under the new cookie, and been
+    // refused for it.
+    await page.route('**/api/v1/account/password', async (route) => {
+      const refused = page.waitForResponse(
+        (r) => new URL(r.url()).pathname === '/api/v1/sync' && r.status() === 409,
+      )
+      await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+      await refused
+      await route.continue().catch(() => {})
+    })
+    await page.goto(await mailedLink(request, email))
+    await expect(page.getByTestId('login-link-as')).toContainText(email)
+    const password = `synced on ${Date.now()}`
+    await page.getByTestId('join-password').fill(password)
+    await page.getByTestId('login-submit').click()
+
+    await expect(page).toHaveURL(/\/discover$/)
+    await expect(page.getByTestId('account-menu')).toBeVisible()
+    expect(refusedPulls.length).toBeGreaterThan(0)
+    expect(saves).toEqual([200])
+    const signedIn = await request.post(`${BASE}/api/auth/sign-in/email`, {
+      headers: ORIGIN,
+      data: { email, password },
+    })
+    expect(signedIn.ok()).toBe(true)
+  })
+})
+
 test.describe('Join, from the front page', () => {
   test.use(visitor(15))
   test("the front page's own Join opens the sheet, and the new member lands on Discover", async ({

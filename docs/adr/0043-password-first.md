@@ -35,7 +35,9 @@ is mailed with `/login?email=…&otp=…&join=1`, and that link names the addres
 password and goes on to Discover, under *Join Tela*. The password is saved on the session the
 code's sign-in made, naming the account it answered with, before the tab asks who signed in: a
 tab that held another account loads a fresh page then, and a password saved after that would be
-lost with it. A save that fails says so, and Continue lets the member in.
+lost with it. Until the tab has settled, the sign-in also holds the tab's leaving (`holdLeaving`):
+the old account's sync, refused `account_changed` under the new cookie, would otherwise send the
+tab to '/' mid-save. A save that fails says so, and Continue lets the member in.
 
 The requirement is the form's, not the server's, and `join=1` is a hint to the page that protects
 nothing: the code's sign-in makes the account before the password can be saved, and D1 has no

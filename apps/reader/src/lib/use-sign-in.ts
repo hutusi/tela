@@ -17,7 +17,8 @@
 import { normalizeInviteCode } from '@tela/shared'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { useSession } from '../session'
+import { holdLeaving } from '../leave'
+import { type SignedIn, useSession } from '../session'
 import { api } from '../store/api'
 import { type CardClaim, finishCard, keepClaim, takeClaim } from './claim-card'
 
@@ -346,9 +347,47 @@ export function useSignIn(options: SignInOptions) {
   const leaving = useRef(leave)
   leaving.current = leave
 
+  // From a sign-in's request until the tab has settled, the tab's leaving is this form's to hold
+  // (leave.ts): the cookie may be another account's from the answer on, and a call naming the old
+  // one would otherwise send the tab to '/' under the form, a joiner's password save and all.
+  const holding = useRef<((replay: boolean) => void) | null>(null)
+  const letGo = (replay: boolean) => {
+    holding.current?.(replay)
+    holding.current = null
+  }
+  // A form that goes while it holds (the sheet closed some other way) lets go of it.
+  useEffect(
+    () => () => {
+      holding.current?.(true)
+      holding.current = null
+    },
+    [],
+  )
+
+  /** Make a sign-in's request, holding the tab's leaving from then on unless it is refused. */
+  const signingIn = async (request: () => Promise<Response>): Promise<Response> => {
+    letGo(true)
+    holding.current = holdLeaving()
+    try {
+      const res = await request()
+      if (!res.ok) letGo(true)
+      return res
+    } catch (err) {
+      letGo(true)
+      throw err
+    }
+  }
+
   /** Signed in: learn as whom, which may load a fresh page, and go on. */
   const enter = async () => {
-    const outcome = await signedIn(latest.current.next)
+    let outcome: SignedIn | null = null
+    try {
+      outcome = await signedIn(latest.current.next)
+    } finally {
+      // A fresh page loading at `next` is already the new member's: a leave kept meanwhile would
+      // only send it to '/' instead. Otherwise the tab leaves as it was asked to.
+      letGo(outcome !== 'reloading')
+    }
     // The page may go before the session is known (a reload at `next`), or the sheet be closed
     // while it waits: the card is kept for the app to finish once it is the member's.
     const { claim } = latest.current
@@ -420,7 +459,9 @@ export function useSignIn(options: SignInOptions) {
       if ((joining || password) && password.length < PASSWORD_MIN) {
         return setError('password_short')
       }
-      const res = await post('/api/auth/sign-in/email-otp', { email, otp: otp.trim() })
+      const res = await signingIn(() =>
+        post('/api/auth/sign-in/email-otp', { email, otp: otp.trim() }),
+      )
       if (!res.ok) {
         const why = codeError(res.status, (await fields(res)).code)
         // The gate's refusal has spent the code: only a fresh start can go on.
@@ -430,7 +471,7 @@ export function useSignIn(options: SignInOptions) {
       }
       // The password a joiner chose is saved before the tab learns who signed in: a tab that held
       // another account loads a fresh page then, and nothing typed into this one outlives it. A
-      // save that fails says so first, and Continue goes on from there.
+      // save that fails says so first, still holding, and Continue goes on from there.
       if (password) {
         const member = signedInAs(await fields(res))
         if (!member || !(await savePassword(password, member))) {
@@ -444,7 +485,7 @@ export function useSignIn(options: SignInOptions) {
     run(async () => {
       const email = clean(input)
       if (!EMAIL.test(email)) return setError('invalid_email')
-      const res = await post('/api/auth/sign-in/email', { email, password })
+      const res = await signingIn(() => post('/api/auth/sign-in/email', { email, password }))
       // One answer for an unknown address, an account without a password and a wrong one.
       if (!res.ok) {
         return setError(
@@ -474,7 +515,7 @@ export function useSignIn(options: SignInOptions) {
         password,
       })
       if (!done.ok) return setError(done.status === 429 ? 'rate_limited' : 'reset_failed')
-      const res = await post('/api/auth/sign-in/email', { email, password })
+      const res = await signingIn(() => post('/api/auth/sign-in/email', { email, password }))
       if (!res.ok) {
         // The code is spent and the password set: what is left is signing in, by code for now.
         setStep({ kind: 'start' })
