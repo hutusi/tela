@@ -512,7 +512,9 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
     address locked out of its password still signs in by code. Clear it early with
     `delete from action_limits where key = 'passwordSignIn:<address>'`.
   - `401 INVALID_EMAIL_OR_PASSWORD` is the one answer for an unknown address, an account with no
-    password and a wrong one. A member who never set a password, or forgot it, asks for a reset
+    password and a wrong one. The sheet opens on the password (ADR 0043), so a member who never
+    set one is told to choose *Email me a code instead*. A member who never set a password, or
+    forgot it, can instead ask for a reset
     code (`/api/auth/email-otp/request-password-reset`): a mail `Reset your Tela password`, its
     link `/login?reset=1&…`, to an address that has an account and nothing to any other, from the
     same five sends an hour as the sign-in codes. The reset sets the password, adding one if there was none, and ends every

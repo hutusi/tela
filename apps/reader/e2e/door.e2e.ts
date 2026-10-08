@@ -347,6 +347,10 @@ test.describe('the Log in sheet, by code', () => {
 
     await page.getByTestId('nav-login').click()
     const before = await mails(request, email)
+    // The sheet opens on the password (ADR 0043): the code is the toggle under the button.
+    await sheet.getByTestId('login-mode').click()
+    await expect(sheet.getByTestId('login-password')).toHaveCount(0)
+    await expect(sheet.getByTestId('login-submit')).toHaveText('Email me a code')
     await sheet.getByTestId('login-email').fill(email)
     await sheet.getByTestId('login-submit').click()
     // The new step takes the focus: the field that held it is gone.
@@ -385,12 +389,17 @@ test.describe('the Log in sheet, by password', () => {
     await page.goto('/discover')
     await page.getByTestId('nav-login').click()
     const sheet = page.getByTestId('front-door')
-    await sheet.getByTestId('login-mode').click()
+    // It opens on the password (ADR 0043), with the code one press away.
+    await expect(sheet.getByTestId('login-password')).toBeVisible()
+    await expect(sheet.getByTestId('login-submit')).toHaveText('Log in')
+    await expect(sheet.getByTestId('login-mode')).toHaveText('Email me a code instead')
+    await expect(sheet.getByTestId('login-email')).toHaveAttribute('autocomplete', 'username')
     await sheet.getByTestId('login-email').fill(email)
     await sheet.getByTestId('login-password').fill('not the password at all')
     await sheet.getByTestId('login-submit').click()
+    // The way out for a member who never set one, without saying whether this one has.
     await expect(sheet.getByTestId('door-error')).toHaveText(
-      'That email and password do not match.',
+      'That email and password do not match. No password yet? Choose “Email me a code instead”.',
     )
     await sheet.getByTestId('login-password').fill(password)
     await sheet.getByTestId('login-submit').click()

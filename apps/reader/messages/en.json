@@ -113,7 +113,7 @@
       "reset_failed": "That reset code is wrong or has expired. Ask for a new one.",
       "password_set": "Your new password is set, but logging in with it failed. Log in with a code.",
       "password_short": "Passwords need {min} characters or more.",
-      "bad_password": "That email and password do not match.",
+      "bad_password": "That email and password do not match. No password yet? Choose “Email me a code instead”.",
       "not_invited": "No Tela account uses this address. Log in with the address you joined with, or join with an invite code.",
       "invite_used": "Everyone this invite was for has joined, or it was withdrawn. Ask for another.",
       "missing_code": "Enter your invite code.",

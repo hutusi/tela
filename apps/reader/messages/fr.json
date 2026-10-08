@@ -113,7 +113,7 @@
       "reset_failed": "Ce code de réinitialisation est erroné ou a expiré. Demandez-en un nouveau.",
       "password_set": "Votre nouveau mot de passe est défini, mais la connexion avec celui-ci a échoué. Connectez-vous avec un code.",
       "password_short": "Le mot de passe doit comporter au moins {min} caractères.",
-      "bad_password": "Cette adresse e-mail et ce mot de passe ne correspondent pas.",
+      "bad_password": "Cette adresse e-mail et ce mot de passe ne correspondent pas. Pas encore de mot de passe ? Choisissez « Recevoir plutôt un code par e-mail ».",
       "not_invited": "Aucun compte Tela n’utilise cette adresse. Connectez-vous avec l’adresse de votre inscription, ou inscrivez-vous avec un code d’invitation.",
       "invite_used": "Toutes les personnes prévues pour cette invitation se sont inscrites, ou elle a été retirée. Demandez-en une autre.",
       "missing_code": "Saisissez votre code d’invitation.",

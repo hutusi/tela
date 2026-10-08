@@ -106,7 +106,6 @@ test('a member sets a password in Settings, then logs in with it', async ({ brow
   // The log-in sheet, by password this time.
   await page.goto('/login')
   await page.getByTestId('login-email').fill(email)
-  await page.getByRole('button', { name: /log in with a password/i }).click()
   await page.locator('input[type="password"]').fill(password)
   await page.getByTestId('login-submit').click()
   await expect(page).toHaveURL(/\/reading$/)

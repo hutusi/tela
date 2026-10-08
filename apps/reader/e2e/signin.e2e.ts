@@ -36,6 +36,8 @@ test.describe('by code', () => {
 
     await page.goto('/reading')
     await expect(page).toHaveURL(/\/login\?next=%2Freading$/)
+    // The form opens on the password (ADR 0043); the code is one press away.
+    await page.getByTestId('login-mode').click()
     await page.getByTestId('login-email').fill(email)
     await page.getByTestId('login-submit').click()
     await expect(page.getByTestId('login-code')).toBeVisible()

@@ -278,8 +278,9 @@ top: the 34 px mark (in the sheet; the page has its header), a serif title (*Wel
 Tela*) and a line under it; when joining, the invite code; *Continue with Google* and *Continue
 with GitHub*, quiet 44 px pills, only once tela-api says they are configured, then a rule with
 "or"; the email; in password mode the password and *Forgot password?*; the `primary` button
-(*Email me a code*, or *Log in*); and to log in, a toggle between *Log in with a password* and
-*Email me a code instead*. Inputs are 44 px, 10 px corners, a `thumb` border that turns `ink` on
+(*Log in*, or *Email me a code*); and to log in, a toggle between *Email me a code instead* and
+*Log in with a password*. Log in opens in password mode (ADR 0043), its email field then
+`autocomplete="username"` so a password manager fills the pair. Inputs are 44 px, 10 px corners, a `thumb` border that turns `ink` on
 focus, on `paper` inside the sheet and `surface` on the page. The code step asks for the 6-digit
 code, and when joining an optional *Choose a password*, set once the code has made the account. A
 log-in's code step says a code is on its way *if* the address has an account or an invitation,

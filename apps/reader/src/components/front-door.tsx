@@ -208,7 +208,8 @@ export function DoorForm(props: DoorFormProps) {
   const providers = useProviders()
   const [email, setEmail] = useState(props.link?.email ?? '')
   const [password, setPassword] = useState('')
-  const [usePassword, setUsePassword] = useState(false)
+  // Log in opens on the password (ADR 0043); the code is one press away.
+  const [usePassword, setUsePassword] = useState(true)
   const [invite, setInvite] = useState(props.invite ?? '')
   const [otp, setOtp] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -372,7 +373,8 @@ export function DoorForm(props: DoorFormProps) {
               name="email"
               type="email"
               required
-              autoComplete="email"
+              // Beside a password, the account's name, so a password manager fills the pair.
+              autoComplete={usePassword && !joining ? 'username' : 'email'}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t('emailPlaceholder')}
