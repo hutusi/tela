@@ -151,6 +151,8 @@ test.describe('the visitor header', () => {
   test('Join and the sheet are the primary pair: ink by day, the lifted green by night', async ({
     page,
   }) => {
+    // Polled: the app renders over the edge's markup once it boots, and a button read in that
+    // moment is detached, with no computed style at all (CI saw `{ ground: '', text: '' }`).
     const pair = (testId: string) =>
       page.getByTestId(testId).evaluate((el) => {
         const style = getComputedStyle(el)
@@ -170,16 +172,16 @@ test.describe('the visitor header', () => {
 
     await page.emulateMedia({ colorScheme: 'light' })
     await page.goto('/discover')
-    expect(await pair('nav-join')).toEqual(day)
+    await expect.poll(() => pair('nav-join')).toEqual(day)
     await page.getByTestId('nav-join').click()
-    expect(await pair('login-submit')).toEqual(day)
+    await expect.poll(() => pair('login-submit')).toEqual(day)
 
     // A literal colour in a class list would stay as it was on the dark ground.
     await page.emulateMedia({ colorScheme: 'dark' })
     const night = { ground: await green(), text: 'rgb(31, 28, 24)' }
-    expect(await pair('login-submit')).toEqual(night)
+    await expect.poll(() => pair('login-submit')).toEqual(night)
     await page.keyboard.press('Escape')
-    expect(await pair('nav-join')).toEqual(night)
+    await expect.poll(() => pair('nav-join')).toEqual(night)
   })
 })
 
