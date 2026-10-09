@@ -66,6 +66,40 @@ export const CURATED_SITES = [
   { feedUrl: 'https://alastairhumphreys.com/feed/', topics: ['outdoors'] },
   { feedUrl: 'https://andrewskurka.com/feed/', topics: ['outdoors'] },
   { feedUrl: 'https://caseyhandmer.wordpress.com/feed/', topics: ['science'] },
+  {
+    feedUrl: 'https://cphmag.com/feed-atom/',
+    topics: ['photography'],
+    note: 'Jörg Colberg alone, despite "Magazine"',
+  },
+  { feedUrl: 'https://guytal.blog/feed/', topics: ['photography', 'outdoors', 'essays'] },
+  { feedUrl: 'https://www.thewanderinglensman.com/feeds/posts/default', topics: ['photography'] },
+  { feedUrl: 'https://fupduckphoto.wordpress.com/feed/', topics: ['photography'] },
+  { feedUrl: 'https://blog.jimgrey.net/feed/', topics: ['photography', 'life'] },
+  {
+    feedUrl: 'https://spitalfieldslife.com/feed/',
+    topics: ['cities', 'life'],
+    note: 'East London, daily since 2009',
+  },
+  { feedUrl: 'https://ephemeralnewyork.wordpress.com/feed/', topics: ['cities'] },
+  { feedUrl: 'https://humantransit.org/feed', topics: ['cities'] },
+  { feedUrl: 'https://ruthreichl.substack.com/feed', topics: ['food', 'essays'] },
+  { feedUrl: 'https://restaurant-ingthroughhistory.com/feed/', topics: ['food'] },
+  { feedUrl: 'https://www.foodpolitics.com/feed/', topics: ['food', 'science'] },
+  {
+    feedUrl: 'https://chinesecookingdemystified.substack.com/feed',
+    topics: ['food'],
+    note: 'A couple writing together',
+  },
+  { feedUrl: 'https://www.markhorrell.com/blog/feed/', topics: ['outdoors'] },
+  {
+    feedUrl: 'https://britishcoast.wordpress.com/feed/',
+    topics: ['outdoors'],
+    note: 'Walking the coast of mainland Britain in stages',
+  },
+  { feedUrl: 'https://longstride.net/feed.xml', topics: ['outdoors'] },
+  { feedUrl: 'https://theness.com/neurologicablog/feed/', topics: ['science'] },
+  { feedUrl: 'https://www.experimental-history.com/feed', topics: ['science', 'essays'] },
+  { feedUrl: 'https://scottaaronson.blog/?feed=rss2', topics: ['science', 'tech'] },
 
   // 简体中文
   { feedUrl: 'https://www.ruanyifeng.com/blog/atom.xml', topics: ['tech'] },
@@ -200,6 +234,7 @@ export const CURATED_SITES = [
     note: 'Deutsch',
   },
   { feedUrl: 'https://www.designtagebuch.de/feed/', topics: ['design'], note: 'Deutsch' },
+  { feedUrl: 'https://www.zukunft-mobilitaet.net/feed/', topics: ['cities'], note: 'Deutsch' },
   { feedUrl: 'https://kirainet.com/feed/', topics: ['life', 'cities'], note: 'Español' },
   { feedUrl: 'https://danielmarin.naukas.com/feed/', topics: ['science'], note: 'Español' },
   {
