@@ -63,11 +63,21 @@ export function siteOfFeed(t: Tables, feedId: number): SiteRow | undefined {
   return feed ? t.sites.get(feed.siteId) : undefined
 }
 
-/** What a feed is called: its own title, its blog's, or the blog's host. */
+/**
+ * What a feed is called: its blog's name, which an editor may have set where the feed's own is a
+ * placeholder ("feed - Thierry Crouzet"), and which no fetch rewrites as it rewrites the feed's;
+ * the feed's own title when the device holds another feed of the same blog, so the two stay
+ * apart; else the blog's host.
+ */
 export function feedTitle(t: Tables, feedId: number): string {
   const feed = t.feeds.get(feedId)
   const site = feed ? t.sites.get(feed.siteId) : undefined
-  return feed?.title ?? site?.title ?? (site ? host(site.homeUrl) : '')
+  let sibling = false
+  if (feed)
+    for (const f of t.feeds.values())
+      if (f.siteId === feed.siteId && f.id !== feed.id) sibling = true
+  const name = sibling ? (feed?.title ?? site?.title) : (site?.title ?? feed?.title)
+  return name ?? (site ? host(site.homeUrl) : '')
 }
 
 export type SubscriptionItem = {

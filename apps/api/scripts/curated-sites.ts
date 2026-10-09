@@ -15,6 +15,11 @@ export type CuratedSite = {
    */
   featured?: true
   /**
+   * The blog's name, where its feed gives a poor one: the feed's own name ("feed - …"), a bare
+   * address, a brand, or none at all. Applied unless a writer has claimed the blog.
+   */
+  title?: string
+  /**
    * Known mainland-China host. Kept as a note: every such feed fetched from Cloudflare in spike
    * S2, so it is registered like any other until one times out (OPERATIONS.md, the relay).
    */
@@ -54,6 +59,7 @@ export const CURATED_SITES = [
   { feedUrl: 'https://robinsloan.com/feed.xml', topics: ['essays'], featured: true },
   {
     feedUrl: 'https://manuelmoreale.com/feed/rss',
+    title: 'Manuel Moreale',
     topics: ['essays', 'life'],
     note: 'Runs People & Blogs, an interview series about personal sites',
   },
@@ -95,10 +101,15 @@ export const CURATED_SITES = [
   { feedUrl: 'https://www.foodpolitics.com/feed/', topics: ['food', 'science'] },
   {
     feedUrl: 'https://chinesecookingdemystified.substack.com/feed',
+    title: 'Chinese Cooking Demystified',
     topics: ['food'],
     note: 'A couple writing together',
   },
-  { feedUrl: 'https://www.markhorrell.com/blog/feed/', topics: ['outdoors'] },
+  {
+    feedUrl: 'https://www.markhorrell.com/blog/feed/',
+    topics: ['outdoors'],
+    title: 'Mark Horrell',
+  },
   {
     feedUrl: 'https://britishcoast.wordpress.com/feed/',
     topics: ['outdoors'],
@@ -146,11 +157,11 @@ export const CURATED_SITES = [
     topics: ['outdoors', 'life'],
     note: 'Excerpts in the feed; the pages extract cleanly',
   },
-  { feedUrl: 'https://yufree.cn/index.xml', topics: ['science', 'essays'] },
-  { feedUrl: 'https://citydatum.cn/feed', topics: ['cities'] },
+  { feedUrl: 'https://yufree.cn/index.xml', topics: ['science', 'essays'], title: '于淼' },
+  { feedUrl: 'https://citydatum.cn/feed', topics: ['cities'], title: '橙树志' },
   { feedUrl: 'https://bluehe.cn/feed/', topics: ['photography', 'cities'] },
   { feedUrl: 'https://yilinhut.net/feed/', topics: ['science', 'essays'] },
-  { feedUrl: 'https://ygz.ink/feed', topics: ['outdoors', 'life'] },
+  { feedUrl: 'https://ygz.ink/feed', topics: ['outdoors', 'life'], title: '宗宗酱' },
   { feedUrl: 'https://www.geedea.pro/index.xml', topics: ['tech', 'essays'] },
 
   // 正體中文
@@ -181,10 +192,15 @@ export const CURATED_SITES = [
   { feedUrl: 'https://www.bortzmeyer.org/feed-full.atom', topics: ['tech'], featured: true },
   {
     feedUrl: 'https://tcrouzet.com/feeds/feed.xml',
+    title: 'Thierry Crouzet',
     topics: ['essays', 'outdoors'],
     featured: true,
   },
-  { feedUrl: 'https://affordance.framasoft.org/feed/', topics: ['essays', 'tech'] },
+  {
+    feedUrl: 'https://affordance.framasoft.org/feed/',
+    topics: ['essays', 'tech'],
+    title: 'Affordance',
+  },
   { feedUrl: 'https://linterconnexionnestplusassuree.fr/feed/', topics: ['cities'] },
   {
     feedUrl: 'https://www.isabelleetlevelo.fr/feed/',
@@ -209,7 +225,12 @@ export const CURATED_SITES = [
     topics: ['essays', 'photography'],
     note: 'François Bon',
   },
-  { feedUrl: 'https://jeanneemard.wordpress.com/feed/', topics: ['essays'], note: 'Québec' },
+  {
+    feedUrl: 'https://jeanneemard.wordpress.com/feed/',
+    topics: ['essays'],
+    note: 'Québec',
+    title: 'Jeanne Émard',
+  },
   { feedUrl: 'https://standblog.org/blog/feed/atom', topics: ['tech', 'essays'] },
   { feedUrl: 'https://gregorymignard.com/index.xml', topics: ['photography', 'life'] },
   {
@@ -232,12 +253,14 @@ export const CURATED_SITES = [
   { feedUrl: 'https://nonswan.hatenablog.com/feed', topics: ['outdoors', 'food'], note: '日本語' },
   {
     feedUrl: 'https://kaz-ataka.hatenablog.com/feed',
+    title: 'ニューロサイエンスとマーケティングの間',
     topics: ['essays', 'cities', 'science'],
     note: '日本語',
   },
   { feedUrl: 'https://www.44bits.io/ko/feed/all', topics: ['tech'], note: '한국어' },
   {
     feedUrl: 'https://www.bluexmas.com/feed/',
+    title: 'bluexmas',
     featured: true,
     topics: ['food', 'essays'],
     note: '한국어; excerpts in the feed, and the pages extract cleanly',
@@ -245,6 +268,7 @@ export const CURATED_SITES = [
   { feedUrl: 'https://jojoldu.tistory.com/rss', topics: ['essays', 'tech'], note: '한국어' },
   {
     feedUrl: 'http://moogi.new21.org/tc/rss',
+    title: '김 용묵의 절대공간',
     topics: ['tech', 'science', 'life'],
     note: '한국어; https times out',
   },

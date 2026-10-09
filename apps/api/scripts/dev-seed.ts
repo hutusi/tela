@@ -86,7 +86,12 @@ console.log(`adding the ${CURATED_SITES.length} curated blogs…`)
 for (const site of CURATED_SITES as readonly CuratedSite[]) {
   const { res } = await call(
     '/api/admin/curate',
-    { feedUrl: site.feedUrl, topics: site.topics, featured: site.featured === true },
+    {
+      feedUrl: site.feedUrl,
+      topics: site.topics,
+      featured: site.featured === true,
+      title: site.title,
+    },
     true,
   )
   if (!res.ok) console.warn(`  ✗ ${site.feedUrl}: ${res.status}`)

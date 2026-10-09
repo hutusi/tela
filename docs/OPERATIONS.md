@@ -760,8 +760,10 @@ A public reader count is shown only from three readers.
   lists it with its topics, one blog a request. The few marked `featured: true` are featured,
   which puts them ahead of every other blog in Discover (ADR 0018, amended). Taking the mark off
   an entry and applying the list puts that blog back to listed; a blog removed from the list
-  keeps its listing, so demote it in the console. Running it again changes nothing that is
-  already right. A rejected blog is left alone; a claimed one keeps its owner's topics.
+  keeps its listing, so demote it in the console. An entry's `title` names a blog whose feed
+  names it poorly ("feed - …", a bare address, none at all): no fetch rewrites a blog's name, and
+  the reader shows it before the feed's. Running it again changes nothing that is already right.
+  A rejected blog is left alone; a claimed one keeps its owner's topics and name.
 - **Review the blogs members add:** Discover → To review lists each private, unclaimed blog that
   someone reads and a live feed has filled, with its language, its posts of the last 30 days, its
   latest post, its readers and when it was added. List it, or Not for Discover; either takes it

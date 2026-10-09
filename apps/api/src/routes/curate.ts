@@ -12,7 +12,14 @@ import type { ApiDeps } from '../deps'
 import { fetchSoon } from './feeds'
 
 export type CurateResult =
-  | { feedId: number; siteId: number; created: boolean; listing: string; topics: string[] }
+  | {
+      feedId: number
+      siteId: number
+      created: boolean
+      listing: string
+      title: string | null
+      topics: string[]
+    }
   | { error: string }
 
 export async function curate(
@@ -20,6 +27,8 @@ export async function curate(
   feedUrl: string,
   topics: string[],
   featured: boolean,
+  /** The blog's name where its feed gives a poor one; the feed's stands when this is null. */
+  title: string | null = null,
 ): Promise<CurateResult> {
   const { db } = deps
   const added = await deps.ingest.addFeed({ feedUrl, actorId: null })
@@ -36,6 +45,9 @@ export async function curate(
   const listing = featured ? 'featured' : 'listed'
   const relist = site ? site.listing !== 'rejected' && site.listing !== listing : false
   const retopic = site?.listing !== 'rejected' && site?.claimed_by === null && chosen.length > 0
+  // A claimed blog's name is its writer's, as its topics are. No fetch rewrites a blog's name
+  // (it only fills one that is missing), so a name set here stays.
+  const rename = title !== null
   const now = deps.clock.now()
   await db.batch([
     bumpSeq(db),
@@ -43,6 +55,11 @@ export async function curate(
       update sites set listing = ${listing}, review = 'listed', reviewed_at = ${now},
         updated_at = ${now}, seq = ${currentSeq}
       where id = ${added.siteId} and ${relist ? sql`true` : sql`false`}
+    `),
+    db.run(sql`
+      update sites set title = ${title}, updated_at = ${now}, seq = ${currentSeq}
+      where id = ${added.siteId} and claimed_by is null and title is not ${title}
+        and ${rename ? sql`true` : sql`false`}
     `),
     db.run(
       sql`delete from site_topics where site_id = ${added.siteId} and ${retopic ? sql`true` : sql`false`}`,
@@ -59,9 +76,9 @@ export async function curate(
   if (feed && feed.last_fetched_at === null) {
     await fetchSoon(db, deps.jobs, added.feedId, deps.clock.now())
   }
-  const after = await first<{ listing: string }>(
+  const after = await first<{ listing: string; title: string | null }>(
     db,
-    sql`select listing from sites where id = ${added.siteId}`,
+    sql`select listing, title from sites where id = ${added.siteId}`,
   )
   const stored = await db.all<{ topic: string }>(
     sql`select topic from site_topics where site_id = ${added.siteId} order by topic`,
@@ -71,6 +88,7 @@ export async function curate(
     siteId: added.siteId,
     created: added.created,
     listing: after?.listing ?? 'private',
+    title: after?.title ?? null,
     topics: stored.map((t) => t.topic),
   }
 }

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { applyPull, emptyTables, type Tables, titleKey, view } from '@tela/sync'
 import {
   articlesFor,
+  feedTitle,
   isMarkedUnread,
   isRead,
   prefetchPlan,
@@ -207,5 +208,51 @@ describe('what the idle prefetch would fetch', () => {
       [],
     )
     expect(plan(finished)).not.toBe(plan(before))
+  })
+})
+
+describe('what a feed is called', () => {
+  const feed = (id: number, siteId: number, title: string | null) => ({
+    id,
+    siteId,
+    feedUrl: `https://blog${siteId}.example/feed${id}`,
+    title,
+    status: 'active',
+    lastFetchedAt: null,
+    lastError: null,
+    seq: 1,
+  })
+  const site = (id: number, title: string | null) => ({
+    id,
+    homeUrl: `https://blog${id}.example`,
+    title,
+    description: null,
+    faviconKey: null,
+    primaryLang: 'fr',
+    listing: 'featured',
+    owned: false,
+    claimed: false,
+    readerCount: 0,
+    translationOptOut: false,
+    seq: 1,
+  })
+
+  test("the blog's name, which an editor set and no fetch rewrites, then the feed's, then the host", () => {
+    const t = tables({
+      feeds: [feed(1, 1, 'feed - Thierry Crouzet'), feed(2, 2, 'A feed'), feed(3, 3, null)],
+      sites: [site(1, 'Thierry Crouzet'), site(2, null), site(3, null)],
+    })
+    expect(feedTitle(t, 1)).toBe('Thierry Crouzet')
+    expect(feedTitle(t, 2)).toBe('A feed')
+    expect(feedTitle(t, 3)).toBe('blog3.example')
+    expect(feedTitle(t, 99)).toBe('')
+  })
+
+  test('two feeds of one blog keep their own titles, so a member can tell them apart', () => {
+    const t = tables({
+      feeds: [feed(1, 1, 'Posts'), feed(2, 1, 'Links')],
+      sites: [site(1, 'One Blog')],
+    })
+    expect([feedTitle(t, 1), feedTitle(t, 2)]).toEqual(['Posts', 'Links'])
   })
 })

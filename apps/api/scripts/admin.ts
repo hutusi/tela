@@ -149,6 +149,7 @@ if (command === 'invite') {
       feedUrl: site.feedUrl,
       topics: site.topics,
       featured: site.featured === true,
+      title: site.title,
     })
     const body = json as { error?: string; created?: boolean; listing?: string; topics?: string[] }
     if (!res.ok) {

@@ -113,6 +113,25 @@ describe('curating Discover', () => {
     expect(((await (await add(true)).json()) as { listing: string }).listing).toBe('rejected')
   })
 
+  test("names a blog whose feed names it poorly, and leaves a writer's name alone", async () => {
+    const add = (title?: string) =>
+      curate({ feedUrl: server.url('/feed.xml'), topics: [], featured: false, title })
+    const named = (await (await add('Le blog')).json()) as { siteId: number; title: string }
+    expect(named.title).toBe('Le blog')
+    // Without a title the feed's name stands: nothing reverts the one an editor set.
+    expect(((await (await add()).json()) as { title: string }).title).toBe('Le blog')
+    const blogger = await signedIn(api, 'writer@x.test')
+    await api.db.run(
+      sql`update sites set claimed_by = ${blogger.userId} where id = ${named.siteId}`,
+    )
+    expect(((await (await add('Another name')).json()) as { title: string }).title).toBe('Le blog')
+    for (const bad of ['', '   ', 'x'.repeat(201)]) {
+      const res = await add(bad)
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'invalid_title' })
+    }
+  })
+
   test('needs to be told whether to feature, so an older script cannot feature the whole list', async () => {
     const res = await curate({ feedUrl: server.url('/feed.xml'), topics: ['tech'] })
     expect(res.status).toBe(400)

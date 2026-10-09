@@ -146,14 +146,18 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
    */
   app.post('/api/admin/curate', async (c) => {
     if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
-    type Body = { feedUrl?: unknown; topics?: unknown; featured?: unknown }
+    type Body = { feedUrl?: unknown; topics?: unknown; featured?: unknown; title?: unknown }
     const body = await c.req.json<Body>().catch(() => ({}) as Body)
     if (typeof body.feedUrl !== 'string') return c.json({ error: 'invalid_url' }, 400)
     if (typeof body.featured !== 'boolean') return c.json({ error: 'featured_required' }, 400)
+    const title = typeof body.title === 'string' ? body.title.trim() : null
+    if (body.title !== undefined && (!title || title.length > 200)) {
+      return c.json({ error: 'invalid_title' }, 400)
+    }
     const topics = Array.isArray(body.topics)
       ? body.topics.filter((t): t is string => typeof t === 'string')
       : []
-    const result = await curate(deps, body.feedUrl, topics, body.featured)
+    const result = await curate(deps, body.feedUrl, topics, body.featured, title)
     return 'error' in result ? c.json(result, 422) : c.json(result)
   })
 
