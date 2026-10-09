@@ -17,7 +17,7 @@ test.beforeAll(async () => {
       for (const lang of FRESH_LANGS) {
         const res = await admin.post(`${BASE}/api/admin/curate`, {
           headers: { origin: BASE, authorization: `Bearer ${ADMIN_TOKEN}` },
-          data: { feedUrl: `${FIXTURES}/fresh/${lang}.xml`, topics: [] },
+          data: { feedUrl: `${FIXTURES}/fresh/${lang}.xml`, topics: [], featured: true },
         })
         expect(res.ok()).toBe(true)
       }

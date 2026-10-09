@@ -1,8 +1,9 @@
 /**
- * The editorial door into Discover (ADR 0018): an operator adds a curated blog's feed and features
- * the blog, before any blogger has claimed theirs. One entry a request, so `bun run admin curate`
- * shows progress and one unreachable feed does not stop the rest. Applying an entry again changes
- * nothing that is already right.
+ * The editorial door into Discover (ADR 0018): an operator adds a curated blog's feed and lists
+ * the blog, before any blogger has claimed theirs, featuring the few the list marks so Discover
+ * opens on them. One entry a request, so `bun run admin curate` shows progress and one
+ * unreachable feed does not stop the rest. Applying an entry again changes nothing that is
+ * already right.
  */
 import { bumpSeq, currentSeq, first } from '@tela/data'
 import { isTopic } from '@tela/shared'
@@ -18,6 +19,7 @@ export async function curate(
   deps: ApiDeps,
   feedUrl: string,
   topics: string[],
+  featured: boolean,
 ): Promise<CurateResult> {
   const { db } = deps
   const added = await deps.ingest.addFeed({ feedUrl, actorId: null })
@@ -27,19 +29,20 @@ export async function curate(
     db,
     sql`select listing, claimed_by from sites where id = ${added.siteId}`,
   )
-  // Featured, unless a person decided otherwise: a rejected blog is left alone entirely, and a
-  // claimed one's topics are its owner's to pick. Featuring is an editor's decision for Discover,
-  // so it records the review the console's Feature does (ADR 0041): listed, so an Unfeature
-  // leaves the pick in Discover.
-  const feature = site?.listing === 'private' || site?.listing === 'listed'
+  // Featured or listed, as the list says, unless a person decided otherwise: a rejected blog is
+  // left alone entirely, and a claimed one's topics are its owner's to pick. Either is an
+  // editor's decision for Discover, so it records the review the console's Feature and List do
+  // (ADR 0041): listed, so an Unfeature leaves the pick in Discover.
+  const listing = featured ? 'featured' : 'listed'
+  const relist = site ? site.listing !== 'rejected' && site.listing !== listing : false
   const retopic = site?.listing !== 'rejected' && site?.claimed_by === null && chosen.length > 0
   const now = deps.clock.now()
   await db.batch([
     bumpSeq(db),
     db.run(sql`
-      update sites set listing = 'featured', review = 'listed', reviewed_at = ${now},
+      update sites set listing = ${listing}, review = 'listed', reviewed_at = ${now},
         updated_at = ${now}, seq = ${currentSeq}
-      where id = ${added.siteId} and ${feature ? sql`true` : sql`false`}
+      where id = ${added.siteId} and ${relist ? sql`true` : sql`false`}
     `),
     db.run(
       sql`delete from site_topics where site_id = ${added.siteId} and ${retopic ? sql`true` : sql`false`}`,

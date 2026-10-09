@@ -40,7 +40,9 @@ everything so far sits under `[Unreleased]`.
   Portuguese, German and Italian, and 19 for the thin topics: photography, cities, food, outdoors
   and science. Each posted in the 60 days before it was added. Three blogs silent for six months
   or more leave the list. Discover now pages its blogs 60 at a time. Before, it stopped at 60
-  and never said there were more.
+  and never said there were more. Only 25 hand-picked blogs are featured now, so Discover opens
+  on a front shelf across languages and topics. The rest of the list is listed (ADR 0018,
+  amended).
 - **Mark as unread.** The reader's action row offers *Mark as unread* on a read post and *Mark as
   read* on an unread one, whether or not opening reads, and `m` does the same from the keyboard. A
   post marked unread beats an earlier "mark all read" and the 30-day horizon until it is read

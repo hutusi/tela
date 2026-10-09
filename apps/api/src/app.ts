@@ -140,17 +140,20 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     return c.json(invited)
   })
 
-  /** Add a curated blog's feed and feature it in Discover (`bun run admin curate`). */
+  /**
+   * Add a curated blog's feed, and feature it in Discover or list it (`bun run admin curate`).
+   * `featured` is required: an older script that left it out would feature the whole list again.
+   */
   app.post('/api/admin/curate', async (c) => {
     if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
-    const body = await c.req
-      .json<{ feedUrl?: unknown; topics?: unknown }>()
-      .catch(() => ({}) as { feedUrl?: unknown; topics?: unknown })
+    type Body = { feedUrl?: unknown; topics?: unknown; featured?: unknown }
+    const body = await c.req.json<Body>().catch(() => ({}) as Body)
     if (typeof body.feedUrl !== 'string') return c.json({ error: 'invalid_url' }, 400)
+    if (typeof body.featured !== 'boolean') return c.json({ error: 'featured_required' }, 400)
     const topics = Array.isArray(body.topics)
       ? body.topics.filter((t): t is string => typeof t === 'string')
       : []
-    const result = await curate(deps, body.feedUrl, topics)
+    const result = await curate(deps, body.feedUrl, topics, body.featured)
     return 'error' in result ? c.json(result, 422) : c.json(result)
   })
 

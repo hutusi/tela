@@ -81,3 +81,15 @@ This ADR was written on the Postgres stack; the names it uses are now these (ADR
   that `claimed_by is not null` already tells a claimed blog from one readers listed.
 - "Only the count the card already displays" no longer holds below three readers: ADR 0041 gives
   a public count only from the community door's threshold up.
+
+## Amended (2026-10-09)
+
+The editorial list no longer features everything it lists. At 35 blogs, featuring every one was
+harmless. At 110 it meant nothing: Discover sorts featured blogs first, so when nearly everything
+was featured its first page was simply the oldest entries. Every entry is now listed, and only
+the few marked `featured: true` in `apps/api/scripts/curated-sites.ts` are featured: a front
+shelf, picked by hand for posting and for its spread across languages and topics. Applying the
+list moves a blog that lost the mark back to listed. A blog removed from the list keeps whatever
+listing it had. `POST /api/admin/curate` requires `featured`, since a script that predates it
+would otherwise feature the whole list again. A rejected blog stays rejected whatever the list
+says, and either listing records the operator's review as listed (ADR 0041).

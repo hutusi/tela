@@ -10,6 +10,11 @@ export type CuratedSite = {
   topics: readonly [Topic, ...Topic[]]
   note?: string
   /**
+   * On Discover's front shelf: featured blogs come before every other listed one. Kept to a
+   * hand-picked few, posting and spread across languages and topics, or the shelf means nothing.
+   */
+  featured?: true
+  /**
    * Known mainland-China host. Kept as a note: every such feed fetched from Cloudflare in spike
    * S2, so it is registered like any other until one times out (OPERATIONS.md, the relay).
    */
@@ -32,29 +37,31 @@ export type CuratedSite = {
  * featured card that leads to a blog nobody writes any more makes the directory look abandoned.
  * Removing it here changes nothing in production: set it from Feature to List in the console as
  * well, and it stays readable under All.
+ * Every entry is listed; the few marked `featured` are featured, and an entry that loses the mark
+ * goes back to listed when the list is applied. A blog that leaves the list keeps its listing.
  * Changing this list is a reviewable commit; `bun run admin curate` applies it, and applying it
  * again changes nothing that is already right.
  */
 export const CURATED_SITES = [
   // English
-  { feedUrl: 'https://simonwillison.net/atom/everything/', topics: ['tech'] },
+  { feedUrl: 'https://simonwillison.net/atom/everything/', topics: ['tech'], featured: true },
   { feedUrl: 'https://jvns.ca/atom.xml', topics: ['tech'] },
   { feedUrl: 'https://overreacted.io/rss.xml', topics: ['tech'] },
   { feedUrl: 'https://daringfireball.net/feeds/main', topics: ['tech'] },
   { feedUrl: 'https://macwright.com/rss.xml', topics: ['tech', 'life'] },
   { feedUrl: 'https://hillelwayne.com/index.xml', topics: ['tech', 'science'] },
   { feedUrl: 'https://sive.rs/en.atom', topics: ['essays'] },
-  { feedUrl: 'https://robinsloan.com/feed.xml', topics: ['essays'] },
+  { feedUrl: 'https://robinsloan.com/feed.xml', topics: ['essays'], featured: true },
   {
     feedUrl: 'https://manuelmoreale.com/feed/rss',
     topics: ['essays', 'life'],
     note: 'Runs People & Blogs, an interview series about personal sites',
   },
-  { feedUrl: 'https://craigmod.com/index.xml', topics: ['essays', 'photography'] },
+  { feedUrl: 'https://craigmod.com/index.xml', topics: ['essays', 'photography'], featured: true },
   { feedUrl: 'https://maggieappleton.com/rss.xml', topics: ['design'] },
   { feedUrl: 'https://blog.jim-nielsen.com/feed.xml', topics: ['design', 'tech'] },
   { feedUrl: 'https://kottke.org/index.xml', topics: ['life'] },
-  { feedUrl: 'https://austinkleon.com/feed/', topics: ['life', 'design'] },
+  { feedUrl: 'https://austinkleon.com/feed/', topics: ['life', 'design'], featured: true },
   { feedUrl: 'https://pedestrianobservations.com/feed/', topics: ['cities'] },
   {
     feedUrl: 'https://diamondgeezer.blogspot.com/feeds/posts/default',
@@ -77,12 +84,13 @@ export const CURATED_SITES = [
   { feedUrl: 'https://blog.jimgrey.net/feed/', topics: ['photography', 'life'] },
   {
     feedUrl: 'https://spitalfieldslife.com/feed/',
+    featured: true,
     topics: ['cities', 'life'],
     note: 'East London, daily since 2009',
   },
   { feedUrl: 'https://ephemeralnewyork.wordpress.com/feed/', topics: ['cities'] },
   { feedUrl: 'https://humantransit.org/feed', topics: ['cities'] },
-  { feedUrl: 'https://ruthreichl.substack.com/feed', topics: ['food', 'essays'] },
+  { feedUrl: 'https://ruthreichl.substack.com/feed', topics: ['food', 'essays'], featured: true },
   { feedUrl: 'https://restaurant-ingthroughhistory.com/feed/', topics: ['food'] },
   { feedUrl: 'https://www.foodpolitics.com/feed/', topics: ['food', 'science'] },
   {
@@ -97,19 +105,23 @@ export const CURATED_SITES = [
     note: 'Walking the coast of mainland Britain in stages',
   },
   { feedUrl: 'https://longstride.net/feed.xml', topics: ['outdoors'] },
-  { feedUrl: 'https://theness.com/neurologicablog/feed/', topics: ['science'] },
+  { feedUrl: 'https://theness.com/neurologicablog/feed/', topics: ['science'], featured: true },
   { feedUrl: 'https://www.experimental-history.com/feed', topics: ['science', 'essays'] },
   { feedUrl: 'https://scottaaronson.blog/?feed=rss2', topics: ['science', 'tech'] },
 
   // 简体中文
-  { feedUrl: 'https://www.ruanyifeng.com/blog/atom.xml', topics: ['tech'] },
+  { feedUrl: 'https://www.ruanyifeng.com/blog/atom.xml', topics: ['tech'], featured: true },
   { feedUrl: 'https://blog.codingnow.com/atom.xml', topics: ['tech'] },
   { feedUrl: 'https://kexue.fm/feed', topics: ['science', 'tech'] },
   { feedUrl: 'https://baoyu.io/feed.xml', topics: ['tech'] },
-  { feedUrl: 'https://www.zhangxinxu.com/wordpress/feed/', topics: ['design', 'tech'] },
+  {
+    feedUrl: 'https://www.zhangxinxu.com/wordpress/feed/',
+    topics: ['design', 'tech'],
+    featured: true,
+  },
   { feedUrl: 'https://tw93.fun/feed.xml', topics: ['tech', 'life'] },
-  { feedUrl: 'https://hutusi.com/feed.xml', topics: ['tech', 'essays'] },
-  { feedUrl: 'https://www.tortorse.com/atom.xml', topics: ['essays', 'design'] },
+  { feedUrl: 'https://hutusi.com/feed.xml', topics: ['tech', 'essays'], featured: true },
+  { feedUrl: 'https://www.tortorse.com/atom.xml', topics: ['essays', 'design'], featured: true },
   { feedUrl: 'https://jia.je/feed.xml', topics: ['tech'] },
   { feedUrl: 'https://colobu.com/atom.xml', topics: ['tech'] },
   {
@@ -117,12 +129,12 @@ export const CURATED_SITES = [
     topics: ['tech', 'essays'],
     note: 'blog.est.im',
   },
-  { feedUrl: 'https://www.jfsay.com/feed', topics: ['life', 'cities'] },
+  { feedUrl: 'https://www.jfsay.com/feed', topics: ['life', 'cities'], featured: true },
   { feedUrl: 'https://anotherdayu.com/feed/', topics: ['life', 'food', 'outdoors'] },
   { feedUrl: 'https://www.kawabangga.com/feed', topics: ['tech'] },
   { feedUrl: 'https://www.fengcan.net/feed/', topics: ['essays'] },
   { feedUrl: 'https://www.ixiqin.com/feed/', topics: ['tech', 'life'] },
-  { feedUrl: 'https://mobius.blog/feed/', topics: ['essays', 'life'] },
+  { feedUrl: 'https://mobius.blog/feed/', topics: ['essays', 'life'], featured: true },
   { feedUrl: 'https://elmagnifico.tech/feed.xml', topics: ['tech', 'outdoors'] },
   {
     feedUrl: 'http://weiwuhui.com/feed',
@@ -142,15 +154,15 @@ export const CURATED_SITES = [
   { feedUrl: 'https://www.geedea.pro/index.xml', topics: ['tech', 'essays'] },
 
   // 正體中文
-  { feedUrl: 'https://blog.gslin.org/feed/', topics: ['tech'] },
+  { feedUrl: 'https://blog.gslin.org/feed/', topics: ['tech'], featured: true },
   { feedUrl: 'https://www.playpcesor.com/feeds/posts/default', topics: ['tech', 'life'] },
-  { feedUrl: 'https://readingoutpost.com/feed/', topics: ['essays'] },
+  { feedUrl: 'https://readingoutpost.com/feed/', topics: ['essays'], featured: true },
   {
     feedUrl: 'https://blog.darkthread.net/feed/rss/',
     topics: ['tech'],
     note: 'Excerpts in the feed; the pages extract cleanly',
   },
-  { feedUrl: 'https://alexhsu.com/rss.xml', topics: ['essays', 'life'] },
+  { feedUrl: 'https://alexhsu.com/rss.xml', topics: ['essays', 'life'], featured: true },
   { feedUrl: 'https://oliveassignment.xyz/feed/', topics: ['essays', 'cities'] },
   { feedUrl: 'https://ivonblog.com/index.xml', topics: ['tech'] },
   { feedUrl: 'https://blog.serv.idv.tw/feed', topics: ['tech', 'life'] },
@@ -166,12 +178,17 @@ export const CURATED_SITES = [
   },
 
   // Français
-  { feedUrl: 'https://www.bortzmeyer.org/feed-full.atom', topics: ['tech'] },
-  { feedUrl: 'https://tcrouzet.com/feeds/feed.xml', topics: ['essays', 'outdoors'] },
+  { feedUrl: 'https://www.bortzmeyer.org/feed-full.atom', topics: ['tech'], featured: true },
+  {
+    feedUrl: 'https://tcrouzet.com/feeds/feed.xml',
+    topics: ['essays', 'outdoors'],
+    featured: true,
+  },
   { feedUrl: 'https://affordance.framasoft.org/feed/', topics: ['essays', 'tech'] },
   { feedUrl: 'https://linterconnexionnestplusassuree.fr/feed/', topics: ['cities'] },
   {
     feedUrl: 'https://www.isabelleetlevelo.fr/feed/',
+    featured: true,
     topics: ['cities'],
     note: 'Excerpts in the feed; the pages extract cleanly',
   },
@@ -188,6 +205,7 @@ export const CURATED_SITES = [
   },
   {
     feedUrl: 'https://www.tierslivre.net/spip/spip.php?page=backend',
+    featured: true,
     topics: ['essays', 'photography'],
     note: 'François Bon',
   },
@@ -207,6 +225,7 @@ export const CURATED_SITES = [
   { feedUrl: 'https://azukiazusa.dev/rss.xml', topics: ['tech'], note: '日本語' },
   {
     feedUrl: 'https://p-shirokuma.hatenadiary.com/feed',
+    featured: true,
     topics: ['essays', 'life'],
     note: '日本語',
   },
@@ -219,6 +238,7 @@ export const CURATED_SITES = [
   { feedUrl: 'https://www.44bits.io/ko/feed/all', topics: ['tech'], note: '한국어' },
   {
     feedUrl: 'https://www.bluexmas.com/feed/',
+    featured: true,
     topics: ['food', 'essays'],
     note: '한국어; excerpts in the feed, and the pages extract cleanly',
   },
@@ -230,19 +250,30 @@ export const CURATED_SITES = [
   },
   {
     feedUrl: 'https://www.buddenbohm-und-soehne.de/feed/',
+    featured: true,
     topics: ['essays', 'life', 'cities'],
     note: 'Deutsch',
   },
   { feedUrl: 'https://www.designtagebuch.de/feed/', topics: ['design'], note: 'Deutsch' },
   { feedUrl: 'https://www.zukunft-mobilitaet.net/feed/', topics: ['cities'], note: 'Deutsch' },
   { feedUrl: 'https://kirainet.com/feed/', topics: ['life', 'cities'], note: 'Español' },
-  { feedUrl: 'https://danielmarin.naukas.com/feed/', topics: ['science'], note: 'Español' },
+  {
+    feedUrl: 'https://danielmarin.naukas.com/feed/',
+    topics: ['science'],
+    note: 'Español',
+    featured: true,
+  },
   {
     feedUrl: 'https://elcafedeocata.blogspot.com/feeds/posts/default',
     topics: ['essays'],
     note: 'Español',
   },
-  { feedUrl: 'https://manualdousuario.net/feed/', topics: ['tech'], note: 'Português' },
+  {
+    feedUrl: 'https://manualdousuario.net/feed/',
+    topics: ['tech'],
+    note: 'Português',
+    featured: true,
+  },
   {
     feedUrl: 'https://cristhianoaguiar.substack.com/feed',
     topics: ['essays'],

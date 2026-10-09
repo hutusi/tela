@@ -50,7 +50,7 @@ test.beforeAll(async () => {
     // A blog nobody claimed has no public page; an operator featuring it gives it one.
     const curated = await anna.post(`${BASE}/api/admin/curate`, {
       headers: { origin: BASE, authorization: `Bearer ${ADMIN_TOKEN}` },
-      data: { feedUrl: `${FIXTURES}/jvns.xml`, topics: [] },
+      data: { feedUrl: `${FIXTURES}/jvns.xml`, topics: [], featured: true },
     })
     expect(curated.ok()).toBe(true)
     siteId = ((await curated.json()) as { siteId: number }).siteId

@@ -52,7 +52,7 @@ bun run admin invite <email>         # invite a member through tela-api (ADMIN_T
 bun run admin code <TEXT> --uses N   # an operator invite code for N people (ADR 0034)
 bun run admin codes                  # the operator's codes: places taken, live holds
 bun run admin revoke <TEXT>          # nobody else joins with that code; who joined stays
-bun run admin curate                 # add and feature the curated blogs (apps/api/scripts/curated-sites.ts)
+bun run admin curate                 # add the curated blogs, featuring those marked (apps/api/scripts/curated-sites.ts)
 bun run admin grant <email>          # open the admin console (/admin) to a member; ungrant closes it (ADR 0039)
 cd apps/jobs && wrangler deploy      # deploy order: tela-jobs, tela-api, then tela-web
 cd apps/reader && bunx vite build && wrangler deploy

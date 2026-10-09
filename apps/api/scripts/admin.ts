@@ -6,13 +6,13 @@
  *   ADMIN_TOKEN=… bun run admin code WELCOME --uses 20   # an invite code of your own (ADR 0034)
  *   ADMIN_TOKEN=… bun run admin codes                    # yours, with their places and holds
  *   ADMIN_TOKEN=… bun run admin revoke WELCOME           # nobody else joins with it
- *   ADMIN_TOKEN=… bun run admin curate                   # the curated blogs (curated-sites.ts)
+ *   ADMIN_TOKEN=… bun run admin curate                   # the curated blogs (curated-sites.ts), the marked few featured
  *   ADMIN_TOKEN=… bun run admin grant you@example.com    # open the admin console to a member
  *   ADMIN_TOKEN=… bun run admin ungrant you@example.com  # and close it (ADR 0039)
  *   TELA_URL=http://localhost:8787 ADMIN_TOKEN=… bun run admin invite a@b.c
  */
 import { parseArgs } from 'node:util'
-import { CURATED_SITES } from './curated-sites'
+import { CURATED_SITES, type CuratedSite } from './curated-sites'
 
 const [command, ...args] = process.argv.slice(2)
 const base = (process.env.TELA_URL ?? 'https://telaread.com').replace(/\/$/, '')
@@ -144,10 +144,11 @@ if (command === 'invite') {
   // One blog a request: each fetches the feed, so the list takes a while, and one that fails
   // does not stop the rest. Running it again changes nothing that is already right.
   let failures = 0
-  for (const site of CURATED_SITES) {
+  for (const site of CURATED_SITES as readonly CuratedSite[]) {
     const { res, json } = await admin('POST', 'curate', {
       feedUrl: site.feedUrl,
       topics: site.topics,
+      featured: site.featured === true,
     })
     const body = json as { error?: string; created?: boolean; listing?: string; topics?: string[] }
     if (!res.ok) {

@@ -52,7 +52,7 @@ async function member(
 async function curated(page: Page): Promise<number> {
   const res = await page.request.post(`${BASE}/api/admin/curate`, {
     headers: { ...ORIGIN, authorization: `Bearer ${ADMIN_TOKEN}` },
-    data: { feedUrl: `${FIXTURES}/jvns.xml`, topics: ['tech'] },
+    data: { feedUrl: `${FIXTURES}/jvns.xml`, topics: ['tech'], featured: true },
   })
   expect(res.ok()).toBe(true)
   return ((await res.json()) as { siteId: number }).siteId

@@ -15,7 +15,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CURATED_SITES } from './curated-sites'
+import { CURATED_SITES, type CuratedSite } from './curated-sites'
 import { SEED_MARKER, SEED_MIN_SITES, type SeedSite, seedStatements } from './dev-seed-data'
 
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url))
@@ -83,10 +83,10 @@ const up = await fetch(`${base}/api/health`).catch(() => null)
 if (!up?.ok) stop(`no dev server at ${base}: start \`bun run dev\` first (OPERATIONS.md)`)
 
 console.log(`adding the ${CURATED_SITES.length} curated blogs…`)
-for (const site of CURATED_SITES) {
+for (const site of CURATED_SITES as readonly CuratedSite[]) {
   const { res } = await call(
     '/api/admin/curate',
-    { feedUrl: site.feedUrl, topics: site.topics },
+    { feedUrl: site.feedUrl, topics: site.topics, featured: site.featured === true },
     true,
   )
   if (!res.ok) console.warn(`  ✗ ${site.feedUrl}: ${res.status}`)
