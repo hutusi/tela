@@ -131,9 +131,99 @@ export const CURATED_SITES = [
     note: 'Hong Kong; mixes scripts, and detection reads it as Traditional',
   },
 
+  // Français
+  { feedUrl: 'https://www.bortzmeyer.org/feed-full.atom', topics: ['tech'] },
+  { feedUrl: 'https://tcrouzet.com/feeds/feed.xml', topics: ['essays', 'outdoors'] },
+  { feedUrl: 'https://affordance.framasoft.org/feed/', topics: ['essays', 'tech'] },
+  { feedUrl: 'https://linterconnexionnestplusassuree.fr/feed/', topics: ['cities'] },
+  {
+    feedUrl: 'https://www.isabelleetlevelo.fr/feed/',
+    topics: ['cities'],
+    note: 'Excerpts in the feed; the pages extract cleanly',
+  },
+  {
+    feedUrl: 'https://ploum.net/atom_fr.xml',
+    topics: ['essays', 'tech'],
+    note: 'Belgium; the French feed of a blog that also writes in English',
+  },
+  { feedUrl: 'https://menace-theoriste.fr/feed/', topics: ['science', 'essays'] },
+  {
+    feedUrl: 'https://www.la-grange.net/feed.atom',
+    topics: ['life', 'photography', 'cities'],
+    note: 'Karl Dubost, writing from Japan',
+  },
+  {
+    feedUrl: 'https://www.tierslivre.net/spip/spip.php?page=backend',
+    topics: ['essays', 'photography'],
+    note: 'François Bon',
+  },
+  { feedUrl: 'https://jeanneemard.wordpress.com/feed/', topics: ['essays'], note: 'Québec' },
+  { feedUrl: 'https://standblog.org/blog/feed/atom', topics: ['tech', 'essays'] },
+  { feedUrl: 'https://gregorymignard.com/index.xml', topics: ['photography', 'life'] },
+  {
+    feedUrl: 'https://www.iletaitunefoislapatisserie.com/feeds/posts/default',
+    topics: ['food'],
+    note: 'Excerpts in the feed; the pages extract cleanly',
+  },
+  { feedUrl: 'https://couleur-science.eu/rss.php', topics: ['science'] },
+  { feedUrl: 'https://www.velophile.be/feed/', topics: ['outdoors'], note: 'Belgium' },
+  { feedUrl: 'https://www.arthurperret.fr/feed.xml', topics: ['design', 'tech'] },
+
   // Other source languages, which is where reading a post beside its original earns its keep.
   { feedUrl: 'https://azukiazusa.dev/rss.xml', topics: ['tech'], note: '日本語' },
+  {
+    feedUrl: 'https://p-shirokuma.hatenadiary.com/feed',
+    topics: ['essays', 'life'],
+    note: '日本語',
+  },
+  { feedUrl: 'https://nonswan.hatenablog.com/feed', topics: ['outdoors', 'food'], note: '日本語' },
+  {
+    feedUrl: 'https://kaz-ataka.hatenablog.com/feed',
+    topics: ['essays', 'cities', 'science'],
+    note: '日本語',
+  },
   { feedUrl: 'https://www.44bits.io/ko/feed/all', topics: ['tech'], note: '한국어' },
+  {
+    feedUrl: 'https://www.bluexmas.com/feed/',
+    topics: ['food', 'essays'],
+    note: '한국어; excerpts in the feed, and the pages extract cleanly',
+  },
+  { feedUrl: 'https://jojoldu.tistory.com/rss', topics: ['essays', 'tech'], note: '한국어' },
+  {
+    feedUrl: 'http://moogi.new21.org/tc/rss',
+    topics: ['tech', 'science', 'life'],
+    note: '한국어; https times out',
+  },
+  {
+    feedUrl: 'https://www.buddenbohm-und-soehne.de/feed/',
+    topics: ['essays', 'life', 'cities'],
+    note: 'Deutsch',
+  },
+  { feedUrl: 'https://www.designtagebuch.de/feed/', topics: ['design'], note: 'Deutsch' },
+  { feedUrl: 'https://kirainet.com/feed/', topics: ['life', 'cities'], note: 'Español' },
+  { feedUrl: 'https://danielmarin.naukas.com/feed/', topics: ['science'], note: 'Español' },
+  {
+    feedUrl: 'https://elcafedeocata.blogspot.com/feeds/posts/default',
+    topics: ['essays'],
+    note: 'Español',
+  },
+  { feedUrl: 'https://manualdousuario.net/feed/', topics: ['tech'], note: 'Português' },
+  {
+    feedUrl: 'https://cristhianoaguiar.substack.com/feed',
+    topics: ['essays'],
+    note: 'Português',
+  },
+  {
+    feedUrl: 'https://dias-com-arvores.blogspot.com/feeds/posts/default',
+    topics: ['science', 'outdoors', 'photography'],
+    note: 'Português; excerpts in the feed, and the pages extract cleanly',
+  },
+  {
+    feedUrl: 'https://leonardo.blogspot.com/feeds/posts/default?redirect=false',
+    topics: ['essays'],
+    note: 'Italiano; without redirect=false, Blogger sends the feed to http FeedBurner',
+  },
+  { feedUrl: 'https://attivissimo.me/feed/', topics: ['science', 'tech'], note: 'Italiano' },
 ] as const satisfies readonly CuratedSite[]
 
 // Deliberately absent: rachelbythebay.com. She runs a feed-reader conformance test and blocks
