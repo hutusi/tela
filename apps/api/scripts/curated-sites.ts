@@ -27,7 +27,11 @@ export type CuratedSite = {
  * All nine topics are covered on purpose: /discover renders every chip whether or not anything
  * is behind it, and a chip that lands on "No blogs listed here yet" is worse than no chip.
  *
- * Each entry was verified to serve a parseable feed under the body cap when it was added.
+ * Each entry was verified to serve a parseable feed under the body cap when it was added, and to
+ * have posted in the 60 days before. A blog silent for six months leaves the list, since a
+ * featured card that leads to a blog nobody writes any more makes the directory look abandoned.
+ * Removing it here changes nothing in production: set it from Feature to List in the console as
+ * well, and it stays readable under All.
  * Changing this list is a reviewable commit; `bun run admin curate` applies it, and applying it
  * again changes nothing that is already right.
  */
@@ -35,7 +39,6 @@ export const CURATED_SITES = [
   // English
   { feedUrl: 'https://simonwillison.net/atom/everything/', topics: ['tech'] },
   { feedUrl: 'https://jvns.ca/atom.xml', topics: ['tech'] },
-  { feedUrl: 'https://fasterthanli.me/index.xml', topics: ['tech'] },
   { feedUrl: 'https://overreacted.io/rss.xml', topics: ['tech'] },
   { feedUrl: 'https://daringfireball.net/feeds/main', topics: ['tech'] },
   { feedUrl: 'https://macwright.com/rss.xml', topics: ['tech', 'life'] },
@@ -62,7 +65,6 @@ export const CURATED_SITES = [
   { feedUrl: 'https://smittenkitchen.com/feed/', topics: ['food'] },
   { feedUrl: 'https://alastairhumphreys.com/feed/', topics: ['outdoors'] },
   { feedUrl: 'https://andrewskurka.com/feed/', topics: ['outdoors'] },
-  { feedUrl: 'https://blog.mingthein.com/feed/', topics: ['photography'] },
   { feedUrl: 'https://caseyhandmer.wordpress.com/feed/', topics: ['science'] },
 
   // 简体中文
@@ -73,15 +75,65 @@ export const CURATED_SITES = [
   { feedUrl: 'https://www.zhangxinxu.com/wordpress/feed/', topics: ['design', 'tech'] },
   { feedUrl: 'https://tw93.fun/feed.xml', topics: ['tech', 'life'] },
   { feedUrl: 'https://hutusi.com/feed.xml', topics: ['tech', 'essays'] },
+  { feedUrl: 'https://www.tortorse.com/atom.xml', topics: ['essays', 'design'] },
+  { feedUrl: 'https://jia.je/feed.xml', topics: ['tech'] },
+  { feedUrl: 'https://colobu.com/atom.xml', topics: ['tech'] },
+  {
+    feedUrl: 'https://feeds.feedburner.com/initiative',
+    topics: ['tech', 'essays'],
+    note: 'blog.est.im',
+  },
+  { feedUrl: 'https://www.jfsay.com/feed', topics: ['life', 'cities'] },
+  { feedUrl: 'https://anotherdayu.com/feed/', topics: ['life', 'food', 'outdoors'] },
+  { feedUrl: 'https://www.kawabangga.com/feed', topics: ['tech'] },
+  { feedUrl: 'https://www.fengcan.net/feed/', topics: ['essays'] },
+  { feedUrl: 'https://www.ixiqin.com/feed/', topics: ['tech', 'life'] },
+  { feedUrl: 'https://mobius.blog/feed/', topics: ['essays', 'life'] },
+  { feedUrl: 'https://elmagnifico.tech/feed.xml', topics: ['tech', 'outdoors'] },
+  {
+    feedUrl: 'http://weiwuhui.com/feed',
+    topics: ['essays', 'tech'],
+    note: 'https fails the handshake',
+  },
+  {
+    feedUrl: 'https://blog.douchi.space/index.xml',
+    topics: ['outdoors', 'life'],
+    note: 'Excerpts in the feed; the pages extract cleanly',
+  },
+  { feedUrl: 'https://yufree.cn/index.xml', topics: ['science', 'essays'] },
+  { feedUrl: 'https://citydatum.cn/feed', topics: ['cities'] },
+  { feedUrl: 'https://bluehe.cn/feed/', topics: ['photography', 'cities'] },
+  { feedUrl: 'https://yilinhut.net/feed/', topics: ['science', 'essays'] },
+  { feedUrl: 'https://ygz.ink/feed', topics: ['outdoors', 'life'] },
+  { feedUrl: 'https://www.geedea.pro/index.xml', topics: ['tech', 'essays'] },
 
   // 正體中文
   { feedUrl: 'https://blog.gslin.org/feed/', topics: ['tech'] },
   { feedUrl: 'https://www.playpcesor.com/feeds/posts/default', topics: ['tech', 'life'] },
+  { feedUrl: 'https://readingoutpost.com/feed/', topics: ['essays'] },
+  {
+    feedUrl: 'https://blog.darkthread.net/feed/rss/',
+    topics: ['tech'],
+    note: 'Excerpts in the feed; the pages extract cleanly',
+  },
+  { feedUrl: 'https://alexhsu.com/rss.xml', topics: ['essays', 'life'] },
+  { feedUrl: 'https://oliveassignment.xyz/feed/', topics: ['essays', 'cities'] },
+  { feedUrl: 'https://ivonblog.com/index.xml', topics: ['tech'] },
+  { feedUrl: 'https://blog.serv.idv.tw/feed', topics: ['tech', 'life'] },
+  {
+    feedUrl: 'https://feeds.feedburner.com/pmmustknow',
+    topics: ['design', 'tech'],
+    note: 'mrpm.cc; its own /feed answers a feed reader with HTML',
+  },
+  {
+    feedUrl: 'https://taxodium.ink/rss.xml',
+    topics: ['food', 'tech', 'outdoors'],
+    note: 'Hong Kong; mixes scripts, and detection reads it as Traditional',
+  },
 
   // Other source languages, which is where reading a post beside its original earns its keep.
   { feedUrl: 'https://azukiazusa.dev/rss.xml', topics: ['tech'], note: '日本語' },
   { feedUrl: 'https://www.44bits.io/ko/feed/all', topics: ['tech'], note: '한국어' },
-  { feedUrl: 'https://blog.koalite.com/feed/', topics: ['tech'], note: 'Español' },
 ] as const satisfies readonly CuratedSite[]
 
 // Deliberately absent: rachelbythebay.com. She runs a feed-reader conformance test and blocks
