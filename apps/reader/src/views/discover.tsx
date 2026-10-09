@@ -32,6 +32,8 @@ export function DiscoverView({
   const here = discoverHref(params)
   const langLabel = params.lang ? label(params.lang) : t('allLanguages')
   const languages = data?.languages ?? []
+  const pages =
+    data?.total !== undefined && data.pageSize ? Math.ceil(data.total / data.pageSize) : 1
 
   return (
     <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 pb-20 pt-10 animate-fade md:px-12">
@@ -116,6 +118,25 @@ export function DiscoverView({
             <SiteCard key={site.id} site={site} member={member} next={here} />
           ))}
         </div>
+      )}
+
+      {pages > 1 && (
+        <nav
+          className="mt-8 flex items-center justify-center gap-5 text-[13px]"
+          data-testid="discover-pager"
+        >
+          {params.page > 1 ? (
+            <Link to={discoverHref({ ...params, page: params.page - 1 })} className={chip(false)}>
+              ← {t('pager.previous')}
+            </Link>
+          ) : null}
+          <span className="text-muted">{t('pager.page', { page: params.page, pages })}</span>
+          {params.page < pages ? (
+            <Link to={discoverHref({ ...params, page: params.page + 1 })} className={chip(false)}>
+              {t('pager.next')} →
+            </Link>
+          ) : null}
+        </nav>
       )}
 
       <div className="mt-12 flex flex-wrap items-center gap-6 rounded-xl border border-line px-7 py-6">

@@ -383,6 +383,25 @@ describe('public pages', () => {
     ])
   })
 
+  test('Discover past one page renders a pager, so the rest is reachable before any script', async () => {
+    for (let id = 1; id <= 61; id++) await listedBlog(id, `Blog ${id}`)
+    const pager = (html: string) => html.match(/data-testid="discover-pager".*?<\/nav>/s)?.[0] ?? ''
+    const cards = (html: string) => (html.match(/data-testid="site-card"/g) ?? []).length
+
+    const one = await (await page('/discover')).text()
+    expect(cards(one)).toBe(60)
+    expect(pager(one)).toContain('Page 1 of 2')
+    expect(pager(one)).toContain('href="/discover?page=2"')
+    expect(pager(one)).not.toContain('Previous')
+
+    const two = await (await page('/discover?page=2')).text()
+    expect(cards(two)).toBe(1)
+    expect(two).toContain('Blog 61')
+    expect(pager(two)).toContain('Page 2 of 2')
+    expect(pager(two)).toContain('href="/discover"')
+    expect(pager(two)).not.toContain('Next')
+  })
+
   test("render in the reader's language, cached apart", async () => {
     await listedBlog(1, 'Garden Notes')
     const zh = await (await page('/discover', { cookie: 'tela_locale=zh-Hans' })).text()

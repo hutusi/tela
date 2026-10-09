@@ -61,6 +61,11 @@ function withTitles<T extends Record<string, unknown>>(row: T): T {
 
 /** The front page's edition: the week's newest post from each blog, at most this many. */
 export const EDITION_POSTS = 11
+/**
+ * Blogs on one page of Discover. The directory outgrew one page when the editorial list reached
+ * 110, and a bare `limit` dropped the newest blogs from All with nothing to say so.
+ */
+export const DISCOVER_PAGE = 60
 /** better-auth's bucket for a request whose IP it cannot tell, which all such requests share. */
 const NO_IP = 'no-trusted-ip'
 /** Suffixes tried, in order, for a free handle near one that is taken or reserved. */
@@ -98,8 +103,10 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       ? sql`and exists (select 1 from site_topics t where t.site_id = s.id and t.topic = ${topic})`
       : sql``
     const byLang = lang && LANG.test(lang) ? sql`and s.primary_lang = ${lang}` : sql``
+    const asked = Number(c.req.query('page'))
+    const page = Number.isInteger(asked) && asked > 1 && asked <= 1000 ? asked : 1
     const since = deps.clock.now() - 30 * DAY
-    const [sites, languages, topics] = (await db.batch([
+    const [sites, languages, topics, totals] = (await db.batch([
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
           s.primary_lang as "primaryLang", (s.claimed_by is not null) as claimed,
@@ -116,7 +123,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
         where s.listing in ${PUBLIC_LISTING} ${byTopic} ${byLang}
         order by s.listing = 'featured' desc, s.claimed_by is not null desc,
           coalesce(${READER_COUNT}, 0) desc, s.id
-        limit 60
+        limit ${DISCOVER_PAGE} offset ${(page - 1) * DISCOVER_PAGE}
       `),
       db.all(sql`
         select s.primary_lang as lang, count(*) as count from sites s
@@ -127,10 +134,15 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
         select t.site_id as "siteId", t.topic from site_topics t
         join sites s on s.id = t.site_id where s.listing in ${PUBLIC_LISTING}
       `),
+      db.all(sql`
+        select count(*) as total from sites s
+        where s.listing in ${PUBLIC_LISTING} ${byTopic} ${byLang}
+      `),
     ] as never)) as unknown as [
       Record<string, unknown>[],
       { lang: string; count: number }[],
       { siteId: number; topic: string }[],
+      { total: number }[],
     ]
     return c.json(
       {
@@ -140,6 +152,9 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
           topics: topics.filter((t) => t.siteId === s.id).map((t) => t.topic),
         })),
         languages,
+        total: Number(totals[0]?.total ?? 0),
+        page,
+        pageSize: DISCOVER_PAGE,
       },
       200,
       cached,

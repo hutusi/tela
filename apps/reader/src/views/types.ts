@@ -27,7 +27,13 @@ export type DiscoverSite = {
   topics: string[]
 }
 
-export type DiscoverData = { sites: DiscoverSite[]; languages: { lang: string; count: number }[] }
+/** One page of Discover. `total` is every blog the filters match; an older answer has none. */
+export type DiscoverData = {
+  sites: DiscoverSite[]
+  languages: { lang: string; count: number }[]
+  total?: number
+  pageSize?: number
+}
 
 /**
  * A post in the front page's edition: the newest of one public blog, with its excerpt translated

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { bumpSeq, currentSeq, first, type TelaDb } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { likePattern } from '../src/routes/members'
-import { PROFILE_CACHE, PUBLIC_CACHE } from '../src/routes/public'
+import { DISCOVER_PAGE, PROFILE_CACHE, PUBLIC_CACHE } from '../src/routes/public'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 let api: TestApi
@@ -151,6 +151,30 @@ describe('public', () => {
     const body = (await res.json()) as { sites: { id: number }[]; languages: unknown[] }
     expect(body.sites.map((s) => s.id)).toEqual([2, 1])
     expect(body.languages).toEqual([{ lang: 'en', count: 2 }])
+  })
+
+  test('Discover pages past sixty blogs and says how many the filters match', async () => {
+    // A bare `limit 60` dropped the newest blogs from All once the editorial list reached 110.
+    const count = DISCOVER_PAGE + 5
+    for (let id = 1; id <= count; id++) await blog(id, 'featured')
+    type Page = { sites: { id: number }[]; total: number; page: number; pageSize: number }
+    const read = async (query = '') =>
+      (await (await get(`/api/v1/public/discover${query}`)).json()) as Page
+    const one = await read()
+    expect([one.total, one.page, one.pageSize, one.sites.length]).toEqual([
+      count,
+      1,
+      DISCOVER_PAGE,
+      DISCOVER_PAGE,
+    ])
+    const two = await read('?page=2')
+    expect(two.page).toBe(2)
+    expect(two.sites.map((s) => s.id)).toEqual([61, 62, 63, 64, 65])
+    expect(new Set([...one.sites, ...two.sites].map((s) => s.id)).size).toBe(count)
+    expect((await read('?page=3')).sites).toEqual([])
+    for (const nonsense of ['?page=0', '?page=x', '?page=1.5', '?page=-2']) {
+      expect((await read(nonsense)).page).toBe(1)
+    }
   })
 
   test('no public answer says how a blog was listed (ADR 0041)', async () => {

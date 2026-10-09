@@ -42,13 +42,25 @@ describe('reading URLs', () => {
 describe('Discover URLs', () => {
   test('keep a known topic and a language tag, in one order', () => {
     const params = parseDiscoverParams(new URLSearchParams('lang=ja&topic=tech&utm=x'))
-    expect(params).toEqual({ topic: 'tech', lang: 'ja' })
+    expect(params).toEqual({ topic: 'tech', lang: 'ja', page: 1 })
     expect(discoverHref(params)).toBe('/discover?topic=tech&lang=ja')
     expect(discoverApiPath(params)).toBe('/api/v1/public/discover?topic=tech&lang=ja')
     expect(parseDiscoverParams(new URLSearchParams('topic=nope&lang=<x>'))).toEqual({
       topic: null,
       lang: null,
+      page: 1,
     })
+  })
+
+  test('carry a page past the first, and read anything else as the first', () => {
+    const params = parseDiscoverParams(new URLSearchParams('topic=food&page=2'))
+    expect(params).toEqual({ topic: 'food', lang: null, page: 2 })
+    expect(discoverApiPath(params)).toBe('/api/v1/public/discover?topic=food&page=2')
+    // A topic or a language chosen from page 2 starts again at page 1.
+    expect(discoverHref({ topic: 'cities', lang: params.lang })).toBe('/discover?topic=cities')
+    for (const page of ['1', '0', '-3', '2.5', 'x', '1001']) {
+      expect(parseDiscoverParams(new URLSearchParams(`page=${page}`)).page).toBe(1)
+    }
   })
 })
 

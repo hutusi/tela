@@ -39,7 +39,8 @@ everything so far sits under `[Unreleased]`.
   Simplified, 8 Traditional), 16 in French, which had none, 16 in Japanese, Korean, Spanish,
   Portuguese, German and Italian, and 19 for the thin topics: photography, cities, food, outdoors
   and science. Each posted in the 60 days before it was added. Three blogs silent for six months
-  or more leave the list.
+  or more leave the list. Discover now pages its blogs 60 at a time. Before, it stopped at 60
+  and never said there were more.
 - **Mark as unread.** The reader's action row offers *Mark as unread* on a read post and *Mark as
   read* on an unread one, whether or not opening reads, and `m` does the same from the keyboard. A
   post marked unread beats an earlier "mark all read" and the 30-day horizon until it is read

@@ -256,6 +256,11 @@
     "subscribed": "Abonné(e)",
     "claimed": "Revendiqué par son auteur",
     "empty": "Aucun blog ici pour l’instant. Revendiquez le vôtre et ouvrez la marche.",
+    "pager": {
+      "previous": "Précédente",
+      "next": "Suivante",
+      "page": "Page {page} sur {pages}"
+    },
     "claim": {
       "title": "Vous avez un blog ?",
       "intro": "Revendiquez votre flux pour voir combien de personnes vous lisent, comment vos articles ont été reçus et ce que les lecteurs en ont dit en les recommandant.",
