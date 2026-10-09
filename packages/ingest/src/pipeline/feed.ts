@@ -50,7 +50,12 @@ import {
 } from '@tela/data'
 import type { ContentMode } from '@tela/shared'
 import { sql } from 'drizzle-orm'
-import { type ContentSample, learnContentMode, SUMMARY_MAX_CHARS } from '../content-mode'
+import {
+  type ContentSample,
+  endsWithJumpLink,
+  learnContentMode,
+  SUMMARY_MAX_CHARS,
+} from '../content-mode'
 import { HttpError } from '../http'
 import { selectItems, titleFor } from '../items'
 import { timeoutsWarrantRelay } from '../region-policy'
@@ -262,6 +267,7 @@ async function processItem(item: ParsedItem, feed: FeedForFetch, parsed: ParsedF
       chars: processed.text.length,
       hadFullContent: item.contentHtml !== null,
       tail: processed.text.slice(-40),
+      jumpLink: endsWithJumpLink(html, item.url),
     },
   } satisfies ProcessedItem
 }

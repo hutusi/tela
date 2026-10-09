@@ -204,6 +204,53 @@ describe('ingestFeed', () => {
     expect(article?.content_key).toBe(v2!.content_key)
   })
 
+  // Three feeds were learned as full while they shipped excerpts in a content field, so readers
+  // got the excerpt as the post and nothing ever extracted it: a French Blogger blog's jump break,
+  // smitten kitchen's theme and kexue.fm. A full post ending in its permalink stays full.
+  test('excerpts in a content field are summaries, by their tail or their jump link', async () => {
+    const excerpt = `<p>${'Une tarte fondante, onctueuse et bien chocolatée. '.repeat(8)}</p>`
+    const endings: Record<string, [ending: (link: string) => string, mode: string]> = {
+      blogger: [
+        (l) => `${excerpt}<br><br>\n<a href="${l}#more">... la suite par ici</a>`,
+        'summary',
+      ],
+      theme: [
+        (l) =>
+          `${excerpt}\n<p><a class="more-link" href="${l}">Read more <span>&raquo;</span></a></p>`,
+        'summary',
+      ],
+      elision: [
+        (l) => `${excerpt}<p class="more"><a href="${l}" title="Post">[...]</a></p>`,
+        'summary',
+      ],
+      permalink: [
+        (l) => `${longHtml(4)}<p><a href="${l}" title="Permanent link">★</a></p>`,
+        'full',
+      ],
+    }
+    for (const [name, [ending, mode]] of Object.entries(endings)) {
+      server.text(
+        `/${name}.xml`,
+        rss({
+          link: server.url('/'),
+          items: [1, 2, 3].map((n) => ({
+            guid: `${name}-${n}`,
+            link: server.url(`/${name}/${n}`),
+            title: `Post ${n}`,
+            content: ending(server.url(`/${name}/${n}`)),
+            date: `Thu, 0${n} Sep 2026 08:00:00 GMT`,
+          })),
+        }),
+      )
+      const { feedId } = await addFeed(`/${name}.xml`)
+      await fetchOnce(feedId)
+      const learned = await row<{ content_mode: string }>(
+        sql`select content_mode from feeds where id = ${feedId}`,
+      )
+      expect([name, learned?.content_mode]).toEqual([name, mode])
+    }
+  })
+
   test('a changed summary never replaces its extraction (the regression ADR 0022 fixes)', async () => {
     const summaries = (text: string) =>
       rss({

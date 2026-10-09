@@ -631,6 +631,13 @@ says who holds it:
   `<claim>><run>` (`translate.body:mumisiw0:ji73sz>n4wdspj4`) is a run that started; a bare claim
   owner is still waiting in its queue. A `lost` outcome for a key that finished is a duplicate
   delivery: queues deliver at least once, and the second copy found the claim already started.
+- **A feed that ships excerpts but was learned as full:** its posts stop after a paragraph, and
+  nothing extracts them. A feed's `content_mode` is learned once, at its first fetch, and a
+  `full` feed's posts keep their feed version even beside an extraction. So a feed misread
+  before the jump-link and read-more rules caught its shape stays wrong until it is set by hand:
+  `update feeds set content_mode = 'summary' where id = …`, then queue its posts, as for a dead
+  letter: `update articles set extract_state = 'due' where feed_id = …`. Each extraction stamps
+  its article's seq when it lands, which is when devices get the full text.
 - **What gave up:** `select * from dead_letters order by at desc limit 20`. Nothing retries a
   dead letter. Fix the cause, then make the domain row due again:
   - a feed: `update feeds set next_fetch_at = 0 where id = …`;
