@@ -326,3 +326,59 @@ test.describe('search', () => {
     await expect(page.getByTestId('search-empty')).toBeVisible()
   })
 })
+
+test.describe('Discover past one page', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test('the pager opens each page at its top, held or not', async ({ page }) => {
+    // 110 blogs, as the editorial list has, without listing 110 in the stack every spec shares.
+    const site = (id: number) => ({
+      id,
+      title: `Blog ${id}`,
+      homeUrl: `https://blog${id}.example`,
+      description: null,
+      faviconKey: null,
+      primaryLang: 'en',
+      claimed: false,
+      readerCount: null,
+      feedId: id,
+      latestTitle: `Post ${id}`,
+      latestAt: null,
+      postsLast30d: 0,
+      topics: [],
+    })
+    await page.route(/\/api\/v1\/public\/discover(\?|$)/, async (route) => {
+      const n = Number(new URL(route.request().url()).searchParams.get('page') ?? 1)
+      const ids = Array.from({ length: n === 1 ? 60 : 50 }, (_, i) => (n - 1) * 60 + i + 1)
+      await route.fulfill({
+        json: {
+          sites: ids.map(site),
+          languages: [{ lang: 'en', count: 110 }],
+          total: 110,
+          page: n,
+          pageSize: 60,
+        },
+      })
+    })
+    // Into Discover from inside the app, so every page comes through the route above, not the
+    // edge's handover.
+    await page.goto('/about')
+    await page.getByRole('banner').getByRole('link', { name: 'Discover' }).click()
+    const cards = page.getByTestId('site-card')
+    const pager = page.getByTestId('discover-pager')
+    await expect(cards).toHaveCount(60)
+
+    const turn = async (name: RegExp, first: string, count: number) => {
+      await pager.scrollIntoViewIfNeeded()
+      expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(1000)
+      await pager.getByRole('link', { name }).click()
+      await expect(cards).toHaveCount(count)
+      await expect(cards.first()).toContainText(first)
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
+    }
+    await turn(/Next/, 'Blog 61', 50)
+    await turn(/Previous/, 'Blog 1', 60)
+    // Page 2 is held now and renders at once: the scroll it inherited was the regression.
+    await turn(/Next/, 'Blog 61', 50)
+  })
+})
