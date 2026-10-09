@@ -59,6 +59,28 @@ test.describe('by code', () => {
   })
 })
 
+test.describe('a network that blocks Tela', () => {
+  test.use(visitor(23))
+  test('says so, rather than to try again in a minute', async ({ page }) => {
+    await page.goto('/login')
+    // A company's web filter that does not know the domain yet refuses every request outright,
+    // while the shell's worker still draws the page from its cache.
+    await page.route('**/api/auth/**', (route) => route.abort('connectionrefused'))
+    const unreachable =
+      "We could not reach Tela from this network. A work or school network may block it: try another, such as your phone's hotspot."
+
+    await page.getByTestId('login-email').fill('someone@e2e.test')
+    await page.getByTestId('login-password').fill('long enough to send')
+    await page.getByTestId('login-submit').click()
+    await expect(page.getByTestId('door-error')).toHaveText(unreachable)
+
+    await page.getByTestId('login-mode').click()
+    await page.getByTestId('login-email').fill('someone@e2e.test')
+    await page.getByTestId('login-submit').click()
+    await expect(page.getByTestId('door-error')).toHaveText(unreachable)
+  })
+})
+
 test.describe('by link', () => {
   test.use(visitor(2))
   test("the mail's link signs in whichever browser opens it, once asked, and leaves no code in the address bar", async ({

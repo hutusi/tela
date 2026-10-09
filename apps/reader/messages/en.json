@@ -126,6 +126,7 @@
       "provider_cancelled": "Sign-in was cancelled.",
       "provider_expired": "That took too long. Try again.",
       "provider_failed": "We could not reach the provider. Try again, or log in by email.",
+      "unreachable": "We could not reach Tela from this network. A work or school network may block it: try another, such as your phone's hotspot.",
       "failed": "Something went wrong. Try again in a minute."
     },
     "claimTitle": "Claim @{handle}",

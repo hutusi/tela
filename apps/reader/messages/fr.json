@@ -126,6 +126,7 @@
       "provider_cancelled": "La connexion a été annulée.",
       "provider_expired": "Cela a pris trop de temps. Réessayez.",
       "provider_failed": "Impossible de joindre le fournisseur. Réessayez, ou connectez-vous par e-mail.",
+      "unreachable": "Impossible de joindre Tela depuis ce réseau. Un réseau d’entreprise ou d’école peut le bloquer : essayez-en un autre, par exemple le partage de connexion de votre téléphone.",
       "failed": "Une erreur s’est produite. Réessayez dans une minute."
     },
     "claimTitle": "Revendiquer @{handle}",

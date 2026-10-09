@@ -530,6 +530,14 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   - A code that never arrives: check Resend's log for the address first, then the Worker's logs
     for the send error. An address with no account is mailed only while it holds an invitation
     (a hold from a join lasts a day); otherwise the request answers as usual and nothing is sent.
+  - A member whose sign-in fails on one network only, and works on another, is behind a network
+    that refuses telaread.com: the form says "We could not reach Tela from this network" when no
+    answer came back at all. A browser that has visited before still draws the page, from the
+    shell's cache, which hides the block.
+    `wrangler tail tela-web` while they try shows nothing from them; on a company network it is
+    usually a web filter that does not yet know the domain (registered 2026-10-06). On 2026-10-10
+    an office's proxy refused it for a while, then let it through unasked. The member's IT can
+    allow-list the domain; nothing on Tela's side changes it.
   - A code sign-in refused `403 INVITE_REQUIRED` found no invitation for the address: it never had
     one, its hold lapsed or went with its revoked code, or a later join moved a single-use code's
     hold to another address.

@@ -126,6 +126,7 @@
       "provider_cancelled": "登入已取消。",
       "provider_expired": "等待時間過長，請重試。",
       "provider_failed": "無法連線服務商。請重試，或用電子郵件登入。",
+      "unreachable": "無法從這個網路連線 Tela。公司或學校的網路可能封鎖了它，換個網路試試，比如手機熱點。",
       "failed": "出了點問題，請稍後再試。"
     },
     "claimTitle": "認領 @{handle}",

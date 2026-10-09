@@ -115,6 +115,7 @@ export type SignInError =
   | 'provider_cancelled'
   | 'provider_expired'
   | 'provider_failed'
+  | 'unreachable'
   | 'failed'
 
 /** The gate's refusals (ADR 0034), as an email-code sign-in or a provider names them. */
@@ -279,12 +280,22 @@ export type SignInOptions = {
   claim?: CardClaim | undefined
 }
 
+/**
+ * No answer came back at all: the request never reached Tela. A network that blocks the domain
+ * (a company's web filter, which may not know a new one yet) looks like this, while the shell's
+ * worker still draws the page from its cache, so "try again in a minute" would send the visitor
+ * waiting for nothing.
+ */
+class Unreachable extends Error {}
+
 const post = (path: string, body: unknown) =>
   fetch(path, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     credentials: 'same-origin',
     body: JSON.stringify(body),
+  }).catch((err: unknown) => {
+    throw new Unreachable('no answer', { cause: err })
   })
 
 /** An answer's JSON fields, or none: better-auth's errors are `{code, message}`, Tela's `{error}`. */
@@ -419,8 +430,8 @@ export function useSignIn(options: SignInOptions) {
     setError(null)
     try {
       await work()
-    } catch {
-      setError(fallback)
+    } catch (err) {
+      setError(err instanceof Unreachable ? 'unreachable' : fallback)
     } finally {
       setBusy(false)
     }
@@ -570,8 +581,8 @@ export function useSignIn(options: SignInOptions) {
       if (latest.current.claim) keepClaim(latest.current.claim)
       // Busy until the page is gone: a second press would start a second flow.
       window.location.assign(url)
-    } catch {
-      setError('provider_failed')
+    } catch (err) {
+      setError(err instanceof Unreachable ? 'unreachable' : 'provider_failed')
       setBusy(false)
     }
   }
