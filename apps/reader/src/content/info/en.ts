@@ -232,7 +232,7 @@ export const en = {
               },
               {
                 name: 'Google and GitHub',
-                text: 'Only if you sign in with them. They will know you signed in to Tela.',
+                text: "Only if you sign in with them. They will know you signed in to Tela. When you claim a blog with GitHub on your account, Tela's servers also ask GitHub for that account's public username and website, and keep neither.",
               },
               {
                 name: 'Blogs',
@@ -378,7 +378,7 @@ export const en = {
         blocks: [
           {
             list: [
-              'Claim only a blog you write or control. You prove it with a tag or a link on its home page.',
+              'Claim only a blog you write or control. You prove it with a tag or a link on its home page, or with your GitHub account, when the blog and the account link to each other.',
               'A claimed blog is listed in Discover, with your name and bio on its page.',
               "If a claim turns out to be false, we'll release it.",
             ],

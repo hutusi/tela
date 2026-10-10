@@ -99,6 +99,12 @@ test.describe('discover and claim', () => {
     const snippet = (await page.getByTestId('meta-snippet').textContent()) ?? ''
     const token = snippet.match(/content="([0-9a-f]+)"/)?.[1]
     expect(token).toBeTruthy()
+    // The profile link is one for the footer, and GitHub waits on linking it in Settings.
+    await expect(page.getByTestId('rel-me-snippet')).toContainText('<a rel="me" href=')
+    await expect(page.getByTestId('claim-github').getByRole('link')).toHaveAttribute(
+      'href',
+      '/settings',
+    )
 
     const stop = keepCycling(page)
     try {
@@ -107,7 +113,9 @@ test.describe('discover and claim', () => {
       await expect(page.getByTestId('claim-page')).toHaveAttribute('data-status', 'failed', {
         timeout: 30_000,
       })
-      await expect(page.getByTestId('claim-error')).toContainText('tela-site-verification')
+      // Worded on the page from the reason the check stored, not the check's own English.
+      await expect(page.getByTestId('claim-error')).toContainText('no meta tag')
+      await expect(page.getByTestId('claim-error')).not.toContainText('{"reason"')
 
       // Publish the token on the fixture home page and verify again.
       const set = await request.post(`${FIXTURES}/__claim-token?token=${token}`)

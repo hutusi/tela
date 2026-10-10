@@ -3,6 +3,7 @@
  * and the verified ones an operator may remove. A record shows what the check saw and links to the
  * blog and the people on both sides of a dispute.
  */
+import { describeClaimError } from '@tela/shared'
 import type { AdminClaimDetail, AdminClaimRow, AdminFilter } from '@tela/shared/admin'
 import { useMemo } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
@@ -115,7 +116,7 @@ function ClaimRecord({ row, detail, open }: RecordProps<AdminClaimRow, AdminClai
               ? t('sections.lastError')
               : t('sections.lastCheck', { when: when(claim.lastCheckedAt) })
           }
-          text={claim.error}
+          text={describeClaimError(claim.error)}
         />
       ) : null}
       {claim.owner && claim.status !== 'verified' ? <Note>{t('notes.disputed')}</Note> : null}
