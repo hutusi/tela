@@ -52,14 +52,12 @@ function reasonText(t: Translate, r: ClaimReason, site: string): string {
       return t('reasons.link_marked', { page: r.page, target: r.target, rel: r.rel })
     case 'not_site_wide':
       return t('reasons.not_site_wide', { page: r.page, other: r.other, target: r.target })
-    case 'no_second_page':
-      return t('reasons.no_second_page', { page: r.page, target: r.target })
+    case 'no_not_found_page':
+      return t('reasons.no_not_found_page', { page: r.page, target: r.target })
     case 'github_website':
-      return r.website
-        ? t('reasons.github_website', { login: r.login, website: r.website, site })
-        : t('reasons.github_website_unset', { login: r.login, site })
+      return t('reasons.github_website', { site })
     case 'github_link':
-      return t('reasons.github_link', { page: r.page, login: r.login, site })
+      return t('reasons.github_link', { page: r.page, site })
     case 'github_unavailable':
       return t('reasons.github_unavailable')
   }

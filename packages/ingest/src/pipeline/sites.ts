@@ -124,57 +124,45 @@ export async function siteAssetsJob(
 export const MAX_DECLARED_FEEDS = 20
 const DECLARED_FEED_TIMEOUT_MS = 5000
 const DECLARED_FEEDS_BUDGET_MS = 90_000
-/** Older posts tried for a link without `rel="me"`, in case the oldest has gone. */
-const SECOND_PAGE_TRIES = 2
+
 /** A URL kept in a stored reason; the column holds 500 characters. */
 const REASON_URL_MAX = 180
 
 const HTML_ACCEPT = 'text/html, application/xhtml+xml, */*;q=0.5'
 
+/** Where a claim asks for the blog's not-found page: a path no blog has, the same for one claim. */
+export const notFoundProbe = (token: string) => `/tela-claim-${token.slice(0, 12)}`
+
 /**
- * A page that repeats what the home page shows on every page (its header, footer and sidebar)
- * but not its posts: the oldest post Tela holds on the blog's own origin. A link found on both is
- * the blog's own, not a mention in a post the home page happens to show in full (ADR 0045).
+ * The blog's own page for an address it does not have: what every page shares (its header,
+ * footer, sidebar) and no post. A link found there and on the home page is the blog's own, not a
+ * mention in a post (ADR 0045). Nothing on it is anyone else's to choose: an older post was the
+ * first try, and both the post the home page shows in full and a backdated item in a feed that
+ * names the blog as its home could make a mention look site-wide. Only a real 404 (or 410) on
+ * the blog's origin counts; a page that answers 200, or sends a missing address home, is the
+ * home page again.
  */
-async function secondPage(
+async function notFoundPage(
   ctx: IngestContext,
-  siteId: number,
   homeUrl: string,
-  home: string,
+  token: string,
 ): Promise<{ url: string; body: string } | null> {
   const origin = new URL(homeUrl)
-  const bare = origin.hostname.replace(/^www\./, '')
-  const rows = await ctx.db.all<{ url: string }>(sql`
-    select a.url from articles a join feeds f on f.id = a.feed_id
-    where f.site_id = ${siteId} and a.url is not null and a.url_host in (${bare}, ${`www.${bare}`})
-    order by a.published_at is null, a.published_at, a.id
-    limit 10
-  `)
-  const own = (url: string) => {
-    try {
-      const u = new URL(url)
-      return (
-        u.hostname.replace(/^www\./, '') === bare && u.port === origin.port && u.pathname !== '/'
-      )
-    } catch {
-      return false
-    }
+  const url = new URL(notFoundProbe(token), origin).toString()
+  try {
+    const res = await ctx.http.get(url, { region: 'global', accept: HTML_ACCEPT })
+    const final = new URL(res.finalUrl)
+    const own =
+      final.hostname.replace(/^www\./, '') === origin.hostname.replace(/^www\./, '') &&
+      final.port === origin.port &&
+      final.pathname !== '/'
+    return (res.status === 404 || res.status === 410) && res.body && own
+      ? { url: res.finalUrl, body: res.body }
+      : null
+  } catch (err) {
+    if (err instanceof HttpError) return null
+    throw err
   }
-  let tried = 0
-  for (const { url } of rows) {
-    if (!own(url) || url === home) continue
-    if (tried++ >= SECOND_PAGE_TRIES) break
-    try {
-      const res = await ctx.http.get(url, { region: 'global', accept: HTML_ACCEPT })
-      // A post that is gone and sends readers home is the home page again, not a second page.
-      if (res.status === 200 && res.body && res.finalUrl !== home && own(res.finalUrl)) {
-        return { url: res.finalUrl, body: res.body }
-      }
-    } catch (err) {
-      if (!(err instanceof HttpError)) throw err
-    }
-  }
-  return null
 }
 
 /** The numeric id of the member's GitHub, the one thing a GitHub sign-in leaves (ADR 0036). */
@@ -189,12 +177,14 @@ async function githubIdOf(db: TelaDb, userId: string): Promise<string | null> {
 const clip = (url: string) => url.slice(0, REASON_URL_MAX)
 
 /**
- * Which proof the home page (and, for a link without `rel="me"`, an older post) gives, or why
- * there is none, closest miss first: the member is told what to change, not what is missing.
+ * Which proof the home page (and, for a link without `rel="me"`, the not-found page) gives, or
+ * why there is none, closest miss first: the member is told what to change, not what is missing.
+ * A reason names no GitHub login or website: it is stored, synced and backed up, and Tela keeps
+ * nothing from a provider but the identity (ADR 0036).
  */
 async function proofOf(
   ctx: IngestContext,
-  claim: { site_id: number; user_id: string; token: string; home_url: string; handle: string },
+  claim: { user_id: string; token: string; home_url: string; handle: string },
   page: { finalUrl: string; body: string },
 ): Promise<{ method: ClaimMethod } | { reason: ClaimReason }> {
   const telaHosts = profileHosts(ctx.publicUrl ?? 'https://telaread.com')
@@ -220,13 +210,15 @@ async function proofOf(
   const namesThisSite = gh !== null && namesSite(gh.website, claim.home_url)
   if (namesThisSite && home.github.some((l) => theirs(l) && l.me)) return { method: 'github' }
 
-  // A link without rel="me" is the blog's own only if every page carries it.
+  // A link without rel="me" is the blog's own only if its 404 page, which has no post, shows it.
   const plainProfile = home.profiles.some((l) => mine(l) && !l.marked)
   const plainGithub = namesThisSite && home.github.some((l) => theirs(l) && !l.marked)
   if (plainProfile || plainGithub) {
     const target = plainProfile ? 'profile' : 'github'
-    const second = await secondPage(ctx, claim.site_id, claim.home_url, page.finalUrl)
-    if (!second) return { reason: { reason: 'no_second_page', page: clip(page.finalUrl), target } }
+    const second = await notFoundPage(ctx, claim.home_url, claim.token)
+    if (!second) {
+      return { reason: { reason: 'no_not_found_page', page: clip(page.finalUrl), target } }
+    }
     const again = readProofs(second.body, second.url, claim.token, telaHosts)
     if (plainProfile && again.profiles.some((l) => mine(l) && !l.marked)) return { method: 'link' }
     if (plainGithub && again.github.some((l) => theirs(l) && !l.marked)) return { method: 'github' }
@@ -256,11 +248,11 @@ async function proofOf(
     return {
       reason: marked?.marked
         ? { reason: 'link_marked', page: clip(page.finalUrl), target: 'github', rel: marked.marked }
-        : { reason: 'github_link', page: clip(page.finalUrl), login: gh.login },
+        : { reason: 'github_link', page: clip(page.finalUrl) },
     }
   }
   if (gh && home.github.some(theirs)) {
-    return { reason: { reason: 'github_website', login: gh.login, website: clip(gh.website) } }
+    return { reason: { reason: 'github_website' } }
   }
   const another = home.profiles.find((l) => !mine(l))
   if (another) {

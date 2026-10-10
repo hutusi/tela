@@ -68,7 +68,7 @@ export type TranslationStatus = (typeof TRANSLATION_STATUSES)[number]
 
 /**
  * How a claim was proved (ADRs 0011, 0045): a meta tag with the token, a `rel="me"` link to the
- * Tela profile, a plain link to it found on every page, or a GitHub that links back. `dns` is
+ * Tela profile, a plain link to it the blog's 404 page shows too, or a GitHub that links back. `dns` is
  * reserved and never written.
  */
 export const CLAIM_METHODS = ['meta', 'rel_me', 'link', 'github', 'dns'] as const

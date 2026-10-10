@@ -11,6 +11,7 @@ import {
   dueClaims,
   type IngestContext,
   ingestFeed,
+  notFoundProbe,
   registerFeed,
   siteAssetsJob,
   VERIFICATION_META,
@@ -268,15 +269,26 @@ describe('verifyClaimJob', () => {
     expect(await reasonOf(claimId)).toEqual({ reason: 'no_proof', page: server.origin })
   })
 
-  describe('a link without rel="me" (ADR 0045)', () => {
-    const footer = (href: string, rel = 'noopener noreferrer') =>
-      `<html><body><main>a post</main><footer><a href="${href}" rel="${rel}">Tela</a></footer></body></html>`
+  /** The blog's page for an address it does not have, as the claim with token `tok-123` asks. */
+  const serveNotFound = (html: string, status = 404) =>
+    server.set(notFoundProbe('tok-123'), (_req, res) => {
+      res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(html)
+    })
+  const chromeOnly = (footer: string) =>
+    `<html><body><main>Nothing here.</main><footer>${footer}</footer></body></html>`
 
-    test("counts when an older post carries it too: it is the blog's own", async () => {
+  describe('a link without rel="me" (ADR 0045)', () => {
+    const footerLink = (href: string, rel = 'noopener noreferrer') =>
+      `<a href="${href}" rel="${rel}">Tela</a>`
+    const footer = (href: string, rel?: string) =>
+      `<html><body><main>a post</main><footer>${footerLink(href, rel)}</footer></body></html>`
+
+    test("counts when the blog's 404 page shows it too: it is the blog's own", async () => {
       await addUser('owner', 'owner')
       const { siteId } = await siteFor('/feed.xml')
       serveHtml('/', footer('https://tela.test/@owner'))
-      serveHtml('/a', footer('https://www.tela.test/@owner/'))
+      serveNotFound(chromeOnly(footerLink('https://www.tela.test/@owner/')))
       const claimId = await pendingClaim(siteId, 'owner')
       expect(await verifyClaimJob(ctx(), await claim('site.claim', claimId))).toMatchObject({
         status: 'verified',
@@ -289,33 +301,49 @@ describe('verifyClaimJob', () => {
       expect(row?.method).toBe('link')
     })
 
-    test('does not count on the home page alone, and says where it was missing', async () => {
+    test('a mention is not proof, wherever else the post that makes it is shown', async () => {
+      // The home page shows a post in full that links the profile, and the post's own page shows
+      // it again. A feed from elsewhere that names this blog as its home also carries a backdated
+      // item pointing at that post, so an "oldest post" would be the post itself. Neither page is
+      // asked: only the 404 page, which has no post on it.
       await addUser('owner', 'owner')
       const { siteId } = await siteFor('/feed.xml')
-      // A post the home page shows in full mentions the profile; the post's own page has the
-      // site's chrome and not that post.
-      serveHtml(
-        '/',
-        '<html><body><article><a href="https://tela.test/@owner">x</a></article></body></html>',
-      )
-      serveHtml('/a', '<html><body><article>another post</article></body></html>')
-      const claimId = await pendingClaim(siteId, 'owner')
-      expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe(
-        'failed',
-      )
-      expect(await reasonOf(claimId)).toEqual({
-        reason: 'not_site_wide',
-        page: server.origin,
-        other: server.url('/a'),
-        target: 'profile',
-      })
+      const mention = '<article>A reader, <a href="https://tela.test/@owner">here</a></article>'
+      serveHtml('/', `<html><body>${mention}</body></html>`)
+      serveHtml('/a', `<html><body>${mention}</body></html>`)
+      const elsewhere = await FixtureServer.start()
+      try {
+        await db.run(sql`
+          insert into feeds (site_id, feed_url, host, served_origin, next_fetch_at, created_at, updated_at)
+          values (${siteId}, ${elsewhere.url('/x.xml')}, '127.0.0.1', ${elsewhere.origin}, ${NOW}, 1, 1)
+        `)
+        await db.run(sql`
+          insert into articles (feed_id, dedup_key, url, url_host, published_at, fetched_at, sort_at)
+          select id, 'old', ${server.url('/a')}, '127.0.0.1', 0, 1, 0 from feeds
+          where feed_url = ${elsewhere.url('/x.xml')}
+        `)
+        serveNotFound(chromeOnly('<a href="/about">About</a>'))
+        const claimId = await pendingClaim(siteId, 'owner')
+        expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe(
+          'failed',
+        )
+        expect(await reasonOf(claimId)).toEqual({
+          reason: 'not_site_wide',
+          page: server.origin,
+          other: server.url(notFoundProbe('tok-123')),
+          target: 'profile',
+        })
+        expect(server.requests.some((r) => r.path === '/a')).toBe(false)
+      } finally {
+        await elsewhere.stop()
+      }
     })
 
     test("never counts when marked as a commenter's, on every page or not", async () => {
       await addUser('owner', 'owner')
       const { siteId } = await siteFor('/feed.xml')
       serveHtml('/', footer('https://tela.test/@owner', 'external nofollow ugc'))
-      serveHtml('/a', footer('https://tela.test/@owner', 'external nofollow ugc'))
+      serveNotFound(chromeOnly(footerLink('https://tela.test/@owner', 'external nofollow ugc')))
       const claimId = await pendingClaim(siteId, 'owner')
       expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe(
         'failed',
@@ -328,27 +356,28 @@ describe('verifyClaimJob', () => {
       })
     })
 
-    test('waits for a post to compare with when the blog has none yet', async () => {
+    test('a blog that answers a missing address with its home page has no 404 page', async () => {
       await addUser('owner', 'owner')
       const { siteId } = await siteFor('/feed.xml')
-      await db.run(sql`delete from articles`)
       serveHtml('/', footer('https://tela.test/@owner'))
+      // A single-page app's fallback: 200 and whatever the home page shows, posts and all.
+      serveNotFound(footer('https://tela.test/@owner'), 200)
       const claimId = await pendingClaim(siteId, 'owner')
       expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe(
         'failed',
       )
       expect(await reasonOf(claimId)).toEqual({
-        reason: 'no_second_page',
+        reason: 'no_not_found_page',
         page: server.origin,
         target: 'profile',
       })
     })
 
-    test('a post that is gone and sends readers home is not a second page', async () => {
+    test('a blog that sends a missing address home has no 404 page either', async () => {
       await addUser('owner', 'owner')
       const { siteId } = await siteFor('/feed.xml')
       serveHtml('/', footer('https://tela.test/@owner'))
-      server.set('/a', (_req, res) => {
+      server.set(notFoundProbe('tok-123'), (_req, res) => {
         res.writeHead(301, { location: '/' })
         res.end()
       })
@@ -356,7 +385,7 @@ describe('verifyClaimJob', () => {
       expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe(
         'failed',
       )
-      expect((await reasonOf(claimId))?.reason).toBe('no_second_page')
+      expect((await reasonOf(claimId))?.reason).toBe('no_not_found_page')
     })
 
     test('a link to another handle says which, so a changed handle is found', async () => {
@@ -395,8 +424,12 @@ describe('verifyClaimJob', () => {
         insert into account (id, account_id, provider_id, user_id, created_at, updated_at)
         values (${`gh-${userId}`}, ${GITHUB_ID}, 'github', ${userId}, 1, 1)
       `)
-    const linking = (rel: string) =>
-      `<html><body><footer><a href="https://github.com/owner-gh" rel="${rel}">GitHub</a></footer></body></html>`
+    const githubLink = (rel: string) =>
+      `<a href="https://github.com/owner-gh" rel="${rel}">GitHub</a>`
+    const linking = (rel: string) => `<html><body><footer>${githubLink(rel)}</footer></body></html>`
+    const storedError = async (claimId: number) =>
+      (await first<{ error: string }>(db, sql`select error from site_claims where id = ${claimId}`))
+        ?.error ?? ''
 
     beforeEach(() => {
       asked = []
@@ -407,7 +440,7 @@ describe('verifyClaimJob', () => {
       await linkGitHub('owner')
       const { siteId } = await siteFor('/feed.xml')
       serveHtml('/', linking('noopener'))
-      serveHtml('/a', linking('noopener'))
+      serveNotFound(chromeOnly(githubLink('noopener')))
       const claimId = await pendingClaim(siteId, 'owner')
       // GitHub's website field, typed without a scheme or with www, still names the blog.
       const website = server.url('/').replace(/^http:\/\//, '')
@@ -417,11 +450,10 @@ describe('verifyClaimJob', () => {
       expect(asked).toEqual([GITHUB_ID])
     })
 
-    test('a rel="me" link to the GitHub needs no second page', async () => {
+    test('a rel="me" link to the GitHub needs no 404 page', async () => {
       await addUser('owner', 'owner')
       await linkGitHub('owner')
       const { siteId } = await siteFor('/feed.xml')
-      await db.run(sql`delete from articles`)
       serveHtml('/', linking('me'))
       const claimId = await pendingClaim(siteId, 'owner')
       expect(
@@ -430,6 +462,7 @@ describe('verifyClaimJob', () => {
           await claim('site.claim', claimId),
         ),
       ).toMatchObject({ status: 'verified', method: 'github' })
+      expect(server.requests.some((r) => r.path === notFoundProbe('tok-123'))).toBe(false)
     })
 
     test('a GitHub a post mentions cannot claim the blog by naming it', async () => {
@@ -438,11 +471,10 @@ describe('verifyClaimJob', () => {
       await addUser('owner', 'owner')
       await linkGitHub('owner')
       const { siteId } = await siteFor('/feed.xml')
-      serveHtml(
-        '/',
-        '<html><body><article>A developer known as <a href="https://github.com/owner-gh">Owner</a></article></body></html>',
-      )
-      serveHtml('/a', '<html><body><article>another post</article></body></html>')
+      const mention = `<article>A developer known as ${githubLink('')}</article>`
+      serveHtml('/', `<html><body>${mention}</body></html>`)
+      serveHtml('/a', `<html><body>${mention}</body></html>`)
+      serveNotFound(chromeOnly('<a href="/about">About</a>'))
       const claimId = await pendingClaim(siteId, 'owner')
       expect(
         (
@@ -455,27 +487,28 @@ describe('verifyClaimJob', () => {
       expect(await reasonOf(claimId)).toEqual({
         reason: 'not_site_wide',
         page: server.origin,
-        other: server.url('/a'),
+        other: server.url(notFoundProbe('tok-123')),
         target: 'github',
       })
     })
 
-    test('a GitHub that names another website is told to name this one', async () => {
+    test('a GitHub that names another website is told to name this one, and neither is kept', async () => {
       await addUser('owner', 'owner')
       await linkGitHub('owner')
       const { siteId } = await siteFor('/feed.xml')
       serveHtml('/', linking('noopener'))
-      serveHtml('/a', linking('noopener'))
+      serveNotFound(chromeOnly(githubLink('noopener')))
       const claimId = await pendingClaim(siteId, 'owner')
       await verifyClaimJob(
         ctx({ github: github('https://elsewhere.example') }),
         await claim('site.claim', claimId),
       )
-      expect(await reasonOf(claimId)).toEqual({
-        reason: 'github_website',
-        login: 'Owner-GH',
-        website: 'https://elsewhere.example',
-      })
+      expect(await reasonOf(claimId)).toEqual({ reason: 'github_website' })
+      // The stored reason syncs to the device and goes into the nightly export: nothing GitHub
+      // said may be in it (ADR 0036).
+      const error = (await storedError(claimId)).toLowerCase()
+      expect(error).not.toContain('owner-gh')
+      expect(error).not.toContain('elsewhere')
     })
 
     test('a GitHub that names the blog, on a blog that does not link it, says so', async () => {
@@ -488,11 +521,8 @@ describe('verifyClaimJob', () => {
         ctx({ github: github(server.url('/')) }),
         await claim('site.claim', claimId),
       )
-      expect(await reasonOf(claimId)).toEqual({
-        reason: 'github_link',
-        page: server.origin,
-        login: 'Owner-GH',
-      })
+      expect(await reasonOf(claimId)).toEqual({ reason: 'github_link', page: server.origin })
+      expect((await storedError(claimId)).toLowerCase()).not.toContain('owner-gh')
     })
 
     test('GitHub not answering is the reason only when nothing else came close', async () => {
