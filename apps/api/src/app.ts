@@ -15,6 +15,7 @@ import { runBatch } from './routes/admin/framework'
 import { avatarRoutes } from './routes/avatars'
 import { claimRoutes } from './routes/claims'
 import { curate } from './routes/curate'
+import { discoverRoutes } from './routes/discover'
 import { feedRoutes } from './routes/feeds'
 import { inviteMember } from './routes/invite-member'
 import { inviteRoutes, operatorCodeRoutes } from './routes/invites'
@@ -228,6 +229,9 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
 
   // Anyone may read these; tela-web caches them at the edge.
   app.route('/api/v1/public/avatars', avatarRoutes(deps))
+  // Discover's This week, Articles and Readers (ADR 0044), under the Blogs answer's own path:
+  // that one is `/discover` exactly, in `publicRoutes`, and these are only below it.
+  app.route('/api/v1/public/discover', discoverRoutes(deps))
   app.route('/api/v1/public', publicRoutes(deps, auth))
   // Hubs, not members, call this; the signature is the authorization.
   app.route('/api/websub', websubRoutes(deps))

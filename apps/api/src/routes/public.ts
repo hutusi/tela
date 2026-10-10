@@ -80,10 +80,11 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
     const byLang = lang && LANG.test(lang) ? sql`and s.primary_lang = ${lang}` : sql``
     const asked = Number(c.req.query('page'))
     const page = Number.isInteger(asked) && asked > 1 && asked <= 1000 ? asked : 1
-    const since = deps.clock.now() - 30 * DAY
+    const now = deps.clock.now()
+    const since = now - 30 * DAY
     const [sites, languages, topics, totals] = (await db.batch([
       db.all(sql`
-        select ${siteCard(since)}
+        select ${siteCard(since, now)}
         from sites s
         where s.listing in ${PUBLIC_LISTING} ${byTopic} ${byLang}
         order by s.listing = 'featured' desc, s.claimed_by is not null desc,
