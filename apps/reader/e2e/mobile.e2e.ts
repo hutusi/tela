@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { resetReading, setPrefs } from './helpers'
+import { BASE, resetReading, setPrefs } from './helpers'
 
 // Runs in the `mobile` project (a Pixel 7 viewport), as the setup's member.
 test.describe('mobile fallback', () => {
@@ -94,5 +94,28 @@ test.describe('mobile fallback', () => {
     await page.getByTestId('nav-settings').click()
     await expect(page).toHaveURL(/\/settings$/)
     await expect(panel).toHaveCount(0)
+  })
+})
+
+test.describe('Discover on a phone', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test('every tab is in reach, in French, and the page never scrolls sideways', async ({
+    page,
+    context,
+  }) => {
+    await context.addCookies([{ name: 'tela_locale', value: 'fr', url: BASE }])
+    await page.goto('/discover')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    for (const tab of ['readers', 'articles', 'blogs', 'week']) {
+      const link = page.getByTestId(`discover-tab-${tab}`)
+      await link.scrollIntoViewIfNeeded()
+      await link.click()
+      await expect(page.getByTestId(`discover-tab-${tab}`)).toHaveAttribute('aria-current', 'page')
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      )
+      expect(overflow).toBeLessThanOrEqual(0)
+    }
   })
 })

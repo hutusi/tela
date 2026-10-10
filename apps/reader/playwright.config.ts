@@ -28,7 +28,7 @@ export default defineConfig({
     {
       name: 'chromium',
       testMatch:
-        /(local-first|reader|translation|highlights|info|invites|keyboard|layout|public|settings|signin|social|styles|visitor|websub|door|oauth|writers|admin)\.e2e\.ts/,
+        /(local-first|reader|translation|highlights|info|invites|keyboard|layout|public|settings|signin|social|styles|visitor|websub|door|oauth|writers|admin|discover)\.e2e\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
     // The stacked layout below the desktop breakpoint. A Chromium device profile, so CI needs only
