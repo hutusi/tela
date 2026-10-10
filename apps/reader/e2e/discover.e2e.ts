@@ -245,3 +245,71 @@ test.describe('as a member', () => {
     ).toHaveCount(0)
   })
 })
+
+test.describe('More articles', () => {
+  test.use(VISITOR)
+
+  /** A post of the mocked answer: its own blog, nobody's subscription, no recommendations. */
+  const mocked = (id: number) => ({
+    article: {
+      id: 900_000 + id,
+      feedId: 900_000 + id,
+      url: `https://mocked${id}.example/post`,
+      title: `Mocked post ${id}`,
+      author: null,
+      publishedAt: 0,
+      fetchedAt: 0,
+      sortAt: 1_000_000 - id,
+      sourceLang: 'en',
+      excerpt: null,
+      contentKey: null,
+      wordCount: 0,
+      readingMinutes: 1,
+      extractState: 'done',
+      likeCount: 0,
+      recommendCount: 0,
+      seq: 0,
+      titles: {},
+    },
+    site: {
+      id: 900_000 + id,
+      title: `Mocked blog ${id}`,
+      homeUrl: `https://mocked${id}.example`,
+      faviconKey: null,
+      primaryLang: 'en',
+      claimed: false,
+    },
+    weekRecs: 0,
+    recommenders: [],
+    note: null,
+  })
+  const posts = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) => mocked(from + i))
+
+  test('a page asked for before leaving Articles is there on coming back', async ({ page }) => {
+    await page.route(/\/api\/v1\/public\/discover\/articles(\?|$)/, async (route) => {
+      if (new URL(route.request().url()).searchParams.has('cursor')) {
+        // Slow enough for the member to go to another tab and back while it is out.
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        return route.fulfill({
+          json: { recommended: [], posts: posts(31, 35), next: null, languages: [] },
+        })
+      }
+      return route.fulfill({
+        json: { recommended: [], posts: posts(1, 30), next: '999970:900030', languages: [] },
+      })
+    })
+    await page.goto('/discover/blogs')
+    // From the tab, so the app asks for Articles itself, past the edge's page.
+    await page.getByTestId('discover-tab-articles').click()
+    await expect(page.getByTestId('discover-post')).toHaveCount(30)
+    const asked = page.waitForRequest((r) => r.url().includes('cursor='))
+    await page.getByTestId('articles-more').click()
+    await asked
+    await page.getByTestId('discover-tab-blogs').click()
+    await expect(page.getByTestId('discover-tab-blogs')).toHaveAttribute('aria-current', 'page')
+    await page.getByTestId('discover-tab-articles').click()
+    await expect(page.getByTestId('discover-post')).toHaveCount(35)
+    await expect(page.getByTestId('articles-more')).toHaveCount(0)
+  })
+})

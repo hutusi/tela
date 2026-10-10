@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 import { emptyTables, type Tables } from '@tela/sync'
 import {
+  AUTO_PAGES,
+  articlesVersion,
+  fetchingMore,
+  fetchMore,
+  forgetArticlesPages,
+  heldPages,
+  subscribeArticles,
+} from '../src/lib/articles-pages'
+import {
   articlesApiPath,
   articlesHref,
   blogsApiPath,
@@ -328,5 +337,56 @@ describe('suggested readers', () => {
     expect(got.map((s) => s.person.handle)).not.toContain('early')
     expect(got.find((s) => s.person.handle === 'one-note')?.group).toBe('active')
     expect(got.find((s) => s.person.handle === 'noter')?.group).toBe('notes')
+  })
+})
+
+describe("Articles' pages after the first", () => {
+  const page = (next: string | null) => ({ recommended: [], posts: [], next, languages: [] })
+  /** A fetch the test answers when it likes. */
+  function held() {
+    let answer: (res: Response) => void = () => {}
+    const fetcher = (() =>
+      new Promise<Response>((resolve) => {
+        answer = resolve
+      })) as unknown as typeof fetch
+    return { fetcher, answer: (res: Response) => answer(res) }
+  }
+
+  test('a page that lands after its asker left is told to the page shown then', async () => {
+    forgetArticlesPages()
+    const { fetcher, answer } = held()
+    const asker = subscribeArticles(() => {})
+    const done = fetchMore(
+      { base: 'b', start: '9:9', from: '9:9', auto: false, url: '/u' },
+      fetcher,
+    )
+    asker() // Articles unmounts: the member went to another tab
+    const heard: number[] = []
+    const back = subscribeArticles(() => heard.push(articlesVersion()))
+    expect(fetchingMore('b')).toBe(true)
+    answer(Response.json(page('5:5')))
+    await done
+    expect(heard.length).toBeGreaterThan(0)
+    expect(fetchingMore('b')).toBe(false)
+    expect(heldPages('b')?.pages.map((p) => p.next)).toEqual(['5:5'])
+    back()
+  })
+
+  test('a page is kept only where it carries on, and pages asked for alone stop at the cap', async () => {
+    forgetArticlesPages()
+    const ok = () => Promise.resolve(Response.json(page(null))) as ReturnType<typeof fetch>
+    const fetcher = ok as unknown as typeof fetch
+    // Asked from a cursor the held pages no longer end at: nothing is kept.
+    await fetchMore({ base: 'c', start: '9:9', from: '1:1', auto: false, url: '/u' }, fetcher)
+    expect(heldPages('c')?.pages).toEqual([])
+    for (let i = 0; i < AUTO_PAGES + 2; i++) {
+      await fetchMore({ base: 'd', start: '9:9', from: '9:9', auto: true, url: '/u' }, fetcher)
+    }
+    expect(heldPages('d')?.auto).toBe(AUTO_PAGES)
+    // The first page it brought was the last there is: nothing after it is appended again.
+    expect(heldPages('d')?.pages).toHaveLength(1)
+    // A first page that ends elsewhere starts the held pages over.
+    await fetchMore({ base: 'd', start: '8:8', from: '8:8', auto: false, url: '/u' }, fetcher)
+    expect(heldPages('d')).toMatchObject({ after: '8:8', auto: 0 })
   })
 })

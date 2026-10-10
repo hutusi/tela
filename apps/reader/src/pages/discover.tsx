@@ -3,9 +3,16 @@
  * answer, the same for everyone, which the edge hands over for the first render; what is the
  * member's own (the blogs they read, whom they follow) is put on it here, from the device.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 import { Navigate, useLocation, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
+import {
+  articlesVersion,
+  fetchingMore,
+  fetchMore,
+  heldPages,
+  subscribeArticles,
+} from '../lib/articles-pages'
 import {
   type ArticlesParams,
   articlesApiPath,
@@ -90,58 +97,29 @@ function WeekPage() {
   )
 }
 
-/**
- * Articles' pages after the first, by the first page's endpoint, for the visit: Back to the page
- * shows what "More" had brought. `after` is the cursor they carry on from; a fresh first page
- * that ends elsewhere starts them over, since they would no longer follow it. `auto` counts the
- * pages fetched without being asked, at most `AUTO_PAGES`.
- */
-type Extra = { after: string; pages: ArticlesData[]; auto: number }
-const extraPages = new Map<string, Extra>()
-const fetching = new Set<string>()
-
 /** Fewer posts than this left after the member's blogs: the page asks for more on its own. */
 const FEW_POSTS = 12
-const AUTO_PAGES = 2
 
+/**
+ * Articles' first page, and the pages "More" brought after it (`lib/articles-pages.ts`), which
+ * live for the visit outside the page: this page hears every change to them, including a request
+ * a page shown before it made.
+ */
 function useArticles(params: ArticlesParams) {
   const base = articlesApiPath(params)
   const loaded = usePublic<ArticlesData>(base)
   const first = loaded.status === 'ready' ? loaded.data : null
-  // The pages held and the requests out live outside React, for the visit: a render reads them.
-  const [, setVersion] = useState(0)
-  const busy = fetching.has(base)
-  const held = extraPages.get(base)
+  useSyncExternalStore(subscribeArticles, articlesVersion, articlesVersion)
+  const busy = fetchingMore(base)
+  const held = heldPages(base)
   const extra = first && held && held.after === first.next ? held : null
   const pages = useMemo(() => (first ? [first, ...(extra?.pages ?? [])] : null), [first, extra])
   const next = pages ? (pages.at(-1)?.next ?? null) : null
-
   const more = useCallback(
     (from: string, auto: boolean) => {
-      if (!first?.next || fetching.has(base)) return
-      const start = first.next
-      const kept = extraPages.get(base)
-      const known = kept && kept.after === start ? kept : { after: start, pages: [], auto: 0 }
-      if (auto && known.auto >= AUTO_PAGES) return
-      extraPages.set(base, { ...known, auto: known.auto + (auto ? 1 : 0) })
-      fetching.add(base)
-      setVersion((v) => v + 1)
-      fetch(articlesApiPath({ ...params, cursor: from }), { credentials: 'same-origin' })
-        .then((res) => (res.ok ? (res.json() as Promise<ArticlesData>) : null))
-        .then((page) => {
-          // Appended only where it carries on: what is held still ends at the cursor it was asked
-          // from, for the same first page.
-          const now = extraPages.get(base)
-          if (!page || !now || now.after !== start) return
-          const end = now.pages.at(-1)?.next ?? now.after
-          if (end !== from) return
-          extraPages.set(base, { ...now, pages: [...now.pages, page] })
-        })
-        .catch(() => undefined)
-        .finally(() => {
-          fetching.delete(base)
-          setVersion((v) => v + 1)
-        })
+      if (!first?.next) return
+      const url = articlesApiPath({ ...params, cursor: from })
+      void fetchMore({ base, start: first.next, from, auto, url })
     },
     [base, first, params],
   )
