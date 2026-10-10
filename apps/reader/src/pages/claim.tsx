@@ -41,8 +41,11 @@ export function claimError(code: string | undefined): StartError {
 
 type Translate = ReturnType<typeof useTranslations<'claim'>>
 
-/** What to change, in the member's words, for a check that found no proof. */
-function reasonText(t: Translate, r: ClaimReason, site: string): string {
+/**
+ * What to change, in the member's words, for a check that found no proof. Null for a reason this
+ * build does not know, which a newer tela-api may send: the page shows its English text instead.
+ */
+function reasonText(t: Translate, r: ClaimReason, site: string): string | null {
   switch (r.reason) {
     case 'no_proof':
       return t('reasons.no_proof', { page: r.page })
@@ -68,6 +71,8 @@ function reasonText(t: Translate, r: ClaimReason, site: string): string {
       return t('reasons.home_status', { page: r.page, status: r.status })
     case 'home_unreachable':
       return t('reasons.home_unreachable', { page: r.page, why: r.why })
+    default:
+      return null
   }
 }
 
@@ -282,9 +287,8 @@ export function ClaimSitePage() {
             {standing.status === 'failed' && (standing.reason || standing.error) ? (
               <span className="text-[13px] text-danger" data-testid="claim-error">
                 {t('failed')}{' '}
-                {standing.reason
-                  ? reasonText(t, standing.reason, standing.homeUrl)
-                  : standing.error}
+                {(standing.reason && reasonText(t, standing.reason, standing.homeUrl)) ??
+                  standing.error}
               </span>
             ) : null}
           </div>

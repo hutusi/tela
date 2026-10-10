@@ -203,6 +203,16 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        - `/discover/readers` as a visitor shows no "Recommended posts you liked too" or "Read the
          blogs you read" group;
        - Following's "Readers to follow" lists the same people as Discover's Readers.
+   - Claims an operator's no holds (ADR 0045, migration 0010) bump `MIN_CLIENT` to 3: a claim
+     page cached before them cannot word the new reasons. The migration adds
+     `site_claims.overruled_at` and carries over earlier rejections and removals from the admin
+     ledger. Apply it, then deploy tela-web, then tela-api within minutes, then tela-jobs:
+     - tela-web before tela-api, as for any bump. A device's copy stays where it is (`tela-2`
+       is the database's own name, not the protocol's); a stale shell only reloads.
+     - tela-jobs last, because an older tela-api shows a reason it does not know as its raw
+       JSON. An older tela-jobs meanwhile only ignores `overruled_at`.
+     - Rolling back: tela-web may not go back while the new tela-api is live. tela-api and
+       tela-jobs may, and the migration can stay.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way

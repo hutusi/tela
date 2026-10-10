@@ -8,7 +8,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { bumpSeq, createMemberCode, currentSeq, type TelaDb } from '@tela/data'
-import { CLIENT_HEADER, MEMBER_HEADER, type PullResponse } from '@tela/sync'
+import { CLIENT_HEADER, MEMBER_HEADER, MIN_CLIENT, type PullResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
@@ -471,19 +471,21 @@ describe('signing out', () => {
     api.request('/api/auth/sign-out', { cookie: b.cookie, headers, body: {} })
 
   test("a stale tab naming the account it still holds does not end the other account's session", async () => {
-    const res = await signOut({ [CLIENT_HEADER]: '2', [MEMBER_HEADER]: a.userId })
+    const res = await signOut({ [CLIENT_HEADER]: String(MIN_CLIENT), [MEMBER_HEADER]: a.userId })
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'account_changed' })
     expect(await sessions(b)).toBe(1)
   })
 
   test('naming the member it is signs out, in the same request that checked', async () => {
-    expect((await signOut({ [CLIENT_HEADER]: '2', [MEMBER_HEADER]: b.userId })).status).toBe(200)
+    expect(
+      (await signOut({ [CLIENT_HEADER]: String(MIN_CLIENT), [MEMBER_HEADER]: b.userId })).status,
+    ).toBe(200)
     expect(await sessions(b)).toBe(0)
   })
 
   test('a current client naming no one is refused like one naming someone else', async () => {
-    const res = await signOut({ [CLIENT_HEADER]: '2', [MEMBER_HEADER]: undefined })
+    const res = await signOut({ [CLIENT_HEADER]: String(MIN_CLIENT), [MEMBER_HEADER]: undefined })
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'account_changed' })
     expect(await sessions(b)).toBe(1)

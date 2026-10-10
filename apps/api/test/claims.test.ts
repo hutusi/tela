@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { first } from '@tela/data'
 import type { ClaimReason } from '@tela/shared'
+import { CLIENT_HEADER } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
@@ -84,6 +85,23 @@ describe('claiming a blog', () => {
     const down = await failWith('home page returned HTTP 503')
     expect(down.reason).toBe(null)
     expect(down.error).toBe('home page returned HTTP 503')
+    const refused = await failWith(
+      JSON.stringify({ reason: 'home_refused', page: server.url('/'), status: 403 }),
+    )
+    expect(refused.error).toBe(
+      `${server.url('/')} turned Tela away with HTTP 403, as bot protection does`,
+    )
+  })
+
+  test('a protocol-2 shell is told to upgrade: it cannot word the reasons protocol 3 adds', async () => {
+    // Its page shows a reason it has no words for as "Not verified yet" and nothing else.
+    const { siteId } = await start()
+    const res = await api.request(`/api/v1/claims/${siteId}`, {
+      as: reader,
+      headers: { [CLIENT_HEADER]: '2' },
+    })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'upgrade' })
   })
 
   test('the token is the same every time for a member, and differs between members', async () => {

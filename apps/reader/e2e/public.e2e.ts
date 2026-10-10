@@ -218,6 +218,29 @@ test.describe('discover and claim', () => {
     await expect(checking).toHaveText('Checking your site…')
     await expect(verify).toBeDisabled()
   })
+
+  test('a reason this build has no words for shows the text tela-api sends beside it', async ({
+    page,
+  }) => {
+    // A newer tela-api may store a reason this shell never heard of: it is not left blank.
+    const failed = {
+      siteId: 999_998,
+      homeUrl: 'https://blog.example',
+      status: 'failed',
+      error: 'a reason from a later build, in English',
+      reason: { reason: 'from_a_later_build', page: 'https://blog.example' },
+      github: false,
+      proofs: {
+        meta: '<meta name="tela-site-verification" content="0">',
+        relMe: '<a rel="me" href="https://tela.test/@e2e">Tela</a>',
+      },
+    }
+    await page.route('**/api/v1/claims/999998**', (route) => route.fulfill({ json: failed }))
+    await page.goto('/sites/999998/claim')
+    await expect(page.getByTestId('claim-error')).toHaveText(
+      'Not verified yet. a reason from a later build, in English',
+    )
+  })
 })
 
 test.describe('recommendations, profile, dashboard, settings', () => {

@@ -24,8 +24,10 @@ export const PAGE_ROWS = 1000
  *
  * - 1: the first local-first shell.
  * - 2: every member call names the member (`MEMBER_HEADER`).
+ * - 3: a claim's standing may carry a reason a protocol-2 shell cannot word (an operator's no, a
+ *   home page that turns Tela away, ADR 0045), which it showed as "Not verified yet" and nothing.
  */
-export const MIN_CLIENT = 2
+export const MIN_CLIENT = 3
 /** The request header a client names its protocol version in. */
 export const CLIENT_HEADER = 'x-tela-client'
 /**

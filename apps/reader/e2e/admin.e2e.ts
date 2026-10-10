@@ -73,7 +73,7 @@ function scriptsOf(page: Page): string[] {
 /** What a member call carries: the client's protocol and the member it names. */
 async function asMember(page: Page): Promise<Record<string, string>> {
   const me = (await (await page.request.get(`${BASE}/api/v1/me`)).json()) as { id: string }
-  return { 'x-tela-client': '2', 'x-tela-member': me.id }
+  return { 'x-tela-client': '3', 'x-tela-member': me.id }
 }
 
 /** The site's listing, as the console's own Discover ledger reads it. */

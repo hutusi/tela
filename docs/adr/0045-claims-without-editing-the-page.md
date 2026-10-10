@@ -75,6 +75,12 @@ reason too: three of the 116 public blogs refuse Tela's fetch outright (2026-10-
 thing their writer can change is letting a user agent that starts `Tela/` through. Other failures
 (an operator's rejection, a blog another member holds) stay text.
 
+**A new reason is a protocol change.** A claim page cached before it words only the reasons it
+knew, and showed one it did not as "Not verified yet" and nothing (review, Codex), so the reasons
+of 2026-10-11 made protocol 3 (`MIN_CLIENT`): an older shell is told to reload. The page now
+shows the English text tela-api sends beside a reason it has no words for, so the next reason
+need not bump the protocol again.
+
 **GitHub is asked without the member's token**, which Tela never keeps (ADR 0036): the user API by
 id is public. tela-jobs sends an optional `GITHUB_TOKEN` with no permissions, to that host only and
 on no redirect, for 5,000 requests an hour; without it GitHub allows 60 per egress IP, which

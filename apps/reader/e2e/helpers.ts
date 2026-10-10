@@ -91,7 +91,7 @@ export async function memberHeaders(request: APIRequestContext): Promise<Record<
   if (!me.ok()) throw new Error(`who am I failed: ${me.status()} ${await me.text()}`)
   const { id } = (await me.json()) as { id: string }
   // x-tela-client carries MIN_CLIENT (packages/sync/src/protocol.ts), as the app's calls do.
-  return { 'x-tela-client': '2', 'x-tela-member': id }
+  return { 'x-tela-client': '3', 'x-tela-member': id }
 }
 
 /**
