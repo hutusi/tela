@@ -5,7 +5,7 @@ import { fakeClock, memoryBlobs } from '@tela/platform/portable'
 import { claimReason } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { type GitHub, GitHubUnavailable } from '../src/github'
-import { createHttpClient } from '../src/http'
+import { createHttpClient, type HttpClient } from '../src/http'
 import {
   dueAssets,
   dueClaims,
@@ -386,6 +386,31 @@ describe('verifyClaimJob', () => {
         'failed',
       )
       expect((await reasonOf(claimId))?.reason).toBe('no_not_found_page')
+    })
+
+    test.each([
+      ['https', 'https', null],
+      ['http', 'https', null],
+      ['https', 'http', 'no_not_found_page'],
+    ] as const)('a blog on %s whose 404 page comes over %s: %s', async (home, notFound, reason) => {
+      await addUser('owner', 'owner')
+      const { siteId } = await siteFor('/feed.xml')
+      const homeUrl = server.origin.replace(/^http:/, `${home}:`)
+      await db.run(sql`update sites set home_url = ${homeUrl} where id = ${siteId}`)
+      serveHtml('/', footer('https://tela.test/@owner'))
+      serveNotFound(chromeOnly(footerLink('https://tela.test/@owner')))
+      // The fixture speaks plain HTTP: ask it that way, and say which scheme each page came over.
+      const over: HttpClient = {
+        async get(url, opts) {
+          const res = await http.get(url.replace(/^https:/, 'http:'), opts)
+          const scheme = new URL(url).pathname === notFoundProbe('tok-123') ? notFound : home
+          return { ...res, finalUrl: res.finalUrl.replace(/^http:/, `${scheme}:`) }
+        },
+      }
+      const claimId = await pendingClaim(siteId, 'owner')
+      const outcome = await verifyClaimJob(ctx({ http: over }), await claim('site.claim', claimId))
+      expect(outcome.status).toBe(reason ? 'failed' : 'verified')
+      expect((await reasonOf(claimId))?.reason ?? null).toBe(reason)
     })
 
     test('a link to another handle says which, so a changed handle is found', async () => {

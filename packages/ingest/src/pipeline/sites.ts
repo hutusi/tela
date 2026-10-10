@@ -139,8 +139,8 @@ export const notFoundProbe = (token: string) => `/tela-claim-${token.slice(0, 12
  * mention in a post (ADR 0045). Nothing on it is anyone else's to choose: an older post was the
  * first try, and both the post the home page shows in full and a backdated item in a feed that
  * names the blog as its home could make a mention look site-wide. Only a real 404 (or 410) on
- * the blog's origin counts; a page that answers 200, or sends a missing address home, is the
- * home page again.
+ * the blog's origin, and not downgraded to plain HTTP, counts; a page that answers 200, or sends
+ * a missing address home, is the home page again.
  */
 async function notFoundPage(
   ctx: IngestContext,
@@ -152,7 +152,10 @@ async function notFoundPage(
   try {
     const res = await ctx.http.get(url, { region: 'global', accept: HTML_ACCEPT })
     const final = new URL(res.finalUrl)
+    // A blog served over HTTPS that sends the probe to plain HTTP lets anyone on the way write
+    // the page; an upgrade is fine, since a blog stored as http:// usually answers over HTTPS.
     const own =
+      (final.protocol === origin.protocol || final.protocol === 'https:') &&
       final.hostname.replace(/^www\./, '') === origin.hostname.replace(/^www\./, '') &&
       final.port === origin.port &&
       final.pathname !== '/'

@@ -57,7 +57,9 @@ with that GitHub. Measured on the 107 curated blogs that answered (2026-10-10):
 The 404 page is the answer to `/tela-claim-<token prefix>` on the blog's origin, and counts only
 as a 404 or 410 that stays on the origin and off `/`: a single-page app's fallback answers 200
 with the home page, posts and all, and a blog that sends a missing address home answers with the
-home page too. Either is told its link needs `rel="me"`.
+home page too. Either is told its link needs `rel="me"`. Nor does a blog served over HTTPS
+whose probe lands on plain HTTP: anyone on the way could write that page (review, CodeRabbit).
+An upgrade from `http://` counts.
 
 **A check that finds no proof says what to change**, as the closest miss: a link on the home page
 that the 404 page lacks, no 404 page, a link marked as a commenter's, a link to another handle, a
