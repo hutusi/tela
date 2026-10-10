@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { detectLocale } from '../src/i18n'
-import { discoverApiPath, discoverHref, parseDiscoverParams } from '../src/lib/discover-href'
+import { blogsApiPath, blogsHref, parseBlogsParams } from '../src/lib/discover-href'
 import { canonicalReadingHref, parseReadingParams, readingHref } from '../src/lib/href'
 import { addError } from '../src/lib/opml'
 import { safeDecode } from '../src/lib/safe-decode'
@@ -39,13 +39,14 @@ describe('reading URLs', () => {
   })
 })
 
-describe('Discover URLs', () => {
+describe("Discover's Blogs URLs", () => {
   test('keep a known topic and a language tag, in one order', () => {
-    const params = parseDiscoverParams(new URLSearchParams('lang=ja&topic=tech&utm=x'))
+    const params = parseBlogsParams(new URLSearchParams('lang=ja&topic=tech&utm=x'))
     expect(params).toEqual({ topic: 'tech', lang: 'ja', page: 1 })
-    expect(discoverHref(params)).toBe('/discover?topic=tech&lang=ja')
-    expect(discoverApiPath(params)).toBe('/api/v1/public/discover?topic=tech&lang=ja')
-    expect(parseDiscoverParams(new URLSearchParams('topic=nope&lang=<x>'))).toEqual({
+    expect(blogsHref(params)).toBe('/discover/blogs?topic=tech&lang=ja')
+    // The page moved; its endpoint did not (ADR 0044).
+    expect(blogsApiPath(params)).toBe('/api/v1/public/discover?topic=tech&lang=ja')
+    expect(parseBlogsParams(new URLSearchParams('topic=nope&lang=<x>'))).toEqual({
       topic: null,
       lang: null,
       page: 1,
@@ -53,24 +54,58 @@ describe('Discover URLs', () => {
   })
 
   test('carry a page past the first, and read anything else as the first', () => {
-    const params = parseDiscoverParams(new URLSearchParams('topic=food&page=2'))
+    const params = parseBlogsParams(new URLSearchParams('topic=food&page=2'))
     expect(params).toEqual({ topic: 'food', lang: null, page: 2 })
-    expect(discoverApiPath(params)).toBe('/api/v1/public/discover?topic=food&page=2')
+    expect(blogsApiPath(params)).toBe('/api/v1/public/discover?topic=food&page=2')
     // A topic or a language chosen from page 2 starts again at page 1.
-    expect(discoverHref({ topic: 'cities', lang: params.lang })).toBe('/discover?topic=cities')
+    expect(blogsHref({ topic: 'cities', lang: params.lang })).toBe('/discover/blogs?topic=cities')
     for (const page of ['1', '0', '-3', '2.5', 'x', '1001']) {
-      expect(parseDiscoverParams(new URLSearchParams(`page=${page}`)).page).toBe(1)
+      expect(parseBlogsParams(new URLSearchParams(`page=${page}`)).page).toBe(1)
     }
   })
 })
 
 describe('public pages at the edge', () => {
-  test('are Discover, a blog by id, a profile by handle and the info pages, and nothing else', () => {
+  test("are Discover's tabs, a blog by id, a profile by handle and the info pages, and nothing else", () => {
     const route = (path: string) => publicRoute(new URL(path, 'https://tela.test'))
-    expect(route('/discover?topic=tech')).toMatchObject({
-      kind: 'discover',
-      api: '/api/v1/public/discover?topic=tech',
+    // Each tab always exists: a tela-api without its endpoint yet is the plain shell, not a 404.
+    expect(route('/discover?utm_source=x')).toEqual({
+      kind: 'week',
+      api: '/api/v1/public/discover/week',
+      alwaysExists: true,
     })
+    expect(route('/discover/blogs?topic=tech')).toMatchObject({
+      kind: 'blogs',
+      api: '/api/v1/public/discover?topic=tech',
+      alwaysExists: true,
+    })
+    expect(route('/discover/readers?x=1')).toEqual({
+      kind: 'readers',
+      api: '/api/v1/public/discover/readers',
+      alwaysExists: true,
+    })
+    // Articles' two sorts are one endpoint and two pages, and so is a page reached by cursor.
+    expect(route('/discover/articles?topic=tech')).toMatchObject({
+      kind: 'articles',
+      api: '/api/v1/public/discover/articles?topic=tech',
+      key: '/discover/articles?topic=tech',
+      alwaysExists: true,
+    })
+    expect(route('/discover/articles?sort=new&topic=tech&utm_source=x')).toMatchObject({
+      api: '/api/v1/public/discover/articles?topic=tech',
+      key: '/discover/articles?topic=tech&sort=new',
+    })
+    expect(route('/discover/articles?sort=new&cursor=1700000000000:42')).toMatchObject({
+      api: '/api/v1/public/discover/articles?cursor=1700000000000%3A42',
+      key: '/discover/articles?sort=new&cursor=1700000000000%3A42',
+    })
+    // An address from before the tabs moved, whole query and all; nothing else on it did.
+    expect(route('/discover?topic=tech&door=login&via=github')).toEqual({
+      kind: 'redirect',
+      api: null,
+      redirect: '/discover/blogs?topic=tech&door=login&via=github',
+    })
+    expect(route('/discover?page=2')).toMatchObject({ redirect: '/discover/blogs?page=2' })
     expect(route('/s/12')).toMatchObject({
       kind: 'site',
       siteId: 12,
@@ -92,6 +127,9 @@ describe('public pages at the edge', () => {
     for (const page of ['about', 'privacy', 'terms'] as const)
       expect(route(`/${page}`)).toEqual({ kind: 'info', page, api: null, key: `/info/${page}` })
     for (const path of [
+      '/discover/',
+      '/discover/week',
+      '/discover/blogs/x',
       '/s/12/x',
       '/s/abc',
       '/@',
@@ -141,7 +179,11 @@ describe('public pages at the edge', () => {
     const pages = [
       '/',
       '/?titles=translated',
+      '/discover',
       '/discover?topic=tech',
+      '/discover/articles?sort=new',
+      '/discover/blogs?topic=tech',
+      '/discover/readers',
       '/s/12',
       '/@reader_1',
       '/about',
@@ -160,6 +202,12 @@ describe('public pages at the edge', () => {
     for (const path of ['/__tela/shell', '/join', '/writers', '/admin', '/admin/feeds'])
       expect(runsFirst(path)).toBe(false)
     expect(patterns).not.toContain('/*')
+    expect(patterns.filter((p) => p.startsWith('/discover'))).toEqual([
+      '/discover',
+      '/discover/articles',
+      '/discover/blogs',
+      '/discover/readers',
+    ])
   })
 })
 

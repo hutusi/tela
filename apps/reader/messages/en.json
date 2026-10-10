@@ -228,8 +228,85 @@
     "retry": "Try translating again"
   },
   "discover": {
-    "title": "Independent blogs, in any language.",
-    "intro": "Blogs and personal websites with a feed, chosen by Tela, by their writers and by readers. Subscribe in one click; Tela translates as you read.",
+    "title": "Discover",
+    "intro": "Posts, blogs and readers from outside your subscriptions, in any language.",
+    "tabs": {
+      "week": "This week",
+      "articles": "Articles",
+      "blogs": "Blogs",
+      "readers": "Readers"
+    },
+    "minutes": "{n} min",
+    "week": {
+      "span": {
+        "recommended": "Most recommended this week",
+        "week": "New this week",
+        "latest": "Latest in the directory"
+      },
+      "allArticles": "All articles →",
+      "allBlogs": "All blogs →",
+      "allReaders": "All readers →",
+      "read": "Read",
+      "readersRecommended": "{n, plural, one {# reader} other {# readers}} recommended it this week.",
+      "newBlogs": "New in the directory",
+      "newLabel": "New",
+      "readersToFollow": "Readers to follow",
+      "sampleOn": "on <b>{title}</b>",
+      "footer": {
+        "recommended": "That's the week, made from what readers recommended in the last seven days. Blogs you subscribe to are left out.",
+        "edition": "Nobody has recommended enough this week to rank it yet, so these are the newest posts from the directory. Blogs you subscribe to are left out."
+      },
+      "empty": "Nothing new this week outside the blogs you read."
+    },
+    "articles": {
+      "sortLabel": "Order",
+      "sort": {
+        "recs": "Most recommended",
+        "new": "Newest"
+      },
+      "more": "More articles",
+      "empty": "No articles match. Try another topic or language."
+    },
+    "reason": {
+      "followed": "{name}, whom you follow, recommended it",
+      "followedOthers": "{name}, whom you follow, and {n, plural, one {# other reader} other {# other readers}} recommended it",
+      "week": "Recommended by {n, plural, one {# reader} other {# readers}} this week"
+    },
+    "noteBy": "— {name}",
+    "people": {
+      "intro": "Suggested from the posts readers recommend, the notes they write and the blogs they show on their profile. Tela matches them to what you like and read on your device.",
+      "groups": {
+        "shared": "Recommended posts you liked too",
+        "blogs": "Read the blogs you read",
+        "early": "Found posts before others did",
+        "notes": "Explain what they recommend",
+        "active": "Recommending lately"
+      },
+      "reasons": {
+        "shared": {
+          "one": "Also recommended “{title}”",
+          "count": "Also recommended {n, plural, one {# post} other {# posts}} you recommended or liked"
+        },
+        "blogs": {
+          "recs": {
+            "one": "Recommends posts from {blog}",
+            "count": "Recommends posts from {n, plural, one {# blog} other {# blogs}} you read"
+          },
+          "reads": {
+            "one": "Also reads {blog}",
+            "count": "Reads {n, plural, one {# blog} other {# blogs}} you read"
+          }
+        },
+        "early": "Recommended “{title}” before {n, plural, one {# other reader} other {# other readers}} did",
+        "notes": {
+          "all": "Wrote a note with all {n} recommendations this month",
+          "some": "Wrote a note with {k} of {n} recommendations this month"
+        },
+        "active": "Recommended {n, plural, one {# post} other {# posts}} this month"
+      },
+      "sample": "Recommended <b>{title}</b> · {blog}",
+      "empty": "No readers to suggest yet. They appear here once readers start recommending posts."
+    },
     "allTopics": "All",
     "language": "Language",
     "allLanguages": "All languages",

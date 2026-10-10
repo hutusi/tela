@@ -119,11 +119,3 @@ export function legacyDiscover(pathname: string, search: string): string | null 
   if (!q.has('topic') && !q.has('lang') && !q.has('page')) return null
   return withQuery('/discover/blogs', q)
 }
-
-/** @deprecated The Blogs page's names from before the tabs, until every caller has moved. */
-export type DiscoverParams = BlogsParams
-export const parseDiscoverParams = parseBlogsParams
-export function discoverHref(params: Partial<BlogsParams>): string {
-  return withQuery('/discover', blogsQuery(params))
-}
-export const discoverApiPath = blogsApiPath

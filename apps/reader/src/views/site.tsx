@@ -8,6 +8,7 @@ import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { PersonAvatar } from '../components/person-avatar'
 import { SiteAvatar } from '../components/site-avatar'
+import { blogsHref } from '../lib/discover-href'
 import { cadenceKey, displayHost, shortDate } from '../lib/format'
 import { publicTitle } from '../lib/public-title'
 import { PostLink } from './post-link'
@@ -93,7 +94,7 @@ export function SiteView({
               {data.topics.map((topic) => (
                 <Link
                   key={topic}
-                  to={`/discover?topic=${topic}`}
+                  to={blogsHref({ topic })}
                   className="rounded-full border border-line px-2.5 py-0.5 text-[12px] text-ink-2 hover:border-ink hover:no-underline"
                 >
                   {td(`topics.${topic}`)}

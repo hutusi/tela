@@ -1,18 +1,14 @@
-/** Discover (`/discover`): listed blogs by topic and language. Rendered by the SPA and the edge. */
-import { asLabel, LANGUAGE_NAMES, TOPICS, type UiLocale } from '@tela/shared'
+/**
+ * Discover's Blogs (`/discover/blogs`): listed blogs by topic and language, paged. Rendered by the
+ * SPA and the edge. A directory, so the blogs the member reads stay on it, as "Subscribed".
+ */
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { chip, LanguageFilter, TopicChips } from '../components/discover-filters'
 import { SiteCard } from '../components/site-card'
-import { type DiscoverParams, discoverHref } from '../lib/discover-href'
+import { type BlogsParams, blogsHref } from '../lib/discover-href'
+import { DiscoverFrame } from './discover-frame'
 import type { DiscoverData, MemberControls } from './types'
-
-const chip = (on: boolean) =>
-  `rounded-full border px-3.5 py-1.5 text-[13px] hover:no-underline ${
-    on ? 'border-ink bg-ink text-paper' : 'border-line text-ink-2 hover:border-ink'
-  }`
-
-const menuItem = (on: boolean) =>
-  `flex justify-between gap-3 rounded-md px-2.5 py-[7px] text-[13px] text-ink hover:bg-hover hover:no-underline ${on ? 'bg-hover' : ''}`
 
 export function DiscoverView({
   data,
@@ -21,78 +17,29 @@ export function DiscoverView({
   locale,
 }: {
   data: DiscoverData | null
-  params: DiscoverParams
+  params: BlogsParams
   member?: MemberControls | undefined
   locale: string
 }) {
   const t = useTranslations('discover')
-  const names = LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en
-  // The menu's value and items are labels: "Japonais", where a French sentence says "japonais".
-  const label = (tag: string) => asLabel(names[tag] ?? tag, locale)
-  const here = discoverHref(params)
-  const langLabel = params.lang ? label(params.lang) : t('allLanguages')
-  const languages = data?.languages ?? []
+  const here = blogsHref(params)
   const pages =
     data?.total !== undefined && data.pageSize ? Math.ceil(data.total / data.pageSize) : 1
 
   return (
-    <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 pb-20 pt-10 animate-fade md:px-12">
-      <div className="mb-9 max-w-[620px]">
-        <h1 className="mb-2.5 font-serif text-[40px] font-medium leading-[1.1] tracking-tight">
-          {t('title')}
-        </h1>
-        <p className="m-0 text-base leading-normal text-ink-2">{t('intro')}</p>
-      </div>
-
+    <DiscoverFrame tab="blogs">
       <div className="mb-7 flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-2" data-testid="topic-chips">
-          <Link to={discoverHref({ lang: params.lang })} className={chip(params.topic === null)}>
-            {t('allTopics')}
-          </Link>
-          {TOPICS.map((topic) => (
-            <Link
-              key={topic}
-              to={discoverHref({ topic: params.topic === topic ? null : topic, lang: params.lang })}
-              className={chip(params.topic === topic)}
-            >
-              {t(`topics.${topic}`)}
-            </Link>
-          ))}
-        </div>
+        <TopicChips
+          topic={params.topic}
+          hrefOf={(topic) => blogsHref({ topic, lang: params.lang })}
+        />
         <div className="flex-1" />
-        {/* A <details>, so the menu works in the edge-rendered page before any script runs. */}
-        <details className="relative" data-testid="discover-language">
-          <summary
-            className={`flex cursor-pointer list-none items-center gap-1.5 whitespace-nowrap rounded-full border bg-surface px-3 py-1.5 text-[13px] font-medium hover:border-muted ${
-              params.lang ? 'border-ink' : 'border-line'
-            }`}
-          >
-            <span className="font-normal text-muted">{t('language')}</span>
-            {langLabel}
-            <span className="text-[10px] text-muted">▾</span>
-          </summary>
-          <div className="absolute right-0 top-[calc(100%+6px)] z-[4] flex min-w-[180px] flex-col rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,.08)] animate-fade">
-            <Link
-              to={discoverHref({ topic: params.topic })}
-              className={menuItem(params.lang === null)}
-            >
-              <span>{t('allLanguages')}</span>
-              <span className="text-xs text-muted">
-                {languages.reduce((n, l) => n + l.count, 0)}
-              </span>
-            </Link>
-            {languages.map((l) => (
-              <Link
-                key={l.lang}
-                to={discoverHref({ topic: params.topic, lang: l.lang })}
-                className={menuItem(params.lang === l.lang)}
-              >
-                <span>{label(l.lang)}</span>
-                <span className="text-xs text-muted">{l.count}</span>
-              </Link>
-            ))}
-          </div>
-        </details>
+        <LanguageFilter
+          lang={params.lang}
+          languages={data?.languages ?? []}
+          hrefOf={(lang) => blogsHref({ topic: params.topic, lang })}
+          locale={locale}
+        />
       </div>
 
       {data === null ? (
@@ -126,13 +73,13 @@ export function DiscoverView({
           data-testid="discover-pager"
         >
           {params.page > 1 ? (
-            <Link to={discoverHref({ ...params, page: params.page - 1 })} className={chip(false)}>
+            <Link to={blogsHref({ ...params, page: params.page - 1 })} className={chip(false)}>
               ← {t('pager.previous')}
             </Link>
           ) : null}
           <span className="text-muted">{t('pager.page', { page: params.page, pages })}</span>
           {params.page < pages ? (
-            <Link to={discoverHref({ ...params, page: params.page + 1 })} className={chip(false)}>
+            <Link to={blogsHref({ ...params, page: params.page + 1 })} className={chip(false)}>
               {t('pager.next')} →
             </Link>
           ) : null}
@@ -152,6 +99,6 @@ export function DiscoverView({
           {t('claim.cta')}
         </Link>
       </div>
-    </main>
+    </DiscoverFrame>
   )
 }

@@ -10,9 +10,11 @@
  * - `/avatar/<userId>?v=` is a member's picture (ADR 0032), from tela-api, cached per colo.
  * - Sessions are read from better-auth's signed five-minute cookie cache with the shared secret.
  *   Only when that has lapsed does it ask tela-api, and passes on the refreshed cookie.
- * - `/` (for visitors), `/discover`, `/s/:id` and `/@handle` are rendered here from tela-api's
- *   public JSON, poured into the SPA's index.html and cached per colo, locale and deploy for five
- *   minutes; `/about`, `/privacy` and `/terms` the same way, from the bundle alone. A request to
+ * - `/` (for visitors), Discover's tabs (`/discover`, `/discover/articles`, `/discover/blogs`,
+ *   `/discover/readers`), `/s/:id` and `/@handle` are rendered here from tela-api's public JSON,
+ *   poured into the SPA's index.html and cached per colo, locale and deploy for five minutes;
+ *   `/about`, `/privacy` and `/terms` the same way, from the bundle alone. An address from before
+ *   Discover's tabs (`/discover?topic=…`) is a permanent redirect, answered here. A request to
  *   `/` that carries a session cookie is a member's: the plain shell, from the assets, never
  *   cached, and tela-api is not asked (ADR 0035). Every other path is the SPA's
  *   static assets, which answer without running this Worker at all.
@@ -60,13 +62,15 @@ type Waiter = { waitUntil(promise: Promise<unknown>): void }
  * Privacy and Terms), and the key it is cached under when that is not the endpoint (a profile's
  * tabs, a page with no endpoint). `visitorsOnly`: a request with a session cookie gets the plain
  * shell. `alwaysExists`: a 404 from tela-api is not the page's answer either, so it is the plain
- * shell, uncached, like an outage.
+ * shell, uncached, like an outage. `redirect`: the page has moved there for good, and nobody is
+ * asked anything.
  */
 export type PublicPageRoute = {
   api: string | null
   key?: string
   visitorsOnly?: boolean
   alwaysExists?: boolean
+  redirect?: string
 }
 
 export type PublicPages<R extends PublicPageRoute = PublicPageRoute> = {
@@ -93,6 +97,8 @@ const OBJECT_CACHE = 'private, max-age=31536000, immutable'
 const IMAGE_CACHE = 'private, max-age=604800, immutable'
 /** The cache's own namespace: keys are never a URL a reader can request directly. */
 const CACHE_ORIGIN = 'https://tela-edge.cache'
+/** A page that moved (an address from before Discover's tabs): kept a day, by whoever keeps it. */
+const MOVED_CACHE = 'public, max-age=86400'
 /** A rendered public page, at the edge. The browser always asks again: the page is the shell too. */
 const PAGE_EDGE_CACHE = 'public, s-maxage=300'
 const PAGE_CACHE = 'public, max-age=0, must-revalidate'
@@ -299,9 +305,19 @@ export function createEdge(deps: EdgeDeps) {
 
   async function servePublic(request: Request, waiter?: Waiter): Promise<Response> {
     const url = new URL(request.url)
-    const route = request.method === 'GET' ? pages.route(url) : null
-    // Not a public page after all (`/s/x/y`): the SPA's index.html, which says so itself.
-    if (!route) return assets.fetch(request)
+    const read = request.method === 'GET' || request.method === 'HEAD'
+    const route = read ? pages.route(url) : null
+    // Moved: the same answer for a member and a visitor, so nothing about either is asked; and
+    // for HEAD too, which is how link checkers and `curl -I` ask where a page went.
+    if (route?.redirect !== undefined) {
+      return new Response(null, {
+        status: 301,
+        headers: { location: route.redirect, 'cache-control': MOVED_CACHE },
+      })
+    }
+    // Not a public page after all (`/s/x/y`), or not a GET: the SPA's index.html, which says so
+    // itself.
+    if (!route || request.method !== 'GET') return assets.fetch(request)
     if (!route.visitorsOnly) return renderPublic(request, url, route, waiter)
     // A member's `/` is the app, which takes them to their reading. Told by the cookie alone,
     // before the cache and without asking tela-api: a lapsed session gets the plain shell too,

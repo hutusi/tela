@@ -217,7 +217,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest; which of them read a blog. Only as far as each shows it (ADR 0031). Readers to follow come from Discover's pool, matched on the device (ADR 0044): `suggested` is always empty, kept for shells cached before that, which read it |
 | `GET /api/v1/export` | "Your data": the member's own rows as one JSON file |
 | `GET /api/v1/public/auth` | Which providers the sign-in sheet may offer, `{google, github}`: each once its app is configured (ADR 0036) |
-| `/api/v1/public/*` | Discover's Blogs at `/discover` (60 blogs a page, `?page=`, with the `total` its filters match), a blog's page (with its claimant and readers' notes), a profile (with follow counts, and liked posts only if shown): listed and featured blogs only, edge-cacheable. A blog's reader count is given from three readers and is null below, in Discover's order as well as its value (`publicReaderCount`, ADR 0041); member search gives it the same way |
+| `/api/v1/public/*` | Discover's Blogs at `/discover`, which the page `/discover/blogs` reads (60 blogs a page, `?page=`, with the `total` its filters match), a blog's page (with its claimant and readers' notes), a profile (with follow counts, and liked posts only if shown): listed and featured blogs only, edge-cacheable. A blog's reader count is given from three readers and is null below, in Discover's order as well as its value (`publicReaderCount`, ADR 0041); member search gives it the same way |
 | `GET /api/v1/public/avatars/:userId?v=` | A member's picture, only at the version it is at (ADR 0032, 0033): the one they uploaded, from R2, else their Gravatar while they show it and the check found one, fetched here by the hash of their email, which never leaves tela-api; raster types only, 512 KB, immutable for 30 days; none is a 404 the letter stands in for |
 | `GET /api/v1/public/front` | The front page's edition (ADR 0035): each public blog's newest post, newest first, from the last seven days, or the latest ones when nobody wrote that week, eleven at most, with its titles and translated excerpts, its blog and its claimant; and the counts the copy states, public blogs and the week's distinct blogs, languages and posts. Each blog's newest post is one seek per live feed down `articles_feed_sort_idx`; future-dated posts wait. Cached as a profile is |
 | `GET /api/v1/public/discover/week`, `/articles`, `/readers` | Discover's other tabs (ADR 0044), in `apps/api/src/routes/discover.ts`: one answer for everyone, which the device personalizes from its own rows, so nothing about the viewer is asked. This week: the rolling seven days' recommended posts, the most recommended first, then the newest; the front page's edition beside them (`editionStatement`, shared with `/front`), for the device to fall back on; twelve blogs new in the directory, every listed blog alike, by when it arrived or was claimed and never by an operator's review; and readers to suggest. Articles (`?topic&lang&cursor`): every public post newest first, thirty a page behind a `sortAt:id` cursor cut by key down `articles_sort_idx`, never by offset; the week's recommended, whole, on the first page only; the languages of the last 90 days within the topic. Readers: `readersPool`, the people who recommend or show what they read, in two round trips, each with their newest recommendations as `[articleId, siteId]`, the public blogs they show (null unless they do), their earliest find (by recommendation id, never the device's `at`, from two others after) and their newest note, of posts whose date has come. A post carries its week's recommendations, up to twenty recommender ids and its newest note. Listed and featured blogs, live feeds and posts whose date has come only; no answer says how a blog was listed. Cached as a profile is |
@@ -247,9 +247,13 @@ The only public Worker, unpinned, with no D1.
   address that names no member or version.
 - Sessions come from the signed cookie cache; when it has lapsed, tela-api's get-session is asked
   and its fresh cookie passed on.
-- `/discover`, `/s/:id` and `/@handle` are rendered here (`src/ssr.tsx`) with the SPA's own views,
-  from tela-api's public JSON, into the built `index.html`, cached per colo, locale and deploy for
-  five minutes, with the data handed to the SPA in `#tela-data`.
+- Discover's four tabs (`/discover`, `/discover/articles`, `/discover/blogs`,
+  `/discover/readers`; ADR 0044), `/s/:id` and `/@handle` are rendered here (`src/ssr.tsx`) with
+  the SPA's own views, from tela-api's public JSON, into the built `index.html`, cached per colo,
+  locale and deploy for five minutes, with the data handed to the SPA in `#tela-data`. The page is
+  the visitor's: a member's device hides their own blogs and adds whom they follow once the app
+  boots. `/discover` with the Blogs page's old filters (`topic`, `lang`, `page`) is answered 301 to
+  `/discover/blogs` with its whole query, asking tela-api nothing.
 - `/` is the front page (ADR 0035), rendered the same way for visitors from
   `/api/v1/public/front`, one page for each title mode (`?titles=translated`), and from its own
   key, never the address asked. A request whose cookie holds `tela.session_token` is a member's:
@@ -303,9 +307,10 @@ A Vite + React SPA that renders from the device.
 | `/`, `/?titles=translated` | The front page for visitors (ADR 0035), rendered at the edge: the count of public blogs, this week's edition (one post a blog; the latest when the week has none), titles as written or in the reader's language; members go to `/reading` |
 | `/login` | Password first, or an emailed code (ADR 0043); the mail's sign-in and reset links fill their code in and ask before using it (ADR 0036), and a first sign-in's (`join=1`) asks for the joiner's password and goes on to Discover |
 | `/reading?filter=&feed=&article=&mode=` | Sidebar, list and the open article |
-| `/discover?topic=&lang=`, `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart |
+| `/discover`, `/discover/articles?topic=&lang=&sort=new&cursor=`, `/discover/blogs?topic=&lang=&page=`, `/discover/readers` | Discover (ADR 0044): This week (the week's most recommended, else the edition; new blogs; readers to follow), Articles, Blogs and Readers. Public pages, rendered at the edge too; Articles' sorts and pages are cached apart. The device hides the blogs its member reads and matches suggested readers to their likes and blogs (`lib/discover-overlay.ts`, `lib/discover-week.ts`, `lib/suggest-readers.ts`) |
+| `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart |
 | `/about`, `/privacy`, `/terms` | The info pages, for anyone; copy from `src/content/info`, rendered at the edge too, with no data |
-| `/following?tab=` | What the people a member follows did, by RPC; whom they follow, from the device (ADR 0031) |
+| `/following?tab=` | What the people a member follows did, by RPC; whom they follow, from the device (ADR 0031); readers to follow from Discover's pool, by the same rule (ADR 0044) |
 | `/search?q=` | The device first, then blogs and older posts from the server |
 | `/add`, `/claim?url=&taken=`, `/sites/:id/claim` | Add feeds and OPML; claim a blog (For writers' card lands on `/claim` with its blog filled in) |
 | `/writers` | For writers: a calling card made as you type, beside a labelled sample (ADR 0037); SPA-only (ADR 0035) |

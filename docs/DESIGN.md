@@ -210,11 +210,14 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
 `AppHeader`, `ThemeMenu`, `LanguageMenu` (`MemberLanguage`, `VisitorLanguage`), `FrontDoor` (the sheet and `DoorForm`), `WriterCard`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
 `PairedBody`, `TranslationBar`, `Untranslated`, `LikeButton`, `RecommendPopover`, `EmptyState`,
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `SiteFooter`, `TypographyMenu`, the
-highlight toolbar, note and list (`highlights.tsx`), and `Shortcuts`. The front page, Discover, a
+highlight toolbar, note and list (`highlights.tsx`), `Shortcuts`, and Discover's `DiscoverTabs`,
+`TopicChips` and `LanguageFilter` (`discover-filters.tsx`), `LeadPost`, `RankedPost` and `PostRow`
+(`discover-post.tsx`), `ReaderCard` and `FollowButton`. The front page, Discover's tabs, a
 blog's page and a profile are pure views in `apps/reader/src/views`, rendered by the SPA and by
 the edge alike. Anything
 interactive in them must work without JavaScript or degrade to a link: Discover's language menu
-is a native `<details>`, and a visitor's Subscribe is a link to sign in. The store marks read,
+is a native `<details>`, its tabs, topic chips, sort and "More articles" are links, and a
+visitor's Subscribe and Follow are links to sign in. The store marks read,
 requests translations and follows background work itself, so no component polls or refreshes.
 
 Recommend (from the design): the reader's action row holds Like and Recommend pills; Recommend
@@ -384,6 +387,45 @@ of avatars and "Anna and Jonas read this blog.", a member call beside the cached
 
 Dashboard reuses the header and a single 720–960 px column with `font-serif` headings; there is no
 dedicated design for it, so it follows the Discover page's spacing and the site card's chips.
+
+Discover (`/discover`, Tela v5 §11, ADR 0044): a 1120 px page, 44 px above (32 px on a phone).
+Every tab opens with the serif "Discover" (40 px, 32 px on a phone), the 15 px `ink-2` intro
+("Posts, blogs and readers from outside your subscriptions, in any language."), and the tabs This
+week · Articles · Blogs · Readers, underlined as Following's are, each an address (`/discover`,
+`/discover/articles`, `/discover/blogs`, `/discover/readers`) and the current one `aria-current`.
+On a phone the tab row runs to the screen's edges and scrolls sideways rather than wrapping; its
+rule is an inset shadow, since a scrolling row clips a border hung below it. Section labels are
+11 px uppercase `muted` with their "All articles →" link on the right, 64 px apart. Everything
+personal is the device's: the blogs the member reads and the people they follow are taken once
+as the page opens, so a card Subscribed or Followed from it stays, showing Subscribed or
+Following, until they come back.
+
+- **This week:** the span's label ("Most recommended this week", or "New this week" and "Latest
+  in the directory" while too few recommendations are left to rank), then the lead, a `surface`
+  card (radius 14, 32 px in, 20 px on a phone): on the left the blog's 10 px swatch and name,
+  the byline, the time, minutes and the "JA → EN" badge, a 38 px serif title (28 px on a phone),
+  the 18 px excerpt, and *Read* (filled `ink`) beside *Subscribe*; on the right, the note in
+  20 px italic serif with its reader's 22 px avatar and name, and over a `line` rule "4 other
+  readers recommended it this week." (the followed reader's line instead, when there is one).
+  Under it, posts 2 to 5 in columns of at least 420 px: a 20 px serif rank in `muted`, the blog,
+  a 22 px serif title, and the reason line. Then *New in the directory*, three site cards labelled
+  only "New" (never how a blog was listed, ADR 0041), *Readers to follow*, three reader cards, and
+  a 13 px `muted` footer over a `line` rule saying what the week is made of.
+- **Articles:** the topic chips, the sort as two links in a `hover` pill (the current one lifted
+  on `surface`, as `Segmented` looks, but links), and the language menu; then rows 26 px tall
+  either side of a `line` rule, at most 740 px wide: the meta line, a 25 px serif title, two lines
+  of 17 px excerpt, the reason line, and the newest note, "“…” — Name". "More articles" is an
+  outlined pill and a link to the next page; with a script it brings that page in place.
+- **Blogs:** the directory as it was: chips, the language menu, the site grid, the pager and the
+  claim strip. It keeps the blogs the member reads, as "Subscribed".
+- **Readers:** a 13 px `muted` note on where suggestions come from, then a group per reason, in
+  the rule's order, each a row: a 48 px avatar, the name (15 px 600) and @handle, the bio in 18 px
+  serif `body`, the reason line, and the note in a `surface` box with "Recommended **title** ·
+  blog", which opens the post; *Follow* at the right, under the text on a phone.
+
+The reason line is 12.5 px `ink-2` after a 5 px `accent` dot: "Anna, whom you follow, recommended
+it", else "Recommended by 4 readers this week". There is no "Not interested", and no post page of
+Discover's own: a post opens as everywhere else (`PostLink`).
 
 Discover card (from the design): 40 px avatar (favicon or initial), name with a green ✓ when
 claimed, host, language chip, serif tagline, "Latest: …", "N readers · cadence", and a
