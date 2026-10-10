@@ -373,7 +373,8 @@ swatch, name and "JA → EN", a 23 px serif title, two lines of excerpt, minutes
 day's likes are one card listing the posts; a day's new subscriptions are blog cards with
 Subscribe. Likes and subscriptions are grouped by the viewer's local day, and the feed pages
 thirty entries at a time behind "Older activity". The aside lists the people followed (from the device, no request) and a few
-readers to follow, drawn only from what is public. No toasts: a Follow button changes at once.
+readers to follow: the first five Discover's Readers tab would suggest (ADR 0044), each with its
+reason under the name (the accent dot, 12.5 px `ink-2`). No toasts: a Follow button changes at once.
 
 Blog (`/s/:id`, Tela v2): a 1080 px page. The header is an 84 px avatar (20 px corners), the host
 and "✓ Claimed by {name}" in accent, the title in 56 px serif (40 px on a phone), the blog's
