@@ -822,7 +822,8 @@ A public reader count is shown only from three readers.
   home page for the feeds the blog declares.
 - **Read a claim's method before believing it** (ADR 0045). *Meta tag* and *rel="me" link* are
   the blogger's own word on the page. *Link on every page* and *GitHub, both ways* are inferred: a
-  link without `rel="me"` found on the home page and an older post. Their known way to be wrong
+  link without `rel="me"` found on the home page and on the blog's 404 page, which shows its
+  header, footer and sidebar and no post. Their known way to be wrong
   is someone the blog links from its header, footer or sidebar (a blogroll, a theme credit to a
   person, a sponsor slot) whose GitHub then names the blog. When a writer says their blog was
   taken, look at the method first; if it is one of those two, remove the claim and let the

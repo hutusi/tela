@@ -130,7 +130,7 @@ and hashes as the `NORM_VERSION` contract.
   replacing the full text.
 - `extractArticleJob`, `siteAssetsJob` (raster favicons to `tela-assets`), `verifyClaimJob`
   (`pipeline/proofs.ts` reads the home page: a meta tag, a `rel="me"` link to the profile, or a
-  link without one that an older post of the blog repeats, to the profile or to a GitHub whose
+  link without one that the blog's 404 page shows too, to the profile or to a GitHub whose
   website is the blog, asked of `api.github.com` by the member's GitHub id; then provenance; ADR
   0045), `websubSubscribeJob`, and `gravatarCheckJob`
   (`pipeline/gravatar.ts`: whether Gravatar has a picture for a member, recorded and never copied,
