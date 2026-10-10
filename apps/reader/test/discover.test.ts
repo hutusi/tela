@@ -210,6 +210,13 @@ describe('the device on Discover', () => {
     expect(postReason(post(2, 2), [])).toBeNull()
   })
 
+  test('the others beside whom you follow are counted from the post, not the twenty named', () => {
+    const named = Array.from({ length: 20 }, (_, i) => `r${i}`)
+    const busy = post(3, 3, { article: article(3, { recommendCount: 25 }), recommenders: named })
+    const ann = { id: 'r0', handle: 'ann', displayName: 'Ann', avatar: null }
+    expect(postReason(busy, [ann])).toMatchObject({ kind: 'followed', others: 24 })
+  })
+
   test('a translated excerpt shows only beside a translated title', () => {
     const fr = { ...article(1, { sourceLang: 'fr', excerpt: 'Bonjour' }) }
     const both = { ...fr, titles: { en: 'Hello' }, excerpts: { en: 'Hi there' } }

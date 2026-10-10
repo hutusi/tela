@@ -57,11 +57,10 @@ export type PostReason =
 
 export function postReason(post: DiscoverPost, followed: readonly Person[]): PostReason {
   if (followed.length > 0) {
-    return {
-      kind: 'followed',
-      people: [...followed],
-      others: Math.max(post.recommenders.length - followed.length, 0),
-    }
+    // Everyone who recommends it, from the post's own count: the answer names only the newest
+    // twenty recommenders, so their number is no total.
+    const total = Math.max(post.article.recommendCount, post.recommenders.length)
+    return { kind: 'followed', people: [...followed], others: Math.max(total - followed.length, 0) }
   }
   return post.weekRecs > 0 ? { kind: 'week', count: post.weekRecs } : null
 }
