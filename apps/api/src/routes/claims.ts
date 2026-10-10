@@ -9,7 +9,7 @@
  * before the token could be on the page.
  */
 import { bumpSeq, claimDue, consumeLimit, currentSeq, dueClaims, first } from '@tela/data'
-import { claimReason } from '@tela/shared'
+import { claimReason, describeClaimError } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
@@ -86,13 +86,14 @@ export function claimRoutes(deps: ApiDeps) {
       db,
       sql`select 1 as linked from account where user_id = ${userId} and provider_id = 'github'`,
     )
-    // A check that found no proof says why as a reason the page words; anything else as written.
+    // A check that found no proof says why as a reason the page words in the member's language.
+    // The text goes too, for a claim page cached before reasons existed, which shows only that.
     const reason = claimReason(claim?.error)
     return {
       siteId,
       homeUrl: site.home_url,
       status: (claim?.status ?? 'unverified') as 'unverified' | 'pending' | 'failed',
-      error: reason ? null : (claim?.error ?? null),
+      error: claim?.error ? describeClaimError(claim.error) : null,
       reason,
       github: github !== undefined,
       proofs: {

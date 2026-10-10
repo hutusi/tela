@@ -67,7 +67,7 @@ describe('claiming a blog', () => {
     expect((await start()).github).toBe(true)
   })
 
-  test('a check that found no proof comes back as a reason, any other failure as text', async () => {
+  test('a check that found no proof comes back as a reason, and as text for an older page', async () => {
     const { siteId } = await start()
     await api.request(`/api/v1/claims/${siteId}/verify`, { body: {}, as: reader })
     const failWith = async (error: string) => {
@@ -78,7 +78,9 @@ describe('claiming a blog', () => {
     }
     const missed = await failWith(JSON.stringify({ reason: 'no_proof', page: server.url('/') }))
     expect(missed.reason).toEqual({ reason: 'no_proof', page: server.url('/') })
-    expect(missed.error).toBe(null)
+    // A claim page cached before reasons shows `error` alone, so it is never empty for one.
+    expect(missed.error).toContain(`no meta tag with the token`)
+    expect(missed.error).toContain(server.url('/'))
     const down = await failWith('home page returned HTTP 503')
     expect(down.reason).toBe(null)
     expect(down.error).toBe('home page returned HTTP 503')
