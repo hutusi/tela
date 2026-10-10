@@ -238,7 +238,7 @@ export const fr = {
               },
               {
                 name: 'Google et GitHub',
-                text: 'Uniquement si vous vous connectez avec eux. Ils sauront que vous vous connectez à Tela.',
+                text: 'Uniquement si vous vous connectez avec eux. Ils sauront que vous vous connectez à Tela. Quand vous revendiquez un blog avec GitHub associé à votre compte, les serveurs de Tela demandent aussi à GitHub l’identifiant public et le site web de ce compte, et ne conservent ni l’un ni l’autre.',
               },
               {
                 name: 'Les blogs',
@@ -384,7 +384,7 @@ export const fr = {
         blocks: [
           {
             list: [
-              'Ne revendiquez qu’un blog que vous écrivez ou que vous contrôlez. Vous le prouvez avec une balise ou un lien sur sa page d’accueil.',
+              'Ne revendiquez qu’un blog que vous écrivez ou que vous contrôlez. Vous le prouvez avec une balise ou un lien sur sa page d’accueil, ou avec votre compte GitHub, quand le blog et ce compte renvoient l’un vers l’autre.',
               'Un blog revendiqué est référencé dans Découvrir, avec votre nom et votre bio sur sa page.',
               'Si une revendication se révèle fausse, nous l’annulerons.',
             ],

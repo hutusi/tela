@@ -45,7 +45,13 @@
     "latest": "Latest post",
     "posts30d": "Posts, 30 days"
   },
-  "methods": { "meta": "Meta tag", "rel_me": "rel=\"me\" link", "dns": "DNS record" },
+  "methods": {
+    "meta": "Meta tag",
+    "rel_me": "rel=\"me\" link",
+    "link": "Link on every page",
+    "github": "GitHub, both ways",
+    "dns": "DNS record"
+  },
   "regions": { "global": "Direct", "cn": "China relay" },
   "formats": { "rss": "RSS", "atom": "Atom", "rdf": "RDF", "json": "JSON Feed" },
   "listing": {

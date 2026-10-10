@@ -1,3 +1,4 @@
+export * from './claims'
 export * from './constants'
 export * from './handles'
 export * from './invites'

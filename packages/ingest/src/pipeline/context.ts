@@ -2,6 +2,7 @@ import type { Lease, TelaDb } from '@tela/data'
 import { bumpSeq, fence, isFenceRefusal, release } from '@tela/data'
 import type { Blobs, Clock } from '@tela/platform'
 import { sql } from 'drizzle-orm'
+import type { GitHub } from '../github'
 import type { HttpClient } from '../http'
 import type { RegionPolicy } from '../region-policy'
 
@@ -23,6 +24,8 @@ export type IngestContext = {
   publicUrl?: string
   /** Where Gravatar serves pictures (ADR 0033); unset is `GRAVATAR_URL`. Tests point it here. */
   gravatarUrl?: string
+  /** GitHub's public profiles, for a claim by GitHub (ADR 0045); absent, no claim checks GitHub. */
+  github?: GitHub
   /** Tests only: let side requests the HTTP client does not make (WebSub hubs) reach localhost. */
   allowPrivateHosts?: boolean
 }

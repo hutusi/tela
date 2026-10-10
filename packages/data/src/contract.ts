@@ -172,6 +172,26 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       )
     })
 
+    it('keeps the checks and foreign keys of site_claims, which migration 0009 rebuilt (ADR 0045)', async () => {
+      const db = await makeDb()
+      await db.run(
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 0, 0, 0)`,
+      )
+      await db.insert(sites).values({ homeUrl: 'https://a.b', createdAt: T0, updatedAt: T0 })
+      const claimBy = (method: string, siteId = 1, userId = 'u1') =>
+        db.run(sql`
+          insert into site_claims (site_id, user_id, method, token, created_at)
+          values (${siteId}, ${userId}, ${method}, 't', 1)
+        `)
+      await claimBy('github')
+      await db.run(sql`update site_claims set method = 'link'`)
+      expect(await caught(() => claimBy('email', 1, 'u1'))).not.toBe(null)
+      expect(await caught(() => claimBy('meta', 99))).not.toBe(null)
+      expect(await caught(() => db.run(sql`update site_claims set status = 'done'`))).not.toBe(null)
+      // A second claim by the same member on the same site: the unique index came back too.
+      expect(await caught(() => claimBy('meta'))).not.toBe(null)
+    })
+
     it("gives a member's picture: their upload, else a Gravatar they show and have, else none (ADR 0033)", async () => {
       const db = await makeDb()
       await db.run(

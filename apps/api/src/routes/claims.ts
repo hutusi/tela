@@ -1,6 +1,7 @@
 /**
- * A blogger claiming their blog (ADR 0011, 0018): prove it with a meta tag carrying a token, or a
- * rel="me" link back to their Tela profile, then ask for the check.
+ * A blogger claiming their blog (ADRs 0011, 0018, 0045): prove it with a meta tag carrying a
+ * token, a link back to their Tela profile, or a GitHub that links the blog both ways, then ask
+ * for the check. The check tries every way at once; the member never picks one.
  *
  * The token is derived, not stored: an HMAC of the site and member under the server's secret. So
  * nothing exists until the member asks for the check, and a `pending` claim is always one they
@@ -8,6 +9,7 @@
  * before the token could be on the page.
  */
 import { bumpSeq, claimDue, consumeLimit, currentSeq, dueClaims, first } from '@tela/data'
+import { claimReason, describeClaimError } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
@@ -80,14 +82,24 @@ export function claimRoutes(deps: ApiDeps) {
       db,
       sql`select id, status, error from site_claims where site_id = ${siteId} and user_id = ${userId}`,
     )
+    const github = await first(
+      db,
+      sql`select 1 as linked from account where user_id = ${userId} and provider_id = 'github'`,
+    )
+    // A check that found no proof says why as a reason the page words in the member's language.
+    // The text goes too, for a claim page cached before reasons existed, which shows only that.
+    const reason = claimReason(claim?.error)
     return {
       siteId,
       homeUrl: site.home_url,
       status: (claim?.status ?? 'unverified') as 'unverified' | 'pending' | 'failed',
-      error: claim?.error ?? null,
+      error: claim?.error ? describeClaimError(claim.error) : null,
+      reason,
+      github: github !== undefined,
       proofs: {
         meta: `<meta name="${META_NAME}" content="${token}">`,
-        relMe: `<link rel="me" href="${config.publicUrl}/@${profile?.handle ?? ''}">`,
+        // A link, not a <link>: it goes where a blog keeps its links, the header or the footer.
+        relMe: `<a rel="me" href="${config.publicUrl}/@${profile?.handle ?? ''}">Tela</a>`,
       },
     }
   }

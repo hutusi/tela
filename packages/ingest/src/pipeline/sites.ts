@@ -14,13 +14,15 @@ import {
   moveFeedToOrigin,
   type TelaDb,
 } from '@tela/data'
-import type { ClaimMethod } from '@tela/shared'
+import type { ClaimMethod, ClaimReason } from '@tela/shared'
 import { findAll, getAttributeValue } from 'domutils'
 import { type SQL, sql } from 'drizzle-orm'
 import { parseDocument } from 'htmlparser2'
+import { GitHubUnavailable, type GitHubUser } from '../github'
 import { type HttpClient, HttpError } from '../http'
 import { requestHubSubscription } from '../websub'
 import { commit, type IngestContext, type Statement } from './context'
+import { namesSite, type ProfileLink, profileHosts, readProofs } from './proofs'
 
 /** The host of a site's origin (`https://blog.example` → `blog.example`), in SQL. */
 const siteHost = (homeUrl: SQL) => sql`substr(${homeUrl}, instr(${homeUrl}, '://') + 3)`
@@ -116,36 +118,153 @@ export async function siteAssetsJob(
 }
 
 // ---------------------------------------------------------------------------------------------
-// Claim verification (ADR 0011)
+// Claim verification (ADRs 0011, 0045)
 
-export const VERIFICATION_META = 'tela-site-verification'
 /** Declared feeds kept per site, and the time budget for learning where they redirect. */
 export const MAX_DECLARED_FEEDS = 20
 const DECLARED_FEED_TIMEOUT_MS = 5000
 const DECLARED_FEEDS_BUDGET_MS = 90_000
 
-/** Does the page carry the token in a meta tag, or a rel="me" link to the member's profile? */
-export function findProof(
-  html: string,
+/** A URL kept in a stored reason; the column holds 500 characters. */
+const REASON_URL_MAX = 180
+
+const HTML_ACCEPT = 'text/html, application/xhtml+xml, */*;q=0.5'
+
+/** Where a claim asks for the blog's not-found page: a path no blog has, the same for one claim. */
+export const notFoundProbe = (token: string) => `/tela-claim-${token.slice(0, 12)}`
+
+/**
+ * The blog's own page for an address it does not have: what every page shares (its header,
+ * footer, sidebar) and no post. A link found there and on the home page is the blog's own, not a
+ * mention in a post (ADR 0045). Nothing on it is anyone else's to choose: an older post was the
+ * first try, and both the post the home page shows in full and a backdated item in a feed that
+ * names the blog as its home could make a mention look site-wide. Only a real 404 (or 410) on
+ * the blog's origin, and not downgraded to plain HTTP, counts; a page that answers 200, or sends
+ * a missing address home, is the home page again.
+ */
+async function notFoundPage(
+  ctx: IngestContext,
+  homeUrl: string,
   token: string,
-  profileUrls: string[],
-): { method: 'meta' | 'rel_me' } | null {
-  const doc = parseDocument(html)
-  for (const meta of findAll((el) => el.name === 'meta', doc.children)) {
-    if (
-      (getAttributeValue(meta, 'name') ?? '').toLowerCase() === VERIFICATION_META &&
-      (getAttributeValue(meta, 'content') ?? '').trim() === token
-    ) {
-      return { method: 'meta' }
+): Promise<{ url: string; body: string } | null> {
+  const origin = new URL(homeUrl)
+  const url = new URL(notFoundProbe(token), origin).toString()
+  try {
+    const res = await ctx.http.get(url, { region: 'global', accept: HTML_ACCEPT })
+    const final = new URL(res.finalUrl)
+    // A blog served over HTTPS that sends the probe to plain HTTP lets anyone on the way write
+    // the page; an upgrade is fine, since a blog stored as http:// usually answers over HTTPS.
+    const own =
+      (final.protocol === origin.protocol || final.protocol === 'https:') &&
+      final.hostname.replace(/^www\./, '') === origin.hostname.replace(/^www\./, '') &&
+      final.port === origin.port &&
+      final.pathname !== '/'
+    return (res.status === 404 || res.status === 410) && res.body && own
+      ? { url: res.finalUrl, body: res.body }
+      : null
+  } catch (err) {
+    if (err instanceof HttpError) return null
+    throw err
+  }
+}
+
+/** The numeric id of the member's GitHub, the one thing a GitHub sign-in leaves (ADR 0036). */
+async function githubIdOf(db: TelaDb, userId: string): Promise<string | null> {
+  const row = await first<{ account_id: string }>(
+    db,
+    sql`select account_id from account where user_id = ${userId} and provider_id = 'github' limit 1`,
+  )
+  return row?.account_id ?? null
+}
+
+const clip = (url: string) => url.slice(0, REASON_URL_MAX)
+
+/**
+ * Which proof the home page (and, for a link without `rel="me"`, the not-found page) gives, or
+ * why there is none, closest miss first: the member is told what to change, not what is missing.
+ * A reason names no GitHub login or website: it is stored, synced and backed up, and Tela keeps
+ * nothing from a provider but the identity (ADR 0036).
+ */
+async function proofOf(
+  ctx: IngestContext,
+  claim: { user_id: string; token: string; home_url: string; handle: string },
+  page: { finalUrl: string; body: string },
+): Promise<{ method: ClaimMethod } | { reason: ClaimReason }> {
+  const telaHosts = profileHosts(ctx.publicUrl ?? 'https://telaread.com')
+  const home = readProofs(page.body, page.finalUrl, claim.token, telaHosts)
+  if (home.meta) return { method: 'meta' }
+  const handle = claim.handle.toLowerCase()
+  const mine = (l: ProfileLink) => l.name === handle
+  if (home.profiles.some((l) => mine(l) && l.me)) return { method: 'rel_me' }
+
+  let gh: GitHubUser | null = null
+  let githubDown = false
+  const githubId = ctx.github ? await githubIdOf(ctx.db, claim.user_id) : null
+  if (ctx.github && githubId) {
+    try {
+      gh = await ctx.github.user(githubId)
+    } catch (err) {
+      if (!(err instanceof GitHubUnavailable)) throw err
+      githubDown = true
     }
   }
-  const targets = new Set(profileUrls.map((u) => u.replace(/\/+$/, '').toLowerCase()))
-  for (const el of findAll((el) => el.name === 'link' || el.name === 'a', doc.children)) {
-    const rel = (getAttributeValue(el, 'rel') ?? '').toLowerCase().split(/\s+/)
-    const href = (getAttributeValue(el, 'href') ?? '').trim().replace(/\/+$/, '').toLowerCase()
-    if (rel.includes('me') && targets.has(href)) return { method: 'rel_me' }
+  const login = gh?.login.toLowerCase()
+  const theirs = (l: ProfileLink) => l.name === login
+  const namesThisSite = gh !== null && namesSite(gh.website, claim.home_url)
+  if (namesThisSite && home.github.some((l) => theirs(l) && l.me)) return { method: 'github' }
+
+  // A link without rel="me" is the blog's own only if its 404 page, which has no post, shows it.
+  const plainProfile = home.profiles.some((l) => mine(l) && !l.marked)
+  const plainGithub = namesThisSite && home.github.some((l) => theirs(l) && !l.marked)
+  if (plainProfile || plainGithub) {
+    const target = plainProfile ? 'profile' : 'github'
+    const second = await notFoundPage(ctx, claim.home_url, claim.token)
+    if (!second) {
+      return { reason: { reason: 'no_not_found_page', page: clip(page.finalUrl), target } }
+    }
+    const again = readProofs(second.body, second.url, claim.token, telaHosts)
+    if (plainProfile && again.profiles.some((l) => mine(l) && !l.marked)) return { method: 'link' }
+    if (plainGithub && again.github.some((l) => theirs(l) && !l.marked)) return { method: 'github' }
+    return {
+      reason: {
+        reason: 'not_site_wide',
+        page: clip(page.finalUrl),
+        other: clip(second.url),
+        target,
+      },
+    }
   }
-  return null
+
+  const markedProfile = home.profiles.find((l) => mine(l) && l.marked)
+  if (markedProfile?.marked) {
+    return {
+      reason: {
+        reason: 'link_marked',
+        page: clip(page.finalUrl),
+        target: 'profile',
+        rel: markedProfile.marked,
+      },
+    }
+  }
+  if (gh && namesThisSite) {
+    const marked = home.github.find((l) => theirs(l) && l.marked)
+    return {
+      reason: marked?.marked
+        ? { reason: 'link_marked', page: clip(page.finalUrl), target: 'github', rel: marked.marked }
+        : { reason: 'github_link', page: clip(page.finalUrl) },
+    }
+  }
+  if (gh && home.github.some(theirs)) {
+    return { reason: { reason: 'github_website' } }
+  }
+  const another = home.profiles.find((l) => !mine(l))
+  if (another) {
+    return {
+      reason: { reason: 'other_handle', page: clip(page.finalUrl), found: another.name, handle },
+    }
+  }
+  if (githubDown) return { reason: { reason: 'github_unavailable' } }
+  return { reason: { reason: 'no_proof', page: clip(page.finalUrl) } }
 }
 
 /** The declared feed URLs kept, plus where each redirects to, under one time budget. */
@@ -236,25 +355,18 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
 
   let page: Awaited<ReturnType<HttpClient['get']>>
   try {
-    page = await ctx.http.get(claim.home_url, {
-      region: 'global',
-      accept: 'text/html, application/xhtml+xml, */*;q=0.5',
-    })
+    page = await ctx.http.get(claim.home_url, { region: 'global', accept: HTML_ACCEPT })
   } catch (err) {
     const why = err instanceof HttpError ? `${err.kind}: ${err.message}` : String(err)
     return fail(`could not fetch ${claim.home_url} (${why})`)
   }
   if (page.status !== 200 || !page.body) return fail(`home page returned HTTP ${page.status}`)
-  const base = (ctx.publicUrl ?? 'https://telaread.com').replace(/\/+$/, '')
   const vouched = claim.vouched_by !== null
-  const proof = vouched
+  const found = vouched
     ? { method: claim.method }
-    : findProof(page.body, claim.token, [`${base}/@${claim.handle}`])
-  if (!proof) {
-    return fail(
-      `no <meta name="${VERIFICATION_META}"> with the token and no rel="me" link to your profile on ${page.finalUrl}`,
-    )
-  }
+    : await proofOf(ctx, { ...claim, handle: claim.handle }, page)
+  if ('reason' in found) return fail(JSON.stringify(found.reason))
+  const proof = found
 
   // The feeds the home page declares are the ones the owner vouches for; every other feed that
   // joined while the site was unclaimed moves to the origin that serves it.

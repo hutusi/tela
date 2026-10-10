@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { first } from '@tela/data'
+import type { ClaimReason } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
@@ -33,6 +34,9 @@ beforeEach(async () => {
 type Standing = {
   siteId: number
   status: string
+  error?: string | null
+  reason?: ClaimReason | null
+  github?: boolean
   proofs?: { meta: string; relMe: string }
 }
 const start = async (as = reader) =>
@@ -47,8 +51,39 @@ describe('claiming a blog', () => {
     expect(standing.proofs?.meta).toMatch(
       /^<meta name="tela-site-verification" content="[0-9a-f]{24}">$/,
     )
-    expect(standing.proofs?.relMe).toMatch(/href="http:\/\/tela\.test\/@u_[0-9a-f]{10}"/)
+    // A link for the header or footer, where a blog keeps its links, not a tag for <head>.
+    expect(standing.proofs?.relMe).toMatch(
+      /^<a rel="me" href="http:\/\/tela\.test\/@u_[0-9a-f]{10}">Tela<\/a>$/,
+    )
+    expect(standing.github).toBe(false)
     expect(await first(api.db, sql`select 1 as x from site_claims`)).toBeUndefined()
+  })
+
+  test('says whether the member has a GitHub to claim by (ADR 0045)', async () => {
+    await api.db.run(sql`
+      insert into account (id, account_id, provider_id, user_id, created_at, updated_at)
+      values ('gh', '4242', 'github', ${reader.userId}, 1, 1)
+    `)
+    expect((await start()).github).toBe(true)
+  })
+
+  test('a check that found no proof comes back as a reason, and as text for an older page', async () => {
+    const { siteId } = await start()
+    await api.request(`/api/v1/claims/${siteId}/verify`, { body: {}, as: reader })
+    const failWith = async (error: string) => {
+      await api.db.run(sql`update site_claims set status = 'failed', error = ${error}`)
+      return (await (
+        await api.request(`/api/v1/claims/${siteId}`, { as: reader })
+      ).json()) as Standing
+    }
+    const missed = await failWith(JSON.stringify({ reason: 'no_proof', page: server.url('/') }))
+    expect(missed.reason).toEqual({ reason: 'no_proof', page: server.url('/') })
+    // A claim page cached before reasons shows `error` alone, so it is never empty for one.
+    expect(missed.error).toContain(`no meta tag with the token`)
+    expect(missed.error).toContain(server.url('/'))
+    const down = await failWith('home page returned HTTP 503')
+    expect(down.reason).toBe(null)
+    expect(down.error).toBe('home page returned HTTP 503')
   })
 
   test('the token is the same every time for a member, and differs between members', async () => {

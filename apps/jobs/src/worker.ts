@@ -14,6 +14,7 @@ import type {
 } from '@cloudflare/workers-types'
 import * as schema from '@tela/data/schema'
 // Subpaths, so this bundle takes only what it runs.
+import { createGitHub } from '@tela/ingest/github'
 import { createHttpClient } from '@tela/ingest/http'
 import { createIngest, type Ingest as IngestApi } from '@tela/ingest/pipeline'
 import { createRelayClient } from '@tela/ingest/relay'
@@ -51,12 +52,18 @@ function context(env: Env): JobsContext {
       ? createRelayClient({ relayUrl: env.RELAY_URL, secret: env.RELAY_SECRET })
       : undefined
   const controlUrl = env.RELAY_CONTROL_URL ?? 'https://www.cloudflare.com/cdn-cgi/trace'
+  const userAgent = env.WORKER_USER_AGENT ?? 'Tela/0.1 (+https://telaread.com; feed reader)'
   return {
     db: d1Db(env.DB, schema),
     blobs: r2Blobs(env.BLOBS),
     ...(env.ASSETS ? { assets: r2Blobs(env.ASSETS) } : {}),
     publicUrl: env.PUBLIC_URL ?? 'https://telaread.com',
     ...(env.GRAVATAR_URL ? { gravatarUrl: env.GRAVATAR_URL } : {}),
+    github: createGitHub({
+      userAgent,
+      ...(env.GITHUB_TOKEN ? { token: env.GITHUB_TOKEN } : {}),
+      ...(env.GITHUB_API_URL ? { apiUrl: env.GITHUB_API_URL } : {}),
+    }),
     jobs: queueJobs<JobQueues>({
       fetch: env.FETCH_QUEUE,
       extract: env.EXTRACT_QUEUE,
@@ -65,7 +72,7 @@ function context(env: Env): JobsContext {
     }),
     clock: systemClock,
     http: createHttpClient({
-      userAgent: env.WORKER_USER_AGENT ?? 'Tela/0.1 (+https://telaread.com; feed reader)',
+      userAgent,
       timeoutMs: Number(env.FETCH_TIMEOUT_MS ?? 20_000),
       // Politeness is the lease table's job now: one live lease per host, across every kind.
       politenessMs: 0,

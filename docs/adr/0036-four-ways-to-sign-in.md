@@ -88,7 +88,9 @@ in, and shows "Sign in as <email>" with a button. The reset link does the same.
 **Nothing is kept from a provider but the identity.** No tokens: `account.create.before` and
 `update.before` null every token, and `updateAccountOnSignIn` is off. No name or picture: the gate
 returns `{name: '', image: null}`, so a member's real name from Google is never published on their
-profile unless they choose it, and no third party's URL rides in the session cookie. Scopes are the
+profile unless they choose it, and no third party's URL rides in the session cookie. (A claim by
+GitHub asks GitHub's public API for the login and website behind the kept id, without the member's
+token, and keeps neither: ADR 0045.) Scopes are the
 least that gives an address (`openid email`; `user:email`), and the hook on `/sign-in/social`
 refuses a body with any key but the provider, the three return URLs, `disableRedirect` and
 `additionalData.invite`, so a client cannot widen them. Signing in with an ID token, which has no

@@ -373,15 +373,28 @@
     "continue": "繼續",
     "searching": "正在查詢訂閱源…",
     "verifyTitle": "證明你擁有這個網站",
-    "verifyIntro": "在 {site} 的首頁加入以下兩段程式碼之一：",
-    "optionMeta": "方式一：meta 標籤",
+    "verifyIntro": "用下面任意一種方式證明 <site></site> 是你的，然後點「驗證」。Tela 會逐一檢查。",
+    "optionGitHub": "你的 GitHub",
+    "optionGitHubHint": "如果你 GitHub 主頁上填寫的網站是 {site}，而你的網站在頁頭或頁尾連結了這個 GitHub 主頁，就什麼都不用加。",
+    "optionGitHubUnlinked": "如果你的網站和 GitHub 主頁已經互相連結，就什麼都不用加：先在<link>設定</link>裡把 GitHub 連結到你的 Tela 帳號，再回來驗證。",
+    "optionRelMe": "指向你 Tela 個人頁的連結",
+    "optionRelMeHint": "把它放在網站的頁頭或頁尾。已有的連結也可以：帶 rel=\"me\" 的放在首頁任何位置都行；不帶的，需要放在 404 頁面也會顯示的頁頭或頁尾裡。",
+    "optionMeta": "meta 標籤",
     "optionMetaHint": "放在首頁的 <head> 中。驗證完成後可以刪除。",
-    "optionRelMe": "方式二：rel=\"me\" 連結",
-    "optionRelMeHint": "從你的首頁連結到你的 Tela 個人頁（放在頁尾即可）。",
     "verify": "驗證",
     "verifyAgain": "再次驗證",
     "checking": "正在檢查你的網站…",
     "failed": "尚未驗證。",
+    "reasons": {
+      "no_proof": "在 {page} 上什麼也沒找到：沒有 meta 標籤，沒有指向你 Tela 個人頁的連結，也沒有與網站互鏈的 GitHub 連結。Tela 讀取的是伺服器返回的頁面，不執行任何指令碼。",
+      "other_handle": "{page} 連結的是 Tela 個人頁 @{found}，而你的是 @{handle}。請改成你的個人頁連結。",
+      "link_marked": "{page} 上指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結帶有 rel=\"{rel}\"，評論區就是這樣標記評論者連結的，所以不算數。去掉它，或者加上 rel=\"me\"。",
+      "not_site_wide": "指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結在 {page} 上有，但在 {other}（你網站的 404 頁面）上沒有。不帶 rel=\"me\" 的連結，要放在 404 頁面也會顯示的頁頭或頁尾裡才算數，文章裡的連結不算。給它加上 rel=\"me\"，或者把它移到頁頭或頁尾。",
+      "no_not_found_page": "{page} 上指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結沒有 rel=\"me\"，所以 Tela 還要在你網站的 404 頁面上找到它，但你的網站沒有對不存在的地址返回可讀取的 404 頁面。給連結加上 rel=\"me\"。",
+      "github_website": "你的網站連結了你的 GitHub 主頁，但這個主頁上填寫的網站不是 {site}。到 GitHub 上把它改成 {site}，再驗證一次。",
+      "github_link": "你的 GitHub 主頁填寫的網站是 {site}，但 {page} 沒有連結到這個 GitHub 主頁。在頁頭或頁尾加上這個連結。",
+      "github_unavailable": "GitHub 沒有響應，Tela 無法檢查你的 GitHub。稍後再試，或者換一種方式。"
+    },
     "verified": "已驗證。這個網站在 Tela 上屬於你了。",
     "verifiedHint": "它現在會出現在「發現」中。在網站頁選擇主題，在儀表板檢視讀者與喜歡。",
     "viewSite": "檢視網站頁",
@@ -480,7 +493,7 @@
       },
       "connect": {
         "title": "連結你的部落格",
-        "body": "在你的網站上加一行，證明它屬於你：一個 meta 標籤，或一個指向你名片的連結。任何有 RSS 或 Atom 訂閱源的部落格都可以。"
+        "body": "用一個指向你名片的連結或一個 meta 標籤證明網站屬於你；如果你的網站和 GitHub 已經互相連結，什麼都不用加。任何有 RSS 或 Atom 訂閱源的部落格都可以。"
       },
       "follow": {
         "title": "追蹤你喜歡的寫作者",

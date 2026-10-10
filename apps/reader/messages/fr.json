@@ -373,15 +373,28 @@
     "continue": "Continuer",
     "searching": "Recherche de votre flux…",
     "verifyTitle": "Prouvez que ce site est à vous",
-    "verifyIntro": "Ajoutez l’un de ces deux extraits à la page d’accueil de {site} :",
-    "optionMeta": "Option A : une balise meta",
+    "verifyIntro": "Montrez que <site></site> est à vous de l’une de ces façons, puis cliquez sur Vérifier. Tela les essaie toutes.",
+    "optionGitHub": "Votre GitHub",
+    "optionGitHubHint": "Rien à ajouter si le site web de votre profil GitHub est {site} et si votre site renvoie vers ce profil depuis son en-tête ou son pied de page.",
+    "optionGitHubUnlinked": "Si votre site et votre profil GitHub renvoient déjà l’un vers l’autre, il n’y a rien à ajouter : associez GitHub à votre compte Tela dans les <link>Paramètres</link>, puis revenez ici.",
+    "optionRelMe": "Un lien vers votre profil Tela",
+    "optionRelMeHint": "Placez-le dans l’en-tête ou le pied de page de votre site. Un lien existant convient aussi : avec rel=\"me\", n’importe où sur la page d’accueil ; sans, seulement dans un en-tête ou un pied de page que la page 404 de votre site affiche aussi.",
+    "optionMeta": "Une balise meta",
     "optionMetaHint": "Placez-la dans le <head> de votre page d’accueil. Vous pourrez la retirer après la vérification.",
-    "optionRelMe": "Option B : un lien rel=\"me\"",
-    "optionRelMeHint": "Faites un lien vers votre profil Tela depuis votre page d’accueil (un lien en pied de page suffit).",
     "verify": "Vérifier",
     "verifyAgain": "Vérifier à nouveau",
     "checking": "Vérification de votre site…",
     "failed": "Pas encore vérifié.",
+    "reasons": {
+      "no_proof": "Tela n’a rien trouvé sur {page} : ni balise meta, ni lien vers votre profil Tela, ni lien vers un GitHub qui renvoie au site. Tela lit la page telle que votre serveur l’envoie, sans exécuter de script.",
+      "other_handle": "{page} renvoie vers le profil Tela @{found}, mais le vôtre est @{handle}. Corrigez le lien.",
+      "link_marked": "Le lien vers {target, select, github {votre GitHub} other {votre profil Tela}} sur {page} porte rel=\"{rel}\", comme les liens des commentateurs : il ne compte pas. Retirez cette mention, ou ajoutez rel=\"me\".",
+      "not_site_wide": "Le lien vers {target, select, github {votre GitHub} other {votre profil Tela}} figure sur {page} mais pas sur {other}, la page de votre site pour une adresse introuvable. Sans rel=\"me\", un lien ne compte que si cette page l’affiche aussi, dans l’en-tête ou le pied de page ; un lien dans un article ne compte pas. Ajoutez-lui rel=\"me\", ou déplacez-le dans l’en-tête ou le pied de page.",
+      "no_not_found_page": "Le lien vers {target, select, github {votre GitHub} other {votre profil Tela}} sur {page} n’a pas de rel=\"me\" : Tela le cherche donc aussi sur la page 404 de votre site, et votre site ne répond pas à une adresse introuvable par une page 404 lisible. Ajoutez rel=\"me\" au lien.",
+      "github_website": "Votre site renvoie vers votre profil GitHub, mais le site web de ce profil n’est pas {site}. Indiquez {site} sur GitHub, puis vérifiez à nouveau.",
+      "github_link": "Votre profil GitHub indique {site} comme site web, mais {page} ne renvoie pas vers ce profil. Ajoutez ce lien à votre en-tête ou à votre pied de page.",
+      "github_unavailable": "GitHub n’a pas répondu : Tela n’a pas pu vérifier votre GitHub. Réessayez dans un moment, ou utilisez une autre façon."
+    },
     "verified": "Vérifié. Ce site est à vous sur Tela.",
     "verifiedHint": "Il apparaît désormais dans Découvrir. Choisissez ses thèmes sur la page du site, et suivez lecteurs et coups de cœur dans votre tableau de bord.",
     "viewSite": "Voir la page du site",
@@ -480,7 +493,7 @@
       },
       "connect": {
         "title": "Reliez votre blog",
-        "body": "Ajoutez une ligne à votre site pour montrer qu’il est à vous : une balise meta, ou un lien vers votre carte. Tout blog doté d’un flux RSS ou Atom convient."
+        "body": "Montrez que le site est à vous avec un lien vers votre carte ou une balise meta, ou sans rien ajouter si votre site et votre GitHub renvoient déjà l’un vers l’autre. Tout blog doté d’un flux RSS ou Atom convient."
       },
       "follow": {
         "title": "Suivez les auteurs que vous aimez",

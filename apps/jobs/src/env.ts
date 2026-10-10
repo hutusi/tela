@@ -15,6 +15,13 @@ export type Env = {
   MISC_QUEUE: Queue<JobMessage>
   /** Where Gravatar serves pictures (ADR 0033); unset is gravatar.com. The e2e points it here. */
   GRAVATAR_URL?: string
+  /** Where GitHub's API answers (ADR 0045); unset is api.github.com. The e2e points it here. */
+  GITHUB_API_URL?: string
+  /**
+   * Secret, optional: a GitHub token with no permissions, for a claim by GitHub (ADR 0045). Without
+   * it GitHub allows 60 requests an hour per egress IP, which other Workers share.
+   */
+  GITHUB_TOKEN?: string
   WORKER_USER_AGENT?: string
   FETCH_TIMEOUT_MS?: string
   /** Origin of the HK relay; unset means feeds never change region. */

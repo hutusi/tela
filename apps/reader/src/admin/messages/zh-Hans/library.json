@@ -45,7 +45,13 @@
     "latest": "最新文章",
     "posts30d": "30 天内文章"
   },
-  "methods": { "meta": "Meta 标签", "rel_me": "rel=\"me\" 链接", "dns": "DNS 记录" },
+  "methods": {
+    "meta": "Meta 标签",
+    "rel_me": "rel=\"me\" 链接",
+    "link": "每页都有的链接",
+    "github": "GitHub 互链",
+    "dns": "DNS 记录"
+  },
   "regions": { "global": "直连", "cn": "中国中转" },
   "formats": { "rss": "RSS", "atom": "Atom", "rdf": "RDF", "json": "JSON Feed" },
   "listing": {

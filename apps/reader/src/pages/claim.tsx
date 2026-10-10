@@ -1,10 +1,13 @@
 /**
- * Claiming a blog (ADR 0011, 0018): give its address, put a proof on the home page, then ask for
- * the check. The check runs in tela-jobs; this page asks how it went every few seconds.
+ * Claiming a blog (ADRs 0011, 0018, 0045): give its address, show it is yours (a GitHub that
+ * links it both ways, a link to the profile, or a meta tag), then ask for the check, which tries
+ * every way. It runs in tela-jobs; this page asks how it went every few seconds, and words what
+ * the check found when it found no proof.
  *
  * For writers' card lands here as `/claim?url=…`, the address filled in, and with `&taken=1`
  * when the handle it chose is another member's.
  */
+import type { ClaimReason } from '@tela/shared'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
@@ -19,7 +22,12 @@ type Standing =
       siteId: number
       homeUrl: string
       status: 'unverified' | 'pending' | 'failed'
+      /** A failure in words, as the check wrote it (the page did not answer, an operator's word). */
       error: string | null
+      /** What the check found when it found no proof, for this page to word. */
+      reason: ClaimReason | null
+      /** Whether the member has a GitHub on their account to claim by. */
+      github: boolean
       proofs: { meta: string; relMe: string }
     }
 
@@ -29,6 +37,30 @@ export function claimError(code: string | undefined): StartError {
   if (code === 'invalid_url' || code === 'rate_limited') return code
   if (code === 'not_a_feed') return 'no_feed'
   return 'fetch_failed'
+}
+
+type Translate = ReturnType<typeof useTranslations<'claim'>>
+
+/** What to change, in the member's words, for a check that found no proof. */
+function reasonText(t: Translate, r: ClaimReason, site: string): string {
+  switch (r.reason) {
+    case 'no_proof':
+      return t('reasons.no_proof', { page: r.page })
+    case 'other_handle':
+      return t('reasons.other_handle', { page: r.page, found: r.found, handle: r.handle })
+    case 'link_marked':
+      return t('reasons.link_marked', { page: r.page, target: r.target, rel: r.rel })
+    case 'not_site_wide':
+      return t('reasons.not_site_wide', { page: r.page, other: r.other, target: r.target })
+    case 'no_not_found_page':
+      return t('reasons.no_not_found_page', { page: r.page, target: r.target })
+    case 'github_website':
+      return t('reasons.github_website', { site })
+    case 'github_link':
+      return t('reasons.github_link', { page: r.page, site })
+    case 'github_unavailable':
+      return t('reasons.github_unavailable')
+  }
 }
 
 const POLL_MS = 2500
@@ -158,10 +190,13 @@ export function ClaimSitePage() {
           {t('verifyTitle')}
         </h1>
         <p className="mt-2 text-[15px] leading-relaxed text-ink-2">
-          {t('verifyIntro', { site: standing.homeUrl })}{' '}
-          <a href={standing.homeUrl} target="_blank" rel="noopener noreferrer">
-            {standing.homeUrl}
-          </a>
+          {t.rich('verifyIntro', {
+            site: () => (
+              <a href={standing.homeUrl} target="_blank" rel="noopener noreferrer">
+                {standing.homeUrl}
+              </a>
+            ),
+          })}
         </p>
       </div>
 
@@ -185,6 +220,26 @@ export function ClaimSitePage() {
         </div>
       ) : (
         <>
+          <section className="flex flex-col gap-3" data-testid="claim-github">
+            <h2 className="font-serif text-[22px] font-medium">{t('optionGitHub')}</h2>
+            <p className="text-[14px] text-ink-2">
+              {standing.github
+                ? t('optionGitHubHint', { site: standing.homeUrl })
+                : t.rich('optionGitHubUnlinked', {
+                    link: (chunks) => <Link to="/settings">{chunks}</Link>,
+                  })}
+            </p>
+          </section>
+          <section className="flex flex-col gap-3">
+            <h2 className="font-serif text-[22px] font-medium">{t('optionRelMe')}</h2>
+            <p className="text-[14px] text-ink-2">{t('optionRelMeHint')}</p>
+            <pre
+              className="overflow-x-auto rounded-lg border border-line bg-surface px-4 py-3 text-[13px]"
+              data-testid="rel-me-snippet"
+            >
+              {standing.proofs.relMe}
+            </pre>
+          </section>
           <section className="flex flex-col gap-3">
             <h2 className="font-serif text-[22px] font-medium">{t('optionMeta')}</h2>
             <p className="text-[14px] text-ink-2">{t('optionMetaHint')}</p>
@@ -193,13 +248,6 @@ export function ClaimSitePage() {
               data-testid="meta-snippet"
             >
               {standing.proofs.meta}
-            </pre>
-          </section>
-          <section className="flex flex-col gap-3">
-            <h2 className="font-serif text-[22px] font-medium">{t('optionRelMe')}</h2>
-            <p className="text-[14px] text-ink-2">{t('optionRelMeHint')}</p>
-            <pre className="overflow-x-auto rounded-lg border border-line bg-surface px-4 py-3 text-[13px]">
-              {standing.proofs.relMe}
             </pre>
           </section>
           <div className="flex flex-wrap items-center gap-4">
@@ -213,9 +261,12 @@ export function ClaimSitePage() {
               {standing.status === 'failed' ? t('verifyAgain') : t('verify')}
             </button>
             {pending ? <span className="text-[13px] text-muted">{t('checking')}</span> : null}
-            {standing.status === 'failed' && standing.error ? (
+            {standing.status === 'failed' && (standing.reason || standing.error) ? (
               <span className="text-[13px] text-danger" data-testid="claim-error">
-                {t('failed')} {standing.error}
+                {t('failed')}{' '}
+                {standing.reason
+                  ? reasonText(t, standing.reason, standing.homeUrl)
+                  : standing.error}
               </span>
             ) : null}
           </div>

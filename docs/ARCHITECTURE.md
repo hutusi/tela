@@ -62,7 +62,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `profiles` | One per member: `handle`, `display_name`, `bio`, `ui_locale` and `reading_lang` (null follows the interface, ADR 0040), each with the `at` of the change that set it (`ui_locale_at`, `reading_lang_at`), whether the member shows their subscriptions and likes (`public_subscriptions`, `public_likes`, both off by default, each with the `at` of the change that set it and a version that every change counts up, which a show must name, issue #16), their picture (ADR 0032, 0033): the R2 key of one they uploaded (`avatar_key`), whether they show their Gravatar (`gravatar`, with its `gravatar_at`; never set counts as on), whether Gravatar has one for them (`gravatar_found`, asked at `gravatar_checked_at`), and `avatar_version`, the picture's version, which every change of picture counts up, and `is_admin`, who may open the admin console (granted only by the operator's token, ADR 0039) |
 | `user_prefs` | Synced preferences, one row per key: reading mode, text size, measure, theme (`lib/typography.ts`), and the Reading and Translation settings `reader.mark_on_open`, `reader.hide_read`, `translate.auto`, `translate.never` (`lib/prefs.ts`) |
 | `sites` | A blog: normalized `home_url`, `listing` (private/listed/featured/rejected), `claimed_by`, `reader_count`, `translation_opt_out`, and an operator's review for Discover (ADR 0041, neither synced): what it decided (`review`, listed or dismissed; null keeps a blog a member added in the review queue, and `listed` keeps a blog in Discover through an Unfeature or a removed claim) and when the last decision was made (`reviewed_at`) |
-| `site_topics`, `site_claims` | A blog's topics; claim attempts (meta or `rel="me"`), with the operator who vouched for one (`vouched_by`, so its check skips only the proof) and when an operator last decided on it (`reviewed_at`, ADR 0039) |
+| `site_topics`, `site_claims` | A blog's topics; claim attempts and how each was proved (`method`: a meta tag, a `rel="me"` link, a link on every page, or GitHub both ways, ADR 0045; a check that found no proof stores its reason as JSON in `error`), with the operator who vouched for one (`vouched_by`, so its check skips only the proof) and when an operator last decided on it (`reviewed_at`, ADR 0039) |
 | `feeds` | The fetch unit: validators, schedule (`next_fetch_at`, `fetch_interval_sec`), `fetch_region`, `timeout_streak`, `status`, `content_mode`, `hub_url`, `merged_into` (another address for the blog's canonical feed, ADR 0028) |
 | `articles` | `dedup_key` unique per feed, `sort_at`, `source_lang`, `current_version`, `content_key`, `extract_state`, counts. `AUTOINCREMENT` ids, so the unread watermark never meets a reused id. Ordered two ways: within a feed by `(feed_id, sort_at, id)` (`articles_feed_sort_idx`), and across every feed by `(sort_at, id)` (`articles_sort_idx`, Discover's Articles) |
 | `article_versions` | Every body an article has had: provenance (feed or readability), `content_key`, `raw_key` (ADR 0022) |
@@ -129,7 +129,10 @@ and hashes as the `NORM_VERSION` contract.
   its latest Readability extraction, so a changed summary asks for a new extraction instead of
   replacing the full text.
 - `extractArticleJob`, `siteAssetsJob` (raster favicons to `tela-assets`), `verifyClaimJob`
-  (meta or `rel="me"`, then provenance), `websubSubscribeJob`, and `gravatarCheckJob`
+  (`pipeline/proofs.ts` reads the home page: a meta tag, a `rel="me"` link to the profile, or a
+  link without one that the blog's 404 page shows too, to the profile or to a GitHub whose
+  website is the blog, asked of `api.github.com` by the member's GitHub id; then provenance; ADR
+  0045), `websubSubscribeJob`, and `gravatarCheckJob`
   (`pipeline/gravatar.ts`: whether Gravatar has a picture for a member, recorded and never copied,
   ADR 0033).
 - `createIngest` (`pipeline/rpc.ts`) is what tela-api reaches over the `Ingest` RPC: discovery,
@@ -212,7 +215,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `POST /api/v1/mutations` | The push: up to 50 idempotent, last-writer-wins mutations in one batch |
 | `/api/v1/translations` | Request a body translation; poll its streamed state |
 | `/api/v1/feeds` | Discover feeds at a URL, add one, import and export OPML |
-| `/api/v1/claims` | Start a claim, see its proofs, ask for the check |
+| `/api/v1/claims` | Start a claim, see its proofs (and whether the member has a GitHub to claim by), ask for the check; a failed check comes back as a `reason` the page words, or as text |
 | `/api/v1/profile`, `/api/v1/sites/:id/*`, `/api/v1/dashboard`, `/api/v1/search` | Handle and profile, owner-only topics and opt-out, the author dashboard, search past the device's horizon |
 | `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest; which of them read a blog. Only as far as each shows it (ADR 0031). Readers to follow come from Discover's pool, matched on the device (ADR 0044): `suggested` is always empty, kept for shells cached before that, which read it |
 | `GET /api/v1/export` | "Your data": the member's own rows as one JSON file |
@@ -347,7 +350,9 @@ A Vite + React SPA that renders from the device.
 - **D1's limits held everywhere:** 100 bound parameters, 100 KB of SQL, five compound terms. The
   portable client enforces them, so a test trips them before D1 does.
 - **Outbound fetches** refuse private ranges by name and address; on Cloudflare
-  `global_fetch_strictly_public` refuses them at the socket too.
+  `global_fetch_strictly_public` refuses them at the socket too. The two hosts Tela names itself,
+  Gravatar and GitHub's API, are asked with a plain `fetch`, and the GitHub token goes to that
+  host only, on no redirect.
 - **Model output is never trusted as HTML:** placeholders must match, text is re-escaped.
 - **Every new account claims an invitation:** better-auth's `user.create.before` admits a user only
   by claiming, in one statement, an invitation its address holds, or on a provider's return the
