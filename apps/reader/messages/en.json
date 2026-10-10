@@ -393,7 +393,8 @@
       "no_not_found_page": "The link to {target, select, github {your GitHub} other {your Tela profile}} on {page} has no rel=\"me\", so Tela looks for it on your site's 404 page too, and your site does not answer a missing address with a 404 page Tela can read. Add rel=\"me\" to the link.",
       "github_website": "Your site links to your GitHub profile, but the website on that profile is not {site}. Set it to {site} on GitHub, then verify again.",
       "github_link": "Your GitHub profile names {site} as its website, but {page} does not link to that profile. Add the link to your header or footer.",
-      "github_unavailable": "GitHub did not answer, so Tela could not check your GitHub. Try again in a little while, or use another way."
+      "github_unavailable": "GitHub did not answer, so Tela could not check your GitHub. Try again in a little while, or use another way.",
+      "overruled": "An operator removed or turned down this claim, so a link without rel=\"me\" no longer proves it. Add rel=\"me\" to the link to {target, select, github {your GitHub} other {your Tela profile}} on {page}, or add the meta tag."
     },
     "verified": "Verified. This site is yours on Tela.",
     "verifiedHint": "It is now listed in Discover. Pick its topics on the site page, and see readers and likes in your dashboard.",

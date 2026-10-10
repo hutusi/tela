@@ -39,7 +39,8 @@ everything so far sits under `[Unreleased]`.
   page shows it too: to your Tela profile, or to your GitHub when GitHub is on your Tela account
   and names the blog as its website. Only a link on the home page alone needs `rel="me"`. A check
   that finds no proof says what to change: the link it found and where it was missing, a link
-  marked as a commenter's, an old handle, or a GitHub whose website is another (ADR 0045).
+  marked as a commenter's, an old handle, or a GitHub whose website is another. A claim an
+  operator removed or turned down verifies again only by the tag or `rel="me"` (ADR 0045).
 - **Discover in four tabs.** *This week* is Discover's home: the week's most recommended posts
   with readers' notes once there are enough of them, and until then the newest post of each blog,
   then blogs new in the directory and readers to follow. *Articles* lists posts from every public

@@ -1,0 +1,1 @@
+ALTER TABLE `site_claims` ADD `overruled_at` integer;

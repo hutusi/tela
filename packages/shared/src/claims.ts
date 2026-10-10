@@ -33,6 +33,11 @@ export type ClaimReason =
   | { reason: 'github_link'; page: string }
   /** GitHub did not answer, and nothing else on the page was proof. */
   | { reason: 'github_unavailable' }
+  /**
+   * A link without `rel="me"` on `page`, on a claim an operator rejected or removed: from then on
+   * only the tag or `rel="me"` counts, or the claimant would win back the blog by that link.
+   */
+  | { reason: 'overruled'; page: string; target: ClaimTarget }
 
 export const CLAIM_REASONS = [
   'no_proof',
@@ -43,6 +48,7 @@ export const CLAIM_REASONS = [
   'github_website',
   'github_link',
   'github_unavailable',
+  'overruled',
 ] as const satisfies readonly ClaimReason['reason'][]
 
 /** The stored reason, or null for a plain-text error (and for anything that is not one). */
@@ -88,5 +94,7 @@ export function describeClaimError(error: string): string {
       return `your GitHub names this blog as its website, and ${r.page} does not link to it`
     case 'github_unavailable':
       return 'GitHub did not answer'
+    case 'overruled':
+      return `an operator ruled on this claim, so the link to ${TARGETS[r.target]} on ${r.page} counts only with rel="me"`
   }
 }

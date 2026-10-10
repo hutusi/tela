@@ -393,7 +393,8 @@
       "no_not_found_page": "Le lien vers {target, select, github {votre GitHub} other {votre profil Tela}} sur {page} n’a pas de rel=\"me\" : Tela le cherche donc aussi sur la page 404 de votre site, et votre site ne répond pas à une adresse introuvable par une page 404 lisible. Ajoutez rel=\"me\" au lien.",
       "github_website": "Votre site renvoie vers votre profil GitHub, mais le site web de ce profil n’est pas {site}. Indiquez {site} sur GitHub, puis vérifiez à nouveau.",
       "github_link": "Votre profil GitHub indique {site} comme site web, mais {page} ne renvoie pas vers ce profil. Ajoutez ce lien à votre en-tête ou à votre pied de page.",
-      "github_unavailable": "GitHub n’a pas répondu : Tela n’a pas pu vérifier votre GitHub. Réessayez dans un moment, ou utilisez une autre façon."
+      "github_unavailable": "GitHub n’a pas répondu : Tela n’a pas pu vérifier votre GitHub. Réessayez dans un moment, ou utilisez une autre façon.",
+      "overruled": "Un opérateur a retiré ou refusé cette revendication : un lien sans rel=\"me\" ne la prouve donc plus. Ajoutez rel=\"me\" au lien vers {target, select, github {votre GitHub} other {votre profil Tela}} sur {page}, ou ajoutez la balise meta."
     },
     "verified": "Vérifié. Ce site est à vous sur Tela.",
     "verifiedHint": "Il apparaît désormais dans Découvrir. Choisissez ses thèmes sur la page du site, et suivez lecteurs et coups de cœur dans votre tableau de bord.",

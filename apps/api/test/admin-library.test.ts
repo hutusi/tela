@@ -7,7 +7,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { claimDue, first, type Lease } from '@tela/data'
 import { createHttpClient } from '@tela/ingest/http'
-import { type IngestContext, ingestFeed, verifyClaimJob } from '@tela/ingest/pipeline'
+import {
+  type IngestContext,
+  ingestFeed,
+  notFoundProbe,
+  verifyClaimJob,
+} from '@tela/ingest/pipeline'
 import type {
   AdminActResponse,
   AdminClaimDetail,
@@ -266,10 +271,12 @@ const claimOf = (id: number) =>
     error: string | null
     vouched_by: string | null
     reviewed_at: number | null
+    overruled_at: number | null
     seq: number
   }>(
     api.db,
-    sql`select status, error, vouched_by, reviewed_at, seq from site_claims where id = ${id}`,
+    sql`select status, error, vouched_by, reviewed_at, overruled_at, seq from site_claims
+      where id = ${id}`,
   )
 const topicsOf = async (siteId: number) =>
   (
@@ -1119,11 +1126,57 @@ describe('claims', () => {
       error: 'Not a personal blog',
       vouched_by: null,
       reviewed_at: api.clock.now(),
+      overruled_at: api.clock.now(),
     })
     expect((await siteOf(siteId))?.claimed_by).toBeNull()
     expect(await leaseOf('site.claim', claimId)).toBeUndefined()
     // Decided: out of the review queue.
     expect((await list<AdminClaimRow>('claims', 'review')).rows).toEqual([])
+  })
+
+  test('Remove holds: asked again, the plain link that won the blog proves nothing', async () => {
+    const { blogger, siteId, claimId } = await memberClaim()
+    const handle = (
+      await one<{ handle: string }>(
+        api.db,
+        sql`select handle from profiles where user_id = ${blogger.userId}`,
+      )
+    )?.handle
+    const token = (
+      await one<{ token: string }>(api.db, sql`select token from site_claims where id = ${claimId}`)
+    )?.token
+    const footer = (rel: string) =>
+      `<html><body><footer><a rel="${rel}" href="https://tela.test/@${handle}">Tela</a></footer></body></html>`
+    // A link without rel="me" in a footer the blog's 404 page shows too: a plain link, which a
+    // blog may give someone else, as a blogroll does.
+    serveHome(footer('noopener'))
+    server.set(notFoundProbe(token ?? ''), (_req, res) => {
+      res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(footer('noopener'))
+    })
+    const askAgain = async () => {
+      await api.request(`/api/v1/claims/${siteId}/verify`, { as: blogger, body: {} })
+      return runCheck()
+    }
+    expect(await askAgain()).toMatchObject({ status: 'verified', method: 'link' })
+
+    expect(await outcome('claim.remove', claimId)).toBe('done')
+    expect((await claimOf(claimId))?.overruled_at).toBe(api.clock.now())
+    expect(await askAgain()).toMatchObject({ status: 'failed' })
+    const failed = await one<{ error: string }>(
+      api.db,
+      sql`select error from site_claims where id = ${claimId}`,
+    )
+    expect(JSON.parse(failed?.error ?? '')).toEqual({
+      reason: 'overruled',
+      page: server.origin,
+      target: 'profile',
+    })
+    expect((await siteOf(siteId))?.claimed_by).toBeNull()
+
+    // The blog saying so outright still proves it.
+    serveHome(footer('me'))
+    expect(await askAgain()).toMatchObject({ status: 'verified', method: 'rel_me' })
   })
 
   test('Dismiss: out of the queue until it fails again, and undone while untouched', async () => {
@@ -1165,6 +1218,7 @@ describe('claims', () => {
     expect(await claimOf(claim)).toMatchObject({
       status: 'failed',
       error: 'removed by an operator',
+      overruled_at: api.clock.now(),
     })
     expect(await siteOf(site)).toMatchObject({
       claimed_by: null,
@@ -1187,7 +1241,11 @@ describe('claims', () => {
     expect(await outcome('claim.remove', claim)).toBe('not_applicable')
 
     expect((await undo(removed.undo?.group)).status).toBe(200)
-    expect(await claimOf(claim)).toMatchObject({ status: 'verified', error: null })
+    expect(await claimOf(claim)).toMatchObject({
+      status: 'verified',
+      error: null,
+      overruled_at: null,
+    })
     expect(await siteOf(site)).toMatchObject({
       claimed_by: owner.userId,
       translation_opt_out: 1,

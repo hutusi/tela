@@ -85,7 +85,8 @@ const vouch: ActHandler = async (ctx, id) => {
 
 /**
  * Reject a claim with the reason its claimant will read. A check in flight is cut off, so it
- * cannot verify the claim after the operator said no; the claimant may still ask again.
+ * cannot verify the claim after the operator said no; the claimant may still ask again, and from
+ * then on only the tag or `rel="me"` proves it (`overruled_at`, ADR 0045).
  */
 const reject: ActHandler = async (ctx, id, args) => {
   const claimId = idOf(id)
@@ -97,10 +98,17 @@ const reject: ActHandler = async (ctx, id, args) => {
     table: 'site_claims',
     id: claimId,
     applies: sql`status in ('pending', 'failed')`,
-    set: sql`status = 'failed', error = ${reason}, reviewed_at = ${ctx.now}, vouched_by = null`,
+    set: sql`status = 'failed', error = ${reason}, reviewed_at = ${ctx.now}, vouched_by = null,
+      overruled_at = ${ctx.now}`,
     from: sql`json_object('status', status, 'error', error, 'reviewedAt', reviewed_at,
-      'vouchedBy', vouched_by)`,
-    to: { status: 'failed', error: reason, reviewedAt: ctx.now, vouchedBy: null },
+      'vouchedBy', vouched_by, 'overruledAt', overruled_at)`,
+    to: {
+      status: 'failed',
+      error: reason,
+      reviewedAt: ctx.now,
+      vouchedBy: null,
+      overruledAt: ctx.now,
+    },
     after: (db) => [breakLease(db, 'site.claim', claimId, stamped('site_claims', claimId))],
   })
 }
@@ -148,7 +156,12 @@ const listingUnclaimed = (prefix: string) => {
 }
 
 type RemovedFrom = {
-  claim?: { status?: string; error?: string | null; reviewedAt?: number | null }
+  claim?: {
+    status?: string
+    error?: string | null
+    reviewedAt?: number | null
+    overruledAt?: number | null
+  }
   site?: {
     id?: number
     claimedBy?: string | null
@@ -165,7 +178,9 @@ type RemovedTo = { site?: { listing?: SiteListing } }
  * sees, never deleted, since a device drops only what a tombstone names and claims have none. The
  * blog loses its owner and what came with one: the feeds it declared, the owner's translation
  * opt-out, and a listing only the claim opened (a featured or hidden blog stays as it is). Its
- * feeds stay where they are: an unclaimed blog carries every feed that names it.
+ * feeds stay where they are: an unclaimed blog carries every feed that names it. The claimant may
+ * ask again, and then only the tag or `rel="me"` proves it (`overruled_at`, ADR 0045): a plain
+ * link, which is how a blog is taken by someone it only links to, won it the first time.
  */
 const remove: ActHandler = async (ctx, id) => {
   const claimId = idOf(id)
@@ -192,13 +207,14 @@ const remove: ActHandler = async (ctx, id) => {
       },
       {
         from: sql`json_object(
-          'claim', json_object('status', c.status, 'error', c.error, 'reviewedAt', c.reviewed_at),
+          'claim', json_object('status', c.status, 'error', c.error, 'reviewedAt', c.reviewed_at,
+            'overruledAt', c.overruled_at),
           'site', json_object('id', s.id, 'claimedBy', s.claimed_by, 'claimedAt', s.claimed_at,
             'declaredFeedUrls', json(s.declared_feed_urls),
             'translationOptOut', s.translation_opt_out, 'listing', s.listing))`,
         to: sql`json_object(
           'claim', json_object('status', 'failed', 'error', ${CLAIM_REMOVED_ERROR},
-            'reviewedAt', ${ctx.now}),
+            'reviewedAt', ${ctx.now}, 'overruledAt', ${ctx.now}),
           'site', json_object('claimedBy', null, 'listing', ${listingUnclaimed('s.')}))`,
       },
       sql`from site_claims c join sites s on s.id = c.site_id
@@ -206,7 +222,7 @@ const remove: ActHandler = async (ctx, id) => {
     ),
     db.all(sql`
       update site_claims set status = 'failed', error = ${CLAIM_REMOVED_ERROR},
-        reviewed_at = ${ctx.now}, vouched_by = null, seq = ${currentSeq}
+        reviewed_at = ${ctx.now}, overruled_at = ${ctx.now}, vouched_by = null, seq = ${currentSeq}
       where id = ${claimId} and status = 'verified'
       returning id
     `),
@@ -259,7 +275,7 @@ const restoreRemoved: Inverse = (db: TelaDb, change, now) => {
       db.run(sql`
         update site_claims set status = ${from.claim?.status ?? 'verified'},
           error = ${from.claim?.error ?? null}, reviewed_at = ${from.claim?.reviewedAt ?? null},
-          seq = ${currentSeq}
+          overruled_at = ${from.claim?.overruledAt ?? null}, seq = ${currentSeq}
         where id = ${claimId} and ${still}
       `),
       db.run(sql`

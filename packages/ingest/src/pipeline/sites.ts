@@ -187,7 +187,7 @@ const clip = (url: string) => url.slice(0, REASON_URL_MAX)
  */
 async function proofOf(
   ctx: IngestContext,
-  claim: { user_id: string; token: string; home_url: string; handle: string },
+  claim: { user_id: string; token: string; home_url: string; handle: string; overruled: boolean },
   page: { finalUrl: string; body: string },
 ): Promise<{ method: ClaimMethod } | { reason: ClaimReason }> {
   const telaHosts = profileHosts(ctx.publicUrl ?? 'https://telaread.com')
@@ -218,6 +218,10 @@ async function proofOf(
   const plainGithub = namesThisSite && home.github.some((l) => theirs(l) && !l.marked)
   if (plainProfile || plainGithub) {
     const target = plainProfile ? 'profile' : 'github'
+    // An operator said no to this claim, and a plain link is what a blog may give someone else.
+    if (claim.overruled) {
+      return { reason: { reason: 'overruled', page: clip(page.finalUrl), target } }
+    }
     const second = await notFoundPage(ctx, claim.home_url, claim.token)
     if (!second) {
       return { reason: { reason: 'no_not_found_page', page: clip(page.finalUrl), target } }
@@ -328,14 +332,15 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
     method: ClaimMethod
     status: string
     vouched_by: string | null
+    overruled_at: number | null
     home_url: string
     claimed_by: string | null
     handle: string | null
   }>(
     db,
     sql`
-      select c.site_id, c.user_id, c.token, c.method, c.status, c.vouched_by, s.home_url,
-        s.claimed_by, p.handle
+      select c.site_id, c.user_id, c.token, c.method, c.status, c.vouched_by, c.overruled_at,
+        s.home_url, s.claimed_by, p.handle
       from site_claims c join sites s on s.id = c.site_id
       left join profiles p on p.user_id = c.user_id
       where c.id = ${claimId}
@@ -364,7 +369,11 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
   const vouched = claim.vouched_by !== null
   const found = vouched
     ? { method: claim.method }
-    : await proofOf(ctx, { ...claim, handle: claim.handle }, page)
+    : await proofOf(
+        ctx,
+        { ...claim, handle: claim.handle, overruled: claim.overruled_at !== null },
+        page,
+      )
   if ('reason' in found) return fail(JSON.stringify(found.reason))
   const proof = found
 

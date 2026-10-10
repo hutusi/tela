@@ -827,7 +827,9 @@ A public reader count is shown only from three readers.
   is someone the blog links from its header, footer or sidebar (a blogroll, a theme credit to a
   person, a sponsor slot) whose GitHub then names the blog. When a writer says their blog was
   taken, look at the method first; if it is one of those two, remove the claim and let the
-  writer prove it with a meta tag.
+  writer prove it with a meta tag. The removal holds: the claimant may ask again, and their claim
+  then verifies only by the tag or `rel="me"`, not by the link you ruled on (`overruled_at`).
+  Rejecting a claim does the same. Undoing the removal undoes that too.
 - **A claim says "GitHub did not answer"** (`github_unavailable` in Evidence): GitHub refused or
   failed the lookup and nothing else on the page was proof. Without `GITHUB_TOKEN`, that is the
   shared 60-an-hour limit; with it, check the token has not expired (`curl -H "Authorization:

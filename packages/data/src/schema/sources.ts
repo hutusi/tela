@@ -157,6 +157,13 @@ export const siteClaims = sqliteTable(
     vouchedBy: text().references(() => user.id, { onDelete: 'set null' }),
     /** When an operator last decided on it; a failed claim checked since needs review again. */
     reviewedAt: ms(),
+    /**
+     * When an operator last said no to it, by rejecting it or removing it once verified (ADR
+     * 0045). From then on it verifies only by a proof the blog states outright, the tag or a
+     * `rel="me"` link, never by a plain link, which a blog may give someone else. Asking again
+     * keeps it, or the claimant would win the blog back by the link the operator ruled on.
+     */
+    overruledAt: ms(),
     seq: seq(),
   },
   (t) => [

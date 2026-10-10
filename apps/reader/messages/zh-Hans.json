@@ -393,7 +393,8 @@
       "no_not_found_page": "{page} 上指向{target, select, github {你的 GitHub} other {你 Tela 个人页}}的链接没有 rel=\"me\"，所以 Tela 还要在你网站的 404 页面上找到它，但你的网站没有对不存在的地址返回可读取的 404 页面。给链接加上 rel=\"me\"。",
       "github_website": "你的网站链接了你的 GitHub 主页，但这个主页上填写的网站不是 {site}。到 GitHub 上把它改成 {site}，再验证一次。",
       "github_link": "你的 GitHub 主页填写的网站是 {site}，但 {page} 没有链接到这个 GitHub 主页。在页头或页脚加上这个链接。",
-      "github_unavailable": "GitHub 没有响应，Tela 无法检查你的 GitHub。稍后再试，或者换一种方式。"
+      "github_unavailable": "GitHub 没有响应，Tela 无法检查你的 GitHub。稍后再试，或者换一种方式。",
+      "overruled": "管理员已移除或驳回这个认领，所以不带 rel=\"me\" 的链接不再能证明这个网站是你的。给 {page} 上指向{target, select, github {你的 GitHub} other {你 Tela 个人页}}的链接加上 rel=\"me\"，或者添加 meta 标签。"
     },
     "verified": "已验证。这个网站在 Tela 上属于你了。",
     "verifiedHint": "它现在会出现在「发现」中。在站点页选择主题，在仪表盘查看读者与喜欢。",

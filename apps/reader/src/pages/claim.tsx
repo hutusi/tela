@@ -60,6 +60,8 @@ function reasonText(t: Translate, r: ClaimReason, site: string): string {
       return t('reasons.github_link', { page: r.page, site })
     case 'github_unavailable':
       return t('reasons.github_unavailable')
+    case 'overruled':
+      return t('reasons.overruled', { page: r.page, target: r.target })
   }
 }
 
