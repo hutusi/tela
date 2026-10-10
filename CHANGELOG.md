@@ -35,6 +35,14 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Discover in four tabs.** *This week* is Discover's home: the week's most recommended posts
+  with readers' notes once there are enough of them, and until then the newest post of each blog,
+  then blogs new in the directory and readers to follow. *Articles* lists posts from every public
+  blog, most recommended or newest, by topic and language, with titles in your language. *Blogs*
+  is the directory as it was, now at `/discover/blogs`. *Readers* suggests members to follow and
+  says why. Posts and blogs you already read stay out of the way, and whom you follow is matched
+  on your device, so the pages are the same for everyone and cached at the edge (ADR 0044).
+  Following's *Readers to follow* uses the same rule.
 - **78 more blogs in Discover.** The editorial list grows from 35 to 110: 27 in Chinese (19
   Simplified, 8 Traditional), 16 in French, which had none, 16 in Japanese, Korean, Spanish,
   Portuguese, German and Italian, and 19 for the thin topics: photography, cities, food, outdoors

@@ -155,7 +155,8 @@ export const en = {
           },
           {
             list: [
-              "Your recommendations also reach the people who follow you. A recommendation with a note also appears on the blog's page on Tela and in its writer's Dashboard, with your name and handle.",
+              "Your recommendations also reach the people who follow you, and appear in Discover beside the posts you recommend, notes included. A recommendation with a note also appears on the blog's page on Tela and in its writer's Dashboard, with your name and handle.",
+              'Once you recommend posts, or show the blogs you read, Discover may suggest you as a reader to follow, to anyone browsing it, saying why: a post you recommended, or a blog you show. Tela matches suggestions to what each member likes and reads on their own device; nothing private of yours is used to suggest you.',
               "The posts you like and the blogs you read are shown only if you turn them on in Settings → Privacy. Then they appear on your profile and to the people who follow you, including on a blog's page as a reader they follow.",
               "Your picture is the one you upload. Without one, it's your Gravatar, which stays on until you turn it off in Settings → Profile. Without either, it's your initial.",
               'A picture you remove or turn off can stay in browser and network caches for up to 30 days, at an address nothing links to any more.',

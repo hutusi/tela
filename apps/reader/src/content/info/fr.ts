@@ -161,7 +161,8 @@ export const fr = {
           },
           {
             list: [
-              'Vos recommandations parviennent aussi aux personnes qui vous suivent. Une recommandation accompagnée d’un mot apparaît également sur la page du blog dans Tela et dans le tableau de bord de son auteur, avec votre nom et votre identifiant.',
+              'Vos recommandations parviennent aussi aux personnes qui vous suivent, et apparaissent dans Découvrir à côté des articles recommandés, avec leur mot. Une recommandation accompagnée d’un mot apparaît également sur la page du blog dans Tela et dans le tableau de bord de son auteur, avec votre nom et votre identifiant.',
+              'Dès que vous recommandez des articles, ou que vous montrez les blogs que vous lisez, Découvrir peut vous suggérer comme lecteur à suivre, à quiconque le parcourt, en disant pourquoi : un article que vous avez recommandé, ou un blog que vous montrez. Tela rapproche ces suggestions de ce que chaque membre aime et lit sur son propre appareil ; rien de privé ne sert à vous suggérer.',
               'Les articles que vous aimez et les blogs que vous lisez ne sont montrés que si vous l’activez dans Paramètres → Confidentialité. Ils apparaissent alors sur votre profil et aux personnes qui vous suivent, y compris sur la page d’un blog, parmi les lecteurs qu’elles suivent.',
               'Votre photo est celle que vous envoyez. Sans elle, c’est votre Gravatar, actif jusqu’à ce que vous le désactiviez dans Paramètres → Profil. Sans l’une ni l’autre, c’est votre initiale.',
               'Une photo que vous supprimez ou désactivez peut rester jusqu’à 30 jours dans les caches des navigateurs et du réseau, à une adresse vers laquelle plus rien ne pointe.',
