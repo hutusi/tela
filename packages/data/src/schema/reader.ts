@@ -133,6 +133,8 @@ export const recommendations = sqliteTable(
     uniqueIndex('recommendations_user_article_idx').on(t.userId, t.articleId),
     index('recommendations_article_idx').on(t.articleId),
     index('recommendations_user_seq_idx').on(t.userId, t.seq),
+    /** The week's recommendations, for Discover's This week and Articles (ADR 0044). */
+    index('recommendations_created_idx').on(t.createdAt),
   ],
 )
 
