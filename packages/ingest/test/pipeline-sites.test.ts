@@ -2,7 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { claimDue, first, type Lease, type TelaDb } from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
 import { fakeClock, memoryBlobs } from '@tela/platform/portable'
+import { claimReason } from '@tela/shared'
 import { sql } from 'drizzle-orm'
+import { type GitHub, GitHubUnavailable } from '../src/github'
 import { createHttpClient } from '../src/http'
 import {
   dueAssets,
@@ -229,6 +231,28 @@ describe('verifyClaimJob', () => {
     })
   })
 
+  test('a rel="me" link counts however a browser would follow it to the profile', async () => {
+    await addUser('owner', 'owner')
+    const { siteId } = await siteFor('/feed.xml')
+    // The old address, %40 for @, and a query: still the profile, and on the home page alone.
+    serveHtml(
+      '/',
+      '<html><head><link rel="Me" href="http://tela.ainaive.com/%40Owner?ref=blog"></head></html>',
+    )
+    const claimId = await pendingClaim(siteId, 'owner')
+    expect(await verifyClaimJob(ctx(), await claim('site.claim', claimId))).toMatchObject({
+      status: 'verified',
+      method: 'rel_me',
+    })
+  })
+
+  /** The claim's stored reason, parsed. */
+  const reasonOf = async (claimId: number) =>
+    claimReason(
+      (await first<{ error: string }>(db, sql`select error from site_claims where id = ${claimId}`))
+        ?.error,
+    )
+
   test('no proof fails with a reason the member can act on', async () => {
     await addUser('owner', 'owner')
     const { siteId } = await siteFor('/feed.xml')
@@ -236,12 +260,266 @@ describe('verifyClaimJob', () => {
     const claimId = await pendingClaim(siteId, 'owner')
     const outcome = await verifyClaimJob(ctx(), await claim('site.claim', claimId))
     expect(outcome.status).toBe('failed')
-    const row = await first<{ status: string; error: string }>(
+    const row = await first<{ status: string }>(
       db,
-      sql`select status, error from site_claims where id = ${claimId}`,
+      sql`select status from site_claims where id = ${claimId}`,
     )
     expect(row?.status).toBe('failed')
-    expect(row?.error).toContain(VERIFICATION_META)
+    expect(await reasonOf(claimId)).toEqual({ reason: 'no_proof', page: server.origin })
+  })
+
+  describe('a link without rel="me" (ADR 0045)', () => {
+    const footer = (href: string, rel = 'noopener noreferrer') =>
+      `<html><body><main>a post</main><footer><a href="${href}" rel="${rel}">Tela</a></footer></body></html>`
+
+    test("counts when an older post carries it too: it is the blog's own", async () => {
+      await addUser('owner', 'owner')
+      const { siteId } = await siteFor('/feed.xml')
+      serveHtml('/', footer('https://tela.test/@owner'))
+      serveHtml('/a', footer('https://www.tela.test/@owner/'))
+      const claimId = await pendingClaim(siteId, 'owner')
+      expect(await verifyClaimJob(ctx(), await claim('site.claim', claimId))).toMatchObject({
+        status: 'verified',
+        method: 'link',
+      })
+      const row = await first<{ method: string }>(
+        db,
+        sql`select method from site_claims where id = ${claimId}`,
+      )
+      expect(row?.method).toBe('link')
+    })
+
+    test('does not count on the home page alone, and says where it was missing', async () => {
+      await addUser('owner', 'owner')
+      const { siteId } = await siteFor('/feed.xml')
+      // A post the home page shows in full mentions the profile; the post's own page has the
+      // site's chrome and not that post.
+      serveHtml(
+        '/',
+        '<html><body><article><a href="https://tela.test/@owner">x</a></article></body></html>',
+      )
+      serveHtml('/a', '<html><body><article>another post</article></body></html>')
+      const claimId = await pendingClaim(siteId, 'owner')
+      expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe(
+        'failed',
+      )
+      expect(await reasonOf(claimId)).toEqual({
+        reason: 'not_site_wide',
+        page: server.origin,
+        other: server.url('/a'),
+        target: 'profile',
+      })
+    })
+
+    test("never counts when marked as a commenter's, on every page or not", async () => {
+      await addUser('owner', 'owner')
+      const { siteId } = await siteFor('/feed.xml')
+      serveHtml('/', footer('https://tela.test/@owner', 'external nofollow ugc'))
+      serveHtml('/a', footer('https://tela.test/@owner', 'external nofollow ugc'))
+      const claimId = await pendingClaim(siteId, 'owner')
+      expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe(
+        'failed',
+      )
+      expect(await reasonOf(claimId)).toEqual({
+        reason: 'link_marked',
+        page: server.origin,
+        target: 'profile',
+        rel: 'nofollow ugc',
+      })
+    })
+
+    test('waits for a post to compare with when the blog has none yet', async () => {
+      await addUser('owner', 'owner')
+      const { siteId } = await siteFor('/feed.xml')
+      await db.run(sql`delete from articles`)
+      serveHtml('/', footer('https://tela.test/@owner'))
+      const claimId = await pendingClaim(siteId, 'owner')
+      expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe(
+        'failed',
+      )
+      expect(await reasonOf(claimId)).toEqual({
+        reason: 'no_second_page',
+        page: server.origin,
+        target: 'profile',
+      })
+    })
+
+    test('a post that is gone and sends readers home is not a second page', async () => {
+      await addUser('owner', 'owner')
+      const { siteId } = await siteFor('/feed.xml')
+      serveHtml('/', footer('https://tela.test/@owner'))
+      server.set('/a', (_req, res) => {
+        res.writeHead(301, { location: '/' })
+        res.end()
+      })
+      const claimId = await pendingClaim(siteId, 'owner')
+      expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe(
+        'failed',
+      )
+      expect((await reasonOf(claimId))?.reason).toBe('no_second_page')
+    })
+
+    test('a link to another handle says which, so a changed handle is found', async () => {
+      await addUser('owner', 'new_name')
+      const { siteId } = await siteFor('/feed.xml')
+      serveHtml(
+        '/',
+        '<html><body><a rel="me" href="https://tela.test/@old_name">me</a></body></html>',
+      )
+      const claimId = await pendingClaim(siteId, 'owner')
+      expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe(
+        'failed',
+      )
+      expect(await reasonOf(claimId)).toEqual({
+        reason: 'other_handle',
+        page: server.origin,
+        found: 'old_name',
+        handle: 'new_name',
+      })
+    })
+  })
+
+  describe('by GitHub (ADR 0045)', () => {
+    const GITHUB_ID = '4242'
+    let asked: string[]
+    /** GitHub, answering for one account: its login, and the website its profile names. */
+    const github = (website: string | (() => never), login = 'Owner-GH'): GitHub => ({
+      async user(id) {
+        asked.push(id)
+        if (typeof website === 'function') return website()
+        return id === GITHUB_ID ? { login, website } : null
+      },
+    })
+    const linkGitHub = (userId: string) =>
+      db.run(sql`
+        insert into account (id, account_id, provider_id, user_id, created_at, updated_at)
+        values (${`gh-${userId}`}, ${GITHUB_ID}, 'github', ${userId}, 1, 1)
+      `)
+    const linking = (rel: string) =>
+      `<html><body><footer><a href="https://github.com/owner-gh" rel="${rel}">GitHub</a></footer></body></html>`
+
+    beforeEach(() => {
+      asked = []
+    })
+
+    test('a blog and a GitHub that link each other verify, with nothing added', async () => {
+      await addUser('owner', 'owner')
+      await linkGitHub('owner')
+      const { siteId } = await siteFor('/feed.xml')
+      serveHtml('/', linking('noopener'))
+      serveHtml('/a', linking('noopener'))
+      const claimId = await pendingClaim(siteId, 'owner')
+      // GitHub's website field, typed without a scheme or with www, still names the blog.
+      const website = server.url('/').replace(/^http:\/\//, '')
+      expect(
+        await verifyClaimJob(ctx({ github: github(website) }), await claim('site.claim', claimId)),
+      ).toMatchObject({ status: 'verified', method: 'github' })
+      expect(asked).toEqual([GITHUB_ID])
+    })
+
+    test('a rel="me" link to the GitHub needs no second page', async () => {
+      await addUser('owner', 'owner')
+      await linkGitHub('owner')
+      const { siteId } = await siteFor('/feed.xml')
+      await db.run(sql`delete from articles`)
+      serveHtml('/', linking('me'))
+      const claimId = await pendingClaim(siteId, 'owner')
+      expect(
+        await verifyClaimJob(
+          ctx({ github: github(server.url('/')) }),
+          await claim('site.claim', claimId),
+        ),
+      ).toMatchObject({ status: 'verified', method: 'github' })
+    })
+
+    test('a GitHub a post mentions cannot claim the blog by naming it', async () => {
+      // The Daring Fireball shape: the home page shows a post in full that links a developer's
+      // GitHub, and that developer's profile names the blog.
+      await addUser('owner', 'owner')
+      await linkGitHub('owner')
+      const { siteId } = await siteFor('/feed.xml')
+      serveHtml(
+        '/',
+        '<html><body><article>A developer known as <a href="https://github.com/owner-gh">Owner</a></article></body></html>',
+      )
+      serveHtml('/a', '<html><body><article>another post</article></body></html>')
+      const claimId = await pendingClaim(siteId, 'owner')
+      expect(
+        (
+          await verifyClaimJob(
+            ctx({ github: github(server.url('/')) }),
+            await claim('site.claim', claimId),
+          )
+        ).status,
+      ).toBe('failed')
+      expect(await reasonOf(claimId)).toEqual({
+        reason: 'not_site_wide',
+        page: server.origin,
+        other: server.url('/a'),
+        target: 'github',
+      })
+    })
+
+    test('a GitHub that names another website is told to name this one', async () => {
+      await addUser('owner', 'owner')
+      await linkGitHub('owner')
+      const { siteId } = await siteFor('/feed.xml')
+      serveHtml('/', linking('noopener'))
+      serveHtml('/a', linking('noopener'))
+      const claimId = await pendingClaim(siteId, 'owner')
+      await verifyClaimJob(
+        ctx({ github: github('https://elsewhere.example') }),
+        await claim('site.claim', claimId),
+      )
+      expect(await reasonOf(claimId)).toEqual({
+        reason: 'github_website',
+        login: 'Owner-GH',
+        website: 'https://elsewhere.example',
+      })
+    })
+
+    test('a GitHub that names the blog, on a blog that does not link it, says so', async () => {
+      await addUser('owner', 'owner')
+      await linkGitHub('owner')
+      const { siteId } = await siteFor('/feed.xml')
+      serveHtml('/', '<html><body>nothing here</body></html>')
+      const claimId = await pendingClaim(siteId, 'owner')
+      await verifyClaimJob(
+        ctx({ github: github(server.url('/')) }),
+        await claim('site.claim', claimId),
+      )
+      expect(await reasonOf(claimId)).toEqual({
+        reason: 'github_link',
+        page: server.origin,
+        login: 'Owner-GH',
+      })
+    })
+
+    test('GitHub not answering is the reason only when nothing else came close', async () => {
+      await addUser('owner', 'owner')
+      await linkGitHub('owner')
+      const { siteId } = await siteFor('/feed.xml')
+      serveHtml('/', '<html><body>nothing here</body></html>')
+      const claimId = await pendingClaim(siteId, 'owner')
+      const down = github(() => {
+        throw new GitHubUnavailable('GitHub answered HTTP 403')
+      })
+      await verifyClaimJob(ctx({ github: down }), await claim('site.claim', claimId))
+      expect(await reasonOf(claimId)).toEqual({ reason: 'github_unavailable' })
+    })
+
+    test('a member who never linked a GitHub is not looked up', async () => {
+      await addUser('owner', 'owner')
+      const { siteId } = await siteFor('/feed.xml')
+      serveHtml('/', linking('me'))
+      const claimId = await pendingClaim(siteId, 'owner')
+      await verifyClaimJob(
+        ctx({ github: github(server.url('/')) }),
+        await claim('site.claim', claimId),
+      )
+      expect(asked).toEqual([])
+      expect((await reasonOf(claimId))?.reason).toBe('no_proof')
+    })
   })
 
   describe('vouched for by an operator (ADR 0039)', () => {

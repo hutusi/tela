@@ -6,6 +6,7 @@
   "description": "Ingestion library: HTTP client, feed discovery, feed fetching, article extraction (no queue, no runtime-specific APIs)",
   "exports": {
     ".": "./src/index.ts",
+    "./github": "./src/github.ts",
     "./http": "./src/http.ts",
     "./net": "./src/net.ts",
     "./pipeline": "./src/pipeline/index.ts",
