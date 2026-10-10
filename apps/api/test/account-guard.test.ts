@@ -470,26 +470,34 @@ describe('signing out', () => {
   const signOut = (headers: Record<string, string | undefined>) =>
     api.request('/api/auth/sign-out', { cookie: b.cookie, headers, body: {} })
 
-  test("a stale tab naming the account it still holds does not end the other account's session", async () => {
-    const res = await signOut({ [CLIENT_HEADER]: String(MIN_CLIENT), [MEMBER_HEADER]: a.userId })
-    expect(res.status).toBe(409)
-    expect(await res.json()).toEqual({ error: 'account_changed' })
-    expect(await sessions(b)).toBe(1)
-  })
+  // Every protocol that names the member is checked: the current one, and 2, where naming began
+  // (NAMES_MEMBER_SINCE, written out so raising it fails here). A protocol-2 tab is told to reload
+  // by every other call and still signs out; checked only from MIN_CLIENT, protocol 3 let it end
+  // another account's session (Codex's review).
+  for (const protocol of ['2', String(MIN_CLIENT)]) {
+    describe(`on protocol ${protocol}`, () => {
+      test("a stale tab naming the account it still holds does not end the other account's session", async () => {
+        const res = await signOut({ [CLIENT_HEADER]: protocol, [MEMBER_HEADER]: a.userId })
+        expect(res.status).toBe(409)
+        expect(await res.json()).toEqual({ error: 'account_changed' })
+        expect(await sessions(b)).toBe(1)
+      })
 
-  test('naming the member it is signs out, in the same request that checked', async () => {
-    expect(
-      (await signOut({ [CLIENT_HEADER]: String(MIN_CLIENT), [MEMBER_HEADER]: b.userId })).status,
-    ).toBe(200)
-    expect(await sessions(b)).toBe(0)
-  })
+      test('naming the member it is signs out, in the same request that checked', async () => {
+        expect(
+          (await signOut({ [CLIENT_HEADER]: protocol, [MEMBER_HEADER]: b.userId })).status,
+        ).toBe(200)
+        expect(await sessions(b)).toBe(0)
+      })
 
-  test('a current client naming no one is refused like one naming someone else', async () => {
-    const res = await signOut({ [CLIENT_HEADER]: String(MIN_CLIENT), [MEMBER_HEADER]: undefined })
-    expect(res.status).toBe(409)
-    expect(await res.json()).toEqual({ error: 'account_changed' })
-    expect(await sessions(b)).toBe(1)
-  })
+      test('naming no one is refused like naming someone else', async () => {
+        const res = await signOut({ [CLIENT_HEADER]: protocol, [MEMBER_HEADER]: undefined })
+        expect(res.status).toBe(409)
+        expect(await res.json()).toEqual({ error: 'account_changed' })
+        expect(await sessions(b)).toBe(1)
+      })
+    })
+  }
 
   test('a shell before protocol 2 names no one, and signs out as it always did', async () => {
     expect((await signOut(oldShell)).status).toBe(200)

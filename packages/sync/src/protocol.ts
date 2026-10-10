@@ -28,6 +28,13 @@ export const PAGE_ROWS = 1000
  *   home page that turns Tela away, ADR 0045), which it showed as "Not verified yet" and nothing.
  */
 export const MIN_CLIENT = 3
+/**
+ * The first protocol whose clients name the member (`MEMBER_HEADER`). Signing out checks that name
+ * from here on, whatever `MIN_CLIENT` has become: a tab told to reload may still sign out, and a
+ * tab that names one account must never end the session another tab started. Tied to
+ * `MIN_CLIENT`, protocol 3 let every protocol-2 tab sign out unchecked (Codex's review).
+ */
+export const NAMES_MEMBER_SINCE = 2
 /** The request header a client names its protocol version in. */
 export const CLIENT_HEADER = 'x-tela-client'
 /**

@@ -3,7 +3,13 @@
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
 import { audit, bumpSeq, currentSeq, first, newGroupId, schema } from '@tela/data'
-import { CLIENT_HEADER, MEMBER_HEADER, MIN_CLIENT, pushSchema } from '@tela/sync'
+import {
+  CLIENT_HEADER,
+  MEMBER_HEADER,
+  MIN_CLIENT,
+  NAMES_MEMBER_SINCE,
+  pushSchema,
+} from '@tela/sync'
 import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { type Auth, createAuth } from './auth'
@@ -81,11 +87,14 @@ async function asWrongCode(answer: Response): Promise<Response> {
   return new Response(JSON.stringify(WRONG_CODE), { status: 400, headers })
 }
 
-/** A client older than the protocol is told to reload, not left misreading rows. */
-function tooOld(version: string | undefined): boolean {
-  const n = Number(version ?? '0')
-  return !Number.isInteger(n) || n < MIN_CLIENT
+/** The protocol a client names (`CLIENT_HEADER`), or 0 for none or one that is not a number. */
+function protocolOf(header: string | undefined): number {
+  const n = Number(header ?? '0')
+  return Number.isInteger(n) ? n : 0
 }
+
+/** A client older than the protocol is told to reload, not left misreading rows. */
+const tooOld = (header: string | undefined) => protocolOf(header) < MIN_CLIENT
 
 export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   const auth = createAuth(deps)
@@ -93,11 +102,12 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
 
   // Signing out names the member too, in the same request that ends the session: a tab still
   // holding the account another tab signed out of must not end the session that tab started. A
-  // client on protocol 2 or later that names someone else, or no one, is refused. Only shells
-  // older than that sign out unchecked: they cannot name anyone, and refusing them would leave a
-  // member signed in who asked not to be.
+  // client on protocol 2 or later that names someone else, or no one, is refused, even one too
+  // old for every other call (`NAMES_MEMBER_SINCE`, not `MIN_CLIENT`). Only shells older than
+  // that sign out unchecked: they cannot name anyone, and refusing them would leave a member
+  // signed in who asked not to be.
   app.post('/api/auth/sign-out', async (c) => {
-    if (!tooOld(c.req.header(CLIENT_HEADER))) {
+    if (protocolOf(c.req.header(CLIENT_HEADER)) >= NAMES_MEMBER_SINCE) {
       const session = await auth.api.getSession({ headers: c.req.raw.headers })
       if (session && c.req.header(MEMBER_HEADER) !== session.user.id) {
         return c.json({ error: 'account_changed' }, 409)
@@ -246,8 +256,9 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
    * for the first account as the second. The checks run in this order:
    *
    * 1. `/api/v1/me` passes: it is how a tab learns who is signed in, and says only that.
-   * 2. A client older than `MIN_CLIENT` is told to upgrade. It names no one, and `upgrade` is the
-   *    only 409 the first shell knows: `account_changed` would have it retry for ever.
+   * 2. A client older than `MIN_CLIENT` is told to upgrade, before its name is read: `upgrade` is
+   *    the only 409 the first shell knows (`account_changed` would have it retry for ever), and a
+   *    reload puts any older one on the current protocol.
    * 3. A client that names anyone else, or no one, is told the account changed. It forgets what
    *    it holds and starts over as the session's member. Told to upgrade, a current client would
    *    reload into the same state.
