@@ -384,6 +384,7 @@
     "verify": "Vérifier",
     "verifyAgain": "Vérifier à nouveau",
     "checking": "Vérification de votre site…",
+    "stillChecking": "La vérification prend plus de temps que d’habitude. Vérifiez à nouveau, ou revenez plus tard : la réponse s’affichera ici.",
     "failed": "Pas encore vérifié.",
     "reasons": {
       "no_proof": "Tela n’a rien trouvé sur {page} : ni balise meta, ni lien vers votre profil Tela, ni lien vers un GitHub qui renvoie au site. Tela lit la page telle que votre serveur l’envoie, sans exécuter de script.",
@@ -394,7 +395,10 @@
       "github_website": "Votre site renvoie vers votre profil GitHub, mais le site web de ce profil n’est pas {site}. Indiquez {site} sur GitHub, puis vérifiez à nouveau.",
       "github_link": "Votre profil GitHub indique {site} comme site web, mais {page} ne renvoie pas vers ce profil. Ajoutez ce lien à votre en-tête ou à votre pied de page.",
       "github_unavailable": "GitHub n’a pas répondu : Tela n’a pas pu vérifier votre GitHub. Réessayez dans un moment, ou utilisez une autre façon.",
-      "overruled": "Un opérateur a retiré ou refusé cette revendication : un lien sans rel=\"me\" ne la prouve donc plus. Ajoutez rel=\"me\" au lien vers {target, select, github {votre GitHub} other {votre profil Tela}} sur {page}, ou ajoutez la balise meta."
+      "overruled": "Un opérateur a retiré ou refusé cette revendication : un lien sans rel=\"me\" ne la prouve donc plus. Ajoutez rel=\"me\" au lien vers {target, select, github {votre GitHub} other {votre profil Tela}} sur {page}, ou ajoutez la balise meta.",
+      "home_refused": "{page} a refusé Tela (HTTP {status}). C’est d’ordinaire une protection contre les robots : Cloudflare, un pare-feu ou une extension de sécurité. Laissez passer les requêtes dont l’agent utilisateur commence par « Tela/ », puis vérifiez à nouveau.",
+      "home_status": "{page} a répondu HTTP {status} au lieu d’une page que Tela peut lire. Vérifiez que votre page d’accueil s’affiche, puis vérifiez à nouveau.",
+      "home_unreachable": "Tela n’a pas pu lire {page} : {why, select, timeout {la réponse a pris trop de temps} too_large {la page dépasse la taille que Tela lit} redirect_loop {elle redirige trop de fois} other {elle est injoignable}}. Vérifiez qu’elle s’affiche, puis vérifiez à nouveau."
     },
     "verified": "Vérifié. Ce site est à vous sur Tela.",
     "verifiedHint": "Il apparaît désormais dans Découvrir. Choisissez ses thèmes sur la page du site, et suivez lecteurs et coups de cœur dans votre tableau de bord.",

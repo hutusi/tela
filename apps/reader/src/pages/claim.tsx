@@ -62,6 +62,12 @@ function reasonText(t: Translate, r: ClaimReason, site: string): string {
       return t('reasons.github_unavailable')
     case 'overruled':
       return t('reasons.overruled', { page: r.page, target: r.target })
+    case 'home_refused':
+      return t('reasons.home_refused', { page: r.page, status: r.status })
+    case 'home_status':
+      return t('reasons.home_status', { page: r.page, status: r.status })
+    case 'home_unreachable':
+      return t('reasons.home_unreachable', { page: r.page, why: r.why })
   }
 }
 
@@ -145,6 +151,9 @@ export function ClaimSitePage() {
   const valid = Number.isInteger(siteId) && siteId > 0
   const [standing, setStanding] = useState<Standing | null | 'missing'>(null)
   const [pollingSince, setPollingSince] = useState<number | null>(null)
+  // Asked for long enough with no answer: the check may be waiting to retry, so the member may
+  // ask for a fresh one rather than watch "Checking" for ever.
+  const [stalled, setStalled] = useState(false)
   useTitle(t('verifyTitle'))
 
   const load = useCallback(async () => {
@@ -162,8 +171,10 @@ export function ClaimSitePage() {
     const since = pollingSince ?? Date.now()
     if (pollingSince === null) setPollingSince(since)
     const id = setInterval(() => {
-      if (Date.now() - since > POLL_FOR_MS) clearInterval(id)
-      else load().catch(() => undefined)
+      if (Date.now() - since > POLL_FOR_MS) {
+        clearInterval(id)
+        setStalled(true)
+      } else load().catch(() => undefined)
     }, POLL_MS)
     return () => clearInterval(id)
   }, [pending, pollingSince, load])
@@ -174,6 +185,7 @@ export function ClaimSitePage() {
     })
     if (status === 200) {
       setPollingSince(Date.now())
+      setStalled(false)
       setStanding(body)
     }
   }
@@ -256,13 +268,17 @@ export function ClaimSitePage() {
             <button
               type="button"
               onClick={() => void verify()}
-              disabled={pending}
+              disabled={pending && !stalled}
               className="rounded-full bg-ink px-5 py-2.5 font-medium text-paper hover:brightness-125 disabled:opacity-60"
               data-testid="claim-verify"
             >
-              {standing.status === 'failed' ? t('verifyAgain') : t('verify')}
+              {standing.status === 'failed' || stalled ? t('verifyAgain') : t('verify')}
             </button>
-            {pending ? <span className="text-[13px] text-muted">{t('checking')}</span> : null}
+            {pending ? (
+              <span className="text-[13px] text-muted" data-testid="claim-checking">
+                {stalled ? t('stillChecking') : t('checking')}
+              </span>
+            ) : null}
             {standing.status === 'failed' && (standing.reason || standing.error) ? (
               <span className="text-[13px] text-danger" data-testid="claim-error">
                 {t('failed')}{' '}

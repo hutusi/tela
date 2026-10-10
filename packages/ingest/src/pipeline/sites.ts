@@ -14,7 +14,7 @@ import {
   moveFeedToOrigin,
   type TelaDb,
 } from '@tela/data'
-import type { ClaimMethod, ClaimReason } from '@tela/shared'
+import type { ClaimMethod, ClaimReason, HomeUnreachable } from '@tela/shared'
 import { findAll, getAttributeValue } from 'domutils'
 import { type SQL, sql } from 'drizzle-orm'
 import { parseDocument } from 'htmlparser2'
@@ -178,6 +178,14 @@ async function githubIdOf(db: TelaDb, userId: string): Promise<string | null> {
 }
 
 const clip = (url: string) => url.slice(0, REASON_URL_MAX)
+
+/** Statuses that turn a reader away rather than answer it: bot protection, usually. */
+const REFUSED = new Set([401, 403, 429])
+
+const unreachable = (err: HttpError): HomeUnreachable =>
+  err.kind === 'timeout' || err.kind === 'too_large' || err.kind === 'redirect_loop'
+    ? err.kind
+    : 'other'
 
 /**
  * Which proof the home page (and, for a link without `rel="me"`, the not-found page) gives, or
@@ -355,6 +363,7 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
   }
   const fail = (error: string) =>
     done([claimFailed(db, claimId, error, ctx.clock.now())], { status: 'failed', error })
+  const failFor = (reason: ClaimReason) => fail(JSON.stringify(reason))
   if (!claim.handle) return fail('the claimant has no profile')
   if (claim.claimed_by !== null && claim.claimed_by !== claim.user_id) return fail(TAKEN)
 
@@ -362,10 +371,18 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
   try {
     page = await ctx.http.get(claim.home_url, { region: 'global', accept: HTML_ACCEPT })
   } catch (err) {
-    const why = err instanceof HttpError ? `${err.kind}: ${err.message}` : String(err)
-    return fail(`could not fetch ${claim.home_url} (${why})`)
+    if (!(err instanceof HttpError)) return fail(`could not fetch ${claim.home_url} (${err})`)
+    return failFor({
+      reason: 'home_unreachable',
+      page: clip(claim.home_url),
+      why: unreachable(err),
+    })
   }
-  if (page.status !== 200 || !page.body) return fail(`home page returned HTTP ${page.status}`)
+  if (page.status !== 200 || !page.body) {
+    const status = page.status
+    const reason = REFUSED.has(status) ? 'home_refused' : 'home_status'
+    return failFor({ reason, page: clip(claim.home_url), status })
+  }
   const vouched = claim.vouched_by !== null
   const found = vouched
     ? { method: claim.method }
@@ -374,7 +391,7 @@ export async function verifyClaimJob(ctx: IngestContext, lease: Lease): Promise<
         { ...claim, handle: claim.handle, overruled: claim.overruled_at !== null },
         page,
       )
-  if ('reason' in found) return fail(JSON.stringify(found.reason))
+  if ('reason' in found) return failFor(found.reason)
   const proof = found
 
   // The feeds the home page declares are the ones the owner vouches for; every other feed that

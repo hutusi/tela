@@ -38,7 +38,7 @@ directory.
 | `GITHUB_TOKEN` | tela-jobs (secret, optional) | A fine-grained GitHub token with no repository access and no permissions, for a claim by GitHub (ADR 0045): it asks `api.github.com/user/<id>` for a member's login and website, which needs no permission. Unset, GitHub allows 60 requests an hour per egress IP, and Cloudflare's egress IPs are shared with other customers, so a check may find GitHub refusing (`github_unavailable`) for reasons of someone else's making. Set, 5,000 an hour. Make it under the owner's account, with the longest expiry GitHub allows, and diary its renewal: an expired token answers 401, which a claim also reads as `github_unavailable` |
 | `GITHUB_API_URL` | tela-jobs | Where GitHub's API answers, default `https://api.github.com`. For a test stack only |
 | `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, and fetches to private addresses. Never deployed |
-| `WORKER_USER_AGENT` | tela-jobs | Sent on every fetch; keep a contact URL in it |
+| `WORKER_USER_AGENT` | tela-jobs | Sent on every fetch; keep a contact URL in it, and keep it starting `Tela/`: a claim page tells a writer whose site turns Tela away to let that through |
 | `FETCH_TIMEOUT_MS` | tela-jobs, the relay | Per-request timeout, default 20000 |
 | `WEBSUB_ENABLED` | tela-jobs | `1` subscribes at feeds' hubs; hubs verify by calling `PUBLIC_URL/api/websub/<feedId>` |
 | `LLM_PROVIDER` | tela-jobs | `bailian` (default), `anthropic` or `mock`. Without the matching key the provider falls back to the mock, and the translation kinds are then disabled rather than caching placeholder output; set `mock` on purpose for local runs only |

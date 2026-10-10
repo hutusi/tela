@@ -384,6 +384,7 @@
     "verify": "Verify",
     "verifyAgain": "Verify again",
     "checking": "Checking your site…",
+    "stillChecking": "This is taking longer than usual. Verify again, or come back later: the answer will be here.",
     "failed": "Not verified yet.",
     "reasons": {
       "no_proof": "Tela found nothing on {page}: no meta tag, no link to your Tela profile, and no link to a GitHub that links back. Tela reads the page as your server sends it, before any script runs.",
@@ -394,7 +395,10 @@
       "github_website": "Your site links to your GitHub profile, but the website on that profile is not {site}. Set it to {site} on GitHub, then verify again.",
       "github_link": "Your GitHub profile names {site} as its website, but {page} does not link to that profile. Add the link to your header or footer.",
       "github_unavailable": "GitHub did not answer, so Tela could not check your GitHub. Try again in a little while, or use another way.",
-      "overruled": "An operator removed or turned down this claim, so a link without rel=\"me\" no longer proves it. Add rel=\"me\" to the link to {target, select, github {your GitHub} other {your Tela profile}} on {page}, or add the meta tag."
+      "overruled": "An operator removed or turned down this claim, so a link without rel=\"me\" no longer proves it. Add rel=\"me\" to the link to {target, select, github {your GitHub} other {your Tela profile}} on {page}, or add the meta tag.",
+      "home_refused": "{page} turned Tela away (HTTP {status}). Bot protection usually does this: Cloudflare, a firewall or a security plugin. Let requests whose user agent starts with “Tela/” through, then verify again.",
+      "home_status": "{page} answered HTTP {status} rather than a page Tela could read. Check that your home page loads, then verify again.",
+      "home_unreachable": "Tela could not read {page}: {why, select, timeout {it took too long to answer} too_large {the page is larger than Tela reads} redirect_loop {it redirects too many times} other {it could not be reached}}. Check that it loads, then verify again."
     },
     "verified": "Verified. This site is yours on Tela.",
     "verifiedHint": "It is now listed in Discover. Pick its topics on the site page, and see readers and likes in your dashboard.",

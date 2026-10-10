@@ -384,6 +384,7 @@
     "verify": "驗證",
     "verifyAgain": "再次驗證",
     "checking": "正在檢查你的網站…",
+    "stillChecking": "這次檢查比平時久。可以再驗證一次，或者稍後回來檢視結果。",
     "failed": "尚未驗證。",
     "reasons": {
       "no_proof": "在 {page} 上什麼也沒找到：沒有 meta 標籤，沒有指向你 Tela 個人頁的連結，也沒有與網站互鏈的 GitHub 連結。Tela 讀取的是伺服器返回的頁面，不執行任何指令碼。",
@@ -394,7 +395,10 @@
       "github_website": "你的網站連結了你的 GitHub 主頁，但這個主頁上填寫的網站不是 {site}。到 GitHub 上把它改成 {site}，再驗證一次。",
       "github_link": "你的 GitHub 主頁填寫的網站是 {site}，但 {page} 沒有連結到這個 GitHub 主頁。在頁頭或頁尾加上這個連結。",
       "github_unavailable": "GitHub 沒有響應，Tela 無法檢查你的 GitHub。稍後再試，或者換一種方式。",
-      "overruled": "管理員已移除或駁回這個認領，所以不帶 rel=\"me\" 的連結不再能證明這個網站是你的。給 {page} 上指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結加上 rel=\"me\"，或者新增 meta 標籤。"
+      "overruled": "管理員已移除或駁回這個認領，所以不帶 rel=\"me\" 的連結不再能證明這個網站是你的。給 {page} 上指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結加上 rel=\"me\"，或者新增 meta 標籤。",
+      "home_refused": "{page} 拒絕了 Tela 的訪問（HTTP {status}）。這通常是防爬蟲設定造成的，比如 Cloudflare、防火牆或安全外掛。請放行 User-Agent 以「Tela/」開頭的請求，然後再驗證一次。",
+      "home_status": "{page} 返回了 HTTP {status}，而不是 Tela 能讀取的頁面。確認首頁能正常開啟，然後再驗證一次。",
+      "home_unreachable": "Tela 無法讀取 {page}：{why, select, timeout {響應時間太長} too_large {頁面超出了 Tela 讀取的大小} redirect_loop {重定向次數太多} other {無法連線}}。確認它能正常開啟，然後再驗證一次。"
     },
     "verified": "已驗證。這個網站在 Tela 上屬於你了。",
     "verifiedHint": "它現在會出現在「發現」中。在網站頁選擇主題，在儀表板檢視讀者與喜歡。",

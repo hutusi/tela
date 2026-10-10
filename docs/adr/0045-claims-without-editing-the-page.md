@@ -70,7 +70,10 @@ beside the reason too (`describeClaimError`, as the admin console shows it), bec
 cached before reasons existed shows only that text. A reason holds no GitHub login or website:
 the column syncs to the device and goes into the nightly export, and Tela keeps nothing from a
 provider but the identity (ADR 0036), so the page says "your GitHub" and "is not {site}".
-Other failures stay text.
+A home page that turns Tela away (401, 403, 429), answers another status or does not answer is a
+reason too: three of the 116 public blogs refuse Tela's fetch outright (2026-10-11), and the one
+thing their writer can change is letting a user agent that starts `Tela/` through. Other failures
+(an operator's rejection, a blog another member holds) stay text.
 
 **GitHub is asked without the member's token**, which Tela never keeps (ADR 0036): the user API by
 id is public. tela-jobs sends an optional `GITHUB_TOKEN` with no permissions, to that host only and

@@ -269,6 +269,43 @@ describe('verifyClaimJob', () => {
     expect(await reasonOf(claimId)).toEqual({ reason: 'no_proof', page: server.origin })
   })
 
+  test.each([
+    [403, 'home_refused'],
+    [429, 'home_refused'],
+    [500, 'home_status'],
+  ] as const)(
+    'a home page answering %i fails as %s, which says what to do',
+    async (status, reason) => {
+      await addUser('owner', 'owner')
+      const { siteId } = await siteFor('/feed.xml')
+      server.set('/', (_req, res) => {
+        res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' })
+        res.end('<html><body>Checking your browser…</body></html>')
+      })
+      const claimId = await pendingClaim(siteId, 'owner')
+      expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe(
+        'failed',
+      )
+      expect(await reasonOf(claimId)).toEqual({ reason, page: server.origin, status })
+    },
+  )
+
+  test('a home page that never answers says it took too long', async () => {
+    await addUser('owner', 'owner')
+    const { siteId } = await siteFor('/feed.xml')
+    // Past the client's 300 ms.
+    server.set('/', (_req, res) => {
+      setTimeout(() => res.end('<html></html>'), 600)
+    })
+    const claimId = await pendingClaim(siteId, 'owner')
+    expect((await verifyClaimJob(ctx(), await claim('site.claim', claimId))).status).toBe('failed')
+    expect(await reasonOf(claimId)).toEqual({
+      reason: 'home_unreachable',
+      page: server.origin,
+      why: 'timeout',
+    })
+  })
+
   /** The blog's page for an address it does not have, as the claim with token `tok-123` asks. */
   const serveNotFound = (html: string, status = 404) =>
     server.set(notFoundProbe('tok-123'), (_req, res) => {
@@ -632,7 +669,7 @@ describe('verifyClaimJob', () => {
       await vouchFor(claimId)
       expect(await verifyClaimJob(ctx(), await claim('site.claim', claimId))).toEqual({
         status: 'failed',
-        error: 'home page returned HTTP 503',
+        error: JSON.stringify({ reason: 'home_status', page: server.origin, status: 503 }),
       })
     })
 

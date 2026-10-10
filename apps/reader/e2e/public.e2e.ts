@@ -186,6 +186,38 @@ test.describe('discover and claim', () => {
     await expect(page).toHaveURL(/\/reading\?.*article=\d+/)
     await expect(page.getByTestId('article-title')).toHaveText(title)
   })
+
+  test('a check that runs long says so, and the member may ask for another', async ({ page }) => {
+    // tela-jobs never answers: the check is waiting to retry, as after a failed attempt.
+    const pending = {
+      siteId: 999_999,
+      homeUrl: 'https://blog.example',
+      status: 'pending',
+      error: null,
+      reason: null,
+      github: false,
+      proofs: {
+        meta: '<meta name="tela-site-verification" content="0">',
+        relMe: '<a rel="me" href="https://tela.test/@e2e">Tela</a>',
+      },
+    }
+    await page.route('**/api/v1/claims/999999**', (route) => route.fulfill({ json: pending }))
+    await page.clock.install()
+    await page.goto('/sites/999999/claim')
+    const checking = page.getByTestId('claim-checking')
+    const verify = page.getByTestId('claim-verify')
+    await expect(checking).toHaveText('Checking your site…')
+    await expect(verify).toBeDisabled()
+
+    // Past the two minutes the page asks for: it stops, says so, and offers a fresh check.
+    await page.clock.fastForward(125_000)
+    await expect(checking).toContainText('taking longer than usual')
+    await expect(verify).toBeEnabled()
+    await expect(verify).toHaveText('Verify again')
+    await verify.click()
+    await expect(checking).toHaveText('Checking your site…')
+    await expect(verify).toBeDisabled()
+  })
 })
 
 test.describe('recommendations, profile, dashboard, settings', () => {

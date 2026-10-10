@@ -38,6 +38,15 @@ export type ClaimReason =
    * only the tag or `rel="me"` counts, or the claimant would win back the blog by that link.
    */
   | { reason: 'overruled'; page: string; target: ClaimTarget }
+  /** The home page turned Tela away (401, 403, 429): bot protection, usually. */
+  | { reason: 'home_refused'; page: string; status: number }
+  /** The home page answered something other than a page: another status, or nothing. */
+  | { reason: 'home_status'; page: string; status: number }
+  /** The home page did not answer at all. */
+  | { reason: 'home_unreachable'; page: string; why: HomeUnreachable }
+
+/** Why a home page did not answer, as the claim page words it. */
+export type HomeUnreachable = 'timeout' | 'too_large' | 'redirect_loop' | 'other'
 
 export const CLAIM_REASONS = [
   'no_proof',
@@ -49,6 +58,9 @@ export const CLAIM_REASONS = [
   'github_link',
   'github_unavailable',
   'overruled',
+  'home_refused',
+  'home_status',
+  'home_unreachable',
 ] as const satisfies readonly ClaimReason['reason'][]
 
 /** The stored reason, or null for a plain-text error (and for anything that is not one). */
@@ -67,6 +79,13 @@ export function claimReason(error: string | null | undefined): ClaimReason | nul
 const TARGETS: Record<ClaimTarget, string> = {
   profile: 'your Tela profile',
   github: 'your GitHub',
+}
+
+const UNREACHABLE: Record<HomeUnreachable, string> = {
+  timeout: 'it took too long to answer',
+  too_large: 'the page is larger than Tela reads',
+  redirect_loop: 'it redirects too many times',
+  other: 'it could not be reached',
 }
 
 /**
@@ -96,5 +115,11 @@ export function describeClaimError(error: string): string {
       return 'GitHub did not answer'
     case 'overruled':
       return `an operator ruled on this claim, so the link to ${TARGETS[r.target]} on ${r.page} counts only with rel="me"`
+    case 'home_refused':
+      return `${r.page} turned Tela away with HTTP ${r.status}, as bot protection does`
+    case 'home_status':
+      return `${r.page} answered HTTP ${r.status}, not a page Tela could read`
+    case 'home_unreachable':
+      return `could not fetch ${r.page} (${UNREACHABLE[r.why]})`
   }
 }
