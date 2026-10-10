@@ -95,9 +95,7 @@ export function socialRoutes(deps: ApiDeps) {
     const asked = c.req.query('tab')
     const tab: FeedTab = asked === 'recs' || asked === 'likes' ? asked : 'all'
     const lang = isReadingLanguage(c.req.query('lang')) ? c.req.query('lang') : null
-    const now = deps.clock.now()
     const cursor = CURSOR.exec(c.req.query('cursor') ?? '')
-    const first = cursor === null
     const minutes = minutesOf(cursor ? cursor[2] : c.req.query('tz'))
     const offset = minutes * 60_000
     // Entries strictly after the cursor in the feed's order: older, or as old with a smaller key.
@@ -168,7 +166,7 @@ export function socialRoutes(deps: ApiDeps) {
     const wantLikes = tab !== 'recs'
     const wantSubs = tab === 'all'
 
-    const [recommended, liked, subscribed, suggested] = (await db.batch([
+    const [recommended, liked, subscribed] = (await db.batch([
       wantRecs
         ? db.all(sql`
             select * from (
@@ -209,29 +207,6 @@ export function socialRoutes(deps: ApiDeps) {
               shown: SUBSCRIBED_SHOWN,
             }) as never,
           )
-        : db.all(none),
-      // Readers to follow, on the first page only, from what is public: people who recommended
-      // posts from blogs the member reads, people whose shown subscriptions overlap theirs, and
-      // people recommending lately (ADR 0031).
-      first
-        ? db.all(sql`
-            select p.user_id as id, p.handle, p.display_name as "displayName", p.bio,
-              ${avatarOf('p')} as avatar, count(*) as score
-            from (
-              select r.user_id from recommendations r join articles a on a.id = r.article_id
-              where r.deleted_at is null and a.feed_id in (
-                select feed_id from subscriptions where user_id = ${me} and deleted_at is null)
-              union all
-              select sub.user_id from subscriptions sub join profiles q on q.user_id = sub.user_id
-              where q.public_subscriptions = 1 and sub.deleted_at is null and sub.feed_id in (
-                select feed_id from subscriptions where user_id = ${me} and deleted_at is null)
-              union all
-              select r.user_id from recommendations r
-              where r.deleted_at is null and r.created_at >= ${now - 30 * DAY}
-            ) candidates join profiles p on p.user_id = candidates.user_id
-            where p.user_id <> ${me} and p.user_id not in (${followees})
-            group by p.user_id order by score desc, p.handle limit 5
-          `)
         : db.all(none),
     ] as never)) as unknown as Row[][]
 
@@ -320,7 +295,10 @@ export function socialRoutes(deps: ApiDeps) {
       {
         items: page,
         next,
-        suggested: (suggested ?? []).map(({ score: _s, ...p }) => p),
+        // Readers to follow are worked out on the device now, from Discover's pool (ADR 0044). A
+        // shell cached before that reads this list's length and remembers its people, so it stays,
+        // always empty, rather than unmounting the page under them.
+        suggested: [],
       },
       200,
       { 'cache-control': 'no-store' },

@@ -290,16 +290,13 @@ describe('the Following feed', () => {
     expect(page.suggested).toBeDefined()
   })
 
-  test('suggests readers from public signals only, never myself or someone I follow', async () => {
+  test('suggests nobody itself, but keeps the list a shell cached before Discover reads', async () => {
+    // Readers to follow come from Discover's pool, matched on the device (ADR 0044; its tests are
+    // in discover.test.ts). An older shell reads `suggested.length`, so the list stays, empty.
     const a = await article(1)
     await push([{ type: 'subscribe', feedId: 1 }])
-    await follow(ANNA)
-    await recommend(ANNA, a, now - 60_000) // followed already
     await recommend(CLEO, a, now - 60_000) // recommends what I read
-    await subscribe(BORIS, 1, now - 60_000) // reads what I read, privately: not a signal
-    const { suggested } = await feed()
-    expect(suggested.map((p) => p.handle)).toEqual(['cleo'])
-    expect(suggested[0]).toMatchObject({ id: CLEO, bio: 'Bio of cleo' })
+    expect((await feed()).suggested).toEqual([])
   })
 })
 
