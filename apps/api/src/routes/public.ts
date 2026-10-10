@@ -10,7 +10,7 @@
  * says how a blog was listed: nothing public renders it, and beside a held-back count it would
  * tell a blog an operator listed from the queue from an editorial pick (ADR 0041).
  */
-import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first, publicReaderCount } from '@tela/data'
+import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first } from '@tela/data'
 import { HANDLE, isTopic, RESERVED_HANDLES } from '@tela/shared'
 import { getIP } from 'better-auth/api'
 import { sql } from 'drizzle-orm'
@@ -18,46 +18,21 @@ import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { Auth } from '../auth'
 import type { ApiDeps } from '../deps'
+import {
+  DAY,
+  editionStatement,
+  LANG,
+  PROFILE_CACHE,
+  PUBLIC_CACHE,
+  PUBLIC_LISTING,
+  parseLangMap,
+  READER_COUNT,
+  siteCard,
+  TITLES,
+  withTitles,
+} from './public-sql'
 
-/** Five minutes at the edge, a day of serving stale while it refreshes. */
-export const PUBLIC_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=86400'
-/**
- * A profile shows what its member chose to show, and Settings tells them a change reaches it in a
- * few minutes: a browser may serve its copy a minute and four more while it asks again, never a
- * day (ADR 0031). Discover and a blog's page keep PUBLIC_CACHE (ADR 0024).
- */
-export const PROFILE_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=240'
-const LANG = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/
-const DAY = 24 * 60 * 60 * 1000
-const PUBLIC_LISTING = sql.raw(`('listed', 'featured')`)
-/** A blog's reader count as anyone may see it (`publicReaderCount`), over `sites s`. */
-const READER_COUNT = publicReaderCount('s')
-/**
- * A post's titles in the launch languages it has one in, from a table aliased `a`: a public page
- * is cached for everyone, so it carries each and the reader picks the one they read in.
- */
-const TITLES = sql.raw(`(select json_group_object(t.lang, t.title) from article_titles t
-  where t.article_id = a.id and t.title is not null) as "titles"`)
-/**
- * Beside `TITLES`, a post's excerpts in the launch languages it has one in: the front page's lead
- * shows the translated one when the visitor reads titles translated.
- */
-const EXCERPTS = sql.raw(`(select json_group_object(t.lang, t.excerpt) from article_titles t
-  where t.article_id = a.id and t.excerpt is not null) as "excerpts"`)
-/** An object SQLite's `json_group_object` handed back as text; anything unreadable is none. */
-function parseLangMap(value: unknown): Record<string, string> {
-  if (typeof value !== 'string') return {}
-  try {
-    return JSON.parse(value) as Record<string, string>
-  } catch {
-    return {}
-  }
-}
-/** The titles object SQLite handed back as text. */
-function withTitles<T extends Record<string, unknown>>(row: T): T {
-  if (typeof row.titles !== 'string') return row
-  return { ...row, titles: parseLangMap(row.titles) }
-}
+export { PROFILE_CACHE, PUBLIC_CACHE }
 
 /** The front page's edition: the week's newest post from each blog, at most this many. */
 export const EDITION_POSTS = 11
@@ -105,20 +80,11 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
     const byLang = lang && LANG.test(lang) ? sql`and s.primary_lang = ${lang}` : sql``
     const asked = Number(c.req.query('page'))
     const page = Number.isInteger(asked) && asked > 1 && asked <= 1000 ? asked : 1
-    const since = deps.clock.now() - 30 * DAY
+    const now = deps.clock.now()
+    const since = now - 30 * DAY
     const [sites, languages, topics, totals] = (await db.batch([
       db.all(sql`
-        select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
-          s.primary_lang as "primaryLang", (s.claimed_by is not null) as claimed,
-          ${READER_COUNT} as "readerCount",
-          (select min(f.id) from feeds f where f.site_id = s.id and f.merged_into is null) as "feedId",
-          (select a.title from articles a join feeds f on f.id = a.feed_id where f.site_id = s.id
-            and f.merged_into is null order by a.sort_at desc limit 1) as "latestTitle",
-          (select max(a.sort_at) from articles a join feeds f on f.id = a.feed_id
-            where f.site_id = s.id and f.merged_into is null) as "latestAt",
-          (select count(*) from articles a join feeds f on f.id = a.feed_id
-            where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since})
-            as "postsLast30d"
+        select ${siteCard(since, now)}
         from sites s
         where s.listing in ${PUBLIC_LISTING} ${byTopic} ${byLang}
         order by s.listing = 'featured' desc, s.claimed_by is not null desc,
@@ -345,37 +311,15 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
 
   /**
    * The front page's edition (ADR 0035): the newest post of each public blog, newest first, from
-   * the last seven days, or the latest ones when nobody wrote that week; and the counts its copy
-   * states. Cached as a profile is, so the counts a visitor reads are minutes old at most.
-   *
-   * Each blog's newest post is a seek per live feed down `articles_feed_sort_idx`, then the newest
-   * of those: ordering a join of feeds and articles before the limit reads every article the blog
-   * has. Future-dated posts wait for their date.
+   * the last seven days, or the latest ones when nobody wrote that week (`editionStatement`); and
+   * the counts its copy states. Cached as a profile is, so the counts a visitor reads are minutes
+   * old at most.
    */
   routes.get('/front', async (c) => {
     const now = deps.clock.now()
     const since = now - 7 * DAY
     const [rows, counts] = (await db.batch([
-      db.all(sql`
-        select ${ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS},
-          s.id as "siteId", s.title as "siteTitle", s.home_url as "homeUrl",
-          s.favicon_key as "faviconKey", s.primary_lang as "primaryLang",
-          p.handle as "claimantHandle", p.display_name as "claimantName"
-        from sites s
-        join articles a on a.id = (
-          select a1.id from feeds f
-          join articles a1 on a1.id = (
-            select a2.id from articles a2 where a2.feed_id = f.id and a2.sort_at <= ${now}
-            order by a2.sort_at desc, a2.id desc limit 1
-          )
-          where f.site_id = s.id and f.merged_into is null
-          order by a1.sort_at desc, a1.id desc limit 1
-        )
-        left join profiles p on p.user_id = s.claimed_by
-        where s.listing in ${PUBLIC_LISTING}
-        order by a.sort_at desc, a.id desc
-        limit 60
-      `),
+      db.all(editionStatement(now)),
       db.all(sql`
         select (select count(*) from sites where listing in ${PUBLIC_LISTING}) as blogs,
           count(distinct f.site_id) as "weekBlogs",

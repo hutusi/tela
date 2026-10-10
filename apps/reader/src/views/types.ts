@@ -157,3 +157,78 @@ export type MemberControls = {
   /** Follow someone or stop, at once; the page names them until the pull does (ADR 0031). */
   setFollowing(person: Person, follow: boolean): void
 }
+
+/** A post's blog on Discover's posts and readers. */
+export type PostSite = {
+  id: number
+  title: string | null
+  homeUrl: string
+  faviconKey: string | null
+  primaryLang: string | null
+  claimed: boolean
+}
+
+/**
+ * A post on Discover (ADR 0044), the same for everyone who asks: the device works out what is
+ * its member's own, such as who among its recommenders they follow.
+ */
+export type DiscoverPost = {
+  article: PublicArticle & { excerpts?: Partial<Record<string, string>> }
+  site: PostSite
+  /** Live recommendations made in the last seven days. */
+  weekRecs: number
+  /** Who recommends it, newest first and at most twenty: account ids, as a follow names them. */
+  recommenders: string[]
+  /** The newest recommendation of it that came with a note. */
+  note: { text: string; person: Person } | null
+}
+
+/** A post a reader recommended, with its blog. */
+export type ReaderPost = { article: PublicArticle; site: PostSite }
+
+/**
+ * A member Discover may suggest following (ADR 0044): everything here is already public on their
+ * profile. The device matches it against its own member's likes, recommendations and blogs.
+ */
+export type ReaderCandidate = Person & {
+  bio: string | null
+  /** Their newest live recommendations, as [articleId, siteId]. */
+  recs: [number, number][]
+  /** Listed blogs they read, by site id; null unless they show what they read. */
+  sites: number[] | null
+  /** Live recommendations in the last thirty days, and how many of those came with a note. */
+  recent: number
+  withNote: number
+  /** Every live recommendation they have made. */
+  total: number
+  /** The post they recommended before the most other readers did, from two others up. */
+  early: (ReaderPost & { others: number }) | null
+  /** Their newest recommendation with a note, of a post on a listed blog. */
+  sample: (ReaderPost & { note: string }) | null
+}
+
+/** This week on Discover (`/api/v1/public/discover/week`); the device composes the page. */
+export type WeekData = {
+  since: number
+  /** Posts recommended in the last seven days, the most recommended first. */
+  recommended: DiscoverPost[]
+  /** The front page's edition: one post a blog, from the week, else the latest there are. */
+  edition: { span: 'week' | 'latest'; posts: DiscoverPost[] }
+  /** Blogs new to the directory, newest first. */
+  newBlogs: DiscoverSite[]
+  readers: ReaderCandidate[]
+}
+
+/**
+ * One page of Discover's Articles (`/api/v1/public/discover/articles`): the newest posts, and on
+ * the first page the week's recommended ones, which are never paged since their counts move.
+ */
+export type ArticlesData = {
+  recommended: DiscoverPost[]
+  posts: DiscoverPost[]
+  next: string | null
+  languages: { lang: string; count: number }[]
+}
+
+/** Discover's Readers (`/api/v1/public/discover/readers`). */
+export type ReadersData = { readers: ReaderCandidate[] }

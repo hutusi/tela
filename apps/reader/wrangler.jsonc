@@ -14,7 +14,8 @@
   "observability": { "enabled": true },
   // The SPA's static assets answer every other path for free, without running the Worker; a
   // path with no asset is the app itself. The Worker runs first only where it has work to do:
-  // "/" is the front page it renders for visitors (ADR 0035), and exactly "/", never "/*".
+  // "/" is the front page it renders for visitors (ADR 0035), and exactly "/", never "/*";
+  // Discover's tabs are listed one by one for the same reason, never "/discover/*" (ADR 0044).
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
@@ -26,6 +27,9 @@
       "/avatar/*",
       "/robots.txt",
       "/discover",
+      "/discover/articles",
+      "/discover/blogs",
+      "/discover/readers",
       "/s/*",
       "/@*",
       "/about",

@@ -428,6 +428,110 @@ it("reads the front page's edition and checks a handle, on D1", async () => {
   expect(await handle.json()).toEqual({ handle: 'front', status: 'available', suggestion: 'front' })
 })
 
+it("reads Discover's week, articles and readers, on D1", async () => {
+  const { db, call } = stack()
+  const now = Date.now()
+  const hour = 60 * 60 * 1000
+  const [anna, boris, cleo] = ['workers-disc-anna01', 'workers-disc-boris1', 'workers-disc-cleo01']
+  // Forty posts, three to an hour: 34 on a blog about tech, 6 on another.
+  const posts = Array.from({ length: 40 }, (_, i) => i + 1)
+  await db.batch([
+    bumpSeq(db),
+    db.run(sql`insert into sites (id, home_url, title, listing, primary_lang, created_at, updated_at, seq)
+      values (701, 'https://disc1.example', 'Disc 1', 'listed', 'en', ${now - hour}, 0, ${currentSeq}),
+        (702, 'https://disc2.example', 'Disc 2', 'featured', 'ja', ${now}, 0, ${currentSeq})`),
+    db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at, updated_at, seq)
+      values (701, 701, 'https://disc1.example/feed', 'disc1.example', 0, 0, 0, ${currentSeq}),
+        (702, 702, 'https://disc2.example/feed', 'disc2.example', 0, 0, 0, ${currentSeq})`),
+    db.run(sql`insert into site_topics (site_id, topic) values (701, 'tech')`),
+    db.run(sql`insert into articles (id, feed_id, dedup_key, title, source_lang, fetched_at, sort_at, seq)
+      select 7000 + value, case when value <= 34 then 701 else 702 end, 'disc' || value,
+        'Disc post ' || value, case when value <= 34 then 'en' else 'ja' end, ${now},
+        ${now} - (value / 3) * ${hour}, ${currentSeq}
+      from json_each(${JSON.stringify(posts)})`),
+    db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+      select value, value, value || '@x.test', 1, 0, 0 from json_each(${JSON.stringify([anna, boris, cleo])})`),
+    db.run(sql`insert into profiles (user_id, handle, display_name, public_subscriptions, created_at,
+        updated_at, seq)
+      values (${anna}, 'discanna', 'Anna', 0, 0, 0, ${currentSeq}),
+        (${boris}, 'discboris', 'Boris', 0, 0, 0, ${currentSeq}),
+        (${cleo}, 'disccleo', 'Cleo', 1, 0, 0, ${currentSeq})`),
+    // Anna first, then Boris with a note, then Cleo: Anna's is an early find, before two others.
+    db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at, seq)
+      values (${anna}, 7003, null, ${now - hour}, ${now - hour}, ${currentSeq})`),
+    db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at, seq)
+      values (${boris}, 7003, 'read it on D1', ${now - hour}, ${now - hour}, ${currentSeq})`),
+    db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at, seq)
+      values (${cleo}, 7003, null, ${now - hour}, ${now - hour}, ${currentSeq})`),
+    db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at, seq)
+      values (${cleo}, 701, 0, 0, ${currentSeq})`),
+  ] as never)
+
+  type Post = {
+    article: { id: number; sortAt: number }
+    site: { id: number }
+    weekRecs: number
+    recommenders: string[]
+    note: { text: string; person: { handle: string } } | null
+  }
+  type Reader = {
+    id: string
+    sites: number[] | null
+    recs: [number, number][]
+    early: { others: number; article: { id: number } } | null
+    sample: { note: string; article: { id: number } } | null
+  }
+  const json = async <T>(path: string) => {
+    const res = await call(`/api/v1/public/discover${path}`)
+    expect(res.status).toBe(200)
+    return (await res.json()) as T
+  }
+
+  // The week: json_group_array and json_object per post, and the edition's nested seeks.
+  const week = await json<{
+    recommended: Post[]
+    edition: { span: string; posts: Post[] }
+    newBlogs: { id: number; topics: string[] }[]
+    readers: Reader[]
+  }>('/week')
+  const top = week.recommended.find((p) => p.article.id === 7003)
+  expect(top).toMatchObject({
+    weekRecs: 3,
+    recommenders: [cleo, boris, anna],
+    note: { text: 'read it on D1', person: { handle: 'discboris' } },
+  })
+  expect(week.edition.span).toBe('week')
+  expect(week.newBlogs.find((s) => s.id === 701)?.topics).toEqual(['tech'])
+  expect(week.readers.find((r) => r.id === anna)?.early).toMatchObject({ others: 2 })
+
+  // Articles: the row-value cursor across posts that share an hour.
+  const first = await json<{ posts: Post[]; next: string | null; recommended: Post[] }>(
+    '/articles?topic=tech',
+  )
+  expect(first.posts).toHaveLength(30)
+  expect(first.recommended.map((p) => p.article.id)).toEqual([7003])
+  const second = await json<{ posts: Post[]; next: string | null; recommended: Post[] }>(
+    `/articles?topic=tech&cursor=${encodeURIComponent(first.next ?? '')}`,
+  )
+  expect(second.recommended).toEqual([])
+  expect(second.next).toBeNull()
+  const seen = [...first.posts, ...second.posts].map((p) => p.article.id)
+  const expected = posts
+    .filter((v) => v <= 34)
+    .sort((x, y) => Math.floor(x / 3) - Math.floor(y / 3) || y - x)
+    .map((v) => 7000 + v)
+  expect(seen).toEqual(expected)
+
+  // Readers: the window functions and the CTE, keyed through json_each.
+  const { readers } = await json<{ readers: Reader[] }>('/readers')
+  const by = (id: string) => readers.find((r) => r.id === id)
+  expect(by(anna)?.early).toMatchObject({ others: 2, article: { id: 7003 } })
+  expect(by(anna)?.recs).toEqual([[7003, 701]])
+  expect(by(anna)?.sites).toBeNull()
+  expect(by(boris)?.sample).toMatchObject({ note: 'read it on D1', article: { id: 7003 } })
+  expect(by(cleo)?.sites).toEqual([701])
+})
+
 it("joins with a code, signs in, and shows on the inviter's list, on D1", async () => {
   const { db, mail, call, codeFor, cookiesOf } = stack()
   // A member, made by the operator, who makes a code: the five are counted in one insert…select.

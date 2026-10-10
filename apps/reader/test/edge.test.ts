@@ -7,7 +7,14 @@ import { sql } from 'drizzle-orm'
 import { createTestApi, signedIn, type TestApi } from '../../api/test/helpers'
 import { detectLocale } from '../src/i18n'
 import { type PublicRoute, publicRoute, renderPublicPage } from '../src/ssr'
-import type { FrontData } from '../src/views/types'
+import type {
+  ArticlesData,
+  DiscoverPost,
+  FrontData,
+  ReaderCandidate,
+  ReadersData,
+  WeekData,
+} from '../src/views/types'
 import { createEdge, type EdgeCache, type PublicPages } from '../worker/edge'
 
 const KEY = 'a'.repeat(32)
@@ -361,12 +368,13 @@ describe('public pages', () => {
 
   test('render into the SPA shell with their data handed over, and come from the cache after', async () => {
     await listedBlog(1, 'Garden Notes')
-    const res = await page('/discover')
+    const res = await page('/discover/blogs')
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toContain('text/html')
     expect(res.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
     const html = await res.text()
-    expect(html).toContain('<title>Discover · Tela</title>')
+    expect(html).toContain('<title>Blogs · Discover · Tela</title>')
+    expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*data-testid="discover-tab-blogs"/)
     expect(html).toMatch(/<div id="root">.*Garden Notes.*<\/div><script id="tela-data"/s)
     expect(html).toContain('/assets/index-abc123.js')
     // The shell's own noindex is for the app; a public page is indexed as the edge's header says.
@@ -374,10 +382,11 @@ describe('public pages', () => {
     const handed = JSON.parse(
       html.match(/<script id="tela-data" type="application\/json">(.*?)<\/script>/s)?.[1] ?? '',
     )
+    // The Blogs page moved to `/discover/blogs`; its endpoint stayed where it was (ADR 0044).
     expect(handed.path).toBe('/api/v1/public/discover')
     expect(handed.body.sites[0].title).toBe('Garden Notes')
 
-    await page('/discover?utm_source=x')
+    await page('/discover/blogs?utm_source=x')
     expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/'))).toEqual([
       '/api/v1/public/discover',
     ])
@@ -388,26 +397,26 @@ describe('public pages', () => {
     const pager = (html: string) => html.match(/data-testid="discover-pager".*?<\/nav>/s)?.[0] ?? ''
     const cards = (html: string) => (html.match(/data-testid="site-card"/g) ?? []).length
 
-    const one = await (await page('/discover')).text()
+    const one = await (await page('/discover/blogs')).text()
     expect(cards(one)).toBe(60)
     expect(pager(one)).toContain('Page 1 of 2')
-    expect(pager(one)).toContain('href="/discover?page=2"')
+    expect(pager(one)).toContain('href="/discover/blogs?page=2"')
     expect(pager(one)).not.toContain('Previous')
 
-    const two = await (await page('/discover?page=2')).text()
+    const two = await (await page('/discover/blogs?page=2')).text()
     expect(cards(two)).toBe(1)
     expect(two).toContain('Blog 61')
     expect(pager(two)).toContain('Page 2 of 2')
-    expect(pager(two)).toContain('href="/discover"')
+    expect(pager(two)).toContain('href="/discover/blogs"')
     expect(pager(two)).not.toContain('Next')
   })
 
   test("render in the reader's language, cached apart", async () => {
     await listedBlog(1, 'Garden Notes')
-    const zh = await (await page('/discover', { cookie: 'tela_locale=zh-Hans' })).text()
+    const zh = await (await page('/discover/blogs', { cookie: 'tela_locale=zh-Hans' })).text()
     expect(zh).toContain('<html lang="zh-Hans"')
-    expect(zh).toContain('发现')
-    const en = await (await page('/discover')).text()
+    expect(zh).toContain('<title>博客 · 发现 · Tela</title>')
+    const en = await (await page('/discover/blogs')).text()
     expect(en).toContain('<html lang="en"')
     expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/'))).toHaveLength(2)
   })
@@ -569,7 +578,7 @@ describe('public pages', () => {
     expect(privacy).toMatch(/<meta name="description" content="Tela keeps what it needs/)
     expect(privacy).toContain('id="cookies"')
     expect(privacy).toContain('href="#cookies"')
-    expect(privacy).toContain('Last updated 4 October 2026')
+    expect(privacy).toContain('Last updated 10 October 2026')
     expect(apiCalls).toEqual([])
     // Three pages, once each: the second visit to Privacy came from the cache.
     expect(cache.size).toBe(3)
@@ -627,7 +636,7 @@ describe('public pages', () => {
     expect(zh).toContain('<html lang="zh-Hans"')
     expect(zh).toContain('<title>条款 · Tela</title>')
     expect(zh).toContain('id="writers"')
-    expect(zh).toContain('最后更新：2026年10月4日')
+    expect(zh).toContain('最后更新：2026年10月10日')
     const en = await (await page('/terms')).text()
     expect(en).toContain('<html lang="en"')
     expect(en).toContain('<title>Terms · Tela</title>')
@@ -639,11 +648,11 @@ describe('public pages', () => {
     const hant = await (await page('/privacy', { 'accept-language': 'zh-TW,zh;q=0.8' })).text()
     expect(hant).toContain('<html lang="zh-Hant"')
     expect(hant).toContain('<title>隱私 · Tela</title>')
-    expect(hant).toContain('最後更新：2026年10月4日')
+    expect(hant).toContain('最後更新：2026年10月10日')
     const fr = await (await page('/privacy', { cookie: 'tela_locale=fr' })).text()
     expect(fr).toContain('<html lang="fr"')
     expect(fr).toContain('<title>Confidentialité · Tela</title>')
-    expect(fr).toContain('Dernière mise à jour : 4 octobre 2026')
+    expect(fr).toContain('Dernière mise à jour : 10 octobre 2026')
     expect(fr).toContain('id="cookies"')
   })
 
@@ -854,6 +863,250 @@ describe('the front page (ADR 0035)', () => {
     } finally {
       errors.mockRestore()
     }
+  })
+})
+
+/** A post on Discover, of blog `siteId` (whose feed has the same id), as tela-api gives it. */
+function discoverPost(id: number, siteId: number, over: Partial<DiscoverPost> = {}): DiscoverPost {
+  return {
+    article: {
+      id,
+      feedId: siteId,
+      url: `https://blog${siteId}.example/${id}`,
+      title: `Post ${id}`,
+      author: null,
+      publishedAt: 0,
+      fetchedAt: 0,
+      sortAt: 0,
+      sourceLang: 'en',
+      excerpt: `What post ${id} is about.`,
+      contentKey: null,
+      wordCount: 900,
+      readingMinutes: 4,
+      extractState: 'done',
+      likeCount: 0,
+      recommendCount: 0,
+      seq: 1,
+    },
+    site: {
+      id: siteId,
+      title: `Blog ${siteId}`,
+      homeUrl: `https://blog${siteId}.example`,
+      faviconKey: null,
+      primaryLang: 'en',
+      claimed: false,
+    },
+    weekRecs: 0,
+    recommenders: [],
+    note: null,
+    ...over,
+  }
+}
+
+function candidate(handle: string, over: Partial<ReaderCandidate> = {}): ReaderCandidate {
+  return {
+    id: `id-${handle}-0000`,
+    handle,
+    displayName: null,
+    avatar: null,
+    bio: null,
+    recs: [],
+    sites: null,
+    recent: 0,
+    withNote: 0,
+    total: 0,
+    early: null,
+    sample: null,
+    ...over,
+  }
+}
+
+const anna = { id: 'id-anna-0000', handle: 'anna', displayName: 'Anna K', avatar: null }
+
+/** This week as tela-api gives it: three posts recommended this week, so they lead. */
+const WEEK: WeekData = {
+  since: 0,
+  recommended: [
+    discoverPost(11, 1, {
+      weekRecs: 5,
+      recommenders: [anna.id],
+      note: { text: 'Read it twice.', person: anna },
+    }),
+    discoverPost(12, 2, { weekRecs: 3 }),
+    discoverPost(13, 3, { weekRecs: 2 }),
+  ],
+  edition: { span: 'week', posts: [discoverPost(14, 4), discoverPost(15, 5)] },
+  newBlogs: [
+    {
+      id: 6,
+      title: 'Fresh Blog',
+      homeUrl: 'https://fresh.example',
+      description: 'Just listed.',
+      faviconKey: null,
+      primaryLang: 'en',
+      claimed: false,
+      readerCount: null,
+      feedId: 6,
+      latestTitle: null,
+      latestAt: null,
+      postsLast30d: 2,
+      topics: [],
+    },
+  ],
+  readers: [candidate('reader_a', { recent: 2, total: 2 })],
+}
+
+describe("Discover's tabs (ADR 0044)", () => {
+  let asked: string[]
+  /** tela-web with tela-api's new Discover endpoints answering `answers`, and the rest as it does. */
+  function tabsEdge(answers: Record<string, () => Response>) {
+    asked = []
+    return createEdge({
+      blobs,
+      api: {
+        fetch: async (req) => {
+          const url = new URL(req.url)
+          apiCalls.push(url.pathname)
+          asked.push(url.pathname + url.search)
+          const answer = answers[url.pathname]
+          return answer ? answer() : api.app.fetch(req)
+        },
+      },
+      assets: {
+        fetch: async () => new Response(TEMPLATE, { headers: { 'content-type': 'text/html' } }),
+      },
+      pages: pages as unknown as PublicPages,
+      cache,
+      fetchImage: async () => new Response('nope', { status: 404 }),
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+    })
+  }
+  const visit = (e: ReturnType<typeof createEdge>, path: string, headers = {}) =>
+    e.fetch(new Request(`${ORIGIN}${path}`, { headers }))
+  const handover = (html: string) =>
+    JSON.parse(
+      html.match(/<script id="tela-data" type="application\/json">(.*?)<\/script>/s)?.[1] ?? '',
+    )
+
+  test('This week is Discover: rendered with its answer handed over, and the cache after', async () => {
+    const edge = tabsEdge({ '/api/v1/public/discover/week': () => Response.json(WEEK) })
+    const res = await visit(edge, '/discover')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('<title>Discover · Tela</title>')
+    expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*data-testid="discover-tab-week"/)
+    expect(html).toContain('href="/discover/articles"')
+    // Three recommended posts lead the week, the most recommended first, its note beside it.
+    expect(html).toMatch(/data-testid="week-span" data-span="recommended"/)
+    expect(html).toMatch(/data-testid="week-lead" data-article-id="11" data-site-id="1"/)
+    expect(html).toContain('“Read it twice.”')
+    expect(html).toContain('5 readers recommended it this week.')
+    expect(html.match(/data-testid="discover-post"/g)).toHaveLength(4)
+    expect(html).toContain('Recommended by 3 readers this week')
+    expect(html).toContain('Fresh Blog')
+    expect(html).toMatch(/data-testid="reader-card" data-handle="reader_a"/)
+    // A visitor's Subscribe and Follow sign in first, and come back here.
+    expect(html).toContain(`href="/login?next=${encodeURIComponent('/discover')}"`)
+    expect(handover(html)).toEqual({ path: '/api/v1/public/discover/week', body: WEEK })
+
+    // A campaign's query string is the same page, from the cache.
+    const again = await (await visit(edge, '/discover?utm_source=x')).text()
+    expect(again).toContain('data-testid="week-lead"')
+    expect(again).not.toContain('utm_source')
+    expect(asked).toEqual(['/api/v1/public/discover/week'])
+  })
+
+  test('an address from before the tabs is a permanent redirect to Blogs, whole, asking tela-api nothing', async () => {
+    const edge = tabsEdge({})
+    for (const cookie of [null, 'tela.session_token=abc.def']) {
+      const res = await visit(edge, '/discover?topic=tech&door=login', cookie ? { cookie } : {})
+      expect(res.status).toBe(301)
+      expect(res.headers.get('location')).toBe('/discover/blogs?topic=tech&door=login')
+      expect(res.headers.get('cache-control')).toBe('public, max-age=86400')
+    }
+    // HEAD too: link checkers and `curl -I` ask that way (OPERATIONS.md's check does).
+    const head = await edge.fetch(new Request(`${ORIGIN}/discover?topic=tech`, { method: 'HEAD' }))
+    expect(head.status).toBe(301)
+    expect(head.headers.get('location')).toBe('/discover/blogs?topic=tech')
+    expect(apiCalls).toEqual([])
+    expect(cache.size).toBe(0)
+  })
+
+  test('no week from tela-api, a 404 included, is the plain shell, never kept', async () => {
+    for (const status of [404, 503]) {
+      const edge = tabsEdge({
+        '/api/v1/public/discover/week': () => new Response('no', { status }),
+      })
+      const res = await visit(edge, '/discover')
+      expect(res.status).toBe(200)
+      expect(await res.text()).toBe(TEMPLATE)
+      expect(res.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
+    }
+    expect(cache.size).toBe(0)
+  })
+
+  test('Articles reached by a cursor links to the page after it, and each sort is a page of its own', async () => {
+    const answer: ArticlesData = {
+      recommended: [discoverPost(21, 1, { weekRecs: 4 })],
+      posts: [
+        discoverPost(22, 2, {
+          note: { text: 'A quiet one.', person: anna },
+          recommenders: [anna.id],
+        }),
+        discoverPost(21, 1, { weekRecs: 4 }),
+      ],
+      next: '1000:5',
+      languages: [{ lang: 'en', count: 2 }],
+    }
+    const edge = tabsEdge({ '/api/v1/public/discover/articles': () => Response.json(answer) })
+    const html = await (await visit(edge, '/discover/articles?sort=new&cursor=2000:9')).text()
+    expect(html).toContain('<title>Articles · Discover · Tela</title>')
+    const more = html.match(/<a [^>]*data-testid="articles-more"[^>]*>/)?.[0] ?? ''
+    expect(more).toContain('href="/discover/articles?sort=new&amp;cursor=1000%3A5"')
+    expect(html).toMatch(/aria-current="page"[^>]*data-testid="articles-sort-new"/)
+    // The newest alone, in the stream's order; the note as its reader wrote it.
+    const listed = [...html.matchAll(/data-testid="discover-post" data-article-id="(\d+)"/g)]
+    expect(listed.map((m) => m[1])).toEqual(['22', '21'])
+    expect(html).toContain('“A quiet one.”')
+    expect(html).toContain('— Anna K')
+    expect(handover(html).path).toBe('/api/v1/public/discover/articles?cursor=2000%3A9')
+
+    // The most recommended first, then the stream, each post once: the same answer, another page.
+    const recs = await (await visit(edge, '/discover/articles')).text()
+    const ranked = [...recs.matchAll(/data-testid="discover-post" data-article-id="(\d+)"/g)]
+    expect(ranked.map((m) => m[1])).toEqual(['21', '22'])
+    await visit(edge, '/discover/articles?sort=new&cursor=2000:9')
+    expect(asked).toEqual([
+      '/api/v1/public/discover/articles?cursor=2000%3A9',
+      '/api/v1/public/discover/articles',
+    ])
+  })
+
+  test('Readers for a visitor shows only the groups that need nothing of theirs', async () => {
+    const early = discoverPost(31, 1)
+    const pool: ReadersData = {
+      readers: [
+        // Would be "blogs" for a member who reads blog 1; a visitor has no blogs.
+        candidate('blogs_only', { recs: [[31, 1]], total: 1 }),
+        candidate('active_one', { recent: 1, total: 1 }),
+        candidate('note_writer', { recent: 2, withNote: 2, total: 2 }),
+        candidate('early_one', {
+          early: { article: early.article, site: early.site, others: 3 },
+          recent: 1,
+          total: 1,
+        }),
+      ],
+    }
+    const edge = tabsEdge({ '/api/v1/public/discover/readers': () => Response.json(pool) })
+    const html = await (await visit(edge, '/discover/readers')).text()
+    expect(html).toContain('<title>Readers · Discover · Tela</title>')
+    const groups = [...html.matchAll(/data-testid="reader-group" data-group="(\w+)"/g)]
+    expect(groups.map((m) => m[1])).toEqual(['early', 'notes', 'active'])
+    expect(html).toContain('Recommended “Post 31” before 3 other readers did')
+    expect(html).toContain('Wrote a note with all 2 recommendations this month')
+    // In the pool handed over, and nowhere on the page.
+    expect(html.split('<script id="tela-data"')[0]).not.toContain('blogs_only')
+    expect(html).toContain(`href="/login?next=${encodeURIComponent('/discover/readers')}"`)
   })
 })
 

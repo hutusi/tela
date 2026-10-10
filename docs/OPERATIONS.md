@@ -182,6 +182,25 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        - `/discover` shows no count below three;
        - `curl -sI https://telaread.com/manifest.webmanifest` is `application/manifest+json`;
        - a code requested from a French browser arrives in French.
+   - Discover's four tabs (ADR 0044, migration 0008) are additive and keep protocol 2, with no
+     `MIN_CLIENT` bump. The migration only adds two indexes (`articles_sort_idx`,
+     `recommendations_created_idx`). Apply it, then deploy tela-api, then tela-web (tela-jobs is
+     unchanged):
+     - tela-api before tela-web, because the new shell reads `/api/v1/public/discover/week`,
+       `/articles` and `/readers`. A tela-web out first shows visitors the plain shell at those
+       paths (never cached; the edge treats tela-api's 404 there as no answer) and members empty
+       tabs and an empty "Readers to follow", until tela-api is out.
+     - **Either Worker may go back alone.** An older tela-api answers the new tabs with nothing;
+       an older tela-web shows the old one-page Discover. `/api/v1/following` keeps answering
+       `suggested: []` for shells cached before the tabs.
+     - After deploy, check that:
+       - `/discover` shows This week to a visitor, and `/discover/blogs` shows no count below
+         three;
+       - `curl -sI 'https://telaread.com/discover?topic=tech'` is a 301 to
+         `/discover/blogs?topic=tech`;
+       - `/discover/readers` as a visitor shows no "Recommended posts you liked too" or "Read the
+         blogs you read" group;
+       - Following's "Readers to follow" lists the same people as Discover's Readers.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -377,7 +396,7 @@ is tela-api.
 - **Images:** `/img/<contentKey>/<i>` fetches only what a content object names, over
   `global_fetch_strictly_public`. A broken image is the origin's answer, which the Worker logs
   show; nothing is signed, so there is no secret to rotate.
-- **Public pages** (the front page `/`, Discover, `/s/:id`, `/@handle`) are rendered here and
+- **Public pages** (the front page `/`, Discover's four tabs, `/s/:id`, `/@handle`) are rendered here and
   kept in each colo's cache for five minutes, keyed by locale and by the build. So a deploy never
   serves a page that names scripts it removed, and a blog's change shows within five minutes.
   There is nothing to purge. `/` is rendered only for a request without `tela.session_token`; a

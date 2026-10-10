@@ -22,7 +22,7 @@ test.describe('without JavaScript', () => {
       await expect(page.locator('#tela-data')).toHaveCount(0)
       await expect(page.getByTestId('info-page')).toBeVisible()
       await expect(page.getByTestId('info-short')).toBeVisible()
-      await expect(page.getByTestId('info-updated')).toHaveText('Last updated 4 October 2026')
+      await expect(page.getByTestId('info-updated')).toHaveText('Last updated 10 October 2026')
       await expect(page).toHaveTitle(title)
       await expect(
         page.getByTestId('site-footer').getByRole('link', { name: 'Privacy' }),
@@ -72,7 +72,7 @@ test.describe('for a guest', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
     await expect(page).toHaveTitle('条款 · Tela')
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('条款')
-    await expect(page.getByTestId('info-updated')).toHaveText('最后更新：2026年10月4日')
+    await expect(page.getByTestId('info-updated')).toHaveText('最后更新：2026年10月10日')
     await expect(page.getByTestId('info-tabs').getByRole('link', { name: '隐私' })).toBeVisible()
 
     await page.getByTestId('info-toc').getByRole('link', { name: '作者的作品' }).click()

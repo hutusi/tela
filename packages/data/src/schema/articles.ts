@@ -61,6 +61,11 @@ export const articles = sqliteTable(
     uniqueIndex('articles_feed_dedup_idx').on(t.feedId, t.dedupKey),
     index('articles_feed_seq_idx').on(t.feedId, t.seq),
     index('articles_feed_sort_idx').on(t.feedId, t.sortAt, t.id),
+    /**
+     * Every public post newest first, across feeds: Discover's Articles pages by `(sort_at, id)`
+     * (ADR 0044). `articles_feed_sort_idx` serves one feed's newest, not the whole directory's.
+     */
+    index('articles_sort_idx').on(t.sortAt, t.id),
     index('articles_content_key_idx').on(t.contentKey),
     index('articles_fetched_at_idx').on(t.fetchedAt),
     index('articles_extract_state_idx').on(t.extractState, t.fetchedAt),

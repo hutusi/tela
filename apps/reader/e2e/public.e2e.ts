@@ -18,7 +18,20 @@ test.describe('for a visitor', () => {
     expect(res?.headers()['x-robots-tag']).toBe('noindex, nofollow')
     await expect(page.locator('meta[name="robots"]')).toHaveCount(0)
     await expect(page).toHaveTitle('Discover · Tela')
+    // Discover opens on This week (ADR 0044), its tabs links that work without a script.
+    await expect(page.getByTestId('discover-tab-week')).toHaveAttribute('aria-current', 'page')
+    await expect(page.getByTestId('week-span')).toHaveAttribute(
+      'data-span',
+      /^(recommended|week|latest)$/,
+    )
+    // Followed by address: without a script, a click waits on frames that never come.
+    await expect(page.getByTestId('discover-tab-blogs')).toHaveAttribute('href', '/discover/blogs')
+    await page.goto('/discover/blogs')
+    await expect(page).toHaveTitle('Blogs · Discover · Tela')
     await expect(page.getByTestId('topic-chips')).toBeVisible()
+    // An address from before the tabs is the Blogs page now, its query kept.
+    await page.goto('/discover?topic=tech')
+    await expect(page).toHaveURL(/\/discover\/blogs\?topic=tech$/)
     // The visitor's header (ADR 0035): Log in and Join are links, so they work without a script.
     const banner = page.getByRole('banner')
     await expect(banner.getByRole('link', { name: 'Log in', exact: true })).toHaveAttribute(
@@ -106,6 +119,7 @@ test.describe('discover and claim', () => {
     }
 
     await page.getByRole('link', { name: 'Discover' }).first().click()
+    await page.getByTestId('discover-tab-blogs').click()
     const card = page.locator(`[data-testid="site-card"][data-site-id="${siteId}"]`)
     await expect(card).toBeVisible()
     await expect(card.getByTestId('claimed-badge')).toBeVisible()
@@ -126,16 +140,19 @@ test.describe('discover and claim', () => {
   test('the site page lets the owner set topics, and Discover filters by them', async ({
     page,
   }) => {
-    await page.goto('/discover')
-    await page.getByTestId('site-card').first().locator('a[href^="/s/"]').first().click()
+    await page.goto('/discover/blogs')
+    // The member's own blog, claimed above: featured blogs sort before it, whichever specs ran.
+    const own = page.getByTestId('site-card').filter({ has: page.getByTestId('claimed-badge') })
+    await own.first().locator('a[href^="/s/"]').first().click()
     await expect(page).toHaveURL(/\/s\/\d+$/)
     await expect(page.getByTestId('site-articles')).toBeVisible()
     const form = page.getByTestId('topics-form')
     await form.getByLabel('Tech').check()
     await form.getByRole('button', { name: 'Save' }).click()
-    await expect(page.locator('a[href="/discover?topic=tech"]')).toBeVisible()
+    await expect(page.locator('a[href="/discover/blogs?topic=tech"]')).toBeVisible()
 
     await page.getByRole('link', { name: 'Discover' }).first().click()
+    await page.getByTestId('discover-tab-blogs').click()
     await page.getByTestId('topic-chips').getByRole('link', { name: 'Tech' }).click()
     await expect(page).toHaveURL(/topic=tech/)
     await expect(page.getByTestId('site-card')).toHaveCount(1)
@@ -153,7 +170,7 @@ test.describe('discover and claim', () => {
   })
 
   test('a post on a blog page opens in the reader', async ({ page }) => {
-    await page.goto('/discover')
+    await page.goto('/discover/blogs')
     await page.getByTestId('site-card').first().locator('a[href^="/s/"]').first().click()
     const post = page.getByTestId('site-articles').getByRole('link').first()
     const title = (await post.textContent())?.trim() ?? ''
@@ -360,10 +377,11 @@ test.describe('Discover past one page', () => {
         },
       })
     })
-    // Into Discover from inside the app, so every page comes through the route above, not the
-    // edge's handover.
+    // Into Discover's Blogs from inside the app, so every page comes through the route above, not
+    // the edge's handover.
     await page.goto('/about')
     await page.getByRole('banner').getByRole('link', { name: 'Discover' }).click()
+    await page.getByTestId('discover-tab-blogs').click()
     const cards = page.getByTestId('site-card')
     const pager = page.getByTestId('discover-pager')
     await expect(cards).toHaveCount(60)

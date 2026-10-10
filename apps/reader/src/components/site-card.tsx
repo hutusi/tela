@@ -17,10 +17,13 @@ export function SiteCard({
   site,
   member,
   next,
+  label,
 }: {
   site: SiteCardData
   member?: MemberControls | undefined
   next: string
+  /** A word above the card, as This week's "New" (never how the blog was listed, ADR 0041). */
+  label?: string | undefined
 }) {
   const t = useTranslations('discover')
   const ts = useTranslations('site')
@@ -32,6 +35,11 @@ export function SiteCard({
       data-testid="site-card"
       data-site-id={site.id}
     >
+      {label ? (
+        <div className="text-[10.5px] font-semibold tracking-[0.08em] text-muted uppercase">
+          {label}
+        </div>
+      ) : null}
       <div className="flex items-center gap-3">
         <SiteAvatar id={site.id} title={title} faviconKey={site.faviconKey} size={40} />
         <div className="min-w-0 flex-1">

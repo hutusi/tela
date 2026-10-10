@@ -11,7 +11,7 @@ import { forgetPublic } from './lib/use-public'
 import { AddPage } from './pages/add'
 import { ClaimPage, ClaimSitePage } from './pages/claim'
 import { DashboardPage } from './pages/dashboard'
-import { DiscoverPage } from './pages/discover'
+import { ArticlesPage, BlogsPage, DiscoverHome, ReadersPage } from './pages/discover'
 import { FollowingPage } from './pages/following'
 import { InfoPage } from './pages/info'
 import { JoinPage } from './pages/join'
@@ -279,7 +279,10 @@ function Routed() {
                           </Members>
                         }
                       />
-                      <Route path="/discover" element={<DiscoverPage />} />
+                      <Route path="/discover" element={<DiscoverHome />} />
+                      <Route path="/discover/articles" element={<ArticlesPage />} />
+                      <Route path="/discover/blogs" element={<BlogsPage />} />
+                      <Route path="/discover/readers" element={<ReadersPage />} />
                       <Route path="/writers" element={<WritersPage />} />
                       <Route
                         path="/following"

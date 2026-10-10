@@ -1,7 +1,8 @@
 # 0031 — Members follow members; what others do arrives by RPC, not sync
 
 Status: accepted (2026-09-30). Amends 0025: three mutations and one synced table join the
-protocol.
+protocol. Amended by 0044 (2026-10-10): suggestions follow one rule on Discover and Following,
+matched on the device.
 
 ## Context
 
@@ -72,6 +73,8 @@ newer shell.
 **Suggestions use only what is already public**: members who recommended posts from blogs you
 read, members whose public subscriptions overlap yours, and members who recommended anything in
 the last thirty days. Nobody is suggested because of a private subscription or a private like.
+(Amended by 0044: the same three signals, with shared likes, early finds and notes, now place each
+reader in one group, and the device matches the member's own side.)
 
 ## Consequences
 

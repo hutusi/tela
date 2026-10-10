@@ -228,8 +228,85 @@
     "retry": "Relancer la traduction"
   },
   "discover": {
-    "title": "Des blogs indépendants, dans toutes les langues.",
-    "intro": "Des blogs et des sites personnels qui publient un flux, choisis par Tela, par leurs auteurs et par les lecteurs. Abonnez-vous en un clic ; Tela traduit au fil de votre lecture.",
+    "title": "Découvrir",
+    "intro": "Des articles, des blogs et des lecteurs hors de vos abonnements, dans toutes les langues.",
+    "tabs": {
+      "week": "Cette semaine",
+      "articles": "Articles",
+      "blogs": "Blogs",
+      "readers": "Lecteurs"
+    },
+    "minutes": "{n} min",
+    "week": {
+      "span": {
+        "recommended": "Les plus recommandés cette semaine",
+        "week": "Nouveautés de la semaine",
+        "latest": "Les derniers articles de l’annuaire"
+      },
+      "allArticles": "Tous les articles →",
+      "allBlogs": "Tous les blogs →",
+      "allReaders": "Tous les lecteurs →",
+      "read": "Lire",
+      "readersRecommended": "{n, plural, one {# lecteur l’a recommandé} other {# lecteurs l’ont recommandé}} cette semaine.",
+      "newBlogs": "Nouveaux dans l’annuaire",
+      "newLabel": "Nouveau",
+      "readersToFollow": "Lecteurs à suivre",
+      "sampleOn": "sur <b>{title}</b>",
+      "footer": {
+        "recommended": "Voilà la semaine, faite de ce que les lecteurs ont recommandé ces sept derniers jours. Les blogs de vos abonnements n’y figurent pas.",
+        "edition": "Personne n’a encore assez recommandé cette semaine pour établir un classement : voici donc les articles les plus récents de l’annuaire. Les blogs de vos abonnements n’y figurent pas."
+      },
+      "empty": "Rien de nouveau cette semaine en dehors des blogs que vous lisez."
+    },
+    "articles": {
+      "sortLabel": "Ordre",
+      "sort": {
+        "recs": "Les plus recommandés",
+        "new": "Les plus récents"
+      },
+      "more": "Plus d’articles",
+      "empty": "Aucun article ne correspond. Essayez un autre thème ou une autre langue."
+    },
+    "reason": {
+      "followed": "{name}, que vous suivez, l’a recommandé",
+      "followedOthers": "{name}, que vous suivez, et {n, plural, one {# autre lecteur} other {# autres lecteurs}} l’ont recommandé",
+      "week": "Recommandé par {n, plural, one {# lecteur} other {# lecteurs}} cette semaine"
+    },
+    "noteBy": "— {name}",
+    "people": {
+      "intro": "Des suggestions tirées des articles que les lecteurs recommandent, des mots qu’ils écrivent et des blogs qu’ils montrent sur leur profil. Tela les rapproche de ce que vous aimez et lisez, sur votre appareil.",
+      "groups": {
+        "shared": "Recommandent aussi des articles que vous avez aimés",
+        "blogs": "Lisent les blogs que vous lisez",
+        "early": "Ont trouvé des articles avant les autres",
+        "notes": "Expliquent ce qu’ils recommandent",
+        "active": "Recommandent ces temps-ci"
+      },
+      "reasons": {
+        "shared": {
+          "one": "A aussi recommandé « {title} »",
+          "count": "A aussi recommandé {n, plural, one {# article que vous avez recommandé ou aimé} other {# articles que vous avez recommandés ou aimés}}"
+        },
+        "blogs": {
+          "recs": {
+            "one": "Recommande des articles de {blog}",
+            "count": "Recommande des articles de {n, plural, one {# blog} other {# blogs}} que vous lisez"
+          },
+          "reads": {
+            "one": "Lit aussi {blog}",
+            "count": "Lit {n, plural, one {# blog} other {# blogs}} que vous lisez"
+          }
+        },
+        "early": "A recommandé « {title} » avant {n, plural, one {# autre lecteur} other {# autres lecteurs}}",
+        "notes": {
+          "all": "A écrit un mot pour chacune de ses {n} recommandations ce mois-ci",
+          "some": "A écrit un mot pour {k} de ses {n} recommandations ce mois-ci"
+        },
+        "active": "A recommandé {n, plural, one {# article} other {# articles}} ce mois-ci"
+      },
+      "sample": "A recommandé <b>{title}</b> · {blog}",
+      "empty": "Aucun lecteur à suggérer pour l’instant. Ils apparaîtront ici dès que des lecteurs recommanderont des articles."
+    },
     "allTopics": "Tous",
     "language": "Langue",
     "allLanguages": "Toutes les langues",

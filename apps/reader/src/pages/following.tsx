@@ -2,27 +2,33 @@
  * `/following` (Tela v2): what the people the member follows recommended, liked and subscribed to.
  * Their activity is other members' rows, so it comes by RPC, a page of entries at a time behind a
  * cursor (ADR 0031); whom the member follows is their own synced rows, so the aside needs no
- * network. What a page fetched is held for the visit, so Back renders at once, and the first page
- * is asked for again behind it.
+ * network for them. What a page fetched is held for the visit, so Back renders at once, and the
+ * first page is asked for again behind it. The readers it suggests are Discover's (ADR 0044): the
+ * public pool, matched on the device by the same rule.
  */
 import { languageBadge } from '@tela/shared'
 import type { ArticleRow } from '@tela/sync'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { FollowButton } from '../components/follow-button'
 import { PersonAvatar } from '../components/person-avatar'
+import { ReasonDot, useReasonText } from '../components/reader-card'
 import { SiteAvatar } from '../components/site-avatar'
+import { READERS_PATH } from '../lib/discover-href'
 import { appendPage, mergeFirstPage } from '../lib/following-feed'
 import { displayHost, relativeTime, swatchColor } from '../lib/format'
 import { useMemberControls } from '../lib/member'
-import { readingPrefsOf } from '../lib/prefs'
+import { suggestReaders } from '../lib/suggest-readers'
 import { useTitle } from '../lib/title'
+import { useMine, useReading } from '../lib/use-discover'
+import { usePublic } from '../lib/use-public'
 import { apiJson } from '../store/api'
-import { useConfirmedFollowees, useNow, useReadingLang, useStore, useTables } from '../store/hooks'
+import { useConfirmedFollowees, useNow, useStore, useTables } from '../store/hooks'
 import { followedPeople } from '../store/selectors'
 import { useUi } from '../ui'
 import { PostLink } from '../views/post-link'
-import type { MemberControls, Person } from '../views/types'
+import type { MemberControls, Person, ReadersData, Reading } from '../views/types'
 
 type Tab = 'all' | 'recs' | 'likes'
 const TABS: Tab[] = ['all', 'recs', 'likes']
@@ -57,8 +63,8 @@ export type FeedItem =
     }
   | { kind: 'liked'; key: string; at: number; person: Person; count: number; posts: Post[] }
   | { kind: 'subscribed'; key: string; at: number; person: Person; count: number; sites: Site[] }
-type Suggested = Person & { bio: string | null }
-type FeedPage = { items: FeedItem[]; next: string | null; suggested: Suggested[] }
+/** tela-api still sends `suggested`, always empty, for shells from before ADR 0044. */
+type FeedPage = { items: FeedItem[]; next: string | null }
 
 type Feed = {
   status: 'loading' | 'ready' | 'failed'
@@ -66,19 +72,12 @@ type Feed = {
   view: string
   items: FeedItem[]
   next: string | null
-  suggested: Suggested[]
 }
 
 /** What each tab fetched this visit, by member, tab, language and whom they followed. */
 const held = new Map<string, Feed>()
 
-const loading = (view: string): Feed => ({
-  status: 'loading',
-  view,
-  items: [],
-  next: null,
-  suggested: [],
-})
+const loading = (view: string): Feed => ({ status: 'loading', view, items: [], next: null })
 
 function useFeed(tab: Tab, lang: string) {
   const { store } = useStore()
@@ -134,7 +133,7 @@ function useFeed(tab: Tab, lang: string) {
       }
       // The fresh first page over what is held, keeping the older pages loaded where they carry on.
       const merged = mergeFirstPage(kept?.status === 'ready' ? kept : null, page)
-      const next: Feed = { status: 'ready', view, ...merged, suggested: page.suggested }
+      const next: Feed = { status: 'ready', view, ...merged }
       held.set(key, next)
       setFeed(next)
     })
@@ -164,7 +163,7 @@ function useFeed(tab: Tab, lang: string) {
     setFeed(loading(view))
     void fetchPage(null).then((page) => {
       const next: Feed = page
-        ? { status: 'ready', view, ...page }
+        ? { status: 'ready', view, items: page.items, next: page.next }
         : { ...loading(view), status: 'failed' }
       if (page) held.set(asked, next)
       if (shown.current === asked) setFeed(next)
@@ -173,27 +172,49 @@ function useFeed(tab: Tab, lang: string) {
   return { feed, more, busy, retry }
 }
 
+/** How many readers the aside suggests. */
+const SUGGESTED = 5
+
+/**
+ * The readers to follow, by Discover's rule (ADR 0044): the public pool, matched against the
+ * member's own likes, recommendations and blogs, without whom they followed as the page opened,
+ * so a Follow from here keeps its row, showing Following.
+ */
+function useSuggested(reading: Reading) {
+  const pool = usePublic<ReadersData>(READERS_PATH)
+  const mine = useMine(reading)
+  const data = pool.status === 'ready' ? pool.data : null
+  return useMemo(
+    () => (data && mine ? suggestReaders(data.readers, mine).slice(0, SUGGESTED) : []),
+    [data, mine],
+  )
+}
+
 export function FollowingPage() {
   const t = useTranslations('following')
   const [search] = useSearchParams()
   const asked = search.get('tab')
   const tab: Tab = asked === 'recs' || asked === 'likes' ? asked : 'all'
   const { locale } = useUi()
-  const lang = useReadingLang(locale)
+  const reading = useReading(locale)
+  const { lang, never } = reading
   const tables = useTables()
   const { store } = useStore()
   const member = useMemberControls()
   const now = useNow()
   const { feed, more, busy, retry } = useFeed(tab, lang)
-  const never = readingPrefsOf(tables).never
   const people = followedPeople(tables, (id) => store.person(id))
+  const suggested = useSuggested(reading)
+  const reasonText = useReasonText()
   useTitle(t('title'))
 
   // The people this page shows: a follow from here is named by them until the pull comes.
   useEffect(() => {
-    store.rememberPeople(feed.suggested)
     store.rememberPeople(feed.items.map((i) => i.person))
   }, [feed, store])
+  useEffect(() => {
+    store.rememberPeople(suggested.map((s) => s.person))
+  }, [suggested, store])
 
   return (
     <main className="mx-auto grid w-full max-w-[1120px] flex-1 animate-fade grid-cols-1 items-start gap-12 px-4 pt-10 pb-24 md:px-12 md:pt-11 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-16">
@@ -289,73 +310,44 @@ export function FollowingPage() {
             ))
           )}
         </section>
-        {feed.suggested.length > 0 && member ? (
+        {suggested.length > 0 && member ? (
           <section className="flex flex-col gap-4" data-testid="readers-to-follow">
             <h2 className="m-0 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">
               {t('readersToFollow')}
             </h2>
-            {feed.suggested.map((p) => {
-              const on = member.isFollowing(p.id)
-              return (
-                <div
-                  key={p.id}
-                  className="flex items-start gap-3"
-                  data-testid="suggested-reader"
-                  data-handle={p.handle}
-                >
-                  <Link to={`/@${p.handle}`} className="hover:no-underline">
-                    <PersonAvatar
-                      handle={p.handle}
-                      displayName={p.displayName}
-                      avatar={p.avatar}
-                      size={32}
-                    />
+            {suggested.map(({ person: p, reason }) => (
+              <div
+                key={p.id}
+                className="flex items-start gap-3"
+                data-testid="suggested-reader"
+                data-handle={p.handle}
+              >
+                <Link to={`/@${p.handle}`} className="hover:no-underline">
+                  <PersonAvatar
+                    handle={p.handle}
+                    displayName={p.displayName}
+                    avatar={p.avatar}
+                    size={32}
+                  />
+                </Link>
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <Link to={`/@${p.handle}`} className="font-medium text-ink hover:underline">
+                    {p.displayName ?? `@${p.handle}`}
                   </Link>
-                  <div className="min-w-0 flex-1">
-                    <Link to={`/@${p.handle}`} className="font-medium text-ink hover:underline">
-                      {p.displayName ?? `@${p.handle}`}
-                    </Link>
-                    {p.bio ? (
-                      <div className="mt-0.5 line-clamp-2 text-[12.5px] leading-[1.4] text-ink-2">
-                        {p.bio}
-                      </div>
-                    ) : null}
-                  </div>
-                  <FollowButton person={p} on={on} member={member} small />
+                  <ReasonDot text={reasonText(reason, reading)} />
+                  {p.bio ? (
+                    <div className="line-clamp-2 text-[12.5px] leading-[1.4] text-ink-2">
+                      {p.bio}
+                    </div>
+                  ) : null}
                 </div>
-              )
-            })}
+                <FollowButton person={p} member={member} next="/following" small />
+              </div>
+            ))}
           </section>
         ) : null}
       </aside>
     </main>
-  )
-}
-
-function FollowButton({
-  person,
-  on,
-  member,
-  small = false,
-}: {
-  person: Person
-  on: boolean
-  member: MemberControls
-  small?: boolean
-}) {
-  const t = useTranslations('following')
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={() => member.setFollowing(person, !on)}
-      className={`shrink-0 rounded-full border font-medium whitespace-nowrap ${
-        small ? 'px-[11px] py-1 text-[12px]' : 'px-3.5 py-1.5 text-[13px]'
-      } ${on ? 'border-thumb text-ink-2' : 'border-ink bg-ink text-paper'}`}
-      data-testid="follow-suggested"
-    >
-      {on ? t('followingButton') : t('follow')}
-    </button>
   )
 }
 

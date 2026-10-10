@@ -228,8 +228,85 @@
     "retry": "重新翻譯"
   },
   "discover": {
-    "title": "獨立部落格，任何語言。",
-    "intro": "有訂閱源的部落格與個人網站，由 Tela、作者和讀者一起挑選。一鍵訂閱，Tela 邊讀邊翻譯。",
+    "title": "發現",
+    "intro": "訂閱之外的文章、部落格和讀者，不限語言。",
+    "tabs": {
+      "week": "本週",
+      "articles": "文章",
+      "blogs": "部落格",
+      "readers": "讀者"
+    },
+    "minutes": "{n} 分鐘",
+    "week": {
+      "span": {
+        "recommended": "本週最多推薦",
+        "week": "本週新文章",
+        "latest": "收錄部落格的最新文章"
+      },
+      "allArticles": "全部文章 →",
+      "allBlogs": "全部部落格 →",
+      "allReaders": "全部讀者 →",
+      "read": "閱讀",
+      "readersRecommended": "本週有 {n, plural, other {# 位讀者}}推薦了它。",
+      "newBlogs": "新收錄的部落格",
+      "newLabel": "新",
+      "readersToFollow": "可以追蹤的讀者",
+      "sampleOn": "推薦了 <b>{title}</b>",
+      "footer": {
+        "recommended": "這就是本週：根據讀者過去七天的推薦整理。你訂閱的部落格不在其中。",
+        "edition": "本週的推薦還不夠排出名次，所以這裡是收錄部落格的最新文章。你訂閱的部落格不在其中。"
+      },
+      "empty": "本週在你讀的部落格之外，還沒有新內容。"
+    },
+    "articles": {
+      "sortLabel": "排序",
+      "sort": {
+        "recs": "最多推薦",
+        "new": "最新"
+      },
+      "more": "更多文章",
+      "empty": "沒有符合的文章。換個話題或語言試試。"
+    },
+    "reason": {
+      "followed": "你追蹤的 {name} 推薦了它",
+      "followedOthers": "你追蹤的 {name} 和另外 {n, plural, other {# 位讀者}}推薦了它",
+      "week": "本週有 {n, plural, other {# 位讀者}}推薦"
+    },
+    "noteBy": "—— {name}",
+    "people": {
+      "intro": "根據讀者推薦的文章、寫下的推薦語，以及在個人頁公開的在讀部落格來推薦。Tela 在你的裝置上，把他們與你喜歡和閱讀的內容做比對。",
+      "groups": {
+        "shared": "也推薦了你喜歡的文章",
+        "blogs": "在讀你讀的部落格",
+        "early": "比別人更早發現好文章",
+        "notes": "會說明推薦的理由",
+        "active": "最近常推薦"
+      },
+      "reasons": {
+        "shared": {
+          "one": "也推薦了「{title}」",
+          "count": "也推薦了 {n, plural, other {# 篇}}你推薦或喜歡的文章"
+        },
+        "blogs": {
+          "recs": {
+            "one": "推薦過 {blog} 的文章",
+            "count": "推薦過 {n, plural, other {# 個}}你讀的部落格的文章"
+          },
+          "reads": {
+            "one": "也在讀 {blog}",
+            "count": "也在讀 {n, plural, other {# 個}}你讀的部落格"
+          }
+        },
+        "early": "比另外 {n, plural, other {# 位讀者}}更早推薦了「{title}」",
+        "notes": {
+          "all": "本月的 {n} 次推薦都寫了推薦語",
+          "some": "本月 {n} 次推薦中有 {k} 次寫了推薦語"
+        },
+        "active": "本月推薦了 {n, plural, other {# 篇文章}}"
+      },
+      "sample": "推薦了 <b>{title}</b> · {blog}",
+      "empty": "還沒有可推薦的讀者。讀者開始推薦文章後，他們會出現在這裡。"
+    },
     "allTopics": "全部",
     "language": "語言",
     "allLanguages": "所有語言",

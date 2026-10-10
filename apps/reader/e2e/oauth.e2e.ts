@@ -32,9 +32,10 @@ test('GitHub: the sheet sends the visitor there with Tela’s callback, and says
   const sheet = page.getByTestId('front-door')
   await sheet.getByTestId('door-github').click()
 
-  // Back on the page it started on, with the sheet open again and the address as it was.
+  // Back on the page it started on, with the sheet open again and the address as it was: the
+  // Blogs page, which the old address redirects to (ADR 0044).
   await expect(sheet.getByTestId('door-error')).toHaveText('Sign-in was cancelled.')
-  await expect(page).toHaveURL(/\/discover\?topic=tech$/)
+  await expect(page).toHaveURL(/\/discover\/blogs\?topic=tech$/)
   const asked = authorize as URL | null
   expect(asked?.searchParams.get('redirect_uri')).toBe(`${BASE}/api/auth/callback/github`)
   // The state is what ties the callback to this browser's start; a missing one would have come
