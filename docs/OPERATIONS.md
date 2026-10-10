@@ -32,9 +32,11 @@ directory.
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | tela-api (secret) | Tela's Google OAuth client (ADR 0036), a Web client whose redirect URI is `PUBLIC_URL/api/auth/callback/google`. Google sign-in is offered only while both are set |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | tela-api (secret) | Tela's GitHub OAuth app (ADR 0036), its callback URL `PUBLIC_URL/api/auth/callback/github`. GitHub sign-in is offered only while both are set |
 | `MAIL_FROM` | tela-api, tela-jobs | Sender, `Tela <noreply@telaread.com>`, a domain Resend has verified (ainaive.com is verified too, and was the sender until 2026-10-08) |
-| `PUBLIC_URL` | tela-api, tela-jobs | The one public origin, `https://telaread.com`: better-auth's base URL and trusted origin, claim `rel="me"` targets, the WebSub callback |
+| `PUBLIC_URL` | tela-api, tela-jobs | The one public origin, `https://telaread.com`: better-auth's base URL and trusted origin, the profile links a claim looks for (with `www.` and the old `tela.ainaive.com`, ADR 0045), the WebSub callback |
 | `TELA_PRIVATE_BETA` | tela-web | `1`: robots.txt disallows everything and every response the Worker serves carries `X-Robots-Tag: noindex, nofollow` (ADR 0015). The SPA shell is a static asset the Worker never sees, so it is noindex by its own meta tag, always: it is the app, with nothing of its own to index. Public pages drop that tag and follow this var. `/` now passes the Worker (the front page, ADR 0035), so both of its answers, a visitor's page and a member's plain shell, carry the header too |
 | `GRAVATAR_URL` | tela-api, tela-jobs | Where members' pictures are fetched from (tela-api, ADR 0032) and asked about (tela-jobs, ADR 0033), default `https://gravatar.com/avatar`. The e2e points it at its fixture server. A picture is cached for 30 days in each colo and browser under an address with its version, and turning the switch off cannot purge a colo: a copy already held stays, at an address nothing links to any more |
+| `GITHUB_TOKEN` | tela-jobs (secret, optional) | A fine-grained GitHub token with no repository access and no permissions, for a claim by GitHub (ADR 0045): it asks `api.github.com/user/<id>` for a member's login and website, which needs no permission. Unset, GitHub allows 60 requests an hour per egress IP, and Cloudflare's egress IPs are shared with other customers, so a check may find GitHub refusing (`github_unavailable`) for reasons of someone else's making. Set, 5,000 an hour. Make it under the owner's account, with the longest expiry GitHub allows, and diary its renewal: an expired token answers 401, which a claim also reads as `github_unavailable` |
+| `GITHUB_API_URL` | tela-jobs | Where GitHub's API answers, default `https://api.github.com`. For a test stack only |
 | `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, and fetches to private addresses. Never deployed |
 | `WORKER_USER_AGENT` | tela-jobs | Sent on every fetch; keep a contact URL in it |
 | `FETCH_TIMEOUT_MS` | tela-jobs, the relay | Per-request timeout, default 20000 |
@@ -818,6 +820,17 @@ A public reader count is shown only from three readers.
 - **Vouch for a claim** whose check cannot see the proof (a page behind bot protection, a tag in
   the wrong place): Claims → Verify by hand. The check then skips the proof, and still reads the
   home page for the feeds the blog declares.
+- **Read a claim's method before believing it** (ADR 0045). *Meta tag* and *rel="me" link* are
+  the blogger's own word on the page. *Link on every page* and *GitHub, both ways* are inferred: a
+  link without `rel="me"` found on the home page and an older post. Their known way to be wrong
+  is someone the blog links from its header, footer or sidebar (a blogroll, a theme credit to a
+  person, a sponsor slot) whose GitHub then names the blog. When a writer says their blog was
+  taken, look at the method first; if it is one of those two, remove the claim and let the
+  writer prove it with a meta tag.
+- **A claim says "GitHub did not answer"** (`github_unavailable` in Evidence): GitHub refused or
+  failed the lookup and nothing else on the page was proof. Without `GITHUB_TOKEN`, that is the
+  shared 60-an-hour limit; with it, check the token has not expired (`curl -H "Authorization:
+  Bearer …" https://api.github.com/rate_limit`).
 
 ## Translation
 
