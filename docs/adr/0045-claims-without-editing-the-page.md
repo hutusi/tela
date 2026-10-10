@@ -97,7 +97,9 @@ are deferred, since D1 ignores `foreign_keys=OFF`.
   the writer proves it with the tag. The removal holds: from then on that member's claim on that
   blog verifies only by the tag or `rel="me"` (`site_claims.overruled_at`, migration 0010), and a
   rejection does the same. Until 2026-10-11 it did not, and the claimant could press Verify and
-  win the blog back by the very link the operator ruled on.
+  win the blog back by the very link the operator ruled on. Migration 0010 carries over the
+  rejections and removals made before it, from the admin ledger (the latest of each claim's not
+  undone), or those would have stayed open to the same link (review, Codex).
 - A blog whose 404 page is bare, or which has none, cannot use 3 or 4 without `rel="me"`, and is
   told so.
 - A link added by script, or a page behind bot protection, is still invisible: the check reads the
