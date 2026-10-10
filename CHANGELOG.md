@@ -35,6 +35,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Claiming a blog asks less.** A blog that links your GitHub, whose GitHub names the blog as
+  its website, is yours with nothing added, once GitHub is on your Tela account. A plain link to
+  your Tela profile counts too when it is on every page, as a footer link is; `rel="me"` is needed
+  only for a link on the home page alone. A check that finds no proof says what to change: the
+  link it found and where it was missing, a link marked as a commenter's, an old handle, or the
+  website your GitHub names (ADR 0045).
 - **Discover in four tabs.** *This week* is Discover's home: the week's most recommended posts
   with readers' notes once there are enough of them, and until then the newest post of each blog,
   then blogs new in the directory and readers to follow. *Articles* lists posts from every public
