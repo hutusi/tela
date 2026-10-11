@@ -137,10 +137,13 @@ export function HighlightToolbar({
       >
         <span aria-hidden="true" className="size-3 shrink-0 rounded-[3px] bg-highlight" />
         {t('highlight')}
-        {/* No key to press on a phone. */}
-        <kbd className="rounded-[4px] border border-on-primary/35 px-1 font-sans text-[10.5px] leading-[14px] opacity-75 pointer-coarse:hidden">
-          H
-        </kbd>
+        {/* No key to press on a phone. Out of the name, which is the label alone, as on the
+            Focus toggle: aria-keyshortcuts says the key. */}
+        <span aria-hidden="true" className="flex pointer-coarse:hidden">
+          <kbd className="rounded-[4px] border border-on-primary/35 px-1 font-sans text-[10.5px] leading-[14px] opacity-75">
+            H
+          </kbd>
+        </span>
       </button>
       <button
         type="button"

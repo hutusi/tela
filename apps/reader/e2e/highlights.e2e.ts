@@ -212,6 +212,10 @@ test('the toolbar sits over the selection with its key, and under it on a narrow
   await selectText(page, 'Something else entirely')
   const toolbar = page.getByTestId('highlight-toolbar')
   await expect(toolbar.locator('kbd')).toHaveText('H')
+  // The key cap is shown, not read: the button is named by its label, and says its key apart.
+  const create = page.getByTestId('highlight-create')
+  await expect(create).toHaveAccessibleName('Highlight')
+  await expect(create).toHaveAttribute('aria-keyshortcuts', 'h')
   await expect(toolbar).toHaveAttribute('data-place', 'above')
   // Centred 8px above the selection.
   const selected = await selectionBox(page)
