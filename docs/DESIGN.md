@@ -95,9 +95,10 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
 ## Layout rules
 
 - Header 56px, sticky: the lockup (28px mark + wordmark, serif 26px/600, 9px apart),
-  Reading/Discover/Following pills (Following for members), search, the theme menu (from `sm`),
-  the language circle (at every width), and the member's avatar (30px: their picture, or their
-  initial on the accent). The circle sets a member's interface language, and the translation
+  Reading/Discover/Following pills (Following for members), search, the theme menu and the
+  language circle (all three from `sm`: below it they are rows of the account menu, and a
+  visitor's theme and language are in the footer), and the member's avatar (30px: their
+  picture, or their initial on the accent). The circle sets a member's interface language, and the translation
   follows it, until Settings → Language sets the two apart (ADR 0040). Pills are ink in every
   state: the active one is distinguished by its `hover` background alone, never by colour.
 - A visitor's header (ADR 0035) is its own, shown as soon as the device is known to hold no
@@ -775,7 +776,8 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   cards (`repeat(auto-fill, minmax(260px, 1fr))`, 14px gap) from the directory's first page,
   which puts featured blogs first: a 36px avatar with a 9px radius, the name, host and language,
   the serif tagline, the readers (ADR 0041's rule), and Subscribe, filled `ink` until it is
-  pressed, then outlined. The screen stays up as they subscribe; a ruled footer says "Subscribe
+  pressed, then outlined. The screen stays up as they subscribe from it (leaving Reading ends
+  that: one who subscribed in Discover comes back to their list); a ruled footer says "Subscribe
   to at least one to start reading." or offers "Start reading {n} blogs →", with "More blogs in
   Discover →" on the right, and under it "Coming from another reader? Import an OPML file or
   paste a blog's address.", both to `/add`. Offline, it keeps the heading and the links. The

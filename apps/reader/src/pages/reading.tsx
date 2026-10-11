@@ -94,7 +94,10 @@ export function ReadingPage() {
   // brings the profile with the subscriptions, so it cannot flash for one who follows some. Once
   // shown it is latched for that account, so subscribing from it keeps it up until the member
   // starts reading; an open article has the page meanwhile, and Liked keeps its list, since a
-  // member who follows nothing may still have kept posts (`showsFirstRun`).
+  // member who follows nothing may still have kept posts (`showsFirstRun`). The latch is this
+  // page's, not the account's, on purpose: it only keeps the page still under its own Subscribe
+  // buttons, so a member who leaves for Discover or /add and subscribes there comes back to their
+  // list, not to a page asking them to start.
   const empty = tables.profile !== null && subs.length === 0 && !open
   const [firstRunFor, setFirstRunFor] = useState<string | null>(null)
   if (empty && store.userId !== null && firstRunFor !== store.userId) setFirstRunFor(store.userId)
