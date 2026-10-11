@@ -471,8 +471,10 @@ Dashboard (`/dashboard`, Tela v5 §9): a 960 px page, padded 44/48 (16 px at the
   the serif 18 title over its 12 px date, then likes, recommendations and notes, right-aligned in
   tabular figures, with "–" for a post without notes. It scrolls inside itself on a phone, never
   the page.
-- **What readers said:** a 32 px `PersonAvatar` beside the note in serif italic 19, in the
-  locale's quotation marks, then "{name} on {post} · {date}", the name opening the profile.
+- **What readers said:** the newest twenty notes of each blog (a cap per blog, so one busy blog
+  never empties another's section), each a 32 px `PersonAvatar` beside the note in serif italic
+  19, in the locale's quotation marks, then "{name} on {post} · {date}", the name opening the
+  profile.
 - **This blog on Tela:** "Let readers translate your posts" as a `SettingRow` with the standard
   switch (on means translation is allowed), confirmed by a toast. The switch shows what tela-api
   answered and ignores a press while one is in flight.

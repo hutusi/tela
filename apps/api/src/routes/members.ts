@@ -171,15 +171,22 @@ export function memberRoutes(deps: ApiDeps) {
           where s.claimed_by = ${member.id}
         ) where n <= 20
       `),
+      // The newest twenty of each blog, not of all of them together: a cap shared across blogs
+      // let one busy blog's notes crowd out another's, whose section then said it had none
+      // under a tile that counted some.
       db.all(sql`
-        select r.note, r.created_at as "createdAt", f.site_id as "siteId", a.id as "articleId",
-          a.title as "articleTitle", a.url as "articleUrl", p.handle,
-          p.display_name as "displayName", ${avatarOf('p')} as "avatar"
-        from recommendations r join articles a on a.id = r.article_id
-        join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-        join profiles p on p.user_id = r.user_id
-        where s.claimed_by = ${member.id} and r.deleted_at is null and r.note is not null
-        order by r.created_at desc limit 50
+        select * from (
+          select r.note, r.created_at as "createdAt", f.site_id as "siteId", a.id as "articleId",
+            a.title as "articleTitle", a.url as "articleUrl", p.handle,
+            p.display_name as "displayName", ${avatarOf('p')} as "avatar",
+            row_number() over (
+              partition by f.site_id order by r.created_at desc, r.article_id desc
+            ) as n
+          from recommendations r join articles a on a.id = r.article_id
+          join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+          join profiles p on p.user_id = r.user_id
+          where s.claimed_by = ${member.id} and r.deleted_at is null and r.note is not null
+        ) where n <= 20 order by "createdAt" desc
       `),
       // The counters are live counts (`recount` in sync/push.ts), as the posts' columns are.
       db.all(sql`
@@ -187,7 +194,7 @@ export function memberRoutes(deps: ApiDeps) {
           coalesce(sum(a.like_count), 0) as "likes",
           coalesce(sum(a.recommend_count), 0) as "recommendations",
           (select count(*) from recommendations r join articles a2 on a2.id = r.article_id
-            join feeds f2 on f2.id = a2.feed_id
+            join feeds f2 on f2.id = a2.feed_id join profiles p2 on p2.user_id = r.user_id
             where f2.site_id = f.site_id and r.deleted_at is null and r.note is not null
           ) as "notes"
         from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
@@ -220,7 +227,7 @@ export function memberRoutes(deps: ApiDeps) {
         totals: totalsOf(s.id),
         posts: posts.filter((p) => p.siteId === s.id).map(({ n: _n, siteId: _s, ...p }) => p),
       })),
-      notes,
+      notes: notes.map(({ n: _n, ...note }) => note),
     })
   })
 

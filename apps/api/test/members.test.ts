@@ -218,6 +218,37 @@ describe('dashboard', () => {
   })
 })
 
+describe('dashboard notes', () => {
+  test("each blog keeps its own newest notes, so a busy blog never hides a quiet one's", async () => {
+    await blog(1, 'listed', reader.userId)
+    await blog(2, 'listed', reader.userId)
+    const fan = await signedIn(api, 'fan@x.test')
+    // Twenty-five newer notes on blog 1, each on a post of its own, and one older on blog 2.
+    await db.batch([
+      bumpSeq(db),
+      ...Array.from({ length: 25 }, (_, i) =>
+        db.run(sql`insert into articles (feed_id, dedup_key, title, fetched_at, sort_at, seq)
+          values (1, ${`busy${i}`}, ${`Busy ${i}`}, 0, ${100 + i}, ${currentSeq})`),
+      ),
+    ] as never)
+    await db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at)
+      select ${fan.userId}, id, 'busy', 1000 + id, 1000 + id from articles
+      where dedup_key like 'busy%'`)
+    await db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at)
+      select ${fan.userId}, id, 'quiet', 1, 1 from articles where dedup_key = 'p2'`)
+
+    const res = (await (await api.request('/api/v1/dashboard', { as: reader })).json()) as {
+      sites: { id: number; totals: { notes: number } }[]
+      notes: { siteId: number; note: string; n?: number }[]
+    }
+    const of = (siteId: number) => res.notes.filter((n) => n.siteId === siteId)
+    expect(of(1)).toHaveLength(20)
+    expect(of(2).map((n) => n.note)).toEqual(['quiet'])
+    expect(res.sites.map((s) => s.totals.notes)).toEqual([25, 1])
+    expect(res.notes.every((n) => n.n === undefined)).toBe(true)
+  })
+})
+
 describe('search', () => {
   test("finds public blogs, the member's private ones, and articles only in their feeds", async () => {
     await blog(1, 'listed', null, 'Gardening Notes')
