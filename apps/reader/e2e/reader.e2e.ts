@@ -28,7 +28,7 @@ async function rowsOnServer(api: APIRequestContext) {
   return (
     (await res.json()) as {
       rows: {
-        articles: { id: number; feedId: number }[]
+        articles: { id: number; feedId: number; fetchedAt: number }[]
         feeds: { id: number; feedUrl: string }[]
         subscriptions: { feedId: number; watermarkId: number; deletedAt: number | null }[]
         states: {
@@ -638,9 +638,21 @@ test.describe('reader', () => {
 
   test('Liked has no Mark all read, since liking a post read it', async ({ page }) => {
     const rows = await rowsOnServer(page.request)
-    const liked = new Set(rows.states.filter((s) => s.likedAt !== null).map((s) => s.articleId))
-    const post = rows.articles.find((a) => !liked.has(a.id))
+    const states = new Map(rows.states.map((s) => [s.articleId, s]))
+    const watermarks = new Map(rows.subscriptions.map((s) => [s.feedId, s.watermarkId]))
+    // Read on the server already: opened, or under its blog's watermark or past the 30-day
+    // horizon, and not marked unread.
+    const read = (a: { id: number; feedId: number; fetchedAt: number }) => {
+      const s = states.get(a.id)
+      if (s?.readAt != null) return true
+      if (s?.readUpdatedAt != null) return false
+      return a.id <= (watermarks.get(a.feedId) ?? 0) || a.fetchedAt < Date.now() - 30 * DAY
+    }
+    const unliked = rows.articles.filter((a) => states.get(a.id)?.likedAt == null)
+    // Liking a post reads it: one read already is left as it was found.
+    const post = unliked.find(read) ?? unliked[0]
     if (!post) throw new Error('every post is liked')
+    const wasRead = read(post)
     await push(page.request, [{ type: 'setLiked', articleId: post.id, liked: true }])
     try {
       await page.goto('/reading?filter=liked')
@@ -650,7 +662,10 @@ test.describe('reader', () => {
       ).toBeVisible()
       await expect(page.getByTestId('mark-all-read')).toHaveCount(0)
     } finally {
-      await push(page.request, [{ type: 'setLiked', articleId: post.id, liked: false }])
+      await push(page.request, [
+        { type: 'setLiked', articleId: post.id, liked: false },
+        ...(wasRead ? [] : [{ type: 'markUnread', articleId: post.id }]),
+      ])
     }
   })
 
