@@ -7,7 +7,8 @@
  * - Push: a quarter-second after the last local change, so a burst of reads goes as one push, and
  *   at once when the tab is hidden or closed, so the last change before leaving is not left
  *   waiting for the next visit; offline, it keeps retrying with backoff and loses nothing
- *   (pending mutations are stored).
+ *   (pending mutations are stored). A change held back for an Undo (the store's `holdMs`) goes
+ *   when its hold ends, or with the rest when the tab is hidden or closed, whichever is first.
  * - A 401 means the session is gone; a 409 means this app is older than the protocol, or that
  *   another tab signed in as someone else. Each call names the account the tab holds, and its
  *   answer is taken only while the tab still holds it (the store's epoch).
@@ -69,6 +70,9 @@ export class SyncEngine {
     window.removeEventListener('online', this.onOnline)
     if (this.interval) clearInterval(this.interval)
     if (this.pushTimer) clearTimeout(this.pushTimer)
+    // A change held back for an Undo is stored now, for whichever push comes next (a reloaded
+    // shell's, or this one's when it starts again): nothing may be left on a timer once stopped.
+    this.store.releaseHolds()
   }
 
   private onVisibility = () => {
@@ -76,8 +80,12 @@ export class SyncEngine {
     else this.onLeave()
   }
 
-  /** The page may not come back: send what is waiting now, in a request that outlives it. */
+  /**
+   * The page may not come back: send what is waiting now, in a request that outlives it, changes
+   * held back for an Undo included. Letting them go is synchronous, so the push sees them.
+   */
   private onLeave = () => {
+    this.store.releaseHolds()
     if (this.pushTimer) clearTimeout(this.pushTimer)
     this.pushTimer = null
     void this.push({ keepalive: true })

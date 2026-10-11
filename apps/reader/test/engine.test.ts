@@ -5,11 +5,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { memoryPersistence } from '../src/store/db'
 import { type EngineEvents, SyncEngine } from '../src/store/engine'
-import { LocalStore } from '../src/store/local'
+import { LocalStore, type Stamp, type Timers } from '../src/store/local'
 import { NOW, profile, pull, sub } from './rows'
 
 const saved = { fetch: globalThis.fetch, document: globalThis.document, window: globalThis.window }
 const listeners = { addEventListener() {}, removeEventListener() {} }
+const noop = { removeEventListener() {} }
 beforeAll(() => {
   // Only the listener calls the engine makes when it starts and stops.
   Object.assign(globalThis, {
@@ -46,8 +47,8 @@ function server(answer: () => Response | Promise<Response>) {
 const tick = () => new Promise((r) => setTimeout(r, 0))
 const snapshot = pull(5, { profile: [profile], subscriptions: [sub(1)] }, true)
 
-async function member(storage = memoryPersistence(), id = 'a') {
-  const store = new LocalStore(storage, () => NOW)
+async function member(storage = memoryPersistence(), id = 'a', timers?: Timers) {
+  const store = new LocalStore(storage, () => NOW, timers)
   await store.open()
   await store.setUser(id)
   await store.applyPull(snapshot, store.epoch)
@@ -183,5 +184,77 @@ describe('another tab signing in as someone else', () => {
     engineFor(store).start()
     await tick()
     expect(calls).toEqual([])
+  })
+})
+
+/** A change the store made: a test that holds an account always gets one. */
+function made(stamp: Stamp | null): Stamp {
+  if (!stamp) throw new Error('no change was made')
+  return stamp
+}
+
+describe('a change held back for an Undo', () => {
+  /** Timers that never run by themselves: only letting go ends a hold here. */
+  const never: Timers = { set: () => 0, clear() {} }
+  const hold = { holdMs: 5000 }
+
+  test('leaving the page lets it go first, so the request that outlives the page carries it', async () => {
+    const store = await member(memoryPersistence(), 'a', never)
+    const sent: { path: string; keepalive: boolean; mids: string[] }[] = []
+    globalThis.fetch = (async (input: string, init?: RequestInit) => {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null
+      const mids: string[] = (body?.mutations ?? []).map((m: { mid: string }) => m.mid)
+      sent.push({ path: String(input).split('?')[0] ?? '', keepalive: !!init?.keepalive, mids })
+      return mids.length > 0
+        ? Response.json({ applied: mids, rejected: [], seq: 6 })
+        : Response.json(pull(6, {}))
+    }) as typeof fetch
+    // The engine's own pagehide listener, as the browser would call it.
+    const heard = new Map<string, () => void>()
+    Object.assign(globalThis, {
+      window: { addEventListener: (type: string, f: () => void) => heard.set(type, f), ...noop },
+    })
+    try {
+      const engine = engineFor(store)
+      engine.start()
+      await tick()
+      const before = made(store.mutate({ type: 'markRead', articleId: 1 }))
+      const held = made(store.mutate({ type: 'markAllRead', upTo: 9 }, hold))
+      const after = made(store.mutate({ type: 'subscribe', feedId: 2 }))
+      expect(store.unsent().map((m) => m.mid)).toEqual([before.mid])
+
+      heard.get('pagehide')?.()
+      await tick()
+      const pushes = sent.filter((c) => c.path === '/api/v1/mutations')
+      expect(pushes).toEqual([
+        {
+          path: '/api/v1/mutations',
+          keepalive: true,
+          mids: [before.mid, held.mid, after.mid],
+        },
+      ])
+      expect(store.retract(held.mid)).toBe(false)
+    } finally {
+      Object.assign(globalThis, { window: listeners })
+    }
+  })
+
+  test('stopping stores it, sends nothing, and leaves nothing on a timer', async () => {
+    const storage = memoryPersistence()
+    let timers = 0
+    const counted: Timers = {
+      set: () => ++timers,
+      clear: () => void timers--,
+    }
+    const store = await member(storage, 'a', counted)
+    const calls = server(() => Response.json({ applied: [], rejected: [], seq: 5 }))
+    const engine = engineFor(store)
+    const held = made(store.mutate({ type: 'markAllRead', upTo: 9 }, hold))
+    expect(timers).toBe(1)
+    engine.stop()
+    await new Promise((r) => setTimeout(r, 300))
+    expect(timers).toBe(0)
+    expect(calls).toEqual([])
+    expect((await storage.load()).pending.map((p) => p.mutation.mid)).toEqual([held.mid])
   })
 })

@@ -4,7 +4,8 @@
  * `useSyncExternalStore`; the snapshot changes identity exactly when the view does.
  *
  * Every change is written through to storage, so a reload, a crash or a day offline loses
- * nothing the member did. Every write names the account it is for, and storage refuses it once
+ * nothing the member did, except one held back for an Undo for the few seconds it is held
+ * (`mutate`'s `holdMs`). Every write names the account it is for, and storage refuses it once
  * the copy is no longer that account's (another tab signed in as someone else, or out): the tab
  * then hears `onLost` and leaves, rather than write one account's rows into another's.
  */
@@ -48,9 +49,28 @@ const gone = (before: readonly Pending[], after: readonly Pending[]): string[] =
 
 export type Snapshot = { version: number; tables: Tables; pendingCount: number }
 
+/** What the store stamped a change with: its id, and the time it was made. */
+export type Stamp = { mid: string; at: number }
+
+/** How the store waits: the platform's timers, or a test's. */
+export type Timers = {
+  set(run: () => void, ms: number): unknown
+  clear(handle: unknown): void
+}
+
+const platformTimers: Timers = {
+  set: (run, ms) => setTimeout(run, ms),
+  clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+}
+
 export class LocalStore {
   private confirmed: Confirmed = { cursor: 0, tables: emptyTables() }
   private pending: Pending[] = []
+  /**
+   * Changes in `pending` held back from the server for an Undo, by id, with the timer that lets
+   * each go (`mutate`'s `holdMs`). Held only in memory, never in storage, until let go.
+   */
+  private holds = new Map<string, unknown>()
   private current: Snapshot = { version: 0, tables: emptyTables(), pendingCount: 0 }
   private listeners = new Set<() => void>()
   /** Called after every local mutation, so the sync engine can push. */
@@ -131,6 +151,7 @@ export class LocalStore {
   constructor(
     private readonly persistence: Persistence,
     private readonly now: () => number = Date.now,
+    private readonly timers: Timers = platformTimers,
   ) {}
 
   /** Load what the device kept from its last visit. */
@@ -143,6 +164,7 @@ export class LocalStore {
       tables: saved.rows ? tablesFromRows(saved.rows) : emptyTables(),
     }
     this.pending = saved.pending
+    this.pruneHolds()
     this.recompute()
   }
 
@@ -177,6 +199,8 @@ export class LocalStore {
     this.userId = owner
     this.confirmed = { cursor: 0, tables: emptyTables() }
     this.pending = []
+    // A held change was the old account's: it is never let go into the new one's.
+    this.pruneHolds()
     this.transient = new Map()
     this.transientNames = new Map()
     this.people = new Map()
@@ -192,17 +216,111 @@ export class LocalStore {
     this.onLost?.()
   }
 
-  /** Make a change now, on this device, and queue it for the server. */
-  mutate(input: MutationInput): void {
+  /**
+   * Make a change now, on this device, and queue it for the server; returns what it was stamped
+   * with, or null when the tab holds no account and nothing was made.
+   *
+   * With `holdMs`, the change is shown at once but held back from the server for that long, so
+   * an Undo can take it back before tela-api ever sees it (`retract`): some changes cannot be
+   * undone once sent (the read watermark only moves forward, ADR 0025). Nothing made after it is
+   * sent before it (`unsent`). It is held in memory only and written to storage when let go: any
+   * other tab that booted meanwhile would load it from storage and send it. A crash or a closed
+   * tab during the hold drops it, which is the price; leaving the page lets it go first
+   * (`releaseHolds`, from the sync engine).
+   */
+  mutate(input: MutationInput, options: { holdMs?: number } = {}): Stamp | null {
     const owner = this.userId
     // Nobody's rows are held: the change would be no one's, and could go to anyone.
-    if (owner === null) return
+    if (owner === null) return null
     const mutation = { ...input, mid: newId(), at: this.now() } as Mutation
+    const stamp = { mid: mutation.mid, at: mutation.at }
     const entry: Pending = { mutation }
     this.pending = [...this.pending, entry]
+    if (options.holdMs !== undefined && options.holdMs > 0) {
+      this.holds.set(
+        stamp.mid,
+        this.timers.set(() => this.letGo([stamp.mid]), options.holdMs),
+      )
+      this.recompute()
+      return stamp
+    }
     this.recompute()
     void this.write(owner, this.epoch, { put: [entry] })
     this.onMutation?.()
+    return stamp
+  }
+
+  /**
+   * Make several changes at once: one recompute, one write, one push. Each is stamped later than
+   * the one before it, so they keep their order wherever `at` decides, and every one later than
+   * `after` when given (an Undo that must come after the change it undoes).
+   */
+  mutateMany(inputs: readonly MutationInput[], options: { after?: number } = {}): Stamp[] {
+    const owner = this.userId
+    if (owner === null || inputs.length === 0) return []
+    const now = this.now()
+    let last = options.after ?? Number.NEGATIVE_INFINITY
+    const entries: Pending[] = inputs.map((input) => {
+      last = Math.max(now, last + 1)
+      return { mutation: { ...input, mid: newId(), at: last } as Mutation }
+    })
+    this.pending = [...this.pending, ...entries]
+    this.recompute()
+    void this.write(owner, this.epoch, { put: entries })
+    this.onMutation?.()
+    return entries.map(({ mutation }) => ({ mid: mutation.mid, at: mutation.at }))
+  }
+
+  /**
+   * Take back a change still held (`mutate`'s `holdMs`): it leaves the view, and since it was
+   * never written or sent, nothing else has to. False when it is not held: let go already, so on
+   * its way to the server, or never held at all.
+   */
+  retract(mid: string): boolean {
+    if (!this.holds.has(mid)) return false
+    this.timers.clear(this.holds.get(mid))
+    this.holds.delete(mid)
+    this.pending = this.pending.filter((p) => p.mutation.mid !== mid)
+    this.recompute()
+    // What it held back can go now.
+    if (this.unsent(1).length > 0) this.onMutation?.()
+    return true
+  }
+
+  /** Let every held change go now, in the order they were made: the page may not come back. */
+  releaseHolds(): void {
+    this.letGo([...this.holds.keys()])
+  }
+
+  /** Stop holding `mids`, write them through in one write, and push. */
+  private letGo(mids: readonly string[]): void {
+    const going = new Set<string>()
+    for (const mid of mids) {
+      if (!this.holds.has(mid)) continue
+      this.timers.clear(this.holds.get(mid))
+      this.holds.delete(mid)
+      going.add(mid)
+    }
+    const owner = this.userId
+    if (going.size === 0 || owner === null) return
+    const entries = this.pending.filter((p) => going.has(p.mutation.mid))
+    if (entries.length === 0) return
+    void this.write(owner, this.epoch, { put: entries })
+    this.onMutation?.()
+  }
+
+  /**
+   * Stop holding whatever `pending` no longer has, letting none of it go: it went with the
+   * account, or a load replaced it. Every place that replaces `pending` calls this after.
+   */
+  private pruneHolds(): void {
+    if (this.holds.size === 0) return
+    const kept = new Set(this.pending.map((p) => p.mutation.mid))
+    for (const [mid, handle] of this.holds) {
+      if (kept.has(mid)) continue
+      this.timers.clear(handle)
+      this.holds.delete(mid)
+    }
   }
 
   /**
@@ -234,7 +352,7 @@ export class LocalStore {
     const pull = completePull(given)
     const before = this.confirmed.tables
     const from = this.confirmed.cursor
-    const held = this.pending
+    const queued = this.pending
     this.confirmed = applyPull(this.confirmed, pull)
     const after = this.confirmed.tables.follows
     const changedFollows = [
@@ -242,7 +360,9 @@ export class LocalStore {
       ...[...before.follows.values()].filter((f) => !after.has(f.userId)),
     ]
     if (changedFollows.length > 0) this.onFollowsConfirmed?.(changedFollows)
+    // A held change is unanswered, so it stays, and nothing of it is written here.
     this.pending = settle(this.confirmed, this.pending)
+    this.pruneHolds()
     this.recompute()
     const rows = rowsOf(this.confirmed.tables)
     const changed: Partial<TableRows> = {}
@@ -263,16 +383,22 @@ export class LocalStore {
       cursor: this.confirmed.cursor,
       from,
       whole: rows,
-      drop: gone(held, this.pending),
+      drop: gone(queued, this.pending),
     })
   }
 
-  /** What to push next: mutations the server has not answered for, oldest first. */
+  /**
+   * What to push next: mutations the server has not answered for, oldest first, up to the first
+   * one still held. Nothing made after a held change goes before it (a subscribe made after a
+   * mark-all-read must not reach the server first).
+   */
   unsent(limit = 50): Mutation[] {
-    return this.pending
-      .filter((p) => p.ackedAt === undefined)
-      .slice(0, limit)
-      .map((p) => p.mutation)
+    const next: Mutation[] = []
+    for (const p of this.pending) {
+      if (next.length >= limit || this.holds.has(p.mutation.mid)) break
+      if (p.ackedAt === undefined) next.push(p.mutation)
+    }
+    return next
   }
 
   /**
@@ -284,15 +410,16 @@ export class LocalStore {
     if (owner === null || epoch !== this.epoch) return
     const applied = new Set(res.applied)
     const refused = new Set(res.rejected.map((r) => r.mid))
-    const held = this.pending
+    const queued = this.pending
     this.pending = this.pending
       .filter((p) => !refused.has(p.mutation.mid))
       .map((p) => (applied.has(p.mutation.mid) ? { ...p, ackedAt: res.seq } : p))
     this.pending = settle(this.confirmed, this.pending)
+    this.pruneHolds()
     this.recompute()
     await this.write(owner, epoch, {
       put: this.pending.filter((p) => applied.has(p.mutation.mid)),
-      drop: gone(held, this.pending),
+      drop: gone(queued, this.pending),
     })
   }
 
