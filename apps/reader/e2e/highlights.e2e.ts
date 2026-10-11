@@ -26,6 +26,16 @@ test.beforeAll(async ({ request }) => {
   await ensureFeeds(['/changing.xml'])
 })
 
+/**
+ * The post as v3 has it, the passage gone, whatever ran before: a spec that reads v3 calls this
+ * itself, so it passes run alone (`-g`) as well as after the spec that moves the post there. A
+ * refetch of a post that has not changed adds no version, so calling it again changes nothing.
+ */
+async function atV3(request: APIRequestContext) {
+  await request.post(`${FIXTURES}/__changing?v=3`)
+  await cycle(request, { refetch: true })
+}
+
 async function openChanging(page: Page) {
   await page.goto('/reading')
   await synced(page)
@@ -154,8 +164,7 @@ test('a passage the post no longer has is kept with its note, and says so', asyn
   page,
   request,
 }) => {
-  await request.post(`${FIXTURES}/__changing?v=3`)
-  await cycle(request, { refetch: true })
+  await atV3(request)
   await openChanging(page)
   await expect(page.getByTestId('body-original').first()).toContainText('Something else entirely')
   const item = page.getByTestId('highlight-item')
@@ -190,12 +199,14 @@ test('a highlight on the translation belongs to that side and that language', as
   await expect.poll(() => painted(page)).toEqual([needle])
 })
 
-// The specs below read the post as the one above left it (v3), from no highlights at all.
+// The specs below read the post at v3 (`atV3`), and those that make highlights start from none.
 const V3_FIRST = 'The first paragraph sets the scene.'
 
 test('the toolbar sits over the selection with its key, and under it on a narrow screen', async ({
   page,
+  request,
 }) => {
+  await atV3(request)
   await openChanging(page)
   await expect(page.getByTestId('body-original').first()).toContainText(V3_FIRST)
   await selectText(page, 'Something else entirely')
@@ -229,6 +240,7 @@ test('the list follows the post, not the order the highlights were made in', asy
   page,
   request,
 }) => {
+  await atV3(request)
   await clearHighlights(request)
   await openChanging(page)
   await expect(page.getByTestId('body-original').first()).toContainText(V3_FIRST)
@@ -251,6 +263,7 @@ test('a highlight over two others takes both in, and their notes join', async ({
   request,
 }) => {
   const UNION = 'The first paragraph sets the scene'
+  await atV3(request)
   await clearHighlights(request)
   await openChanging(page)
   await expect(page.getByTestId('body-original').first()).toContainText(V3_FIRST)
@@ -296,6 +309,7 @@ test('a highlight over two others takes both in, and their notes join', async ({
 })
 
 test('a removed highlight comes back with Undo, under the same id', async ({ page, request }) => {
+  await atV3(request)
   await clearHighlights(request)
   // The toast's time is the page's clock, run on below rather than waited out.
   await page.clock.install()
