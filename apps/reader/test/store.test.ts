@@ -463,10 +463,95 @@ describe('a change held back for an Undo', () => {
       { after: NOW + 10 },
     )
     expect(undo.map((s) => s.at)).toEqual([NOW + 11, NOW + 12])
-    // A clock already past `after` keeps its own time.
+    // An `after` already passed changes nothing: the next stamp is the next after the last.
     expect(store.mutateMany([{ type: 'markRead', articleId: 7 }], { after: NOW - 10 })).toEqual([
-      { mid: expect.any(String), at: NOW },
+      { mid: expect.any(String), at: NOW + 13 },
     ])
     expect(store.mutateMany([])).toEqual([])
+  })
+
+  test('every change is stamped later than the one before, whatever the clock says', async () => {
+    let clock = NOW
+    const store = new LocalStore(memoryPersistence(), () => clock)
+    await store.open()
+    await store.setUser('a')
+    // Within one millisecond.
+    const one = made(store.mutate({ type: 'markRead', articleId: 7 }))
+    const two = made(store.mutate({ type: 'markRead', articleId: 8 }))
+    expect([one.at, two.at]).toEqual([NOW, NOW + 1])
+    // A group runs its stamps ahead of the clock; a change made a moment after is later still,
+    // so an Undo pressed then is not decided as made before what it undoes.
+    const group = store.mutateMany([
+      { type: 'markRead', articleId: 7 },
+      { type: 'markRead', articleId: 8 },
+      { type: 'setLiked', articleId: 7, liked: true },
+    ])
+    clock += 1
+    const after = made(store.mutate({ type: 'markUnread', articleId: 7 }))
+    expect(group.map((s) => s.at)).toEqual([NOW + 2, NOW + 3, NOW + 4])
+    expect(after.at).toBe(NOW + 5)
+    // Once the clock is ahead again, it is the clock's time.
+    clock = NOW + 100
+    expect(made(store.mutate({ type: 'markRead', articleId: 7 })).at).toBe(NOW + 100)
+  })
+
+  test('release lets one held change go now: stored, then sent', async () => {
+    const { storage, timers, store, pushes } = await holding()
+    const one = made(store.mutate(markAll, HOLD))
+    const two = made(store.mutate({ type: 'deleteHighlight', id: 'highlight-0000001' }, HOLD))
+    pushes.count = 0
+    store.release(one.mid)
+    expect(pushes.count).toBe(1)
+    // The one still held holds back nothing made before it.
+    expect(store.unsent().map((m) => m.mid)).toEqual([one.mid])
+    expect(timers.size()).toBe(1)
+    await tick()
+    expect(storage.written).toEqual([one.mid])
+    expect(store.retract(one.mid)).toBe(false)
+
+    // Again, or after an Undo took it back: nothing more.
+    expect(store.retract(two.mid)).toBe(true)
+    pushes.count = 0
+    store.release(one.mid)
+    store.release(two.mid)
+    await tick()
+    expect(storage.written).toEqual([one.mid])
+    expect(pushes.count).toBe(0)
+    expect(timers.size()).toBe(0)
+  })
+
+  test('a group held together: one timer, taken back or let go together', async () => {
+    const { storage, timers, store, pushes } = await holding()
+    const read = [7, 8].map((articleId) => ({ type: 'markRead', articleId }) as const)
+    const group = store.mutateMany(read, HOLD)
+    const mids = group.map((s) => s.mid)
+    expect(timers.size()).toBe(1)
+    expect(store.getSnapshot().tables.states.get(8)?.readAt).not.toBeNull()
+    expect(store.unsent()).toEqual([])
+    expect(pushes.count).toBe(0)
+    await tick()
+    expect(storage.written).toEqual([])
+    // Only the whole group is taken back: a part of it says no and takes nothing.
+    expect(store.retract(mids[0] ?? '', 'not-held')).toBe(false)
+    expect(store.retract(...mids)).toBe(true)
+    expect(store.getSnapshot().tables.states.get(8)?.readAt ?? null).toBeNull()
+    expect(store.getSnapshot().pendingCount).toBe(0)
+    expect(timers.size()).toBe(0)
+
+    // Its timer lets every one of them go, in one write and one push.
+    const again = store.mutateMany(read, HOLD)
+    const commits = storage.commits
+    timers.fire()
+    expect(store.unsent().map((m) => m.mid)).toEqual(again.map((s) => s.mid))
+    expect(pushes.count).toBe(1)
+    await tick()
+    expect(storage.commits - commits).toBe(1)
+    expect(await stored(storage)).toEqual(again.map((s) => s.mid))
+
+    // Released by hand, the timer goes with the last of them.
+    const third = store.mutateMany(read, HOLD)
+    store.release(...third.map((s) => s.mid))
+    expect(timers.size()).toBe(0)
+    expect(store.retract(...third.map((s) => s.mid))).toBe(false)
   })
 })
