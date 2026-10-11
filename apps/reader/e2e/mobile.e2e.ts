@@ -497,6 +497,39 @@ test.describe('the article on a phone', () => {
     await expect(original).toHaveAttribute('href', href ?? '')
     await expect(original).toHaveAttribute('target', '_blank')
   })
+
+  test('the account menu opens over the bar, and scrolls to its last row on a short screen', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 640 })
+    await openArticle(page)
+    await page.getByTestId('account-menu').click()
+    const panel = page.getByTestId('account-panel')
+    await expect(panel.getByTestId('nav-profile')).toBeVisible()
+    /** Whether a tap at the middle of `id` lands on it, not on the bar's Mark read under it. */
+    const reached = (id: string) =>
+      panel.getByTestId(id).evaluate((el) => {
+        const r = el.getBoundingClientRect()
+        const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+        return at !== null && el.contains(at)
+      })
+    // Upright, then turned on its side, where the panel hangs under the avatar (`sm`) and is
+    // taller than the window: it stops 8px above the foot and scrolls.
+    for (const size of [
+      { width: 360, height: 640 },
+      { width: 640, height: 350 },
+    ]) {
+      await page.setViewportSize(size)
+      await expect(page.getByTestId('bottom-bar')).toBeVisible()
+      await panel.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
+      const box = await panel.boundingBox()
+      expect(box && box.y + box.height).toBeLessThanOrEqual(size.height - 7)
+      for (const id of ['nav-invites', 'sign-out']) {
+        await panel.getByTestId(id).scrollIntoViewIfNeeded()
+        expect(await reached(id), `${id} at ${size.width}×${size.height}`).toBe(true)
+      }
+    }
+  })
 })
 
 test.describe('Discover on a phone', () => {

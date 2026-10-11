@@ -90,8 +90,10 @@ export function AccountMenu() {
 }
 
 /**
- * The panel. On a phone it is fixed 8px from each edge under the 56px header, and scrolls inside
- * itself if the screen is short; from `sm` up it hangs under the avatar, 220px wide, as before.
+ * The panel. On a phone it is fixed 8px from each edge under the 56px header; from `sm` up it
+ * hangs under the avatar, 220px wide, as before. Either way it stops 8px above the window's foot
+ * and scrolls inside itself on a short screen, a phone turned sideways (640 × 350) included: the
+ * header is sticky, so scrolling the page never brings a row below the foot into reach.
  */
 function AccountPanel({ id, done }: { id: string; done: () => void }) {
   const [view, setView] = useState<'menu' | 'language'>('menu')
@@ -111,7 +113,7 @@ function AccountPanel({ id, done }: { id: string; done: () => void }) {
   return (
     <div
       id={id}
-      className="fixed top-16 right-2 left-2 z-[7] flex max-h-[calc(100dvh-72px)] animate-fade flex-col overflow-y-auto rounded-[14px] border border-line bg-surface p-1.5 text-[15px] text-ink shadow-[0_12px_32px_rgba(0,0,0,.10)] sm:absolute sm:top-[calc(100%+10px)] sm:right-0 sm:left-auto sm:max-h-none sm:min-w-[220px] sm:overflow-visible sm:rounded-xl sm:text-[13.5px]"
+      className="fixed top-16 right-2 left-2 z-[7] flex max-h-[calc(100dvh-72px)] animate-fade flex-col overflow-y-auto rounded-[14px] border border-line bg-surface p-1.5 text-[15px] text-ink shadow-[0_12px_32px_rgba(0,0,0,.10)] sm:absolute sm:top-[calc(100%+10px)] sm:right-0 sm:left-auto sm:max-h-[calc(100dvh-61px)] sm:min-w-[220px] sm:rounded-xl sm:text-[13.5px]"
       data-testid="account-panel"
       data-view={view}
     >

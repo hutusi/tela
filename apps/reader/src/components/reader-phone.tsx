@@ -46,6 +46,11 @@ const ITEM =
  * `--bottom-bar` on the root says how tall it is, so the toast and the end of the article clear it.
  * It is put in the body, not the reader pane: the pane fades in on a transform, and a transformed
  * ancestor would hold a `fixed` bar to the pane, and clip it, while it does.
+ *
+ * It sits under the sticky header (`z-[9]` to its `z-10`). The account menu opens inside the
+ * header's stacking context, so a bar above the header covered the menu's last rows, and a tap on
+ * Sign out marked the post read. What floats over the page from the body (the highlight toolbar
+ * and note, the toast) is above both.
  */
 export function ReaderBottomBar({
   liked,
@@ -89,7 +94,7 @@ export function ReaderBottomBar({
   return createPortal(
     <div
       ref={bar}
-      className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-line bg-paper px-1.5 pb-[max(22px,env(safe-area-inset-bottom))] pt-1.5"
+      className="fixed inset-x-0 bottom-0 z-[9] grid grid-cols-4 border-t border-line bg-paper px-1.5 pb-[max(22px,env(safe-area-inset-bottom))] pt-1.5"
       data-testid="bottom-bar"
     >
       <button
