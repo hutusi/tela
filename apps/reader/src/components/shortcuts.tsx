@@ -7,6 +7,7 @@ type What =
   | 'original'
   | 'like'
   | 'read'
+  | 'undo'
   | 'highlight'
   | 'sidebar'
   | 'focus'
@@ -19,6 +20,7 @@ const KEYS: [string, What][] = [
   ['o', 'original'],
   ['l', 'like'],
   ['m', 'read'],
+  ['u', 'undo'],
   ['h', 'highlight'],
   ['[', 'sidebar'],
   ['f', 'focus'],

@@ -4,10 +4,21 @@
  */
 import { HIGHLIGHT_NOTE_MAX } from '@tela/shared'
 import type { HighlightRow } from '@tela/sync'
-import { useEffect, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslations } from 'use-intl'
 import type { Anchor } from '../lib/anchor'
 import { type Side, selectedAnchor } from '../lib/highlight-dom'
+import { UNDO_HOLD_MS } from '../lib/toasts'
+import { highlightAgain, offerUndo } from '../lib/undo'
 import type { HighlightItem } from '../lib/use-highlights'
 import { useStore } from '../store/hooks'
 
@@ -27,17 +38,48 @@ export function useSelectedAnchor(root: React.RefObject<HTMLElement | null>): Se
     document.addEventListener('selectionchange', update)
     window.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
+    // The pane fades in rising 4px, and a selection made meanwhile moves with it, with no
+    // selectionchange to say so: the toolbar stayed where the selection was when it was made.
+    document.addEventListener('animationend', update)
     return () => {
       cancelAnimationFrame(frame)
       document.removeEventListener('selectionchange', update)
       window.removeEventListener('scroll', update, true)
       window.removeEventListener('resize', update)
+      document.removeEventListener('animationend', update)
     }
   }, [root])
   return selected
 }
 
-/** Floats above the selection: highlight it, or highlight it and write a note. */
+/**
+ * A finger, or a pane below Tailwind's `lg`: the toolbar goes under the selection, where the
+ * system's own selection menu (above it, on phones) leaves it alone.
+ */
+const UNDER = '(pointer: coarse), (width < 64rem)'
+
+function useUnder(): boolean {
+  return useSyncExternalStore(
+    (changed) => {
+      const query = window.matchMedia(UNDER)
+      query.addEventListener('change', changed)
+      return () => query.removeEventListener('change', changed)
+    },
+    () => window.matchMedia(UNDER).matches,
+    () => false,
+  )
+}
+
+/** The sticky header's height: the toolbar never sits under it. */
+const HEADER = 56
+/** Between the toolbar and the selection, and between it and the window's edges. */
+const GAP = 8
+
+/**
+ * Over the selection, following it as it scrolls: highlight it, or highlight it and write a note.
+ * Centred 8px above it, or under it where there is no room above or on a phone; kept inside the
+ * window, and above the phone reader's bottom bar (`--bottom-bar`).
+ */
 export function HighlightToolbar({
   selected,
   onHighlight,
@@ -46,44 +88,116 @@ export function HighlightToolbar({
   onHighlight: (withNote: boolean) => void
 }) {
   const t = useTranslations('highlights')
+  const under = useUnder()
+  // Its own size places it: measured before it is painted, and again whenever it changes.
+  const box = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState({ width: 0, height: 0 })
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    const { offsetWidth: width, offsetHeight: height } = el
+    setSize((held) => (held.width === width && held.height === height ? held : { width, height }))
+  })
   const { rect } = selected
-  const top = rect.top > 56 ? rect.top - 44 : rect.bottom + 8
-  const left = Math.min(Math.max(rect.left + rect.width / 2, 90), window.innerWidth - 90)
+  const half = size.width / 2
+  const left = Math.min(
+    Math.max(rect.left + rect.width / 2, half + GAP),
+    window.innerWidth - half - GAP,
+  )
+  const above = !under && rect.top - GAP - size.height >= HEADER
+  const style: CSSProperties = above
+    ? { left, top: rect.top, transform: `translate(-50%, calc(-100% - ${GAP}px))` }
+    : {
+        left,
+        top: `max(${HEADER + GAP}px, min(${rect.bottom + GAP}px, calc(100dvh - var(--bottom-bar, 0px) - ${size.height + GAP}px)))`,
+        transform: 'translateX(-50%)',
+      }
   // mousedown would collapse the selection before the click could use it.
   const keep = (e: React.MouseEvent) => e.preventDefault()
-  return (
+  const button = `flex cursor-pointer items-center whitespace-nowrap font-medium text-on-primary hover:bg-on-primary/14 ${
+    under
+      ? 'min-h-10 gap-2 rounded-lg px-3.5 text-sm'
+      : 'gap-1.5 rounded-md px-2.5 py-1.5 text-[13px]'
+  }`
+  // In <body>, not the pane: while the pane fades in, its transform is the containing block of
+  // anything fixed inside it, and a selection made then put the toolbar 56px off.
+  return createPortal(
     <div
-      className="fixed z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-line bg-surface p-1 text-[13px] shadow-[0_8px_24px_rgba(0,0,0,.12)]"
-      style={{ top, left }}
+      ref={box}
+      className={`fixed z-20 flex gap-0.5 bg-ink p-1 shadow-[0_8px_24px_rgba(0,0,0,.18)] ${
+        under ? 'rounded-xl' : 'rounded-[10px]'
+      }`}
+      style={style}
       data-testid="highlight-toolbar"
+      data-place={above ? 'above' : 'under'}
     >
       <button
         type="button"
         onMouseDown={keep}
         onClick={() => onHighlight(false)}
-        className="rounded-full px-3 py-1.5 font-medium text-ink hover:bg-hover"
+        aria-keyshortcuts="h"
+        className={button}
         data-testid="highlight-create"
       >
-        <span
-          aria-hidden="true"
-          className="mr-1.5 inline-block size-2.5 rounded-sm bg-highlight align-middle"
-        />
+        <span aria-hidden="true" className="size-3 shrink-0 rounded-[3px] bg-highlight" />
         {t('highlight')}
+        {/* No key to press on a phone. Out of the name, which is the label alone, as on the
+            Focus toggle: aria-keyshortcuts says the key. */}
+        <span aria-hidden="true" className="flex pointer-coarse:hidden">
+          <kbd className="rounded-[4px] border border-on-primary/35 px-1 font-sans text-[10.5px] leading-[14px] opacity-75">
+            H
+          </kbd>
+        </span>
       </button>
       <button
         type="button"
         onMouseDown={keep}
         onClick={() => onHighlight(true)}
-        className="rounded-full px-3 py-1.5 text-ink-2 hover:bg-hover hover:text-ink"
+        className={button}
         data-testid="highlight-create-note"
       >
         {t('addNote')}
       </button>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
-/** A highlight's note, and the way to remove it, next to where it was clicked. */
+/**
+ * Remove a highlight, with an Undo while the toast shows. The removal is held on the device until
+ * the toast goes (`offerUndo`), so an Undo takes it back before tela-api hears of it and the
+ * highlight keeps its id. Once sent it cannot be taken back (a deleted highlight stays deleted),
+ * so an Undo after that makes the same passage and note again under a new id.
+ */
+function useRemoveHighlight(): (row: HighlightRow) => void {
+  const t = useTranslations('highlights')
+  const undo = useTranslations('toast')('undo')
+  const { store } = useStore()
+  return useCallback(
+    (row: HighlightRow) => {
+      const removed = store.mutate(
+        { type: 'deleteHighlight', id: row.id },
+        { holdMs: UNDO_HOLD_MS },
+      )
+      if (!removed) return
+      offerUndo(store, t('removed'), undo, [removed.mid], () => store.mutate(highlightAgain(row)))
+    },
+    [store, t, undo],
+  )
+}
+
+/**
+ * Where the note opens for a point: 14px under it, or over it where it would not fit above the
+ * window's foot, or above the phone reader's bottom bar while that shows (`--bottom-bar`).
+ */
+const NOTE_WIDTH = 320
+const NOTE_HEIGHT = 250
+const NOTE_EDGE = 12
+
+/**
+ * A highlight's note, and the way to remove it, next to where it was clicked. Keyed by the
+ * highlight by its caller, so the text it holds is always that highlight's.
+ */
 export function HighlightNote({
   row,
   at,
@@ -95,6 +209,7 @@ export function HighlightNote({
 }) {
   const t = useTranslations('highlights')
   const { store } = useStore()
+  const removeHighlight = useRemoveHighlight()
   const [note, setNote] = useState(row.note ?? '')
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -116,18 +231,31 @@ export function HighlightNote({
     onClose()
   }
   const remove = () => {
-    store.mutate({ type: 'deleteHighlight', id: row.id })
     onClose()
+    removeHighlight(row)
   }
-  const top = Math.min(at.y + 12, window.innerHeight - 240)
-  const left = Math.min(Math.max(at.x - 160, 12), window.innerWidth - 332)
+  // The bar's height as the toolbar's clamp reads it; none where there is no bar.
+  const bar =
+    Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--bottom-bar'),
+    ) || 0
+  const below = at.y + 14
+  const top =
+    below + NOTE_HEIGHT > window.innerHeight - bar
+      ? Math.max(NOTE_EDGE, at.y - 14 - NOTE_HEIGHT)
+      : below
+  const left = Math.min(
+    Math.max(at.x - NOTE_WIDTH / 2, NOTE_EDGE),
+    window.innerWidth - NOTE_WIDTH - NOTE_EDGE,
+  )
 
-  return (
+  // In <body>, as the toolbar is: the pane's fade would otherwise place it.
+  return createPortal(
     <div
       ref={box}
       role="dialog"
       aria-label={t('noteLabel')}
-      className="fixed z-20 flex w-80 flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.14)] animate-fade"
+      className="fixed z-30 flex w-80 flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.12)] animate-fade"
       style={{ top, left }}
       data-testid="highlight-note"
       onKeyDown={(e) => {
@@ -137,9 +265,9 @@ export function HighlightNote({
         }
       }}
     >
-      <blockquote className="m-0 line-clamp-3 border-l-2 border-highlight-strong pl-2.5 font-serif text-[15px] italic leading-snug text-ink-2">
-        {row.quote}
-      </blockquote>
+      <div className="line-clamp-3 font-serif text-[15px] leading-[1.45] text-ink-2">
+        <span className="bg-highlight box-decoration-clone">{row.quote}</span>
+      </div>
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value.slice(0, HIGHLIGHT_NOTE_MAX))}
@@ -152,11 +280,12 @@ export function HighlightNote({
         <button
           type="button"
           onClick={remove}
-          className="flex-1 text-left text-[13px] text-muted hover:text-danger"
+          className="py-1.5 text-[13px] text-muted hover:text-danger"
           data-testid="highlight-remove"
         >
           {t('remove')}
         </button>
+        <span className="flex-1" />
         <button
           type="button"
           onClick={onClose}
@@ -173,13 +302,15 @@ export function HighlightNote({
           {t('save')}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
 /**
- * Every highlight of this post, in the order they were made. One the post no longer contains
- * keeps its quote and note and says so; one on a layout not showing says where it is.
+ * Every highlight of this post, in reading order (`useHighlights`). One the post no longer
+ * contains keeps its quote and note, says so and comes last; one on a layout not showing says
+ * where it is.
  */
 export function HighlightList({
   items,
@@ -189,18 +320,18 @@ export function HighlightList({
   onOpen: (item: HighlightItem, at: { x: number; y: number }) => void
 }) {
   const t = useTranslations('highlights')
-  const { store } = useStore()
+  const removeHighlight = useRemoveHighlight()
   if (items.length === 0) return null
   return (
-    <section className="mt-12 max-w-(--reader-measure)" data-testid="highlights">
-      <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+    <section className="mt-9 max-w-(--reader-measure)" data-testid="highlights">
+      <h2 className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
         {t('title', { n: items.length })}
       </h2>
-      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      <ul className="m-0 list-none p-0">
         {items.map((item) => (
           <li
             key={item.row.id}
-            className="rounded-xl border border-line bg-surface px-4 py-3"
+            className="border-t border-line"
             data-testid="highlight-item"
             data-status={item.status}
           >
@@ -209,23 +340,27 @@ export function HighlightList({
               disabled={item.status !== 'shown'}
               onClick={(e) => {
                 item.leaf?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-                onOpen(item, { x: e.clientX, y: e.clientY })
+                // From the keyboard there is no pointer: the note opens by the row instead.
+                const row = e.currentTarget.getBoundingClientRect()
+                onOpen(item, { x: e.clientX || row.left + 40, y: e.clientY || row.bottom })
               }}
-              className="w-full text-left disabled:cursor-default"
+              className="flex w-full flex-col gap-1.5 py-3.5 text-left disabled:cursor-default"
             >
-              <span className="block font-serif text-[16px] leading-snug text-body">
-                <mark className="rounded-sm bg-highlight px-0.5 text-inherit">
+              <span className="font-serif text-[17px] leading-normal text-ink">
+                <mark className="rounded-[2px] bg-highlight text-inherit box-decoration-clone">
                   {item.row.quote}
                 </mark>
               </span>
               {item.row.note ? (
-                <span className="mt-1.5 block text-[13.5px] leading-snug text-ink-2">
+                <span className="whitespace-pre-line text-[13.5px] leading-[1.45] text-ink-2">
                   {item.row.note}
                 </span>
+              ) : item.status === 'shown' ? (
+                <span className="text-[13px] text-muted">{t('addNote')}</span>
               ) : null}
             </button>
             {item.status !== 'shown' ? (
-              <div className="mt-2 flex items-center gap-3 text-[12px] text-muted">
+              <div className="-mt-1.5 flex items-center gap-3 pb-3.5 text-[12px] text-muted">
                 <span className="flex-1">
                   {item.status === 'detached' ? t('detached') : t('elsewhere')}
                 </span>
@@ -233,7 +368,7 @@ export function HighlightList({
                   <button
                     type="button"
                     className="hover:text-danger"
-                    onClick={() => store.mutate({ type: 'deleteHighlight', id: item.row.id })}
+                    onClick={() => removeHighlight(item.row)}
                   >
                     {t('remove')}
                   </button>
@@ -243,6 +378,11 @@ export function HighlightList({
           </li>
         ))}
       </ul>
+      <p className="m-0 border-t border-line pt-3 text-[12.5px] text-muted">
+        {t.rich('privacy', {
+          keyboard: (chunks) => <span className="pointer-coarse:hidden">{chunks}</span>,
+        })}
+      </p>
     </section>
   )
 }

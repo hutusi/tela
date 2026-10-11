@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { useFrontDoor } from '../components/front-door'
+import { CHECK, EXTERNAL, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { SiteFooter } from '../components/site-footer'
 import { Swatch } from '../components/swatch'
@@ -222,7 +223,12 @@ export function WritersPage() {
                     {!typed ? null : !handle ? (
                       <span className="text-muted">{t('availability.none')}</span>
                     ) : availability?.status === 'available' ? (
-                      <span className="text-accent">{t('availability.available', { handle })}</span>
+                      <span className="inline-flex items-center gap-1 text-accent">
+                        <Glyph size={12} className="block shrink-0">
+                          {CHECK}
+                        </Glyph>
+                        {t('availability.available', { handle })}
+                      </span>
                     ) : availability ? (
                       <span className="text-ink-2">
                         {t(`availability.${availability.status}`, { handle })}
@@ -322,11 +328,10 @@ export function WritersPage() {
                   >
                     <span className="text-ink-2">{t('does.link.pill')}</span>
                     <span className="truncate font-semibold text-ink">@{writer.handle}</span>
-                    <span
-                      aria-hidden="true"
-                      className="rounded-full bg-hover px-2.5 py-1 text-[12px] text-ink-2"
-                    >
-                      ↗
+                    <span className="rounded-full bg-hover px-2.5 py-[7px] text-ink-2">
+                      <Glyph size={12} className="block">
+                        {EXTERNAL}
+                      </Glyph>
                     </span>
                   </span>
                 ) : null}

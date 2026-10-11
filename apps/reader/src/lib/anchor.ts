@@ -13,9 +13,12 @@
  * The quote is always re-checked, even for a leaf whose id is unchanged: a repeated block's id
  * carries a position suffix (`-2`, `-3`), so the same id can name different text after an edit.
  *
+ * A new highlight that overlaps or touches others in its leaf takes them in (`mergeAnchors`), so a
+ * passage is never painted twice and its notes are kept together.
+ *
  * Pure functions over leaf texts, so the rules are tested without a browser.
  */
-import { HIGHLIGHT_CONTEXT } from '@tela/shared'
+import { HIGHLIGHT_CONTEXT, HIGHLIGHT_NOTE_MAX, HIGHLIGHT_QUOTE_MAX } from '@tela/shared'
 
 export type Anchor = {
   leafId: string
@@ -91,4 +94,56 @@ export function anchorChanged(anchor: Anchor, resolved: Resolved): boolean {
       resolved.start !== anchor.start ||
       resolved.end !== anchor.end)
   )
+}
+
+/** A highlight already in the leaf, at the offsets it resolved to in the leaf's text as it is now. */
+export type Span = { id: string; start: number; end: number; note: string | null }
+
+export type Merge =
+  /** The selection is inside this highlight already: there is nothing to make. */
+  | { kind: 'inside'; id: string }
+  /** One highlight over the selection and every one it reaches, which it replaces. */
+  | { kind: 'merge'; anchor: Anchor; absorbed: string[]; note: string | null }
+
+/**
+ * What a selection of `leafId` (its text now is `text`) makes, given the highlights already in
+ * that leaf on the same side and in the same language. Null means it makes a highlight of its own:
+ * it reaches none of them, or the one it would make is over a limit, which the server would refuse
+ * while the deletes went through.
+ *
+ * It reaches a highlight it overlaps or touches (one ending where it starts), but not one a space
+ * away; and the union keeps reaching until nothing more joins, so a selection bridging two takes
+ * both in. Their notes join in reading order, a blank line apart, each written once.
+ */
+export function mergeAnchors(
+  leafId: string,
+  text: string,
+  fresh: { start: number; end: number },
+  existing: readonly Span[],
+): Merge | null {
+  const inside = existing.find((s) => s.start <= fresh.start && fresh.end <= s.end)
+  if (inside) return { kind: 'inside', id: inside.id }
+  let { start, end } = fresh
+  const absorbed: Span[] = []
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const span of existing) {
+      if (absorbed.includes(span) || span.start > end || span.end < start) continue
+      absorbed.push(span)
+      start = Math.min(start, span.start)
+      end = Math.max(end, span.end)
+      grew = true
+    }
+  }
+  if (absorbed.length === 0 || end - start > HIGHLIGHT_QUOTE_MAX) return null
+  const inOrder = [...absorbed].sort((a, b) => a.start - b.start)
+  const notes = [...new Set(inOrder.map((s) => s.note?.trim() ?? '').filter(Boolean))]
+  const note = notes.join('\n\n')
+  if (note.length > HIGHLIGHT_NOTE_MAX) return null
+  return {
+    kind: 'merge',
+    anchor: anchorIn(leafId, text, start, end),
+    absorbed: inOrder.map((s) => s.id),
+    note: note || null,
+  }
 }

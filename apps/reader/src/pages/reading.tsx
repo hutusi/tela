@@ -8,6 +8,7 @@ import { useLocation, useNavigate, useNavigationType, useSearchParams } from 're
 import { useTranslations } from 'use-intl'
 import { ArticleList } from '../components/article-list'
 import { EmptyState } from '../components/empty-state'
+import { FirstRun, showsFirstRun } from '../components/first-run'
 import { MobileNav } from '../components/mobile-nav'
 import { Reader } from '../components/reader'
 import { Shortcuts } from '../components/shortcuts'
@@ -21,11 +22,13 @@ import {
   type ReadingMode,
   readingHref,
 } from '../lib/href'
-import { gridColumns, toggleFocus, useLayout } from '../lib/layout'
+import { effectiveSidebar, gridColumns, toggleFocus, useLayout, useWide } from '../lib/layout'
 import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
+import { currentToast, runToastAction } from '../lib/toasts'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
+  feedTitle,
   isLiked,
   isRead,
   prefetchPlan,
@@ -43,6 +46,7 @@ const PREFETCH_IDLE_MS = 1500
 
 export function ReadingPage() {
   const t = useTranslations('reader')
+  const ts = useTranslations('sidebar')
   const tables = useTables()
   const now = useNow()
   const { locale } = useUi()
@@ -71,14 +75,44 @@ export function ReadingPage() {
   )
   const selected = params.feedId !== null ? subs.find((s) => s.feedId === params.feedId) : undefined
   const listTitle = params.feedId !== null ? (selected?.title ?? '') : undefined
+  // What a phone's back bar goes back to, by the name the list's own disclosure gives it.
+  const listName =
+    params.feedId !== null ? (selected?.title ?? ts('subscriptions')) : ts(params.filter)
   const pendingFetch = selected !== undefined && selected.lastFetchedAt === null
   const article =
     params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
   const open = params.articleId !== null
-  // Which panes show beside the article: this device's choice, not the member's (ADR 0029). In
+  // Which panes show beside the article: this device's choice, not the member's (ADR 0029), and
+  // until it has chosen, the window's: an article opened below 1200px starts with the rail. In
   // focus an open article has the page to itself; a closed one shows the list as ever.
-  const panes = useLayout()
+  const stored = useLayout()
+  const wide = useWide()
+  const panes = { sidebar: effectiveSidebar(stored.sidebar, open, wide), focus: stored.focus }
   const focused = open && panes.focus === 'on'
+
+  // The first run (Tela v5), for a member who follows nothing: never before the first pull, which
+  // brings the profile with the subscriptions, so it cannot flash for one who follows some. Once
+  // shown it is latched for that account, so subscribing from it keeps it up until the member
+  // starts reading; an open article has the page meanwhile, and Liked keeps its list, since a
+  // member who follows nothing may still have kept posts (`showsFirstRun`). The latch is this
+  // page's, not the account's, on purpose: it only keeps the page still under its own Subscribe
+  // buttons, so a member who leaves for Discover or /add and subscribes there comes back to their
+  // list, not to a page asking them to start.
+  const empty = tables.profile !== null && subs.length === 0 && !open
+  const [firstRunFor, setFirstRunFor] = useState<string | null>(null)
+  if (empty && store.userId !== null && firstRunFor !== store.userId) setFirstRunFor(store.userId)
+  const firstRun = showsFirstRun({
+    synced: tables.profile !== null,
+    subscriptions: subs.length,
+    open,
+    filter: params.filter,
+    latched: firstRunFor !== null && firstRunFor === store.userId,
+  })
+  const startReading = () => {
+    setFirstRunFor(null)
+    // On the list of everything followed, whichever the sidebar was pointed at meanwhile.
+    if (canonicalReadingHref(window.location.search) !== readingHref({})) navigate(readingHref({}))
+  }
 
   // The post after this one in the list as shown, the one `j` would open: a card at the end of
   // the article offers it, so a pointer reader flows on without going back up to the list.
@@ -88,6 +122,7 @@ export function ReadingPage() {
     ? {
         href: readingHref({ filter: params.filter, feedId: params.feedId, articleId: after.id }),
         title: shownTitle(tables, after, readingLang, prefs.never).title,
+        blog: feedTitle(tables, after.feedId) || store.sourceName(after.feedId),
       }
     : null
 
@@ -134,9 +169,10 @@ export function ReadingPage() {
 
   // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
   // article, [ shows or hides the sidebar, f the list too while one is open, o opens its original,
-  // l likes or unlikes it and m marks it read or unread, ? lists the keys. Typing in a field is
-  // never a shortcut, and a popover that handles Esc itself marks the event so the article stays
-  // open.
+  // l likes or unlikes it and m marks it read or unread, u presses the toast's Undo while it shows,
+  // ? lists the keys. Typing in a field is never a shortcut, nor is a key pressed in a modal
+  // dialog (the phone's Recommend sheet), which the page under it does not own; and a popover that
+  // handles Esc itself marks the event so the article stays open.
   const [help, setHelp] = useState(false)
   // Read when a key is pressed, not when the listener was bound: a second `j` can come before
   // React has rendered the first one's navigation, and the URL is already right by then.
@@ -147,9 +183,16 @@ export function ReadingPage() {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
       const target = e.target as HTMLElement | null
       if (target?.closest('input, textarea, select, [contenteditable]')) return
+      if (document.querySelector('dialog:modal')) return
       const { items, close, help } = keys.current
       const now = parseReadingParams(new URLSearchParams(window.location.search))
-      if (e.key === 'j' || e.key === 'k') {
+      if (e.key === 'u') {
+        // The toast showing when the key is pressed, not when the listener was bound.
+        const toast = currentToast()
+        if (!toast?.action || e.repeat) return
+        e.preventDefault()
+        runToastAction(toast.id)
+      } else if (e.key === 'j' || e.key === 'k') {
         const at = items.findIndex((a) => a.id === now.articleId)
         const step = e.key === 'j' ? 1 : -1
         const next = items[at === -1 ? (step === 1 ? 0 : items.length - 1) : at + step]
@@ -303,12 +346,14 @@ export function ReadingPage() {
 
   return (
     <div
-      className={`group grid flex-1 grid-cols-1 lg:min-h-0 ${gridColumns(open, panes)}`}
+      className={`group grid flex-1 grid-cols-1 lg:min-h-0 ${gridColumns(open, panes, !firstRun)}`}
       data-testid="reading-layout"
       data-open={open ? '1' : undefined}
       data-sidebar={panes.sidebar}
       data-focus={focused ? '1' : undefined}
     >
+      {/* Over the first run too: on a phone it is the only way to Liked, and a member who follows
+          nothing may still have kept posts there, as the sidebar beside it does on a desktop. */}
       {open ? null : <MobileNav subscriptions={subs} totals={counts} params={params} />}
       {/* The sidebar, or the rail it collapses to (ADR 0030), and neither in focus. Not rendered
           rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no defined
@@ -320,18 +365,28 @@ export function ReadingPage() {
       ) : (
         <SidebarRail subscriptions={subs} params={params} />
       )}
-      <ArticleList
-        items={items}
-        params={params}
-        title={listTitle}
-        readingLang={readingLang}
-        locale={locale}
-        now={now}
-        pendingFetch={pendingFetch}
-        hidingRead={prefs.hideRead && all.length > 0}
-      />
+      {firstRun ? null : (
+        <ArticleList
+          items={items}
+          params={params}
+          title={listTitle}
+          readingLang={readingLang}
+          locale={locale}
+          now={now}
+          pendingFetch={pendingFetch}
+          hidingRead={prefs.hideRead && all.length > 0}
+        />
+      )}
       {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}
-      {article ? (
+      {firstRun ? (
+        // In place of the list and the empty pane, at every width.
+        <FirstRun
+          readingLang={readingLang}
+          locale={locale}
+          subscribed={subs.length}
+          onStart={startReading}
+        />
+      ) : article ? (
         <Reader
           key={article.id}
           article={article}
@@ -340,6 +395,7 @@ export function ReadingPage() {
           onMode={onMode}
           onClose={close}
           next={next}
+          listName={listName}
         />
       ) : open && tables.profile === null ? (
         // The first sync has not landed yet (the profile always comes in the first snapshot):

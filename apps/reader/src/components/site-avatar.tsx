@@ -8,6 +8,7 @@ export function SiteAvatar({
   faviconKey,
   size = 40,
   radius = 10,
+  round = false,
 }: {
   id: number
   title: string
@@ -15,6 +16,8 @@ export function SiteAvatar({
   size?: number
   /** The favicon's corner; an initial's grows with its size. A blog page's 84px one wants 20. */
   radius?: number
+  /** A circle, favicon or initial, as the end of an article draws the blog. */
+  round?: boolean
 }) {
   const src = assetUrl(faviconKey)
   if (src) {
@@ -25,9 +28,9 @@ export function SiteAvatar({
         width={size}
         height={size}
         className="shrink-0 bg-surface object-cover"
-        style={{ width: size, height: size, borderRadius: radius }}
+        style={{ width: size, height: size, borderRadius: round ? '50%' : radius }}
       />
     )
   }
-  return <Swatch id={id * 7919} title={title} size={size} />
+  return <Swatch id={id * 7919} title={title} size={size} round={round} />
 }

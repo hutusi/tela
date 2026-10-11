@@ -4,7 +4,9 @@
     "tagline": "Independent blogs, in any language."
   },
   "common": {
-    "quoted": "“{text}”"
+    "quoted": "“{text}”",
+    "likeCount": "{n, plural, one {# like} other {# likes}}",
+    "recommendCount": "{n, plural, one {# recommendation} other {# recommendations}}"
   },
   "nav": {
     "reading": "Reading",
@@ -17,7 +19,7 @@
     "logIn": "Log in",
     "join": "Join",
     "signOut": "Sign out",
-    "addFeed": "+ Add a feed",
+    "addFeed": "+ Add a blog",
     "dashboard": "Dashboard",
     "admin": "Admin",
     "settings": "Settings",
@@ -27,6 +29,13 @@
     "invites": "Invite friends",
     "writers": "For writers",
     "themeIs": "Theme: {theme}"
+  },
+  "menu": {
+    "language": "Language",
+    "theme": "Theme",
+    "search": "Search",
+    "languageHint": "Menus and translations follow this choice. To translate into another language, use Language settings.",
+    "apartHint": "Translations follow this choice, and menus keep their own language. To link the two again, use Language settings."
   },
   "front": {
     "description": "Independent blogs from around the world, each in its own language, with their titles translated into yours.",
@@ -43,7 +52,7 @@
     "empty": "No posts yet. The blogs Tela gathers will show here as they write.",
     "writers": {
       "title": "Write a blog? Make it your calling card.",
-      "intro": "Claim your blog on Tela and get a page with your name, your blog and the posts you recommend. Your site stays where it is.",
+      "intro": "Claim your blog on Tela and get a page with your name, your blog and the posts you recommend. Your blog stays where it is.",
       "cta": "Make your card"
     },
     "read": "Read →",
@@ -55,7 +64,9 @@
     "about": "About",
     "writers": "For writers",
     "privacy": "Privacy",
-    "terms": "Terms"
+    "terms": "Terms",
+    "language": "Language",
+    "theme": "Theme"
   },
   "login": {
     "title": "Log in to Tela"
@@ -142,28 +153,31 @@
     "browse": "Feeds",
     "hide": "Collapse the sidebar",
     "show": "Expand the sidebar",
-    "manage": "Manage subscriptions"
+    "manage": "Manage subscriptions",
+    "browseDiscover": "or browse Discover →"
   },
   "list": {
     "markAllRead": "Mark all read",
     "empty": "Nothing here yet.",
-    "emptyHint": "Add a feed to start reading.",
+    "emptyHint": "<add>Add a blog</add> to start reading.",
     "minutes": "{n} min",
     "translatedBadge": "{from} → {to}",
     "loadMore": "Older articles",
     "fetching": "Fetching this feed for the first time…",
     "allRead": "You're all caught up.",
-    "allReadHint": "Read posts are hidden. <settings>Show them again</settings> in Settings."
+    "allReadHint": "Read posts are hidden. <settings>Show them again</settings> in Settings.",
+    "markedRead": "{n, plural, one {Marked # post read.} other {Marked # posts read.}}",
+    "undoTooMany": "Already sent, and too many posts to mark unread from here."
   },
   "reader": {
-    "close": "✕ Close",
+    "close": "Close",
     "like": "Like",
     "liked": "Liked",
     "recommend": "Recommend",
     "minRead": "{n} min read",
     "readOriginal": "Open the original",
     "readersOnTela": "{n, plural, =0 {no readers on Tela yet} one {# reader on Tela} other {# readers on Tela}}",
-    "visibleToAuthor": "Your ♡ and recommendations are visible to the author.",
+    "visibleToAuthor": "The author sees how many liked this, and your recommendation with its note.",
     "pickArticle": "Pick an article on the left. Posts in other languages open with a translation beside the original.",
     "unreadCount": "{n} unread",
     "noContent": "This post has no readable content in its feed.",
@@ -178,14 +192,20 @@
     "recommended": "Recommended.",
     "recommendedWithNote": "Recommended with your note.",
     "unrecommended": "Recommendation removed.",
-    "fetchingFullText": "Fetching the full post from the site…",
-    "upNext": "Up next",
+    "fetchingFullText": "Fetching the full post from the blog…",
+    "upNext": "Up next · {blog}",
     "focus": "Focus",
     "markRead": "Mark as read",
-    "markUnread": "Mark as unread"
+    "markUnread": "Mark as unread",
+    "markReadShort": "Mark read",
+    "markUnreadShort": "Mark unread",
+    "likeCount": "Like · {n}",
+    "likedCount": "Liked · {n}",
+    "original": "Original",
+    "backTo": "Back to {list}"
   },
   "add": {
-    "title": "Add a feed",
+    "title": "Add a blog",
     "intro": "Paste a blog address or a feed URL. Tela finds the feed and starts fetching.",
     "placeholder": "https://example.blog",
     "find": "Find feeds",
@@ -195,9 +215,9 @@
     "subscribed": "Subscribed",
     "items": "{n, plural, one {# post} other {# posts}}",
     "opml": "Or import an OPML file",
-    "opmlHint": "Exported from another reader. Up to 500 feeds.",
+    "opmlHint": "Exported from another reader. Up to 500 blogs.",
     "import": "Import",
-    "imported": "Imported {n, plural, one {# feed} other {# feeds}}.",
+    "imported": "Imported {n, plural, one {# blog} other {# blogs}}.",
     "errors": {
       "invalid_url": "That does not look like a URL.",
       "fetch_failed": "Could not reach that address.",
@@ -207,12 +227,14 @@
     }
   },
   "translation": {
-    "writtenIn": "Written in <b>{source}</b>. Translated to {target} by Tela.",
-    "writtenInOnly": "Written in <b>{source}</b>.",
+    "writtenIn": "Written in <b>{source}</b>.",
+    "translatedBy": "Translated to {target} by Tela.",
     "translateNow": "Translate into {target}",
     "translating": "Translating…",
+    "translatingInto": "Translating into {target}…",
+    "translatingRest": "Translating the rest…",
     "failed": "Translation failed.",
-    "partial": "{n, plural, one {# paragraph} other {# paragraphs}} could not be translated.",
+    "partial": "Translated to {target} by Tela. {n, plural, one {# paragraph} other {# paragraphs}} could not be translated.",
     "modesLabel": "Reading layout",
     "modes": {
       "side": "Side by side",
@@ -221,7 +243,7 @@
     },
     "columnTranslated": "{target} · translation",
     "columnOriginal": "original",
-    "blockUntranslated": "not translated",
+    "notTranslated": "Not translated · {language}",
     "rateLimited": "Too many translation requests for now. Please try again in a little while.",
     "budgetExhausted": "You have used today's translation allowance. It resets tomorrow.",
     "unavailable": "The translation could not be started. Please try again.",
@@ -341,17 +363,17 @@
     },
     "claim": {
       "title": "Have a blog?",
-      "intro": "Claim your feed to see how many read you, how your posts landed, and what readers said recommending them.",
-      "cta": "Claim your feed"
+      "intro": "Claim your blog to see how many read you, how your posts landed, and what readers said recommending them.",
+      "cta": "Claim your blog"
     }
   },
   "site": {
-    "claimedByName": "✓ Claimed by {name}",
-    "visit": "Visit site ↗",
+    "claimedByName": "Claimed by {name}",
+    "visit": "Visit blog ↗",
     "writtenIn": "Written in {lang}",
     "cadence": "{key, select, daily {Posts daily} weekly {Posts weekly} biweekly {Posts twice a month} monthly {Posts monthly} other {Quiet lately}}",
     "readersOnTela": "{n, plural, one {# reader on Tela} other {# readers on Tela}}",
-    "claimLink": "Is this your site? Claim it",
+    "claimLink": "Is this your blog? Claim it",
     "yourTopics": "Your topics",
     "saveTopics": "Save",
     "posts": "Posts",
@@ -368,31 +390,31 @@
     "noteOn": "<person></person> on <post></post>"
   },
   "claim": {
-    "title": "Claim your feed",
-    "intro": "Tell us your blog's address. We will find its feed, then ask you to prove you control the site.",
+    "title": "Claim your blog",
+    "intro": "Tell us your blog's address. We will find its feed, then ask you to prove you control the blog.",
     "continue": "Continue",
     "searching": "Looking for your feed…",
-    "verifyTitle": "Prove you own this site",
+    "verifyTitle": "Prove you own this blog",
     "verifyIntro": "Show that <site></site> is yours in any one of these ways, then press Verify. Tela tries them all.",
     "optionGitHub": "Your GitHub",
-    "optionGitHubHint": "Nothing to add if the website on your GitHub profile is {site} and your site links to that profile from its header or footer.",
-    "optionGitHubUnlinked": "If your site and your GitHub profile already link to each other, there is nothing to add: link GitHub to your Tela account in <link>Settings</link>, then come back.",
+    "optionGitHubHint": "Nothing to add if the website on your GitHub profile is {site} and your blog links to that profile from its header or footer.",
+    "optionGitHubUnlinked": "If your blog and your GitHub profile already link to each other, there is nothing to add: link GitHub to your Tela account in <link>Settings</link>, then come back.",
     "optionRelMe": "A link to your Tela profile",
-    "optionRelMeHint": "Put this in your site's header or footer. A link you already have works too: with rel=\"me\" anywhere on the home page; without it, only in a header or footer that your site's 404 page shows as well.",
+    "optionRelMeHint": "Put this in your blog's header or footer. A link you already have works too: with rel=\"me\" anywhere on the home page; without it, only in a header or footer that your blog's 404 page shows as well.",
     "optionMeta": "A meta tag",
     "optionMetaHint": "Put this in the <head> of your home page. You can remove it after verification.",
     "verify": "Verify",
     "verifyAgain": "Verify again",
-    "checking": "Checking your site…",
+    "checking": "Checking your blog…",
     "stillChecking": "This is taking longer than usual. Verify again, or come back later: the answer will be here.",
     "failed": "Not verified yet.",
     "reasons": {
       "no_proof": "Tela found nothing on {page}: no meta tag, no link to your Tela profile, and no link to a GitHub that links back. Tela reads the page as your server sends it, before any script runs.",
       "other_handle": "{page} links to the Tela profile @{found}, but yours is @{handle}. Change the link to your profile.",
       "link_marked": "The link to {target, select, github {your GitHub} other {your Tela profile}} on {page} is marked rel=\"{rel}\", as comment sections mark a commenter's link, so it does not count. Remove that, or add rel=\"me\".",
-      "not_site_wide": "The link to {target, select, github {your GitHub} other {your Tela profile}} is on {page} but not on {other}, your site's page for a missing address. Without rel=\"me\", a link counts only if that page shows it too, in a header or footer, so a link in a post does not. Add rel=\"me\" to it, or move it to your header or footer.",
-      "no_not_found_page": "The link to {target, select, github {your GitHub} other {your Tela profile}} on {page} has no rel=\"me\", so Tela looks for it on your site's 404 page too, and your site does not answer a missing address with a 404 page Tela can read. Add rel=\"me\" to the link.",
-      "github_website": "Your site links to your GitHub profile, but the website on that profile is not {site}. Set it to {site} on GitHub, then verify again.",
+      "not_site_wide": "The link to {target, select, github {your GitHub} other {your Tela profile}} is on {page} but not on {other}, your blog's page for a missing address. Without rel=\"me\", a link counts only if that page shows it too, in a header or footer, so a link in a post does not. Add rel=\"me\" to it, or move it to your header or footer.",
+      "no_not_found_page": "The link to {target, select, github {your GitHub} other {your Tela profile}} on {page} has no rel=\"me\", so Tela looks for it on your blog's 404 page too, and your blog does not answer a missing address with a 404 page Tela can read. Add rel=\"me\" to the link.",
+      "github_website": "Your blog links to your GitHub profile, but the website on that profile is not {site}. Set it to {site} on GitHub, then verify again.",
       "github_link": "Your GitHub profile names {site} as its website, but {page} does not link to that profile. Add the link to your header or footer.",
       "github_unavailable": "GitHub did not answer, so Tela could not check your GitHub. Try again in a little while, or use another way.",
       "overruled": "An operator removed or turned down this claim, so a link without rel=\"me\" no longer proves it. Add rel=\"me\" to the link to {target, select, github {your GitHub} other {your Tela profile}} on {page}, or add the meta tag.",
@@ -400,14 +422,14 @@
       "home_status": "{page} answered HTTP {status} rather than a page Tela could read. Check that your home page loads, then verify again.",
       "home_unreachable": "Tela could not read {page}: {why, select, timeout {it took too long to answer} too_large {the page is larger than Tela reads} redirect_loop {it redirects too many times} other {it could not be reached}}. Check that it loads, then verify again."
     },
-    "verified": "Verified. This site is yours on Tela.",
-    "verifiedHint": "It is now listed in Discover. Pick its topics on the site page, and see readers and likes in your dashboard.",
-    "viewSite": "View site page",
-    "claimedByOther": "This site has already been claimed by another Tela member.",
+    "verified": "Verified. This blog is yours on Tela.",
+    "verifiedHint": "It is now listed in Discover. Pick its topics on the blog's page, and see readers and likes in your dashboard.",
+    "viewSite": "View blog page",
+    "claimedByOther": "This blog has already been claimed by another Tela member.",
     "errors": {
       "invalid_url": "That does not look like a URL.",
       "fetch_failed": "Could not reach that address.",
-      "no_feed": "No feed found at that address. Tela lists sites that publish a feed.",
+      "no_feed": "No feed found at that address. Tela lists blogs that publish a feed.",
       "rate_limited": "Too many claim attempts. Please wait a little and try again."
     },
     "taken": "The handle you picked belongs to someone else, so yours is still a temporary one. Choose another in <link>Settings</link>."
@@ -427,7 +449,7 @@
       "submit": "Claim your card"
     },
     "availability": {
-      "available": "✓ @{handle} is available",
+      "available": "@{handle} is available",
       "taken": "@{handle} is taken.",
       "reserved": "@{handle} is reserved.",
       "invalid": "@{handle} cannot be a handle.",
@@ -498,7 +520,7 @@
       },
       "connect": {
         "title": "Connect your blog",
-        "body": "Show the site is yours with a link to your card or a meta tag, or with nothing at all if your site and your GitHub already link to each other. Any blog with an RSS or Atom feed works."
+        "body": "Show the blog is yours with a link to your card or a meta tag, or with nothing at all if your blog and your GitHub already link to each other. Any blog with an RSS or Atom feed works."
       },
       "follow": {
         "title": "Follow writers you like",
@@ -506,10 +528,10 @@
       }
     },
     "yours": {
-      "title": "Your site stays yours",
+      "title": "Your blog stays yours",
       "nothing": {
         "title": "Nothing moves",
-        "body": "Tela reads the feed you already publish. Every post links back to your site."
+        "body": "Tela reads the feed you already publish. Every post links back to your blog."
       },
       "ads": {
         "title": "No ads",
@@ -550,7 +572,7 @@
     "tabs": {
       "all": "All",
       "recs": "Recommendations",
-      "likes": "Likes"
+      "likes": "Liked"
     },
     "recommended": "recommended",
     "liked": "{n, plural, one {liked a post} other {liked # posts}}",
@@ -568,14 +590,27 @@
     "followingButton": "Following"
   },
   "dashboard": {
-    "title": "Your sites",
-    "intro": "How many read you, how your posts landed, and what readers said recommending them.",
-    "noSites": "You have not claimed a site yet.",
+    "title": "Dashboard",
+    "intro": "How many read your blog, how your posts landed, and what readers said when they recommended them.",
+    "noSites": "You have not claimed a blog yet.",
+    "listedUnder": "{listing} under {topics}",
+    "listSeparator": ", ",
+    "readers": "Readers on Tela",
+    "newReaders": "+{n} in the last 30 days",
+    "likes": "Likes",
+    "likesAcross": "across {n, plural, one {# post} other {# posts}}",
+    "recommendations": "Recommendations",
+    "withNote": "{n} with a note",
+    "posts": "Posts",
     "post": "Post",
+    "notesColumn": "Notes",
     "notes": "What readers said",
     "noNotes": "No recommendation notes yet.",
-    "optOutTranslation": "Opt out of translation",
-    "allowTranslation": "Allow translation",
+    "onTela": "This blog on Tela",
+    "translate": "Let readers translate your posts",
+    "translateHint": "Tela translates your posts for readers in other languages and always shows your original beside the translation. Turned off, readers see your posts only as you wrote them.",
+    "translationOn": "Translation is on for {blog}.",
+    "translationOff": "Translation is off for {blog}.",
     "listing": {
       "private": "private",
       "listed": "listed in Discover",
@@ -659,7 +694,7 @@
     "addLanguage": "+ Add language",
     "add": "Add",
     "removeLanguage": "Remove {lang}",
-    "subscriptionsIntro": "{n, plural, one {# blog} other {# blogs}}. Bring feeds from another reader with OPML.",
+    "subscriptionsIntro": "{n, plural, one {# blog} other {# blogs}}. Bring blogs from another reader with OPML.",
     "importOpml": "Import OPML",
     "opmlExport": "Export",
     "unsubscribe": "Unsubscribe",
@@ -757,6 +792,8 @@
     "save": "Save",
     "cancel": "Cancel",
     "remove": "Remove highlight",
+    "removed": "Highlight removed.",
+    "privacy": "Highlights and notes are private.<keyboard> Select text and press H to highlight.</keyboard>",
     "detached": "This passage is no longer in the post.",
     "elsewhere": "In another layout or language: switch to see it."
   },
@@ -784,6 +821,7 @@
     "original": "Open the original in a new tab",
     "like": "Like or unlike the article",
     "read": "Mark the article read or unread",
+    "undo": "Undo, while a message offers it",
     "highlight": "Highlight the selection",
     "sidebar": "Collapse or expand the sidebar",
     "focus": "Hide the list while reading",
@@ -800,5 +838,16 @@
     "onThisPage": "On this page",
     "short": "The short version",
     "updated": "Last updated {date}"
+  },
+  "toast": {
+    "undo": "Undo"
+  },
+  "firstRun": {
+    "title": "Start with a few blogs",
+    "intro": "Subscribe to a few and their posts fill your reading list. Posts in other languages arrive with their titles in {language}.",
+    "waiting": "Subscribe to at least one to start reading.",
+    "start": "{n, plural, one {Start reading # blog →} other {Start reading # blogs →}}",
+    "more": "More blogs in Discover →",
+    "import": "Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>."
   }
 }

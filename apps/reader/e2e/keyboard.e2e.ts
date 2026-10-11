@@ -110,6 +110,8 @@ test('? lists the keys; Esc in a popover closes the popover, not the article', a
   await page.getByTestId('recommend-note').press('Escape')
   await expect(page.getByTestId('recommend-popover')).toHaveCount(0)
   await expect(page.getByTestId('reader')).toBeVisible()
+  // Focus goes back to the button that opened it, not to <body>.
+  await expect(page.getByTestId('recommend-button')).toBeFocused()
   // Typing a j in a field is typing, not a shortcut.
   await page.getByTestId('search-input').focus()
   await page.keyboard.press('j')

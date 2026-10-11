@@ -162,6 +162,26 @@ export async function fromAccountMenu(page: Page, item: string): Promise<void> {
   await page.getByTestId(item).click()
 }
 
+/**
+ * The open account menu's rows that show, in order, by test id (Tela v5): on a phone the
+ * language, theme and search rows first, then the items every width has.
+ */
+export function accountMenuOrder(page: Page): Promise<string[]> {
+  const rows = [
+    '[data-testid^="nav-"]',
+    '[data-testid="sign-out"]',
+    '[data-testid="account-language"]',
+    '[data-testid="account-theme-row"]',
+    '[data-testid="account-search"]',
+  ].join(', ')
+  return page
+    .getByTestId('account-panel')
+    .locator(rows)
+    .evaluateAll((els) =>
+      els.filter((el) => el.checkVisibility()).map((el) => el.getAttribute('data-testid') ?? ''),
+    )
+}
+
 /** Wait until the page's first sync has landed: the sidebar lists the subscriptions. */
 export async function synced(page: Page): Promise<void> {
   await page.getByTestId('subscription').first().waitFor()
@@ -411,10 +431,10 @@ export async function measureHeader(page: Page, controls: string[]) {
  * squeezed below one pill (a 4px nav was what `md` once rendered); from `sm` up it is not clipped
  * at all. On macOS with the theme menu and the language circle in (34px, whatever it shows): the
  * member's pill row is 247px (Reading, Discover, Following), and 640px, the tightest case, leaves
- * it 141px to spare (161px in French, whose row is 227px), where the Read-in button the circle
+ * it 147px to spare (167px in French, whose row is 227px), where the Read-in button the circle
  * replaced was 104px with 简体 and left 72px; CI's Linux Chromium sets text about 2% wider (an
- * older 335px row measured 341px there). The visitor's row is 175px, with 161px to spare at 640
- * (65px in French, whose Log in and Join run longer). Below `sm` the member's nav scrolls: 196px
+ * older 335px row measured 341px there). The visitor's row is 175px, with 163px to spare at 640
+ * (67px in French, whose Log in and Join run longer). Below `sm` the member's nav scrolls: 196px
  * of it shows at 360, where 122px did beside the button.
  */
 export function expectHeaderFits(m: Awaited<ReturnType<typeof measureHeader>>, width: number) {

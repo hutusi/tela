@@ -29,9 +29,17 @@ function handedOver(path: string): unknown {
   return undefined
 }
 
-export type Loaded<T> = { status: 'loading' } | { status: 'missing' } | { status: 'ready'; data: T }
+/**
+ * Still loading, and `failed` once the request has (offline, an error): most pages keep their
+ * skeleton and wait for the next visit, and one with something better to show can show it.
+ */
+export type Loaded<T> =
+  | { status: 'loading'; failed?: true }
+  | { status: 'missing' }
+  | { status: 'ready'; data: T }
 
 const LOADING = { status: 'loading' } as const
+const FAILED = { status: 'loading', failed: true } as const
 const MISSING = { status: 'missing' } as const
 
 /** What a path shows before its own answer: what is held this visit, else loading. */
@@ -81,6 +89,13 @@ export function usePublic<T>(path: string | null): Loaded<T> {
     // is never replaced by an older one. A page changed this visit is fetched past the copy.
     const handover = version === 0 && !held.has(path) && handedOver(path) !== undefined
     const cache: 'reload' | 'no-cache' | null = stale ? 'reload' : handover ? 'no-cache' : null
+    // A refetch that fails leaves what the page shows; only a page still loading hears of it.
+    const fail = () => {
+      if (cancelled) return
+      setState((s) =>
+        s.path === path && s.loaded.status === 'loading' ? { path, loaded: FAILED } : s,
+      )
+    }
     fetch(path, { credentials: 'same-origin', ...(cache ? { cache } : {}) })
       .then(async (res) => {
         if (cancelled) return
@@ -88,12 +103,15 @@ export function usePublic<T>(path: string | null): Loaded<T> {
           setState({ path, loaded: MISSING })
           return
         }
-        if (!res.ok) return
+        if (!res.ok) {
+          fail()
+          return
+        }
         const data = (await res.json()) as T
         held.set(path, data)
         if (!cancelled) setState({ path, loaded: { status: 'ready', data } })
       })
-      .catch(() => undefined)
+      .catch(fail)
     return () => {
       cancelled = true
     }

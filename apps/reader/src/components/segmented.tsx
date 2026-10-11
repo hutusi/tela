@@ -1,4 +1,8 @@
-/** One of a few named values, side by side, the chosen one lifted (Settings, DESIGN.md). */
+/**
+ * One of a few named values, side by side, the chosen one lifted (Settings, DESIGN.md). `value`
+ * null marks none, where the page cannot say which (the edge's, for the theme). `large` is the
+ * phone's size, for a row of a menu or the footer (Tela v5): 13px, and items tall enough to touch.
+ */
 export function Segmented<T extends string>({
   label,
   options,
@@ -6,13 +10,15 @@ export function Segmented<T extends string>({
   render,
   onChoose,
   testId,
+  large = false,
 }: {
   label: string
   options: readonly T[]
-  value: T
+  value: T | null
   render: (option: T) => React.ReactNode
   onChoose: (option: T) => void
   testId: string
+  large?: boolean
 }) {
   return (
     <fieldset
@@ -25,10 +31,12 @@ export function Segmented<T extends string>({
           <button
             key={option}
             type="button"
-            aria-pressed={active}
+            aria-pressed={value === null ? undefined : active}
             onClick={() => onChoose(option)}
             data-testid={`${testId}-${option}`}
-            className={`rounded-md px-3 py-[5px] text-[12.5px] whitespace-nowrap ${
+            className={`rounded-md whitespace-nowrap ${
+              large ? 'px-[11px] py-[7px] text-[13px]' : 'px-3 py-[5px] text-[12.5px]'
+            } ${
               active
                 ? 'bg-surface text-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]'
                 : 'text-ink-2 hover:text-ink'

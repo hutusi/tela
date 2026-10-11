@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { Glyph, SEARCH } from './glyph'
 
 /**
  * The site's one search input. The header carries it from `xl`, the search page below `xl`, so
@@ -28,7 +29,7 @@ export function SearchField({
         navigate(`/search?q=${encodeURIComponent(value.trim())}`)
       }}
     >
-      <span aria-hidden="true">⌕</span>
+      <Glyph className="block shrink-0">{SEARCH}</Glyph>
       <input
         type="search"
         name="q"

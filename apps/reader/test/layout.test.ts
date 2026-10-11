@@ -1,6 +1,7 @@
 /** The panes this device shows (ADR 0029): kept in localStorage, in the shape of the synced prefs. */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import {
+  effectiveSidebar,
   gridColumns,
   layout,
   setLayout,
@@ -43,14 +44,14 @@ function forget() {
 }
 
 describe('the panes this device shows', () => {
-  test('start shown and unfocused, and a value this build does not know is the default too', () => {
+  test('start with no sidebar chosen and unfocused, and a value this build does not know is no choice', () => {
     held.clear()
     forget()
-    expect(layout()).toEqual({ sidebar: 'shown', focus: 'off' })
+    expect(layout()).toEqual({ sidebar: null, focus: 'off' })
     held.set('tela.sidebar', 'sideways')
     held.set('tela.focus', 'sharp')
     forget()
-    expect(layout()).toEqual({ sidebar: 'shown', focus: 'off' })
+    expect(layout()).toEqual({ sidebar: null, focus: 'off' })
   })
 
   test('a choice is written to the device and told to whoever is listening', () => {
@@ -60,6 +61,7 @@ describe('the panes this device shows', () => {
     const stop = subscribeLayout(() => {
       told += 1
     })
+    // No article open and no window to measure: the sidebar shows, so the toggle hides it.
     toggleSidebar()
     expect(held.get('tela.sidebar')).toBe('hidden')
     expect(layout().sidebar).toBe('hidden')
@@ -77,10 +79,10 @@ describe('the panes this device shows', () => {
   test('another tab’s choice arrives through its storage event, and only for our keys', () => {
     held.clear()
     forget()
-    expect(layout().sidebar).toBe('shown')
+    expect(layout().sidebar).toBeNull()
     held.set('tela.sidebar', 'hidden')
     // The cache does not see the write itself.
-    expect(layout().sidebar).toBe('shown')
+    expect(layout().sidebar).toBeNull()
     let told = 0
     const stop = subscribeLayout(() => {
       told += 1
@@ -98,7 +100,7 @@ describe('the panes this device shows', () => {
     // other tab chose meanwhile, not the one it left with.
     held.clear()
     forget()
-    expect(layout().sidebar).toBe('shown')
+    expect(layout().sidebar).toBeNull()
     held.set('tela.sidebar', 'hidden')
     storageEvent('tela.sidebar')
     expect(layout().sidebar).toBe('hidden')
@@ -119,11 +121,69 @@ describe('the panes this device shows', () => {
     }
     Object.assign(globalThis, { localStorage: refusing })
     try {
-      expect(layout().sidebar).toBe('shown')
+      expect(layout().sidebar).toBeNull()
       setLayout({ sidebar: 'hidden' })
       expect(layout().sidebar).toBe('hidden')
     } finally {
       Object.assign(globalThis, { localStorage: store })
+      forget()
+    }
+  })
+})
+
+describe('the sidebar the page shows', () => {
+  test('the device’s choice at any width, else the rail beside an article in a narrow window', () => {
+    for (const open of [false, true]) {
+      for (const wide of [false, true]) {
+        expect(effectiveSidebar('shown', open, wide)).toBe('shown')
+        expect(effectiveSidebar('hidden', open, wide)).toBe('hidden')
+      }
+    }
+    expect(effectiveSidebar(null, false, false)).toBe('shown')
+    expect(effectiveSidebar(null, false, true)).toBe('shown')
+    expect(effectiveSidebar(null, true, true)).toBe('shown')
+    expect(effectiveSidebar(null, true, false)).toBe('hidden')
+  })
+
+  test('the toggle stores the other one from what shows when it runs, so from the rail it stores shown', () => {
+    const at = (search: string, wide: boolean) =>
+      Object.assign(globalThis, {
+        location: { search },
+        matchMedia: (query: string) => ({ matches: wide, media: query }),
+      })
+    try {
+      held.clear()
+      forget()
+      // An article open in a narrow window, nothing chosen: the rail shows, so this is a show.
+      at('?article=5', false)
+      toggleSidebar()
+      expect(held.get('tela.sidebar')).toBe('shown')
+      toggleSidebar()
+      expect(held.get('tela.sidebar')).toBe('hidden')
+
+      // The same with the window wide, or no article open: the sidebar shows, so this hides it.
+      held.clear()
+      forget()
+      at('?article=5', true)
+      toggleSidebar()
+      expect(held.get('tela.sidebar')).toBe('hidden')
+      held.clear()
+      forget()
+      at('?filter=today', false)
+      toggleSidebar()
+      expect(held.get('tela.sidebar')).toBe('hidden')
+
+      // A value this build does not know counts as no choice there too.
+      held.set('tela.sidebar', 'sideways')
+      forget()
+      at('?article=5', false)
+      toggleSidebar()
+      expect(held.get('tela.sidebar')).toBe('shown')
+    } finally {
+      const globals = globalThis as { location?: unknown; matchMedia?: unknown }
+      delete globals.location
+      delete globals.matchMedia
+      held.clear()
       forget()
     }
   })
@@ -137,6 +197,15 @@ describe('the grid', () => {
     expect(gridColumns(true, shown)).toBe('lg:grid-cols-[220px_260px_minmax(0,1fr)]')
     expect(gridColumns(false, hidden)).toBe('lg:grid-cols-[48px_minmax(280px,380px)_minmax(0,1fr)]')
     expect(gridColumns(true, hidden)).toBe('lg:grid-cols-[48px_260px_minmax(0,1fr)]')
+  })
+
+  test('the first run has no list: the sidebar or its rail, and its page', () => {
+    expect(gridColumns(false, { sidebar: 'shown', focus: 'off' }, false)).toBe(
+      'lg:grid-cols-[220px_minmax(0,1fr)]',
+    )
+    expect(gridColumns(false, { sidebar: 'hidden', focus: 'on' }, false)).toBe(
+      'lg:grid-cols-[48px_minmax(0,1fr)]',
+    )
   })
 
   test('in focus an open article has the grid to itself, and a closed one does not', () => {

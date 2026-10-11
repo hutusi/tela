@@ -66,6 +66,52 @@ test('the sidebar collapses to its rail, and stays collapsed on this device', as
   await expect(layout).toHaveAttribute('data-sidebar', 'shown')
 })
 
+test('below 1200px an open article starts with the rail, until this device chooses', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1100, height: 800 })
+  await page.goto('/reading')
+  await synced(page)
+  const layout = page.getByTestId('reading-layout')
+  const sidebar = page.getByTestId('sidebar')
+  const rail = page.getByTestId('sidebar-rail')
+  const stored = () => page.evaluate(() => localStorage.getItem('tela.sidebar'))
+  // Nothing open: the list has the room, and the sidebar shows.
+  await expect(sidebar).toBeVisible()
+  await page.getByTestId('article-row').first().click()
+  await expect(page).toHaveURL(/article=\d+/)
+  await expect(rail).toBeVisible()
+  await expect(sidebar).toHaveCount(0)
+  await expect(layout).toHaveAttribute('data-sidebar', 'hidden')
+
+  // Nothing stored, so the width decides, as the window changes.
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await expect(sidebar).toBeVisible()
+  await expect(rail).toHaveCount(0)
+  await page.setViewportSize({ width: 1100, height: 800 })
+  await expect(rail).toBeVisible()
+
+  // Closing the article gives the sidebar back.
+  await page.getByTestId('close-article').click()
+  await expect(page).not.toHaveURL(/article=/)
+  await expect(sidebar).toBeVisible()
+  await expect(rail).toHaveCount(0)
+  expect(await stored()).toBeNull()
+
+  // The toggle while an article is open stores what it then shows, and that holds from now on.
+  await page.getByTestId('article-row').first().click()
+  await expect(rail).toBeVisible()
+  await rail.getByTestId('sidebar-toggle').click()
+  await expect(sidebar).toBeVisible()
+  await expect(rail).toHaveCount(0)
+  expect(await stored()).toBe('shown')
+  await page.reload()
+  await expect(page).toHaveURL(/article=\d+/)
+  await expect(sidebar).toBeVisible()
+  await expect(rail).toHaveCount(0)
+  await expect(layout).toHaveAttribute('data-sidebar', 'shown')
+})
+
 test('the rail keeps the filters and the feeds', async ({ page }) => {
   await page.goto('/reading')
   await synced(page)
@@ -316,7 +362,9 @@ test('focus hides the list too while an article is open, and j, k and Esc carry 
   await expect(list).toBeHidden()
   await expect(page.locator('aside')).toHaveCount(0)
   // The article has the pane to itself.
-  expect((await page.getByTestId('reader').boundingBox())?.width).toBeGreaterThanOrEqual(1200)
+  expect(
+    Math.round((await page.getByTestId('reader').boundingBox())?.width ?? 0),
+  ).toBeGreaterThanOrEqual(1200)
   await page.keyboard.press('f')
   await expect(list).toBeVisible()
   expect(await list.evaluate((el) => (el as HTMLElement & { kept?: boolean }).kept)).toBe(true)

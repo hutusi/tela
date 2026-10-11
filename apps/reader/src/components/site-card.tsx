@@ -11,7 +11,15 @@ export type SiteCardData = Pick<
 > &
   Partial<Pick<DiscoverSite, 'primaryLang' | 'claimed' | 'latestTitle' | 'postsLast30d'>>
 
+import { CHECK, Glyph } from './glyph'
 import { SiteAvatar } from './site-avatar'
+
+/**
+ * Subscribe in a grid of blogs is outlined (Tela v5 §11): a page of cards is a page of choices,
+ * and twelve filled buttons would shout over the blogs. Subscribed keeps the quieter line.
+ */
+const SUBSCRIBE =
+  'rounded-full border bg-transparent px-3.5 py-1.5 text-[13px] font-medium transition-colors hover:bg-hover'
 
 export function SiteCard({
   site,
@@ -50,10 +58,13 @@ export function SiteCard({
             {site.claimed ? (
               <span
                 title={t('claimed')}
-                className="text-xs text-accent"
+                className="flex shrink-0 text-accent"
                 data-testid="claimed-badge"
               >
-                ✓
+                <Glyph size={12} className="block">
+                  {CHECK}
+                </Glyph>
+                <span className="sr-only">{t('claimed')}</span>
               </span>
             ) : null}
           </div>
@@ -94,16 +105,14 @@ export function SiteCard({
             onClick={() => site.feedId !== null && member.toggle(site.feedId, subscribed)}
             data-testid="site-subscribe"
             aria-pressed={subscribed}
-            className={`rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-all hover:brightness-95 ${
-              subscribed ? 'border-line bg-transparent text-ink-2' : 'border-ink bg-ink text-paper'
-            }`}
+            className={`${SUBSCRIBE} ${subscribed ? 'border-line text-ink-2' : 'border-ink text-ink'}`}
           >
             {subscribed ? t('subscribed') : t('subscribe')}
           </button>
         ) : (
           <Link
             to={`/login?next=${encodeURIComponent(next)}`}
-            className="rounded-full border border-ink bg-ink px-3.5 py-1.5 text-[13px] font-medium text-paper hover:no-underline"
+            className={`${SUBSCRIBE} border-ink text-ink hover:no-underline`}
           >
             {t('subscribe')}
           </Link>

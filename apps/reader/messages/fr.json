@@ -4,7 +4,9 @@
     "tagline": "Des blogs indépendants, dans toutes les langues."
   },
   "common": {
-    "quoted": "« {text} »"
+    "quoted": "« {text} »",
+    "likeCount": "{n} j’aime",
+    "recommendCount": "{n, plural, one {# recommandation} other {# recommandations}}"
   },
   "nav": {
     "reading": "Lecture",
@@ -17,7 +19,7 @@
     "logIn": "Connexion",
     "join": "S’inscrire",
     "signOut": "Se déconnecter",
-    "addFeed": "+ Ajouter un flux",
+    "addFeed": "+ Ajouter un blog",
     "dashboard": "Tableau de bord",
     "admin": "Administration",
     "settings": "Paramètres",
@@ -27,6 +29,13 @@
     "invites": "Inviter des proches",
     "writers": "Pour les auteurs",
     "themeIs": "Thème : {theme}"
+  },
+  "menu": {
+    "language": "Langue",
+    "theme": "Thème",
+    "search": "Rechercher",
+    "languageHint": "Les menus et les traductions suivent ce choix. Pour traduire dans une autre langue, passez par les paramètres de langue.",
+    "apartHint": "Les traductions suivent ce choix, et les menus gardent leur propre langue. Pour lier à nouveau les deux, passez par les paramètres de langue."
   },
   "front": {
     "description": "Des blogs indépendants du monde entier, chacun dans sa langue, avec des titres traduits dans la vôtre.",
@@ -43,7 +52,7 @@
     "empty": "Aucun article pour l’instant. Les blogs que Tela rassemble apparaîtront ici dès qu’ils publieront.",
     "writers": {
       "title": "Vous tenez un blog ? Faites-en votre carte de visite.",
-      "intro": "Revendiquez votre blog sur Tela et obtenez une page à votre nom, avec votre blog et les articles que vous recommandez. Votre site reste où il est.",
+      "intro": "Revendiquez votre blog sur Tela et obtenez une page à votre nom, avec votre blog et les articles que vous recommandez. Votre blog reste où il est.",
       "cta": "Créer votre carte"
     },
     "read": "Lire →",
@@ -55,7 +64,9 @@
     "about": "À propos",
     "writers": "Pour les auteurs",
     "privacy": "Confidentialité",
-    "terms": "Conditions"
+    "terms": "Conditions",
+    "language": "Langue",
+    "theme": "Thème"
   },
   "login": {
     "title": "Se connecter à Tela"
@@ -142,28 +153,31 @@
     "browse": "Flux",
     "hide": "Replier la barre latérale",
     "show": "Déplier la barre latérale",
-    "manage": "Gérer les abonnements"
+    "manage": "Gérer les abonnements",
+    "browseDiscover": "ou parcourez Découvrir →"
   },
   "list": {
     "markAllRead": "Tout marquer comme lu",
     "empty": "Rien ici pour l’instant.",
-    "emptyHint": "Ajoutez un flux pour commencer à lire.",
+    "emptyHint": "<add>Ajoutez un blog</add> pour commencer à lire.",
     "minutes": "{n} min",
     "translatedBadge": "{from} → {to}",
     "loadMore": "Articles plus anciens",
     "fetching": "Première récupération de ce flux…",
     "allRead": "Vous êtes à jour.",
-    "allReadHint": "Les articles lus sont masqués. <settings>Réaffichez-les</settings> dans les Paramètres."
+    "allReadHint": "Les articles lus sont masqués. <settings>Réaffichez-les</settings> dans les Paramètres.",
+    "markedRead": "{n, plural, one {# article marqué comme lu.} other {# articles marqués comme lus.}}",
+    "undoTooMany": "Déjà envoyé, et trop d’articles à marquer comme non lus d’ici."
   },
   "reader": {
-    "close": "✕ Fermer",
+    "close": "Fermer",
     "like": "J’aime",
     "liked": "Vous aimez",
     "recommend": "Recommander",
     "minRead": "{n} min de lecture",
     "readOriginal": "Ouvrir l’original",
     "readersOnTela": "{n, plural, =0 {aucun lecteur sur Tela pour l’instant} one {# lecteur sur Tela} other {# lecteurs sur Tela}}",
-    "visibleToAuthor": "Vos ♡ et vos recommandations sont visibles par l’auteur.",
+    "visibleToAuthor": "L’auteur voit combien de personnes l’ont aimé, et votre recommandation avec son mot.",
     "pickArticle": "Choisissez un article à gauche. Les articles dans d’autres langues s’ouvrent avec une traduction à côté de l’original.",
     "unreadCount": "{n, plural, one {# non lu} other {# non lus}}",
     "noContent": "Le flux de cet article ne contient aucun texte lisible.",
@@ -178,14 +192,20 @@
     "recommended": "Recommandé.",
     "recommendedWithNote": "Recommandé, avec votre mot.",
     "unrecommended": "Recommandation retirée.",
-    "fetchingFullText": "Récupération de l’article complet sur le site…",
-    "upNext": "À suivre",
+    "fetchingFullText": "Récupération de l’article complet sur le blog…",
+    "upNext": "À suivre · {blog}",
     "focus": "Focus",
     "markRead": "Marquer comme lu",
-    "markUnread": "Marquer comme non lu"
+    "markUnread": "Marquer comme non lu",
+    "markReadShort": "Marquer lu",
+    "markUnreadShort": "Marquer non lu",
+    "likeCount": "J’aime · {n}",
+    "likedCount": "Vous aimez · {n}",
+    "original": "Original",
+    "backTo": "Retour à {list}"
   },
   "add": {
-    "title": "Ajouter un flux",
+    "title": "Ajouter un blog",
     "intro": "Collez l’adresse d’un blog ou l’URL d’un flux. Tela trouve le flux et commence à le récupérer.",
     "placeholder": "https://example.blog",
     "find": "Trouver les flux",
@@ -195,9 +215,9 @@
     "subscribed": "Abonné(e)",
     "items": "{n, plural, one {# article} other {# articles}}",
     "opml": "Ou importez un fichier OPML",
-    "opmlHint": "Exporté depuis un autre lecteur de flux. Jusqu’à 500 flux.",
+    "opmlHint": "Exporté depuis un autre lecteur de flux. Jusqu’à 500 blogs.",
     "import": "Importer",
-    "imported": "{n, plural, one {# flux importé.} other {# flux importés.}}",
+    "imported": "{n, plural, one {# blog importé.} other {# blogs importés.}}",
     "errors": {
       "invalid_url": "Cela ne ressemble pas à une URL.",
       "fetch_failed": "Impossible de joindre cette adresse.",
@@ -207,12 +227,14 @@
     }
   },
   "translation": {
-    "writtenIn": "Écrit en <b>{source}</b>. Traduit en {target} par Tela.",
-    "writtenInOnly": "Écrit en <b>{source}</b>.",
+    "writtenIn": "Écrit en <b>{source}</b>.",
+    "translatedBy": "Traduit en {target} par Tela.",
     "translateNow": "Traduire en {target}",
     "translating": "Traduction en cours…",
+    "translatingInto": "Traduction en {target}…",
+    "translatingRest": "Traduction de la suite…",
     "failed": "La traduction a échoué.",
-    "partial": "{n, plural, one {# paragraphe n’a pas pu être traduit.} other {# paragraphes n’ont pas pu être traduits.}}",
+    "partial": "Traduit en {target} par Tela. {n, plural, one {# paragraphe n’a pas pu être traduit.} other {# paragraphes n’ont pas pu être traduits.}}",
     "modesLabel": "Mise en page de lecture",
     "modes": {
       "side": "Côte à côte",
@@ -221,7 +243,7 @@
     },
     "columnTranslated": "{target} · traduction",
     "columnOriginal": "original",
-    "blockUntranslated": "non traduit",
+    "notTranslated": "Non traduit · {language}",
     "rateLimited": "Trop de demandes de traduction pour le moment. Réessayez d’ici un petit moment.",
     "budgetExhausted": "Vous avez épuisé votre quota de traduction du jour. Il se renouvelle demain.",
     "unavailable": "La traduction n’a pas pu démarrer. Réessayez.",
@@ -341,17 +363,17 @@
     },
     "claim": {
       "title": "Vous avez un blog ?",
-      "intro": "Revendiquez votre flux pour voir combien de personnes vous lisent, comment vos articles ont été reçus et ce que les lecteurs en ont dit en les recommandant.",
-      "cta": "Revendiquer votre flux"
+      "intro": "Revendiquez votre blog pour voir combien de personnes vous lisent, comment vos articles ont été reçus et ce que les lecteurs en ont dit en les recommandant.",
+      "cta": "Revendiquer votre blog"
     }
   },
   "site": {
-    "claimedByName": "✓ Revendiqué par {name}",
-    "visit": "Visiter le site ↗",
+    "claimedByName": "Revendiqué par {name}",
+    "visit": "Visiter le blog ↗",
     "writtenIn": "Écrit en {lang}",
     "cadence": "{key, select, daily {Publie chaque jour} weekly {Publie chaque semaine} biweekly {Publie deux fois par mois} monthly {Publie chaque mois} other {Calme ces derniers temps}}",
     "readersOnTela": "{n, plural, one {# lecteur sur Tela} other {# lecteurs sur Tela}}",
-    "claimLink": "C’est votre site ? Revendiquez-le",
+    "claimLink": "C’est votre blog ? Revendiquez-le",
     "yourTopics": "Vos thèmes",
     "saveTopics": "Enregistrer",
     "posts": "Articles",
@@ -368,31 +390,31 @@
     "noteOn": "<person></person> sur <post></post>"
   },
   "claim": {
-    "title": "Revendiquer votre flux",
-    "intro": "Indiquez l’adresse de votre blog. Nous trouverons son flux, puis vous demanderons de prouver que vous contrôlez le site.",
+    "title": "Revendiquer votre blog",
+    "intro": "Indiquez l’adresse de votre blog. Nous trouverons son flux, puis vous demanderons de prouver que vous contrôlez le blog.",
     "continue": "Continuer",
     "searching": "Recherche de votre flux…",
-    "verifyTitle": "Prouvez que ce site est à vous",
+    "verifyTitle": "Prouvez que ce blog est à vous",
     "verifyIntro": "Montrez que <site></site> est à vous de l’une de ces façons, puis cliquez sur Vérifier. Tela les essaie toutes.",
     "optionGitHub": "Votre GitHub",
-    "optionGitHubHint": "Rien à ajouter si le site web de votre profil GitHub est {site} et si votre site renvoie vers ce profil depuis son en-tête ou son pied de page.",
-    "optionGitHubUnlinked": "Si votre site et votre profil GitHub renvoient déjà l’un vers l’autre, il n’y a rien à ajouter : associez GitHub à votre compte Tela dans les <link>Paramètres</link>, puis revenez ici.",
+    "optionGitHubHint": "Rien à ajouter si le site web de votre profil GitHub est {site} et si votre blog renvoie vers ce profil depuis son en-tête ou son pied de page.",
+    "optionGitHubUnlinked": "Si votre blog et votre profil GitHub renvoient déjà l’un vers l’autre, il n’y a rien à ajouter : associez GitHub à votre compte Tela dans les <link>Paramètres</link>, puis revenez ici.",
     "optionRelMe": "Un lien vers votre profil Tela",
-    "optionRelMeHint": "Placez-le dans l’en-tête ou le pied de page de votre site. Un lien existant convient aussi : avec rel=\"me\", n’importe où sur la page d’accueil ; sans, seulement dans un en-tête ou un pied de page que la page 404 de votre site affiche aussi.",
+    "optionRelMeHint": "Placez-le dans l’en-tête ou le pied de page de votre blog. Un lien existant convient aussi : avec rel=\"me\", n’importe où sur la page d’accueil ; sans, seulement dans un en-tête ou un pied de page que la page 404 de votre blog affiche aussi.",
     "optionMeta": "Une balise meta",
     "optionMetaHint": "Placez-la dans le <head> de votre page d’accueil. Vous pourrez la retirer après la vérification.",
     "verify": "Vérifier",
     "verifyAgain": "Vérifier à nouveau",
-    "checking": "Vérification de votre site…",
+    "checking": "Vérification de votre blog…",
     "stillChecking": "La vérification prend plus de temps que d’habitude. Vérifiez à nouveau, ou revenez plus tard : la réponse s’affichera ici.",
     "failed": "Pas encore vérifié.",
     "reasons": {
-      "no_proof": "Tela n’a rien trouvé sur {page} : ni balise meta, ni lien vers votre profil Tela, ni lien vers un GitHub qui renvoie au site. Tela lit la page telle que votre serveur l’envoie, sans exécuter de script.",
+      "no_proof": "Tela n’a rien trouvé sur {page} : ni balise meta, ni lien vers votre profil Tela, ni lien vers un GitHub qui renvoie au blog. Tela lit la page telle que votre serveur l’envoie, sans exécuter de script.",
       "other_handle": "{page} renvoie vers le profil Tela @{found}, mais le vôtre est @{handle}. Corrigez le lien.",
       "link_marked": "Le lien vers {target, select, github {votre GitHub} other {votre profil Tela}} sur {page} porte rel=\"{rel}\", comme les liens des commentateurs : il ne compte pas. Retirez cette mention, ou ajoutez rel=\"me\".",
-      "not_site_wide": "Le lien vers {target, select, github {votre GitHub} other {votre profil Tela}} figure sur {page} mais pas sur {other}, la page de votre site pour une adresse introuvable. Sans rel=\"me\", un lien ne compte que si cette page l’affiche aussi, dans l’en-tête ou le pied de page ; un lien dans un article ne compte pas. Ajoutez-lui rel=\"me\", ou déplacez-le dans l’en-tête ou le pied de page.",
-      "no_not_found_page": "Le lien vers {target, select, github {votre GitHub} other {votre profil Tela}} sur {page} n’a pas de rel=\"me\" : Tela le cherche donc aussi sur la page 404 de votre site, et votre site ne répond pas à une adresse introuvable par une page 404 lisible. Ajoutez rel=\"me\" au lien.",
-      "github_website": "Votre site renvoie vers votre profil GitHub, mais le site web de ce profil n’est pas {site}. Indiquez {site} sur GitHub, puis vérifiez à nouveau.",
+      "not_site_wide": "Le lien vers {target, select, github {votre GitHub} other {votre profil Tela}} figure sur {page} mais pas sur {other}, la page de votre blog pour une adresse introuvable. Sans rel=\"me\", un lien ne compte que si cette page l’affiche aussi, dans l’en-tête ou le pied de page ; un lien dans un article ne compte pas. Ajoutez-lui rel=\"me\", ou déplacez-le dans l’en-tête ou le pied de page.",
+      "no_not_found_page": "Le lien vers {target, select, github {votre GitHub} other {votre profil Tela}} sur {page} n’a pas de rel=\"me\" : Tela le cherche donc aussi sur la page 404 de votre blog, et votre blog ne répond pas à une adresse introuvable par une page 404 lisible. Ajoutez rel=\"me\" au lien.",
+      "github_website": "Votre blog renvoie vers votre profil GitHub, mais le site web de ce profil n’est pas {site}. Indiquez {site} sur GitHub, puis vérifiez à nouveau.",
       "github_link": "Votre profil GitHub indique {site} comme site web, mais {page} ne renvoie pas vers ce profil. Ajoutez ce lien à votre en-tête ou à votre pied de page.",
       "github_unavailable": "GitHub n’a pas répondu : Tela n’a pas pu vérifier votre GitHub. Réessayez dans un moment, ou utilisez une autre façon.",
       "overruled": "Un opérateur a retiré ou refusé cette revendication : un lien sans rel=\"me\" ne la prouve donc plus. Ajoutez rel=\"me\" au lien vers {target, select, github {votre GitHub} other {votre profil Tela}} sur {page}, ou ajoutez la balise meta.",
@@ -400,14 +422,14 @@
       "home_status": "{page} a répondu HTTP {status} au lieu d’une page que Tela peut lire. Vérifiez que votre page d’accueil s’affiche, puis vérifiez à nouveau.",
       "home_unreachable": "Tela n’a pas pu lire {page} : {why, select, timeout {la réponse a pris trop de temps} too_large {la page dépasse la taille que Tela lit} redirect_loop {elle redirige trop de fois} other {elle est injoignable}}. Vérifiez qu’elle s’affiche, puis vérifiez à nouveau."
     },
-    "verified": "Vérifié. Ce site est à vous sur Tela.",
-    "verifiedHint": "Il apparaît désormais dans Découvrir. Choisissez ses thèmes sur la page du site, et suivez lecteurs et coups de cœur dans votre tableau de bord.",
-    "viewSite": "Voir la page du site",
-    "claimedByOther": "Ce site a déjà été revendiqué par une autre personne sur Tela.",
+    "verified": "Vérifié. Ce blog est à vous sur Tela.",
+    "verifiedHint": "Il apparaît désormais dans Découvrir. Choisissez ses thèmes sur la page du blog, et suivez lecteurs et coups de cœur dans votre tableau de bord.",
+    "viewSite": "Voir la page du blog",
+    "claimedByOther": "Ce blog a déjà été revendiqué par une autre personne sur Tela.",
     "errors": {
       "invalid_url": "Cela ne ressemble pas à une URL.",
       "fetch_failed": "Impossible de joindre cette adresse.",
-      "no_feed": "Aucun flux trouvé à cette adresse. Tela référence les sites qui publient un flux.",
+      "no_feed": "Aucun flux trouvé à cette adresse. Tela référence les blogs qui publient un flux.",
       "rate_limited": "Trop de tentatives de revendication. Patientez un peu, puis réessayez."
     },
     "taken": "L’identifiant choisi appartient déjà à quelqu’un d’autre : le vôtre reste donc provisoire. Choisissez-en un autre dans les <link>Paramètres</link>."
@@ -427,7 +449,7 @@
       "submit": "Revendiquer votre carte"
     },
     "availability": {
-      "available": "✓ @{handle} est disponible",
+      "available": "@{handle} est disponible",
       "taken": "@{handle} est déjà pris.",
       "reserved": "@{handle} est réservé.",
       "invalid": "@{handle} ne peut pas servir d’identifiant.",
@@ -498,7 +520,7 @@
       },
       "connect": {
         "title": "Reliez votre blog",
-        "body": "Montrez que le site est à vous avec un lien vers votre carte ou une balise meta, ou sans rien ajouter si votre site et votre GitHub renvoient déjà l’un vers l’autre. Tout blog doté d’un flux RSS ou Atom convient."
+        "body": "Montrez que le blog est à vous avec un lien vers votre carte ou une balise meta, ou sans rien ajouter si votre blog et votre GitHub renvoient déjà l’un vers l’autre. Tout blog doté d’un flux RSS ou Atom convient."
       },
       "follow": {
         "title": "Suivez les auteurs que vous aimez",
@@ -506,10 +528,10 @@
       }
     },
     "yours": {
-      "title": "Votre site reste le vôtre",
+      "title": "Votre blog reste le vôtre",
       "nothing": {
         "title": "Rien ne bouge",
-        "body": "Tela lit le flux que vous publiez déjà. Chaque article renvoie vers votre site."
+        "body": "Tela lit le flux que vous publiez déjà. Chaque article renvoie vers votre blog."
       },
       "ads": {
         "title": "Pas de publicité",
@@ -568,14 +590,27 @@
     "followingButton": "Suivi(e)"
   },
   "dashboard": {
-    "title": "Vos sites",
-    "intro": "Combien de personnes vous lisent, comment vos articles ont été reçus et ce que les lecteurs en ont dit en les recommandant.",
-    "noSites": "Vous n’avez pas encore revendiqué de site.",
+    "title": "Tableau de bord",
+    "intro": "Combien de personnes lisent votre blog, comment vos articles ont été reçus et ce que les lecteurs ont dit en les recommandant.",
+    "noSites": "Vous n’avez pas encore revendiqué de blog.",
+    "listedUnder": "{listing}, thèmes : {topics}",
+    "listSeparator": ", ",
+    "readers": "Lecteurs sur Tela",
+    "newReaders": "+{n} ces 30 derniers jours",
+    "likes": "J’aime",
+    "likesAcross": "sur {n, plural, one {# article} other {# articles}}",
+    "recommendations": "Recommandations",
+    "withNote": "{n} avec un mot",
+    "posts": "Articles",
     "post": "Article",
+    "notesColumn": "Mots des lecteurs",
     "notes": "Ce qu’en disent les lecteurs",
     "noNotes": "Aucun mot de recommandation pour l’instant.",
-    "optOutTranslation": "Désactiver la traduction",
-    "allowTranslation": "Autoriser la traduction",
+    "onTela": "Ce blog sur Tela",
+    "translate": "Permettre aux lecteurs de traduire vos articles",
+    "translateHint": "Tela traduit vos articles pour les lecteurs d’autres langues et montre toujours votre original à côté de la traduction. Si vous la désactivez, les lecteurs ne voient vos articles que tels que vous les avez écrits.",
+    "translationOn": "La traduction est activée pour {blog}.",
+    "translationOff": "La traduction est désactivée pour {blog}.",
     "listing": {
       "private": "privé",
       "listed": "dans Découvrir",
@@ -659,7 +694,7 @@
     "addLanguage": "+ Ajouter une langue",
     "add": "Ajouter",
     "removeLanguage": "Retirer de la liste : {lang}",
-    "subscriptionsIntro": "{n, plural, one {# blog} other {# blogs}}. Importez les flux d’un autre lecteur avec OPML.",
+    "subscriptionsIntro": "{n, plural, one {# blog} other {# blogs}}. Importez les blogs d’un autre lecteur avec OPML.",
     "importOpml": "Importer un OPML",
     "opmlExport": "Exporter",
     "unsubscribe": "Se désabonner",
@@ -757,6 +792,8 @@
     "save": "Enregistrer",
     "cancel": "Annuler",
     "remove": "Supprimer le surlignage",
+    "removed": "Surlignage supprimé.",
+    "privacy": "Vos surlignages et vos notes sont privés.<keyboard> Sélectionnez du texte et appuyez sur H pour surligner.</keyboard>",
     "detached": "Ce passage ne figure plus dans l’article.",
     "elsewhere": "Dans une autre mise en page ou une autre langue : changez pour le voir."
   },
@@ -784,6 +821,7 @@
     "original": "Ouvrir l’original dans un nouvel onglet",
     "like": "Aimer l’article, ou ne plus l’aimer",
     "read": "Marquer l’article comme lu ou non lu",
+    "undo": "Annuler, tant qu’un message le propose",
     "highlight": "Surligner la sélection",
     "sidebar": "Replier ou déplier la barre latérale",
     "focus": "Masquer la liste pendant la lecture",
@@ -800,5 +838,16 @@
     "onThisPage": "Sur cette page",
     "short": "En bref",
     "updated": "Dernière mise à jour : {date}"
+  },
+  "toast": {
+    "undo": "Annuler"
+  },
+  "firstRun": {
+    "title": "Commencez par quelques blogs",
+    "intro": "Abonnez-vous à quelques-uns et leurs articles rempliront votre liste de lecture. Les articles écrits dans d’autres langues arrivent avec leur titre en {language}.",
+    "waiting": "Abonnez-vous à au moins un blog pour commencer à lire.",
+    "start": "{n, plural, one {Commencer à lire # blog →} other {Commencer à lire # blogs →}}",
+    "more": "Plus de blogs dans Découvrir →",
+    "import": "Vous venez d’un autre lecteur ? <opml>Importez un fichier OPML</opml> ou <add>collez l’adresse d’un blog</add>."
   }
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { bumpSeq, currentSeq, first, type TelaDb } from '@tela/data'
+import { bumpSeq, currentSeq, first, recountReaders, type TelaDb } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { likePattern } from '../src/routes/members'
 import { DISCOVER_PAGE, PROFILE_CACHE, PUBLIC_CACHE } from '../src/routes/public'
@@ -95,6 +95,157 @@ describe('dashboard', () => {
     expect(res.sites.map((s) => s.id)).toEqual([1])
     expect(res.sites[0]?.posts.map((p) => p.title)).toEqual(['Post on blog 1'])
     expect(res.notes).toMatchObject([{ note: 'lovely', handle: expect.stringMatching(/^u_/) }])
+  })
+
+  test("says a blog's language, topics and new readers, each post's notes, and who wrote them", async () => {
+    await blog(1, 'listed', reader.userId)
+    const now = api.clock.now()
+    const daysAgo = (n: number) => now - n * 24 * 60 * 60 * 1000
+    const member = (id: string) =>
+      db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+        values (${id}, ${id}, ${`${id}@x.test`}, 1, 0, 0)`)
+    const sub = (userId: string, feedId: number, at: number, deletedAt: number | null = null) =>
+      db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at, deleted_at)
+        values (${userId}, ${feedId}, ${at}, ${at}, ${deletedAt})`)
+    await db.batch([
+      bumpSeq(db),
+      // Another address for the blog, merged into its feed (ADR 0028): its readers are the blog's.
+      db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, status, merged_into,
+          created_at, updated_at, seq)
+        values (11, 1, 'https://blog1.example/atom', 'blog1.example', 0, 'paused', 1, 0, 0, ${currentSeq})`),
+      db.run(sql`insert into articles (feed_id, dedup_key, title, fetched_at, sort_at, seq)
+        values (1, 'quiet', 'Quiet post', 0, 0, ${currentSeq})`),
+      ...['u-newcomer', 'u-longtime', 'u-left', 'u-twofeeds', 'u-merged'].map(member),
+      db.run(sql`insert into profiles (user_id, handle, display_name, avatar_key, avatar_version,
+          created_at, updated_at, seq)
+        values ('u-newcomer', 'newcomer', 'New Comer', 'avatars/u-newcomer', 3, 0, 0, ${currentSeq})`),
+      sub('u-newcomer', 1, daysAgo(5)),
+      sub('u-longtime', 1, daysAgo(40)),
+      sub('u-left', 1, daysAgo(2), daysAgo(1)),
+      // Read the blog long before subscribing to its other address: not a new reader.
+      sub('u-twofeeds', 1, daysAgo(60)),
+      sub('u-twofeeds', 11, daysAgo(3)),
+      sub('u-merged', 11, daysAgo(1)),
+      ...recountReaders(db, sql`1`, now),
+    ] as never)
+    await put('/api/v1/sites/1/topics', { topics: ['tech', 'design'] })
+    const post = await first<{ id: number }>(
+      db,
+      sql`select id from articles where dedup_key = 'p1'`,
+    )
+    await db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at,
+        deleted_at)
+      values ('u-newcomer', ${post?.id}, 'lovely', 5, 5, null),
+        ('u-longtime', ${post?.id}, null, 6, 6, null),
+        ('u-twofeeds', ${post?.id}, 'taken back', 7, 7, 8)`)
+
+    const res = (await (await api.request('/api/v1/dashboard', { as: reader })).json()) as {
+      sites: Record<string, unknown>[]
+      notes: Record<string, unknown>[]
+    }
+    expect(res.sites[0]).toMatchObject({
+      primaryLang: 'en',
+      topics: ['design', 'tech'],
+      // Four live readers, two of them new: the one who left and the two from before are not.
+      readerCount: 4,
+      newReaders30d: 2,
+      posts: [
+        { title: 'Post on blog 1', noteCount: 1 },
+        { title: 'Quiet post', noteCount: 0 },
+      ],
+    })
+    expect(res.notes).toEqual([
+      {
+        note: 'lovely',
+        createdAt: 5,
+        siteId: 1,
+        articleId: post?.id,
+        articleTitle: 'Post on blog 1',
+        articleUrl: null,
+        handle: 'newcomer',
+        displayName: 'New Comer',
+        avatar: '/avatar/u-newcomer?v=3',
+      },
+    ])
+  })
+
+  test('totals the whole blog, not the twenty posts listed, counting only live notes', async () => {
+    await blog(1, 'listed', reader.userId)
+    // Claimed, with no post yet: its totals are zero, not missing.
+    await db.batch([
+      bumpSeq(db),
+      db.run(sql`insert into sites (id, home_url, title, listing, claimed_by, created_at, updated_at, seq)
+        values (2, 'https://blog2.example', 'Blog 2', 'private', ${reader.userId}, 0, 0, ${currentSeq})`),
+      // Twenty-one newer posts, a like each, push the first post out of the list.
+      db.run(sql`insert into articles (feed_id, dedup_key, title, fetched_at, sort_at, like_count, seq)
+        select 1, 'newer' || value, 'Newer ' || value, 0, 100 + value, 1, ${currentSeq}
+        from json_each(${JSON.stringify(Array.from({ length: 21 }, (_, i) => i))}) where true`),
+      db.run(sql`update articles set like_count = 2, recommend_count = 2 where dedup_key = 'p1'`),
+    ] as never)
+    const oldest = (
+      await first<{ id: number }>(db, sql`select id from articles where dedup_key = 'p1'`)
+    )?.id
+    // Two live recommendations, as the post's counter says, one with a note; one taken back.
+    await db.batch([
+      db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+        values ('u-fan', 'u-fan', 'fan@x.test', 1, 0, 0),
+          ('u-quiet', 'u-quiet', 'quiet@x.test', 1, 0, 0),
+          ('u-gone', 'u-gone', 'gone@x.test', 1, 0, 0)`),
+      db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+        values ('u-fan', 'fan', 0, 0), ('u-quiet', 'quiet', 0, 0), ('u-gone', 'gone', 0, 0)`),
+      db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at,
+          deleted_at)
+        values ('u-fan', ${oldest}, 'lovely', 5, 5, null),
+          ('u-quiet', ${oldest}, null, 6, 6, null),
+          ('u-gone', ${oldest}, 'taken back', 7, 7, 8)`),
+    ] as never)
+
+    const res = (await (await api.request('/api/v1/dashboard', { as: reader })).json()) as {
+      sites: { id: number; posts: { title: string }[]; totals: Record<string, number> }[]
+      notes: { note: string }[]
+    }
+    const [one, two] = res.sites
+    expect(one?.posts).toHaveLength(20)
+    expect(one?.posts.map((p) => p.title)).not.toContain('Post on blog 1')
+    // Its note is below the list, so the totals count it: twenty-two posts and every like.
+    expect(res.notes.map((n) => n.note)).toEqual(['lovely'])
+    expect(one?.totals).toEqual({ posts: 22, likes: 23, recommendations: 2, notes: 1 })
+    expect(two).toMatchObject({
+      id: 2,
+      posts: [],
+      totals: { posts: 0, likes: 0, recommendations: 0, notes: 0 },
+    })
+  })
+})
+
+describe('dashboard notes', () => {
+  test("each blog keeps its own newest notes, so a busy blog never hides a quiet one's", async () => {
+    await blog(1, 'listed', reader.userId)
+    await blog(2, 'listed', reader.userId)
+    const fan = await signedIn(api, 'fan@x.test')
+    // Twenty-five newer notes on blog 1, each on a post of its own, and one older on blog 2.
+    await db.batch([
+      bumpSeq(db),
+      ...Array.from({ length: 25 }, (_, i) =>
+        db.run(sql`insert into articles (feed_id, dedup_key, title, fetched_at, sort_at, seq)
+          values (1, ${`busy${i}`}, ${`Busy ${i}`}, 0, ${100 + i}, ${currentSeq})`),
+      ),
+    ] as never)
+    await db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at)
+      select ${fan.userId}, id, 'busy', 1000 + id, 1000 + id from articles
+      where dedup_key like 'busy%'`)
+    await db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at)
+      select ${fan.userId}, id, 'quiet', 1, 1 from articles where dedup_key = 'p2'`)
+
+    const res = (await (await api.request('/api/v1/dashboard', { as: reader })).json()) as {
+      sites: { id: number; totals: { notes: number } }[]
+      notes: { siteId: number; note: string; n?: number }[]
+    }
+    const of = (siteId: number) => res.notes.filter((n) => n.siteId === siteId)
+    expect(of(1)).toHaveLength(20)
+    expect(of(2).map((n) => n.note)).toEqual(['quiet'])
+    expect(res.sites.map((s) => s.totals.notes)).toEqual([25, 1])
+    expect(res.notes.every((n) => n.n === undefined)).toBe(true)
   })
 })
 

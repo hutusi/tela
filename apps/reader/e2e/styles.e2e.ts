@@ -146,6 +146,32 @@ test.describe('stylesheet', () => {
   }
 
   /**
+   * The circles on the right are one group, 8px apart, as Tela v5 draws them: the header's own
+   * gap, 28px from `lg`, parts the groups, and between each circle it read as four loose buttons.
+   * Below `xl` search is a circle of the group; from `xl` the field is 28px before it.
+   */
+  for (const [width, ids, gaps] of [
+    [1024, ['search-link', 'theme-menu', 'language-menu', 'account-menu'], [8, 8, 8]],
+    [1280, ['search-field', 'theme-menu', 'language-menu', 'account-menu'], [28, 8, 8]],
+  ] as const) {
+    test(`the header's controls sit together at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto('/reading')
+      await page.getByTestId('account-menu').waitFor({ state: 'attached' })
+      const measured = await page.evaluate((names) => {
+        const boxes = names.map((id) =>
+          (id === 'search-field'
+            ? (document.querySelector('header form') as HTMLElement)
+            : (document.querySelector(`header [data-testid="${id}"]`) as HTMLElement)
+          ).getBoundingClientRect(),
+        )
+        return boxes.slice(1).map((box, i) => Math.round(box.left - (boxes[i]?.right ?? 0)))
+      }, ids)
+      expect(measured).toEqual(gaps)
+    })
+  }
+
+  /**
    * The width budget above is spent in English. French labels run longer ("Tableau de bord"),
    * and every control but the nav is `shrink-0`, so a longer label takes its room from
    * the nav or pushes the header past the viewport: measure each interface language. The account's
@@ -235,6 +261,32 @@ test.describe('stylesheet', () => {
       }
     })
   }
+
+  /**
+   * On a phone a stacked original is set back, 16px at 1.5, and the body under it is 18.5px; CJK
+   * keeps its own 18px at 1.8 on either side. The original's rule was level with the CJK rule and
+   * after it, so a Japanese original came out at 16px/1.5, which only a computed value shows.
+   */
+  test('on a phone, a CJK original keeps its own size and leading in side by side', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    await synced(page)
+    // Synced at the desktop width, whose sidebar `synced` waits for, then narrowed to a phone.
+    await page.setViewportSize({ width: 412, height: 860 })
+    await page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first().click()
+    await expect(page.getByTestId('translation-bar')).toHaveAttribute(
+      'data-state',
+      /done|partial/,
+      { timeout: 30_000 },
+    )
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'side')
+    const original = page.locator('[data-testid="body-original"][lang="ja"]').first()
+    await expect(original).toHaveCSS('font-size', '18px')
+    await expect(original).toHaveCSS('line-height', '32.4px')
+    const translated = page.locator('[data-testid="body-translated"][lang="en"]').first()
+    await expect(translated).toHaveCSS('font-size', '18.5px')
+  })
 
   /**
    * Simplified and Traditional share most code points but not every glyph's shape, and the font

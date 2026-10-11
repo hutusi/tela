@@ -631,6 +631,21 @@ describe('public pages', () => {
     expect(summary(hant)).toMatch(/<span aria-hidden="true" lang="zh-Hant">繁<\/span>/)
   })
 
+  test("carry a phone's language and theme in the footer, the language chosen and no theme", async () => {
+    // Below `sm` the visitor's header has no room for the two circles (Tela v5): the footer has
+    // them as a select and a segmented control. The page's language is the one selected, as the
+    // cache is kept per language; the theme, as in the header's menu, is nobody's in particular.
+    const choices = (html: string) =>
+      html.match(/<div[^>]*data-testid="footer-choices"[^>]*>.*?<\/fieldset>/s)?.[0] ?? ''
+    const fr = choices(await (await page('/about', { cookie: 'tela_locale=fr' })).text())
+    expect(fr).toMatch(/<label[^>]*>Langue<\/label>/)
+    expect(fr).toMatch(/<option value="fr" lang="fr" selected="">Français<\/option>/)
+    expect(fr).toMatch(/<option value="zh-Hant" lang="zh-Hant">繁體中文<\/option>/)
+    expect(fr).toContain('data-testid="footer-theme-dark"')
+    expect(fr).toContain('Sombre')
+    expect(fr).not.toContain('aria-pressed')
+  })
+
   test("an info page renders in the reader's language, cached apart", async () => {
     const zh = await (await page('/terms', { cookie: 'tela_locale=zh-Hans' })).text()
     expect(zh).toContain('<html lang="zh-Hans"')

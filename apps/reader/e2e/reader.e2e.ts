@@ -5,8 +5,115 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { expect, test } from '@playwright/test'
-import { FIXTURES, keepCycling, readStateOnServer, resetReading, setPrefs, synced } from './helpers'
+import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
+import {
+  BASE,
+  ensureFeeds,
+  FIXTURES,
+  keepCycling,
+  memberHeaders,
+  readStateOnServer,
+  resetReading,
+  setPrefs,
+  synced,
+} from './helpers'
+
+const HOUR = 3_600_000
+const DAY = 24 * HOUR
+
+/** The member's rows as the server holds them, through a snapshot pull. */
+async function rowsOnServer(api: APIRequestContext) {
+  const res = await api.get(`${BASE}/api/v1/sync?cursor=0`, { headers: await memberHeaders(api) })
+  if (!res.ok()) throw new Error(`sync failed: ${res.status()} ${await res.text()}`)
+  return (
+    (await res.json()) as {
+      rows: {
+        articles: { id: number; feedId: number; fetchedAt: number }[]
+        feeds: { id: number; feedUrl: string }[]
+        subscriptions: { feedId: number; watermarkId: number; deletedAt: number | null }[]
+        states: {
+          articleId: number
+          readAt: number | null
+          readUpdatedAt?: number | null
+          likedAt: number | null
+        }[]
+      }
+    }
+  ).rows
+}
+
+/** How far the server has the member's subscription to a feed read by its watermark. */
+async function watermarkOnServer(api: APIRequestContext, feedId: number): Promise<number> {
+  const sub = (await rowsOnServer(api)).subscriptions.find((s) => s.feedId === feedId)
+  if (!sub) throw new Error(`no subscription to ${feedId}`)
+  return sub.watermarkId
+}
+
+/** Push changes as the app does, for a state a spec starts from or leaves behind. */
+async function push(api: APIRequestContext, mutations: Record<string, unknown>[]): Promise<void> {
+  const at = Date.now()
+  const res = await api.post(`${BASE}/api/v1/mutations`, {
+    headers: { origin: BASE, ...(await memberHeaders(api)) },
+    data: { mutations: mutations.map((m) => ({ mid: crypto.randomUUID(), at, ...m })) },
+  })
+  if (!res.ok()) throw new Error(`push failed: ${res.status()} ${await res.text()}`)
+}
+
+/** The bodies of every push the page sends from now on. */
+function pushesFrom(page: Page): string[] {
+  const pushed: string[] = []
+  page.on('request', (r) => {
+    if (r.url().includes('/api/v1/mutations')) pushed.push(r.postData() ?? '')
+  })
+  return pushed
+}
+
+const markAllsIn = (pushed: string[]) => pushed.filter((body) => body.includes('"markAllRead"'))
+
+/**
+ * Open 胡涂说, a blog with unread posts, and say which: the posts a Mark all read there reads.
+ * Every spec that lets one reach tela-api marks them unread again after, for the specs after it.
+ */
+async function openUnreadBlog(page: Page) {
+  await page.goto('/reading')
+  await synced(page)
+  await page.getByTestId('subscription').filter({ hasText: '胡涂说' }).click()
+  await expect(page).toHaveURL(/feed=\d+/)
+  const feedId = Number(new URL(page.url()).searchParams.get('feed'))
+  const dots = page.getByTestId('unread-dot')
+  await expect(dots.first()).toBeVisible()
+  const unread = await page
+    .getByTestId('article-row')
+    .filter({ has: page.getByTestId('unread-dot') })
+    .evaluateAll((els) => els.map((el) => Number(el.getAttribute('data-article-id'))))
+  return { feedId, dots, unread, watermark: await watermarkOnServer(page.request, feedId) }
+}
+
+/**
+ * Whether tela-api has read each of `ids`: by its own row, or under its feed's watermark and not
+ * marked unread by hand since. A mark-all reads posts marked unread by hand through their rows,
+ * which leaves the watermark where it was when they all sit under it, as they do once an earlier
+ * spec has marked them unread again: so ask about the posts, not the watermark.
+ */
+async function readOnServer(api: APIRequestContext, feedId: number, ids: number[]) {
+  const { states, subscriptions } = await rowsOnServer(api)
+  const watermark = subscriptions.find((sub) => sub.feedId === feedId)?.watermarkId ?? 0
+  return ids.every((id) => {
+    const s = states.find((state) => state.articleId === id)
+    if (s?.readAt != null) return true
+    const byHand = s !== undefined && s.readAt === null && s.readUpdatedAt != null
+    return !byHand && id <= watermark
+  })
+}
+
+/** Whether tela-api has each of `ids` marked unread by hand. */
+async function unreadOnServer(api: APIRequestContext, ids: number[]): Promise<boolean> {
+  const { states } = await rowsOnServer(api)
+  return ids.every((id) => {
+    const s = states.find((state) => state.articleId === id)
+    return s !== undefined && s.readAt === null && s.readUpdatedAt != null
+  })
+}
 
 test.describe('reader', () => {
   test('signed-in home goes to reading, with the subscriptions from the first sync', async ({
@@ -215,23 +322,31 @@ test.describe('reader', () => {
     await expect(page.getByTestId('article-title')).toBeInViewport()
   })
 
-  test('a row read during this visit stays dimmed after the article closes', async ({ page }) => {
+  test('a row read during this visit shows as read after the article closes', async ({ page }) => {
     await page.goto('/reading')
     await synced(page)
     await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
     await expect(page).toHaveURL(/\/reading\?feed=\d+/)
     await expect(page.getByTestId('article-row').first()).toContainText('Julia Evans')
     const row = page.getByTestId('article-row').nth(2)
-    // Polled: the list fades in, so a first reading can land mid-animation.
+    // A read row keeps its full opacity, so its 12px meta stays readable; its title steps back to
+    // ink-2 and its dot goes (Tela v5). Polled: the list fades in.
     const opacity = () => row.evaluate((el) => Number(getComputedStyle(el).opacity))
+    const title = () => row.locator('h2').evaluate((el) => getComputedStyle(el).color)
+    const INK = 'rgb(31, 28, 24)'
+    const INK_2 = 'rgb(92, 85, 75)'
 
-    if ((await row.getAttribute('data-read')) === '0') await expect.poll(opacity).toBe(1)
+    if ((await row.getAttribute('data-read')) === '0') await expect.poll(title).toBe(INK)
     await row.click()
     await expect(page.getByTestId('reader')).toBeVisible()
+    // The open row's title stays ink, read or not.
+    await expect.poll(title).toBe(INK)
     await page.getByTestId('close-article').click()
     await expect(page.getByTestId('reader')).toHaveCount(0)
     await expect(row).toHaveAttribute('data-read', '1')
-    await expect.poll(opacity).toBeLessThan(1)
+    await expect.poll(title).toBe(INK_2)
+    await expect(row.getByTestId('unread-dot')).toHaveCount(0)
+    await expect.poll(opacity).toBe(1)
   })
 
   test('opening an article moves focus into it once it is there', async ({ page }) => {
@@ -329,6 +444,9 @@ test.describe('reader', () => {
       `[data-testid="article-row"][href="/reading?filter=liked&article=${articleId}"]`,
     )
     await expect(mine).toHaveCount(1)
+    // Its counts are read in words: the heart and the arrow beside them are drawn, and hidden.
+    await expect(mine).toHaveAccessibleName(/[1-9]\d*\s*likes?\b/)
+    await expect(mine).toHaveAccessibleName(/\d+\s*recommendations?\b/)
     const before = await liked.count()
     await mine.click()
     await expect(page).toHaveURL(new RegExp(`article=${articleId}(&|$)`))
@@ -339,16 +457,256 @@ test.describe('reader', () => {
     await expect(liked).toHaveCount(before - 1)
   })
 
-  test('mark all read clears the counts for one feed', async ({ page }) => {
+  test('mark all read clears the counts for one feed, and Undo takes it back before it is sent', async ({
+    page,
+  }) => {
+    await resetReading(page.request)
+    // Everything the page pushes: the mark-all, once taken back, must never be among it.
+    const pushed: string[] = []
+    page.on('request', (r) => {
+      if (r.url().includes('/api/v1/mutations')) pushed.push(r.postData() ?? '')
+    })
     await page.goto('/reading')
     await synced(page)
-    await page.getByTestId('subscription').filter({ hasText: '胡涂说' }).click()
+    const feed = page.getByTestId('subscription').filter({ hasText: '胡涂说' })
+    await feed.click()
     await expect(page).toHaveURL(/feed=\d+/)
+    const feedId = Number(new URL(page.url()).searchParams.get('feed'))
+    const count = feed.locator('span').last()
+    const dots = page.getByTestId('unread-dot')
+    await expect(dots.first()).toBeVisible()
+    const unread = Number(await count.textContent())
+    expect(unread).toBeGreaterThan(0)
+    await expect(dots).toHaveCount(unread)
+    const watermark = await watermarkOnServer(page.request, feedId)
+
     await page.getByTestId('mark-all-read').click()
-    await expect(page.getByTestId('unread-dot')).toHaveCount(0)
-    await expect(
-      page.getByTestId('subscription').filter({ hasText: '胡涂说' }).locator('span').last(),
-    ).toHaveText('')
+    await expect(dots).toHaveCount(0)
+    await expect(count).toHaveText('')
+    const toast = page.getByTestId('toast')
+    await expect(toast).toContainText(`Marked ${unread} ${unread === 1 ? 'post' : 'posts'} read.`)
+    await page.getByTestId('toast-action').click()
+    await expect(toast).toHaveCount(0)
+    await expect(dots).toHaveCount(unread)
+    await expect(count).toHaveText(String(unread))
+
+    // Held on the device while the toast showed, and taken back there: a reload, which lets go
+    // of anything still held, sends nothing, and the server's watermark never moved.
+    await page.reload()
+    await synced(page)
+    await expect(dots).toHaveCount(unread)
+    await expect(count).toHaveText(String(unread))
+    expect(await watermarkOnServer(page.request, feedId)).toBe(watermark)
+    expect(pushed.filter((body) => body.includes('"markAllRead"'))).toEqual([])
+  })
+
+  test('u takes a mark-all back while its toast shows', async ({ page }) => {
+    await resetReading(page.request)
+    const pushed = pushesFrom(page)
+    const { feedId, dots, unread, watermark } = await openUnreadBlog(page)
+    await page.getByTestId('mark-all-read').click()
+    await expect(dots).toHaveCount(0)
+    const toast = page.getByTestId('toast')
+    await expect(toast.getByTestId('toast-action')).toHaveAttribute('aria-keyshortcuts', 'u')
+    // Focus is on Mark all read, not in the toast: the key reaches it from anywhere on the page.
+    await page.keyboard.press('u')
+    await expect(toast).toHaveCount(0)
+    await expect(dots).toHaveCount(unread.length)
+
+    await page.reload()
+    await synced(page)
+    await expect(dots).toHaveCount(unread.length)
+    expect(await watermarkOnServer(page.request, feedId)).toBe(watermark)
+    expect(markAllsIn(pushed)).toEqual([])
+  })
+
+  test('pressed twice, Mark all read still sends nothing once undone', async ({ page }) => {
+    await resetReading(page.request)
+    const pushed = pushesFrom(page)
+    const { feedId, dots, unread, watermark } = await openUnreadBlog(page)
+    const toast = page.getByTestId('toast')
+    await page.getByTestId('mark-all-read').click()
+    await expect(toast).toContainText(`Marked ${unread.length} `)
+    // The second finds nothing unread: it makes no change and says nothing, so the first one's
+    // Undo still shows, and takes back all there is.
+    await page.getByTestId('mark-all-read').click()
+    await expect(toast).toContainText(`Marked ${unread.length} `)
+    await page.getByTestId('toast-action').click()
+    await expect(toast).toHaveCount(0)
+    await expect(dots).toHaveCount(unread.length)
+
+    await page.reload()
+    await synced(page)
+    await expect(dots).toHaveCount(unread.length)
+    expect(await watermarkOnServer(page.request, feedId)).toBe(watermark)
+    expect(markAllsIn(pushed)).toEqual([])
+  })
+
+  test('a mark-all left alone goes to tela-api once its toast has gone, not before', async ({
+    page,
+  }) => {
+    await resetReading(page.request)
+    await page.clock.install()
+    const pushed = pushesFrom(page)
+    const { feedId, dots, unread } = await openUnreadBlog(page)
+    try {
+      await page.getByTestId('mark-all-read').click()
+      await expect(dots).toHaveCount(0)
+      const toast = page.getByTestId('toast')
+      await expect(toast).toBeVisible()
+      // Long past the push's quarter-second, and still held: the toast is still up.
+      await page.clock.runFor(3000)
+      await expect(toast).toBeVisible()
+      expect(markAllsIn(pushed)).toEqual([])
+      // The toast's five seconds are up, and the change goes with it.
+      await page.clock.runFor(3000)
+      await expect(toast).toHaveCount(0)
+      await expect.poll(() => readOnServer(page.request, feedId, unread)).toBe(true)
+      expect(markAllsIn(pushed)).toHaveLength(1)
+    } finally {
+      await push(
+        page.request,
+        unread.map((articleId) => ({ type: 'markUnread', articleId })),
+      )
+    }
+  })
+
+  test('an Undo after the mark-all went anyway marks what it read unread on tela-api', async ({
+    page,
+  }) => {
+    await resetReading(page.request)
+    const { feedId, dots, unread } = await openUnreadBlog(page)
+    try {
+      await page.getByTestId('mark-all-read').click()
+      await expect(dots).toHaveCount(0)
+      const toast = page.getByTestId('toast')
+      // A pointer over the toast stops its time, so it is still up when the tab comes back.
+      await toast.hover()
+      // The tab is hidden: everything held goes now, in case the page never comes back.
+      const sent = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      await sent
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      await expect.poll(() => readOnServer(page.request, feedId, unread)).toBe(true)
+
+      // Too late to take back, so the Undo marks each post it read unread, after it.
+      await expect(toast).toBeVisible()
+      await page.getByTestId('toast-action').click()
+      await expect(toast).toHaveCount(0)
+      await expect(dots).toHaveCount(unread.length)
+      await expect.poll(() => unreadOnServer(page.request, unread)).toBe(true)
+    } finally {
+      await push(
+        page.request,
+        unread.map((articleId) => ({ type: 'markUnread', articleId })),
+      )
+    }
+  })
+
+  test('on Today, Mark all read reads the posts it lists, and no older one', async ({ page }) => {
+    await resetReading(page.request)
+    // A blog that wrote in the last day, which every other fixture did not. The setup's member
+    // has never read it: Discover's spec subscribes to it and leaves it again.
+    await ensureFeeds(['/fresh/en.xml'])
+    try {
+      // Today is the last 24 hours on the browser's clock, and the blog's newest post is from
+      // four hours before midnight UTC: late in the UTC day, the clock goes back to keep it in.
+      const midnight = Math.floor(Date.now() / DAY) * DAY
+      await page.clock.install({ time: Math.min(Date.now(), midnight + 18 * HOUR) })
+      await page.goto('/reading?filter=today')
+      await synced(page)
+      const rows = page.getByTestId('article-row')
+      await expect(rows.first()).toBeVisible()
+      const listed = await rows.evaluateAll((els) =>
+        els.map((el) => Number(el.getAttribute('data-article-id'))),
+      )
+      // An older post of another blog, unread only for being above its blog's watermark: the
+      // mark-all Today used to send moved every blog's watermark up to its newest post.
+      const before = await rowsOnServer(page.request)
+      const watermarks = new Map(
+        before.subscriptions.filter((s) => s.deletedAt === null).map((s) => [s.feedId, s]),
+      )
+      const touched = new Set(
+        before.states
+          .filter((s) => s.readAt !== null || s.readUpdatedAt != null)
+          .map((s) => s.articleId),
+      )
+      const todays = new Set(
+        before.articles.filter((a) => listed.includes(a.id)).map((a) => a.feedId),
+      )
+      const older = before.articles
+        .filter(
+          (a) =>
+            !todays.has(a.feedId) &&
+            a.id < Math.max(...listed) &&
+            a.id > (watermarks.get(a.feedId)?.watermarkId ?? Number.POSITIVE_INFINITY) &&
+            !touched.has(a.id),
+        )
+        .sort((a, b) => b.id - a.id)[0]
+      if (!older) throw new Error('no older post unread below the Today list')
+
+      const sent = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+      await page.getByTestId('mark-all-read').click()
+      await expect(page.getByTestId('toast')).toContainText(/^Marked \d+ posts? read\./)
+      await expect(page.getByTestId('unread-dot')).toHaveCount(0)
+      // Held while its toast shows, as a mark-all is: sent once the toast has gone.
+      await page.clock.runFor(6000)
+      await expect(page.getByTestId('toast')).toHaveCount(0)
+      await sent
+
+      expect(await watermarkOnServer(page.request, older.feedId)).toBeLessThan(older.id)
+      await page.goto(`/reading?feed=${older.feedId}`)
+      await expect(
+        page
+          .locator(`[data-testid="article-row"][data-article-id="${older.id}"]`)
+          .getByTestId('unread-dot'),
+      ).toHaveCount(1)
+    } finally {
+      // As Discover's spec leaves the member: a post from today would top every list after this.
+      const fresh = (await rowsOnServer(page.request)).feeds.find((f) =>
+        f.feedUrl.endsWith('/fresh/en.xml'),
+      )
+      if (fresh) await push(page.request, [{ type: 'unsubscribe', feedId: fresh.id }])
+    }
+  })
+
+  test('Liked has no Mark all read, since liking a post read it', async ({ page }) => {
+    const rows = await rowsOnServer(page.request)
+    const states = new Map(rows.states.map((s) => [s.articleId, s]))
+    const watermarks = new Map(rows.subscriptions.map((s) => [s.feedId, s.watermarkId]))
+    // Read on the server already: opened, or under its blog's watermark or past the 30-day
+    // horizon, and not marked unread.
+    const read = (a: { id: number; feedId: number; fetchedAt: number }) => {
+      const s = states.get(a.id)
+      if (s?.readAt != null) return true
+      if (s?.readUpdatedAt != null) return false
+      return a.id <= (watermarks.get(a.feedId) ?? 0) || a.fetchedAt < Date.now() - 30 * DAY
+    }
+    const unliked = rows.articles.filter((a) => states.get(a.id)?.likedAt == null)
+    // Liking a post reads it: one read already is left as it was found.
+    const post = unliked.find(read) ?? unliked[0]
+    if (!post) throw new Error('every post is liked')
+    const wasRead = read(post)
+    await push(page.request, [{ type: 'setLiked', articleId: post.id, liked: true }])
+    try {
+      await page.goto('/reading?filter=liked')
+      await synced(page)
+      await expect(
+        page.locator(`[data-testid="article-row"][data-article-id="${post.id}"]`),
+      ).toBeVisible()
+      await expect(page.getByTestId('mark-all-read')).toHaveCount(0)
+    } finally {
+      await push(page.request, [
+        { type: 'setLiked', articleId: post.id, liked: false },
+        ...(wasRead ? [] : [{ type: 'markUnread', articleId: post.id }]),
+      ])
+    }
   })
 
   test('the UI switches to Chinese in Settings, and the header says so', async ({ page }) => {
@@ -400,7 +758,7 @@ test.describe('reader', () => {
       buffer: Buffer.from(opml.replaceAll('http://127.0.0.1:4790', FIXTURES)),
     })
     await page.getByTestId('opml-import').click()
-    await expect(page.getByTestId('opml-result')).toContainText(/Imported \d+ feed/)
+    await expect(page.getByTestId('opml-result')).toContainText(/Imported \d+ blog/)
   })
 
   test('a summary-only feed gets its full text fetched', async ({ page }) => {
@@ -443,6 +801,8 @@ test.describe('reader', () => {
     await expect(page).toHaveURL(/article=\d+/)
     const next = page.getByTestId('next-article')
     await expect(next).toContainText(secondTitle)
+    // Whose it is, as the label says: capitals are the stylesheet's, not the words'.
+    await expect(next).toContainText('Up next · Julia Evans')
     await next.click()
     await expect(page).toHaveURL(new RegExp(`article=${second}$`))
     await expect(page.getByTestId('article-title')).toHaveText(secondTitle)
@@ -451,5 +811,90 @@ test.describe('reader', () => {
     await rows.last().click()
     await expect(page).toHaveURL(/article=\d+/)
     await expect(page.getByTestId('next-article')).toHaveCount(0)
+  })
+
+  test('the end of an article likes it, and recommends it with a note in a box of its own', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    const rows = page.getByTestId('article-row')
+    await expect(rows.first()).toContainText('Julia Evans')
+    // Not the first, which the recommendation and dashboard spec recommends.
+    await rows.nth(2).click()
+    await expect(page).toHaveURL(/article=\d+/)
+
+    const actions = page.getByTestId('end-actions')
+    await expect(actions).toContainText('The author sees how many liked this')
+    await expect(page.getByTestId('end-blog')).toContainText('Julia Evans')
+
+    // Like or Liked, with no count, and the toolbar's like follows.
+    const like = page.getByTestId('end-like')
+    const was = (await like.getAttribute('aria-pressed')) === 'true'
+    await like.click()
+    await expect(like).toHaveAttribute('aria-pressed', String(!was))
+    await expect(like).toHaveText(was ? 'Like' : 'Liked')
+    await expect(page.getByTestId('like-button')).toHaveAttribute('aria-pressed', String(!was))
+    await like.click()
+    await expect(like).toHaveAttribute('aria-pressed', String(was))
+
+    const recommend = page.getByTestId('end-recommend')
+    if ((await recommend.getAttribute('aria-pressed')) === 'true') await recommend.click()
+    await expect(recommend).toHaveText('Recommend')
+    await recommend.click()
+    // The form opens under the row, not in the toolbar's popover, with the field ready to type in.
+    const box = page.getByTestId('recommend-inline')
+    const field = box.getByTestId('recommend-note')
+    await expect(box).toContainText('Recommend to your readers')
+    await expect(page.getByTestId('recommend-popover')).toHaveCount(0)
+    await expect(field).toBeFocused()
+    await expect(field).toHaveAttribute('placeholder', 'Why should they read this? (optional)')
+    // Esc closes the box, not the article, and hands focus back to the button that opened it.
+    await field.press('Escape')
+    await expect(box).toHaveCount(0)
+    await expect(page).toHaveURL(/article=\d+/)
+    await expect(recommend).toBeFocused()
+    await recommend.click()
+    await expect(field).toBeFocused()
+    await field.fill('Read it for the diagrams.')
+    const sent = page.waitForResponse(
+      (r) =>
+        r.url().includes('/api/v1/mutations') &&
+        r.ok() &&
+        (r.request().postData() ?? '').includes('Read it for the diagrams.'),
+    )
+    await box.getByTestId('recommend-submit').click()
+    await expect(page.getByTestId('toast')).toContainText('Recommended with your note.')
+    await expect(box).toHaveCount(0)
+    await expect(recommend).toHaveAttribute('aria-pressed', 'true')
+    await expect(recommend).toHaveText('Recommended')
+    await expect(recommend).toBeFocused()
+    await expect(page.getByTestId('recommend-button')).toHaveAttribute('aria-pressed', 'true')
+    await sent
+
+    // Recommended, the same button takes it back, as the toolbar's does; the push is waited for,
+    // so no later spec meets it.
+    const taken = page.waitForResponse(
+      (r) =>
+        r.url().includes('/api/v1/mutations') &&
+        r.ok() &&
+        (r.request().postData() ?? '').includes('unrecommend'),
+    )
+    await recommend.click()
+    await expect(page.getByTestId('toast')).toContainText('Recommendation removed.')
+    await expect(recommend).toHaveAttribute('aria-pressed', 'false')
+    await taken
+
+    // A phone's bars are not drawn at 1280, and leave the toast where it was.
+    for (const id of ['back-bar', 'bottom-bar', 'bar-like', 'bar-recommend', 'bar-original']) {
+      await expect(page.getByTestId(id)).toHaveCount(0)
+    }
+    const variable = await page.evaluate(() =>
+      document.documentElement.style.getPropertyValue('--bottom-bar'),
+    )
+    expect(variable).toBe('')
+    await expect(page.getByTestId('close-article')).toBeVisible()
   })
 })

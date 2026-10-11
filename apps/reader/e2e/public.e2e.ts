@@ -206,7 +206,7 @@ test.describe('discover and claim', () => {
     await page.goto('/sites/999999/claim')
     const checking = page.getByTestId('claim-checking')
     const verify = page.getByTestId('claim-verify')
-    await expect(checking).toHaveText('Checking your site…')
+    await expect(checking).toHaveText('Checking your blog…')
     await expect(verify).toBeDisabled()
 
     // Past the two minutes the page asks for: it stops, says so, and offers a fresh check.
@@ -215,7 +215,7 @@ test.describe('discover and claim', () => {
     await expect(verify).toBeEnabled()
     await expect(verify).toHaveText('Verify again')
     await verify.click()
-    await expect(checking).toHaveText('Checking your site…')
+    await expect(checking).toHaveText('Checking your blog…')
     await expect(verify).toBeDisabled()
   })
 
@@ -258,6 +258,8 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     await expect(page.getByTestId('toast')).toContainText('Recommended with your note')
     await expect(page.getByTestId('recommend-button')).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByTestId('recommend-button')).toContainText('1')
+    // The popover gone, focus is back on the button that opened it.
+    await expect(page.getByTestId('recommend-button')).toBeFocused()
     // The profile is public data from the server: let the push land first.
     await page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
 
@@ -267,15 +269,75 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     await expect(recs).toContainText(title.slice(0, 20))
     await expect(recs).toContainText('Worth your time')
 
-    // The member claimed the fixture site earlier, so the note reaches the dashboard.
-    await fromAccountMenu(page, 'nav-dashboard')
-    await expect(page.getByTestId('dashboard-site')).toHaveCount(1)
-    await expect(page.getByTestId('dashboard-notes')).toContainText('Worth your time')
-    await expect(page.getByTestId('dashboard-post').first()).toBeVisible()
-    await page.getByTestId('translation-optout').click()
-    await expect(page.getByTestId('translation-optout')).toContainText('Allow translation')
-    await page.getByTestId('translation-optout').click()
-    await expect(page.getByTestId('translation-optout')).toContainText('Opt out of translation')
+    // The member claimed the fixture site earlier, so the note reaches the dashboard. A writer's
+    // menu offers the Dashboard in For writers' place, never both.
+    await page.getByTestId('account-menu').click()
+    await expect(page.getByTestId('nav-dashboard')).toBeVisible()
+    await expect(page.getByTestId('nav-for-writers')).toHaveCount(0)
+    const answered = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === '/api/v1/dashboard' && r.ok(),
+    )
+    await page.getByTestId('nav-dashboard').click()
+    const site = page.getByTestId('dashboard-site')
+    await expect(site).toHaveCount(1)
+    const { sites } = (await (await answered).json()) as {
+      sites: { totals: { posts: number; likes: number; recommendations: number; notes: number } }[]
+    }
+    const totals = sites[0]?.totals
+    expect(totals).toBeDefined()
+    if (!totals) return
+    // Listed (or featured, if the admin spec curated it first), under the topic the owner picked
+    // on the blog's page above.
+    await expect(page.getByTestId('dashboard-meta')).toContainText(
+      /(listed in Discover|featured) under .*Tech/,
+    )
+    // The member subscribed to it in this run, so they are one of its new readers.
+    const readers = page.getByTestId('dashboard-readers')
+    await expect(readers).toContainText('Readers on Tela')
+    await expect(readers).toContainText(/\+[1-9]\d* in the last 30 days/)
+    // The tiles are the whole blog's, whether or not the recommended post is among the twenty
+    // listed: the note just left is one of them, as it is one of the notes below.
+    expect(totals.recommendations).toBeGreaterThanOrEqual(1)
+    expect(totals.notes).toBeGreaterThanOrEqual(1)
+    await expect(page.getByTestId('dashboard-likes').locator('span')).toHaveText([
+      'Likes',
+      String(totals.likes),
+      new RegExp(`^across ${totals.posts} posts?$`),
+    ])
+    await expect(page.getByTestId('dashboard-recommendations').locator('span')).toHaveText([
+      'Recommendations',
+      String(totals.recommendations),
+      `${totals.notes} with a note`,
+    ])
+    await expect(site.getByRole('columnheader')).toHaveText([
+      'Post',
+      'Likes',
+      'Recommendations',
+      'Notes',
+    ])
+    const rows = page.getByTestId('dashboard-post')
+    await expect(rows.first()).toBeVisible()
+    // The table is the newest twenty of the posts the tiles count.
+    expect(await rows.count()).toBe(Math.min(20, totals.posts))
+    // A post without notes says so with a dash, never a 0.
+    const noteCells = rows.locator('td:nth-child(4)')
+    await expect(noteCells).toHaveText(
+      Array.from({ length: await rows.count() }, () => /^(–|[1-9]\d*)$/),
+    )
+    const notes = page.getByTestId('dashboard-notes')
+    await expect(notes).toContainText('“Worth your time, especially the ending.”')
+    await expect(notes.locator('a[href^="/@"]').last()).toBeVisible()
+
+    // Translation is on unless the owner turns it off, and each change says so.
+    const translate = page.getByTestId('dashboard-translate')
+    await expect(translate).toHaveAttribute('role', 'switch')
+    await expect(translate).toHaveAttribute('aria-checked', 'true')
+    await translate.click()
+    await expect(translate).toHaveAttribute('aria-checked', 'false')
+    await expect(page.getByTestId('toast')).toHaveText(/^Translation is off for .+\.$/)
+    await translate.click()
+    await expect(translate).toHaveAttribute('aria-checked', 'true')
+    await expect(page.getByTestId('toast')).toHaveText(/^Translation is on for .+\.$/)
   })
 
   test('settings validate the handle and the profile link follows it', async ({ page }) => {

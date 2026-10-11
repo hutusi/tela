@@ -131,7 +131,7 @@ test.describe('For writers, for a visitor', () => {
     await suggestion.click()
     await expect(card.getByTestId('writer-card-handle')).toHaveText(offered)
     await expect(said).toHaveAttribute('data-status', 'available')
-    await expect(said).toContainText(`✓ ${offered} is available`)
+    await expect(said).toContainText(`${offered} is available`)
   })
 
   test('cuts a long handle before the Follow pill on a 360px card', async ({ page }) => {

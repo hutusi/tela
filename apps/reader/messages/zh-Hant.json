@@ -4,7 +4,9 @@
     "tagline": "獨立部落格，任何語言。"
   },
   "common": {
-    "quoted": "「{text}」"
+    "quoted": "「{text}」",
+    "likeCount": "{n} 人喜歡",
+    "recommendCount": "{n} 人推薦"
   },
   "nav": {
     "reading": "閱讀",
@@ -17,7 +19,7 @@
     "logIn": "登入",
     "join": "加入",
     "signOut": "登出",
-    "addFeed": "+ 新增訂閱",
+    "addFeed": "+ 新增部落格",
     "dashboard": "儀表板",
     "admin": "管理",
     "settings": "設定",
@@ -27,6 +29,13 @@
     "invites": "邀請朋友",
     "writers": "寫作者",
     "themeIs": "主題：{theme}"
+  },
+  "menu": {
+    "language": "語言",
+    "theme": "主題",
+    "search": "搜尋",
+    "languageHint": "選單和翻譯都跟隨這個選擇。想翻譯成另一種語言，請到語言設定。",
+    "apartHint": "翻譯跟隨這個選擇，選單保留自己的語言。想讓兩者重新一致，請到語言設定。"
   },
   "front": {
     "description": "來自世界各地的獨立部落格，各用各的語言，標題譯成你的語言。",
@@ -43,7 +52,7 @@
     "empty": "還沒有文章。Tela 彙集的部落格一有新作，就會出現在這裡。",
     "writers": {
       "title": "你寫部落格嗎？讓它成為你的名片。",
-      "intro": "在 Tela 認領你的部落格，就有一頁屬於你：你的名字、你的部落格、你推薦的文章。你的網站原樣不動。",
+      "intro": "在 Tela 認領你的部落格，就有一頁屬於你：你的名字、你的部落格、你推薦的文章。你的部落格原樣不動。",
       "cta": "製作你的名片"
     },
     "read": "閱讀 →",
@@ -55,7 +64,9 @@
     "about": "關於",
     "writers": "寫作者",
     "privacy": "隱私",
-    "terms": "條款"
+    "terms": "條款",
+    "language": "語言",
+    "theme": "主題"
   },
   "login": {
     "title": "登入 Tela"
@@ -142,28 +153,31 @@
     "browse": "訂閱",
     "hide": "收起側欄",
     "show": "展開側欄",
-    "manage": "管理訂閱"
+    "manage": "管理訂閱",
+    "browseDiscover": "或去「發現」看看 →"
   },
   "list": {
     "markAllRead": "全部標為已讀",
     "empty": "這裡還沒有內容。",
-    "emptyHint": "新增一個訂閱源開始閱讀。",
+    "emptyHint": "<add>新增一個部落格</add>，開始閱讀。",
     "minutes": "{n} 分鐘",
     "translatedBadge": "{from} → {to}",
     "loadMore": "更早的文章",
     "fetching": "正在首次抓取這個訂閱源…",
     "allRead": "都讀完了。",
-    "allReadHint": "已讀文章被隱藏了，可以在<settings>設定</settings>裡重新顯示。"
+    "allReadHint": "已讀文章被隱藏了，可以在<settings>設定</settings>裡重新顯示。",
+    "markedRead": "已將 {n} 篇文章標為已讀。",
+    "undoTooMany": "已經傳送，涉及的文章太多，無法在這裡撤銷。"
   },
   "reader": {
-    "close": "✕ 關閉",
+    "close": "關閉",
     "like": "喜歡",
     "liked": "已喜歡",
     "recommend": "推薦",
     "minRead": "閱讀約 {n} 分鐘",
     "readOriginal": "開啟原文",
     "readersOnTela": "{n, plural, =0 {在 Tela 上還沒有讀者} other {# 位 Tela 讀者}}",
-    "visibleToAuthor": "你的 ♡ 和推薦對作者可見。",
+    "visibleToAuthor": "作者能看到有多少人喜歡這篇文章，以及你的推薦和推薦語。",
     "pickArticle": "在左側選擇一篇文章。其他語言的文章會與譯文並排顯示。",
     "unreadCount": "{n} 篇未讀",
     "noContent": "這篇文章的訂閱源中沒有可讀內容。",
@@ -178,14 +192,20 @@
     "recommended": "已推薦。",
     "recommendedWithNote": "已附上你的推薦語。",
     "unrecommended": "已取消推薦。",
-    "fetchingFullText": "正在從原站取得全文…",
-    "upNext": "下一篇",
+    "fetchingFullText": "正在從部落格取得全文…",
+    "upNext": "下一篇 · {blog}",
     "focus": "專注",
     "markRead": "標為已讀",
-    "markUnread": "標為未讀"
+    "markUnread": "標為未讀",
+    "markReadShort": "標為已讀",
+    "markUnreadShort": "標為未讀",
+    "likeCount": "喜歡 · {n}",
+    "likedCount": "已喜歡 · {n}",
+    "original": "原文",
+    "backTo": "返回{list}"
   },
   "add": {
-    "title": "新增訂閱",
+    "title": "新增部落格",
     "intro": "貼上部落格網址或訂閱源 URL。Tela 會找到訂閱源並開始抓取。",
     "placeholder": "https://example.blog",
     "find": "查詢訂閱源",
@@ -195,9 +215,9 @@
     "subscribed": "已訂閱",
     "items": "{n} 篇文章",
     "opml": "或匯入 OPML 檔案",
-    "opmlHint": "從其他閱讀器匯出。最多 500 個訂閱源。",
+    "opmlHint": "從其他閱讀器匯出。最多 500 個部落格。",
     "import": "匯入",
-    "imported": "已匯入 {n} 個訂閱源。",
+    "imported": "已匯入 {n} 個部落格。",
     "errors": {
       "invalid_url": "這不像是一個 URL。",
       "fetch_failed": "無法連上這個網址。",
@@ -207,12 +227,14 @@
     }
   },
   "translation": {
-    "writtenIn": "原文為<b>{source}</b>，由 Tela 翻譯成{target}。",
-    "writtenInOnly": "原文為<b>{source}</b>。",
+    "writtenIn": "原文為<b>{source}</b>。",
+    "translatedBy": "由 Tela 翻譯成{target}。",
     "translateNow": "翻譯成{target}",
     "translating": "翻譯中…",
+    "translatingInto": "正在翻譯成{target}…",
+    "translatingRest": "正在翻譯其餘部分…",
     "failed": "翻譯失敗。",
-    "partial": "有 {n} 段未能翻譯。",
+    "partial": "由 Tela 翻譯成{target}，有 {n} 段未能翻譯。",
     "modesLabel": "閱讀版式",
     "modes": {
       "side": "對照",
@@ -221,7 +243,7 @@
     },
     "columnTranslated": "{target} · 譯文",
     "columnOriginal": "原文",
-    "blockUntranslated": "未翻譯",
+    "notTranslated": "未翻譯 · {language}",
     "rateLimited": "翻譯請求過於頻繁，請稍後再試。",
     "budgetExhausted": "今日的翻譯額度已用完，明天會重設。",
     "unavailable": "暫時無法開始翻譯，請重試。",
@@ -341,17 +363,17 @@
     },
     "claim": {
       "title": "你有部落格嗎？",
-      "intro": "認領你的訂閱源，看看有多少人在讀你、你的文章反響如何，以及讀者推薦時說了什麼。",
-      "cta": "認領你的訂閱源"
+      "intro": "認領你的部落格，看看有多少人在讀你、你的文章反響如何，以及讀者推薦時說了什麼。",
+      "cta": "認領你的部落格"
     }
   },
   "site": {
-    "claimedByName": "✓ 由 {name} 認領",
-    "visit": "前往網站 ↗",
+    "claimedByName": "由 {name} 認領",
+    "visit": "前往部落格 ↗",
     "writtenIn": "用{lang}寫作",
     "cadence": "{key, select, daily {每日更新} weekly {每週更新} biweekly {每月兩更} monthly {每月更新} other {最近安靜}}",
     "readersOnTela": "{n} 位 Tela 讀者",
-    "claimLink": "這是你的網站？認領它",
+    "claimLink": "這是你的部落格？認領它",
     "yourTopics": "你的主題",
     "saveTopics": "儲存",
     "posts": "文章",
@@ -368,46 +390,46 @@
     "noteOn": "<person></person> 推薦了 <post></post>"
   },
   "claim": {
-    "title": "認領你的訂閱源",
-    "intro": "告訴我們你部落格的網址。我們會找到它的訂閱源，然後請你證明你擁有這個網站。",
+    "title": "認領你的部落格",
+    "intro": "告訴我們你部落格的網址。我們會找到它的訂閱源，然後請你證明你擁有這個部落格。",
     "continue": "繼續",
     "searching": "正在查詢訂閱源…",
-    "verifyTitle": "證明你擁有這個網站",
+    "verifyTitle": "證明你擁有這個部落格",
     "verifyIntro": "用下面任意一種方式證明 <site></site> 是你的，然後點「驗證」。Tela 會逐一檢查。",
     "optionGitHub": "你的 GitHub",
-    "optionGitHubHint": "如果你 GitHub 主頁上填寫的網站是 {site}，而你的網站在頁頭或頁尾連結了這個 GitHub 主頁，就什麼都不用加。",
-    "optionGitHubUnlinked": "如果你的網站和 GitHub 主頁已經互相連結，就什麼都不用加：先在<link>設定</link>裡把 GitHub 連結到你的 Tela 帳號，再回來驗證。",
+    "optionGitHubHint": "如果你 GitHub 主頁上填寫的網站是 {site}，而你的部落格在頁頭或頁尾連結了這個 GitHub 主頁，就什麼都不用加。",
+    "optionGitHubUnlinked": "如果你的部落格和 GitHub 主頁已經互相連結，就什麼都不用加：先在<link>設定</link>裡把 GitHub 連結到你的 Tela 帳號，再回來驗證。",
     "optionRelMe": "指向你 Tela 個人頁的連結",
-    "optionRelMeHint": "把它放在網站的頁頭或頁尾。已有的連結也可以：帶 rel=\"me\" 的放在首頁任何位置都行；不帶的，需要放在 404 頁面也會顯示的頁頭或頁尾裡。",
+    "optionRelMeHint": "把它放在部落格的頁頭或頁尾。已有的連結也可以：帶 rel=\"me\" 的放在首頁任何位置都行；不帶的，需要放在 404 頁面也會顯示的頁頭或頁尾裡。",
     "optionMeta": "meta 標籤",
     "optionMetaHint": "放在首頁的 <head> 中。驗證完成後可以刪除。",
     "verify": "驗證",
     "verifyAgain": "再次驗證",
-    "checking": "正在檢查你的網站…",
+    "checking": "正在檢查你的部落格…",
     "stillChecking": "這次檢查比平時久。可以再驗證一次，或者稍後回來檢視結果。",
     "failed": "尚未驗證。",
     "reasons": {
-      "no_proof": "在 {page} 上什麼也沒找到：沒有 meta 標籤，沒有指向你 Tela 個人頁的連結，也沒有與網站互鏈的 GitHub 連結。Tela 讀取的是伺服器返回的頁面，不執行任何指令碼。",
+      "no_proof": "在 {page} 上什麼也沒找到：沒有 meta 標籤，沒有指向你 Tela 個人頁的連結，也沒有與部落格互鏈的 GitHub 連結。Tela 讀取的是伺服器返回的頁面，不執行任何指令碼。",
       "other_handle": "{page} 連結的是 Tela 個人頁 @{found}，而你的是 @{handle}。請改成你的個人頁連結。",
       "link_marked": "{page} 上指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結帶有 rel=\"{rel}\"，評論區就是這樣標記評論者連結的，所以不算數。去掉它，或者加上 rel=\"me\"。",
-      "not_site_wide": "指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結在 {page} 上有，但在 {other}（你網站的 404 頁面）上沒有。不帶 rel=\"me\" 的連結，要放在 404 頁面也會顯示的頁頭或頁尾裡才算數，文章裡的連結不算。給它加上 rel=\"me\"，或者把它移到頁頭或頁尾。",
-      "no_not_found_page": "{page} 上指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結沒有 rel=\"me\"，所以 Tela 還要在你網站的 404 頁面上找到它，但你的網站沒有對不存在的地址返回可讀取的 404 頁面。給連結加上 rel=\"me\"。",
-      "github_website": "你的網站連結了你的 GitHub 主頁，但這個主頁上填寫的網站不是 {site}。到 GitHub 上把它改成 {site}，再驗證一次。",
+      "not_site_wide": "指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結在 {page} 上有，但在 {other}（你部落格的 404 頁面）上沒有。不帶 rel=\"me\" 的連結，要放在 404 頁面也會顯示的頁頭或頁尾裡才算數，文章裡的連結不算。給它加上 rel=\"me\"，或者把它移到頁頭或頁尾。",
+      "no_not_found_page": "{page} 上指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結沒有 rel=\"me\"，所以 Tela 還要在你部落格的 404 頁面上找到它，但你的部落格沒有對不存在的地址返回可讀取的 404 頁面。給連結加上 rel=\"me\"。",
+      "github_website": "你的部落格連結了你的 GitHub 主頁，但這個主頁上填寫的網站不是 {site}。到 GitHub 上把它改成 {site}，再驗證一次。",
       "github_link": "你的 GitHub 主頁填寫的網站是 {site}，但 {page} 沒有連結到這個 GitHub 主頁。在頁頭或頁尾加上這個連結。",
       "github_unavailable": "GitHub 沒有響應，Tela 無法檢查你的 GitHub。稍後再試，或者換一種方式。",
-      "overruled": "管理員已移除或駁回這個認領，所以不帶 rel=\"me\" 的連結不再能證明這個網站是你的。給 {page} 上指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結加上 rel=\"me\"，或者新增 meta 標籤。",
+      "overruled": "管理員已移除或駁回這個認領，所以不帶 rel=\"me\" 的連結不再能證明這個部落格是你的。給 {page} 上指向{target, select, github {你的 GitHub} other {你 Tela 個人頁}}的連結加上 rel=\"me\"，或者新增 meta 標籤。",
       "home_refused": "{page} 拒絕了 Tela 的訪問（HTTP {status}）。這通常是防爬蟲設定造成的，比如 Cloudflare、防火牆或安全外掛。請放行 User-Agent 以「Tela/」開頭的請求，然後再驗證一次。",
       "home_status": "{page} 返回了 HTTP {status}，而不是 Tela 能讀取的頁面。確認首頁能正常開啟，然後再驗證一次。",
       "home_unreachable": "Tela 無法讀取 {page}：{why, select, timeout {響應時間太長} too_large {頁面超出了 Tela 讀取的大小} redirect_loop {重定向次數太多} other {無法連線}}。確認它能正常開啟，然後再驗證一次。"
     },
-    "verified": "已驗證。這個網站在 Tela 上屬於你了。",
-    "verifiedHint": "它現在會出現在「發現」中。在網站頁選擇主題，在儀表板檢視讀者與喜歡。",
-    "viewSite": "檢視網站頁",
-    "claimedByOther": "這個網站已被另一位 Tela 成員認領。",
+    "verified": "已驗證。這個部落格在 Tela 上屬於你了。",
+    "verifiedHint": "它現在會出現在「發現」中。在部落格頁選擇主題，在儀表板檢視讀者與喜歡。",
+    "viewSite": "檢視部落格頁",
+    "claimedByOther": "這個部落格已被另一位 Tela 成員認領。",
     "errors": {
       "invalid_url": "這不像是一個 URL。",
       "fetch_failed": "無法連上這個網址。",
-      "no_feed": "這個網址下沒有找到訂閱源。Tela 只收錄發布訂閱源的網站。",
+      "no_feed": "這個網址下沒有找到訂閱源。Tela 只收錄發布訂閱源的部落格。",
       "rate_limited": "認領嘗試太頻繁，請稍後再試。"
     },
     "taken": "你選的使用者名稱已經屬於別人，所以目前用的還是臨時使用者名稱。可以在<link>設定</link>裡另選一個。"
@@ -427,7 +449,7 @@
       "submit": "認領你的名片"
     },
     "availability": {
-      "available": "✓ @{handle} 可以使用",
+      "available": "@{handle} 可以使用",
       "taken": "@{handle} 已被佔用。",
       "reserved": "@{handle} 是保留名。",
       "invalid": "@{handle} 不能用作使用者名稱。",
@@ -498,7 +520,7 @@
       },
       "connect": {
         "title": "連結你的部落格",
-        "body": "用一個指向你名片的連結或一個 meta 標籤證明網站屬於你；如果你的網站和 GitHub 已經互相連結，什麼都不用加。任何有 RSS 或 Atom 訂閱源的部落格都可以。"
+        "body": "用一個指向你名片的連結或一個 meta 標籤證明部落格屬於你；如果你的部落格和 GitHub 已經互相連結，什麼都不用加。任何有 RSS 或 Atom 訂閱源的部落格都可以。"
       },
       "follow": {
         "title": "追蹤你喜歡的寫作者",
@@ -506,10 +528,10 @@
       }
     },
     "yours": {
-      "title": "你的網站還是你的",
+      "title": "你的部落格還是你的",
       "nothing": {
         "title": "什麼都不用搬",
-        "body": "Tela 讀取你已經在發布的訂閱源。每篇文章都連結回你的網站。"
+        "body": "Tela 讀取你已經在發布的訂閱源。每篇文章都連結回你的部落格。"
       },
       "ads": {
         "title": "沒有廣告",
@@ -568,14 +590,27 @@
     "followingButton": "追蹤中"
   },
   "dashboard": {
-    "title": "你的網站",
-    "intro": "有多少人在讀你，你的文章反響如何，讀者推薦時說了什麼。",
-    "noSites": "你還沒有認領網站。",
+    "title": "儀表板",
+    "intro": "有多少人在讀你的部落格，你的文章反響如何，讀者推薦時說了什麼。",
+    "noSites": "你還沒有認領部落格。",
+    "listedUnder": "{listing}，主題：{topics}",
+    "listSeparator": "、",
+    "readers": "Tela 讀者",
+    "newReaders": "近 30 天 +{n}",
+    "likes": "喜歡",
+    "likesAcross": "來自 {n} 篇文章",
+    "recommendations": "推薦",
+    "withNote": "{n} 條附有推薦語",
+    "posts": "文章",
     "post": "文章",
+    "notesColumn": "推薦語",
     "notes": "讀者說",
     "noNotes": "還沒有推薦語。",
-    "optOutTranslation": "關閉翻譯",
-    "allowTranslation": "允許翻譯",
+    "onTela": "這個部落格在 Tela 上",
+    "translate": "允許讀者翻譯你的文章",
+    "translateHint": "Tela 會為使用其他語言的讀者翻譯你的文章，並始終在譯文旁邊顯示原文。關掉後，讀者只能讀到你寫下的原文。",
+    "translationOn": "已為「{blog}」開啟翻譯。",
+    "translationOff": "已為「{blog}」關閉翻譯。",
     "listing": {
       "private": "未公開",
       "listed": "已在「發現」列出",
@@ -757,6 +792,8 @@
     "save": "儲存",
     "cancel": "取消",
     "remove": "刪除劃線",
+    "removed": "已刪除劃線。",
+    "privacy": "劃線和筆記只有你能看到。<keyboard>選中文字後按 H 即可劃線。</keyboard>",
     "detached": "文章裡已經沒有這段文字了。",
     "elsewhere": "在另一種版式或語言中，切換即可看到。"
   },
@@ -784,6 +821,7 @@
     "original": "在新分頁開啟原文",
     "like": "喜歡或取消喜歡這篇文章",
     "read": "將這篇文章標為已讀或未讀",
+    "undo": "提示仍在顯示時，撤銷剛才的操作",
     "highlight": "為所選文字劃線",
     "sidebar": "收起或展開側欄",
     "focus": "閱讀時隱藏列表",
@@ -800,5 +838,16 @@
     "onThisPage": "本頁內容",
     "short": "簡而言之",
     "updated": "最後更新：{date}"
+  },
+  "toast": {
+    "undo": "撤銷"
+  },
+  "firstRun": {
+    "title": "從幾個部落格開始",
+    "intro": "訂閱幾個部落格，它們的文章就會出現在你的閱讀列表裡。其他語言的文章，標題會譯成{language}。",
+    "waiting": "至少訂閱一個，就可以開始閱讀。",
+    "start": "開始閱讀 {n} 個部落格 →",
+    "more": "在「發現」中檢視更多部落格 →",
+    "import": "從別的閱讀器過來？<opml>匯入 OPML 檔案</opml>，或<add>貼上部落格網址</add>。"
   }
 }

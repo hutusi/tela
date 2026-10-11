@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { useTranslations } from 'use-intl'
 import { AppHeader } from './components/app-header'
 import { FrontDoorProvider, ToReading } from './components/front-door'
+import { Toast } from './components/toast'
 import { chooseLocale, detectLocale, I18n, localeCookie, localeToAdopt } from './i18n'
 import { applyTheme, deviceTheme, PREFS, themeToAdopt, typographyOf } from './lib/typography'
 import { forgetPublic } from './lib/use-public'
@@ -358,6 +359,7 @@ function Routed() {
                 }
               />
             </Routes>
+            <Toast />
           </div>
         </FrontDoorProvider>
       </I18n>

@@ -2,6 +2,7 @@ import { TOPICS } from '@tela/shared'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { CHECK, Glyph } from '../components/glyph'
 import { displayHost } from '../lib/format'
 import { useMemberControls } from '../lib/member'
 import { readingPrefsOf } from '../lib/prefs'
@@ -80,6 +81,7 @@ function useFollowedReaders(siteId: number | null, member: boolean): Person[] {
 function TopicsForm({ siteId, topics }: { siteId: number; topics: string[] }) {
   const t = useTranslations('site')
   const td = useTranslations('discover')
+  const ts = useTranslations('settings')
   const [chosen, setChosen] = useState(() => new Set(topics))
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -133,7 +135,16 @@ function TopicsForm({ siteId, topics }: { siteId: number; topics: string[] }) {
         disabled={busy}
         className="ml-auto rounded-full bg-ink px-3.5 py-1.5 text-[13px] font-medium text-paper disabled:opacity-60"
       >
-        {saved ? '✓' : t('saveTopics')}
+        {saved ? (
+          <>
+            <Glyph size={12} className="inline-block">
+              {CHECK}
+            </Glyph>
+            <span className="sr-only">{ts('saved')}</span>
+          </>
+        ) : (
+          t('saveTopics')
+        )}
       </button>
     </form>
   )

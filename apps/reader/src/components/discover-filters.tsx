@@ -5,6 +5,7 @@
 import { asLabel, LANGUAGE_NAMES, TOPICS, type UiLocale } from '@tela/shared'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { CHEVRON_DOWN, Glyph } from './glyph'
 
 export const chip = (on: boolean) =>
   `rounded-full border px-3.5 py-1.5 text-[13px] hover:no-underline ${
@@ -62,7 +63,9 @@ export function LanguageFilter({
       >
         <span className="font-normal text-muted">{t('language')}</span>
         {lang ? label(lang) : t('allLanguages')}
-        <span className="text-[10px] text-muted">▾</span>
+        <Glyph size={12} className="block shrink-0 text-muted">
+          {CHEVRON_DOWN}
+        </Glyph>
       </summary>
       <div className="absolute right-0 top-[calc(100%+6px)] z-[4] flex min-w-[180px] flex-col rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,.08)] animate-fade">
         <Link to={hrefOf(null)} className={menuItem(lang === null)}>

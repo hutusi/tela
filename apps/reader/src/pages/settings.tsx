@@ -18,6 +18,7 @@ import { useId, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, useLocation, useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { AvatarCrop } from '../components/avatar-crop'
+import { CLOSE, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { Segmented } from '../components/segmented'
 import { SettingRow } from '../components/setting-row'
@@ -602,7 +603,9 @@ function NeverTranslate({
               className="flex size-5 items-center justify-center rounded-full text-[12px] text-muted hover:bg-hover hover:text-ink"
               data-testid={`never-remove-${tag}`}
             >
-              ✕
+              <Glyph size={12} className="block">
+                {CLOSE}
+              </Glyph>
             </button>
           </span>
         ))}

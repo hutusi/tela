@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { applyPull, emptyTables, type Tables, titleKey, view } from '@tela/sync'
+import { applyMutation, applyPull, emptyTables, type Tables, titleKey, view } from '@tela/sync'
 import {
   articlesFor,
   feedTitle,
   isMarkedUnread,
   isRead,
+  markAllReadCovers,
   prefetchPlan,
   shownRead,
   shownTitle,
@@ -131,6 +132,80 @@ describe('what the reading view shows', () => {
       title: 'Post 1',
       badge: false,
     })
+  })
+})
+
+describe('what a mark-all-read reads', () => {
+  const state = (articleId: number, readAt: number | null, readUpdatedAt: number | null) => ({
+    articleId,
+    readAt,
+    readUpdatedAt,
+    likedAt: null,
+    likedUpdatedAt: null,
+    seq: 1,
+  })
+  const AT = NOW - 1000
+  const markAll = (upTo: number, feedId?: number) => ({
+    type: 'markAllRead' as const,
+    mid: 'mark-all-1',
+    at: AT,
+    upTo,
+    ...(feedId === undefined ? {} : { feedId }),
+  })
+  // Feed 1 has read up to 2 by its watermark; 3 to 6 are above it. Feed 2 is another blog,
+  // and feed 3 one the member left.
+  const t = tables({
+    subscriptions: [sub(1, { watermarkId: 2 }), sub(2), sub(3, { deletedAt: 5 })],
+    articles: [
+      article(1),
+      // Under the watermark, but marked unread by hand before the mark-all.
+      article(2),
+      article(3),
+      // Marked unread by hand before the mark-all, and since it.
+      article(4),
+      article(5),
+      // Past the horizon: read already, whatever the mark-all does.
+      article(6, { fetchedAt: NOW - 31 * DAY }),
+      // Read by opening it.
+      article(7),
+      article(8, { feedId: 2 }),
+      article(9, { feedId: 3 }),
+      // Above what the list showed.
+      article(10),
+    ],
+    states: [
+      state(2, null, AT - 10),
+      state(4, null, AT - 5),
+      state(5, null, AT + 5),
+      state(7, 3, null),
+    ],
+  })
+
+  test('counts every post it turns read, under the watermark or above it', () => {
+    expect(markAllReadCovers(t, markAll(9, 1), NOW).sort((a, b) => a - b)).toEqual([2, 3, 4])
+  })
+
+  test('across every feed the member follows, without one named', () => {
+    expect(markAllReadCovers(t, markAll(9), NOW).sort((a, b) => a - b)).toEqual([2, 3, 4, 8])
+  })
+
+  test('nothing past the horizon, in another feed, above upTo, or marked unread since', () => {
+    const covered = markAllReadCovers(t, markAll(9, 1), NOW)
+    for (const id of [5, 6, 7, 8, 9, 10]) expect(covered).not.toContain(id)
+    // The answer agrees with what the list then shows.
+    expect(covered.every((id) => !isRead(t, t.articles.get(id) ?? article(id), NOW))).toBe(true)
+    expect(markAllReadCovers(t, markAll(1, 1), NOW)).toEqual([])
+  })
+
+  test('nothing once a mark-all over it is already shown: a second press has nothing to send', () => {
+    // The first press, held for its Undo, is in the view the second one counts against.
+    const once = applyMutation(t, markAll(9, 1))
+    expect(markAllReadCovers(once, { ...markAll(9, 1), mid: 'mark-all-2' }, NOW)).toEqual([])
+    // One feed's after every feed's, the same.
+    const all = applyMutation(t, markAll(9))
+    expect(markAllReadCovers(all, { ...markAll(9, 1), mid: 'mark-all-2' }, NOW)).toEqual([])
+    // Every feed's after one feed's still reads the others.
+    expect(markAllReadCovers(once, { ...markAll(9), mid: 'mark-all-2' }, NOW)).toEqual([8])
   })
 })
 

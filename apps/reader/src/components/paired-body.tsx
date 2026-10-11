@@ -8,7 +8,7 @@ import { Untranslated } from './untranslated'
 const LEAD = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
 
 type Props = {
-  pairs: BlockPair[]
+  pairs: readonly BlockPair[]
   title: string
   originalTitle: string
   targetLang: string
@@ -57,9 +57,10 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
         </div>
 
         {/* The title sits on the source ground too, so that column reads as one surface from
-            its heading down rather than as a title above an unrelated band. */}
+            its heading down rather than as a title above an unrelated band. On a phone it is set
+            small above the translated one, as the reference it is (Tela Mobile 03). */}
         <h1
-          className="article-source mb-6 font-serif text-[32px] font-medium leading-[1.12] tracking-tight text-ink-2"
+          className="article-source mb-6 font-serif text-[18px] font-medium leading-[1.25] tracking-tight text-ink-2 lg:text-[32px] lg:leading-[1.12]"
           style={{ textWrap: 'pretty' }}
           lang={sourceLang}
           dir="auto"
@@ -69,7 +70,7 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
           {originalTitle}
         </h1>
         <h1
-          className="mb-6 font-serif text-[32px] font-medium leading-[1.12] tracking-tight"
+          className="mb-6 font-serif text-[30px] font-medium leading-[1.12] tracking-tight lg:text-[32px]"
           style={{ textWrap: 'pretty' }}
           lang={targetLang}
           data-testid="article-title"
@@ -107,7 +108,9 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
                 dangerouslySetInnerHTML={{ __html: pair.original }}
               />
               {pair.untranslated ? (
-                <Untranslated pending={pair.pending}>{translatedCell}</Untranslated>
+                <Untranslated pending={pair.pending} sourceLang={sourceLang}>
+                  {translatedCell}
+                </Untranslated>
               ) : (
                 translatedCell
               )}

@@ -6,8 +6,12 @@ import { useTranslations } from 'use-intl'
 import { relativeTime } from '../lib/format'
 import { canonicalReadingHref, type ReadingParams, readingHref } from '../lib/href'
 import { readingPrefsOf } from '../lib/prefs'
+import { showToast, UNDO_HOLD_MS } from '../lib/toasts'
+import { offerUndo, unreadAgain } from '../lib/undo'
 import { useStore, useTables } from '../store/hooks'
-import { feedTitle, shownRead, shownTitle } from '../store/selectors'
+import type { Stamp } from '../store/local'
+import { feedTitle, isRead, markAllReadCovers, shownRead, shownTitle } from '../store/selectors'
+import { GlyphCount } from './glyph-count'
 import { Swatch } from './swatch'
 
 type Props = {
@@ -25,6 +29,8 @@ type Props = {
 /** How many rows render; older ones follow on request. The device holds the whole horizon. */
 const PAGE = 200
 
+const read = (articleId: number) => ({ type: 'markRead', articleId }) as const
+
 export function ArticleList({
   items,
   params,
@@ -37,6 +43,7 @@ export function ArticleList({
 }: Props) {
   const t = useTranslations('list')
   const ts = useTranslations('sidebar')
+  const tt = useTranslations('toast')
   const tables = useTables()
   const { store } = useStore()
   const location = useLocation()
@@ -45,17 +52,53 @@ export function ArticleList({
   const target = languageBadge(readingLang)
   const [limit, setLimit] = useState(PAGE)
   const shown = items.slice(0, limit)
+  // Liking a post reads it, so Liked has nothing to mark.
+  const markable = items.length > 0 && !(params.feedId === null && params.filter === 'liked')
   const markAllRead = () => {
+    // The device's rows as they are when pressed, which the toast counts against.
+    const before = store.getSnapshot().tables
+    const at = Date.now()
+    // Held on the device while the toast shows, so an Undo never reaches the server: a watermark
+    // only moves forward (ADR 0025). Sent already (the tab was hidden meanwhile), an Undo marks
+    // what it read unread one by one and later than it, unless that is too many to send.
+    const offer = (ids: number[], held: Stamp[]) => {
+      const last = held.at(-1)
+      if (!last) return
+      offerUndo(
+        store,
+        t('markedRead', { n: ids.length }),
+        tt('undo'),
+        held.map((s) => s.mid),
+        () => {
+          if (!unreadAgain(store, ids, last.at)) showToast(t('undoTooMany'))
+        },
+      )
+    }
+    if (params.feedId === null && params.filter === 'today') {
+      // Today is a window the server knows nothing of: a mark-all up to its newest post would read
+      // every older post of every feed too. So each unread post it holds, read on its own.
+      const ids = items.filter((a) => !isRead(before, a, at)).map((a) => a.id)
+      offer(ids, store.mutateMany(ids.map(read), { holdMs: UNDO_HOLD_MS }))
+      return
+    }
     // Up to what the list displayed, never the server's newest: a post that arrived after the
     // reader looked stays unread (ADR 0025).
     const upTo = shown.reduce((max, a) => (a.id > max ? a.id : max), 0)
-    if (upTo > 0) {
-      store.mutate({
-        type: 'markAllRead',
-        upTo,
-        ...(params.feedId ? { feedId: params.feedId } : {}),
-      })
-    }
+    if (upTo === 0) return
+    const input = {
+      type: 'markAllRead',
+      upTo,
+      ...(params.feedId ? { feedId: params.feedId } : {}),
+    } as const
+    // Counted from what the change does, as the server will apply it: every post of the scope up
+    // to `upTo`, the ones this list never showed included.
+    const covered = markAllReadCovers(before, { ...input, mid: '', at }, at)
+    // Nothing it would read: a second press while the first one's Undo shows (sent anyway, it
+    // would outlive that Undo), or a list read already. A post the device does not hold is past
+    // the horizon, read already too. So nothing is sent, and there is nothing to undo.
+    if (covered.length === 0) return
+    const stamp = store.mutate(input, { holdMs: UNDO_HOLD_MS })
+    if (stamp) offer(covered, [stamp])
   }
   return (
     <section
@@ -66,7 +109,7 @@ export function ArticleList({
         <h1 className="min-w-0 flex-1 truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
           {heading}
         </h1>
-        {items.length > 0 ? (
+        {markable ? (
           <button
             type="button"
             onClick={markAllRead}
@@ -93,7 +136,11 @@ export function ArticleList({
           ) : (
             <>
               <p>{t('empty')}</p>
-              <p>{t('emptyHint')}</p>
+              <p>
+                {t.rich('emptyHint', {
+                  add: (chunks) => <Link to="/add">{chunks}</Link>,
+                })}
+              </p>
             </>
           )}
         </div>
@@ -164,6 +211,7 @@ export function ArticleList({
                 ) : null}
               </div>
               <h2
+                data-row-title
                 className="m-0 font-serif font-medium leading-[1.2] tracking-tight text-[19px] group-data-[open=1]:text-[15.5px]"
                 style={{ textWrap: 'pretty' }}
               >
@@ -176,8 +224,8 @@ export function ArticleList({
               ) : null}
               <div className="flex gap-3 text-xs text-muted group-data-[open=1]:hidden">
                 <span>{t('minutes', { n: a.readingMinutes || 1 })}</span>
-                <span>♡ {a.likeCount}</span>
-                <span>↗ {a.recommendCount}</span>
+                <GlyphCount kind="likeCount" n={a.likeCount} />
+                <GlyphCount kind="recommendCount" n={a.recommendCount} />
               </div>
             </Link>
           )

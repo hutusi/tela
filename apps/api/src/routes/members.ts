@@ -18,6 +18,7 @@ import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
+import { DAY } from './public-sql'
 
 /** A search query as SQL LIKE sees it: trimmed, whitespace collapsed, wildcards escaped. */
 export function likePattern(query: string): string | null {
@@ -124,45 +125,109 @@ export function memberRoutes(deps: ApiDeps) {
     return c.json({ optOut })
   })
 
-  /** A blogger's view of their blogs: readers, recent posts and how they landed, and notes. */
+  /**
+   * A blogger's view of their blogs: readers, recent posts and how they landed, and notes. The
+   * totals are the whole blog's, every post and every live like, recommendation and note, not the
+   * twenty posts listed: the notes below them cover every post, and a total of the twenty could
+   * say "0 with a note" over a note.
+   */
   routes.get('/dashboard', async (c) => {
     const member = c.get('member')
-    const [sites, posts, notes] = (await db.batch([
+    const since = deps.clock.now() - 30 * DAY
+    // New readers are the same population as `reader_count` (`recountReaders`): distinct members
+    // with a live subscription to any of the blog's feeds, merged ones included. A member is new
+    // when none of their live subscriptions to it is older than 30 days, so subscribing to a
+    // second feed of a blog they already read does not count them twice. A resubscribe keeps
+    // its row's `created_at`, so leaving and coming back is not new either.
+    const [sites, topics, posts, notes, totals] = (await db.batch([
       db.all(sql`
         select id, title, home_url as "homeUrl", favicon_key as "faviconKey", listing,
-          reader_count as "readerCount", translation_opt_out as "translationOptOut"
+          primary_lang as "primaryLang", reader_count as "readerCount",
+          translation_opt_out as "translationOptOut",
+          (select count(distinct sub.user_id) from subscriptions sub
+            join feeds f on f.id = sub.feed_id
+            where f.site_id = sites.id and sub.deleted_at is null and sub.created_at > ${since}
+              and not exists (
+                select 1 from subscriptions sub2 join feeds f2 on f2.id = sub2.feed_id
+                where f2.site_id = sites.id and sub2.user_id = sub.user_id
+                  and sub2.deleted_at is null and sub2.created_at <= ${since}
+              )
+          ) as "newReaders30d"
         from sites where claimed_by = ${member.id} order by title
+      `),
+      db.all(sql`
+        select t.site_id as "siteId", t.topic from site_topics t join sites s on s.id = t.site_id
+        where s.claimed_by = ${member.id} order by t.topic
       `),
       db.all(sql`
         select * from (
           select a.id, f.site_id as "siteId", a.title, a.url, a.published_at as "publishedAt",
             a.like_count as "likeCount", a.recommend_count as "recommendCount",
+            (select count(*) from recommendations r
+              where r.article_id = a.id and r.deleted_at is null and r.note is not null
+            ) as "noteCount",
             row_number() over (partition by f.site_id order by a.sort_at desc, a.id desc) as n
           from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
           where s.claimed_by = ${member.id}
         ) where n <= 20
       `),
+      // The newest twenty of each blog, not of all of them together: a cap shared across blogs
+      // let one busy blog's notes crowd out another's, whose section then said it had none
+      // under a tile that counted some.
       db.all(sql`
-        select r.note, r.created_at as "createdAt", a.id as "articleId", a.title as "articleTitle",
-          a.url as "articleUrl", p.handle, p.display_name as "displayName"
-        from recommendations r join articles a on a.id = r.article_id
-        join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-        join profiles p on p.user_id = r.user_id
-        where s.claimed_by = ${member.id} and r.deleted_at is null and r.note is not null
-        order by r.created_at desc limit 50
+        select * from (
+          select r.note, r.created_at as "createdAt", f.site_id as "siteId", a.id as "articleId",
+            a.title as "articleTitle", a.url as "articleUrl", p.handle,
+            p.display_name as "displayName", ${avatarOf('p')} as "avatar",
+            row_number() over (
+              partition by f.site_id order by r.created_at desc, r.article_id desc
+            ) as n
+          from recommendations r join articles a on a.id = r.article_id
+          join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+          join profiles p on p.user_id = r.user_id
+          where s.claimed_by = ${member.id} and r.deleted_at is null and r.note is not null
+        ) where n <= 20 order by "createdAt" desc
+      `),
+      // The counters are live counts (`recount` in sync/push.ts), as the posts' columns are.
+      db.all(sql`
+        select f.site_id as "siteId", count(*) as "posts",
+          coalesce(sum(a.like_count), 0) as "likes",
+          coalesce(sum(a.recommend_count), 0) as "recommendations",
+          (select count(*) from recommendations r join articles a2 on a2.id = r.article_id
+            join feeds f2 on f2.id = a2.feed_id join profiles p2 on p2.user_id = r.user_id
+            where f2.site_id = f.site_id and r.deleted_at is null and r.note is not null
+          ) as "notes"
+        from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+        where s.claimed_by = ${member.id}
+        group by f.site_id
       `),
     ] as never)) as unknown as [
       Record<string, unknown>[],
+      { siteId: number; topic: string }[],
       Record<string, unknown>[],
       Record<string, unknown>[],
+      { siteId: number; posts: number; likes: number; recommendations: number; notes: number }[],
     ]
+    // A blog with no posts yet has no row to group.
+    const totalsOf = (siteId: unknown) => {
+      const { siteId: _s, ...total } = totals.find((t) => t.siteId === siteId) ?? {
+        siteId,
+        posts: 0,
+        likes: 0,
+        recommendations: 0,
+        notes: 0,
+      }
+      return total
+    }
     return c.json({
       sites: sites.map((s) => ({
         ...s,
         translationOptOut: s.translationOptOut === 1,
+        topics: topics.filter((t) => t.siteId === s.id).map((t) => t.topic),
+        totals: totalsOf(s.id),
         posts: posts.filter((p) => p.siteId === s.id).map(({ n: _n, siteId: _s, ...p }) => p),
       })),
-      notes,
+      notes: notes.map(({ n: _n, ...note }) => note),
     })
   })
 
