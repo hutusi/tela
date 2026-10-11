@@ -8,7 +8,7 @@ import { useLocation, useNavigate, useNavigationType, useSearchParams } from 're
 import { useTranslations } from 'use-intl'
 import { ArticleList } from '../components/article-list'
 import { EmptyState } from '../components/empty-state'
-import { FirstRun } from '../components/first-run'
+import { FirstRun, showsFirstRun } from '../components/first-run'
 import { MobileNav } from '../components/mobile-nav'
 import { Reader } from '../components/reader'
 import { Shortcuts } from '../components/shortcuts'
@@ -93,11 +93,18 @@ export function ReadingPage() {
   // The first run (Tela v5), for a member who follows nothing: never before the first pull, which
   // brings the profile with the subscriptions, so it cannot flash for one who follows some. Once
   // shown it is latched for that account, so subscribing from it keeps it up until the member
-  // starts reading; an open article has the page meanwhile.
+  // starts reading; an open article has the page meanwhile, and Liked keeps its list, since a
+  // member who follows nothing may still have kept posts (`showsFirstRun`).
   const empty = tables.profile !== null && subs.length === 0 && !open
   const [firstRunFor, setFirstRunFor] = useState<string | null>(null)
   if (empty && store.userId !== null && firstRunFor !== store.userId) setFirstRunFor(store.userId)
-  const firstRun = !open && (empty || (firstRunFor !== null && firstRunFor === store.userId))
+  const firstRun = showsFirstRun({
+    synced: tables.profile !== null,
+    subscriptions: subs.length,
+    open,
+    filter: params.filter,
+    latched: firstRunFor !== null && firstRunFor === store.userId,
+  })
   const startReading = () => {
     setFirstRunFor(null)
     // On the list of everything followed, whichever the sidebar was pointed at meanwhile.

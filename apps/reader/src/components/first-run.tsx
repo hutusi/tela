@@ -23,6 +23,23 @@ const CARDS = 6
 const INLINE = 'text-ink underline underline-offset-[3px]'
 
 /**
+ * Whether Reading shows the first run in place of the list: for a member whose rows have arrived
+ * (so it cannot flash before the first pull) and who follows nothing, or one it was already shown
+ * to (`latched`) until they start reading; never over an open article, and never on Liked, which
+ * holds what the member kept whether or not they still follow its blog.
+ */
+export function showsFirstRun(s: {
+  synced: boolean
+  subscriptions: number
+  open: boolean
+  filter: string
+  latched: boolean
+}): boolean {
+  if (s.open || s.filter === 'liked') return false
+  return s.latched || (s.synced && s.subscriptions === 0)
+}
+
+/**
  * Reading for a member who follows nothing yet (Tela v5), in place of an empty list and pane:
  * six blogs from the first page of Discover's Blogs, which puts the featured ones first, each with
  * a Subscribe that flips where it is. It stays up however many the member takes, until they say
