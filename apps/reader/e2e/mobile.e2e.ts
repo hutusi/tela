@@ -72,7 +72,7 @@ test.describe('mobile fallback', () => {
     await page.getByTestId('mobile-subscription').first().waitFor()
     const heights = await nav
       .locator('a[href^="/reading"]')
-      .evaluateAll((links) => links.map((a) => a.getBoundingClientRect().height))
+      .evaluateAll((links) => links.map((a) => Math.round(a.getBoundingClientRect().height)))
     expect(Math.min(...heights), 'a row under 40px').toBeGreaterThanOrEqual(40)
     const gear = await nav.getByTestId('manage-subscriptions').boundingBox()
     expect(gear && { width: Math.round(gear.width), height: Math.round(gear.height) }).toEqual({
@@ -356,7 +356,8 @@ test.describe('the article on a phone', () => {
     expect((await bar.boundingBox())?.height).toBeCloseTo(52, 0)
     await expect(back).toHaveText('All articles')
     await expect(back).toHaveAccessibleName('Back to All articles')
-    expect((await back.boundingBox())?.height).toBeGreaterThanOrEqual(44)
+    // Rounded: inside the pane's fade, its transform puts a 44px box at 43.999996 (CI did).
+    expect(Math.round((await back.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(44)
     await expect(bar.getByTestId('typography-button')).toBeVisible()
     // The desktop's controls are not drawn: they are in the bars.
     for (const id of [
@@ -401,7 +402,7 @@ test.describe('the article on a phone', () => {
     expect(variable).toBe(`${Math.round(box?.height ?? 0)}px`)
 
     const like = page.getByTestId('bar-like')
-    expect((await like.boundingBox())?.height).toBeGreaterThanOrEqual(48)
+    expect(Math.round((await like.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(48)
     const was = (await like.getAttribute('aria-pressed')) === 'true'
     const n = Number(/(\d+)$/.exec(((await like.textContent()) ?? '').trim())?.[1])
     expect(Number.isNaN(n)).toBe(false)
@@ -445,7 +446,9 @@ test.describe('the article on a phone', () => {
     // Cancel beside Recommend, a third and two thirds, both a thumb's height.
     const cancel = await sheet.getByRole('button', { name: 'Cancel' }).boundingBox()
     const submit = await sheet.getByTestId('recommend-submit').boundingBox()
-    expect(cancel && submit && cancel.height >= 46 && submit.height >= 46).toBe(true)
+    expect(
+      cancel && submit && Math.round(cancel.height) >= 46 && Math.round(submit.height) >= 46,
+    ).toBe(true)
     expect(cancel && submit && submit.width > cancel.width * 1.8).toBe(true)
 
     await field.fill('For the part about the tests.')

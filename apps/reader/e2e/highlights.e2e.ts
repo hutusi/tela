@@ -254,9 +254,9 @@ test('the toolbar sits over the selection with its key, and under it on a narrow
   expect(narrow && under).toBeTruthy()
   if (!narrow || !under) return
   expect(Math.abs(under.y - (narrow.bottom + 8))).toBeLessThan(1.5)
-  expect((await page.getByTestId('highlight-create').boundingBox())?.height).toBeGreaterThanOrEqual(
-    40,
-  )
+  expect(
+    Math.round((await page.getByTestId('highlight-create').boundingBox())?.height ?? 0),
+  ).toBeGreaterThanOrEqual(40)
 })
 
 test('on a phone, a note with no room above the bottom bar opens over its highlight', async ({

@@ -362,7 +362,9 @@ test('focus hides the list too while an article is open, and j, k and Esc carry 
   await expect(list).toBeHidden()
   await expect(page.locator('aside')).toHaveCount(0)
   // The article has the pane to itself.
-  expect((await page.getByTestId('reader').boundingBox())?.width).toBeGreaterThanOrEqual(1200)
+  expect(
+    Math.round((await page.getByTestId('reader').boundingBox())?.width ?? 0),
+  ).toBeGreaterThanOrEqual(1200)
   await page.keyboard.press('f')
   await expect(list).toBeVisible()
   expect(await list.evaluate((el) => (el as HTMLElement & { kept?: boolean }).kept)).toBe(true)
