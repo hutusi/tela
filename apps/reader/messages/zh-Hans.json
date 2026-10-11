@@ -151,7 +151,8 @@
     "browse": "订阅",
     "hide": "收起侧栏",
     "show": "展开侧栏",
-    "manage": "管理订阅"
+    "manage": "管理订阅",
+    "browseDiscover": "或去「发现」看看 →"
   },
   "list": {
     "markAllRead": "全部标为已读",
@@ -836,5 +837,13 @@
   },
   "toast": {
     "undo": "撤销"
+  },
+  "firstRun": {
+    "title": "从几个博客开始",
+    "intro": "订阅几个博客，它们的文章就会出现在你的阅读列表里。其他语言的文章，标题会译成{language}。",
+    "waiting": "至少订阅一个，就可以开始阅读。",
+    "start": "开始阅读 {n} 个博客 →",
+    "more": "在「发现」中查看更多博客 →",
+    "import": "从别的阅读器过来？<opml>导入 OPML 文件</opml>，或<add>粘贴博客地址</add>。"
   }
 }

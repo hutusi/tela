@@ -8,6 +8,7 @@ import { useLocation, useNavigate, useNavigationType, useSearchParams } from 're
 import { useTranslations } from 'use-intl'
 import { ArticleList } from '../components/article-list'
 import { EmptyState } from '../components/empty-state'
+import { FirstRun } from '../components/first-run'
 import { MobileNav } from '../components/mobile-nav'
 import { Reader } from '../components/reader'
 import { Shortcuts } from '../components/shortcuts'
@@ -87,6 +88,20 @@ export function ReadingPage() {
   const wide = useWide()
   const panes = { sidebar: effectiveSidebar(stored.sidebar, open, wide), focus: stored.focus }
   const focused = open && panes.focus === 'on'
+
+  // The first run (Tela v5), for a member who follows nothing: never before the first pull, which
+  // brings the profile with the subscriptions, so it cannot flash for one who follows some. Once
+  // shown it is latched for that account, so subscribing from it keeps it up until the member
+  // starts reading; an open article has the page meanwhile.
+  const empty = tables.profile !== null && subs.length === 0 && !open
+  const [firstRunFor, setFirstRunFor] = useState<string | null>(null)
+  if (empty && store.userId !== null && firstRunFor !== store.userId) setFirstRunFor(store.userId)
+  const firstRun = !open && (empty || (firstRunFor !== null && firstRunFor === store.userId))
+  const startReading = () => {
+    setFirstRunFor(null)
+    // On the list of everything followed, whichever the sidebar was pointed at meanwhile.
+    if (canonicalReadingHref(window.location.search) !== readingHref({})) navigate(readingHref({}))
+  }
 
   // The post after this one in the list as shown, the one `j` would open: a card at the end of
   // the article offers it, so a pointer reader flows on without going back up to the list.
@@ -312,13 +327,14 @@ export function ReadingPage() {
 
   return (
     <div
-      className={`group grid flex-1 grid-cols-1 lg:min-h-0 ${gridColumns(open, panes)}`}
+      className={`group grid flex-1 grid-cols-1 lg:min-h-0 ${gridColumns(open, panes, !firstRun)}`}
       data-testid="reading-layout"
       data-open={open ? '1' : undefined}
       data-sidebar={panes.sidebar}
       data-focus={focused ? '1' : undefined}
     >
-      {open ? null : <MobileNav subscriptions={subs} totals={counts} params={params} />}
+      {/* The first run has the links the phone's Feeds menu would offer: Discover and adding one. */}
+      {open || firstRun ? null : <MobileNav subscriptions={subs} totals={counts} params={params} />}
       {/* The sidebar, or the rail it collapses to (ADR 0030), and neither in focus. Not rendered
           rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no defined
           winner (AGENTS.md), and a column that is gone needs no element. The list is the
@@ -329,18 +345,28 @@ export function ReadingPage() {
       ) : (
         <SidebarRail subscriptions={subs} params={params} />
       )}
-      <ArticleList
-        items={items}
-        params={params}
-        title={listTitle}
-        readingLang={readingLang}
-        locale={locale}
-        now={now}
-        pendingFetch={pendingFetch}
-        hidingRead={prefs.hideRead && all.length > 0}
-      />
+      {firstRun ? null : (
+        <ArticleList
+          items={items}
+          params={params}
+          title={listTitle}
+          readingLang={readingLang}
+          locale={locale}
+          now={now}
+          pendingFetch={pendingFetch}
+          hidingRead={prefs.hideRead && all.length > 0}
+        />
+      )}
       {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}
-      {article ? (
+      {firstRun ? (
+        // In place of the list and the empty pane, at every width.
+        <FirstRun
+          readingLang={readingLang}
+          locale={locale}
+          subscribed={subs.length}
+          onStart={startReading}
+        />
+      ) : article ? (
         <Reader
           key={article.id}
           article={article}

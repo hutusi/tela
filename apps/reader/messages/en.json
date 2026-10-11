@@ -151,7 +151,8 @@
     "browse": "Feeds",
     "hide": "Collapse the sidebar",
     "show": "Expand the sidebar",
-    "manage": "Manage subscriptions"
+    "manage": "Manage subscriptions",
+    "browseDiscover": "or browse Discover →"
   },
   "list": {
     "markAllRead": "Mark all read",
@@ -836,5 +837,13 @@
   },
   "toast": {
     "undo": "Undo"
+  },
+  "firstRun": {
+    "title": "Start with a few blogs",
+    "intro": "Subscribe to a few and their posts fill your reading list. Posts in other languages arrive with their titles in {language}.",
+    "waiting": "Subscribe to at least one to start reading.",
+    "start": "{n, plural, one {Start reading # blog →} other {Start reading # blogs →}}",
+    "more": "More blogs in Discover →",
+    "import": "Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>."
   }
 }

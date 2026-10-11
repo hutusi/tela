@@ -151,7 +151,8 @@
     "browse": "Flux",
     "hide": "Replier la barre latérale",
     "show": "Déplier la barre latérale",
-    "manage": "Gérer les abonnements"
+    "manage": "Gérer les abonnements",
+    "browseDiscover": "ou parcourez Découvrir →"
   },
   "list": {
     "markAllRead": "Tout marquer comme lu",
@@ -836,5 +837,13 @@
   },
   "toast": {
     "undo": "Annuler"
+  },
+  "firstRun": {
+    "title": "Commencez par quelques blogs",
+    "intro": "Abonnez-vous à quelques-uns et leurs articles rempliront votre liste de lecture. Les articles écrits dans d’autres langues arrivent avec leur titre en {language}.",
+    "waiting": "Abonnez-vous à au moins un blog pour commencer à lire.",
+    "start": "{n, plural, one {Commencer à lire # blog →} other {Commencer à lire # blogs →}}",
+    "more": "Plus de blogs dans Découvrir →",
+    "import": "Vous venez d’un autre lecteur ? <opml>Importez un fichier OPML</opml> ou <add>collez l’adresse d’un blog</add>."
   }
 }

@@ -5,6 +5,7 @@
  */
 import { type BrowserContext, expect, type Page, test } from '@playwright/test'
 import {
+  ADMIN_TOKEN,
   addFeed,
   BASE,
   cycle,
@@ -49,13 +50,59 @@ test.describe('by code', () => {
     await page.getByTestId('login-code').fill(await latestCode(request, email))
     await page.getByTestId('login-submit').click()
     await expect(page).toHaveURL(/\/reading$/)
-    // A new member follows nothing yet.
-    await expect(page.getByTestId('empty-state')).toBeVisible()
+    // A new member follows nothing yet: the first run offers some blogs.
+    await expect(page.getByTestId('first-run')).toBeVisible()
 
     await fromAccountMenu(page, 'sign-out')
     await expect(page).toHaveURL(/\/$/)
     await page.goto('/reading')
     await expect(page).toHaveURL(/\/login/)
+  })
+})
+
+test.describe('the first run', () => {
+  test.use(visitor(31))
+  test('a new member subscribes from it, and it stays until they start reading', async ({
+    page,
+    context,
+  }) => {
+    // A blog Discover lists, whatever ran before: the operator features it, as the admin spec
+    // does, and featured blogs come first.
+    const curated = await context.request.post(`${BASE}/api/admin/curate`, {
+      headers: { origin: BASE, authorization: `Bearer ${ADMIN_TOKEN}` },
+      data: { feedUrl: `${FIXTURES}/jvns.xml`, topics: ['tech'], featured: true },
+    })
+    expect(curated.ok()).toBe(true)
+    await signInRequest(context.request, `first-run-${Date.now()}@e2e.test`)
+    await page.goto('/reading')
+
+    const firstRun = page.getByTestId('first-run')
+    await expect(firstRun.getByRole('heading', { level: 1 })).toHaveText('Start with a few blogs')
+    await expect(firstRun).toContainText('Posts in other languages arrive with their titles in')
+    await expect(firstRun).toContainText('Subscribe to at least one to start reading.')
+    await expect(page.getByTestId('first-run-start')).toHaveCount(0)
+    await expect(page.getByTestId('article-list')).toHaveCount(0)
+    await expect(page.getByTestId('sidebar')).toContainText('No subscriptions yet.')
+    const cards = page.getByTestId('first-run-card')
+    await expect(cards.first()).toBeVisible()
+    expect(await cards.count()).toBeLessThanOrEqual(6)
+
+    const subscribe = cards.first().getByTestId('first-run-subscribe')
+    await expect(subscribe).toHaveText('Subscribe')
+    await subscribe.click()
+    await expect(subscribe).toHaveAttribute('aria-pressed', 'true')
+    await expect(subscribe).toHaveText('Subscribed')
+    // Subscribed, the page stays for more, and says how many there are to read.
+    await expect(page.getByTestId('subscription')).toHaveCount(1)
+    await expect(firstRun).toBeVisible()
+    await expect(firstRun).not.toContainText('Subscribe to at least one')
+    const start = page.getByTestId('first-run-start')
+    await expect(start).toHaveText('Start reading 1 blog →')
+
+    await start.click()
+    await expect(firstRun).toHaveCount(0)
+    await expect(page.getByTestId('article-list')).toBeVisible()
+    await expect(page).toHaveURL(/\/reading$/)
   })
 })
 
@@ -169,7 +216,7 @@ async function twoAccounts(
   const other = await context.newPage()
   await signInRequest(context.request, `second-${stamp}@e2e.test`)
   await other.goto('/reading')
-  await expect(other.getByTestId('empty-state')).toBeVisible()
+  await expect(other.getByTestId('first-run')).toBeVisible()
   await showsSessionAccount(other, context)
   await page.bringToFront()
   return { other }

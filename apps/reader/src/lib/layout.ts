@@ -149,10 +149,16 @@ export function useWide(): boolean {
 /**
  * The reading grid's columns from `lg`: sidebar, list, article. The list is narrower while an
  * article is open, the sidebar's column narrows to its 48px rail when it collapses, and in focus
- * an open article has the grid to itself. Whole literals, so Tailwind's scanner sees each one.
+ * an open article has the grid to itself. The first run has no list: the sidebar, and its page
+ * beside it. Whole literals, so Tailwind's scanner sees each one.
  */
-export function gridColumns(open: boolean, { sidebar, focus }: Layout): string {
+export function gridColumns(open: boolean, { sidebar, focus }: Layout, list = true): string {
   if (open && focus === 'on') return 'lg:grid-cols-[minmax(0,1fr)]'
+  if (!list) {
+    return sidebar === 'hidden'
+      ? 'lg:grid-cols-[48px_minmax(0,1fr)]'
+      : 'lg:grid-cols-[220px_minmax(0,1fr)]'
+  }
   if (sidebar === 'hidden') {
     return open
       ? 'lg:grid-cols-[48px_260px_minmax(0,1fr)]'

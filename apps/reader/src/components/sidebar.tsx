@@ -80,6 +80,13 @@ export function Sidebar({ subscriptions, totals, params }: Props) {
           >
             {tn('addFeed')}
           </Link>
+          <Link
+            to="/discover/blogs"
+            className="whitespace-nowrap px-3 pt-2 text-[12.5px] text-muted hover:text-ink hover:no-underline"
+            data-testid="browse-discover"
+          >
+            {t('browseDiscover')}
+          </Link>
         </div>
       </div>
     </aside>

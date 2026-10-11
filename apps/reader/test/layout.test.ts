@@ -199,6 +199,15 @@ describe('the grid', () => {
     expect(gridColumns(true, hidden)).toBe('lg:grid-cols-[48px_260px_minmax(0,1fr)]')
   })
 
+  test('the first run has no list: the sidebar or its rail, and its page', () => {
+    expect(gridColumns(false, { sidebar: 'shown', focus: 'off' }, false)).toBe(
+      'lg:grid-cols-[220px_minmax(0,1fr)]',
+    )
+    expect(gridColumns(false, { sidebar: 'hidden', focus: 'on' }, false)).toBe(
+      'lg:grid-cols-[48px_minmax(0,1fr)]',
+    )
+  })
+
   test('in focus an open article has the grid to itself, and a closed one does not', () => {
     const focus = { sidebar: 'shown', focus: 'on' } as const
     expect(gridColumns(true, focus)).toBe('lg:grid-cols-[minmax(0,1fr)]')
