@@ -157,6 +157,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
   // A phone has a back bar and a bar of actions in place of the toolbar (Tela Mobile).
   const phone = useMediaQuery(BELOW_LG)
   const barRecommend = useRef<HTMLButtonElement>(null)
+  const endRecommend = useRef<HTMLButtonElement>(null)
 
   // Highlights: painted over what is rendered, found again after the post changes (ADR 0026).
   const body = useRef<HTMLDivElement>(null)
@@ -466,6 +467,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
               <>
                 <LikeButton articleId={article.id} liked={liked} testId="end-like" />
                 <RecommendButton
+                  ref={endRecommend}
                   recommended={recommended}
                   testId="end-recommend"
                   onClick={() =>
@@ -492,7 +494,10 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
               <RecommendForm
                 articleId={article.id}
                 note={recommendNote}
-                onClose={() => setRecommending(null)}
+                onClose={() => {
+                  setRecommending(null)
+                  endRecommend.current?.focus()
+                }}
               />
             </section>
           ) : null}

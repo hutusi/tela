@@ -51,6 +51,12 @@ export function AccountMenu() {
   // Wherever an item leads, the menu is done: close it when one is chosen (the page it names may
   // be the one shown, so the address need not change), and on any change of page.
   const done = () => setOpen(false)
+  // A choice that keeps the page where it is (a language) hands focus back to the avatar, as Esc
+  // does: the row that had it goes with the panel, and focus would fall to <body>.
+  const chosen = () => {
+    setOpen(false)
+    button.current?.focus()
+  }
   const location = useLocation()
   // biome-ignore lint/correctness/useExhaustiveDependencies: on every navigation, by its address
   useEffect(() => setOpen(false), [location.pathname, location.search])
@@ -84,7 +90,7 @@ export function AccountMenu() {
         )}
       </button>
       {/* Mounted only while open, so it opens on the menu every time, never on the languages. */}
-      {open ? <AccountPanel id={panel} done={done} /> : null}
+      {open ? <AccountPanel id={panel} done={done} chosen={chosen} /> : null}
     </div>
   )
 }
@@ -95,7 +101,7 @@ export function AccountMenu() {
  * and scrolls inside itself on a short screen, a phone turned sideways (640 × 350) included: the
  * header is sticky, so scrolling the page never brings a row below the foot into reach.
  */
-function AccountPanel({ id, done }: { id: string; done: () => void }) {
+function AccountPanel({ id, done, chosen }: { id: string; done: () => void; chosen: () => void }) {
   const [view, setView] = useState<'menu' | 'language'>('menu')
   // Where focus goes when the view changes: the row that was chosen is gone, and focus with it.
   const moved = useRef(false)
@@ -118,7 +124,7 @@ function AccountPanel({ id, done }: { id: string; done: () => void }) {
       data-view={view}
     >
       {view === 'language' ? (
-        <LanguageList back={back} onBack={() => show('menu')} done={done} />
+        <LanguageList back={back} onBack={() => show('menu')} done={done} chosen={chosen} />
       ) : (
         <Menu languageRow={languageRow} onLanguage={() => show('language')} done={done} />
       )}
@@ -232,16 +238,18 @@ function Menu({
 /**
  * The phone's language list, in place of the menu (Tela v5): the circle's choice exactly
  * (`useMemberLanguage`, ADR 0040), linked or set apart, and named as the circle's panel names it
- * then. A choice closes the menu, as it closes the circle's.
+ * then. A choice closes the menu, as it closes the circle's, and the avatar has focus (`chosen`).
  */
 function LanguageList({
   back,
   onBack,
   done,
+  chosen,
 }: {
   back: React.RefObject<HTMLButtonElement | null>
   onBack: () => void
   done: () => void
+  chosen: () => void
 }) {
   const t = useTranslations('nav')
   const tm = useTranslations('menu')
@@ -267,7 +275,7 @@ function LanguageList({
           aria-pressed={code === value}
           onClick={() => {
             choose(code)
-            done()
+            chosen()
           }}
           data-testid={`account-language-${code}`}
           className={`flex min-h-12 items-center justify-between gap-3 rounded-lg px-3.5 text-left hover:bg-hover ${code === value ? 'bg-hover font-medium' : ''}`}

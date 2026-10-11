@@ -236,6 +236,8 @@ test.describe('the phone header and account menu', () => {
       await choice('fr').click()
       await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
       await expect(panel).toHaveCount(0)
+      // The row went with the panel; focus is on the avatar, not <body>.
+      await expect(page.getByTestId('account-menu')).toBeFocused()
       await push
       expect(await serverLanguages(page.request)).toEqual({ uiLocale: 'fr', readingLang: null })
       await page.getByTestId('account-menu').click()

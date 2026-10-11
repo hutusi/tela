@@ -258,6 +258,8 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     await expect(page.getByTestId('toast')).toContainText('Recommended with your note')
     await expect(page.getByTestId('recommend-button')).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByTestId('recommend-button')).toContainText('1')
+    // The popover gone, focus is back on the button that opened it.
+    await expect(page.getByTestId('recommend-button')).toBeFocused()
     // The profile is public data from the server: let the push land first.
     await page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
 

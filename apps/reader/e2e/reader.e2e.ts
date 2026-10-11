@@ -831,6 +831,13 @@ test.describe('reader', () => {
     await expect(page.getByTestId('recommend-popover')).toHaveCount(0)
     await expect(field).toBeFocused()
     await expect(field).toHaveAttribute('placeholder', 'Why should they read this? (optional)')
+    // Esc closes the box, not the article, and hands focus back to the button that opened it.
+    await field.press('Escape')
+    await expect(box).toHaveCount(0)
+    await expect(page).toHaveURL(/article=\d+/)
+    await expect(recommend).toBeFocused()
+    await recommend.click()
+    await expect(field).toBeFocused()
     await field.fill('Read it for the diagrams.')
     const sent = page.waitForResponse(
       (r) =>
@@ -843,6 +850,7 @@ test.describe('reader', () => {
     await expect(box).toHaveCount(0)
     await expect(recommend).toHaveAttribute('aria-pressed', 'true')
     await expect(recommend).toHaveText('Recommended')
+    await expect(recommend).toBeFocused()
     await expect(page.getByTestId('recommend-button')).toHaveAttribute('aria-pressed', 'true')
     await sent
 

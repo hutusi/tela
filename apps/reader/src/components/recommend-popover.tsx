@@ -1,5 +1,5 @@
 import { RECOMMENDATION_NOTE_MAX } from '@tela/shared'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type Ref, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
 import { showToast } from '../lib/toasts'
 import { useStore } from '../store/hooks'
@@ -24,15 +24,19 @@ export function RecommendButton({
   count,
   onClick,
   testId,
+  ref,
 }: {
   recommended: boolean
   count?: number
   onClick: () => void
   testId: string
+  /** Where the form it opens hands focus back as it closes. */
+  ref?: Ref<HTMLButtonElement>
 }) {
   const t = useTranslations('reader')
   return (
     <button
+      ref={ref}
       type="button"
       aria-pressed={recommended}
       data-testid={testId}
@@ -56,6 +60,8 @@ export function RecommendButton({
  * phone's bottom sheet (`sheet`), which names the post under the title and gives the two buttons a
  * thumb's room. The field has focus as it opens, since the note is the one thing to do here; Esc
  * and Cancel close it, and the reader's own Esc, which closes the article, never sees that Esc.
+ * Whatever closes it, Recommend included, its holder gives focus back to the button that opened
+ * it (the sheet does as it goes): the form goes, and focus would otherwise fall to <body>.
  */
 export function RecommendForm({
   articleId,
@@ -181,9 +187,11 @@ export function RecommendPopover({
 }: Props) {
   const t = useTranslations('reader')
   const unrecommend = useUnrecommend()
+  const button = useRef<HTMLButtonElement>(null)
   return (
     <div className="relative">
       <RecommendButton
+        ref={button}
         recommended={recommended}
         count={recommendCount}
         testId="recommend-button"
@@ -196,7 +204,14 @@ export function RecommendPopover({
           className="absolute right-0 top-[calc(100%+8px)] z-[6] w-80 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.10)] animate-fade"
           data-testid="recommend-popover"
         >
-          <RecommendForm articleId={articleId} note={note} onClose={() => onOpenChange(false)} />
+          <RecommendForm
+            articleId={articleId}
+            note={note}
+            onClose={() => {
+              onOpenChange(false)
+              button.current?.focus()
+            }}
+          />
         </div>
       ) : null}
     </div>
