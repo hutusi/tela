@@ -852,7 +852,9 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   - A highlight that overlaps or touches another in the same paragraph, side and language takes
     it in: one highlight over both, under a new id, the notes joined in reading order (ADR 0046).
     A merge that would pass the quote or note limit is not made, and a selection inside a
-    highlight only opens its note.
+    highlight only opens its note. Undo is the exception: a removed highlight it brings back
+    after an overlapping one was made meanwhile comes back beside it, unmerged, the two
+    overlapping until one is removed (a known gap, ADR 0046).
 - **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `o`, `l`, `m`, `h`, `[`, `f`, `u` and `?` in
   `kbd` chips. `o` opens the original in a new tab, `l` likes or unlikes, and `m` marks read or
   unread, as the action row's button would, all on the open article; `u` presses the toast's Undo.
