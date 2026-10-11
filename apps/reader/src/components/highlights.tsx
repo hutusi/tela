@@ -17,8 +17,8 @@ import { createPortal } from 'react-dom'
 import { useTranslations } from 'use-intl'
 import type { Anchor } from '../lib/anchor'
 import { type Side, selectedAnchor } from '../lib/highlight-dom'
-import { newId } from '../lib/id'
-import { showToast, UNDO_HOLD_MS } from '../lib/toasts'
+import { UNDO_HOLD_MS } from '../lib/toasts'
+import { highlightAgain, offerUndo } from '../lib/undo'
 import type { HighlightItem } from '../lib/use-highlights'
 import { useStore } from '../store/hooks'
 
@@ -158,9 +158,9 @@ export function HighlightToolbar({
 
 /**
  * Remove a highlight, with an Undo while the toast shows. The removal is held on the device until
- * then (`UNDO_HOLD_MS`), so an Undo takes it back before tela-api hears of it and the highlight
- * keeps its id. Once sent it cannot be taken back (a deleted highlight stays deleted), so an Undo
- * after that makes the same passage and note again under a new id.
+ * the toast goes (`offerUndo`), so an Undo takes it back before tela-api hears of it and the
+ * highlight keeps its id. Once sent it cannot be taken back (a deleted highlight stays deleted),
+ * so an Undo after that makes the same passage and note again under a new id.
  */
 function useRemoveHighlight(): (row: HighlightRow) => void {
   const t = useTranslations('highlights')
@@ -173,20 +173,7 @@ function useRemoveHighlight(): (row: HighlightRow) => void {
         { holdMs: UNDO_HOLD_MS },
       )
       if (!removed) return
-      showToast(t('removed'), {
-        label: undo,
-        run: () => {
-          if (store.retract(removed.mid)) return
-          const { articleId, contentKey, side, lang, leafId, start, end, quote, prefix, suffix } =
-            row
-          store.mutate({
-            type: 'putHighlight',
-            id: newId(),
-            ...{ articleId, contentKey, side, lang, leafId, start, end, quote, prefix, suffix },
-            note: row.note,
-          })
-        },
-      })
+      offerUndo(store, t('removed'), undo, [removed.mid], () => store.mutate(highlightAgain(row)))
     },
     [store, t, undo],
   )

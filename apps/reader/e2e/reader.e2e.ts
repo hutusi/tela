@@ -5,7 +5,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type APIRequestContext, expect, test } from '@playwright/test'
+import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import {
   BASE,
   ensureFeeds,
@@ -57,6 +57,45 @@ async function push(api: APIRequestContext, mutations: Record<string, unknown>[]
     data: { mutations: mutations.map((m) => ({ mid: crypto.randomUUID(), at, ...m })) },
   })
   if (!res.ok()) throw new Error(`push failed: ${res.status()} ${await res.text()}`)
+}
+
+/** The bodies of every push the page sends from now on. */
+function pushesFrom(page: Page): string[] {
+  const pushed: string[] = []
+  page.on('request', (r) => {
+    if (r.url().includes('/api/v1/mutations')) pushed.push(r.postData() ?? '')
+  })
+  return pushed
+}
+
+const markAllsIn = (pushed: string[]) => pushed.filter((body) => body.includes('"markAllRead"'))
+
+/**
+ * Open 胡涂说, a blog with unread posts, and say which: the posts a Mark all read there reads.
+ * Every spec that lets one reach tela-api marks them unread again after, for the specs after it.
+ */
+async function openUnreadBlog(page: Page) {
+  await page.goto('/reading')
+  await synced(page)
+  await page.getByTestId('subscription').filter({ hasText: '胡涂说' }).click()
+  await expect(page).toHaveURL(/feed=\d+/)
+  const feedId = Number(new URL(page.url()).searchParams.get('feed'))
+  const dots = page.getByTestId('unread-dot')
+  await expect(dots.first()).toBeVisible()
+  const unread = await page
+    .getByTestId('article-row')
+    .filter({ has: page.getByTestId('unread-dot') })
+    .evaluateAll((els) => els.map((el) => Number(el.getAttribute('data-article-id'))))
+  return { feedId, dots, unread, watermark: await watermarkOnServer(page.request, feedId) }
+}
+
+/** Whether tela-api has each of `ids` marked unread by hand. */
+async function unreadOnServer(api: APIRequestContext, ids: number[]): Promise<boolean> {
+  const { states } = await rowsOnServer(api)
+  return ids.every((id) => {
+    const s = states.find((state) => state.articleId === id)
+    return s !== undefined && s.readAt === null && s.readUpdatedAt != null
+  })
 }
 
 test.describe('reader', () => {
@@ -441,6 +480,95 @@ test.describe('reader', () => {
     expect(pushed.filter((body) => body.includes('"markAllRead"'))).toEqual([])
   })
 
+  test('pressed twice, Mark all read still sends nothing once undone', async ({ page }) => {
+    await resetReading(page.request)
+    const pushed = pushesFrom(page)
+    const { feedId, dots, unread, watermark } = await openUnreadBlog(page)
+    const toast = page.getByTestId('toast')
+    await page.getByTestId('mark-all-read').click()
+    await expect(toast).toContainText(`Marked ${unread.length} `)
+    // The second finds nothing unread: it makes no change and says nothing, so the first one's
+    // Undo still shows, and takes back all there is.
+    await page.getByTestId('mark-all-read').click()
+    await expect(toast).toContainText(`Marked ${unread.length} `)
+    await page.getByTestId('toast-action').click()
+    await expect(toast).toHaveCount(0)
+    await expect(dots).toHaveCount(unread.length)
+
+    await page.reload()
+    await synced(page)
+    await expect(dots).toHaveCount(unread.length)
+    expect(await watermarkOnServer(page.request, feedId)).toBe(watermark)
+    expect(markAllsIn(pushed)).toEqual([])
+  })
+
+  test('a mark-all left alone goes to tela-api once its toast has gone, not before', async ({
+    page,
+  }) => {
+    await resetReading(page.request)
+    await page.clock.install()
+    const pushed = pushesFrom(page)
+    const { feedId, dots, unread, watermark } = await openUnreadBlog(page)
+    try {
+      await page.getByTestId('mark-all-read').click()
+      await expect(dots).toHaveCount(0)
+      const toast = page.getByTestId('toast')
+      await expect(toast).toBeVisible()
+      // Long past the push's quarter-second, and still held: the toast is still up.
+      await page.clock.runFor(3000)
+      await expect(toast).toBeVisible()
+      expect(markAllsIn(pushed)).toEqual([])
+      // The toast's five seconds are up, and the change goes with it.
+      await page.clock.runFor(3000)
+      await expect(toast).toHaveCount(0)
+      await expect.poll(() => watermarkOnServer(page.request, feedId)).toBeGreaterThan(watermark)
+      expect(markAllsIn(pushed)).toHaveLength(1)
+    } finally {
+      await push(
+        page.request,
+        unread.map((articleId) => ({ type: 'markUnread', articleId })),
+      )
+    }
+  })
+
+  test('an Undo after the mark-all went anyway marks what it read unread on tela-api', async ({
+    page,
+  }) => {
+    await resetReading(page.request)
+    const { feedId, dots, unread, watermark } = await openUnreadBlog(page)
+    try {
+      await page.getByTestId('mark-all-read').click()
+      await expect(dots).toHaveCount(0)
+      const toast = page.getByTestId('toast')
+      // A pointer over the toast stops its time, so it is still up when the tab comes back.
+      await toast.hover()
+      // The tab is hidden: everything held goes now, in case the page never comes back.
+      const sent = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      await sent
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      await expect.poll(() => watermarkOnServer(page.request, feedId)).toBeGreaterThan(watermark)
+
+      // Too late to take back, so the Undo marks each post it read unread, after it.
+      await expect(toast).toBeVisible()
+      await page.getByTestId('toast-action').click()
+      await expect(toast).toHaveCount(0)
+      await expect(dots).toHaveCount(unread.length)
+      await expect.poll(() => unreadOnServer(page.request, unread)).toBe(true)
+    } finally {
+      await push(
+        page.request,
+        unread.map((articleId) => ({ type: 'markUnread', articleId })),
+      )
+    }
+  })
+
   test('on Today, Mark all read reads the posts it lists, and no older one', async ({ page }) => {
     await resetReading(page.request)
     // A blog that wrote in the last day, which every other fixture did not. The setup's member
@@ -487,6 +615,9 @@ test.describe('reader', () => {
       await page.getByTestId('mark-all-read').click()
       await expect(page.getByTestId('toast')).toContainText(/^Marked \d+ posts? read\./)
       await expect(page.getByTestId('unread-dot')).toHaveCount(0)
+      // Held while its toast shows, as a mark-all is: sent once the toast has gone.
+      await page.clock.runFor(6000)
+      await expect(page.getByTestId('toast')).toHaveCount(0)
       await sent
 
       expect(await watermarkOnServer(page.request, older.feedId)).toBeLessThan(older.id)

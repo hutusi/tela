@@ -14,11 +14,11 @@ export const TOAST_MS = 2600
 /** How long a message with an action stays, unpaused: the window in which Undo can be pressed. */
 export const UNDO_MS = 5000
 /**
- * How long a change that offers Undo is held on the device before it is sent (`LocalStore.mutate`
- * with `holdMs`): longer than the toast, so an Undo pressed while it shows always finds the change
- * still held, and the server never hears of it.
+ * The longest a change that offers Undo is held on the device before it is sent
+ * (`LocalStore.mutate` with `holdMs`). Its toast lets it go when the toast goes (the action's
+ * `settle`), however long a reader kept it paused; this only makes sure no hold lasts for ever.
  */
-export const UNDO_HOLD_MS = UNDO_MS + 1000
+export const UNDO_HOLD_MS = 30_000
 
 export type ToastAction = {
   label: string

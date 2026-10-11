@@ -297,6 +297,8 @@ test('a highlight over two others takes both in, and their notes join', async ({
 
 test('a removed highlight comes back with Undo, under the same id', async ({ page, request }) => {
   await clearHighlights(request)
+  // The toast's time is the page's clock, run on below rather than waited out.
+  await page.clock.install()
   await openChanging(page)
   await expect(page.getByTestId('body-original').first()).toContainText(V3_FIRST)
   const pushed: string[] = []
@@ -325,4 +327,19 @@ test('a removed highlight comes back with Undo, under the same id', async ({ pag
   // Taken back while it was held on the device: tela-api never heard of the removal.
   expect(pushed.some((body) => body.includes('deleteHighlight'))).toBe(false)
   expect((await onServer(request)).map(({ id }) => id)).toEqual([made?.id])
+
+  // Left alone, a removal is held while its toast shows, and goes once the toast has.
+  await page.getByTestId('highlight-item').getByRole('button').first().click()
+  await page.getByTestId('highlight-remove').click()
+  const toast = page.getByTestId('toast')
+  await expect(toast).toContainText('Highlight removed.')
+  // Nowhere near the toast, whose time a pointer over it would stop.
+  await page.mouse.move(0, 0)
+  await page.clock.runFor(3000)
+  await expect(toast).toBeVisible()
+  expect(pushed.some((body) => body.includes('deleteHighlight'))).toBe(false)
+  await page.clock.runFor(3000)
+  await expect(toast).toHaveCount(0)
+  await expect.poll(async () => (await onServer(request)).length).toBe(0)
+  expect(pushed.filter((body) => body.includes('deleteHighlight'))).toHaveLength(1)
 })

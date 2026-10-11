@@ -164,7 +164,8 @@
     "fetching": "正在首次抓取这个订阅源…",
     "allRead": "都读完了。",
     "allReadHint": "已读文章被隐藏了，可以在<settings>设置</settings>里重新显示。",
-    "markedRead": "已将 {n} 篇文章标为已读。"
+    "markedRead": "已将 {n} 篇文章标为已读。",
+    "undoTooMany": "已经发送，涉及的文章太多，无法在这里撤销。"
   },
   "reader": {
     "close": "关闭",

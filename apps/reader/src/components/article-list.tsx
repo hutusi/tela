@@ -7,7 +7,9 @@ import { relativeTime } from '../lib/format'
 import { canonicalReadingHref, type ReadingParams, readingHref } from '../lib/href'
 import { readingPrefsOf } from '../lib/prefs'
 import { showToast, UNDO_HOLD_MS } from '../lib/toasts'
+import { offerUndo, unreadAgain } from '../lib/undo'
 import { useStore, useTables } from '../store/hooks'
+import type { Stamp } from '../store/local'
 import { feedTitle, isRead, markAllReadCovers, shownRead, shownTitle } from '../store/selectors'
 import { Glyph, HEART, PASS } from './glyph'
 import { Swatch } from './swatch'
@@ -26,14 +28,8 @@ type Props = {
 
 /** How many rows render; older ones follow on request. The device holds the whole horizon. */
 const PAGE = 200
-/**
- * The most posts an Undo marks unread one by one, once the mark-all it takes back has been sent:
- * past that, one press would queue a push of hundreds.
- */
-const UNDO_UNREAD_MAX = 200
 
 const read = (articleId: number) => ({ type: 'markRead', articleId }) as const
-const unread = (articleId: number) => ({ type: 'markUnread', articleId }) as const
 
 export function ArticleList({
   items,
@@ -62,22 +58,27 @@ export function ArticleList({
     // The device's rows as they are when pressed, which the toast counts against.
     const before = store.getSnapshot().tables
     const at = Date.now()
-    const epoch = store.epoch
-    const say = (n: number, undo: () => void) =>
-      showToast(t('markedRead', { n }), {
-        label: tt('undo'),
-        // The tab holds another account by now: nothing of this one's to take back there.
-        run: () => {
-          if (store.epoch === epoch) undo()
+    // Held on the device while the toast shows, so an Undo never reaches the server: a watermark
+    // only moves forward (ADR 0025). Sent already (the tab was hidden meanwhile), an Undo marks
+    // what it read unread one by one and later than it, unless that is too many to send.
+    const offer = (ids: number[], held: Stamp[]) => {
+      const last = held.at(-1)
+      if (!last) return
+      offerUndo(
+        store,
+        t('markedRead', { n: ids.length }),
+        tt('undo'),
+        held.map((s) => s.mid),
+        () => {
+          if (!unreadAgain(store, ids, last.at)) showToast(t('undoTooMany'))
         },
-      })
+      )
+    }
     if (params.feedId === null && params.filter === 'today') {
       // Today is a window the server knows nothing of: a mark-all up to its newest post would read
       // every older post of every feed too. So each unread post it holds, read on its own.
       const ids = items.filter((a) => !isRead(before, a, at)).map((a) => a.id)
-      const last = store.mutateMany(ids.map(read)).at(-1)
-      if (!last) return
-      say(ids.length, () => store.mutateMany(ids.map(unread), { after: last.at }))
+      offer(ids, store.mutateMany(ids.map(read), { holdMs: UNDO_HOLD_MS }))
       return
     }
     // Up to what the list displayed, never the server's newest: a post that arrived after the
@@ -92,22 +93,12 @@ export function ArticleList({
     // Counted from what the change does, as the server will apply it: every post of the scope up
     // to `upTo`, the ones this list never showed included.
     const covered = markAllReadCovers(before, { ...input, mid: '', at }, at)
-    if (covered.length === 0) {
-      store.mutate(input)
-      return
-    }
-    // Held on the device while its Undo shows, so taking it back never reaches the server: a
-    // watermark only moves forward (ADR 0025).
+    // Nothing it would read: a second press while the first one's Undo shows (sent anyway, it
+    // would outlive that Undo), or a list read already. A post the device does not hold is past
+    // the horizon, read already too. So nothing is sent, and there is nothing to undo.
+    if (covered.length === 0) return
     const stamp = store.mutate(input, { holdMs: UNDO_HOLD_MS })
-    if (!stamp) return
-    say(covered.length, () => {
-      if (store.retract(stamp.mid)) return
-      // Sent already (the tab was hidden meanwhile): what it read, marked unread one by one and
-      // later than it. A mark-all over more posts than that is left as it is.
-      if (covered.length <= UNDO_UNREAD_MAX) {
-        store.mutateMany(covered.map(unread), { after: stamp.at })
-      }
-    })
+    if (stamp) offer(covered, [stamp])
   }
   return (
     <section

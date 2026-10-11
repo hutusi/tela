@@ -164,7 +164,8 @@
     "fetching": "Première récupération de ce flux…",
     "allRead": "Vous êtes à jour.",
     "allReadHint": "Les articles lus sont masqués. <settings>Réaffichez-les</settings> dans les Paramètres.",
-    "markedRead": "{n, plural, one {# article marqué comme lu.} other {# articles marqués comme lus.}}"
+    "markedRead": "{n, plural, one {# article marqué comme lu.} other {# articles marqués comme lus.}}",
+    "undoTooMany": "Déjà envoyé, et trop d’articles à marquer comme non lus d’ici."
   },
   "reader": {
     "close": "Fermer",

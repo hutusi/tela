@@ -164,7 +164,8 @@
     "fetching": "Fetching this feed for the first time…",
     "allRead": "You're all caught up.",
     "allReadHint": "Read posts are hidden. <settings>Show them again</settings> in Settings.",
-    "markedRead": "{n, plural, one {Marked # post read.} other {Marked # posts read.}}"
+    "markedRead": "{n, plural, one {Marked # post read.} other {Marked # posts read.}}",
+    "undoTooMany": "Already sent, and too many posts to mark unread from here."
   },
   "reader": {
     "close": "Close",

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { applyPull, emptyTables, type Tables, titleKey, view } from '@tela/sync'
+import { applyMutation, applyPull, emptyTables, type Tables, titleKey, view } from '@tela/sync'
 import {
   articlesFor,
   feedTitle,
@@ -195,6 +195,17 @@ describe('what a mark-all-read reads', () => {
     // The answer agrees with what the list then shows.
     expect(covered.every((id) => !isRead(t, t.articles.get(id) ?? article(id), NOW))).toBe(true)
     expect(markAllReadCovers(t, markAll(1, 1), NOW)).toEqual([])
+  })
+
+  test('nothing once a mark-all over it is already shown: a second press has nothing to send', () => {
+    // The first press, held for its Undo, is in the view the second one counts against.
+    const once = applyMutation(t, markAll(9, 1))
+    expect(markAllReadCovers(once, { ...markAll(9, 1), mid: 'mark-all-2' }, NOW)).toEqual([])
+    // One feed's after every feed's, the same.
+    const all = applyMutation(t, markAll(9))
+    expect(markAllReadCovers(all, { ...markAll(9, 1), mid: 'mark-all-2' }, NOW)).toEqual([])
+    // Every feed's after one feed's still reads the others.
+    expect(markAllReadCovers(once, { ...markAll(9), mid: 'mark-all-2' }, NOW)).toEqual([8])
   })
 })
 
