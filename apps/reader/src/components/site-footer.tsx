@@ -60,7 +60,8 @@ export function SiteFooter({ year }: { year: number }) {
 /**
  * Below `sm`, the language and the theme the visitor header shows as circles from `sm` up, and
  * doing what they do (`useVisitorLanguage`, `useThemeChoice`). The language is a native select,
- * so a phone opens its own list. Choosing needs the script.
+ * so a phone opens its own list, at 16px: iOS Safari zooms the page into a field set any smaller
+ * when it takes focus. Choosing needs the script.
  */
 function PhoneChoices() {
   const t = useTranslations('footer')
@@ -82,7 +83,7 @@ function PhoneChoices() {
               if (code) choose(code)
             }}
             data-testid="footer-language"
-            className="min-h-10 cursor-pointer appearance-none rounded-full border border-line bg-surface py-0 pr-8 pl-3.5 text-[14px] text-ink"
+            className="min-h-10 cursor-pointer appearance-none rounded-full border border-line bg-surface py-0 pr-8 pl-3.5 text-base text-ink"
           >
             {options.map((code) => (
               <option key={code} value={code} lang={code}>

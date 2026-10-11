@@ -276,6 +276,8 @@ test.describe("a visitor's footer on a phone", () => {
     await expect(language).toHaveAccessibleName('Language')
     const pill = await language.boundingBox()
     expect(pill && Math.round(pill.height)).toBe(40)
+    // Any smaller and iOS Safari zooms the page into it when it takes focus.
+    await expect(language).toHaveCSS('font-size', '16px')
     await language.selectOption('fr')
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
     await expect(page.getByTestId('nav-join')).toHaveText('S’inscrire')
