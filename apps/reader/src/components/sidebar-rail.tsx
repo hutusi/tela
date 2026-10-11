@@ -46,7 +46,7 @@ export function SidebarRail({ subscriptions, params }: Props) {
       data-testid="sidebar-rail"
     >
       <div className={`${TOGGLE_ROW} w-full justify-center`}>
-        <SidebarToggle className="-my-1.5" />
+        <SidebarToggle shown={false} className="-my-1.5" />
       </div>
       <div className="mb-3 h-px w-6 shrink-0 bg-line" />
       <nav className="flex flex-col items-center gap-1" aria-label={tn('reading')}>

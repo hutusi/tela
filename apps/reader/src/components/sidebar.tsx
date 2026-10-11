@@ -37,7 +37,7 @@ export function Sidebar({ subscriptions, totals, params }: Props) {
         <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
           {t('library')}
         </span>
-        <SidebarToggle className="-my-1.5" />
+        <SidebarToggle shown className="-my-1.5" />
       </div>
       <div className="flex flex-col gap-6">
         <nav className="flex flex-col gap-0.5" aria-label={tn('reading')}>

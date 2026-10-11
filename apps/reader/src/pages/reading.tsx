@@ -21,7 +21,7 @@ import {
   type ReadingMode,
   readingHref,
 } from '../lib/href'
-import { gridColumns, toggleFocus, useLayout } from '../lib/layout'
+import { effectiveSidebar, gridColumns, toggleFocus, useLayout, useWide } from '../lib/layout'
 import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
@@ -80,9 +80,12 @@ export function ReadingPage() {
   const article =
     params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
   const open = params.articleId !== null
-  // Which panes show beside the article: this device's choice, not the member's (ADR 0029). In
+  // Which panes show beside the article: this device's choice, not the member's (ADR 0029), and
+  // until it has chosen, the window's: an article opened below 1200px starts with the rail. In
   // focus an open article has the page to itself; a closed one shows the list as ever.
-  const panes = useLayout()
+  const stored = useLayout()
+  const wide = useWide()
+  const panes = { sidebar: effectiveSidebar(stored.sidebar, open, wide), focus: stored.focus }
   const focused = open && panes.focus === 'on'
 
   // The post after this one in the list as shown, the one `j` would open: a card at the end of

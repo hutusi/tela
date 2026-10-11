@@ -1,6 +1,6 @@
 import { flushSync } from 'react-dom'
 import { useTranslations } from 'use-intl'
-import { toggleSidebar, useLayout } from '../lib/layout'
+import { toggleSidebar } from '../lib/layout'
 
 const ID = 'sidebar-toggle'
 
@@ -13,8 +13,9 @@ export const TOGGLE_ROW =
   'sticky top-0 z-[1] flex h-[46px] shrink-0 items-center bg-paper pb-2.5 pt-5'
 
 /**
- * A panel with its left third marked off: the sidebar, drawn here since Tela has no icon set. The
- * third is shaded while the sidebar is shown, so the glyph says which state it is in.
+ * A panel with its left third marked off: the sidebar. The third is shaded while the sidebar is
+ * shown, so the glyph says which state it is in, which is why it is drawn here and not one of
+ * `glyph.tsx`'s fixed shapes.
  */
 function PanelIcon({ open }: { open: boolean }) {
   return (
@@ -59,11 +60,12 @@ export function toggleSidebarKeepingFocus(): void {
  * filters live in `MobileNav`. It heads the sidebar beside "Library", and the rail the sidebar
  * collapses to (ADR 0030); `[` does the same. One instance is mounted at a time, hence the id.
  * `aria-expanded` without `aria-controls`: the two are different elements, and whichever the
- * toggle would point at is not in the DOM once it has done its work.
+ * toggle would point at is not in the DOM once it has done its work. Which one heads it says
+ * whether the sidebar is `shown`: with nothing stored, that is the window's to decide, not the
+ * store's.
  */
-export function SidebarToggle({ className = '' }: { className?: string }) {
+export function SidebarToggle({ shown, className = '' }: { shown: boolean; className?: string }) {
   const t = useTranslations('sidebar')
-  const shown = useLayout().sidebar === 'shown'
   const label = shown ? t('hide') : t('show')
   return (
     <button
