@@ -269,13 +269,47 @@ test.describe('recommendations, profile, dashboard, settings', () => {
 
     // The member claimed the fixture site earlier, so the note reaches the dashboard.
     await fromAccountMenu(page, 'nav-dashboard')
-    await expect(page.getByTestId('dashboard-site')).toHaveCount(1)
-    await expect(page.getByTestId('dashboard-notes')).toContainText('Worth your time')
-    await expect(page.getByTestId('dashboard-post').first()).toBeVisible()
-    await page.getByTestId('translation-optout').click()
-    await expect(page.getByTestId('translation-optout')).toContainText('Allow translation')
-    await page.getByTestId('translation-optout').click()
-    await expect(page.getByTestId('translation-optout')).toContainText('Opt out of translation')
+    const site = page.getByTestId('dashboard-site')
+    await expect(site).toHaveCount(1)
+    // Listed (or featured, if the admin spec curated it first), under the topic the owner picked
+    // on the blog's page above.
+    await expect(page.getByTestId('dashboard-meta')).toContainText(
+      /(listed in Discover|featured) under .*Tech/,
+    )
+    // The member subscribed to it in this run, so they are one of its new readers.
+    const readers = page.getByTestId('dashboard-readers')
+    await expect(readers).toContainText('Readers on Tela')
+    await expect(readers).toContainText(/\+[1-9]\d* in the last 30 days/)
+    await expect(page.getByTestId('dashboard-likes')).toContainText('on the posts below')
+    // The recommended post may be older than the twenty shown, so no count is certain here.
+    await expect(page.getByTestId('dashboard-recommendations')).toContainText(/\d+ with a note/)
+    await expect(site.getByRole('columnheader')).toHaveText([
+      'Post',
+      'Likes',
+      'Recommendations',
+      'Notes',
+    ])
+    const rows = page.getByTestId('dashboard-post')
+    await expect(rows.first()).toBeVisible()
+    // A post without notes says so with a dash, never a 0.
+    const noteCells = rows.locator('td:nth-child(4)')
+    await expect(noteCells).toHaveText(
+      Array.from({ length: await rows.count() }, () => /^(–|[1-9]\d*)$/),
+    )
+    const notes = page.getByTestId('dashboard-notes')
+    await expect(notes).toContainText('“Worth your time, especially the ending.”')
+    await expect(notes.locator('a[href^="/@"]').last()).toBeVisible()
+
+    // Translation is on unless the owner turns it off, and each change says so.
+    const translate = page.getByTestId('dashboard-translate')
+    await expect(translate).toHaveAttribute('role', 'switch')
+    await expect(translate).toHaveAttribute('aria-checked', 'true')
+    await translate.click()
+    await expect(translate).toHaveAttribute('aria-checked', 'false')
+    await expect(page.getByTestId('toast')).toHaveText(/^Translation is off for .+\.$/)
+    await translate.click()
+    await expect(translate).toHaveAttribute('aria-checked', 'true')
+    await expect(page.getByTestId('toast')).toHaveText(/^Translation is on for .+\.$/)
   })
 
   test('settings validate the handle and the profile link follows it', async ({ page }) => {
