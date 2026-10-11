@@ -8,6 +8,7 @@ import { canonicalReadingHref, type ReadingParams, readingHref } from '../lib/hr
 import { readingPrefsOf } from '../lib/prefs'
 import { useStore, useTables } from '../store/hooks'
 import { feedTitle, shownRead, shownTitle } from '../store/selectors'
+import { Glyph, HEART, PASS } from './glyph'
 import { Swatch } from './swatch'
 
 type Props = {
@@ -93,7 +94,11 @@ export function ArticleList({
           ) : (
             <>
               <p>{t('empty')}</p>
-              <p>{t('emptyHint')}</p>
+              <p>
+                {t.rich('emptyHint', {
+                  add: (chunks) => <Link to="/add">{chunks}</Link>,
+                })}
+              </p>
             </>
           )}
         </div>
@@ -177,8 +182,14 @@ export function ArticleList({
               ) : null}
               <div className="flex gap-3 text-xs text-muted group-data-[open=1]:hidden">
                 <span>{t('minutes', { n: a.readingMinutes || 1 })}</span>
-                <span>♡ {a.likeCount}</span>
-                <span>↗ {a.recommendCount}</span>
+                <span className="flex items-center gap-1">
+                  <Glyph size={12}>{HEART}</Glyph>
+                  {a.likeCount}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Glyph size={12}>{PASS}</Glyph>
+                  {a.recommendCount}
+                </span>
               </div>
             </Link>
           )

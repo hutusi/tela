@@ -156,7 +156,7 @@
   "list": {
     "markAllRead": "全部標為已讀",
     "empty": "這裡還沒有內容。",
-    "emptyHint": "新增一個部落格開始閱讀。",
+    "emptyHint": "<add>新增一個部落格</add>，開始閱讀。",
     "minutes": "{n} 分鐘",
     "translatedBadge": "{from} → {to}",
     "loadMore": "更早的文章",

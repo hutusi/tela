@@ -156,7 +156,7 @@
   "list": {
     "markAllRead": "全部标为已读",
     "empty": "这里还没有内容。",
-    "emptyHint": "添加一个博客开始阅读。",
+    "emptyHint": "<add>添加一个博客</add>，开始阅读。",
     "minutes": "{n} 分钟",
     "translatedBadge": "{from} → {to}",
     "loadMore": "更早的文章",

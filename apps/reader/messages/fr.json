@@ -156,7 +156,7 @@
   "list": {
     "markAllRead": "Tout marquer comme lu",
     "empty": "Rien ici pour l’instant.",
-    "emptyHint": "Ajoutez un blog pour commencer à lire.",
+    "emptyHint": "<add>Ajoutez un blog</add> pour commencer à lire.",
     "minutes": "{n} min",
     "translatedBadge": "{from} → {to}",
     "loadMore": "Articles plus anciens",

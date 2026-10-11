@@ -156,7 +156,7 @@
   "list": {
     "markAllRead": "Mark all read",
     "empty": "Nothing here yet.",
-    "emptyHint": "Add a blog to start reading.",
+    "emptyHint": "<add>Add a blog</add> to start reading.",
     "minutes": "{n} min",
     "translatedBadge": "{from} → {to}",
     "loadMore": "Older articles",
