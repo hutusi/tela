@@ -29,7 +29,8 @@ const ACTION = 'rounded-lg bg-paper px-3 py-[5px] text-[12.5px] font-medium text
  * Translate button.
  *
  * The mode toggle is buttons: switching changes nothing the server knows. The URL still follows,
- * so the view stays shareable.
+ * so the view stays shareable. Below `lg` the sentence is on top and the toggle under it, the
+ * width of the bar (Tela Mobile 03).
  */
 export function TranslationBar({
   sourceLang,
@@ -66,7 +67,7 @@ export function TranslationBar({
             : null
   return (
     <div
-      className="mb-7 flex flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-[13px]"
+      className="mb-7 flex flex-col gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2.5 text-[13px] lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-3.5 lg:px-3.5"
       data-testid="translation-bar"
       data-state={view.state}
     >
@@ -81,7 +82,7 @@ export function TranslationBar({
           {status}
         </span>
       </p>
-      <div className="flex-1" />
+      <div className="hidden flex-1 lg:block" />
       {onTranslate ? (
         <button type="button" onClick={onTranslate} className={ACTION} data-testid="translate-now">
           {t('translateNow', { target: targetName })}
@@ -96,7 +97,7 @@ export function TranslationBar({
       {onTranslate || (onRetry && !ready) ? null : (
         /* A fieldset rather than role="group": same semantics, and the one Biome asks for. */
         <fieldset
-          className="flex min-w-0 gap-0.5 rounded-lg bg-paper p-0.5"
+          className="flex w-full min-w-0 gap-0.5 rounded-lg bg-paper p-0.5 lg:w-auto"
           aria-label={t('modesLabel')}
         >
           {MODES.map((m) => {
@@ -111,7 +112,7 @@ export function TranslationBar({
                 aria-current={active ? 'true' : undefined}
                 aria-disabled={disabled ? 'true' : undefined}
                 data-testid={`mode-${m}`}
-                className={`rounded-md px-2.5 py-[5px] text-[12.5px] ${
+                className={`flex-1 rounded-md px-2.5 py-[7px] text-[12.5px] lg:flex-none lg:py-[5px] ${
                   active
                     ? 'bg-surface text-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]'
                     : 'text-muted hover:text-ink'

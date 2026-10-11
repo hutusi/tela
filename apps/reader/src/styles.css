@@ -506,6 +506,25 @@
   color: var(--color-muted);
 }
 
+/*
+ * On a phone (below lg, the reader's `BELOW_LG`; Tela Mobile 03): the body at 18.5px, and a
+ * stacked original set back as the reference it is, smaller and tighter on its ground. `:where()`
+ * keeps the first rule at one class, so a CJK body keeps the size and leading it has above.
+ */
+@media not all and (min-width: 64rem) {
+  :where([data-testid="reader"]) .article-body {
+    font-size: calc(18.5px * var(--reader-scale, 1));
+  }
+  .article-body.article-source {
+    font-size: calc(16px * var(--reader-scale, 1));
+    line-height: 1.5;
+  }
+  .article-source {
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+}
+
 @container (min-width: 1040px) {
   /* Rows are contiguous, so stretching each source cell tiles the tint into one continuous band
      down the second column rather than a stack of rectangles. Only the two ends of that band
@@ -531,4 +550,21 @@
   .article-body.article-block:not(.article-source) > :last-child {
     margin-bottom: 20px;
   }
+}
+
+/*
+ * The scrim under a phone's bottom sheet (`RecommendSheet`): the page dimmed toward ink by day and
+ * toward black at night, as Tela Mobile draws it. Here rather than a utility, since a colour named
+ * in a class list would stay the day's on the dark ground; twice, as the dark blocks are.
+ */
+dialog.sheet::backdrop {
+  background: rgb(31 28 24 / 0.35);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) dialog.sheet::backdrop {
+    background: rgb(0 0 0 / 0.55);
+  }
+}
+:root[data-theme="dark"] dialog.sheet::backdrop {
+  background: rgb(0 0 0 / 0.55);
 }

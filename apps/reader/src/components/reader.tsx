@@ -18,6 +18,7 @@ import { newId } from '../lib/id'
 import { useReadingPrefs } from '../lib/prefs'
 import { readerStyle, typographyOf } from '../lib/typography'
 import { useHighlights } from '../lib/use-highlights'
+import { BELOW_LG, useMediaQuery } from '../lib/use-media'
 import { useArticleTranslation } from '../lib/use-translation'
 import { useNow, useStore, useTables } from '../store/hooks'
 import type { ContentObject } from '../store/objects'
@@ -34,6 +35,7 @@ import { CLOSE, Glyph } from './glyph'
 import { HighlightList, HighlightNote, HighlightToolbar, useSelectedAnchor } from './highlights'
 import { LikeButton } from './like-button'
 import { PairedBody } from './paired-body'
+import { ReaderBackBar, ReaderBottomBar, RecommendSheet } from './reader-phone'
 import {
   RecommendButton,
   RecommendForm,
@@ -78,10 +80,15 @@ type Props = {
   onClose: () => void
   /** The post after this one in the list as shown, if any: offered at the end of the article. */
   next: { href: string; title: string; blog: string } | null
+  /** What the list it was opened from is called: a phone's back bar goes back to it by name. */
+  listName: string
 }
 
-/** Where the one Recommend form is open: the toolbar's popover, or the box at the article's end. */
-type Recommending = 'top' | 'end' | null
+/**
+ * Where the one Recommend form is open: the toolbar's popover or the box at the article's end, or
+ * on a phone the bottom sheet.
+ */
+type Recommending = 'top' | 'end' | 'sheet' | null
 
 /** The end of the article is one column whatever the body above it: the measure, at most 680px. */
 const END = 'max-w-[min(680px,var(--reader-measure))]'
@@ -89,7 +96,7 @@ const END = 'max-w-[min(680px,var(--reader-measure))]'
 /** While a summary-only post waits for its full text, pull quickly so it appears when it lands. */
 const EXTRACT_PULL_MS = 4000
 
-export function Reader({ article, readingLang, mode, onMode, onClose, next }: Props) {
+export function Reader({ article, readingLang, mode, onMode, onClose, next, listName }: Props) {
   const t = useTranslations('reader')
   const locale = useLocale()
   const now = useNow()
@@ -147,6 +154,9 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
   const prefix = useMemo(() => translatedPrefix(pairs, state), [pairs, state])
   const [recommending, setRecommending] = useState<Recommending>(null)
   const unrecommend = useUnrecommend()
+  // A phone has a back bar and a bar of actions in place of the toolbar (Tela Mobile).
+  const phone = useMediaQuery(BELOW_LG)
+  const barRecommend = useRef<HTMLButtonElement>(null)
 
   // Highlights: painted over what is rendered, found again after the post changes (ADR 0026).
   const body = useRef<HTMLDivElement>(null)
@@ -270,11 +280,17 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
   ]
     .filter(Boolean)
     .join(' · ')
+  // Mark as unread on a read post, Mark as read on an unread one, whatever the pref: a phone has
+  // no `m`, so its bar's button is its only way back to unread. One button whose label turns, so
+  // focus stays on it, and it sends what the label says.
+  const toggleRead = () =>
+    store.mutate({ type: read ? 'markUnread' : 'markRead', articleId: article.id })
 
   return (
     <main
       ref={pane}
-      className="min-w-0 overflow-hidden px-5 pb-20 pt-6 outline-none animate-fade md:px-8"
+      // The foot clears the phone's bar of actions while it shows (`--bottom-bar`).
+      className="min-w-0 overflow-hidden px-5 pb-[calc(5rem+var(--bottom-bar,0px))] pt-6 outline-none animate-fade md:px-8"
       data-testid="reader"
       data-mode={shown}
       data-size={size}
@@ -282,53 +298,51 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
       style={readerStyle(size, measure)}
       tabIndex={-1}
     >
+      {phone ? <ReaderBackBar listName={listName} onBack={onClose} /> : null}
       {extracting ? (
         <p className="mx-auto mb-4 max-w-[1240px] text-[13px] text-muted" data-testid="extracting">
           {t('fetchingFullText')}
         </p>
       ) : null}
 
-      <div className="mx-auto mb-7 flex max-w-[1240px] flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={onClose}
-            className="-ml-2.5 flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink"
-            data-testid="close-article"
-          >
-            <Glyph size={14} className="shrink-0">
-              {CLOSE}
-            </Glyph>
-            {t('close')}
-          </button>
-          <FocusToggle />
+      {phone ? null : (
+        <div className="mx-auto mb-7 flex max-w-[1240px] flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="-ml-2.5 flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink"
+              data-testid="close-article"
+            >
+              <Glyph size={14} className="shrink-0">
+                {CLOSE}
+              </Glyph>
+              {t('close')}
+            </button>
+            <FocusToggle />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleRead}
+              className="whitespace-nowrap rounded-full border border-thumb px-3.5 py-[7px] font-medium text-ink hover:border-ink"
+              data-testid={read ? 'mark-unread' : 'mark-read'}
+            >
+              {t(read ? 'markUnread' : 'markRead')}
+            </button>
+            <TypographyMenu />
+            <LikeButton articleId={article.id} liked={liked} likeCount={article.likeCount} />
+            <RecommendPopover
+              articleId={article.id}
+              recommended={recommended}
+              note={recommendNote}
+              recommendCount={article.recommendCount}
+              open={recommending === 'top'}
+              onOpenChange={(open) => setRecommending(open ? 'top' : null)}
+            />
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Mark as unread on a read post, Mark as read on an unread one, whatever the pref:
-              a phone has no `m`, so this is its only way back to unread. One button whose label
-              turns, so focus stays on it, and it sends what the label says. */}
-          <button
-            type="button"
-            onClick={() =>
-              store.mutate({ type: read ? 'markUnread' : 'markRead', articleId: article.id })
-            }
-            className="whitespace-nowrap rounded-full border border-thumb px-3.5 py-[7px] font-medium text-ink hover:border-ink"
-            data-testid={read ? 'mark-unread' : 'mark-read'}
-          >
-            {t(read ? 'markUnread' : 'markRead')}
-          </button>
-          <TypographyMenu />
-          <LikeButton articleId={article.id} liked={liked} likeCount={article.likeCount} />
-          <RecommendPopover
-            articleId={article.id}
-            recommended={recommended}
-            note={recommendNote}
-            recommendCount={article.recommendCount}
-            open={recommending === 'top'}
-            onOpenChange={(open) => setRecommending(open ? 'top' : null)}
-          />
-        </div>
-      </div>
+      )}
 
       {/* The column, centred: the measure while there is one column, and 1240px once the pane has
           room for two paired ones, so the meta line, the bar and the author card are as wide as
@@ -399,7 +413,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
             ) : (
               <div className="max-w-(--reader-measure)">
                 <h1
-                  className="mb-6 font-serif text-[40px] font-medium leading-[1.12] tracking-tight"
+                  className="mb-6 font-serif text-[30px] font-medium leading-[1.12] tracking-tight lg:text-[40px]"
                   style={{ textWrap: 'pretty' }}
                   data-testid="article-title"
                 >
@@ -442,29 +456,34 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
           />
 
           {/* The end of the article (Tela v5): what the reader can do with it, which the author
-              sees, then whose it is, then what comes next. */}
+              sees, then whose it is, then what comes next. On a phone the bar at the foot holds
+              Like and Recommend, so only what the author sees is said here. */}
           <div
             className={`mt-10 flex ${END} flex-wrap items-center gap-2 border-t border-line pt-6`}
             data-testid="end-actions"
           >
-            <LikeButton articleId={article.id} liked={liked} testId="end-like" />
-            <RecommendButton
-              recommended={recommended}
-              testId="end-recommend"
-              onClick={() =>
-                recommended
-                  ? unrecommend(article.id)
-                  : setRecommending((at) => (at === 'end' ? null : 'end'))
-              }
-            />
+            {phone ? null : (
+              <>
+                <LikeButton articleId={article.id} liked={liked} testId="end-like" />
+                <RecommendButton
+                  recommended={recommended}
+                  testId="end-recommend"
+                  onClick={() =>
+                    recommended
+                      ? unrecommend(article.id)
+                      : setRecommending((at) => (at === 'end' ? null : 'end'))
+                  }
+                />
+              </>
+            )}
             <span
-              className="ml-2 flex-[1_1_220px] text-[13px] leading-[1.45] text-muted"
+              className={`${phone ? '' : 'ml-2'} flex-[1_1_220px] text-[13px] leading-[1.45] text-muted`}
               style={{ textWrap: 'pretty' }}
             >
               {t('visibleToAuthor')}
             </span>
           </div>
-          {recommending === 'end' && !recommended ? (
+          {recommending === 'end' && !recommended && !phone ? (
             <section
               aria-label={t('recommendTitle')}
               className={`mt-3 ${END} rounded-xl border border-line bg-surface p-3.5 animate-fade`}
@@ -520,6 +539,28 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
         </div>
       </div>
 
+      {phone ? (
+        <ReaderBottomBar
+          liked={liked}
+          likeCount={article.likeCount}
+          onLike={() => store.mutate({ type: 'setLiked', articleId: article.id, liked: !liked })}
+          recommended={recommended}
+          onRecommend={() => (recommended ? unrecommend(article.id) : setRecommending('sheet'))}
+          recommendRef={barRecommend}
+          read={read}
+          onRead={toggleRead}
+          url={article.url}
+        />
+      ) : null}
+      {phone && recommending === 'sheet' && !recommended ? (
+        <RecommendSheet
+          articleId={article.id}
+          note={recommendNote}
+          post={`${titles.title} · ${site?.title ?? name}`}
+          opener={barRecommend}
+          onClose={() => setRecommending(null)}
+        />
+      ) : null}
       {selectable ? (
         <HighlightToolbar
           selected={selectable}

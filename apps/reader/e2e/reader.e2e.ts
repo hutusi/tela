@@ -528,5 +528,15 @@ test.describe('reader', () => {
     await expect(page.getByTestId('toast')).toContainText('Recommendation removed.')
     await expect(recommend).toHaveAttribute('aria-pressed', 'false')
     await taken
+
+    // A phone's bars are not drawn at 1280, and leave the toast where it was.
+    for (const id of ['back-bar', 'bottom-bar', 'bar-like', 'bar-recommend', 'bar-original']) {
+      await expect(page.getByTestId(id)).toHaveCount(0)
+    }
+    const variable = await page.evaluate(() =>
+      document.documentElement.style.getPropertyValue('--bottom-bar'),
+    )
+    expect(variable).toBe('')
+    await expect(page.getByTestId('close-article')).toBeVisible()
   })
 })

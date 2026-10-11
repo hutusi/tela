@@ -52,18 +52,22 @@ export function RecommendButton({
 
 /**
  * "Recommend to your readers", with an optional note shown on the member's profile and to the
- * author. The toolbar's popover and the box at the end of an article both hold it. The field has
- * focus as it opens, since the note is the one thing to do here; Esc and Cancel close it, and the
- * reader's own Esc, which closes the article, never sees that Esc.
+ * author. The toolbar's popover and the box at the end of an article both hold it, and so does the
+ * phone's bottom sheet (`sheet`), which names the post under the title and gives the two buttons a
+ * thumb's room. The field has focus as it opens, since the note is the one thing to do here; Esc
+ * and Cancel close it, and the reader's own Esc, which closes the article, never sees that Esc.
  */
 export function RecommendForm({
   articleId,
   note,
   onClose,
+  sheet,
 }: {
   articleId: number
   note: string | null
   onClose: () => void
+  /** The bottom sheet's layout: its title's id (the dialog's name) and the post it is about. */
+  sheet?: { titleId: string; post: string }
 }) {
   const t = useTranslations('reader')
   const { store } = useStore()
@@ -82,27 +86,59 @@ export function RecommendForm({
     showToast(kept ? t('recommendedWithNote') : t('recommended'))
   }
 
+  const onEscape = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose()
+    }
+  }
+  const textarea = (className: string) => (
+    <textarea
+      ref={field}
+      value={text}
+      onChange={(e) => setText(e.target.value.slice(0, RECOMMENDATION_NOTE_MAX))}
+      placeholder={t('recommendPlaceholder')}
+      rows={3}
+      data-testid="recommend-note"
+      className={`w-full resize-none border border-line bg-paper font-serif text-ink outline-none focus:border-muted ${className}`}
+    />
+  )
+
+  if (sheet) {
+    return (
+      <form className="flex flex-col gap-3.5" onSubmit={submit} onKeyDown={onEscape}>
+        <div>
+          <div id={sheet.titleId} className="text-base font-semibold">
+            {t('recommendTitle')}
+          </div>
+          <div className="mt-[3px] text-[13px] text-muted">{sheet.post}</div>
+        </div>
+        {textarea('min-h-[104px] rounded-[10px] px-3.5 py-3 text-[17px] leading-[1.45]')}
+        <span className="text-[12.5px] text-muted">{t('recommendHint')}</span>
+        <div className="flex gap-2.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-[46px] flex-1 rounded-full border border-thumb font-medium text-ink hover:border-ink"
+          >
+            {t('cancel')}
+          </button>
+          <button
+            type="submit"
+            data-testid="recommend-submit"
+            className="min-h-[46px] flex-[2] rounded-full bg-ink font-medium text-paper hover:brightness-125"
+          >
+            {t('recommend')}
+          </button>
+        </div>
+      </form>
+    )
+  }
+
   return (
-    <form
-      className="flex flex-col gap-2.5"
-      onSubmit={submit}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          onClose()
-        }
-      }}
-    >
+    <form className="flex flex-col gap-2.5" onSubmit={submit} onKeyDown={onEscape}>
       <div className="font-medium">{t('recommendTitle')}</div>
-      <textarea
-        ref={field}
-        value={text}
-        onChange={(e) => setText(e.target.value.slice(0, RECOMMENDATION_NOTE_MAX))}
-        placeholder={t('recommendPlaceholder')}
-        rows={3}
-        data-testid="recommend-note"
-        className="w-full resize-none rounded-lg border border-line bg-paper px-3 py-2.5 font-serif text-base leading-[1.4] text-ink outline-none focus:border-muted"
-      />
+      {textarea('rounded-lg px-3 py-2.5 text-base leading-[1.4]')}
       <div className="flex items-center gap-2">
         <span className="flex-1 text-xs text-muted">{t('recommendHint')}</span>
         <button

@@ -44,6 +44,7 @@ const PREFETCH_IDLE_MS = 1500
 
 export function ReadingPage() {
   const t = useTranslations('reader')
+  const ts = useTranslations('sidebar')
   const tables = useTables()
   const now = useNow()
   const { locale } = useUi()
@@ -72,6 +73,9 @@ export function ReadingPage() {
   )
   const selected = params.feedId !== null ? subs.find((s) => s.feedId === params.feedId) : undefined
   const listTitle = params.feedId !== null ? (selected?.title ?? '') : undefined
+  // What a phone's back bar goes back to, by the name the list's own disclosure gives it.
+  const listName =
+    params.feedId !== null ? (selected?.title ?? ts('subscriptions')) : ts(params.filter)
   const pendingFetch = selected !== undefined && selected.lastFetchedAt === null
   const article =
     params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
@@ -342,6 +346,7 @@ export function ReadingPage() {
           onMode={onMode}
           onClose={close}
           next={next}
+          listName={listName}
         />
       ) : open && tables.profile === null ? (
         // The first sync has not landed yet (the profile always comes in the first snapshot):

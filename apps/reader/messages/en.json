@@ -191,7 +191,13 @@
     "upNext": "Up next · {blog}",
     "focus": "Focus",
     "markRead": "Mark as read",
-    "markUnread": "Mark as unread"
+    "markUnread": "Mark as unread",
+    "markReadShort": "Mark read",
+    "markUnreadShort": "Mark unread",
+    "likeCount": "Like · {n}",
+    "likedCount": "Liked · {n}",
+    "original": "Original",
+    "backTo": "Back to {list}"
   },
   "add": {
     "title": "Add a blog",

@@ -191,7 +191,13 @@
     "upNext": "À suivre · {blog}",
     "focus": "Focus",
     "markRead": "Marquer comme lu",
-    "markUnread": "Marquer comme non lu"
+    "markUnread": "Marquer comme non lu",
+    "markReadShort": "Marquer lu",
+    "markUnreadShort": "Marquer non lu",
+    "likeCount": "J’aime · {n}",
+    "likedCount": "Vous aimez · {n}",
+    "original": "Original",
+    "backTo": "Retour à {list}"
   },
   "add": {
     "title": "Ajouter un blog",

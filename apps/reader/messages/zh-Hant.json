@@ -191,7 +191,13 @@
     "upNext": "下一篇 · {blog}",
     "focus": "專注",
     "markRead": "標為已讀",
-    "markUnread": "標為未讀"
+    "markUnread": "標為未讀",
+    "markReadShort": "標為已讀",
+    "markUnreadShort": "標為未讀",
+    "likeCount": "喜歡 · {n}",
+    "likedCount": "已喜歡 · {n}",
+    "original": "原文",
+    "backTo": "返回{list}"
   },
   "add": {
     "title": "新增部落格",

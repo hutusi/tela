@@ -36,7 +36,12 @@ test.describe('mobile fallback', () => {
     )
     expect(overflow).toBeLessThanOrEqual(0)
 
-    await page.getByTestId('close-article').click()
+    // The back bar goes back to the list by its name, in the toolbar's place.
+    const back = page.getByTestId('reader-back')
+    await expect(back).toContainText(title.slice(0, 6))
+    await expect(page.getByTestId('close-article')).toHaveCount(0)
+    await back.click()
+    await expect(page).not.toHaveURL(/article=/)
     await expect(page.getByTestId('article-list')).toBeVisible()
     await expect(page.getByTestId('mobile-nav')).toBeVisible()
   })
@@ -286,6 +291,175 @@ test.describe('the phone header and account menu', () => {
     await expect(page).toHaveURL(/\/search$/)
     await expect(page.getByTestId('account-panel')).toHaveCount(0)
     await expect(page.getByTestId('search-page-input')).toBeVisible()
+  })
+})
+
+/**
+ * The article on a phone (Tela Mobile 03–05): a back bar in place of the toolbar, and a bar of
+ * actions fixed at the foot, where a thumb reaches; Recommend opens as a bottom sheet.
+ */
+test.describe('the article on a phone', () => {
+  test.beforeEach(async ({ page }) => {
+    // Posts read on opening and read posts listed, whatever an earlier spec left.
+    await resetReading(page.request)
+  })
+
+  /** Open the second post in All articles, and wait for the bar at its foot. */
+  async function openArticle(page: Page) {
+    await page.goto('/reading')
+    await page.getByTestId('article-row').nth(1).click()
+    await expect(page).toHaveURL(/article=\d+/)
+    await expect(page.getByTestId('bottom-bar')).toBeVisible()
+  }
+
+  /** The next push that carries `fragment`, once it is answered: so no later spec meets it. */
+  const pushed = (page: Page, fragment: string) =>
+    page.waitForResponse(
+      (r) =>
+        r.url().includes('/api/v1/mutations') &&
+        r.ok() &&
+        (r.request().postData() ?? '').includes(fragment),
+    )
+
+  test('a back bar in the toolbar’s place goes back to the list', async ({ page }) => {
+    await openArticle(page)
+    const bar = page.getByTestId('back-bar')
+    const back = bar.getByTestId('reader-back')
+    expect((await bar.boundingBox())?.height).toBe(52)
+    await expect(back).toHaveText('All articles')
+    await expect(back).toHaveAccessibleName('Back to All articles')
+    expect((await back.boundingBox())?.height).toBeGreaterThanOrEqual(44)
+    await expect(bar.getByTestId('typography-button')).toBeVisible()
+    // The desktop's controls are not drawn: they are in the bars.
+    for (const id of [
+      'close-article',
+      'focus-toggle',
+      'like-button',
+      'recommend-button',
+      'end-like',
+      'end-recommend',
+    ]) {
+      await expect(page.getByTestId(id)).toHaveCount(0)
+    }
+    // What the author sees is still said at the end.
+    await expect(page.getByTestId('end-actions')).toContainText('The author sees')
+
+    // The end of the article clears the bar when scrolled to the foot.
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    const last = (await page.getByTestId('next-article').count()) ? 'next-article' : 'end-blog'
+    const end = await page.getByTestId(last).boundingBox()
+    const foot = await page.getByTestId('bottom-bar').boundingBox()
+    expect(end && foot && end.y + end.height <= foot.y, 'the end is under the bar').toBe(true)
+
+    await back.click()
+    await expect(page).not.toHaveURL(/article=/)
+    await expect(page.getByTestId('article-list')).toBeVisible()
+    await expect(page.getByTestId('bottom-bar')).toHaveCount(0)
+    const variable = await page.evaluate(() =>
+      document.documentElement.style.getPropertyValue('--bottom-bar'),
+    )
+    expect(variable, 'the bar left its height behind').toBe('')
+  })
+
+  test('the bottom bar likes the post, and its count follows', async ({ page }) => {
+    await openArticle(page)
+    const bar = page.getByTestId('bottom-bar')
+    const box = await bar.boundingBox()
+    const viewport = page.viewportSize()
+    expect(box && viewport && Math.round(box.y + box.height)).toBe(viewport?.height)
+    const variable = await page.evaluate(() =>
+      document.documentElement.style.getPropertyValue('--bottom-bar'),
+    )
+    expect(variable).toBe(`${Math.round(box?.height ?? 0)}px`)
+
+    const like = page.getByTestId('bar-like')
+    expect((await like.boundingBox())?.height).toBeGreaterThanOrEqual(48)
+    const was = (await like.getAttribute('aria-pressed')) === 'true'
+    const n = Number(/(\d+)$/.exec(((await like.textContent()) ?? '').trim())?.[1])
+    expect(Number.isNaN(n)).toBe(false)
+    await like.click()
+    await expect(like).toHaveAttribute('aria-pressed', String(!was))
+    await expect(like).toHaveText(was ? `Like · ${n - 1}` : `Liked · ${n + 1}`)
+    const back = pushed(page, `"liked":${was}`)
+    await like.click()
+    await expect(like).toHaveAttribute('aria-pressed', String(was))
+    await expect(like).toHaveText(was ? `Liked · ${n}` : `Like · ${n}`)
+    await back
+  })
+
+  test('Recommend opens a bottom sheet, which recommends with a note', async ({ page }) => {
+    await openArticle(page)
+    const recommend = page.getByTestId('bar-recommend')
+    if ((await recommend.getAttribute('aria-pressed')) === 'true') await recommend.click()
+    await expect(recommend).toHaveText('Recommend')
+
+    // Esc closes the sheet, and only the sheet, and the button has its focus back.
+    await recommend.click()
+    const sheet = page.getByTestId('recommend-sheet')
+    const field = sheet.getByTestId('recommend-note')
+    await expect(sheet).toBeVisible()
+    await expect(sheet).toHaveAccessibleName('Recommend to your readers')
+    await expect(field).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(sheet).toHaveCount(0)
+    await expect(page).toHaveURL(/article=\d+/)
+    await expect(recommend).toBeFocused()
+
+    // So does a tap on the scrim above it.
+    await recommend.click()
+    await expect(sheet).toBeVisible()
+    await page.mouse.click(200, 60)
+    await expect(sheet).toHaveCount(0)
+
+    await recommend.click()
+    const title = (await page.getByTestId('article-title').textContent())?.trim() ?? ''
+    await expect(sheet).toContainText(title)
+    // Cancel beside Recommend, a third and two thirds, both a thumb's height.
+    const cancel = await sheet.getByRole('button', { name: 'Cancel' }).boundingBox()
+    const submit = await sheet.getByTestId('recommend-submit').boundingBox()
+    expect(cancel && submit && cancel.height >= 46 && submit.height >= 46).toBe(true)
+    expect(cancel && submit && submit.width > cancel.width * 1.8).toBe(true)
+
+    await field.fill('For the part about the tests.')
+    const sent = pushed(page, 'For the part about the tests.')
+    await sheet.getByTestId('recommend-submit').click()
+    const toast = page.getByTestId('toast')
+    await expect(toast).toContainText('Recommended with your note.')
+    await expect(sheet).toHaveCount(0)
+    await expect(recommend).toHaveAttribute('aria-pressed', 'true')
+    await expect(recommend).toHaveText('Recommended')
+    // The toast stands clear of the bar.
+    const said = await toast.boundingBox()
+    const foot = await page.getByTestId('bottom-bar').boundingBox()
+    expect(said && foot && said.y + said.height <= foot.y, 'the toast is under the bar').toBe(true)
+    await sent
+
+    // Recommended, the same button takes it back.
+    const taken = pushed(page, 'unrecommend')
+    await recommend.click()
+    await expect(toast).toContainText('Recommendation removed.')
+    await expect(recommend).toHaveAttribute('aria-pressed', 'false')
+    await taken
+  })
+
+  test('Mark unread flips, and Original links to the post', async ({ page }) => {
+    await openArticle(page)
+    // Opening read it, so the bar offers the way back, as the toolbar does on a desktop.
+    await expect(page.getByTestId('mark-unread')).toHaveText('Mark unread')
+    await page.getByTestId('mark-unread').click()
+    await expect(page.getByTestId('mark-read')).toHaveText('Mark read')
+    await page.getByTestId('mark-read').click()
+    await expect(page.getByTestId('mark-unread')).toBeVisible()
+
+    const href = await page
+      .getByTestId('reader')
+      .getByRole('link', { name: /Open the original/ })
+      .getAttribute('href')
+    expect(href).toMatch(/^https?:\/\//)
+    const original = page.getByTestId('bar-original')
+    await expect(original).toHaveText('Original')
+    await expect(original).toHaveAttribute('href', href ?? '')
+    await expect(original).toHaveAttribute('target', '_blank')
   })
 })
 
