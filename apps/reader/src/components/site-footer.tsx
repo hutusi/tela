@@ -1,22 +1,30 @@
 /**
  * The public pages' footer: who makes Tela, and the pages that say what it is, what it offers
  * writers and what it keeps. Laid out as the design's front page closes (Tela Landing): the name
- * in serif, the maker, and the links at the right, on the front page's 1280px measure.
- * Pure, like the views it closes: the edge renders it too.
+ * in serif, the maker, and the links at the right, on the front page's 1280px measure. A visitor
+ * on a phone finds the language and the theme here first (Tela v5), since their header has room
+ * for neither. The edge renders it too, as a guest, in the language it renders the page in.
  */
+import { useId } from 'react'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { useVisitor } from './app-header'
+import { CHEVRON_DOWN, Glyph } from './glyph'
+import { endonym, useVisitorLanguage } from './language-menu'
+import { ThemeSwitch } from './theme-menu'
 
 const LINK = 'text-ink-2 hover:text-ink hover:no-underline'
 
 export function SiteFooter({ year }: { year: number }) {
   const t = useTranslations('footer')
+  const visitor = useVisitor()
   return (
     <footer
       className="border-t border-line text-[13px] leading-[1.2] text-muted"
       data-testid="site-footer"
     >
       <div className="mx-auto flex w-full max-w-[1280px] flex-wrap items-center gap-x-6 gap-y-3 px-4 py-[22px] md:px-14">
+        {visitor ? <PhoneChoices /> : null}
         <span className="font-serif text-[19px] leading-none font-semibold text-ink">Tela</span>
         <p className="m-0">
           {t.rich('made', {
@@ -46,5 +54,54 @@ export function SiteFooter({ year }: { year: number }) {
         </nav>
       </div>
     </footer>
+  )
+}
+
+/**
+ * Below `sm`, the language and the theme the visitor header shows as circles from `sm` up, and
+ * doing what they do (`useVisitorLanguage`, `useThemeChoice`). The language is a native select,
+ * so a phone opens its own list. Choosing needs the script.
+ */
+function PhoneChoices() {
+  const t = useTranslations('footer')
+  const { options, value, choose } = useVisitorLanguage()
+  const id = useId()
+  return (
+    <div
+      className="flex w-full flex-col gap-2.5 border-b border-line pb-4 sm:hidden"
+      data-testid="footer-choices"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor={id}>{t('language')}</label>
+        <span className="relative text-ink">
+          <select
+            id={id}
+            value={value}
+            onChange={(e) => {
+              const code = options.find((o) => o === e.target.value)
+              if (code) choose(code)
+            }}
+            data-testid="footer-language"
+            className="min-h-10 cursor-pointer appearance-none rounded-full border border-line bg-surface py-0 pr-8 pl-3.5 text-[14px] text-ink"
+          >
+            {options.map((code) => (
+              <option key={code} value={code} lang={code}>
+                {endonym(code)}
+              </option>
+            ))}
+          </select>
+          <Glyph
+            size={12}
+            className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2"
+          >
+            {CHEVRON_DOWN}
+          </Glyph>
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <span>{t('theme')}</span>
+        <ThemeSwitch label={t('theme')} testId="footer-theme" />
+      </div>
+    </div>
   )
 }

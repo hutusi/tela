@@ -62,7 +62,9 @@
     "about": "关于",
     "writers": "写作者",
     "privacy": "隐私",
-    "terms": "条款"
+    "terms": "条款",
+    "language": "语言",
+    "theme": "主题"
   },
   "login": {
     "title": "登录 Tela"

@@ -246,6 +246,62 @@ test.describe("a visitor's theme", () => {
   })
 })
 
+/**
+ * Below `sm` the visitor's header has no room for the two circles, so the footer of the public
+ * pages carries them (Tela v5, mobile screen 09): the language as a select and the theme as a
+ * segmented control, each doing exactly what the header's does from `sm` up.
+ */
+test.describe("a visitor's footer on a phone", () => {
+  test('holds the language and the theme, and sets them as the header would', async ({ page }) => {
+    const mutations: string[] = []
+    page.on('request', (r) => {
+      if (r.url().includes('/api/v1/mutations')) mutations.push(r.url())
+    })
+    const theme = () =>
+      page.evaluate(() => ({
+        page: document.documentElement.dataset.theme ?? null,
+        kept: localStorage.getItem('tela.theme'),
+      }))
+    await page.setViewportSize({ width: 412, height: 900 })
+    await page.emulateMedia({ colorScheme: 'light' })
+    await page.goto('/')
+    await page.getByTestId('nav-join').waitFor()
+    const choices = page.getByTestId('footer-choices')
+    await choices.scrollIntoViewIfNeeded()
+    await expect(choices).toBeVisible()
+
+    // The language: the page's, as a 40px pill, and a choice is the cookie the edge renders by.
+    const language = page.getByTestId('footer-language')
+    await expect(language).toHaveValue('en')
+    await expect(language).toHaveAccessibleName('Language')
+    const pill = await language.boundingBox()
+    expect(pill && Math.round(pill.height)).toBe(40)
+    await language.selectOption('fr')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    await expect(page.getByTestId('nav-join')).toHaveText('S’inscrire')
+    await page.goto('/about')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    await expect(page.getByTestId('footer-language')).toHaveValue('fr')
+    await page.getByTestId('footer-language').selectOption('en')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+
+    // The theme: this device's alone, as the header's menu has it for a visitor.
+    const auto = page.getByTestId('footer-theme-system')
+    await expect(auto).toHaveAttribute('aria-pressed', 'true')
+    await page.getByTestId('footer-theme-dark').click()
+    expect(await theme()).toEqual({ page: 'dark', kept: 'dark' })
+    await expect(page.getByTestId('footer-theme-dark')).toHaveAttribute('aria-pressed', 'true')
+    await auto.click()
+    expect(await theme()).toEqual({ page: null, kept: 'system' })
+    expect(mutations).toEqual([])
+
+    // From `sm` up the header's circles have them, and the footer does not.
+    await page.setViewportSize({ width: 1024, height: 900 })
+    await expect(choices).toBeHidden()
+    await expect(page.getByTestId('language-menu')).toBeVisible()
+  })
+})
+
 test.describe('Join, after choosing a theme', () => {
   test.use(visitor(16))
   /**

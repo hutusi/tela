@@ -62,7 +62,9 @@
     "about": "About",
     "writers": "For writers",
     "privacy": "Privacy",
-    "terms": "Terms"
+    "terms": "Terms",
+    "language": "Language",
+    "theme": "Theme"
   },
   "login": {
     "title": "Log in to Tela"
