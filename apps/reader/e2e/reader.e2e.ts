@@ -480,6 +480,26 @@ test.describe('reader', () => {
     expect(pushed.filter((body) => body.includes('"markAllRead"'))).toEqual([])
   })
 
+  test('u takes a mark-all back while its toast shows', async ({ page }) => {
+    await resetReading(page.request)
+    const pushed = pushesFrom(page)
+    const { feedId, dots, unread, watermark } = await openUnreadBlog(page)
+    await page.getByTestId('mark-all-read').click()
+    await expect(dots).toHaveCount(0)
+    const toast = page.getByTestId('toast')
+    await expect(toast.getByTestId('toast-action')).toHaveAttribute('aria-keyshortcuts', 'u')
+    // Focus is on Mark all read, not in the toast: the key reaches it from anywhere on the page.
+    await page.keyboard.press('u')
+    await expect(toast).toHaveCount(0)
+    await expect(dots).toHaveCount(unread.length)
+
+    await page.reload()
+    await synced(page)
+    await expect(dots).toHaveCount(unread.length)
+    expect(await watermarkOnServer(page.request, feedId)).toBe(watermark)
+    expect(markAllsIn(pushed)).toEqual([])
+  })
+
   test('pressed twice, Mark all read still sends nothing once undone', async ({ page }) => {
     await resetReading(page.request)
     const pushed = pushesFrom(page)

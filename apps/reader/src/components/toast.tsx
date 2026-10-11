@@ -6,7 +6,7 @@ import { pauseToast, resumeToast, runToastAction, useToast } from '../lib/toasts
  * above the phone reader's bottom bar while that shows (`--bottom-bar`).
  *
  * Its time stops while a pointer is over it or focus is in it, so an Undo being reached for is
- * never taken away, nor focus dropped to the page as it goes.
+ * never taken away, nor focus dropped to the page as it goes; and `u` presses it on /reading.
  */
 export function Toast() {
   const toast = useToast()
@@ -40,10 +40,17 @@ export function Toast() {
             <button
               type="button"
               onClick={() => runToastAction(toast.id)}
+              aria-keyshortcuts="u"
               data-testid="toast-action"
-              className="shrink-0 cursor-pointer font-semibold text-inherit underline underline-offset-2"
+              className="-my-1.5 flex shrink-0 cursor-pointer items-center gap-2 py-1.5 font-semibold text-inherit"
             >
-              {toast.action.label}
+              <span className="underline underline-offset-2">{toast.action.label}</span>
+              {/* No key to press on a phone. */}
+              <span aria-hidden="true" className="pointer-coarse:hidden">
+                <kbd className="rounded-[4px] border border-paper/35 px-1 font-sans text-[10.5px] leading-[14px] font-normal opacity-75">
+                  U
+                </kbd>
+              </span>
             </button>
           ) : null}
         </div>

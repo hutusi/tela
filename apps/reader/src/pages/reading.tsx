@@ -24,6 +24,7 @@ import {
 } from '../lib/href'
 import { effectiveSidebar, gridColumns, toggleFocus, useLayout, useWide } from '../lib/layout'
 import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
+import { currentToast, runToastAction } from '../lib/toasts'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
@@ -158,9 +159,9 @@ export function ReadingPage() {
 
   // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
   // article, [ shows or hides the sidebar, f the list too while one is open, o opens its original,
-  // l likes or unlikes it and m marks it read or unread, ? lists the keys. Typing in a field is
-  // never a shortcut, and a popover that handles Esc itself marks the event so the article stays
-  // open.
+  // l likes or unlikes it and m marks it read or unread, u presses the toast's Undo while it shows,
+  // ? lists the keys. Typing in a field is never a shortcut, and a popover that handles Esc itself
+  // marks the event so the article stays open.
   const [help, setHelp] = useState(false)
   // Read when a key is pressed, not when the listener was bound: a second `j` can come before
   // React has rendered the first one's navigation, and the URL is already right by then.
@@ -173,7 +174,13 @@ export function ReadingPage() {
       if (target?.closest('input, textarea, select, [contenteditable]')) return
       const { items, close, help } = keys.current
       const now = parseReadingParams(new URLSearchParams(window.location.search))
-      if (e.key === 'j' || e.key === 'k') {
+      if (e.key === 'u') {
+        // The toast showing when the key is pressed, not when the listener was bound.
+        const toast = currentToast()
+        if (!toast?.action || e.repeat) return
+        e.preventDefault()
+        runToastAction(toast.id)
+      } else if (e.key === 'j' || e.key === 'k') {
         const at = items.findIndex((a) => a.id === now.articleId)
         const step = e.key === 'j' ? 1 : -1
         const next = items[at === -1 ? (step === 1 ? 0 : items.length - 1) : at + step]

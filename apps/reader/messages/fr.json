@@ -819,6 +819,7 @@
     "original": "Ouvrir l’original dans un nouvel onglet",
     "like": "Aimer l’article, ou ne plus l’aimer",
     "read": "Marquer l’article comme lu ou non lu",
+    "undo": "Annuler, tant qu’un message le propose",
     "highlight": "Surligner la sélection",
     "sidebar": "Replier ou déplier la barre latérale",
     "focus": "Masquer la liste pendant la lecture",
