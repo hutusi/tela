@@ -36,8 +36,9 @@ everything so far sits under `[Unreleased]`.
 ### Added
 
 - **The Tela v5 pass.** Claude Design's v5 handoff, taken where it holds up (ADR 0046):
-  - **Undo** after Mark all read ("Marked 12 posts read.") and after removing a highlight. The
-    change waits on the device while the toast shows, so an undone one never reaches the server.
+  - **Undo** after Mark all read ("Marked 12 posts read.") and after removing a highlight, by
+    click or `u`. The change waits on the device while the toast shows, so an undone one never
+    reaches the server, and the toast stays while it is being used.
   - **A first run** for a member who follows nothing: six blogs from the directory to subscribe to
     in place, then "Start reading".
   - **The end of an article** offers Like and Recommend, with Recommend's note inline, before the

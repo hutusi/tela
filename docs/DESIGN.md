@@ -156,7 +156,8 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
   no room for, then a rule: *Language · {endonym} ›* (48px), which turns the panel into the
   language list in place (‹ Language, the four endonyms in their own `lang` with a tick on the
   current one, a one-line hint and *Language settings*), behaving exactly as the circle does,
-  linked or set apart (`useMemberLanguage`, shared with `MemberLanguage`); *Theme* (48px) with
+  linked or set apart (`useMemberLanguage`, shared with `MemberLanguage`), and giving focus back
+  to the avatar once one is chosen; *Theme* (48px) with
   the Auto / Light / Dark segmented control (`ThemeSwitch`, shared with `ThemeMenu`); and
   *Search*, which a phone otherwise had no way to. A disclosure, not an ARIA menu: Tab reaches its items.
   Esc closes it and returns focus to the avatar, before the reader's own Esc can close an article;
@@ -218,7 +219,8 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
   breakpoint rendered 348px columns at 1280 and nothing caught it (ADR 0019).
 - List rows: feed swatch (10px), feed name, relative time, `XX → EN` badge for foreign posts,
   accent unread dot, serif title (19px wide / 15.5px slim), two-line excerpt, and a meta row of
-  minutes, likes (HEART) and recommendations (PASS) with 12px icons. A read row has no dot and its
+  minutes, likes (HEART) and recommendations (PASS) with 12px icons, read aloud in words ("3
+  likes", `GlyphCount`), since the icons are decoration. A read row has no dot and its
   title steps back to `ink-2`; the open row's title stays `ink`, on a `surface` ground. Read rows
   no longer fade: at 62% opacity their 12px meta was unreadable (Tela v5).
 - Reader: Close (CLOSE and its word) and Focus left; Mark as read or unread, Aa, Like and
@@ -228,7 +230,8 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
   measure): an actions row ruled above it, with Like or Liked and Recommend or Recommended
   (without counts, which the toolbar carries) beside "The author sees how many liked this, and your
   recommendation with its note." at every width; Recommend's form opens inline under that row,
-  the popover's form (`RecommendForm`), and only one of the two is open at a time; then the blog,
+  the popover's form (`RecommendForm`), and only one of the two is open at a time, each giving
+  focus back to the button that opened it on Cancel, Esc or Recommend; then the blog,
   a 44px round `SiteAvatar` with its name and "{description} · {n} readers on Tela" under ADR
   0041's rule. The column is the
   member's measure (640px by default) while the body is one column, and 1240px once two paired
@@ -244,7 +247,9 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
   beside it, when some of the translation arrived). In Translation mode a translation still
   arriving shows the paragraphs so far, then three 13px `hover` bars (96, 88 and 64% wide) and
   "Translating the rest…", never the source of what is to come (`translatedPrefix`); a failed one
-  shows its missing paragraphs as not translated, so the bars cannot stay. Highlighting the
+  shows its missing paragraphs as not translated, so the bars cannot stay, and so does one whose
+  finished copy cannot be fetched (tried twice) while paragraphs are missing: the bar says it
+  failed, and Retry fetches that copy again rather than asking for a new translation. Highlighting the
   translation waits until no paragraph is missing, so an anchor never lands on source text.
 - Paired reading: one grid row per top-level block, the original first — left-hand column when
   there are two, above the translation when they stack, so nothing changes places at the
@@ -278,10 +283,15 @@ renders the pill filled (`bg-ink`), and clicking it again removes the recommenda
 
 The toast (`Toast`, `lib/toasts.ts`, Tela v5) is the reader's one: an `ink` box at the foot of the
 page, centred, 13.5px, for 2.6 s, and 5 s when it carries an action (Undo: 600 weight, underlined,
-in the toast's own colour). One at a time; a newer message replaces the one showing and takes its
-own time. Its live region is always in the page, so a screen reader hears each message. A change
-that offers Undo is held on the device a second longer than the toast shows (`UNDO_HOLD_MS`, ADR
-0046), so an Undo pressed while it shows always finds the change unsent.
+in the toast's own colour, with a `U` key cap on a fine pointer, and a hit area taller than its
+text). One at a time; a newer message replaces the one showing and takes its own time. Its time
+stops while a pointer is over it or focus is in it, and starts again with what it had left, so it
+never vanishes, taking focus with it, while it is being used. Its live region is always in the
+page, so a screen reader hears each message, and `u` presses Undo on the reading page (listed
+under `?`). A change that offers Undo is held on the device for as long as its toast shows, and
+let go when the toast goes without it (ADR 0046), so an Undo pressed while it shows always finds
+the change unsent. The reading page's keys stay quiet while a modal dialog (the phone's Recommend
+sheet) is open.
 
 Settings (Tela v2): a 1040 px page, a 200 px section nav on the left (sticky from `md`, one row
 that scrolls below it) holding the serif "Settings" heading, and the section in a 640 px column.
@@ -447,15 +457,16 @@ Dashboard (`/dashboard`, Tela v5 §9): a 960 px page, padded 44/48 (16 px at the
 40 px between sections. The serif "Dashboard" (40/500) and its intro, then each claimed blog:
 - **Its header:** a 52 px `SiteAvatar` with a 13 px radius, the title (serif 26/500) linking to
   the blog's page, and a 13 px muted line, "{host} · Written in {language} · {listing} under
-  {topics}", which drops whatever part is absent. Topics follow Discover's order, and one this
+  {topics}", which drops whatever part is absent; only a blog in Discover (listed or featured) is
+  "under" its topics. Topics follow Discover's order, and one this
   build does not know is left out rather than shown as a key.
 - **Three tiles** in an auto-fit grid (200 px columns, 12 px gap), each on `surface` in a `line`
   border, 12 px radius, 18/20 padding: a 13 px muted label, a serif 34/500 number in tabular
   figures, and a 12.5 px line under it. *Readers on Tela* (the same count as `reader_count`), with
   "+{n} in the last 30 days" in accent only when someone new subscribed: a reader counts as new
-  when none of their live subscriptions to the blog is older than 30 days. *Likes* "on the posts
-  below" and *Recommendations* "{n} with a note", summed over the posts the table shows (the last
-  20).
+  when none of their live subscriptions to the blog is older than 30 days. *Likes* "across {n}
+  posts" and *Recommendations* "{n} with a note" are the whole blog's, totalled by tela-api, not a
+  sum of the 20 rows below, so the tile and the notes under it always agree.
 - **Posts**, a table with its headers in words (11/600 uppercase, muted, a `line` under them):
   the serif 18 title over its 12 px date, then likes, recommendations and notes, right-aligned in
   tabular figures, with "–" for a post without notes. It scrolls inside itself on a phone, never
@@ -562,7 +573,7 @@ padding, 13 px `muted`: "Tela" in 19 px serif 600 `ink`, "© year · Made by AI 
 https://ainaive.com, in `ink-2`), and About, For writers, Privacy and Terms on the right. On a
 phone, for a visitor, two rows come first (Tela v5), since the header has no room for its
 circles: *Language* with a 40px native select (`surface`, `line`, the endonym and a chevron),
-doing what the circle does (`useVisitorLanguage`), and *Theme* with the Auto / Light / Dark
+doing what the circle does (`useVisitorLanguage`), at 16px so iOS does not zoom on it, and *Theme* with the Auto / Light / Dark
 control (`ThemeSwitch`). From `sm` the circles are back in the header and the rows go.
 
 ## Admin console (`apps/reader/src/admin`, ADR 0039)
@@ -747,9 +758,11 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   count is what the change turns from unread to read on the device, predicted before it is
   sent, not the rows on screen: a feed's watermark reads every post under it. The change is held
   on the device while the toast shows, so Undo takes it back before tela-api hears of it; after
-  that, Undo marks those posts unread one by one (up to 200; ADR 0046). On Today it marks each
-  of Today's unread posts by itself, since a watermark would read older posts in every feed, and
-  Liked has no button, liking having read its posts already.
+  that, Undo marks those posts unread one by one (up to 200, and past that the toast says it was
+  already sent; ADR 0046). One that would read nothing sends nothing. On Today it marks each of
+  Today's unread posts by itself, held as one group and undone whole, since a watermark would read
+  older posts in every feed, and Liked has none: its posts lie across every feed and month, so no
+  watermark reads only them.
 - **First run.** A member whose rows have arrived and who follows nothing sees "Start with a few
   blogs" in place of the list and the empty pane, at every width (Tela v5): a 1000px page in a
   `220px 1fr` grid padded 48px, the serif 36 heading, an intro that names their language, and six
@@ -813,7 +826,7 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
     own menu, with 40 px buttons, a 12 px radius and no key cap, above the bottom bar
     (`--bottom-bar`). Its buttons keep the selection (`mousedown` is prevented).
   - Clicking painted text opens a 320 px note popover, 14 px under the click (above it when it
-    would not fit), 12 px from the window's edges: the quote highlighted in serif 15, a
+    would not fit, counting the phone's bottom bar), 12 px from the window's edges: the quote highlighted in serif 15, a
     three-line serif textarea, *Remove highlight*, *Cancel* and *Save*, as Recommend's does.
     Remove says "Highlight removed." in the toast with Undo: the delete is held on the device
     meanwhile (ADR 0046), and an Undo after it went out puts the highlight back under a new id.
@@ -828,9 +841,9 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
     it in: one highlight over both, under a new id, the notes joined in reading order (ADR 0046).
     A merge that would pass the quote or note limit is not made, and a selection inside a
     highlight only opens its note.
-- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `o`, `l`, `m`, `h`, `[`, `f` and `?` in
+- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `o`, `l`, `m`, `h`, `[`, `f`, `u` and `?` in
   `kbd` chips. `o` opens the original in a new tab, `l` likes or unlikes, and `m` marks read or
-  unread, as the action row's button would, all on the open article.
+  unread, as the action row's button would, all on the open article; `u` presses the toast's Undo.
   `[` needs AltGr or Option on some non-US layouts, as `?` does on others; neither is worked
   around.
 
@@ -845,11 +858,15 @@ run as rows, screens 10–16, come next).
 - **The list:** `MobileNav`'s summary names the list on the left and says "Feeds" with a chevron
   on the right (12.5px `muted`, `ink` and turned while open). Its rows are at least 40px, the
   Subscriptions heading's gear a 44 × 32 target, and the last row is "+ Add a blog".
+- **Layers:** the bottom bar is `z-[9]`, under the sticky header (`z-10`) and so under the account
+  menu, which stops 8px above the window's foot and scrolls inside itself at every width; the
+  highlight toolbar (`z-20`), its note and the toast (`z-30`) sit above the bar, all portalled to
+  `<body>` so the pane's fade cannot place them.
 - **The article** has a 52px back bar in place of the toolbar: BACK and the list's name on the
   left, with a 44px target, and Aa on the right. Close, Focus and the toolbar's pills are not
   there. A bar fixed at the foot holds four 48px targets, each a 20px icon over an 11.5px
   label: *Like · {n}* (filled when liked), *Recommend*, *Mark unread* or *Mark read*, and
-  *Original* (EXTERNAL, a new tab). It sits on `paper` under a `line` rule, with
+  *Original* (EXTERNAL, a new tab), three columns when a post has no link. It sits on `paper` under a `line` rule, with
   `max(22px, env(safe-area-inset-bottom))` below for the home indicator, and is rendered into
   `<body>` so the pane's fade cannot trap it. While it shows it puts its height in
   `--bottom-bar` on the root, which the toast, the highlight toolbar and the article's own foot
@@ -861,7 +878,7 @@ run as rows, screens 10–16, come next).
   focus goes back to the button.
 - **Reading:** the translation bar stacks, its sentence over the modes as a full-width segmented
   control. Titles are 30px and the body 18.5px (CJK keeps its own size); a stacked original sits
-  on `source` in a rounded panel, serif 16 in `ink-2`, padded 10/14.
+  on `source` in a rounded panel, serif 16/1.5 in `ink-2` (CJK keeps its 18/1.8), padded 10/14.
 - **Highlighting** puts the toolbar under the selection, clear of the system's own menu, with
   40px buttons (see Highlights).
 - One set of controls or the other is rendered from a media query (`useMediaQuery(BELOW_LG)`,
