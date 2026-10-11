@@ -1,6 +1,7 @@
 import { RECOMMENDATION_NOTE_MAX } from '@tela/shared'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslations } from 'use-intl'
+import { showToast } from '../lib/toasts'
 import { useStore } from '../store/hooks'
 
 type Props = {
@@ -16,24 +17,17 @@ export function RecommendPopover({ articleId, recommended, note, recommendCount 
   const { store } = useStore()
   const [open, setOpen] = useState(false)
   const [text, setText] = useState(note ?? '')
-  const [toast, setToast] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!toast) return
-    const timer = setTimeout(() => setToast(null), 2600)
-    return () => clearTimeout(timer)
-  }, [toast])
 
   // Applied here at once and synced behind it; the counts are the local view's (ADR 0025).
   const submit = () => {
     store.mutate({ type: 'recommend', articleId, note: text.trim() || null })
     setOpen(false)
-    setToast(text.trim() ? t('recommendedWithNote') : t('recommended'))
+    showToast(text.trim() ? t('recommendedWithNote') : t('recommended'))
   }
 
   const remove = () => {
     store.mutate({ type: 'unrecommend', articleId })
-    setToast(t('unrecommended'))
+    showToast(t('unrecommended'))
   }
 
   return (
@@ -92,15 +86,6 @@ export function RecommendPopover({ articleId, recommended, note, recommendCount 
               {t('recommend')}
             </button>
           </div>
-        </div>
-      ) : null}
-      {toast ? (
-        <div
-          role="status"
-          data-testid="toast"
-          className="fixed bottom-7 left-1/2 z-10 -translate-x-1/2 rounded-[10px] bg-ink px-[18px] py-3 text-[13.5px] text-paper shadow-[0_8px_24px_rgba(0,0,0,.18)] animate-fade"
-        >
-          {toast}
         </div>
       ) : null}
     </div>
