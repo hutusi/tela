@@ -84,7 +84,8 @@ export function pairBlocks(
  * are fetched side by side and a failed fetch is not asked for again, so a later chunk can land
  * before an earlier one, or a gap can stay until the finished object replaces them all; a block
  * after a gap would read as if it followed on from the one before it. A failed translation has
- * nothing more on the way, so what never came shows as not translated rather than waiting for ever.
+ * nothing more on the way, so what never came shows as not translated rather than waiting for ever;
+ * a finished one whose object could not be had either is failed for the reader (`readerState`).
  */
 export function translatedPrefix(
   pairs: readonly BlockPair[],

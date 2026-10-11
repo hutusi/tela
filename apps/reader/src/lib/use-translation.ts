@@ -6,6 +6,9 @@
  * - While it runs, the status is polled every 1.5 s (visible tabs only) and each new chunk object
  *   is fetched and laid over the original by block index: the first paragraphs show in seconds.
  * - Once done, the finished object replaces the chunks; the synced row says so on every device.
+ * - A finished object that cannot be had, asked for twice, leaves the blocks no chunk brought with
+ *   nothing on the way to them: the translation is then failed for this reader (`readerState`),
+ *   and Retry asks for the object again.
  */
 import type { ArticleRow, TranslationRow } from '@tela/sync'
 import { translationKey } from '@tela/sync'
@@ -13,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReaderTranslationState, TranslationView } from '../components/translation-bar'
 import { api } from '../store/api'
 import { useStore, useTables } from '../store/hooks'
-import type { ContentObject, TranslationChunk, TranslationObject } from '../store/objects'
+import type { ContentObject, Objects, TranslationChunk, TranslationObject } from '../store/objects'
 import { siteOfFeed } from '../store/selectors'
 import { blocksContaining, type ReaderBlock } from './block-pairs'
 
@@ -62,6 +65,43 @@ const NOTICE: Record<string, TranslationNotice> = {
   unavailable: 'unavailable',
 }
 
+/** Between the two asks for a finished object: long enough for a dropped connection to return. */
+export const FINISHED_RETRY_MS = 1500
+
+/**
+ * The finished translation object, asked for a second time when the first answer is not one (a
+ * non-OK answer is null, a network error rejects). Null when neither was, or once `signal` is
+ * aborted. Nothing else asks for it again: polling stops once the translation is done.
+ */
+export async function finishedObject(
+  objects: Pick<Objects, 'object'>,
+  key: string,
+  signal: AbortSignal,
+  pause: (ms: number) => Promise<void> = (ms) => new Promise((done) => setTimeout(done, ms)),
+): Promise<TranslationObject | null> {
+  const ask = () => objects.object<TranslationObject>(key, signal).catch(() => null)
+  const first = await ask()
+  if (first || signal.aborted) return first
+  await pause(FINISHED_RETRY_MS)
+  return signal.aborted ? null : ask()
+}
+
+/**
+ * Where the translation stands for this reader. Until the member asks, nothing is under way for
+ * them, whatever another reader started; skipped reads as failed. So does a finished translation
+ * whose object could not be had while blocks still wait on it (`stalled`): no chunk is coming for
+ * them, so they would wait under "Translating the rest…" for ever, with no Retry.
+ */
+export function readerState(
+  current: Live | null,
+  enabled: boolean,
+  stalled: boolean,
+): ReaderTranslationState {
+  if (!current || !enabled) return 'none'
+  if (current.state === 'skipped' || stalled) return 'failed'
+  return current.state as ReaderTranslationState
+}
+
 export function useArticleTranslation(
   article: ArticleRow | null,
   content: ContentObject | null,
@@ -92,6 +132,9 @@ export function useArticleTranslation(
   const [notice, setNotice] = useState<TranslationNotice | null>(null)
   const [chunks, setChunks] = useState<Map<number, string>>(() => new Map())
   const [final, setFinal] = useState<TranslationObject | null>(null)
+  // The key of a finished object asked for twice in vain, and how many times Retry asked again.
+  const [lost, setLost] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
   const asked = useRef<string | null>(null)
 
   // A new article or language starts from nothing.
@@ -101,6 +144,7 @@ export function useArticleTranslation(
     setNotice(null)
     setChunks(new Map())
     setFinal(null)
+    setLost(null)
   }, [contentKey, readingLang])
 
   const current = useMemo(() => moreAdvanced(row, live), [row, live])
@@ -156,37 +200,42 @@ export function useArticleTranslation(
   }, [running, enabled, contentKey, readingLang, engine])
 
   // Fetch each chunk as it is named, and lay it over the original. Keyed by the list's text: the
-  // row is a fresh array on every pull even when it names the same chunks.
+  // row is a fresh array on every pull even when it names the same chunks. One that fails is not
+  // asked for again: the finished object brings its blocks.
   const chunkList = enabled ? (current?.chunkKeys ?? []).join('|') : ''
   useEffect(() => {
     let cancelled = false
     for (const key of chunkList ? chunkList.split('|') : []) {
-      void objects.object<TranslationChunk>(key).then((chunk) => {
-        if (!chunk || cancelled) return
-        setChunks((held) => {
-          const next = new Map(held)
-          for (const [i, html] of Object.entries(chunk.blocks)) next.set(Number(i), html)
-          return next
+      void objects
+        .object<TranslationChunk>(key)
+        .catch(() => null)
+        .then((chunk) => {
+          if (!chunk || cancelled) return
+          setChunks((held) => {
+            const next = new Map(held)
+            for (const [i, html] of Object.entries(chunk.blocks)) next.set(Number(i), html)
+            return next
+          })
         })
-      })
     }
     return () => {
       cancelled = true
     }
   }, [chunkList, objects])
 
-  // The finished object, once there is one.
+  // The finished object, once there is one, and again each time Retry asks for it.
   const objectKey = enabled ? (current?.objectKey ?? null) : null
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` asks again for the same key
   useEffect(() => {
     if (!objectKey) return
-    let cancelled = false
-    void objects.object<TranslationObject>(objectKey).then((o) => {
-      if (!cancelled && o) setFinal(o)
+    const controller = new AbortController()
+    void finishedObject(objects, objectKey, controller.signal).then((o) => {
+      if (controller.signal.aborted) return
+      if (o) setFinal(o)
+      else setLost(objectKey)
     })
-    return () => {
-      cancelled = true
-    }
-  }, [objectKey, objects])
+    return () => controller.abort()
+  }, [objectKey, objects, attempt])
 
   const blocks = useMemo(() => {
     if (!content) return null
@@ -211,11 +260,14 @@ export function useArticleTranslation(
     () => (content ? blocksContaining(content, failed ? failed.split('|') : []) : []),
     [content, failed],
   )
-  // Until the member asks, nothing is under way for them, whatever another reader started.
-  const state: ReaderTranslationState =
-    current && enabled
-      ? ((current.state === 'skipped' ? 'failed' : current.state) as ReaderTranslationState)
-      : 'none'
+  // The finished object is lost to this reader while blocks still wait on it. Chunks that all
+  // landed are the whole translation, and lose nothing without it.
+  const stalled =
+    objectKey !== null &&
+    lost === objectKey &&
+    final === null &&
+    (blocks === null || blocks.some((b) => b === null))
+  const state = readerState(current, enabled, stalled)
   return {
     view: needed
       ? {
@@ -228,6 +280,13 @@ export function useArticleTranslation(
     blocks,
     untranslated,
     notice,
-    retry: () => void request(),
+    // Stalled, the translation is there and only its object is missing: ask for that again, not
+    // for a new translation. Until it lands the rest waits under its placeholder once more.
+    retry: stalled
+      ? () => {
+          setLost(null)
+          setAttempt((n) => n + 1)
+        }
+      : () => void request(),
   }
 }

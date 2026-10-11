@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import { type BlockPair, translatedPrefix } from '../src/lib/block-pairs'
-import { type Live, moreAdvanced } from '../src/lib/use-translation'
+import {
+  FINISHED_RETRY_MS,
+  finishedObject,
+  type Live,
+  moreAdvanced,
+  readerState,
+} from '../src/lib/use-translation'
+import type { TranslationObject } from '../src/store/objects'
 
 const at = (state: string, chunks: number): Live => ({
   state,
@@ -70,5 +77,80 @@ describe('what Translation mode shows of a translation still arriving', () => {
       expect(shown.pairs).toBe(pairs)
       expect(shown.rest).toBe(false)
     }
+  })
+})
+
+describe('a finished translation object that cannot be had', () => {
+  const FINISHED: TranslationObject = {
+    format: 1,
+    lang: 'en',
+    status: 'done',
+    blocks: ['<p>en: a</p>'],
+    failedLeaves: [],
+  }
+  /** Objects that give each answer in turn: an object, null (a non-OK answer) or a rejection. */
+  const answering = (...answers: (TranslationObject | null | Error)[]) => {
+    const asked: string[] = []
+    const objects = {
+      object: async <T>(key: string) => {
+        asked.push(key)
+        const answer = answers.shift() ?? null
+        if (answer instanceof Error) throw answer
+        return answer as T | null
+      },
+    }
+    return { objects, asked }
+  }
+  const pauses: number[] = []
+  const pause = async (ms: number) => {
+    pauses.push(ms)
+  }
+
+  test('is asked for once more after a pause, and kept when the second answer is it', async () => {
+    pauses.length = 0
+    const { objects, asked } = answering(null, FINISHED)
+    const got = await finishedObject(objects, 't/k/en/1.json', new AbortController().signal, pause)
+    expect(got).toBe(FINISHED)
+    expect(asked).toEqual(['t/k/en/1.json', 't/k/en/1.json'])
+    expect(pauses).toEqual([FINISHED_RETRY_MS])
+  })
+
+  test('is given up after the second, a network error read as no answer', async () => {
+    const { objects, asked } = answering(new TypeError('Failed to fetch'), null)
+    const got = await finishedObject(objects, 't/k/en/1.json', new AbortController().signal, pause)
+    expect(got).toBeNull()
+    expect(asked).toHaveLength(2)
+  })
+
+  test('is asked for once when the first answer is it, and not again once nobody waits', async () => {
+    const once = answering(FINISHED)
+    expect(await finishedObject(once.objects, 'k', new AbortController().signal, pause)).toBe(
+      FINISHED,
+    )
+    expect(once.asked).toHaveLength(1)
+
+    const controller = new AbortController()
+    const gone = answering(null, FINISHED)
+    const got = await finishedObject(gone.objects, 'k', controller.signal, async () => {
+      controller.abort()
+    })
+    expect(got).toBeNull()
+    expect(gone.asked).toHaveLength(1)
+  })
+
+  test('leaves blocks still waiting failed, for this reader, so Retry is offered', () => {
+    const done: Live = {
+      state: 'done',
+      chunkKeys: [],
+      objectKey: 't/k/en/1.json',
+      failedLeaves: [],
+    }
+    expect(readerState(done, true, false)).toBe('done')
+    expect(readerState(done, true, true)).toBe('failed')
+    expect(readerState({ ...done, state: 'partial' }, true, true)).toBe('failed')
+    // Not asked for yet, nothing is under way for this member, stalled or not.
+    expect(readerState(done, false, true)).toBe('none')
+    expect(readerState(null, true, true)).toBe('none')
+    expect(readerState({ ...done, state: 'skipped' }, true, false)).toBe('failed')
   })
 })

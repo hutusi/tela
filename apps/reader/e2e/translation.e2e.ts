@@ -477,6 +477,59 @@ test.describe('translation', () => {
     }
   })
 
+  /**
+   * A chunk that fails is not asked for again: the finished object brings its blocks. When that
+   * cannot be had either (asked for twice), nothing more is on the way, so the placeholder goes,
+   * what never came shows as not translated, and the bar offers to try again, which asks for the
+   * finished object once more.
+   */
+  test('a finished translation out of reach shows what never came as not translated, with a retry', async ({
+    page,
+  }) => {
+    await setPrefs(page.request, { 'reader.mode': 'trans' })
+    // Every chunk after the first, and the finished object, answered 503.
+    const later = /\/o\/tc\/.+\/[1-9]\d*\.json$/
+    const finished = /\/o\/t\//
+    const refuse = (route: Route) => route.fulfill({ status: 503, body: '' })
+    await page.route(later, refuse)
+    await page.route(finished, refuse)
+
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('subscription').filter({ hasText: 'give IT a try' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    const bar = page.getByTestId('translation-bar')
+    const rest = page.getByTestId('translating-rest')
+    const retry = bar.getByTestId('translation-retry')
+    const stop = keepCycling(page)
+    try {
+      // Two chunks at least (the spec above says why), so the first lands and the rest do not.
+      await page.getByTestId('article-row').filter({ hasText: 'あなたは見分けられる' }).click()
+      await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans', {
+        timeout: 30_000,
+      })
+      await expect(bar).toHaveAttribute('data-state', 'failed', { timeout: 30_000 })
+      await expect(page.getByTestId('translation-status')).toHaveText('Translation failed.')
+      await expect(rest).toHaveCount(0)
+      await expect(retry).toHaveText('Try translating again')
+      // The first chunk's blocks, translated, then the source standing in for the rest, marked.
+      await expect(page.getByTestId('body-translated').first()).toContainText('en:')
+      await expect(page.locator('.article-untranslated-label').first()).toHaveText(
+        'Not translated · Japanese',
+      )
+
+      await page.unroute(later)
+      await page.unroute(finished)
+      await retry.click()
+      await expect(bar).toHaveAttribute('data-state', /done|partial/, { timeout: 30_000 })
+      await expect(retry).toHaveCount(0)
+      await expect(rest).toHaveCount(0)
+      await expect(page.getByTestId('translation-status')).toContainText('Translated to English')
+    } finally {
+      stop()
+    }
+  })
+
   test('a translation that could not be asked for offers to try again, in the bar', async ({
     page,
   }) => {
