@@ -502,18 +502,14 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
             data-testid="end-blog"
           >
             {site ? (
-              <SiteAvatar
-                id={site.id}
-                title={site.title ?? name}
-                faviconKey={site.faviconKey}
-                size={44}
-                round
-              />
+              <SiteAvatar id={site.id} title={name} faviconKey={site.faviconKey} size={44} round />
             ) : (
               <Swatch id={article.feedId} title={name} size={44} round />
             )}
             <div className="min-w-[200px] flex-1">
-              <div className="font-medium">{site?.title ?? name}</div>
+              {/* The name the list and the meta line use (`feedTitle`): a blog's, or its feed's
+                  own where the device holds two feeds of one blog. */}
+              <div className="font-medium">{name}</div>
               {about ? <div className="text-[13px] text-muted">{about}</div> : null}
             </div>
           </div>
