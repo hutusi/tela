@@ -4,7 +4,9 @@
     "tagline": "独立博客，任何语言。"
   },
   "common": {
-    "quoted": "“{text}”"
+    "quoted": "“{text}”",
+    "likeCount": "{n} 人喜欢",
+    "recommendCount": "{n} 人推荐"
   },
   "nav": {
     "reading": "阅读",

@@ -4,7 +4,9 @@
     "tagline": "獨立部落格，任何語言。"
   },
   "common": {
-    "quoted": "「{text}」"
+    "quoted": "「{text}」",
+    "likeCount": "{n} 人喜歡",
+    "recommendCount": "{n} 人推薦"
   },
   "nav": {
     "reading": "閱讀",

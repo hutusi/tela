@@ -427,6 +427,9 @@ test.describe('reader', () => {
       `[data-testid="article-row"][href="/reading?filter=liked&article=${articleId}"]`,
     )
     await expect(mine).toHaveCount(1)
+    // Its counts are read in words: the heart and the arrow beside them are drawn, and hidden.
+    await expect(mine).toHaveAccessibleName(/[1-9]\d*\s*likes?\b/)
+    await expect(mine).toHaveAccessibleName(/\d+\s*recommendations?\b/)
     const before = await liked.count()
     await mine.click()
     await expect(page).toHaveURL(new RegExp(`article=${articleId}(&|$)`))

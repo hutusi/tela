@@ -4,7 +4,9 @@
     "tagline": "Independent blogs, in any language."
   },
   "common": {
-    "quoted": "“{text}”"
+    "quoted": "“{text}”",
+    "likeCount": "{n, plural, one {# like} other {# likes}}",
+    "recommendCount": "{n, plural, one {# recommendation} other {# recommendations}}"
   },
   "nav": {
     "reading": "Reading",
