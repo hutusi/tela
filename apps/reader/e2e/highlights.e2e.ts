@@ -64,6 +64,13 @@ async function clearHighlights(request: APIRequestContext): Promise<void> {
   if (!res.ok()) throw new Error(`clearing highlights failed: ${res.status()} ${await res.text()}`)
 }
 
+/** Where the selection is on the screen. */
+const selectionBox = (page: Page) =>
+  page.evaluate(() => {
+    const rect = window.getSelection()?.getRangeAt(0).getBoundingClientRect()
+    return rect ? { top: rect.top, bottom: rect.bottom, centre: rect.left + rect.width / 2 } : null
+  })
+
 // Every spec here reads in English, side by side, at the default size and theme.
 test.beforeEach(async ({ page }) => {
   await resetReading(page.request)
@@ -175,6 +182,38 @@ test('a highlight on the translation belongs to that side and that language', as
 
 // The specs below read the post as the one above left it (v3), from no highlights at all.
 const V3_FIRST = 'The first paragraph sets the scene.'
+
+test('the toolbar sits over the selection with its key, and under it on a narrow screen', async ({
+  page,
+}) => {
+  await openChanging(page)
+  await expect(page.getByTestId('body-original').first()).toContainText(V3_FIRST)
+  await selectText(page, 'Something else entirely')
+  const toolbar = page.getByTestId('highlight-toolbar')
+  await expect(toolbar.locator('kbd')).toHaveText('H')
+  await expect(toolbar).toHaveAttribute('data-place', 'above')
+  // Centred 8px above the selection.
+  const selected = await selectionBox(page)
+  const box = await toolbar.boundingBox()
+  expect(selected && box).toBeTruthy()
+  if (!selected || !box) return
+  expect(Math.abs(box.y + box.height - (selected.top - 8))).toBeLessThan(1.5)
+  expect(Math.abs(box.x + box.width / 2 - selected.centre)).toBeLessThan(1.5)
+
+  // Below `lg` it goes under the selection, clear of a phone's own selection menu, with buttons
+  // a finger can hit.
+  await page.setViewportSize({ width: 412, height: 860 })
+  await selectText(page, 'Something else entirely')
+  await expect(toolbar).toHaveAttribute('data-place', 'under')
+  const narrow = await selectionBox(page)
+  const under = await toolbar.boundingBox()
+  expect(narrow && under).toBeTruthy()
+  if (!narrow || !under) return
+  expect(Math.abs(under.y - (narrow.bottom + 8))).toBeLessThan(1.5)
+  expect((await page.getByTestId('highlight-create').boundingBox())?.height).toBeGreaterThanOrEqual(
+    40,
+  )
+})
 
 test('the list follows the post, not the order the highlights were made in', async ({
   page,
