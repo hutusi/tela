@@ -17,7 +17,7 @@
     "logIn": "登录",
     "join": "加入",
     "signOut": "退出登录",
-    "addFeed": "+ 添加订阅",
+    "addFeed": "+ 添加博客",
     "dashboard": "仪表盘",
     "admin": "管理",
     "settings": "设置",
@@ -43,7 +43,7 @@
     "empty": "还没有文章。Tela 汇集的博客一有新作，就会出现在这里。",
     "writers": {
       "title": "你写博客吗？让它成为你的名片。",
-      "intro": "在 Tela 认领你的博客，就有一页属于你：你的名字、你的博客、你推荐的文章。你的网站原样不动。",
+      "intro": "在 Tela 认领你的博客，就有一页属于你：你的名字、你的博客、你推荐的文章。你的博客原样不动。",
       "cta": "制作你的名片"
     },
     "read": "阅读 →",
@@ -147,7 +147,7 @@
   "list": {
     "markAllRead": "全部标为已读",
     "empty": "这里还没有内容。",
-    "emptyHint": "添加一个订阅源开始阅读。",
+    "emptyHint": "添加一个博客开始阅读。",
     "minutes": "{n} 分钟",
     "translatedBadge": "{from} → {to}",
     "loadMore": "更早的文章",
@@ -156,14 +156,14 @@
     "allReadHint": "已读文章被隐藏了，可以在<settings>设置</settings>里重新显示。"
   },
   "reader": {
-    "close": "✕ 关闭",
+    "close": "关闭",
     "like": "喜欢",
     "liked": "已喜欢",
     "recommend": "推荐",
     "minRead": "阅读约 {n} 分钟",
     "readOriginal": "打开原文",
     "readersOnTela": "{n, plural, =0 {在 Tela 上还没有读者} other {# 位 Tela 读者}}",
-    "visibleToAuthor": "你的 ♡ 和推荐对作者可见。",
+    "visibleToAuthor": "作者能看到有多少人喜欢这篇文章，以及你的推荐和推荐语。",
     "pickArticle": "在左侧选择一篇文章。其他语言的文章会与译文并排显示。",
     "unreadCount": "{n} 篇未读",
     "noContent": "这篇文章的订阅源中没有可读内容。",
@@ -178,14 +178,14 @@
     "recommended": "已推荐。",
     "recommendedWithNote": "已附上你的推荐语。",
     "unrecommended": "已取消推荐。",
-    "fetchingFullText": "正在从原站获取全文…",
+    "fetchingFullText": "正在从博客获取全文…",
     "upNext": "下一篇",
     "focus": "专注",
     "markRead": "标为已读",
     "markUnread": "标为未读"
   },
   "add": {
-    "title": "添加订阅",
+    "title": "添加博客",
     "intro": "粘贴博客地址或订阅源 URL。Tela 会找到订阅源并开始抓取。",
     "placeholder": "https://example.blog",
     "find": "查找订阅源",
@@ -195,9 +195,9 @@
     "subscribed": "已订阅",
     "items": "{n} 篇文章",
     "opml": "或导入 OPML 文件",
-    "opmlHint": "从其他阅读器导出。最多 500 个订阅源。",
+    "opmlHint": "从其他阅读器导出。最多 500 个博客。",
     "import": "导入",
-    "imported": "已导入 {n} 个订阅源。",
+    "imported": "已导入 {n} 个博客。",
     "errors": {
       "invalid_url": "这不像是一个 URL。",
       "fetch_failed": "无法访问该地址。",
@@ -341,17 +341,17 @@
     },
     "claim": {
       "title": "你有博客吗？",
-      "intro": "认领你的订阅源，看看有多少人在读你、你的文章反响如何，以及读者推荐时说了什么。",
-      "cta": "认领你的订阅源"
+      "intro": "认领你的博客，看看有多少人在读你、你的文章反响如何，以及读者推荐时说了什么。",
+      "cta": "认领你的博客"
     }
   },
   "site": {
-    "claimedByName": "✓ 由 {name} 认领",
-    "visit": "访问网站 ↗",
+    "claimedByName": "由 {name} 认领",
+    "visit": "访问博客 ↗",
     "writtenIn": "用{lang}写作",
     "cadence": "{key, select, daily {每日更新} weekly {每周更新} biweekly {每月两更} monthly {每月更新} other {最近安静}}",
     "readersOnTela": "{n} 位 Tela 读者",
-    "claimLink": "这是你的网站？认领它",
+    "claimLink": "这是你的博客？认领它",
     "yourTopics": "你的主题",
     "saveTopics": "保存",
     "posts": "文章",
@@ -368,46 +368,46 @@
     "noteOn": "<person></person> 推荐了 <post></post>"
   },
   "claim": {
-    "title": "认领你的订阅源",
-    "intro": "告诉我们你博客的地址。我们会找到它的订阅源，然后请你证明你拥有这个网站。",
+    "title": "认领你的博客",
+    "intro": "告诉我们你博客的地址。我们会找到它的订阅源，然后请你证明你拥有这个博客。",
     "continue": "继续",
     "searching": "正在查找订阅源…",
-    "verifyTitle": "证明你拥有这个网站",
+    "verifyTitle": "证明你拥有这个博客",
     "verifyIntro": "用下面任意一种方式证明 <site></site> 是你的，然后点「验证」。Tela 会逐一检查。",
     "optionGitHub": "你的 GitHub",
-    "optionGitHubHint": "如果你 GitHub 主页上填写的网站是 {site}，而你的网站在页头或页脚链接了这个 GitHub 主页，就什么都不用加。",
-    "optionGitHubUnlinked": "如果你的网站和 GitHub 主页已经互相链接，就什么都不用加：先在<link>设置</link>里把 GitHub 关联到你的 Tela 账号，再回来验证。",
+    "optionGitHubHint": "如果你 GitHub 主页上填写的网站是 {site}，而你的博客在页头或页脚链接了这个 GitHub 主页，就什么都不用加。",
+    "optionGitHubUnlinked": "如果你的博客和 GitHub 主页已经互相链接，就什么都不用加：先在<link>设置</link>里把 GitHub 关联到你的 Tela 账号，再回来验证。",
     "optionRelMe": "指向你 Tela 个人页的链接",
-    "optionRelMeHint": "把它放在网站的页头或页脚。已有的链接也可以：带 rel=\"me\" 的放在首页任何位置都行；不带的，需要放在 404 页面也会显示的页头或页脚里。",
+    "optionRelMeHint": "把它放在博客的页头或页脚。已有的链接也可以：带 rel=\"me\" 的放在首页任何位置都行；不带的，需要放在 404 页面也会显示的页头或页脚里。",
     "optionMeta": "meta 标签",
     "optionMetaHint": "放在首页的 <head> 中。验证完成后可以删除。",
     "verify": "验证",
     "verifyAgain": "再次验证",
-    "checking": "正在检查你的网站…",
+    "checking": "正在检查你的博客…",
     "stillChecking": "这次检查比平时久。可以再验证一次，或者稍后回来查看结果。",
     "failed": "尚未验证。",
     "reasons": {
-      "no_proof": "在 {page} 上什么也没找到：没有 meta 标签，没有指向你 Tela 个人页的链接，也没有与网站互链的 GitHub 链接。Tela 读取的是服务器返回的页面，不运行任何脚本。",
+      "no_proof": "在 {page} 上什么也没找到：没有 meta 标签，没有指向你 Tela 个人页的链接，也没有与博客互链的 GitHub 链接。Tela 读取的是服务器返回的页面，不运行任何脚本。",
       "other_handle": "{page} 链接的是 Tela 个人页 @{found}，而你的是 @{handle}。请改成你的个人页链接。",
       "link_marked": "{page} 上指向{target, select, github {你的 GitHub} other {你 Tela 个人页}}的链接带有 rel=\"{rel}\"，评论区就是这样标记评论者链接的，所以不算数。去掉它，或者加上 rel=\"me\"。",
-      "not_site_wide": "指向{target, select, github {你的 GitHub} other {你 Tela 个人页}}的链接在 {page} 上有，但在 {other}（你网站的 404 页面）上没有。不带 rel=\"me\" 的链接，要放在 404 页面也会显示的页头或页脚里才算数，文章里的链接不算。给它加上 rel=\"me\"，或者把它移到页头或页脚。",
-      "no_not_found_page": "{page} 上指向{target, select, github {你的 GitHub} other {你 Tela 个人页}}的链接没有 rel=\"me\"，所以 Tela 还要在你网站的 404 页面上找到它，但你的网站没有对不存在的地址返回可读取的 404 页面。给链接加上 rel=\"me\"。",
-      "github_website": "你的网站链接了你的 GitHub 主页，但这个主页上填写的网站不是 {site}。到 GitHub 上把它改成 {site}，再验证一次。",
+      "not_site_wide": "指向{target, select, github {你的 GitHub} other {你 Tela 个人页}}的链接在 {page} 上有，但在 {other}（你博客的 404 页面）上没有。不带 rel=\"me\" 的链接，要放在 404 页面也会显示的页头或页脚里才算数，文章里的链接不算。给它加上 rel=\"me\"，或者把它移到页头或页脚。",
+      "no_not_found_page": "{page} 上指向{target, select, github {你的 GitHub} other {你 Tela 个人页}}的链接没有 rel=\"me\"，所以 Tela 还要在你博客的 404 页面上找到它，但你的博客没有对不存在的地址返回可读取的 404 页面。给链接加上 rel=\"me\"。",
+      "github_website": "你的博客链接了你的 GitHub 主页，但这个主页上填写的网站不是 {site}。到 GitHub 上把它改成 {site}，再验证一次。",
       "github_link": "你的 GitHub 主页填写的网站是 {site}，但 {page} 没有链接到这个 GitHub 主页。在页头或页脚加上这个链接。",
       "github_unavailable": "GitHub 没有响应，Tela 无法检查你的 GitHub。稍后再试，或者换一种方式。",
-      "overruled": "管理员已移除或驳回这个认领，所以不带 rel=\"me\" 的链接不再能证明这个网站是你的。给 {page} 上指向{target, select, github {你的 GitHub} other {你 Tela 个人页}}的链接加上 rel=\"me\"，或者添加 meta 标签。",
+      "overruled": "管理员已移除或驳回这个认领，所以不带 rel=\"me\" 的链接不再能证明这个博客是你的。给 {page} 上指向{target, select, github {你的 GitHub} other {你 Tela 个人页}}的链接加上 rel=\"me\"，或者添加 meta 标签。",
       "home_refused": "{page} 拒绝了 Tela 的访问（HTTP {status}）。这通常是防爬虫设置造成的，比如 Cloudflare、防火墙或安全插件。请放行 User-Agent 以“Tela/”开头的请求，然后再验证一次。",
       "home_status": "{page} 返回了 HTTP {status}，而不是 Tela 能读取的页面。确认首页能正常打开，然后再验证一次。",
       "home_unreachable": "Tela 无法读取 {page}：{why, select, timeout {响应时间太长} too_large {页面超出了 Tela 读取的大小} redirect_loop {重定向次数太多} other {无法连接}}。确认它能正常打开，然后再验证一次。"
     },
-    "verified": "已验证。这个网站在 Tela 上属于你了。",
-    "verifiedHint": "它现在会出现在「发现」中。在站点页选择主题，在仪表盘查看读者与喜欢。",
-    "viewSite": "查看站点页",
-    "claimedByOther": "这个网站已被另一位 Tela 成员认领。",
+    "verified": "已验证。这个博客在 Tela 上属于你了。",
+    "verifiedHint": "它现在会出现在「发现」中。在博客页选择主题，在仪表盘查看读者与喜欢。",
+    "viewSite": "查看博客页",
+    "claimedByOther": "这个博客已被另一位 Tela 成员认领。",
     "errors": {
       "invalid_url": "这不像是一个 URL。",
       "fetch_failed": "无法访问该地址。",
-      "no_feed": "该地址下没有找到订阅源。Tela 只收录发布订阅源的网站。",
+      "no_feed": "该地址下没有找到订阅源。Tela 只收录发布订阅源的博客。",
       "rate_limited": "认领尝试太频繁，请稍后再试。"
     },
     "taken": "你选的用户名已经属于别人，所以目前用的还是临时用户名。可以在<link>设置</link>里另选一个。"
@@ -427,7 +427,7 @@
       "submit": "认领你的名片"
     },
     "availability": {
-      "available": "✓ @{handle} 可以使用",
+      "available": "@{handle} 可以使用",
       "taken": "@{handle} 已被占用。",
       "reserved": "@{handle} 是保留名。",
       "invalid": "@{handle} 不能用作用户名。",
@@ -498,7 +498,7 @@
       },
       "connect": {
         "title": "连接你的博客",
-        "body": "用一个指向你名片的链接或一个 meta 标签证明网站属于你；如果你的网站和 GitHub 已经互相链接，什么都不用加。任何有 RSS 或 Atom 订阅源的博客都可以。"
+        "body": "用一个指向你名片的链接或一个 meta 标签证明博客属于你；如果你的博客和 GitHub 已经互相链接，什么都不用加。任何有 RSS 或 Atom 订阅源的博客都可以。"
       },
       "follow": {
         "title": "关注你喜欢的写作者",
@@ -506,10 +506,10 @@
       }
     },
     "yours": {
-      "title": "你的网站还是你的",
+      "title": "你的博客还是你的",
       "nothing": {
         "title": "什么都不用搬",
-        "body": "Tela 读取你已经在发布的订阅源。每篇文章都链接回你的网站。"
+        "body": "Tela 读取你已经在发布的订阅源。每篇文章都链接回你的博客。"
       },
       "ads": {
         "title": "没有广告",
@@ -568,9 +568,9 @@
     "followingButton": "已关注"
   },
   "dashboard": {
-    "title": "你的站点",
-    "intro": "有多少人在读你，你的文章反响如何，读者推荐时说了什么。",
-    "noSites": "你还没有认领站点。",
+    "title": "仪表盘",
+    "intro": "有多少人在读你的博客，你的文章反响如何，读者推荐时说了什么。",
+    "noSites": "你还没有认领博客。",
     "post": "文章",
     "notes": "读者说",
     "noNotes": "还没有推荐语。",
@@ -800,5 +800,8 @@
     "onThisPage": "本页内容",
     "short": "简而言之",
     "updated": "最后更新：{date}"
+  },
+  "toast": {
+    "undo": "撤销"
   }
 }

@@ -206,7 +206,7 @@ test.describe('discover and claim', () => {
     await page.goto('/sites/999999/claim')
     const checking = page.getByTestId('claim-checking')
     const verify = page.getByTestId('claim-verify')
-    await expect(checking).toHaveText('Checking your site…')
+    await expect(checking).toHaveText('Checking your blog…')
     await expect(verify).toBeDisabled()
 
     // Past the two minutes the page asks for: it stops, says so, and offers a fresh check.
@@ -215,7 +215,7 @@ test.describe('discover and claim', () => {
     await expect(verify).toBeEnabled()
     await expect(verify).toHaveText('Verify again')
     await verify.click()
-    await expect(checking).toHaveText('Checking your site…')
+    await expect(checking).toHaveText('Checking your blog…')
     await expect(verify).toBeDisabled()
   })
 

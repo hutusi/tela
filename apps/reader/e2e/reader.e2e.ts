@@ -408,7 +408,7 @@ test.describe('reader', () => {
       buffer: Buffer.from(opml.replaceAll('http://127.0.0.1:4790', FIXTURES)),
     })
     await page.getByTestId('opml-import').click()
-    await expect(page.getByTestId('opml-result')).toContainText(/Imported \d+ feed/)
+    await expect(page.getByTestId('opml-result')).toContainText(/Imported \d+ blog/)
   })
 
   test('a summary-only feed gets its full text fetched', async ({ page }) => {
