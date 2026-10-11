@@ -35,6 +35,30 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **The Tela v5 pass.** Claude Design's v5 handoff, taken where it holds up (ADR 0046):
+  - **Undo** after Mark all read ("Marked 12 posts read.") and after removing a highlight. The
+    change waits on the device while the toast shows, so an undone one never reaches the server.
+  - **A first run** for a member who follows nothing: six blogs from the directory to subscribe to
+    in place, then "Start reading".
+  - **The end of an article** offers Like and Recommend, with Recommend's note inline, before the
+    blog and Up next. A translation still arriving shows what has come and bars for the rest.
+  - **Highlights** that overlap merge, with their notes; the list follows the post's order, and
+    the selection toolbar teaches `H`.
+  - **The Dashboard** has the blog's language and topics, tiles for readers (and those new in 30
+    days), likes and recommendations, a notes column, readers' faces on their notes, and a switch
+    for translation.
+  - **Phones:** the article has a back bar and a bottom bar (Like, Recommend, Mark unread,
+    Original), Recommend is a sheet, and language, theme and Search moved into the account menu,
+    or the footer for a visitor, so the header's pills fit at 360px. Search was unreachable below
+    640px before. Following, profiles, blogs, Settings, the Dashboard, Search and first run on a
+    phone are designed and come next.
+  - **Smaller things:** muted text at AA contrast; read rows that keep their meta readable; drawn
+    icons for every typed glyph, with ↗ kept for links that leave Tela; "blog", not "feed" or
+    "site"; an account menu that offers For writers until a blog is claimed; outlined Subscribe in
+    Discover; an article opened below 1200px starts with the sidebar as its rail.
+  - **Fixed:** Mark all read on Today read every older post in every feed, and on Liked it read
+    everything up to the newest like.
+
 - **Claiming a blog asks less.** A link in its header or footer is enough, once the blog's 404
   page shows it too: to your Tela profile, or to your GitHub when GitHub is on your Tela account
   and names the blog as its website. Only a link on the home page alone needs `rel="me"`. A check

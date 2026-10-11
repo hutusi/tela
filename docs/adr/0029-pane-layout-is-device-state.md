@@ -1,7 +1,8 @@
 # 0029 — Pane layout is device state, not a synced pref
 
 Status: accepted (2026-09-30). Beside 0026, which made typography and theme synced prefs. A hidden
-sidebar became a rail in 0030.
+sidebar became a rail in 0030. Amended by 0046 (2026-10-11): with no choice stored, an article
+opened below 1200px starts with the rail.
 
 ## Context
 

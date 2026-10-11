@@ -216,7 +216,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `/api/v1/translations` | Request a body translation; poll its streamed state |
 | `/api/v1/feeds` | Discover feeds at a URL, add one, import and export OPML |
 | `/api/v1/claims` | Start a claim, see its proofs (and whether the member has a GitHub to claim by), ask for the check; a failed check comes back as a `reason` the page words, or as text |
-| `/api/v1/profile`, `/api/v1/sites/:id/*`, `/api/v1/dashboard`, `/api/v1/search` | Handle and profile, owner-only topics and opt-out, the author dashboard, search past the device's horizon |
+| `/api/v1/profile`, `/api/v1/sites/:id/*`, `/api/v1/dashboard`, `/api/v1/search` | Handle and profile, owner-only topics and opt-out, the author dashboard (per blog its language, topics, readers and those new in 30 days; per post likes, recommendations and notes; readers' notes with their avatars), search past the device's horizon |
 | `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest; which of them read a blog. Only as far as each shows it (ADR 0031). Readers to follow come from Discover's pool, matched on the device (ADR 0044): `suggested` is always empty, kept for shells cached before that, which read it |
 | `GET /api/v1/export` | "Your data": the member's own rows as one JSON file |
 | `GET /api/v1/public/auth` | Which providers the sign-in sheet may offer, `{google, github}`: each once its app is configured (ADR 0036) |
