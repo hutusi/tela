@@ -266,6 +266,23 @@ describe('a change held back for an Undo', () => {
     await pushing
   })
 
+  test('signing out sends the whole queue, a push of 50 at a time', async () => {
+    const store = await member(memoryPersistence(), 'a', never)
+    const sent: number[] = []
+    globalThis.fetch = (async (input: string, init?: RequestInit) => {
+      if (!String(input).startsWith('/api/v1/mutations')) return Response.json(pull(6, {}))
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null
+      const mids: string[] = (body?.mutations ?? []).map((m: { mid: string }) => m.mid)
+      sent.push(mids.length)
+      return Response.json({ applied: mids, rejected: [], seq: 6 })
+    }) as typeof fetch
+    const engine = engineFor(store)
+    for (let id = 1; id <= 120; id++) store.mutate({ type: 'markRead', articleId: id })
+    await engine.flush(3000)
+    expect(sent).toEqual([50, 50, 20])
+    expect(store.unsent(Number.POSITIVE_INFINITY)).toEqual([])
+  })
+
   test('signing out offline waits no longer than it was given', async () => {
     const store = await member(memoryPersistence(), 'a', never)
     // A request that never comes back.

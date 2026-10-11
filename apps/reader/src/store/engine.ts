@@ -231,9 +231,13 @@ export class SyncEngine {
           await this.pushing
           continue
         }
-        const waiting = this.store.unsent().length
+        // The whole queue, not one push's worth: `unsent()` stops at 50, which reads the same
+        // before and after a push of the first 50 out of 120, and so would end the flush with 70
+        // still to send.
+        const waiting = this.store.unsent(Number.POSITIVE_INFINITY).length
         // Stopped, failed, nothing left, or an answer that settled none of it: done.
-        if (!(await this.send({})) || this.store.unsent().length >= waiting) return
+        if (!(await this.send({}))) return
+        if (this.store.unsent(Number.POSITIVE_INFINITY).length >= waiting) return
       }
     }
     let timer: ReturnType<typeof setTimeout> | undefined
