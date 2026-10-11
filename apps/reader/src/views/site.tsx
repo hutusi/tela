@@ -6,6 +6,7 @@
 import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { CHECK, Glyph, HEART } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { SiteAvatar } from '../components/site-avatar'
 import { blogsHref } from '../lib/discover-href'
@@ -63,10 +64,13 @@ export function SiteView({
                 <span>·</span>
                 <Link
                   to={`/@${claimant.handle}`}
-                  className="text-accent"
+                  className="inline-flex items-center gap-1 text-accent"
                   data-testid="claimed-badge"
                   title={td('claimed')}
                 >
+                  <Glyph size={12} className="block shrink-0">
+                    {CHECK}
+                  </Glyph>
                   {t('claimedByName', { name: author ?? '' })}
                 </Link>
               </>
@@ -186,7 +190,12 @@ export function SiteView({
                       ) : null}
                       <div className="flex gap-3 text-[12px] text-muted">
                         <span>{t('minutes', { n: a.readingMinutes || 1 })}</span>
-                        <span>♡ {a.likeCount}</span>
+                        <span className="flex items-center gap-1">
+                          <Glyph size={12} className="block shrink-0">
+                            {HEART}
+                          </Glyph>
+                          {a.likeCount}
+                        </span>
                         {shown.badge ? <span>{shown.badge}</span> : null}
                       </div>
                     </div>

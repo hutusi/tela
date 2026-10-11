@@ -37,6 +37,7 @@ import {
   withoutDoor,
 } from '../lib/use-sign-in'
 import { useSession } from '../session'
+import { CLOSE, Glyph } from './glyph'
 import { LogoMark } from './logo'
 
 /**
@@ -644,7 +645,7 @@ function Sheet({
         data-testid="door-close"
         className="absolute top-3.5 right-3.5 flex size-8 items-center justify-center rounded-lg text-[16px] text-muted hover:bg-paper hover:text-ink"
       >
-        <span aria-hidden="true">✕</span>
+        <Glyph>{CLOSE}</Glyph>
       </button>
     </dialog>
   )

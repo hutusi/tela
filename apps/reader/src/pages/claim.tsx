@@ -11,6 +11,7 @@ import type { ClaimReason } from '@tela/shared'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { CHECK, Glyph } from '../components/glyph'
 import { useTitle } from '../lib/title'
 import { apiJson } from '../store/api'
 import { NotFoundPage } from './not-found'
@@ -228,7 +229,10 @@ export function ClaimSitePage() {
           className="rounded-xl border border-accent/40 bg-surface p-5"
           data-testid="claim-verified"
         >
-          <div className="font-medium text-accent">✓ {t('verified')}</div>
+          <div className="flex items-center gap-1.5 font-medium text-accent">
+            <Glyph className="block shrink-0">{CHECK}</Glyph>
+            {t('verified')}
+          </div>
           <p className="mt-1 text-[14px] text-ink-2">{t('verifiedHint')}</p>
           <Link
             to={`/s/${siteId}`}

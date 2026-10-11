@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { FollowButton } from '../components/follow-button'
+import { Glyph, HEART } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { ReasonDot, useReasonText } from '../components/reader-card'
 import { SiteAvatar } from '../components/site-avatar'
@@ -515,7 +516,12 @@ function PostCard({
       ) : null}
       <div className="mt-0.5 flex gap-3 text-[12px] text-muted">
         <span>{t('minutes', { n: post.article.readingMinutes || 1 })}</span>
-        <span>♡ {post.article.likeCount}</span>
+        <span className="flex items-center gap-1">
+          <Glyph size={12} className="block shrink-0">
+            {HEART}
+          </Glyph>
+          {post.article.likeCount}
+        </span>
         <span className="flex-1" />
         <span className="font-medium text-ink">{t('read')}</span>
       </div>

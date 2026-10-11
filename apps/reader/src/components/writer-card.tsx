@@ -9,6 +9,7 @@
 import { useTranslations } from 'use-intl'
 import { personColor } from '../lib/format'
 import type { Sample } from '../lib/sample-card'
+import { CHECK, Glyph } from './glyph'
 import { PersonAvatar } from './person-avatar'
 
 /** What the visitor has typed: their name, the handle it suggests, and their blog's host. */
@@ -92,7 +93,12 @@ function SampleCard({ sample }: { sample: Sample }) {
         <Dot color={sample.blog.color} size={12} radius={3} />
         <b className="font-medium text-ink">{sample.blog.name}</b>
         <span className="text-muted">{sample.host}</span>
-        <span className="text-[12.5px] font-semibold text-accent">✓ {t('card.claimed')}</span>
+        <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent">
+          <Glyph size={12} className="block shrink-0">
+            {CHECK}
+          </Glyph>
+          {t('card.claimed')}
+        </span>
       </div>
       <p
         className="m-0 font-serif text-[19px] leading-[1.4] text-pretty text-body italic"
