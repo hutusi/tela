@@ -3,24 +3,22 @@ import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { type ReadingParams, readingHref } from '../lib/href'
 import type { Filter, SubscriptionItem } from '../store/selectors'
-import { Glyph } from './glyph'
+import { Glyph, HEART, LIST } from './glyph'
 import { SidebarToggle, TOGGLE_ROW } from './sidebar-toggle'
 import { Swatch } from './swatch'
 
 type Props = { subscriptions: SubscriptionItem[]; params: ReadingParams }
 
-/** The filters' glyphs, drawn like the toggle's panel. */
+/** The filters' glyphs: All and Liked from the drawn set, and Today's dot in a circle, its own. */
 const GLYPHS: Record<Filter, ReactNode> = {
-  all: <path d="M3 4.5h10M3 8h10M3 11.5h10" />,
+  all: LIST,
   today: (
     <>
       <circle cx="8" cy="8" r="5.75" />
       <circle cx="8" cy="8" r="2.25" fill="currentColor" stroke="none" />
     </>
   ),
-  liked: (
-    <path d="M8 13.25S2.25 9.9 2.25 6.1C2.25 4.4 3.6 3 5.25 3 6.4 3 7.4 3.6 8 4.6 8.6 3.6 9.6 3 10.75 3c1.65 0 3 1.4 3 3.1 0 3.8-5.75 7.15-5.75 7.15Z" />
-  ),
+  liked: HEART,
 }
 
 // One or the other, never both: two colour utilities in one class list have no defined winner.
