@@ -247,8 +247,9 @@ test('on a phone, a note with no room above the bottom bar opens over its highli
   const PASSAGE_V3 = 'Something else entirely'
   await atV3(request)
   await clearHighlights(request)
-  await page.setViewportSize({ width: 412, height: 560 })
+  // Opened at the desktop width, whose sidebar `openChanging` clicks, then narrowed to a phone.
   await openChanging(page)
+  await page.setViewportSize({ width: 412, height: 560 })
   await expect(page.getByTestId('body-original').first()).toContainText(V3_FIRST)
   await selectText(page, PASSAGE_V3)
   await page.getByTestId('highlight-create').click()

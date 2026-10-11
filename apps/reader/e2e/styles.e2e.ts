@@ -244,9 +244,10 @@ test.describe('stylesheet', () => {
   test('on a phone, a CJK original keeps its own size and leading in side by side', async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 412, height: 860 })
     await page.goto('/reading')
     await synced(page)
+    // Synced at the desktop width, whose sidebar `synced` waits for, then narrowed to a phone.
+    await page.setViewportSize({ width: 412, height: 860 })
     await page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first().click()
     await expect(page.getByTestId('translation-bar')).toHaveAttribute(
       'data-state',

@@ -89,6 +89,23 @@ async function openUnreadBlog(page: Page) {
   return { feedId, dots, unread, watermark: await watermarkOnServer(page.request, feedId) }
 }
 
+/**
+ * Whether tela-api has read each of `ids`: by its own row, or under its feed's watermark and not
+ * marked unread by hand since. A mark-all reads posts marked unread by hand through their rows,
+ * which leaves the watermark where it was when they all sit under it, as they do once an earlier
+ * spec has marked them unread again: so ask about the posts, not the watermark.
+ */
+async function readOnServer(api: APIRequestContext, feedId: number, ids: number[]) {
+  const { states, subscriptions } = await rowsOnServer(api)
+  const watermark = subscriptions.find((sub) => sub.feedId === feedId)?.watermarkId ?? 0
+  return ids.every((id) => {
+    const s = states.find((state) => state.articleId === id)
+    if (s?.readAt != null) return true
+    const byHand = s !== undefined && s.readAt === null && s.readUpdatedAt != null
+    return !byHand && id <= watermark
+  })
+}
+
 /** Whether tela-api has each of `ids` marked unread by hand. */
 async function unreadOnServer(api: APIRequestContext, ids: number[]): Promise<boolean> {
   const { states } = await rowsOnServer(api)
@@ -531,7 +548,7 @@ test.describe('reader', () => {
     await resetReading(page.request)
     await page.clock.install()
     const pushed = pushesFrom(page)
-    const { feedId, dots, unread, watermark } = await openUnreadBlog(page)
+    const { feedId, dots, unread } = await openUnreadBlog(page)
     try {
       await page.getByTestId('mark-all-read').click()
       await expect(dots).toHaveCount(0)
@@ -544,7 +561,7 @@ test.describe('reader', () => {
       // The toast's five seconds are up, and the change goes with it.
       await page.clock.runFor(3000)
       await expect(toast).toHaveCount(0)
-      await expect.poll(() => watermarkOnServer(page.request, feedId)).toBeGreaterThan(watermark)
+      await expect.poll(() => readOnServer(page.request, feedId, unread)).toBe(true)
       expect(markAllsIn(pushed)).toHaveLength(1)
     } finally {
       await push(
@@ -558,7 +575,7 @@ test.describe('reader', () => {
     page,
   }) => {
     await resetReading(page.request)
-    const { feedId, dots, unread, watermark } = await openUnreadBlog(page)
+    const { feedId, dots, unread } = await openUnreadBlog(page)
     try {
       await page.getByTestId('mark-all-read').click()
       await expect(dots).toHaveCount(0)
@@ -576,7 +593,7 @@ test.describe('reader', () => {
         Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
         document.dispatchEvent(new Event('visibilitychange'))
       })
-      await expect.poll(() => watermarkOnServer(page.request, feedId)).toBeGreaterThan(watermark)
+      await expect.poll(() => readOnServer(page.request, feedId, unread)).toBe(true)
 
       // Too late to take back, so the Undo marks each post it read unread, after it.
       await expect(toast).toBeVisible()
