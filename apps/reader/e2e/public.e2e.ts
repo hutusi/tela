@@ -269,11 +269,15 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     await expect(recs).toContainText(title.slice(0, 20))
     await expect(recs).toContainText('Worth your time')
 
-    // The member claimed the fixture site earlier, so the note reaches the dashboard.
+    // The member claimed the fixture site earlier, so the note reaches the dashboard. A writer's
+    // menu offers the Dashboard in For writers' place, never both.
+    await page.getByTestId('account-menu').click()
+    await expect(page.getByTestId('nav-dashboard')).toBeVisible()
+    await expect(page.getByTestId('nav-for-writers')).toHaveCount(0)
     const answered = page.waitForResponse(
       (r) => new URL(r.url()).pathname === '/api/v1/dashboard' && r.ok(),
     )
-    await fromAccountMenu(page, 'nav-dashboard')
+    await page.getByTestId('nav-dashboard').click()
     const site = page.getByTestId('dashboard-site')
     await expect(site).toHaveCount(1)
     const { sites } = (await (await answered).json()) as {
