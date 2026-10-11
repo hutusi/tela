@@ -160,8 +160,9 @@ export function ReadingPage() {
   // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
   // article, [ shows or hides the sidebar, f the list too while one is open, o opens its original,
   // l likes or unlikes it and m marks it read or unread, u presses the toast's Undo while it shows,
-  // ? lists the keys. Typing in a field is never a shortcut, and a popover that handles Esc itself
-  // marks the event so the article stays open.
+  // ? lists the keys. Typing in a field is never a shortcut, nor is a key pressed in a modal
+  // dialog (the phone's Recommend sheet), which the page under it does not own; and a popover that
+  // handles Esc itself marks the event so the article stays open.
   const [help, setHelp] = useState(false)
   // Read when a key is pressed, not when the listener was bound: a second `j` can come before
   // React has rendered the first one's navigation, and the URL is already right by then.
@@ -172,6 +173,7 @@ export function ReadingPage() {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
       const target = e.target as HTMLElement | null
       if (target?.closest('input, textarea, select, [contenteditable]')) return
+      if (document.querySelector('dialog:modal')) return
       const { items, close, help } = keys.current
       const now = parseReadingParams(new URLSearchParams(window.location.search))
       if (e.key === 'u') {

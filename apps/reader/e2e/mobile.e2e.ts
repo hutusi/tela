@@ -447,6 +447,16 @@ test.describe('the article on a phone', () => {
     expect(cancel && submit && submit.width > cancel.width * 1.8).toBe(true)
 
     await field.fill('For the part about the tests.')
+    // The reading page's keys are not the sheet's: j from Cancel neither leaves the article nor
+    // loses the note, and m and ? do nothing under it.
+    const at = page.url()
+    await sheet.getByRole('button', { name: 'Cancel' }).focus()
+    for (const key of ['j', 'm', '?']) await page.keyboard.press(key)
+    await expect(sheet).toBeVisible()
+    await expect(field).toHaveValue('For the part about the tests.')
+    expect(page.url()).toBe(at)
+    await expect(page.getByTestId('mark-read')).toHaveCount(0)
+    await expect(page.getByTestId('shortcuts')).toHaveCount(0)
     const sent = pushed(page, 'For the part about the tests.')
     await sheet.getByTestId('recommend-submit').click()
     const toast = page.getByTestId('toast')
