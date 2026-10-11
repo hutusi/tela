@@ -22,11 +22,13 @@ const ACTIVE: [NavKey, RegExp][] = [
 
 // Below `sm` the gaps and the pills' sides are the phone's (Tela v5): the member's three pills
 // then fit at 360px beside the avatar alone, with some 15px to spare in English (Figtree,
-// measured: a 231px row in 246px), and 35px in French.
+// measured: a 231px row in 246px), and 35px in French. The header's own gap parts its groups, 28px
+// from `lg` (the lockup, the nav, search); the controls on the right sit 8px apart in `CONTROLS`.
 const HEADER =
   'sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-line bg-paper px-4 sm:gap-2.5 lg:gap-7 lg:px-7'
 const NAV =
   'flex min-w-0 gap-0.5 overflow-x-auto whitespace-nowrap text-sm sm:gap-1 lg:shrink-0 [scrollbar-width:none]'
+const CONTROLS = 'flex shrink-0 items-center gap-2'
 
 function Lockup() {
   return (
@@ -105,9 +107,9 @@ function VisitorHeader() {
         {pill('writers', '/writers')}
       </nav>
       <div className="flex-1" />
-      <ThemeMenu />
-      <VisitorLanguage className="hidden shrink-0 sm:block" />
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className={CONTROLS}>
+        <ThemeMenu />
+        <VisitorLanguage className="hidden shrink-0 sm:block" />
         <Link
           to="/login"
           onClick={opens({ mode: 'login' })}
@@ -152,23 +154,26 @@ function MemberHeader() {
         {member ? pill('following', '/following') : null}
       </nav>
       <div className="flex-1" />
-      <Link
-        to="/search"
-        aria-label={t('search')}
-        data-testid="search-link"
-        className={`${CONTROL} hidden w-[34px] shrink-0 items-center justify-center text-muted hover:text-ink hover:no-underline sm:flex xl:hidden`}
-      >
-        <Glyph>{SEARCH}</Glyph>
-      </Link>
       <SearchField
         key={query}
         query={query}
         testId="search-input"
         className="hidden w-60 min-w-0 items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] text-muted focus-within:border-muted xl:flex"
       />
-      <ThemeMenu />
-      {member ? <MemberLanguage className="hidden shrink-0 sm:block" /> : null}
-      {member ? <AccountMenu /> : null}
+      <div className={CONTROLS}>
+        {/* Below `xl` search is one more circle of the family, so it sits with them. */}
+        <Link
+          to="/search"
+          aria-label={t('search')}
+          data-testid="search-link"
+          className={`${CONTROL} hidden w-[34px] shrink-0 items-center justify-center text-muted hover:text-ink hover:no-underline sm:flex xl:hidden`}
+        >
+          <Glyph>{SEARCH}</Glyph>
+        </Link>
+        <ThemeMenu />
+        {member ? <MemberLanguage className="hidden shrink-0 sm:block" /> : null}
+        {member ? <AccountMenu /> : null}
+      </div>
     </header>
   )
 }

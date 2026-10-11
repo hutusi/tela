@@ -146,6 +146,32 @@ test.describe('stylesheet', () => {
   }
 
   /**
+   * The circles on the right are one group, 8px apart, as Tela v5 draws them: the header's own
+   * gap, 28px from `lg`, parts the groups, and between each circle it read as four loose buttons.
+   * Below `xl` search is a circle of the group; from `xl` the field is 28px before it.
+   */
+  for (const [width, ids, gaps] of [
+    [1024, ['search-link', 'theme-menu', 'language-menu', 'account-menu'], [8, 8, 8]],
+    [1280, ['search-field', 'theme-menu', 'language-menu', 'account-menu'], [28, 8, 8]],
+  ] as const) {
+    test(`the header's controls sit together at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto('/reading')
+      await page.getByTestId('account-menu').waitFor({ state: 'attached' })
+      const measured = await page.evaluate((names) => {
+        const boxes = names.map((id) =>
+          (id === 'search-field'
+            ? (document.querySelector('header form') as HTMLElement)
+            : (document.querySelector(`header [data-testid="${id}"]`) as HTMLElement)
+          ).getBoundingClientRect(),
+        )
+        return boxes.slice(1).map((box, i) => Math.round(box.left - (boxes[i]?.right ?? 0)))
+      }, ids)
+      expect(measured).toEqual(gaps)
+    })
+  }
+
+  /**
    * The width budget above is spent in English. French labels run longer ("Tableau de bord"),
    * and every control but the nav is `shrink-0`, so a longer label takes its room from
    * the nav or pushes the header past the viewport: measure each interface language. The account's

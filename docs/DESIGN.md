@@ -115,7 +115,11 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
   the sheet over the page once the script runs (a modified click still opens the page).
 - The controls on the right are one family (`header-control.ts`): 34px tall and round, on
   `surface`, in a `line` border that darkens on hover. The search link, the theme menu and the
-  language circle are 34px circles of it.
+  language circle are 34px circles of it. They are one group too, 8px apart with the avatar (or a
+  visitor's Log in and Join), as Tela v5 draws them: the header's own gap (28px from `lg`) parts
+  the lockup, the nav, the search field and that group, and between each circle it made four
+  loose buttons of them. Below `xl` the search link is a circle of the group; from `xl` the field
+  sits 28px before it. `styles.e2e.ts` measures both.
 - The language circle (`LanguageMenu`, ADR 0040) is one control for every reader, in both headers
   and on `/login`: a member's and a visitor's from `sm` up, the sign-in page's always. Below `sm`
   a member finds it at the top of the account menu and a visitor in the footer (Tela v5).
@@ -183,13 +187,13 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
   (Discover, For writers, Join) has about 50px; in French it is 14px short and scrolls.
   `styles.e2e.ts` measures this at 640, 768, 800, 1024 and 1280, and from `sm` up no pill may be
   clipped. With the theme menu and the language circle in, the member's row is 247px on macOS,
-  and 640px, the tightest case, leaves it 141px to spare (269px at 768, 343px at 1024; 161px at
-  640 in French, whose row is 227px): the 72px the Read-in button left at its widest label, plus
-  the 70 or so the circle saves. CI's Linux Chromium sets text about 2% wider. Below `sm` it
+  and 640px, the tightest case, leaves it 147px to spare (275px at 768, 403px at 1024; 167px at
+  640 in French, whose row is 227px): the 72px the Read-in button left at its widest label, the
+  70 or so the circle saves, and 6px from grouping the controls (60px from `lg`). CI's Linux Chromium sets text about 2% wider. Below `sm` it
   scrolls, 196px of it showing at 360, where 122px did beside the button. `door.e2e.ts` measures the
   visitor's header at 360, 412, 640, 768, 800, 1024 and 1280 with the same helper
-  (`measureHeader` in `e2e/helpers.ts`): its 175px row is never clipped (161px to spare at 640,
-  65px in French), and no control wraps. Both specs hold both circles to 34 × 34px, so a fifth
+  (`measureHeader` in `e2e/helpers.ts`): its 175px row is never clipped (163px to spare at 640,
+  67px in French), and no control wraps. Both specs hold both circles to 34 × 34px, so a fifth
   language or a longer label cannot quietly take the room back.
 - Reading view (`/reading`) is a three-column grid on `lg+`: sidebar 220px, list
   `minmax(280px, 380px)` or 260px when an article is open, main `minmax(0, 1fr)`. Sidebar and
