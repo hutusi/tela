@@ -58,6 +58,31 @@ test.describe('mobile fallback', () => {
     )
   })
 
+  test('the Feeds menu: the list on the left, Feeds on the right, and rows a finger can hit', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    const nav = page.getByTestId('mobile-nav')
+    const summary = nav.locator('summary')
+    await expect(summary).toContainText('All articles')
+    await expect(summary).toContainText('Feeds')
+    await summary.click()
+    await expect(nav).toHaveAttribute('open', '')
+    await page.getByTestId('mobile-subscription').first().waitFor()
+    const heights = await nav
+      .locator('a[href^="/reading"]')
+      .evaluateAll((links) => links.map((a) => a.getBoundingClientRect().height))
+    expect(Math.min(...heights), 'a row under 40px').toBeGreaterThanOrEqual(40)
+    const gear = await nav.getByTestId('manage-subscriptions').boundingBox()
+    expect(gear && { width: Math.round(gear.width), height: Math.round(gear.height) }).toEqual({
+      width: 44,
+      height: 32,
+    })
+    // The last row adds a blog.
+    await expect(nav.locator('a').last()).toHaveText('+ Add a blog')
+    await expect(nav.locator('a').last()).toHaveAttribute('href', '/add')
+  })
+
   test('the account menu opens on a phone, and holds the way to Settings', async ({ page }) => {
     await page.goto('/reading')
     await page.getByTestId('account-menu').click()
