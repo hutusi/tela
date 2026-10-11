@@ -7,6 +7,7 @@ export function Swatch({
   size = 18,
   round = false,
   color,
+  className = '',
 }: {
   id: number
   title: string
@@ -14,11 +15,13 @@ export function Swatch({
   round?: boolean
   /** A colour of its own instead of the feed's, for a blog that is not one (For writers' sample). */
   color?: string
+  /** For a page the edge renders: CSS alone resizes it there, with `!` to beat the inline size. */
+  className?: string
 }) {
   return (
     <span
       aria-hidden="true"
-      className="flex shrink-0 items-center justify-center font-semibold text-white"
+      className={`flex shrink-0 items-center justify-center font-semibold text-white ${className}`}
       style={{
         width: size,
         height: size,
