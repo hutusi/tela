@@ -13,6 +13,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslations } from 'use-intl'
 import type { Anchor } from '../lib/anchor'
 import { type Side, selectedAnchor } from '../lib/highlight-dom'
@@ -114,7 +115,9 @@ export function HighlightToolbar({
       ? 'min-h-10 gap-2 rounded-lg px-3.5 text-sm'
       : 'gap-1.5 rounded-md px-2.5 py-1.5 text-[13px]'
   }`
-  return (
+  // In <body>, not the pane: while the pane fades in, its transform is the containing block of
+  // anything fixed inside it, and a selection made then put the toolbar 56px off.
+  return createPortal(
     <div
       ref={box}
       className={`fixed z-20 flex gap-0.5 bg-ink p-1 shadow-[0_8px_24px_rgba(0,0,0,.18)] ${
@@ -148,7 +151,8 @@ export function HighlightToolbar({
       >
         {t('addNote')}
       </button>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -241,7 +245,8 @@ export function HighlightNote({
     window.innerWidth - NOTE_WIDTH - NOTE_EDGE,
   )
 
-  return (
+  // In <body>, as the toolbar is: the pane's fade would otherwise place it.
+  return createPortal(
     <div
       ref={box}
       role="dialog"
@@ -293,7 +298,8 @@ export function HighlightNote({
           {t('save')}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
