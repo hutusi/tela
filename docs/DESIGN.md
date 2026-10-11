@@ -833,7 +833,8 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
     *Add a note*, 13/500, with an `on-primary` 14% hover. It sits centred 8 px above the
     selection, below it when the 56 px header leaves no room, and follows the selection as the
     page scrolls (v5 hid it on scroll; clearing a reader's selection because they scrolled helps
-    nobody). On a coarse pointer or below `lg` it sits under the selection, clear of the system's
+    nobody) and as an animation ends: a selection made while the pane fades in rises 4 px with
+    it, and nothing else says so. On a coarse pointer or below `lg` it sits under the selection, clear of the system's
     own menu, with 40 px buttons, a 12 px radius and no key cap, above the bottom bar
     (`--bottom-bar`). Its buttons keep the selection (`mousedown` is prevented).
   - Clicking painted text opens a 320 px note popover, 14 px under the click (above it when it

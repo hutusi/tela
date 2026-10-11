@@ -207,9 +207,23 @@ test('the toolbar sits over the selection with its key, and under it on a narrow
   request,
 }) => {
   await atV3(request)
-  await openChanging(page)
+  // The selection is made while the pane is still fading in, rising 4px: a CI runner did so by
+  // chance, and the toolbar stayed below it. Slowed 50 times the fade is still running, every time.
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Animation.enable')
+  await page.goto('/reading')
+  await synced(page)
+  await page.getByTestId('subscription').filter({ hasText: 'Changing Fixture' }).click()
+  await cdp.send('Animation.setPlaybackRate', { playbackRate: 0.02 })
+  await page.getByTestId('article-row').filter({ hasText: 'A post that changes' }).click()
   await expect(page.getByTestId('body-original').first()).toContainText(V3_FIRST)
   await selectText(page, 'Something else entirely')
+  await cdp.send('Animation.setPlaybackRate', { playbackRate: 1 })
+  // Measured before the fade ends, the selection has not moved yet, and a toolbar left behind
+  // still passes: wait for the pane's fade to end (only the pane's: a closed menu's never does).
+  await page
+    .getByTestId('reader')
+    .evaluate((pane) => Promise.all(pane.getAnimations().map((a) => a.finished)))
   const toolbar = page.getByTestId('highlight-toolbar')
   await expect(toolbar.locator('kbd')).toHaveText('H')
   // The key cap is shown, not read: the button is named by its label, and says its key apart.
@@ -217,13 +231,18 @@ test('the toolbar sits over the selection with its key, and under it on a narrow
   await expect(create).toHaveAccessibleName('Highlight')
   await expect(create).toHaveAttribute('aria-keyshortcuts', 'h')
   await expect(toolbar).toHaveAttribute('data-place', 'above')
-  // Centred 8px above the selection.
-  const selected = await selectionBox(page)
-  const box = await toolbar.boundingBox()
-  expect(selected && box).toBeTruthy()
-  if (!selected || !box) return
-  expect(Math.abs(box.y + box.height - (selected.top - 8))).toBeLessThan(1.5)
-  expect(Math.abs(box.x + box.width / 2 - selected.centre)).toBeLessThan(1.5)
+  // Centred 8px above the selection, once the fade has ended and moved it.
+  await expect
+    .poll(async () => {
+      const selected = await selectionBox(page)
+      const box = await toolbar.boundingBox()
+      if (!selected || !box) return Number.POSITIVE_INFINITY
+      return Math.max(
+        Math.abs(box.y + box.height - (selected.top - 8)),
+        Math.abs(box.x + box.width / 2 - selected.centre),
+      )
+    })
+    .toBeLessThan(1.5)
 
   // Below `lg` it goes under the selection, clear of a phone's own selection menu, with buttons
   // a finger can hit.

@@ -38,11 +38,15 @@ export function useSelectedAnchor(root: React.RefObject<HTMLElement | null>): Se
     document.addEventListener('selectionchange', update)
     window.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
+    // The pane fades in rising 4px, and a selection made meanwhile moves with it, with no
+    // selectionchange to say so: the toolbar stayed where the selection was when it was made.
+    document.addEventListener('animationend', update)
     return () => {
       cancelAnimationFrame(frame)
       document.removeEventListener('selectionchange', update)
       window.removeEventListener('scroll', update, true)
       window.removeEventListener('resize', update)
+      document.removeEventListener('animationend', update)
     }
   }, [root])
   return selected
