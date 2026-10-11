@@ -770,6 +770,7 @@
     "save": "Enregistrer",
     "cancel": "Annuler",
     "remove": "Supprimer le surlignage",
+    "removed": "Surlignage supprimé.",
     "privacy": "Vos surlignages et vos notes sont privés.<keyboard> Sélectionnez du texte et appuyez sur H pour surligner.</keyboard>",
     "detached": "Ce passage ne figure plus dans l’article.",
     "elsewhere": "Dans une autre mise en page ou une autre langue : changez pour le voir."

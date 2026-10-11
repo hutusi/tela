@@ -770,6 +770,7 @@
     "save": "儲存",
     "cancel": "取消",
     "remove": "刪除劃線",
+    "removed": "已刪除劃線。",
     "privacy": "劃線和筆記只有你能看到。<keyboard>選中文字後按 H 即可劃線。</keyboard>",
     "detached": "文章裡已經沒有這段文字了。",
     "elsewhere": "在另一種版式或語言中，切換即可看到。"

@@ -6,6 +6,7 @@ import { HIGHLIGHT_NOTE_MAX } from '@tela/shared'
 import type { HighlightRow } from '@tela/sync'
 import {
   type CSSProperties,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -15,6 +16,8 @@ import {
 import { useTranslations } from 'use-intl'
 import type { Anchor } from '../lib/anchor'
 import { type Side, selectedAnchor } from '../lib/highlight-dom'
+import { newId } from '../lib/id'
+import { showToast, UNDO_HOLD_MS } from '../lib/toasts'
 import type { HighlightItem } from '../lib/use-highlights'
 import { useStore } from '../store/hooks'
 
@@ -149,7 +152,51 @@ export function HighlightToolbar({
   )
 }
 
-/** A highlight's note, and the way to remove it, next to where it was clicked. */
+/**
+ * Remove a highlight, with an Undo while the toast shows. The removal is held on the device until
+ * then (`UNDO_HOLD_MS`), so an Undo takes it back before tela-api hears of it and the highlight
+ * keeps its id. Once sent it cannot be taken back (a deleted highlight stays deleted), so an Undo
+ * after that makes the same passage and note again under a new id.
+ */
+function useRemoveHighlight(): (row: HighlightRow) => void {
+  const t = useTranslations('highlights')
+  const undo = useTranslations('toast')('undo')
+  const { store } = useStore()
+  return useCallback(
+    (row: HighlightRow) => {
+      const removed = store.mutate(
+        { type: 'deleteHighlight', id: row.id },
+        { holdMs: UNDO_HOLD_MS },
+      )
+      if (!removed) return
+      showToast(t('removed'), {
+        label: undo,
+        run: () => {
+          if (store.retract(removed.mid)) return
+          const { articleId, contentKey, side, lang, leafId, start, end, quote, prefix, suffix } =
+            row
+          store.mutate({
+            type: 'putHighlight',
+            id: newId(),
+            ...{ articleId, contentKey, side, lang, leafId, start, end, quote, prefix, suffix },
+            note: row.note,
+          })
+        },
+      })
+    },
+    [store, t, undo],
+  )
+}
+
+/** Where the note opens for a point: 14px under it, or over it where it would not fit. */
+const NOTE_WIDTH = 320
+const NOTE_HEIGHT = 250
+const NOTE_EDGE = 12
+
+/**
+ * A highlight's note, and the way to remove it, next to where it was clicked. Keyed by the
+ * highlight by its caller, so the text it holds is always that highlight's.
+ */
 export function HighlightNote({
   row,
   at,
@@ -161,6 +208,7 @@ export function HighlightNote({
 }) {
   const t = useTranslations('highlights')
   const { store } = useStore()
+  const removeHighlight = useRemoveHighlight()
   const [note, setNote] = useState(row.note ?? '')
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -182,18 +230,23 @@ export function HighlightNote({
     onClose()
   }
   const remove = () => {
-    store.mutate({ type: 'deleteHighlight', id: row.id })
     onClose()
+    removeHighlight(row)
   }
-  const top = Math.min(at.y + 12, window.innerHeight - 240)
-  const left = Math.min(Math.max(at.x - 160, 12), window.innerWidth - 332)
+  const below = at.y + 14
+  const top =
+    below + NOTE_HEIGHT > window.innerHeight ? Math.max(NOTE_EDGE, at.y - 14 - NOTE_HEIGHT) : below
+  const left = Math.min(
+    Math.max(at.x - NOTE_WIDTH / 2, NOTE_EDGE),
+    window.innerWidth - NOTE_WIDTH - NOTE_EDGE,
+  )
 
   return (
     <div
       ref={box}
       role="dialog"
       aria-label={t('noteLabel')}
-      className="fixed z-20 flex w-80 flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.14)] animate-fade"
+      className="fixed z-20 flex w-80 flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.12)] animate-fade"
       style={{ top, left }}
       data-testid="highlight-note"
       onKeyDown={(e) => {
@@ -203,9 +256,9 @@ export function HighlightNote({
         }
       }}
     >
-      <blockquote className="m-0 line-clamp-3 border-l-2 border-highlight-strong pl-2.5 font-serif text-[15px] italic leading-snug text-ink-2">
-        {row.quote}
-      </blockquote>
+      <div className="line-clamp-3 font-serif text-[15px] leading-[1.45] text-ink-2">
+        <span className="bg-highlight box-decoration-clone">{row.quote}</span>
+      </div>
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value.slice(0, HIGHLIGHT_NOTE_MAX))}
@@ -218,11 +271,12 @@ export function HighlightNote({
         <button
           type="button"
           onClick={remove}
-          className="flex-1 text-left text-[13px] text-muted hover:text-danger"
+          className="py-1.5 text-[13px] text-muted hover:text-danger"
           data-testid="highlight-remove"
         >
           {t('remove')}
         </button>
+        <span className="flex-1" />
         <button
           type="button"
           onClick={onClose}
@@ -256,7 +310,7 @@ export function HighlightList({
   onOpen: (item: HighlightItem, at: { x: number; y: number }) => void
 }) {
   const t = useTranslations('highlights')
-  const { store } = useStore()
+  const removeHighlight = useRemoveHighlight()
   if (items.length === 0) return null
   return (
     <section className="mt-9 max-w-(--reader-measure)" data-testid="highlights">
@@ -304,7 +358,7 @@ export function HighlightList({
                   <button
                     type="button"
                     className="hover:text-danger"
-                    onClick={() => store.mutate({ type: 'deleteHighlight', id: item.row.id })}
+                    onClick={() => removeHighlight(item.row)}
                   >
                     {t('remove')}
                   </button>

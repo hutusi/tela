@@ -417,7 +417,9 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
           onHighlight={(withNote) => highlight(selectable.side, withNote)}
         />
       ) : null}
-      {noteRow && note ? <HighlightNote row={noteRow} at={note} onClose={closeNote} /> : null}
+      {noteRow && note ? (
+        <HighlightNote key={noteRow.id} row={noteRow} at={note} onClose={closeNote} />
+      ) : null}
     </main>
   )
 }

@@ -770,6 +770,7 @@
     "save": "Save",
     "cancel": "Cancel",
     "remove": "Remove highlight",
+    "removed": "Highlight removed.",
     "privacy": "Highlights and notes are private.<keyboard> Select text and press H to highlight.</keyboard>",
     "detached": "This passage is no longer in the post.",
     "elsewhere": "In another layout or language: switch to see it."

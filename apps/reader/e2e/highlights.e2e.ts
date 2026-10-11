@@ -235,3 +235,35 @@ test('the list follows the post, not the order the highlights were made in', asy
     'Highlights and notes are private. Select text and press H to highlight.',
   )
 })
+
+test('a removed highlight comes back with Undo, under the same id', async ({ page, request }) => {
+  await clearHighlights(request)
+  await openChanging(page)
+  await expect(page.getByTestId('body-original').first()).toContainText(V3_FIRST)
+  const pushed: string[] = []
+  page.on('request', (r) => {
+    if (r.url().includes('/api/v1/mutations')) pushed.push(r.postData() ?? '')
+  })
+  await selectText(page, 'Something else entirely')
+  const saved = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+  await page.getByTestId('highlight-create').click()
+  await saved
+  await expect.poll(async () => (await onServer(request)).length).toBe(1)
+  const [made] = await onServer(request)
+
+  await page.getByTestId('highlight-item').getByRole('button').first().click()
+  await page.getByTestId('highlight-remove').click()
+  await expect(page.getByTestId('highlights')).toHaveCount(0)
+  expect(await painted(page)).toEqual([])
+  await expect(page.getByTestId('toast')).toContainText('Highlight removed.')
+  await page.getByTestId('toast-action').click()
+  await expect(page.getByTestId('highlight-item')).toHaveCount(1)
+  await expect.poll(() => painted(page)).toEqual(['Something else entirely'])
+
+  await page.reload()
+  await expect(page.getByTestId('highlight-item')).toHaveCount(1)
+  await expect.poll(() => painted(page)).toEqual(['Something else entirely'])
+  // Taken back while it was held on the device: tela-api never heard of the removal.
+  expect(pushed.some((body) => body.includes('deleteHighlight'))).toBe(false)
+  expect((await onServer(request)).map(({ id }) => id)).toEqual([made?.id])
+})
