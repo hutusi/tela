@@ -179,7 +179,10 @@ function useRemoveHighlight(): (row: HighlightRow) => void {
   )
 }
 
-/** Where the note opens for a point: 14px under it, or over it where it would not fit. */
+/**
+ * Where the note opens for a point: 14px under it, or over it where it would not fit above the
+ * window's foot, or above the phone reader's bottom bar while that shows (`--bottom-bar`).
+ */
 const NOTE_WIDTH = 320
 const NOTE_HEIGHT = 250
 const NOTE_EDGE = 12
@@ -224,9 +227,16 @@ export function HighlightNote({
     onClose()
     removeHighlight(row)
   }
+  // The bar's height as the toolbar's clamp reads it; none where there is no bar.
+  const bar =
+    Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--bottom-bar'),
+    ) || 0
   const below = at.y + 14
   const top =
-    below + NOTE_HEIGHT > window.innerHeight ? Math.max(NOTE_EDGE, at.y - 14 - NOTE_HEIGHT) : below
+    below + NOTE_HEIGHT > window.innerHeight - bar
+      ? Math.max(NOTE_EDGE, at.y - 14 - NOTE_HEIGHT)
+      : below
   const left = Math.min(
     Math.max(at.x - NOTE_WIDTH / 2, NOTE_EDGE),
     window.innerWidth - NOTE_WIDTH - NOTE_EDGE,
@@ -238,7 +248,7 @@ export function HighlightNote({
       ref={box}
       role="dialog"
       aria-label={t('noteLabel')}
-      className="fixed z-20 flex w-80 flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.12)] animate-fade"
+      className="fixed z-30 flex w-80 flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.12)] animate-fade"
       style={{ top, left }}
       data-testid="highlight-note"
       onKeyDown={(e) => {

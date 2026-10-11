@@ -236,6 +236,51 @@ test('the toolbar sits over the selection with its key, and under it on a narrow
   )
 })
 
+test('on a phone, a note with no room above the bottom bar opens over its highlight', async ({
+  page,
+  request,
+}) => {
+  const PASSAGE_V3 = 'Something else entirely'
+  await atV3(request)
+  await clearHighlights(request)
+  await page.setViewportSize({ width: 412, height: 560 })
+  await openChanging(page)
+  await expect(page.getByTestId('body-original').first()).toContainText(V3_FIRST)
+  await selectText(page, PASSAGE_V3)
+  await page.getByTestId('highlight-create').click()
+  await expect.poll(() => painted(page)).toEqual([PASSAGE_V3])
+
+  // The passage scrolled to 230px above the bar: a note under it (250px, 14px down) would fit in
+  // the window, which is all the note used to ask, but end under the bar.
+  const bar = await page.getByTestId('bottom-bar').boundingBox()
+  expect(bar).not.toBeNull()
+  const top = bar?.y ?? 0
+  const at = await page.evaluate((y) => {
+    const range = [
+      ...((CSS as unknown as { highlights: Map<string, Set<Range>> }).highlights.get(
+        'tela-highlight',
+      ) ?? []),
+    ][0]
+    if (!range) return null
+    window.scrollBy(0, range.getBoundingClientRect().top - y)
+    const rect = range.getBoundingClientRect()
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+  }, top - 230)
+  expect(at).not.toBeNull()
+  if (!at) return
+  const under = at.y + 14 + 250
+  expect(under, 'a note under the passage would reach under the bar').toBeGreaterThan(top)
+  expect(under, 'a note under the passage would fit in the window').toBeLessThanOrEqual(560)
+  await page.mouse.click(at.x, at.y)
+  const note = page.getByTestId('highlight-note')
+  await expect(note).toBeVisible()
+  const box = await note.boundingBox()
+  expect(box && box.y + box.height, 'the note ends under the bar').toBeLessThanOrEqual(top)
+  expect(box && box.y + box.height, 'the note is not over the passage').toBeLessThanOrEqual(at.y)
+  await page.keyboard.press('Escape')
+  await expect(note).toHaveCount(0)
+})
+
 test('the list follows the post, not the order the highlights were made in', async ({
   page,
   request,
