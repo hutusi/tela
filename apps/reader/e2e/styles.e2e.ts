@@ -237,6 +237,31 @@ test.describe('stylesheet', () => {
   }
 
   /**
+   * On a phone a stacked original is set back, 16px at 1.5, and the body under it is 18.5px; CJK
+   * keeps its own 18px at 1.8 on either side. The original's rule was level with the CJK rule and
+   * after it, so a Japanese original came out at 16px/1.5, which only a computed value shows.
+   */
+  test('on a phone, a CJK original keeps its own size and leading in side by side', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 412, height: 860 })
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first().click()
+    await expect(page.getByTestId('translation-bar')).toHaveAttribute(
+      'data-state',
+      /done|partial/,
+      { timeout: 30_000 },
+    )
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'side')
+    const original = page.locator('[data-testid="body-original"][lang="ja"]').first()
+    await expect(original).toHaveCSS('font-size', '18px')
+    await expect(original).toHaveCSS('line-height', '32.4px')
+    const translated = page.locator('[data-testid="body-translated"][lang="en"]').first()
+    await expect(translated).toHaveCSS('font-size', '18.5px')
+  })
+
+  /**
    * Simplified and Traditional share most code points but not every glyph's shape, and the font
    * stacks name SC families: text in Traditional takes the TC ones, through the tokens, so the
    * interface in 繁體中文 and a post or title marked zh-Hant both follow, and Simplified inside a

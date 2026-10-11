@@ -509,13 +509,15 @@
 /*
  * On a phone (below lg, the reader's `BELOW_LG`; Tela Mobile 03): the body at 18.5px, and a
  * stacked original set back as the reference it is, smaller and tighter on its ground. `:where()`
- * keeps the first rule at one class, so a CJK body keeps the size and leading it has above.
+ * keeps the first rule at one class, so a CJK body keeps the size and leading it has above. The
+ * original's rule leaves CJK out by name for the same reason: at (0,2,0), level with the CJK
+ * rule and after it, it set a Chinese or Japanese original at 16px/1.5.
  */
 @media not all and (min-width: 64rem) {
   :where([data-testid="reader"]) .article-body {
     font-size: calc(18.5px * var(--reader-scale, 1));
   }
-  .article-body.article-source {
+  .article-body.article-source:not(:lang(zh), :lang(ja), :lang(ko)) {
     font-size: calc(16px * var(--reader-scale, 1));
     line-height: 1.5;
   }
