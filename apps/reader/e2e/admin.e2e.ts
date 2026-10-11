@@ -10,11 +10,11 @@ import { type Browser, expect, type Page, test } from '@playwright/test'
 import { FRESH } from './fresh'
 import {
   ADMIN_TOKEN,
+  accountMenuOrder,
   addFeed,
   BASE,
   cycle,
   FIXTURES,
-  fromAccountMenu,
   signInRequest,
 } from './helpers'
 
@@ -106,6 +106,20 @@ test('a member the operator has not granted finds nothing at /admin, and no menu
   await page.getByTestId('account-menu').click()
   await expect(page.getByTestId('nav-settings')).toBeVisible()
   await expect(page.getByTestId('nav-admin')).toHaveCount(0)
+  // A member with no verified claim is offered For writers, never a Dashboard of nothing, in the
+  // order of Tela v5: Invite friends last, then the one divider and Sign out.
+  await expect(page.getByTestId('nav-profile')).toBeVisible()
+  await expect(page.getByTestId('nav-dashboard')).toHaveCount(0)
+  await expect(page.getByTestId('nav-for-writers')).toHaveAttribute('href', '/writers')
+  expect(await accountMenuOrder(page)).toEqual([
+    'nav-profile',
+    'nav-subscriptions',
+    'nav-for-writers',
+    'nav-settings',
+    'nav-invites',
+    'sign-out',
+  ])
+  await expect(page.getByTestId('account-panel').getByRole('separator')).toHaveCount(1)
   const scripts = scriptsOf(page)
   await page.goto('/admin')
   await expect(page.getByTestId('not-found')).toBeVisible()
@@ -121,7 +135,19 @@ test('an admin hides a featured blog from Discover, and takes it back with Undo'
   const siteId = await curated(page)
   await page.goto('/reading')
   const scripts = scriptsOf(page)
-  await fromAccountMenu(page, 'nav-admin')
+  await page.getByTestId('account-menu').click()
+  // Admin after Settings, and Invite friends still last.
+  await expect(page.getByTestId('nav-admin')).toBeVisible()
+  expect(await accountMenuOrder(page)).toEqual([
+    'nav-profile',
+    'nav-subscriptions',
+    'nav-for-writers',
+    'nav-settings',
+    'nav-admin',
+    'nav-invites',
+    'sign-out',
+  ])
+  await page.getByTestId('nav-admin').click()
   await expect(page).toHaveURL(/\/admin$/)
   await expect(page.getByTestId('admin-overview')).toBeVisible()
   // The pattern the two specs above rely on does match the chunk an admin loads.

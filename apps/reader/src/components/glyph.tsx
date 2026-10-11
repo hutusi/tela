@@ -100,6 +100,9 @@ export const CLOSE = <path d="m4 4 8 8M12 4l-8 8" />
 /** A chevron pointing down: a list that opens below. Drawn at 12px. */
 export const CHEVRON_DOWN = <path d="m4.5 6.25 3.5 3.5 3.5-3.5" />
 
+/** A chevron pointing right: a list that opens in place of this one. Drawn at 14px. */
+export const CHEVRON_RIGHT = <path d="m6 3.5 4.5 4.5L6 12.5" />
+
 /** A tick: done, chosen, claimed. Drawn at 12px. */
 export const CHECK = <path d="m3.5 8.5 3 3 6-7" />
 

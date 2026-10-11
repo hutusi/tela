@@ -28,6 +28,13 @@
     "writers": "寫作者",
     "themeIs": "主題：{theme}"
   },
+  "menu": {
+    "language": "語言",
+    "theme": "主題",
+    "search": "搜尋",
+    "languageHint": "選單和翻譯都跟隨這個選擇。想翻譯成另一種語言，請到語言設定。",
+    "apartHint": "翻譯跟隨這個選擇，選單保留自己的語言。想讓兩者重新一致，請到語言設定。"
+  },
   "front": {
     "description": "來自世界各地的獨立部落格，各用各的語言，標題譯成你的語言。",
     "hero": "<em>{count} 個獨立部落格</em>，在此匯流。",

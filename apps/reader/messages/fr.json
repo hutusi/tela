@@ -28,6 +28,13 @@
     "writers": "Pour les auteurs",
     "themeIs": "Thème : {theme}"
   },
+  "menu": {
+    "language": "Langue",
+    "theme": "Thème",
+    "search": "Rechercher",
+    "languageHint": "Les menus et les traductions suivent ce choix. Pour traduire dans une autre langue, passez par les paramètres de langue.",
+    "apartHint": "Les traductions suivent ce choix, et les menus gardent leur propre langue. Pour lier à nouveau les deux, passez par les paramètres de langue."
+  },
   "front": {
     "description": "Des blogs indépendants du monde entier, chacun dans sa langue, avec des titres traduits dans la vôtre.",
     "hero": "Une confluence de <em>{count, plural, one {# blog indépendant.} other {# blogs indépendants.}}</em>",

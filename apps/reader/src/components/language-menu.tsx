@@ -14,7 +14,7 @@ import { useUi } from '../ui'
 import { CONTROL, MENU_PANEL, menuItem, useHeaderMenu } from './header-control'
 
 /** A language as a reader looks for it: in its own name and script, as a label ("Français"). */
-const endonym = (code: ReadingLanguage) => asLabel(LANGUAGE_NAMES[code][code] ?? code, code)
+export const endonym = (code: ReadingLanguage) => asLabel(LANGUAGE_NAMES[code][code] ?? code, code)
 
 /**
  * The header's language circle (ADR 0040), for members, visitors and the sign-in page alike: a
@@ -115,14 +115,24 @@ export function LanguageMenu<T extends ReadingLanguage>({
   )
 }
 
+/** What a language control offers, which it shows as chosen, and what choosing one does. */
+export type LanguageChoice = {
+  /** Set apart (ADR 0040): a choice is the translation language only, and the control says so. */
+  apart: boolean
+  options: readonly ReadingLanguage[]
+  value: ReadingLanguage
+  choose: (code: ReadingLanguage) => void
+}
+
 /**
- * A member's circle. Linked, as an account is until Settings sets them apart (its reading language
- * null), a choice is the interface language, and the translation follows it; apart, a choice is
- * the translation language only. Which, is read when the choice is made, not when the menu
- * rendered: a sync may have linked them or set them apart in between, and the account's rows say
- * what a choice changes.
+ * A member's language (ADR 0040), for the header's circle and the phone's account menu alike, so
+ * the two cannot disagree. Linked, as an account is until Settings sets them apart (its reading
+ * language null), a choice is the interface language, and the translation follows it; apart, a
+ * choice is the translation language only. Which, is read when the choice is made, not when the
+ * menu rendered: a sync may have linked them or set them apart in between, and the account's rows
+ * say what a choice changes.
  */
-export function MemberLanguage() {
+export function useMemberLanguage(): LanguageChoice {
   const { store } = useStore()
   const { locale, setLocale } = useUi()
   const readingLang = useReadingLang(locale)
@@ -132,35 +142,47 @@ export function MemberLanguage() {
     if (linked && isUiLocale(code)) setLocale(code)
     else store.mutate({ type: 'setProfile', readingLang: code })
   }
-  return apart ? (
+  return apart
+    ? { apart, options: READING_LANGUAGES, value: readingLang, choose }
+    : { apart, options: UI_LOCALES, value: locale, choose }
+}
+
+/**
+ * A visitor's language, in the header's circle, on the sign-in page and in the phone's footer
+ * (ADR 0035): the interface language, and with it the language titles are translated into, since
+ * a visitor reads in their interface language (`useReadingLang`). The choice is the `tela_locale`
+ * cookie, which the edge renders by, and an account joining on this browser takes it
+ * (`localeToAdopt`).
+ */
+export function useVisitorLanguage(): LanguageChoice {
+  const { locale, setLocale } = useUi()
+  return {
+    apart: false,
+    options: UI_LOCALES,
+    value: locale,
+    choose: (code) => {
+      if (isUiLocale(code)) setLocale(code)
+    },
+  }
+}
+
+/** A member's circle: their language as `useMemberLanguage` has it, with a way to Settings. */
+export function MemberLanguage({ className }: { className: string }) {
+  const { apart, options, value, choose } = useMemberLanguage()
+  return (
     <LanguageMenu
-      options={READING_LANGUAGES}
-      value={readingLang}
+      options={options}
+      value={value}
       onChoose={choose}
-      apart
+      apart={apart}
       settings
-      className="shrink-0"
-    />
-  ) : (
-    <LanguageMenu
-      options={UI_LOCALES}
-      value={locale}
-      onChoose={choose}
-      settings
-      className="shrink-0"
+      className={className}
     />
   )
 }
 
-/**
- * A visitor's circle, in the header and on the sign-in page (ADR 0035): it sets the interface
- * language, and with it the language titles are translated into, since a visitor reads in their
- * interface language (`useReadingLang`). The choice is the `tela_locale` cookie, which the edge
- * renders by, and an account joining on this browser takes it (`localeToAdopt`).
- */
+/** A visitor's circle, in the header and on the sign-in page: `useVisitorLanguage`. */
 export function VisitorLanguage({ className }: { className: string }) {
-  const { locale, setLocale } = useUi()
-  return (
-    <LanguageMenu options={UI_LOCALES} value={locale} onChoose={setLocale} className={className} />
-  )
+  const { options, value, choose } = useVisitorLanguage()
+  return <LanguageMenu options={options} value={value} onChoose={choose} className={className} />
 }

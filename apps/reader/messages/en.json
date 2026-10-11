@@ -28,6 +28,13 @@
     "writers": "For writers",
     "themeIs": "Theme: {theme}"
   },
+  "menu": {
+    "language": "Language",
+    "theme": "Theme",
+    "search": "Search",
+    "languageHint": "Menus and translations follow this choice. To translate into another language, use Language settings.",
+    "apartHint": "Translations follow this choice, and menus keep their own language. To link the two again, use Language settings."
+  },
   "front": {
     "description": "Independent blogs from around the world, each in its own language, with their titles translated into yours.",
     "hero": "A confluence of <em>{count, plural, one {# independent blog.} other {# independent blogs.}}</em>",
