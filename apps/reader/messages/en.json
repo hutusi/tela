@@ -598,7 +598,7 @@
     "readers": "Readers on Tela",
     "newReaders": "+{n} in the last 30 days",
     "likes": "Likes",
-    "likesHint": "on the posts below",
+    "likesAcross": "across {n, plural, one {# post} other {# posts}}",
     "recommendations": "Recommendations",
     "withNote": "{n} with a note",
     "posts": "Posts",

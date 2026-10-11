@@ -168,6 +168,54 @@ describe('dashboard', () => {
       },
     ])
   })
+
+  test('totals the whole blog, not the twenty posts listed, counting only live notes', async () => {
+    await blog(1, 'listed', reader.userId)
+    // Claimed, with no post yet: its totals are zero, not missing.
+    await db.batch([
+      bumpSeq(db),
+      db.run(sql`insert into sites (id, home_url, title, listing, claimed_by, created_at, updated_at, seq)
+        values (2, 'https://blog2.example', 'Blog 2', 'private', ${reader.userId}, 0, 0, ${currentSeq})`),
+      // Twenty-one newer posts, a like each, push the first post out of the list.
+      db.run(sql`insert into articles (feed_id, dedup_key, title, fetched_at, sort_at, like_count, seq)
+        select 1, 'newer' || value, 'Newer ' || value, 0, 100 + value, 1, ${currentSeq}
+        from json_each(${JSON.stringify(Array.from({ length: 21 }, (_, i) => i))}) where true`),
+      db.run(sql`update articles set like_count = 2, recommend_count = 2 where dedup_key = 'p1'`),
+    ] as never)
+    const oldest = (
+      await first<{ id: number }>(db, sql`select id from articles where dedup_key = 'p1'`)
+    )?.id
+    // Two live recommendations, as the post's counter says, one with a note; one taken back.
+    await db.batch([
+      db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+        values ('u-fan', 'u-fan', 'fan@x.test', 1, 0, 0),
+          ('u-quiet', 'u-quiet', 'quiet@x.test', 1, 0, 0),
+          ('u-gone', 'u-gone', 'gone@x.test', 1, 0, 0)`),
+      db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+        values ('u-fan', 'fan', 0, 0), ('u-quiet', 'quiet', 0, 0), ('u-gone', 'gone', 0, 0)`),
+      db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at,
+          deleted_at)
+        values ('u-fan', ${oldest}, 'lovely', 5, 5, null),
+          ('u-quiet', ${oldest}, null, 6, 6, null),
+          ('u-gone', ${oldest}, 'taken back', 7, 7, 8)`),
+    ] as never)
+
+    const res = (await (await api.request('/api/v1/dashboard', { as: reader })).json()) as {
+      sites: { id: number; posts: { title: string }[]; totals: Record<string, number> }[]
+      notes: { note: string }[]
+    }
+    const [one, two] = res.sites
+    expect(one?.posts).toHaveLength(20)
+    expect(one?.posts.map((p) => p.title)).not.toContain('Post on blog 1')
+    // Its note is below the list, so the totals count it: twenty-two posts and every like.
+    expect(res.notes.map((n) => n.note)).toEqual(['lovely'])
+    expect(one?.totals).toEqual({ posts: 22, likes: 23, recommendations: 2, notes: 1 })
+    expect(two).toMatchObject({
+      id: 2,
+      posts: [],
+      totals: { posts: 0, likes: 0, recommendations: 0, notes: 0 },
+    })
+  })
 })
 
 describe('search', () => {

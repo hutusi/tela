@@ -125,7 +125,12 @@ export function memberRoutes(deps: ApiDeps) {
     return c.json({ optOut })
   })
 
-  /** A blogger's view of their blogs: readers, recent posts and how they landed, and notes. */
+  /**
+   * A blogger's view of their blogs: readers, recent posts and how they landed, and notes. The
+   * totals are the whole blog's, every post and every live like, recommendation and note, not the
+   * twenty posts listed: the notes below them cover every post, and a total of the twenty could
+   * say "0 with a note" over a note.
+   */
   routes.get('/dashboard', async (c) => {
     const member = c.get('member')
     const since = deps.clock.now() - 30 * DAY
@@ -134,7 +139,7 @@ export function memberRoutes(deps: ApiDeps) {
     // when none of their live subscriptions to it is older than 30 days, so subscribing to a
     // second feed of a blog they already read does not count them twice. A resubscribe keeps
     // its row's `created_at`, so leaving and coming back is not new either.
-    const [sites, topics, posts, notes] = (await db.batch([
+    const [sites, topics, posts, notes, totals] = (await db.batch([
       db.all(sql`
         select id, title, home_url as "homeUrl", favicon_key as "faviconKey", listing,
           primary_lang as "primaryLang", reader_count as "readerCount",
@@ -176,17 +181,43 @@ export function memberRoutes(deps: ApiDeps) {
         where s.claimed_by = ${member.id} and r.deleted_at is null and r.note is not null
         order by r.created_at desc limit 50
       `),
+      // The counters are live counts (`recount` in sync/push.ts), as the posts' columns are.
+      db.all(sql`
+        select f.site_id as "siteId", count(*) as "posts",
+          coalesce(sum(a.like_count), 0) as "likes",
+          coalesce(sum(a.recommend_count), 0) as "recommendations",
+          (select count(*) from recommendations r join articles a2 on a2.id = r.article_id
+            join feeds f2 on f2.id = a2.feed_id
+            where f2.site_id = f.site_id and r.deleted_at is null and r.note is not null
+          ) as "notes"
+        from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+        where s.claimed_by = ${member.id}
+        group by f.site_id
+      `),
     ] as never)) as unknown as [
       Record<string, unknown>[],
       { siteId: number; topic: string }[],
       Record<string, unknown>[],
       Record<string, unknown>[],
+      { siteId: number; posts: number; likes: number; recommendations: number; notes: number }[],
     ]
+    // A blog with no posts yet has no row to group.
+    const totalsOf = (siteId: unknown) => {
+      const { siteId: _s, ...total } = totals.find((t) => t.siteId === siteId) ?? {
+        siteId,
+        posts: 0,
+        likes: 0,
+        recommendations: 0,
+        notes: 0,
+      }
+      return total
+    }
     return c.json({
       sites: sites.map((s) => ({
         ...s,
         translationOptOut: s.translationOptOut === 1,
         topics: topics.filter((t) => t.siteId === s.id).map((t) => t.topic),
+        totals: totalsOf(s.id),
         posts: posts.filter((p) => p.siteId === s.id).map(({ n: _n, siteId: _s, ...p }) => p),
       })),
       notes,

@@ -26,6 +26,9 @@ type Site = {
   /** Members whose first live subscription to the blog is under 30 days old. */
   newReaders30d: number
   translationOptOut: boolean
+  /** The whole blog's: every post, and every live like, recommendation and note on them. */
+  totals: { posts: number; likes: number; recommendations: number; notes: number }
+  /** The newest twenty. */
   posts: {
     id: number
     title: string
@@ -199,8 +202,7 @@ function SiteDashboard({
       ? t('listedUnder', { listing, topics: topics.join(t('listSeparator')) })
       : listing,
   ].filter((part) => part !== null)
-  const sum = (count: (post: Site['posts'][number]) => number) =>
-    site.posts.reduce((n, post) => n + count(post), 0)
+  const { totals } = site
 
   // One change at a time: a press while one is on its way would send what the switch showed
   // before the first one landed.
@@ -245,17 +247,16 @@ function SiteDashboard({
             </span>
           ) : null}
         </Tile>
-        <Tile label={t('likes')} value={sum((p) => p.likeCount)} testId="dashboard-likes">
-          <span className="text-[12.5px] text-muted">{t('likesHint')}</span>
+        {/* The whole blog's, as the notes below are, not the twenty posts in the table. */}
+        <Tile label={t('likes')} value={totals.likes} testId="dashboard-likes">
+          <span className="text-[12.5px] text-muted">{t('likesAcross', { n: totals.posts })}</span>
         </Tile>
         <Tile
           label={t('recommendations')}
-          value={sum((p) => p.recommendCount)}
+          value={totals.recommendations}
           testId="dashboard-recommendations"
         >
-          <span className="text-[12.5px] text-muted">
-            {t('withNote', { n: sum((p) => p.noteCount) })}
-          </span>
+          <span className="text-[12.5px] text-muted">{t('withNote', { n: totals.notes })}</span>
         </Tile>
       </div>
 

@@ -598,7 +598,7 @@
     "readers": "Lecteurs sur Tela",
     "newReaders": "+{n} ces 30 derniers jours",
     "likes": "J’aime",
-    "likesHint": "sur les articles ci-dessous",
+    "likesAcross": "sur {n, plural, one {# article} other {# articles}}",
     "recommendations": "Recommandations",
     "withNote": "{n} avec un mot",
     "posts": "Articles",

@@ -270,9 +270,18 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     await expect(recs).toContainText('Worth your time')
 
     // The member claimed the fixture site earlier, so the note reaches the dashboard.
+    const answered = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === '/api/v1/dashboard' && r.ok(),
+    )
     await fromAccountMenu(page, 'nav-dashboard')
     const site = page.getByTestId('dashboard-site')
     await expect(site).toHaveCount(1)
+    const { sites } = (await (await answered).json()) as {
+      sites: { totals: { posts: number; likes: number; recommendations: number; notes: number } }[]
+    }
+    const totals = sites[0]?.totals
+    expect(totals).toBeDefined()
+    if (!totals) return
     // Listed (or featured, if the admin spec curated it first), under the topic the owner picked
     // on the blog's page above.
     await expect(page.getByTestId('dashboard-meta')).toContainText(
@@ -282,9 +291,20 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     const readers = page.getByTestId('dashboard-readers')
     await expect(readers).toContainText('Readers on Tela')
     await expect(readers).toContainText(/\+[1-9]\d* in the last 30 days/)
-    await expect(page.getByTestId('dashboard-likes')).toContainText('on the posts below')
-    // The recommended post may be older than the twenty shown, so no count is certain here.
-    await expect(page.getByTestId('dashboard-recommendations')).toContainText(/\d+ with a note/)
+    // The tiles are the whole blog's, whether or not the recommended post is among the twenty
+    // listed: the note just left is one of them, as it is one of the notes below.
+    expect(totals.recommendations).toBeGreaterThanOrEqual(1)
+    expect(totals.notes).toBeGreaterThanOrEqual(1)
+    await expect(page.getByTestId('dashboard-likes').locator('span')).toHaveText([
+      'Likes',
+      String(totals.likes),
+      new RegExp(`^across ${totals.posts} posts?$`),
+    ])
+    await expect(page.getByTestId('dashboard-recommendations').locator('span')).toHaveText([
+      'Recommendations',
+      String(totals.recommendations),
+      `${totals.notes} with a note`,
+    ])
     await expect(site.getByRole('columnheader')).toHaveText([
       'Post',
       'Likes',
@@ -293,6 +313,8 @@ test.describe('recommendations, profile, dashboard, settings', () => {
     ])
     const rows = page.getByTestId('dashboard-post')
     await expect(rows.first()).toBeVisible()
+    // The table is the newest twenty of the posts the tiles count.
+    expect(await rows.count()).toBe(Math.min(20, totals.posts))
     // A post without notes says so with a dash, never a 0.
     const noteCells = rows.locator('td:nth-child(4)')
     await expect(noteCells).toHaveText(

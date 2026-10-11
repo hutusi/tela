@@ -598,7 +598,7 @@
     "readers": "Tela 读者",
     "newReaders": "近 30 天 +{n}",
     "likes": "喜欢",
-    "likesHint": "来自下面这些文章",
+    "likesAcross": "来自 {n} 篇文章",
     "recommendations": "推荐",
     "withNote": "{n} 条附有推荐语",
     "posts": "文章",
