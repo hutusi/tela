@@ -3,6 +3,7 @@
  * translation objects are aligned by block index by construction (ADR 0022), so pairing is
  * zipping; the checks below are for an object that is not what it says.
  */
+import type { ReaderTranslationState } from '../components/translation-bar'
 import type { ContentObject } from '../store/objects'
 
 /** One top-level block as the reader renders it. `id` is its first leaf, else its position. */
@@ -75,6 +76,26 @@ export function pairBlocks(
       pending: t === null,
     }
   })
+}
+
+/**
+ * What Translation mode shows of a translation still arriving: the blocks before the first one
+ * whose chunk has not landed, and `rest` for a placeholder in place of everything after it. Chunks
+ * are fetched side by side and a failed fetch is not asked for again, so a later chunk can land
+ * before an earlier one, or a gap can stay until the finished object replaces them all; a block
+ * after a gap would read as if it followed on from the one before it. A failed translation has
+ * nothing more on the way, so what never came shows as not translated rather than waiting for ever.
+ */
+export function translatedPrefix(
+  pairs: readonly BlockPair[],
+  state: ReaderTranslationState,
+): { pairs: readonly BlockPair[]; rest: boolean } {
+  const first = pairs.findIndex((p) => p.pending)
+  if (first === -1) return { pairs, rest: false }
+  if (state === 'failed') {
+    return { pairs: pairs.map((p) => (p.pending ? { ...p, pending: false } : p)), rest: false }
+  }
+  return { pairs: pairs.slice(0, first), rest: true }
 }
 
 export type BlockRun = { id: string; html: string; untranslated: boolean; pending: boolean }

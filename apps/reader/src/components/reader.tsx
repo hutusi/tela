@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useLocale, useTranslations } from 'use-intl'
 import { mergeAnchors } from '../lib/anchor'
-import { pairBlocks, readerBlocks, runsOf } from '../lib/block-pairs'
+import { pairBlocks, readerBlocks, runsOf, translatedPrefix } from '../lib/block-pairs'
 import { relativeTime } from '../lib/format'
 import { pointAt, renderedLeaves, type Side } from '../lib/highlight-dom'
 import type { ReadingMode } from '../lib/href'
@@ -30,15 +30,22 @@ import {
   siteOfFeed,
 } from '../store/selectors'
 import { FocusToggle } from './focus-toggle'
+import { CLOSE, Glyph } from './glyph'
 import { HighlightList, HighlightNote, HighlightToolbar, useSelectedAnchor } from './highlights'
 import { LikeButton } from './like-button'
 import { PairedBody } from './paired-body'
-import { RecommendPopover } from './recommend-popover'
+import {
+  RecommendButton,
+  RecommendForm,
+  RecommendPopover,
+  useUnrecommend,
+} from './recommend-popover'
+import { SiteAvatar } from './site-avatar'
 import { ReaderPaneSkeleton } from './skeletons'
 import { Swatch } from './swatch'
 import { TranslationBar } from './translation-bar'
 import { TypographyMenu } from './typography-menu'
-import { Untranslated } from './untranslated'
+import { TranslatingRest, Untranslated } from './untranslated'
 
 function Body({
   html,
@@ -70,8 +77,14 @@ type Props = {
   onMode: (mode: ReadingMode) => void
   onClose: () => void
   /** The post after this one in the list as shown, if any: offered at the end of the article. */
-  next: { href: string; title: string } | null
+  next: { href: string; title: string; blog: string } | null
 }
+
+/** Where the one Recommend form is open: the toolbar's popover, or the box at the article's end. */
+type Recommending = 'top' | 'end' | null
+
+/** The end of the article is one column whatever the body above it: the measure, at most 680px. */
+const END = 'max-w-[min(680px,var(--reader-measure))]'
 
 /** While a summary-only post waits for its full text, pull quickly so it appears when it lands. */
 const EXTRACT_PULL_MS = 4000
@@ -128,11 +141,21 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
 
   const view = translation.view
   const shown: ReadingMode = view?.available && wanted ? mode : 'orig'
+  // What Translation mode shows while chunks are still landing: up to the first gap, then a
+  // placeholder. Side by side keeps every row, with the source standing in for what is missing.
+  const state = view?.state ?? 'none'
+  const prefix = useMemo(() => translatedPrefix(pairs, state), [pairs, state])
+  const [recommending, setRecommending] = useState<Recommending>(null)
+  const unrecommend = useUnrecommend()
 
   // Highlights: painted over what is rendered, found again after the post changes (ADR 0026).
   const body = useRef<HTMLDivElement>(null)
   const [note, setNote] = useState<{ id: string; x: number; y: number } | null>(null)
-  const translationSettled = view?.state === 'done' || view?.state === 'partial'
+  // Settled once it is finished and on screen in full: a synced row can say done while the final
+  // object is still loading, and a block still in source text would take an anchor meant for the
+  // translation.
+  const translationSettled =
+    (state === 'done' || state === 'partial') && !pairs.some((p) => p.pending)
   const rendered = useMemo(() => ({ shown, object, pairs }), [shown, object, pairs])
   // The post's leaves in order, which the list of highlights follows: both sides share the ids.
   const leafOrder = useMemo(
@@ -234,8 +257,19 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
   const read = shownRead(tables, article, now, true, prefs.markOnOpen)
   const title = showTrans ? titles.title : article.title
   const runs = showTrans
-    ? runsOf(pairs, 'translated')
+    ? runsOf(prefix.pairs, 'translated')
     : [{ id: 'o', html: original.map((b) => b.html).join(''), untranslated: false, pending: false }]
+  const liked = isLiked(tables, article.id)
+  const recommended = isRecommended(tables, article.id)
+  const recommendNote = tables.recommendations.get(article.id)?.note ?? null
+  // A count below three says who else reads it, as public pages do not (ADR 0041).
+  const readers = site?.readerCount ?? 0
+  const about = [
+    site?.description,
+    readers >= COMMUNITY_LISTING_MIN_READERS ? t('readersOnTela', { n: readers }) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
     <main
@@ -259,9 +293,12 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
           <button
             type="button"
             onClick={onClose}
-            className="-ml-2.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink"
+            className="-ml-2.5 flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted hover:bg-hover hover:text-ink"
             data-testid="close-article"
           >
+            <Glyph size={14} className="shrink-0">
+              {CLOSE}
+            </Glyph>
             {t('close')}
           </button>
           <FocusToggle />
@@ -281,16 +318,14 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
             {t(read ? 'markUnread' : 'markRead')}
           </button>
           <TypographyMenu />
-          <LikeButton
-            articleId={article.id}
-            liked={isLiked(tables, article.id)}
-            likeCount={article.likeCount}
-          />
+          <LikeButton articleId={article.id} liked={liked} likeCount={article.likeCount} />
           <RecommendPopover
             articleId={article.id}
-            recommended={isRecommended(tables, article.id)}
-            note={tables.recommendations.get(article.id)?.note ?? null}
+            recommended={recommended}
+            note={recommendNote}
             recommendCount={article.recommendCount}
+            open={recommending === 'top'}
+            onOpenChange={(open) => setRecommending(open ? 'top' : null)}
           />
         </div>
       </div>
@@ -334,15 +369,20 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
               mode={mode}
               onMode={onMode}
               onTranslate={wanted ? undefined : () => setAsked(true)}
+              onRetry={
+                state === 'failed' || translation.notice === 'unavailable'
+                  ? translation.retry
+                  : undefined
+              }
             />
           ) : null}
           {translation.notice ? (
-            <p className="text-[13px] text-muted" data-testid={`translation-${translation.notice}`}>
+            <p
+              className="mb-7 text-[13px] text-muted"
+              data-testid={`translation-${translation.notice}`}
+            >
               <TranslationNotice notice={translation.notice} />
             </p>
-          ) : null}
-          {view?.state === 'failed' || translation.notice === 'unavailable' ? (
-            <RetryTranslation onRetry={translation.retry} />
           ) : null}
 
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: a pointer shortcut to a highlight's note; the list below reaches the same popover by keyboard */}
@@ -350,7 +390,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
           <div ref={body} onClick={onBodyClick}>
             {twoCols ? (
               <PairedBody
-                pairs={pairs}
+                pairs={prefix.rest ? pairs : prefix.pairs}
                 title={titles.title}
                 originalTitle={article.title}
                 targetLang={readingLang}
@@ -366,26 +406,29 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
                   {title}
                 </h1>
                 {object && original.length > 0 ? (
-                  runs.map((run) =>
-                    run.untranslated ? (
-                      <Untranslated key={run.id} pending={run.pending}>
+                  <>
+                    {runs.map((run) =>
+                      run.untranslated ? (
+                        <Untranslated key={run.id} pending={run.pending} sourceLang={sourceLang}>
+                          <Body
+                            html={run.html}
+                            lang={sourceLang}
+                            dir="auto"
+                            testId="body-translated"
+                          />
+                        </Untranslated>
+                      ) : (
                         <Body
+                          key={run.id}
                           html={run.html}
-                          lang={sourceLang}
-                          dir="auto"
-                          testId="body-translated"
+                          lang={showTrans ? readingLang : sourceLang}
+                          dir={showTrans ? undefined : 'auto'}
+                          testId={showTrans ? 'body-translated' : 'body-original'}
                         />
-                      </Untranslated>
-                    ) : (
-                      <Body
-                        key={run.id}
-                        html={run.html}
-                        lang={showTrans ? readingLang : sourceLang}
-                        dir={showTrans ? undefined : 'auto'}
-                        testId={showTrans ? 'body-translated' : 'body-original'}
-                      />
-                    ),
-                  )
+                      ),
+                    )}
+                    {showTrans && prefix.rest ? <TranslatingRest /> : null}
+                  </>
                 ) : (
                   <p className="text-muted">{t('noContent')}</p>
                 )}
@@ -398,23 +441,62 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
             onOpen={(item, at) => setNote({ id: item.row.id, x: at.x, y: at.y })}
           />
 
-          <div className="mt-10 flex max-w-(--reader-measure) items-center gap-4 border-t border-line pt-6">
-            <Swatch id={article.feedId} title={name} size={44} round />
-            <div className="flex-1">
+          {/* The end of the article (Tela v5): what the reader can do with it, which the author
+              sees, then whose it is, then what comes next. */}
+          <div
+            className={`mt-10 flex ${END} flex-wrap items-center gap-2 border-t border-line pt-6`}
+            data-testid="end-actions"
+          >
+            <LikeButton articleId={article.id} liked={liked} testId="end-like" />
+            <RecommendButton
+              recommended={recommended}
+              testId="end-recommend"
+              onClick={() =>
+                recommended
+                  ? unrecommend(article.id)
+                  : setRecommending((at) => (at === 'end' ? null : 'end'))
+              }
+            />
+            <span
+              className="ml-2 flex-[1_1_220px] text-[13px] leading-[1.45] text-muted"
+              style={{ textWrap: 'pretty' }}
+            >
+              {t('visibleToAuthor')}
+            </span>
+          </div>
+          {recommending === 'end' && !recommended ? (
+            <section
+              aria-label={t('recommendTitle')}
+              className={`mt-3 ${END} rounded-xl border border-line bg-surface p-3.5 animate-fade`}
+              data-testid="recommend-inline"
+            >
+              <RecommendForm
+                articleId={article.id}
+                note={recommendNote}
+                onClose={() => setRecommending(null)}
+              />
+            </section>
+          ) : null}
+
+          <div
+            className={`mt-8 flex ${END} flex-wrap items-center gap-x-4 gap-y-3 border-t border-line pt-6`}
+            data-testid="end-blog"
+          >
+            {site ? (
+              <SiteAvatar
+                id={site.id}
+                title={site.title ?? name}
+                faviconKey={site.faviconKey}
+                size={44}
+                round
+              />
+            ) : (
+              <Swatch id={article.feedId} title={name} size={44} round />
+            )}
+            <div className="min-w-[200px] flex-1">
               <div className="font-medium">{site?.title ?? name}</div>
-              <div className="text-[13px] text-muted">
-                {/* A count below three says who else reads it, as public pages do not (ADR 0041). */}
-                {[
-                  site?.description,
-                  (site?.readerCount ?? 0) >= COMMUNITY_LISTING_MIN_READERS
-                    ? t('readersOnTela', { n: site?.readerCount ?? 0 })
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </div>
+              {about ? <div className="text-[13px] text-muted">{about}</div> : null}
             </div>
-            <span className="hidden text-[13px] text-muted xl:block">{t('visibleToAuthor')}</span>
           </div>
 
           {/* A push like a row click: the key on the Reader remounts it at the top of the next one. */}
@@ -422,10 +504,10 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
             <Link
               to={next.href}
               data-testid="next-article"
-              className="mt-6 flex max-w-(--reader-measure) flex-col gap-1 rounded-lg border border-line px-4 py-3 text-ink hover:bg-hover hover:no-underline"
+              className={`mt-6 flex ${END} flex-col gap-1 rounded-[10px] border border-line px-4 py-3 text-ink hover:bg-hover hover:no-underline`}
             >
               <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-                {t('upNext')}
+                {t('upNext', { blog: next.blog })}
               </span>
               <span
                 className="font-serif text-[19px] font-medium leading-[1.2] tracking-tight"
@@ -458,18 +540,4 @@ function TranslationNotice({
 }) {
   const t = useTranslations('translation')
   return <>{t(notice)}</>
-}
-
-function RetryTranslation({ onRetry }: { onRetry: () => void }) {
-  const t = useTranslations('translation')
-  return (
-    <button
-      type="button"
-      data-testid="translation-retry"
-      className="mb-7 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] hover:border-muted"
-      onClick={onRetry}
-    >
-      {t('retry')}
-    </button>
-  )
 }

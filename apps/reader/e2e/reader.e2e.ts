@@ -451,6 +451,8 @@ test.describe('reader', () => {
     await expect(page).toHaveURL(/article=\d+/)
     const next = page.getByTestId('next-article')
     await expect(next).toContainText(secondTitle)
+    // Whose it is, as the label says: capitals are the stylesheet's, not the words'.
+    await expect(next).toContainText('Up next · Julia Evans')
     await next.click()
     await expect(page).toHaveURL(new RegExp(`article=${second}$`))
     await expect(page.getByTestId('article-title')).toHaveText(secondTitle)
@@ -459,5 +461,72 @@ test.describe('reader', () => {
     await rows.last().click()
     await expect(page).toHaveURL(/article=\d+/)
     await expect(page.getByTestId('next-article')).toHaveCount(0)
+  })
+
+  test('the end of an article likes it, and recommends it with a note in a box of its own', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    const rows = page.getByTestId('article-row')
+    await expect(rows.first()).toContainText('Julia Evans')
+    // Not the first, which the recommendation and dashboard spec recommends.
+    await rows.nth(2).click()
+    await expect(page).toHaveURL(/article=\d+/)
+
+    const actions = page.getByTestId('end-actions')
+    await expect(actions).toContainText('The author sees how many liked this')
+    await expect(page.getByTestId('end-blog')).toContainText('Julia Evans')
+
+    // Like or Liked, with no count, and the toolbar's like follows.
+    const like = page.getByTestId('end-like')
+    const was = (await like.getAttribute('aria-pressed')) === 'true'
+    await like.click()
+    await expect(like).toHaveAttribute('aria-pressed', String(!was))
+    await expect(like).toHaveText(was ? 'Like' : 'Liked')
+    await expect(page.getByTestId('like-button')).toHaveAttribute('aria-pressed', String(!was))
+    await like.click()
+    await expect(like).toHaveAttribute('aria-pressed', String(was))
+
+    const recommend = page.getByTestId('end-recommend')
+    if ((await recommend.getAttribute('aria-pressed')) === 'true') await recommend.click()
+    await expect(recommend).toHaveText('Recommend')
+    await recommend.click()
+    // The form opens under the row, not in the toolbar's popover, with the field ready to type in.
+    const box = page.getByTestId('recommend-inline')
+    const field = box.getByTestId('recommend-note')
+    await expect(box).toContainText('Recommend to your readers')
+    await expect(page.getByTestId('recommend-popover')).toHaveCount(0)
+    await expect(field).toBeFocused()
+    await expect(field).toHaveAttribute('placeholder', 'Why should they read this? (optional)')
+    await field.fill('Read it for the diagrams.')
+    const sent = page.waitForResponse(
+      (r) =>
+        r.url().includes('/api/v1/mutations') &&
+        r.ok() &&
+        (r.request().postData() ?? '').includes('Read it for the diagrams.'),
+    )
+    await box.getByTestId('recommend-submit').click()
+    await expect(page.getByTestId('toast')).toContainText('Recommended with your note.')
+    await expect(box).toHaveCount(0)
+    await expect(recommend).toHaveAttribute('aria-pressed', 'true')
+    await expect(recommend).toHaveText('Recommended')
+    await expect(page.getByTestId('recommend-button')).toHaveAttribute('aria-pressed', 'true')
+    await sent
+
+    // Recommended, the same button takes it back, as the toolbar's does; the push is waited for,
+    // so no later spec meets it.
+    const taken = page.waitForResponse(
+      (r) =>
+        r.url().includes('/api/v1/mutations') &&
+        r.ok() &&
+        (r.request().postData() ?? '').includes('unrecommend'),
+    )
+    await recommend.click()
+    await expect(page.getByTestId('toast')).toContainText('Recommendation removed.')
+    await expect(recommend).toHaveAttribute('aria-pressed', 'false')
+    await taken
   })
 })

@@ -3,7 +3,7 @@
  * chunks and laid over the original. The mock provider prefixes "en:" and drops a block marked
  * [[drop]], which is how a provider omitting an entry looks.
  */
-import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
+import { type APIRequestContext, expect, type Page, type Route, test } from '@playwright/test'
 import {
   BASE,
   ensureFeeds,
@@ -65,6 +65,9 @@ test.describe('translation', () => {
     await expect(bar).toBeVisible()
     await expect(bar).toContainText('Written in Japanese')
     await expect(bar).toHaveAttribute('data-state', /done|partial/, { timeout: 30_000 })
+    await expect(page.getByTestId('translation-status')).toContainText(
+      'Translated to English by Tela.',
+    )
     // Side by side is a grid of paired blocks: one cell per top-level block per side.
     const translated = page.getByTestId('body-translated')
     const original = page.getByTestId('body-original')
@@ -339,14 +342,23 @@ test.describe('translation', () => {
       await row.click()
       const bar = page.getByTestId('translation-bar')
       await expect(bar).toHaveAttribute('data-state', 'partial', { timeout: 30_000 })
-      await expect(bar).toContainText('1 paragraph could not be translated')
+      await expect(page.getByTestId('translation-status')).toHaveText(
+        'Translated to English by Tela. 1 paragraph could not be translated.',
+      )
     } finally {
       stop()
     }
 
+    // The label names the language the paragraph stayed in, and is set in capitals by CSS alone.
     const marked = page.locator('.article-untranslated')
     await expect(marked).toHaveCount(1)
-    await expect(marked).toContainText('not translated')
+    await expect(marked.locator('.article-untranslated-label')).toHaveText(
+      'Not translated · Japanese',
+    )
+    await expect(marked.locator('.article-untranslated-label')).toHaveCSS(
+      'text-transform',
+      'uppercase',
+    )
     await expect(marked).toContainText('この段落は')
     await expect(marked.getByTestId('body-translated')).toHaveAttribute('lang', 'ja')
 
@@ -354,7 +366,8 @@ test.describe('translation', () => {
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans')
     await expect(page.getByTestId('body-original')).toHaveCount(0)
     await expect(page.locator('.article-untranslated')).toHaveCount(1)
-    await expect(page.locator('.article-untranslated')).toContainText('not translated')
+    await expect(page.locator('.article-untranslated')).toContainText('Not translated · Japanese')
+    await expect(page.getByTestId('translating-rest')).toHaveCount(0)
     // The blocks that did translate stay one body between the marks, not one per paragraph.
     await expect(page.locator('.article-body')).toHaveCount(3)
 
@@ -402,5 +415,99 @@ test.describe('translation', () => {
     await foreign.click()
     await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'side')
     await page.getByTestId('close-article').click()
+  })
+
+  /**
+   * The reader fetches a translation's chunks side by side and never asks again for one that
+   * failed, so a later chunk can land before an earlier one, or not at all until the finished
+   * object replaces them. Translation mode shows the paragraphs up to the first one missing, then
+   * a placeholder: never a paragraph after a gap. Holding back every chunk after the first, and
+   * the finished object, holds that moment still.
+   */
+  test('in Translation, what has not landed waits under a placeholder, never after a gap', async ({
+    page,
+  }) => {
+    await setPrefs(page.request, { 'reader.mode': 'trans' })
+    const held: Route[] = []
+    let released = false
+    const hold = (route: Route) => {
+      if (released) void route.continue()
+      else held.push(route)
+    }
+    const release = async () => {
+      released = true
+      for (const route of held.splice(0)) await route.continue().catch(() => undefined)
+    }
+    // Chunks are `tc/…/<n>.json`; the finished object is `t/…`.
+    await page.route(/\/o\/tc\/.+\/[1-9]\d*\.json$/, hold)
+    await page.route(/\/o\/t\//, hold)
+    const firstChunk = page.waitForResponse((r) => /\/o\/tc\/.+\/0\.json$/.test(r.url()))
+
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('subscription').filter({ hasText: 'give IT a try' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    const stop = keepCycling(page)
+    try {
+      // About 1,800 characters of Japanese: past FIRST_CHUNK_TOKENS (400, a token a character),
+      // so at least two chunks.
+      await page.getByTestId('article-row').filter({ hasText: 'あなたは見分けられる' }).click()
+      await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'trans', {
+        timeout: 30_000,
+      })
+      const chunk = (await (await firstChunk).json()) as { blocks: Record<string, string> }
+      const landed = Object.keys(chunk.blocks).length
+
+      const rest = page.getByTestId('translating-rest')
+      await expect(rest).toBeVisible({ timeout: 30_000 })
+      await expect(rest).toContainText('Translating the rest…')
+      // The first chunk's blocks, in one body, and no source text standing in for the others.
+      const blocks = page.locator('[data-testid="body-translated"] > *')
+      await expect(page.getByTestId('body-translated')).toHaveCount(1)
+      await expect(blocks).toHaveCount(landed)
+      await expect(page.getByTestId('body-translated')).toContainText('en:')
+      await expect(page.locator('.article-untranslated')).toHaveCount(0)
+
+      await release()
+      await expect(rest).toHaveCount(0, { timeout: 30_000 })
+      expect(await blocks.count()).toBeGreaterThan(landed)
+    } finally {
+      stop()
+      await release()
+    }
+  })
+
+  test('a translation that could not be asked for offers to try again, in the bar', async ({
+    page,
+  }) => {
+    // The one request out of reach: the bar says so, and puts the retry where the modes go.
+    const asking = '**/api/v1/translations'
+    await page.route(asking, (route) =>
+      route.request().method() === 'POST' ? route.abort() : route.continue(),
+    )
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('subscription').filter({ hasText: 'give IT a try' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    // A post no other spec opens, so opening it asks for its translation.
+    await page.getByTestId('article-row').filter({ hasText: '12年ぶりの登壇' }).click()
+    const bar = page.getByTestId('translation-bar')
+    const retry = bar.getByTestId('translation-retry')
+    await expect(page.getByTestId('translation-unavailable')).toBeVisible()
+    await expect(retry).toHaveText('Try translating again')
+    await expect(bar.getByTestId('mode-side')).toHaveCount(0)
+    await expect(page.getByTestId('reader')).toHaveAttribute('data-mode', 'orig')
+
+    await page.unroute(asking)
+    const stop = keepCycling(page)
+    try {
+      await retry.click()
+      await expect(page.getByTestId('translation-unavailable')).toHaveCount(0)
+      await expect(bar).toHaveAttribute('data-state', /done|partial/, { timeout: 30_000 })
+      await expect(retry).toHaveCount(0)
+      await expect(bar.getByTestId('mode-side')).toBeVisible()
+    } finally {
+      stop()
+    }
   })
 })

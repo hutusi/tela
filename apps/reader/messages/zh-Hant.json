@@ -188,7 +188,7 @@
     "recommendedWithNote": "已附上你的推薦語。",
     "unrecommended": "已取消推薦。",
     "fetchingFullText": "正在從部落格取得全文…",
-    "upNext": "下一篇",
+    "upNext": "下一篇 · {blog}",
     "focus": "專注",
     "markRead": "標為已讀",
     "markUnread": "標為未讀"
@@ -216,12 +216,14 @@
     }
   },
   "translation": {
-    "writtenIn": "原文為<b>{source}</b>，由 Tela 翻譯成{target}。",
-    "writtenInOnly": "原文為<b>{source}</b>。",
+    "writtenIn": "原文為<b>{source}</b>。",
+    "translatedBy": "由 Tela 翻譯成{target}。",
     "translateNow": "翻譯成{target}",
     "translating": "翻譯中…",
+    "translatingInto": "正在翻譯成{target}…",
+    "translatingRest": "正在翻譯其餘部分…",
     "failed": "翻譯失敗。",
-    "partial": "有 {n} 段未能翻譯。",
+    "partial": "由 Tela 翻譯成{target}，有 {n} 段未能翻譯。",
     "modesLabel": "閱讀版式",
     "modes": {
       "side": "對照",
@@ -230,7 +232,7 @@
     },
     "columnTranslated": "{target} · 譯文",
     "columnOriginal": "原文",
-    "blockUntranslated": "未翻譯",
+    "notTranslated": "未翻譯 · {language}",
     "rateLimited": "翻譯請求過於頻繁，請稍後再試。",
     "budgetExhausted": "今日的翻譯額度已用完，明天會重設。",
     "unavailable": "暫時無法開始翻譯，請重試。",

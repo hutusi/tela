@@ -8,7 +8,7 @@ import { Untranslated } from './untranslated'
 const LEAD = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
 
 type Props = {
-  pairs: BlockPair[]
+  pairs: readonly BlockPair[]
   title: string
   originalTitle: string
   targetLang: string
@@ -107,7 +107,9 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
                 dangerouslySetInnerHTML={{ __html: pair.original }}
               />
               {pair.untranslated ? (
-                <Untranslated pending={pair.pending}>{translatedCell}</Untranslated>
+                <Untranslated pending={pair.pending} sourceLang={sourceLang}>
+                  {translatedCell}
+                </Untranslated>
               ) : (
                 translatedCell
               )}

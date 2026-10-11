@@ -26,6 +26,7 @@ import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
+  feedTitle,
   isLiked,
   isRead,
   prefetchPlan,
@@ -88,6 +89,7 @@ export function ReadingPage() {
     ? {
         href: readingHref({ filter: params.filter, feedId: params.feedId, articleId: after.id }),
         title: shownTitle(tables, after, readingLang, prefs.never).title,
+        blog: feedTitle(tables, after.feedId) || store.sourceName(after.feedId),
       }
     : null
 

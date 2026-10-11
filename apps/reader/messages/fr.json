@@ -188,7 +188,7 @@
     "recommendedWithNote": "Recommandé, avec votre mot.",
     "unrecommended": "Recommandation retirée.",
     "fetchingFullText": "Récupération de l’article complet sur le blog…",
-    "upNext": "À suivre",
+    "upNext": "À suivre · {blog}",
     "focus": "Focus",
     "markRead": "Marquer comme lu",
     "markUnread": "Marquer comme non lu"
@@ -216,12 +216,14 @@
     }
   },
   "translation": {
-    "writtenIn": "Écrit en <b>{source}</b>. Traduit en {target} par Tela.",
-    "writtenInOnly": "Écrit en <b>{source}</b>.",
+    "writtenIn": "Écrit en <b>{source}</b>.",
+    "translatedBy": "Traduit en {target} par Tela.",
     "translateNow": "Traduire en {target}",
     "translating": "Traduction en cours…",
+    "translatingInto": "Traduction en {target}…",
+    "translatingRest": "Traduction de la suite…",
     "failed": "La traduction a échoué.",
-    "partial": "{n, plural, one {# paragraphe n’a pas pu être traduit.} other {# paragraphes n’ont pas pu être traduits.}}",
+    "partial": "Traduit en {target} par Tela. {n, plural, one {# paragraphe n’a pas pu être traduit.} other {# paragraphes n’ont pas pu être traduits.}}",
     "modesLabel": "Mise en page de lecture",
     "modes": {
       "side": "Côte à côte",
@@ -230,7 +232,7 @@
     },
     "columnTranslated": "{target} · traduction",
     "columnOriginal": "original",
-    "blockUntranslated": "non traduit",
+    "notTranslated": "Non traduit · {language}",
     "rateLimited": "Trop de demandes de traduction pour le moment. Réessayez d’ici un petit moment.",
     "budgetExhausted": "Vous avez épuisé votre quota de traduction du jour. Il se renouvelle demain.",
     "unavailable": "La traduction n’a pas pu démarrer. Réessayez.",

@@ -188,7 +188,7 @@
     "recommendedWithNote": "Recommended with your note.",
     "unrecommended": "Recommendation removed.",
     "fetchingFullText": "Fetching the full post from the blog…",
-    "upNext": "Up next",
+    "upNext": "Up next · {blog}",
     "focus": "Focus",
     "markRead": "Mark as read",
     "markUnread": "Mark as unread"
@@ -216,12 +216,14 @@
     }
   },
   "translation": {
-    "writtenIn": "Written in <b>{source}</b>. Translated to {target} by Tela.",
-    "writtenInOnly": "Written in <b>{source}</b>.",
+    "writtenIn": "Written in <b>{source}</b>.",
+    "translatedBy": "Translated to {target} by Tela.",
     "translateNow": "Translate into {target}",
     "translating": "Translating…",
+    "translatingInto": "Translating into {target}…",
+    "translatingRest": "Translating the rest…",
     "failed": "Translation failed.",
-    "partial": "{n, plural, one {# paragraph} other {# paragraphs}} could not be translated.",
+    "partial": "Translated to {target} by Tela. {n, plural, one {# paragraph} other {# paragraphs}} could not be translated.",
     "modesLabel": "Reading layout",
     "modes": {
       "side": "Side by side",
@@ -230,7 +232,7 @@
     },
     "columnTranslated": "{target} · translation",
     "columnOriginal": "original",
-    "blockUntranslated": "not translated",
+    "notTranslated": "Not translated · {language}",
     "rateLimited": "Too many translation requests for now. Please try again in a little while.",
     "budgetExhausted": "You have used today's translation allowance. It resets tomorrow.",
     "unavailable": "The translation could not be started. Please try again.",
