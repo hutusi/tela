@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { useFrontDoor } from '../components/front-door'
-import { CHECK, Glyph } from '../components/glyph'
+import { CHECK, EXTERNAL, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { SiteFooter } from '../components/site-footer'
 import { Swatch } from '../components/swatch'
@@ -328,11 +328,10 @@ export function WritersPage() {
                   >
                     <span className="text-ink-2">{t('does.link.pill')}</span>
                     <span className="truncate font-semibold text-ink">@{writer.handle}</span>
-                    <span
-                      aria-hidden="true"
-                      className="rounded-full bg-hover px-2.5 py-1 text-[12px] text-ink-2"
-                    >
-                      ↗
+                    <span className="rounded-full bg-hover px-2.5 py-[7px] text-ink-2">
+                      <Glyph size={12} className="block">
+                        {EXTERNAL}
+                      </Glyph>
                     </span>
                   </span>
                 ) : null}
