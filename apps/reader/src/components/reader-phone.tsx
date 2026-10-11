@@ -91,10 +91,11 @@ export function ReaderBottomBar({
     }
   }, [])
   const on = (active: boolean) => (active ? 'font-medium text-ink' : 'text-ink-2')
+  // A post with no address of its own has no Original: three items share the width.
   return createPortal(
     <div
       ref={bar}
-      className="fixed inset-x-0 bottom-0 z-[9] grid grid-cols-4 border-t border-line bg-paper px-1.5 pb-[max(22px,env(safe-area-inset-bottom))] pt-1.5"
+      className={`fixed inset-x-0 bottom-0 z-[9] grid ${url ? 'grid-cols-4' : 'grid-cols-3'} border-t border-line bg-paper px-1.5 pb-[max(22px,env(safe-area-inset-bottom))] pt-1.5`}
       data-testid="bottom-bar"
     >
       <button
