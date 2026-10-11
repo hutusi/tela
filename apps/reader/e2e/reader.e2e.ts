@@ -215,23 +215,31 @@ test.describe('reader', () => {
     await expect(page.getByTestId('article-title')).toBeInViewport()
   })
 
-  test('a row read during this visit stays dimmed after the article closes', async ({ page }) => {
+  test('a row read during this visit shows as read after the article closes', async ({ page }) => {
     await page.goto('/reading')
     await synced(page)
     await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
     await expect(page).toHaveURL(/\/reading\?feed=\d+/)
     await expect(page.getByTestId('article-row').first()).toContainText('Julia Evans')
     const row = page.getByTestId('article-row').nth(2)
-    // Polled: the list fades in, so a first reading can land mid-animation.
+    // A read row keeps its full opacity, so its 12px meta stays readable; its title steps back to
+    // ink-2 and its dot goes (Tela v5). Polled: the list fades in.
     const opacity = () => row.evaluate((el) => Number(getComputedStyle(el).opacity))
+    const title = () => row.locator('h2').evaluate((el) => getComputedStyle(el).color)
+    const INK = 'rgb(31, 28, 24)'
+    const INK_2 = 'rgb(92, 85, 75)'
 
-    if ((await row.getAttribute('data-read')) === '0') await expect.poll(opacity).toBe(1)
+    if ((await row.getAttribute('data-read')) === '0') await expect.poll(title).toBe(INK)
     await row.click()
     await expect(page.getByTestId('reader')).toBeVisible()
+    // The open row's title stays ink, read or not.
+    await expect.poll(title).toBe(INK)
     await page.getByTestId('close-article').click()
     await expect(page.getByTestId('reader')).toHaveCount(0)
     await expect(row).toHaveAttribute('data-read', '1')
-    await expect.poll(opacity).toBeLessThan(1)
+    await expect.poll(title).toBe(INK_2)
+    await expect(row.getByTestId('unread-dot')).toHaveCount(0)
+    await expect.poll(opacity).toBe(1)
   })
 
   test('opening an article moves focus into it once it is there', async ({ page }) => {

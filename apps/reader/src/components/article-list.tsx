@@ -164,6 +164,7 @@ export function ArticleList({
                 ) : null}
               </div>
               <h2
+                data-row-title
                 className="m-0 font-serif font-medium leading-[1.2] tracking-tight text-[19px] group-data-[open=1]:text-[15.5px]"
                 style={{ textWrap: 'pretty' }}
               >
