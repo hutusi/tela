@@ -18,6 +18,7 @@ import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
+import { DAY } from './public-sql'
 
 /** A search query as SQL LIKE sees it: trimmed, whitespace collapsed, wildcards escaped. */
 export function likePattern(query: string): string | null {
@@ -127,24 +128,48 @@ export function memberRoutes(deps: ApiDeps) {
   /** A blogger's view of their blogs: readers, recent posts and how they landed, and notes. */
   routes.get('/dashboard', async (c) => {
     const member = c.get('member')
-    const [sites, posts, notes] = (await db.batch([
+    const since = deps.clock.now() - 30 * DAY
+    // New readers are the same population as `reader_count` (`recountReaders`): distinct members
+    // with a live subscription to any of the blog's feeds, merged ones included. A member is new
+    // when none of their live subscriptions to it is older than 30 days, so subscribing to a
+    // second feed of a blog they already read does not count them twice. A resubscribe keeps
+    // its row's `created_at`, so leaving and coming back is not new either.
+    const [sites, topics, posts, notes] = (await db.batch([
       db.all(sql`
         select id, title, home_url as "homeUrl", favicon_key as "faviconKey", listing,
-          reader_count as "readerCount", translation_opt_out as "translationOptOut"
+          primary_lang as "primaryLang", reader_count as "readerCount",
+          translation_opt_out as "translationOptOut",
+          (select count(distinct sub.user_id) from subscriptions sub
+            join feeds f on f.id = sub.feed_id
+            where f.site_id = sites.id and sub.deleted_at is null and sub.created_at > ${since}
+              and not exists (
+                select 1 from subscriptions sub2 join feeds f2 on f2.id = sub2.feed_id
+                where f2.site_id = sites.id and sub2.user_id = sub.user_id
+                  and sub2.deleted_at is null and sub2.created_at <= ${since}
+              )
+          ) as "newReaders30d"
         from sites where claimed_by = ${member.id} order by title
+      `),
+      db.all(sql`
+        select t.site_id as "siteId", t.topic from site_topics t join sites s on s.id = t.site_id
+        where s.claimed_by = ${member.id} order by t.topic
       `),
       db.all(sql`
         select * from (
           select a.id, f.site_id as "siteId", a.title, a.url, a.published_at as "publishedAt",
             a.like_count as "likeCount", a.recommend_count as "recommendCount",
+            (select count(*) from recommendations r
+              where r.article_id = a.id and r.deleted_at is null and r.note is not null
+            ) as "noteCount",
             row_number() over (partition by f.site_id order by a.sort_at desc, a.id desc) as n
           from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
           where s.claimed_by = ${member.id}
         ) where n <= 20
       `),
       db.all(sql`
-        select r.note, r.created_at as "createdAt", a.id as "articleId", a.title as "articleTitle",
-          a.url as "articleUrl", p.handle, p.display_name as "displayName"
+        select r.note, r.created_at as "createdAt", f.site_id as "siteId", a.id as "articleId",
+          a.title as "articleTitle", a.url as "articleUrl", p.handle,
+          p.display_name as "displayName", ${avatarOf('p')} as "avatar"
         from recommendations r join articles a on a.id = r.article_id
         join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         join profiles p on p.user_id = r.user_id
@@ -153,6 +178,7 @@ export function memberRoutes(deps: ApiDeps) {
       `),
     ] as never)) as unknown as [
       Record<string, unknown>[],
+      { siteId: number; topic: string }[],
       Record<string, unknown>[],
       Record<string, unknown>[],
     ]
@@ -160,6 +186,7 @@ export function memberRoutes(deps: ApiDeps) {
       sites: sites.map((s) => ({
         ...s,
         translationOptOut: s.translationOptOut === 1,
+        topics: topics.filter((t) => t.siteId === s.id).map((t) => t.topic),
         posts: posts.filter((p) => p.siteId === s.id).map(({ n: _n, siteId: _s, ...p }) => p),
       })),
       notes,
