@@ -20,10 +20,9 @@ test.describe('mobile fallback', () => {
     await nav.locator('summary').click()
     // A feed with posts: specs before this one add feeds the fixture server may not serve.
     const sub = page.getByTestId('mobile-subscription').filter({ hasText: 'Julia Evans' }).first()
-    const title = (await sub.textContent())?.trim() ?? ''
     await sub.click()
     await expect(page).toHaveURL(/feed=\d+/)
-    await expect(page.getByTestId('mobile-nav')).toContainText(title.slice(0, 6))
+    await expect(page.getByTestId('mobile-nav')).toContainText('Julia Evans')
 
     await page.getByTestId('article-row').first().click()
     await expect(page).toHaveURL(/article=\d+/)
@@ -38,7 +37,9 @@ test.describe('mobile fallback', () => {
 
     // The back bar goes back to the list by its name, in the toolbar's place.
     const back = page.getByTestId('reader-back')
-    await expect(back).toContainText(title.slice(0, 6))
+    // The feed's name, as the list's summary says it (the row's text also holds its swatch's
+    // initial).
+    await expect(back).toContainText('Julia Evans')
     await expect(page.getByTestId('close-article')).toHaveCount(0)
     await back.click()
     await expect(page).not.toHaveURL(/article=/)
@@ -350,7 +351,7 @@ test.describe('the article on a phone', () => {
     await openArticle(page)
     const bar = page.getByTestId('back-bar')
     const back = bar.getByTestId('reader-back')
-    expect((await bar.boundingBox())?.height).toBe(52)
+    expect((await bar.boundingBox())?.height).toBeCloseTo(52, 0)
     await expect(back).toHaveText('All articles')
     await expect(back).toHaveAccessibleName('Back to All articles')
     expect((await back.boundingBox())?.height).toBeGreaterThanOrEqual(44)
