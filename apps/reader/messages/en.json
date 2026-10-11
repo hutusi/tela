@@ -162,7 +162,8 @@
     "loadMore": "Older articles",
     "fetching": "Fetching this feed for the first time…",
     "allRead": "You're all caught up.",
-    "allReadHint": "Read posts are hidden. <settings>Show them again</settings> in Settings."
+    "allReadHint": "Read posts are hidden. <settings>Show them again</settings> in Settings.",
+    "markedRead": "{n, plural, one {Marked # post read.} other {Marked # posts read.}}"
   },
   "reader": {
     "close": "Close",

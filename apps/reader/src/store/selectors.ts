@@ -7,8 +7,8 @@
  * they read it again. Everything that asks whether a post is read asks `isRead`.
  */
 
-import type { ArticleRow, SiteRow } from '@tela/sync'
-import { HORIZON_DAYS, type Tables, titleKey, translationKey } from '@tela/sync'
+import type { ArticleRow, Mutation, SiteRow } from '@tela/sync'
+import { applyMutation, HORIZON_DAYS, type Tables, titleKey, translationKey } from '@tela/sync'
 import type { Person } from '../views/types'
 
 export type Filter = 'all' | 'today' | 'liked'
@@ -43,6 +43,24 @@ export function shownRead(
   markOnOpen: boolean,
 ): boolean {
   return isRead(t, a, now) || (open && markOnOpen && !isMarkedUnread(t, a.id))
+}
+
+/**
+ * The posts a mark-all-read turns from unread to read, as the server will apply it: every post
+ * of a subscribed feed in its scope up to `upTo`, not only the rows a list showed. What its toast
+ * counts, and what an Undo sent after the change has gone marks unread again.
+ */
+export function markAllReadCovers(
+  t: Tables,
+  m: Extract<Mutation, { type: 'markAllRead' }>,
+  now: number,
+): number[] {
+  const after = applyMutation(t, m)
+  const covered: number[] = []
+  for (const a of t.articles.values()) {
+    if (!isRead(t, a, now) && isRead(after, a, now)) covered.push(a.id)
+  }
+  return covered
 }
 
 export const isLiked = (t: Tables, articleId: number) => t.states.get(articleId)?.likedAt != null

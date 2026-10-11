@@ -5,8 +5,59 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { expect, test } from '@playwright/test'
-import { FIXTURES, keepCycling, readStateOnServer, resetReading, setPrefs, synced } from './helpers'
+import { type APIRequestContext, expect, test } from '@playwright/test'
+import {
+  BASE,
+  ensureFeeds,
+  FIXTURES,
+  keepCycling,
+  memberHeaders,
+  readStateOnServer,
+  resetReading,
+  setPrefs,
+  synced,
+} from './helpers'
+
+const HOUR = 3_600_000
+const DAY = 24 * HOUR
+
+/** The member's rows as the server holds them, through a snapshot pull. */
+async function rowsOnServer(api: APIRequestContext) {
+  const res = await api.get(`${BASE}/api/v1/sync?cursor=0`, { headers: await memberHeaders(api) })
+  if (!res.ok()) throw new Error(`sync failed: ${res.status()} ${await res.text()}`)
+  return (
+    (await res.json()) as {
+      rows: {
+        articles: { id: number; feedId: number }[]
+        feeds: { id: number; feedUrl: string }[]
+        subscriptions: { feedId: number; watermarkId: number; deletedAt: number | null }[]
+        states: {
+          articleId: number
+          readAt: number | null
+          readUpdatedAt?: number | null
+          likedAt: number | null
+        }[]
+      }
+    }
+  ).rows
+}
+
+/** How far the server has the member's subscription to a feed read by its watermark. */
+async function watermarkOnServer(api: APIRequestContext, feedId: number): Promise<number> {
+  const sub = (await rowsOnServer(api)).subscriptions.find((s) => s.feedId === feedId)
+  if (!sub) throw new Error(`no subscription to ${feedId}`)
+  return sub.watermarkId
+}
+
+/** Push changes as the app does, for a state a spec starts from or leaves behind. */
+async function push(api: APIRequestContext, mutations: Record<string, unknown>[]): Promise<void> {
+  const at = Date.now()
+  const res = await api.post(`${BASE}/api/v1/mutations`, {
+    headers: { origin: BASE, ...(await memberHeaders(api)) },
+    data: { mutations: mutations.map((m) => ({ mid: crypto.randomUUID(), at, ...m })) },
+  })
+  if (!res.ok()) throw new Error(`push failed: ${res.status()} ${await res.text()}`)
+}
 
 test.describe('reader', () => {
   test('signed-in home goes to reading, with the subscriptions from the first sync', async ({
@@ -347,16 +398,129 @@ test.describe('reader', () => {
     await expect(liked).toHaveCount(before - 1)
   })
 
-  test('mark all read clears the counts for one feed', async ({ page }) => {
+  test('mark all read clears the counts for one feed, and Undo takes it back before it is sent', async ({
+    page,
+  }) => {
+    await resetReading(page.request)
+    // Everything the page pushes: the mark-all, once taken back, must never be among it.
+    const pushed: string[] = []
+    page.on('request', (r) => {
+      if (r.url().includes('/api/v1/mutations')) pushed.push(r.postData() ?? '')
+    })
     await page.goto('/reading')
     await synced(page)
-    await page.getByTestId('subscription').filter({ hasText: '胡涂说' }).click()
+    const feed = page.getByTestId('subscription').filter({ hasText: '胡涂说' })
+    await feed.click()
     await expect(page).toHaveURL(/feed=\d+/)
+    const feedId = Number(new URL(page.url()).searchParams.get('feed'))
+    const count = feed.locator('span').last()
+    const dots = page.getByTestId('unread-dot')
+    await expect(dots.first()).toBeVisible()
+    const unread = Number(await count.textContent())
+    expect(unread).toBeGreaterThan(0)
+    await expect(dots).toHaveCount(unread)
+    const watermark = await watermarkOnServer(page.request, feedId)
+
     await page.getByTestId('mark-all-read').click()
-    await expect(page.getByTestId('unread-dot')).toHaveCount(0)
-    await expect(
-      page.getByTestId('subscription').filter({ hasText: '胡涂说' }).locator('span').last(),
-    ).toHaveText('')
+    await expect(dots).toHaveCount(0)
+    await expect(count).toHaveText('')
+    const toast = page.getByTestId('toast')
+    await expect(toast).toContainText(`Marked ${unread} ${unread === 1 ? 'post' : 'posts'} read.`)
+    await page.getByTestId('toast-action').click()
+    await expect(toast).toHaveCount(0)
+    await expect(dots).toHaveCount(unread)
+    await expect(count).toHaveText(String(unread))
+
+    // Held on the device while the toast showed, and taken back there: a reload, which lets go
+    // of anything still held, sends nothing, and the server's watermark never moved.
+    await page.reload()
+    await synced(page)
+    await expect(dots).toHaveCount(unread)
+    await expect(count).toHaveText(String(unread))
+    expect(await watermarkOnServer(page.request, feedId)).toBe(watermark)
+    expect(pushed.filter((body) => body.includes('"markAllRead"'))).toEqual([])
+  })
+
+  test('on Today, Mark all read reads the posts it lists, and no older one', async ({ page }) => {
+    await resetReading(page.request)
+    // A blog that wrote in the last day, which every other fixture did not. The setup's member
+    // has never read it: Discover's spec subscribes to it and leaves it again.
+    await ensureFeeds(['/fresh/en.xml'])
+    try {
+      // Today is the last 24 hours on the browser's clock, and the blog's newest post is from
+      // four hours before midnight UTC: late in the UTC day, the clock goes back to keep it in.
+      const midnight = Math.floor(Date.now() / DAY) * DAY
+      await page.clock.install({ time: Math.min(Date.now(), midnight + 18 * HOUR) })
+      await page.goto('/reading?filter=today')
+      await synced(page)
+      const rows = page.getByTestId('article-row')
+      await expect(rows.first()).toBeVisible()
+      const listed = await rows.evaluateAll((els) =>
+        els.map((el) => Number(el.getAttribute('data-article-id'))),
+      )
+      // An older post of another blog, unread only for being above its blog's watermark: the
+      // mark-all Today used to send moved every blog's watermark up to its newest post.
+      const before = await rowsOnServer(page.request)
+      const watermarks = new Map(
+        before.subscriptions.filter((s) => s.deletedAt === null).map((s) => [s.feedId, s]),
+      )
+      const touched = new Set(
+        before.states
+          .filter((s) => s.readAt !== null || s.readUpdatedAt != null)
+          .map((s) => s.articleId),
+      )
+      const todays = new Set(
+        before.articles.filter((a) => listed.includes(a.id)).map((a) => a.feedId),
+      )
+      const older = before.articles
+        .filter(
+          (a) =>
+            !todays.has(a.feedId) &&
+            a.id < Math.max(...listed) &&
+            a.id > (watermarks.get(a.feedId)?.watermarkId ?? Number.POSITIVE_INFINITY) &&
+            !touched.has(a.id),
+        )
+        .sort((a, b) => b.id - a.id)[0]
+      if (!older) throw new Error('no older post unread below the Today list')
+
+      const sent = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
+      await page.getByTestId('mark-all-read').click()
+      await expect(page.getByTestId('toast')).toContainText(/^Marked \d+ posts? read\./)
+      await expect(page.getByTestId('unread-dot')).toHaveCount(0)
+      await sent
+
+      expect(await watermarkOnServer(page.request, older.feedId)).toBeLessThan(older.id)
+      await page.goto(`/reading?feed=${older.feedId}`)
+      await expect(
+        page
+          .locator(`[data-testid="article-row"][data-article-id="${older.id}"]`)
+          .getByTestId('unread-dot'),
+      ).toHaveCount(1)
+    } finally {
+      // As Discover's spec leaves the member: a post from today would top every list after this.
+      const fresh = (await rowsOnServer(page.request)).feeds.find((f) =>
+        f.feedUrl.endsWith('/fresh/en.xml'),
+      )
+      if (fresh) await push(page.request, [{ type: 'unsubscribe', feedId: fresh.id }])
+    }
+  })
+
+  test('Liked has no Mark all read, since liking a post read it', async ({ page }) => {
+    const rows = await rowsOnServer(page.request)
+    const liked = new Set(rows.states.filter((s) => s.likedAt !== null).map((s) => s.articleId))
+    const post = rows.articles.find((a) => !liked.has(a.id))
+    if (!post) throw new Error('every post is liked')
+    await push(page.request, [{ type: 'setLiked', articleId: post.id, liked: true }])
+    try {
+      await page.goto('/reading?filter=liked')
+      await synced(page)
+      await expect(
+        page.locator(`[data-testid="article-row"][data-article-id="${post.id}"]`),
+      ).toBeVisible()
+      await expect(page.getByTestId('mark-all-read')).toHaveCount(0)
+    } finally {
+      await push(page.request, [{ type: 'setLiked', articleId: post.id, liked: false }])
+    }
   })
 
   test('the UI switches to Chinese in Settings, and the header says so', async ({ page }) => {

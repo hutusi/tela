@@ -162,7 +162,8 @@
     "loadMore": "更早的文章",
     "fetching": "正在首次抓取这个订阅源…",
     "allRead": "都读完了。",
-    "allReadHint": "已读文章被隐藏了，可以在<settings>设置</settings>里重新显示。"
+    "allReadHint": "已读文章被隐藏了，可以在<settings>设置</settings>里重新显示。",
+    "markedRead": "已将 {n} 篇文章标为已读。"
   },
   "reader": {
     "close": "关闭",

@@ -6,8 +6,9 @@ import { useTranslations } from 'use-intl'
 import { relativeTime } from '../lib/format'
 import { canonicalReadingHref, type ReadingParams, readingHref } from '../lib/href'
 import { readingPrefsOf } from '../lib/prefs'
+import { showToast, UNDO_HOLD_MS } from '../lib/toasts'
 import { useStore, useTables } from '../store/hooks'
-import { feedTitle, shownRead, shownTitle } from '../store/selectors'
+import { feedTitle, isRead, markAllReadCovers, shownRead, shownTitle } from '../store/selectors'
 import { Glyph, HEART, PASS } from './glyph'
 import { Swatch } from './swatch'
 
@@ -25,6 +26,14 @@ type Props = {
 
 /** How many rows render; older ones follow on request. The device holds the whole horizon. */
 const PAGE = 200
+/**
+ * The most posts an Undo marks unread one by one, once the mark-all it takes back has been sent:
+ * past that, one press would queue a push of hundreds.
+ */
+const UNDO_UNREAD_MAX = 200
+
+const read = (articleId: number) => ({ type: 'markRead', articleId }) as const
+const unread = (articleId: number) => ({ type: 'markUnread', articleId }) as const
 
 export function ArticleList({
   items,
@@ -38,6 +47,7 @@ export function ArticleList({
 }: Props) {
   const t = useTranslations('list')
   const ts = useTranslations('sidebar')
+  const tt = useTranslations('toast')
   const tables = useTables()
   const { store } = useStore()
   const location = useLocation()
@@ -46,17 +56,58 @@ export function ArticleList({
   const target = languageBadge(readingLang)
   const [limit, setLimit] = useState(PAGE)
   const shown = items.slice(0, limit)
+  // Liking a post reads it, so Liked has nothing to mark.
+  const markable = items.length > 0 && !(params.feedId === null && params.filter === 'liked')
   const markAllRead = () => {
+    // The device's rows as they are when pressed, which the toast counts against.
+    const before = store.getSnapshot().tables
+    const at = Date.now()
+    const epoch = store.epoch
+    const say = (n: number, undo: () => void) =>
+      showToast(t('markedRead', { n }), {
+        label: tt('undo'),
+        // The tab holds another account by now: nothing of this one's to take back there.
+        run: () => {
+          if (store.epoch === epoch) undo()
+        },
+      })
+    if (params.feedId === null && params.filter === 'today') {
+      // Today is a window the server knows nothing of: a mark-all up to its newest post would read
+      // every older post of every feed too. So each unread post it holds, read on its own.
+      const ids = items.filter((a) => !isRead(before, a, at)).map((a) => a.id)
+      const last = store.mutateMany(ids.map(read)).at(-1)
+      if (!last) return
+      say(ids.length, () => store.mutateMany(ids.map(unread), { after: last.at }))
+      return
+    }
     // Up to what the list displayed, never the server's newest: a post that arrived after the
     // reader looked stays unread (ADR 0025).
     const upTo = shown.reduce((max, a) => (a.id > max ? a.id : max), 0)
-    if (upTo > 0) {
-      store.mutate({
-        type: 'markAllRead',
-        upTo,
-        ...(params.feedId ? { feedId: params.feedId } : {}),
-      })
+    if (upTo === 0) return
+    const input = {
+      type: 'markAllRead',
+      upTo,
+      ...(params.feedId ? { feedId: params.feedId } : {}),
+    } as const
+    // Counted from what the change does, as the server will apply it: every post of the scope up
+    // to `upTo`, the ones this list never showed included.
+    const covered = markAllReadCovers(before, { ...input, mid: '', at }, at)
+    if (covered.length === 0) {
+      store.mutate(input)
+      return
     }
+    // Held on the device while its Undo shows, so taking it back never reaches the server: a
+    // watermark only moves forward (ADR 0025).
+    const stamp = store.mutate(input, { holdMs: UNDO_HOLD_MS })
+    if (!stamp) return
+    say(covered.length, () => {
+      if (store.retract(stamp.mid)) return
+      // Sent already (the tab was hidden meanwhile): what it read, marked unread one by one and
+      // later than it. A mark-all over more posts than that is left as it is.
+      if (covered.length <= UNDO_UNREAD_MAX) {
+        store.mutateMany(covered.map(unread), { after: stamp.at })
+      }
+    })
   }
   return (
     <section
@@ -67,7 +118,7 @@ export function ArticleList({
         <h1 className="min-w-0 flex-1 truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
           {heading}
         </h1>
-        {items.length > 0 ? (
+        {markable ? (
           <button
             type="button"
             onClick={markAllRead}

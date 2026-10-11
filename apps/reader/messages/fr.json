@@ -162,7 +162,8 @@
     "loadMore": "Articles plus anciens",
     "fetching": "Première récupération de ce flux…",
     "allRead": "Vous êtes à jour.",
-    "allReadHint": "Les articles lus sont masqués. <settings>Réaffichez-les</settings> dans les Paramètres."
+    "allReadHint": "Les articles lus sont masqués. <settings>Réaffichez-les</settings> dans les Paramètres.",
+    "markedRead": "{n, plural, one {# article marqué comme lu.} other {# articles marqués comme lus.}}"
   },
   "reader": {
     "close": "Fermer",
