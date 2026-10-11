@@ -104,6 +104,49 @@ test.describe('the first run', () => {
     await expect(page.getByTestId('article-list')).toBeVisible()
     await expect(page).toHaveURL(/\/reading$/)
   })
+
+  test('on a phone, a member who follows nothing still reaches the posts they liked', async ({
+    page,
+    context,
+  }) => {
+    // A member who liked a post and then unsubscribed from everything: the like keeps the post.
+    const api = context.request
+    await signInRequest(api, `first-run-liked-${Date.now()}@e2e.test`)
+    const { feedId } = await addFeed(api, `${FIXTURES}/jvns.xml`)
+    await cycle(api)
+    const pulled = (await (
+      await api.get(`${BASE}/api/v1/sync?cursor=0`, { headers: await memberHeaders(api) })
+    ).json()) as { rows: { articles: { id: number; feedId: number; title: string }[] } }
+    const post = pulled.rows.articles.find((a) => a.feedId === feedId)
+    if (!post) throw new Error(`feed ${feedId} has no posts`)
+    const change = (m: Record<string, unknown>) => ({
+      mid: crypto.randomUUID(),
+      at: Date.now(),
+      ...m,
+    })
+    const pushed = await api.post(`${BASE}/api/v1/mutations`, {
+      headers: { origin: BASE, ...(await memberHeaders(api)) },
+      data: {
+        mutations: [
+          change({ type: 'setLiked', articleId: post.id, liked: true }),
+          change({ type: 'unsubscribe', feedId }),
+        ],
+      },
+    })
+    expect(pushed.ok()).toBe(true)
+
+    await page.setViewportSize({ width: 412, height: 860 })
+    await page.goto('/reading')
+    await expect(page.getByTestId('first-run')).toBeVisible()
+    // The sidebar is a desktop's; on a phone the Feeds menu is the way to Liked, first run or not.
+    const nav = page.getByTestId('mobile-nav')
+    await expect(nav).toBeVisible()
+    await nav.locator('summary').click()
+    await nav.getByRole('link', { name: /^Liked/ }).click()
+    await expect(page).toHaveURL(/filter=liked/)
+    await expect(page.getByTestId('first-run')).toHaveCount(0)
+    await expect(page.getByTestId('article-list')).toContainText(post.title)
+  })
 })
 
 test.describe('a network that blocks Tela', () => {

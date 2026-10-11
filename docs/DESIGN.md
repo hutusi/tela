@@ -775,7 +775,10 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   to at least one to start reading." or offers "Start reading {n} blogs →", with "More blogs in
   Discover →" on the right, and under it "Coming from another reader? Import an OPML file or
   paste a blog's address.", both to `/add`. Offline, it keeps the heading and the links. The
-  sidebar says "No subscriptions yet." and, under "+ Add a blog", "or browse Discover →".
+  sidebar says "No subscriptions yet." and, under "+ Add a blog", "or browse Discover →"; below
+  `lg` the Feeds menu stays above the first run, since on a phone it is the only way to Liked,
+  which a member who follows nothing may still have kept posts in. Liked and an open article
+  never give way to it.
 - **Marking read and hiding read posts** are the member's (Settings → Reading). The action row
   always offers the other state: *Mark as unread* on a read post, *Mark as read* on an unread one,
   whatever the pref, since on a phone, which has no `m`, it is the only way back to unread. It is
