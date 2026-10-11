@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { anchorChanged, anchorIn, resolveAnchor } from '../src/lib/anchor'
+import { HIGHLIGHT_NOTE_MAX, HIGHLIGHT_QUOTE_MAX } from '@tela/shared'
+import { anchorChanged, anchorIn, mergeAnchors, resolveAnchor, type Span } from '../src/lib/anchor'
 
 const leaves = (...pairs: [string, string][]) => new Map(pairs)
 
@@ -81,5 +82,110 @@ describe('finding a highlight again', () => {
       start: 11,
       end: 16,
     })
+  })
+})
+
+describe('a highlight over others takes them in', () => {
+  const text = 'The quick brown fox jumps over the lazy dog. The dog sleeps.'
+  /** A highlight already in the leaf over `quote`, the first time it occurs. */
+  const span = (id: string, quote: string, note: string | null = null): Span => {
+    const start = text.indexOf(quote)
+    return { id, start, end: start + quote.length, note }
+  }
+  const sel = (quote: string) => ({
+    start: text.indexOf(quote),
+    end: text.indexOf(quote) + quote.length,
+  })
+
+  test('one it overlaps: the union, with the context of the union', () => {
+    const merged = mergeAnchors('leaf-a', text, sel('brown fox'), [span('h1', 'quick brown', 'Q')])
+    expect(merged).toEqual({
+      kind: 'merge',
+      anchor: anchorIn('leaf-a', text, 4, 19),
+      absorbed: ['h1'],
+      note: 'Q',
+    })
+    expect(merged?.kind === 'merge' && merged.anchor.quote).toBe('quick brown fox')
+  })
+
+  test('one it touches counts; one a space away does not', () => {
+    // "quick" ends where " brown" would start: selecting "brown" leaves a space between them.
+    expect(mergeAnchors('leaf-a', text, sel('brown'), [span('h1', 'quick')])).toBeNull()
+    const touching = mergeAnchors('leaf-a', text, sel(' brown'), [span('h1', 'quick')])
+    expect(touching).toMatchObject({ kind: 'merge', absorbed: ['h1'] })
+    expect(touching?.kind === 'merge' && touching.anchor.quote).toBe('quick brown')
+  })
+
+  test('a union keeps reaching until nothing more joins, in whatever order they are given', () => {
+    // "brown fox" reaches "fox jumps", which then touches " over the".
+    const chain = [span('far', ' over the', 'C'), span('near', 'fox jumps', 'B')]
+    for (const existing of [chain, [...chain].reverse()]) {
+      const merged = mergeAnchors('leaf-a', text, sel('brown fox'), existing)
+      expect(merged).toMatchObject({ kind: 'merge', absorbed: ['near', 'far'], note: 'B\n\nC' })
+      expect(merged?.kind === 'merge' && merged.anchor.quote).toBe('brown fox jumps over the')
+    }
+  })
+
+  test('a selection bridging two takes both in, their notes in reading order, each once', () => {
+    const merged = mergeAnchors('leaf-a', text, sel('brown fox jumps'), [
+      span('h2', 'jumps over', 'Same.'),
+      span('h1', 'quick brown', 'Same.'),
+      span('h3', 'fox', null),
+      span('h4', 'lazy dog', 'Elsewhere.'),
+    ])
+    expect(merged).toMatchObject({
+      kind: 'merge',
+      absorbed: ['h1', 'h3', 'h2'],
+      note: 'Same.',
+    })
+    expect(merged?.kind === 'merge' && merged.anchor.quote).toBe('quick brown fox jumps over')
+  })
+
+  test('a selection inside one changes nothing, and names it', () => {
+    expect(mergeAnchors('leaf-a', text, sel('brown'), [span('h1', 'quick brown fox')])).toEqual({
+      kind: 'inside',
+      id: 'h1',
+    })
+    // Exactly over it is inside it too.
+    expect(mergeAnchors('leaf-a', text, sel('fox'), [span('h1', 'fox')])).toEqual({
+      kind: 'inside',
+      id: 'h1',
+    })
+  })
+
+  test('none reached, or none there: a highlight of its own', () => {
+    expect(mergeAnchors('leaf-a', text, sel('lazy'), [span('h1', 'quick brown')])).toBeNull()
+    expect(mergeAnchors('leaf-a', text, sel('lazy'), [])).toBeNull()
+  })
+
+  test('works on Chinese text as on any other', () => {
+    const zh = '今天天气很好，我们去公园散步。'
+    const merged = mergeAnchors('leaf-zh', zh, { start: 7, end: 12 }, [
+      { id: 'h1', start: 10, end: 14, note: '公园' },
+    ])
+    expect(merged).toMatchObject({ kind: 'merge', absorbed: ['h1'], note: '公园' })
+    expect(merged?.kind === 'merge' && merged.anchor).toEqual(anchorIn('leaf-zh', zh, 7, 14))
+    expect(merged?.kind === 'merge' && merged.anchor.quote).toBe('我们去公园散步')
+  })
+
+  test('a union over either limit is refused: the selection is made on its own', () => {
+    const long = 'x'.repeat(HIGHLIGHT_QUOTE_MAX + 100)
+    const quoteOver = mergeAnchors('leaf-l', long, { start: 1000, end: long.length }, [
+      { id: 'h1', start: 0, end: 1100, note: null },
+    ])
+    expect(quoteOver).toBeNull()
+    // At the limit exactly is fine.
+    expect(
+      mergeAnchors('leaf-l', long, { start: 1000, end: HIGHLIGHT_QUOTE_MAX }, [
+        { id: 'h1', start: 0, end: 1100, note: null },
+      ]),
+    ).toMatchObject({ kind: 'merge' })
+
+    const half = 'n'.repeat(HIGHLIGHT_NOTE_MAX / 2)
+    const notesOver = mergeAnchors('leaf-a', text, sel('brown fox jumps'), [
+      span('h1', 'quick brown', half),
+      span('h2', 'jumps over', `${half}!`),
+    ])
+    expect(notesOver).toBeNull()
   })
 })

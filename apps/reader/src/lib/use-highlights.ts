@@ -173,5 +173,21 @@ export function useHighlights({
     [],
   )
 
-  return { items, at }
+  /**
+   * The highlights painted in one leaf of one side (and, on the translation, in the language it
+   * is in), where they are on the page now: what a new highlight there merges with.
+   */
+  const inLeaf = useCallback(
+    (side: Side, lang: string | null, leafId: string): HighlightItem[] =>
+      current.current.filter(
+        (item) =>
+          item.status === 'shown' &&
+          item.row.side === side &&
+          (side === 'original' || item.row.lang === lang) &&
+          item.leafId === leafId,
+      ),
+    [],
+  )
+
+  return { items, at, inLeaf }
 }

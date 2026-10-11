@@ -9,9 +9,10 @@ import type { ArticleRow } from '@tela/sync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useLocale, useTranslations } from 'use-intl'
+import { mergeAnchors } from '../lib/anchor'
 import { pairBlocks, readerBlocks, runsOf } from '../lib/block-pairs'
 import { relativeTime } from '../lib/format'
-import { pointAt, type Side } from '../lib/highlight-dom'
+import { pointAt, renderedLeaves, type Side } from '../lib/highlight-dom'
 import type { ReadingMode } from '../lib/href'
 import { newId } from '../lib/id'
 import { useReadingPrefs } from '../lib/prefs'
@@ -151,27 +152,53 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
   // A streaming translation's text is still changing: highlight it once it has settled.
   const selectable =
     selected && (selected.side === 'original' || translationSettled) ? selected : null
+  // A selection that overlaps or touches highlights in its leaf takes them in: one highlight over
+  // all of it, with their notes, under a new id. A new id because a deleted one stays deleted, and
+  // another device's re-anchoring could still write to an old one and undo the merge. Inside one
+  // already, it changes nothing, and Add a note opens that one's note.
+  const { inLeaf } = highlights
   const highlight = useCallback(
     (side: Side, withNote: boolean) => {
-      if (!selectable || !article.contentKey) return
+      if (!selectable || !article.contentKey || !body.current) return
+      const { anchor, rect } = selectable
+      const lang = side === 'translation' ? readingLang : null
+      const text = renderedLeaves(body.current, side).get(anchor.leafId)?.textContent ?? ''
+      const spans = inLeaf(side, lang, anchor.leafId).map((item) => ({
+        id: item.row.id,
+        start: item.start,
+        end: item.end,
+        note: item.row.note,
+      }))
+      const merge = text ? mergeAnchors(anchor.leafId, text, anchor, spans) : null
+      window.getSelection()?.removeAllRanges()
+      const at = { x: rect.left + rect.width / 2, y: rect.bottom }
+      if (merge?.kind === 'inside') {
+        if (withNote) setNote({ id: merge.id, ...at })
+        return
+      }
       const id = newId()
-      store.mutate({
-        type: 'putHighlight',
+      const put = {
+        type: 'putHighlight' as const,
         id,
         articleId: article.id,
         contentKey: article.contentKey,
         side,
-        lang: side === 'translation' ? readingLang : null,
-        ...selectable.anchor,
-        note: null,
-      })
-      window.getSelection()?.removeAllRanges()
-      if (withNote) {
-        const { rect } = selectable
-        setNote({ id, x: rect.left + rect.width / 2, y: rect.bottom })
+        lang,
+        ...(merge ? merge.anchor : anchor),
+        note: merge?.note ?? null,
       }
+      if (merge) {
+        const { absorbed } = merge
+        store.mutateMany([
+          put,
+          ...absorbed.map((gone) => ({ type: 'deleteHighlight' as const, id: gone })),
+        ])
+        // A note open on one it took in is now the merged one's.
+        setNote((open) => (open && absorbed.includes(open.id) ? { ...open, id } : open))
+      } else store.mutate(put)
+      if (withNote) setNote({ id, ...at })
     },
-    [selectable, article.id, article.contentKey, readingLang, store],
+    [selectable, article.id, article.contentKey, readingLang, store, inLeaf],
   )
   // `h` highlights the selection: the keyboard's way to the toolbar.
   useEffect(() => {

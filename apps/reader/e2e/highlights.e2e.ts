@@ -1,7 +1,8 @@
 /**
  * Highlights and notes (ADR 0026): made from a selection, painted over the text without touching
  * the article's DOM, kept across reloads, found again when the post changes, and admitted to be
- * gone when the passage is.
+ * gone when the passage is. A new one takes in those it overlaps, a removal can be undone, and the
+ * list follows the post (Tela v5).
  */
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import {
@@ -62,6 +63,15 @@ async function clearHighlights(request: APIRequestContext): Promise<void> {
     },
   })
   if (!res.ok()) throw new Error(`clearing highlights failed: ${res.status()} ${await res.text()}`)
+}
+
+/** Highlight `passage` from the toolbar and write `note` on it. */
+async function highlightWithNote(page: Page, passage: string, note: string): Promise<void> {
+  await selectText(page, passage)
+  await page.getByTestId('highlight-create-note').click()
+  await page.getByTestId('highlight-note-text').fill(note)
+  await page.getByTestId('highlight-note-save').click()
+  await expect(page.getByTestId('highlight-note')).toHaveCount(0)
 }
 
 /** Where the selection is on the screen. */
@@ -234,6 +244,55 @@ test('the list follows the post, not the order the highlights were made in', asy
   await expect(page.getByTestId('highlights')).toContainText(
     'Highlights and notes are private. Select text and press H to highlight.',
   )
+})
+
+test('a highlight over two others takes both in, and their notes join', async ({
+  page,
+  request,
+}) => {
+  const UNION = 'The first paragraph sets the scene'
+  await clearHighlights(request)
+  await openChanging(page)
+  await expect(page.getByTestId('body-original').first()).toContainText(V3_FIRST)
+  // A space apart, two stay two.
+  await highlightWithNote(page, 'The first paragraph', 'Opening.')
+  await highlightWithNote(page, 'sets the scene', 'Scene.')
+  const items = page.getByTestId('highlight-item')
+  await expect(items).toHaveCount(2)
+  await expect
+    .poll(async () => (await painted(page)).sort())
+    .toEqual(['The first paragraph', 'sets the scene'])
+
+  // A selection across both makes one highlight of all of it, in one push.
+  const merged = page.waitForRequest(
+    (r) =>
+      r.url().includes('/api/v1/mutations') && (r.postData() ?? '').includes('deleteHighlight'),
+  )
+  await selectText(page, 'paragraph sets')
+  await page.getByTestId('highlight-create').click()
+  await expect(items).toHaveCount(1)
+  await expect.poll(() => painted(page)).toEqual([UNION])
+  await expect(items).toContainText('Opening.')
+  await expect(items).toContainText('Scene.')
+  const { mutations } = JSON.parse((await merged).postData() ?? '{}') as {
+    mutations: { type: string; quote?: string }[]
+  }
+  expect(mutations.filter((m) => m.type === 'deleteHighlight')).toHaveLength(2)
+  expect(mutations.some((m) => m.type === 'putHighlight' && m.quote === UNION)).toBe(true)
+  await expect
+    .poll(async () => (await onServer(request)).map(({ quote, note }) => ({ quote, note })))
+    .toEqual([{ quote: UNION, note: 'Opening.\n\nScene.' }])
+
+  // Inside it already, a selection makes nothing, and Add a note opens the one it is in.
+  await selectText(page, 'first paragraph')
+  await page.getByTestId('highlight-create-note').click()
+  await expect(page.getByTestId('highlight-note-text')).toHaveValue('Opening.\n\nScene.')
+  await page.keyboard.press('Escape')
+  await expect(items).toHaveCount(1)
+
+  await page.reload()
+  await expect(items).toHaveCount(1)
+  await expect.poll(() => painted(page)).toEqual([UNION])
 })
 
 test('a removed highlight comes back with Undo, under the same id', async ({ page, request }) => {
