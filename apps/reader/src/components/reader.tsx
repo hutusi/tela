@@ -133,10 +133,16 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next }: Pr
   const [note, setNote] = useState<{ id: string; x: number; y: number } | null>(null)
   const translationSettled = view?.state === 'done' || view?.state === 'partial'
   const rendered = useMemo(() => ({ shown, object, pairs }), [shown, object, pairs])
+  // The post's leaves in order, which the list of highlights follows: both sides share the ids.
+  const leafOrder = useMemo(
+    () => new Map((object?.blocks ?? []).flatMap((b) => b.leaves).map((id, i) => [id, i])),
+    [object],
+  )
   const highlights = useHighlights({
     article,
     root: body,
     readingLang,
+    order: leafOrder,
     rendered,
     translationSettled,
     activeId: note?.id ?? null,

@@ -3,7 +3,7 @@
  * the article's DOM, kept across reloads, found again when the post changes, and admitted to be
  * gone when the passage is.
  */
-import { expect, type Page, test } from '@playwright/test'
+import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import {
   BASE,
   cycle,
@@ -31,6 +31,37 @@ async function openChanging(page: Page) {
   await page.getByTestId('subscription').filter({ hasText: 'Changing Fixture' }).click()
   await page.getByTestId('article-row').filter({ hasText: 'A post that changes' }).click()
   await expect(page.getByTestId('body-original').first()).toBeVisible()
+}
+
+type ServerHighlight = { id: string; quote: string; note: string | null }
+
+/** The member's highlights as tela-api holds them, through a snapshot pull. */
+async function onServer(request: APIRequestContext): Promise<ServerHighlight[]> {
+  const res = await request.get(`${BASE}/api/v1/sync?cursor=0`, {
+    headers: await memberHeaders(request),
+  })
+  if (!res.ok()) throw new Error(`sync failed: ${res.status()} ${await res.text()}`)
+  const { rows } = (await res.json()) as { rows: { highlights: ServerHighlight[] } }
+  return rows.highlights
+}
+
+/** Delete every highlight the member has, through the API: the specs below start from none. */
+async function clearHighlights(request: APIRequestContext): Promise<void> {
+  const held = await onServer(request)
+  if (held.length === 0) return
+  const at = Date.now()
+  const res = await request.post(`${BASE}/api/v1/mutations`, {
+    headers: { origin: BASE, ...(await memberHeaders(request)) },
+    data: {
+      mutations: held.map(({ id }) => ({
+        mid: crypto.randomUUID(),
+        at,
+        type: 'deleteHighlight',
+        id,
+      })),
+    },
+  })
+  if (!res.ok()) throw new Error(`clearing highlights failed: ${res.status()} ${await res.text()}`)
 }
 
 // Every spec here reads in English, side by side, at the default size and theme.
@@ -140,4 +171,28 @@ test('a highlight on the translation belongs to that side and that language', as
   expect(await painted(page)).toEqual([])
   await page.getByTestId('mode-side').click()
   await expect.poll(() => painted(page)).toEqual([needle])
+})
+
+// The specs below read the post as the one above left it (v3), from no highlights at all.
+const V3_FIRST = 'The first paragraph sets the scene.'
+
+test('the list follows the post, not the order the highlights were made in', async ({
+  page,
+  request,
+}) => {
+  await clearHighlights(request)
+  await openChanging(page)
+  await expect(page.getByTestId('body-original').first()).toContainText(V3_FIRST)
+  const items = page.getByTestId('highlight-item')
+  // The last paragraph first, then the one before it.
+  for (const [n, passage] of ['says goodbye', 'Something else'].entries()) {
+    await selectText(page, passage)
+    await page.getByTestId('highlight-create').click()
+    await expect(items).toHaveCount(n + 1)
+  }
+  await expect(items.nth(0)).toContainText('Something else')
+  await expect(items.nth(1)).toContainText('says goodbye')
+  await expect(page.getByTestId('highlights')).toContainText(
+    'Highlights and notes are private. Select text and press H to highlight.',
+  )
 })

@@ -178,8 +178,9 @@ export function HighlightNote({
 }
 
 /**
- * Every highlight of this post, in the order they were made. One the post no longer contains
- * keeps its quote and note and says so; one on a layout not showing says where it is.
+ * Every highlight of this post, in reading order (`useHighlights`). One the post no longer
+ * contains keeps its quote and note, says so and comes last; one on a layout not showing says
+ * where it is.
  */
 export function HighlightList({
   items,
@@ -192,15 +193,15 @@ export function HighlightList({
   const { store } = useStore()
   if (items.length === 0) return null
   return (
-    <section className="mt-12 max-w-(--reader-measure)" data-testid="highlights">
-      <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+    <section className="mt-9 max-w-(--reader-measure)" data-testid="highlights">
+      <h2 className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
         {t('title', { n: items.length })}
       </h2>
-      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      <ul className="m-0 list-none p-0">
         {items.map((item) => (
           <li
             key={item.row.id}
-            className="rounded-xl border border-line bg-surface px-4 py-3"
+            className="border-t border-line"
             data-testid="highlight-item"
             data-status={item.status}
           >
@@ -209,23 +210,27 @@ export function HighlightList({
               disabled={item.status !== 'shown'}
               onClick={(e) => {
                 item.leaf?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-                onOpen(item, { x: e.clientX, y: e.clientY })
+                // From the keyboard there is no pointer: the note opens by the row instead.
+                const row = e.currentTarget.getBoundingClientRect()
+                onOpen(item, { x: e.clientX || row.left + 40, y: e.clientY || row.bottom })
               }}
-              className="w-full text-left disabled:cursor-default"
+              className="flex w-full flex-col gap-1.5 py-3.5 text-left disabled:cursor-default"
             >
-              <span className="block font-serif text-[16px] leading-snug text-body">
-                <mark className="rounded-sm bg-highlight px-0.5 text-inherit">
+              <span className="font-serif text-[17px] leading-normal text-ink">
+                <mark className="rounded-[2px] bg-highlight text-inherit box-decoration-clone">
                   {item.row.quote}
                 </mark>
               </span>
               {item.row.note ? (
-                <span className="mt-1.5 block text-[13.5px] leading-snug text-ink-2">
+                <span className="whitespace-pre-line text-[13.5px] leading-[1.45] text-ink-2">
                   {item.row.note}
                 </span>
+              ) : item.status === 'shown' ? (
+                <span className="text-[13px] text-muted">{t('addNote')}</span>
               ) : null}
             </button>
             {item.status !== 'shown' ? (
-              <div className="mt-2 flex items-center gap-3 text-[12px] text-muted">
+              <div className="-mt-1.5 flex items-center gap-3 pb-3.5 text-[12px] text-muted">
                 <span className="flex-1">
                   {item.status === 'detached' ? t('detached') : t('elsewhere')}
                 </span>
@@ -243,6 +248,11 @@ export function HighlightList({
           </li>
         ))}
       </ul>
+      <p className="m-0 border-t border-line pt-3 text-[12.5px] text-muted">
+        {t.rich('privacy', {
+          keyboard: (chunks) => <span className="pointer-coarse:hidden">{chunks}</span>,
+        })}
+      </p>
     </section>
   )
 }
