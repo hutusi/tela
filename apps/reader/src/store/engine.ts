@@ -8,7 +8,8 @@
  *   at once when the tab is hidden or closed, so the last change before leaving is not left
  *   waiting for the next visit; offline, it keeps retrying with backoff and loses nothing
  *   (pending mutations are stored). A change held back for an Undo (the store's `holdMs`) goes
- *   when its hold ends, or with the rest when the tab is hidden or closed, whichever is first.
+ *   when its toast goes, or with the rest when the tab is hidden or closed or the member signs out
+ *   (`flush`), whichever is first.
  * - A 401 means the session is gone; a 409 means this app is older than the protocol, or that
  *   another tab signed in as someone else. Each call names the account the tab holds, and its
  *   answer is taken only while the tab still holds it (the store's epoch).
@@ -31,7 +32,8 @@ const MAX_BACKOFF_MS = 60_000
 export class SyncEngine {
   private pulling: Promise<void> | null = null
   private pullAgain = false
-  private pushing = false
+  /** The push on its way, if any: one at a time, and `flush` waits for it. */
+  private pushing: Promise<void> | null = null
   private pushTimer: ReturnType<typeof setTimeout> | null = null
   private backoff = 1000
   private interval: ReturnType<typeof setInterval> | null = null
@@ -168,13 +170,26 @@ export class SyncEngine {
 
   /** Push what is unsent, then pull so the confirmed tables catch up with it. */
   async push(options: { keepalive?: boolean } = {}): Promise<void> {
-    if (this.pushing || this.stopped) return
+    if (!(await this.send(options))) return
+    if (this.store.unsent().length > 0) this.schedulePush()
+    await this.pull()
+  }
+
+  /**
+   * Send one batch of what is unsent, unless one is on its way already. True once it is answered;
+   * false when nothing went, or it failed (offline, it is tried again later).
+   */
+  private async send(options: { keepalive?: boolean }): Promise<boolean> {
+    if (this.pushing || this.stopped) return false
     const owner = this.store.userId
     const epoch = this.store.epoch
-    if (owner === null) return
+    if (owner === null) return false
     const batch = this.store.unsent()
-    if (batch.length === 0) return
-    this.pushing = true
+    if (batch.length === 0) return false
+    let sent = (): void => {}
+    this.pushing = new Promise<void>((resolve) => {
+      sent = resolve
+    })
     try {
       const res = await api('/api/v1/mutations', {
         body: { mutations: batch },
@@ -184,15 +199,48 @@ export class SyncEngine {
       if (!res.ok) throw new Error(`push ${res.status}`)
       await this.store.acknowledge((await res.json()) as PushResponse, epoch)
       this.backoff = 1000
-      this.pushing = false
-      if (this.store.unsent().length > 0) this.schedulePush()
-      await this.pull()
+      return true
     } catch (err) {
-      this.pushing = false
-      if (this.fail(err, epoch)) return
+      if (this.fail(err, epoch)) return false
       // Offline: try again later, a little later each time.
       this.pushTimer = setTimeout(() => void this.push(), this.backoff)
       this.backoff = Math.min(MAX_BACKOFF_MS, this.backoff * 2)
+      return false
+    } finally {
+      this.pushing = null
+      sent()
     }
+  }
+
+  /**
+   * Signing out: let every hold go and send everything waiting, then come back, at most `ms`
+   * later, so a sign-out offline is not held up (what is unsent then is lost with the account, as
+   * it always was). Changes held for an Undo would otherwise go with the account, and everything
+   * queued behind them. Nothing is pulled after: the rows are about to be forgotten. Answers mean
+   * what they always do: a 409 for another account sends the tab to start again as them.
+   */
+  async flush(ms: number): Promise<void> {
+    if (this.stopped) return
+    this.store.releaseHolds()
+    const sendAll = async () => {
+      for (;;) {
+        // This loop sends what the debounce would have.
+        if (this.pushTimer) clearTimeout(this.pushTimer)
+        this.pushTimer = null
+        if (this.pushing) {
+          await this.pushing
+          continue
+        }
+        const waiting = this.store.unsent().length
+        // Stopped, failed, nothing left, or an answer that settled none of it: done.
+        if (!(await this.send({})) || this.store.unsent().length >= waiting) return
+      }
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, ms)
+    })
+    await Promise.race([sendAll(), late])
+    clearTimeout(timer)
   }
 }

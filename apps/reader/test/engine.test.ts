@@ -239,6 +239,61 @@ describe('a change held back for an Undo', () => {
     }
   })
 
+  test('signing out sends it first, with what it held back, and waits for the answer', async () => {
+    const storage = memoryPersistence()
+    const store = await member(storage, 'a', never)
+    const sent: string[][] = []
+    globalThis.fetch = (async (input: string, init?: RequestInit) => {
+      // The pull after the first push.
+      if (!String(input).startsWith('/api/v1/mutations')) return Response.json(pull(6, {}))
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null
+      const mids: string[] = (body?.mutations ?? []).map((m: { mid: string }) => m.mid)
+      sent.push(mids)
+      await tick()
+      return Response.json({ applied: mids, rejected: [], seq: 6 })
+    }) as typeof fetch
+    const engine = engineFor(store)
+    const before = made(store.mutate({ type: 'markRead', articleId: 1 }))
+    // One push already on its way when the member signs out: the flush waits for it, then sends
+    // the rest.
+    const pushing = engine.push()
+    const held = made(store.mutate({ type: 'markAllRead', upTo: 9 }, hold))
+    const after = made(store.mutate({ type: 'subscribe', feedId: 2 }))
+    await engine.flush(3000)
+    expect(sent).toEqual([[before.mid], [held.mid, after.mid]])
+    expect(store.unsent()).toEqual([])
+    expect(store.retract(held.mid)).toBe(false)
+    await pushing
+  })
+
+  test('signing out offline waits no longer than it was given', async () => {
+    const store = await member(memoryPersistence(), 'a', never)
+    // A request that never comes back.
+    server(() => new Promise<Response>(() => {}))
+    const engine = engineFor(store)
+    const held = made(store.mutate({ type: 'markAllRead', upTo: 9 }, hold))
+    const started = Date.now()
+    await engine.flush(50)
+    expect(Date.now() - started).toBeLessThan(1000)
+    // Let go, and stored: unsent, but nothing is lost before the account is forgotten.
+    expect(store.unsent().map((m) => m.mid)).toEqual([held.mid])
+  })
+
+  test("signing out, a push told of another account's session leaves as it always did", async () => {
+    const store = await member(memoryPersistence(), 'a', never)
+    server(() => Response.json({ error: 'account_changed' }, { status: 409 }))
+    let changed = 0
+    const engine = engineFor(store, { onAccountChanged: () => void changed++ })
+    store.mutate({ type: 'markAllRead', upTo: 9 }, hold)
+    await engine.flush(3000)
+    expect(changed).toBe(1)
+
+    // Stopped already: a second flush sends nothing.
+    const calls = server(() => Response.json({ applied: [], rejected: [], seq: 5 }))
+    await engine.flush(3000)
+    expect(calls).toEqual([])
+  })
+
   test('stopping stores it, sends nothing, and leaves nothing on a timer', async () => {
     const storage = memoryPersistence()
     let timers = 0

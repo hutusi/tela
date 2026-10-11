@@ -202,6 +202,9 @@ export function whenReachable(again: () => void, delay: number): () => void {
   return stop
 }
 
+/** The longest signing out waits for the changes still unsent to go (`SyncEngine.flush`). */
+export const SIGN_OUT_FLUSH_MS = 3000
+
 /** A signed-out session that never changes: the edge renders public pages for guests with it. */
 export function GuestSession({ children }: { children: React.ReactNode }) {
   const guest: Session = {
@@ -332,6 +335,14 @@ export function SessionProvider({
   )
 
   const signOut = useCallback(async () => {
+    // What the member did last goes first, a change held for an Undo included, since forgetting
+    // the account drops whatever is unsent. Not for long: offline, signing out goes on without.
+    const epoch = store.epoch
+    await engine.flush(SIGN_OUT_FLUSH_MS)
+    // A push was told that another tab signed in as someone else (api() has sent this tab to
+    // start again as them), or that the session had ended (the tab has forgotten the account):
+    // a sign-out now would name no one, and could end the other account's session.
+    if (store.epoch !== epoch) return
     engine.stop()
     // One request names this tab's account and ends the session, so tela-api can refuse it when
     // another tab has since signed in as someone else: a stale tab must not end their session.
