@@ -193,12 +193,14 @@ function SiteDashboard({
     td(`topics.${topic}`),
   )
   const listing = t(`listing.${site.listing}`)
+  // Only a blog in Discover is found under its topics: "private under Design" says nothing true.
+  const inDiscover = site.listing === 'listed' || site.listing === 'featured'
   const meta = [
     displayHost(site.homeUrl),
     site.primaryLang
       ? ts('writtenIn', { lang: names[site.primaryLang] ?? site.primaryLang })
       : null,
-    topics.length > 0
+    inDiscover && topics.length > 0
       ? t('listedUnder', { listing, topics: topics.join(t('listSeparator')) })
       : listing,
   ].filter((part) => part !== null)
