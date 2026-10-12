@@ -616,6 +616,17 @@
       "listed": "已在「發現」列出",
       "featured": "精選",
       "rejected": "已隱藏"
+    },
+    "short": {
+      "readers": "讀者",
+      "newReaders": "近 30 天 +{n}",
+      "likes": "喜歡",
+      "recommendations": "推薦"
+    },
+    "row": {
+      "likes": "<b>{n}</b> 人喜歡",
+      "recommendations": "<b>{n}</b> 條推薦",
+      "notes": "{n} 條推薦語"
     }
   },
   "settings": {

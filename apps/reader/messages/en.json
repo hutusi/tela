@@ -616,6 +616,17 @@
       "listed": "listed in Discover",
       "featured": "featured",
       "rejected": "hidden"
+    },
+    "short": {
+      "readers": "Readers",
+      "newReaders": "+{n} in 30 days",
+      "likes": "Likes",
+      "recommendations": "Recs"
+    },
+    "row": {
+      "likes": "<b>{n}</b> {n, plural, one {like} other {likes}}",
+      "recommendations": "<b>{n}</b> {n, plural, one {recommendation} other {recommendations}}",
+      "notes": "{n, plural, one {# note} other {# notes}}"
     }
   },
   "settings": {

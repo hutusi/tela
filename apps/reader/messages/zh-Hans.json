@@ -616,6 +616,17 @@
       "listed": "已在「发现」列出",
       "featured": "精选",
       "rejected": "已隐藏"
+    },
+    "short": {
+      "readers": "读者",
+      "newReaders": "近 30 天 +{n}",
+      "likes": "喜欢",
+      "recommendations": "推荐"
+    },
+    "row": {
+      "likes": "<b>{n}</b> 人喜欢",
+      "recommendations": "<b>{n}</b> 条推荐",
+      "notes": "{n} 条推荐语"
     }
   },
   "settings": {

@@ -559,3 +559,128 @@ test.describe('Discover on a phone', () => {
     }
   })
 })
+
+test.describe('the Dashboard on a phone', () => {
+  // The setup's member has claimed no blog, so the dashboard's answer is the test's own: a post
+  // with notes, one without, and one with no date. The page reads only this answer, never the
+  // device's tables, and the route admits any member.
+  const DAY = 86_400_000
+  const dashboard = {
+    sites: [
+      {
+        id: 999_997,
+        title: 'The Long Margin',
+        homeUrl: 'https://longmargin.example',
+        faviconKey: null,
+        listing: 'listed',
+        primaryLang: 'en',
+        topics: [],
+        readerCount: 86,
+        newReaders30d: 9,
+        translationOptOut: false,
+        totals: { posts: 3, likes: 132, recommendations: 38, notes: 4 },
+        posts: [
+          {
+            id: 999_991,
+            title: 'Editing is mostly deleting',
+            url: 'https://longmargin.example/editing',
+            publishedAt: Date.now() - 6 * DAY,
+            likeCount: 41,
+            recommendCount: 12,
+            noteCount: 2,
+          },
+          {
+            id: 999_992,
+            title: 'Four languages, two of them badly',
+            url: null,
+            publishedAt: Date.now() - 14 * DAY,
+            likeCount: 63,
+            recommendCount: 19,
+            noteCount: 0,
+          },
+          {
+            id: 999_993,
+            title: 'A reading list for the dark months',
+            url: null,
+            publishedAt: null,
+            likeCount: 28,
+            recommendCount: 7,
+            noteCount: 2,
+          },
+        ],
+      },
+    ],
+    notes: [
+      {
+        note: 'Cut the second paragraph, she says, and she is right about mine too.',
+        createdAt: Date.now() - DAY,
+        siteId: 999_997,
+        articleId: 999_991,
+        articleTitle: 'Editing is mostly deleting',
+        articleUrl: null,
+        handle: 'anna',
+        displayName: 'Anna Kowalska',
+        avatar: null,
+      },
+    ],
+  }
+
+  test('three tiles abreast under short labels, and the posts as rows', async ({ page }) => {
+    await page.route('**/api/v1/dashboard', (route) => route.fulfill({ json: dashboard }))
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      await page.goto('/dashboard')
+      const rows = page.getByTestId('dashboard-post')
+      await expect(rows).toHaveCount(3)
+      // Rows in the table's place, not beside a hidden one.
+      await expect(page.locator('table')).toHaveCount(0)
+
+      // Each tile keeps its three spans, the label the short one.
+      await expect(page.getByTestId('dashboard-readers').locator('span')).toHaveText([
+        'Readers',
+        '86',
+        '+9 in 30 days',
+      ])
+      await expect(page.getByTestId('dashboard-likes').locator('span')).toHaveText([
+        'Likes',
+        '132',
+        'across 3 posts',
+      ])
+      await expect(page.getByTestId('dashboard-recommendations').locator('span')).toHaveText([
+        'Recs',
+        '38',
+        '4 with a note',
+      ])
+      const boxes = await Promise.all(
+        ['readers', 'likes', 'recommendations'].map((k) =>
+          page.getByTestId(`dashboard-${k}`).boundingBox(),
+        ),
+      )
+      const tops = boxes.map((box) => Math.round(box?.y ?? -1))
+      expect(new Set(tops).size, `the tiles on one row at ${width}`).toBe(1)
+      expect(tops[0]).toBeGreaterThanOrEqual(0)
+      const last = boxes[2]
+      expect(last && last.x + last.width).toBeLessThanOrEqual(width)
+
+      // The date, then the counts with their numbers bold; notes only when there are some, and
+      // no date (nor its separator) for a post without one.
+      const stats = rows.getByTestId('dashboard-post-stats')
+      await expect(stats.nth(0)).toHaveText(/^[^·]+ · 41 likes · 12 recommendations · 2 notes$/)
+      await expect(stats.nth(0).locator('b')).toHaveText(['41', '12'])
+      await expect(stats.nth(1)).toHaveText(/^[^·]+ · 63 likes · 19 recommendations$/)
+      await expect(stats.nth(1)).not.toContainText('note')
+      await expect(stats.nth(2)).toHaveText('28 likes · 7 recommendations · 2 notes')
+
+      // What readers said: the note beside a 28px avatar, its date kept.
+      const notes = page.getByTestId('dashboard-notes')
+      await expect(notes).toContainText('“Cut the second paragraph')
+      const avatar = await notes.locator('[data-avatar]').boundingBox()
+      expect(avatar && Math.round(avatar.width)).toBe(28)
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      )
+      expect(overflow, `sideways scroll at ${width}`).toBeLessThanOrEqual(0)
+    }
+  })
+})

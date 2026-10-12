@@ -616,6 +616,17 @@
       "listed": "dans Découvrir",
       "featured": "mis en avant",
       "rejected": "masqué"
+    },
+    "short": {
+      "readers": "Lecteurs",
+      "newReaders": "+{n} en 30 jours",
+      "likes": "J’aime",
+      "recommendations": "Recos"
+    },
+    "row": {
+      "likes": "<b>{n}</b> j’aime",
+      "recommendations": "<b>{n}</b> {n, plural, one {recommandation} other {recommandations}}",
+      "notes": "{n} avec un mot"
     }
   },
   "settings": {
