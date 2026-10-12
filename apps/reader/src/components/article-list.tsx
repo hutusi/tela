@@ -145,7 +145,9 @@ export function ArticleList({
           {heading}
         </h1>
         {/* The switch, and Mark all read at the row's end while the list is wide. Liked has
-            neither: it is a shelf the member keeps, not an inbox, and liking a post reads it. */}
+            neither: it is a shelf the member keeps, not an inbox, and liking a post reads it.
+            Where the two do not fit on one line (French on a 320px phone), Mark all read's label
+            wraps rather than push the page sideways. */}
         {show !== null ? (
           <div className="flex min-h-[30px] items-center gap-2">
             <Segmented
@@ -162,7 +164,7 @@ export function ArticleList({
               <button
                 type="button"
                 onClick={markAllRead}
-                className="whitespace-nowrap rounded-md px-2 py-1 text-[13px] text-muted hover:bg-hover hover:text-ink group-data-[open=1]:hidden max-md:min-h-11"
+                className="rounded-md px-2 py-1 text-right text-[13px] text-muted hover:bg-hover hover:text-ink group-data-[open=1]:hidden max-md:min-h-11"
                 data-testid="mark-all-read"
               >
                 {t('markAllRead')}

@@ -81,6 +81,35 @@ test.describe('mobile fallback', () => {
     }
   })
 
+  test("in French at 320px, the switch and Mark all read share the list's row", async ({
+    page,
+  }) => {
+    await resetReading(page.request)
+    // The longest Mark all read the catalogues have, on the narrowest phone.
+    await setPrefs(page.request, {}, { uiLocale: 'fr' })
+    try {
+      await page.setViewportSize({ width: 320, height: 640 })
+      await page.goto('/reading')
+      await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+      await page.getByTestId('mobile-nav').locator('summary').click()
+      await page.getByTestId('mobile-subscription').filter({ hasText: '胡涂说' }).first().click()
+      await expect(page).toHaveURL(/feed=\d+/)
+      const markAll = page.getByTestId('mark-all-read')
+      await expect(markAll).toHaveText('Tout marquer comme lu')
+      await noSidewaysScroll(page, 'the list in French')
+      const [all, mark] = [
+        await restingBox(page.getByTestId('list-show-all')),
+        await restingBox(markAll),
+      ]
+      // Side by side, inside the 20px gutter, and still a finger's size.
+      expect(mark.x).toBeGreaterThan(all.x + all.width)
+      expect(mark.x + mark.width).toBeLessThanOrEqual(300)
+      expect(mark.height).toBeGreaterThanOrEqual(44)
+    } finally {
+      await resetReading(page.request)
+    }
+  })
+
   test('Manage beside the feeds opens the list in Settings', async ({ page }) => {
     await page.goto('/reading')
     const nav = page.getByTestId('mobile-nav')
