@@ -307,14 +307,16 @@ the serif "Settings" heading, and the section in a 640 px column; an item is cur
 section shown, not by the address. Each section is an address (`/settings/profile`,
 `/settings/reading`, `/settings/translation`, `/settings/subscriptions`, `/settings/privacy`,
 `/settings/invites`, `/settings/account`), so Back and a shared link land on it. Bare `/settings`
-is Profile from `md` and, below it, the list of sections (Tela Mobile 13, ADR 0047): the serif 30
-"Settings", then each section as a row at least 48 px tall, 15/500, with CHEVRON_RIGHT and a
-`line` between. On a phone a section is its own page under a 52 px back bar beneath the header, a
-link to `/settings` (BACK and "Settings", named "Back to Settings") rather than history, since a
-deep link has none, then the section's name as the serif 30 heading; arriving from a row or a
-link starts the page at its top with focus on that name. Whatever means Profile (*Edit profile*,
-a claim's "handle taken") names `/settings/profile`, so no form is edited at bare `/settings`,
-where crossing `md` would swap it for the list. *Default view* stays under Language at every
+goes to `/settings/profile` from `md` and is, below it, the list of sections (Tela Mobile 13, ADR
+0047): the serif 30 "Settings", then each section as a row at least 48 px tall, 15/500, with
+CHEVRON_RIGHT and a `line` above. On a phone a section is its own page under a 52 px back bar
+beneath the header (BACK and "Settings", named "Back to Settings"), then the section's name as the
+serif 30 heading. Opened from the list, the bar goes back, so the history holds the list once
+however many sections are visited, and focus returns to the row that was left (the list's entry
+keeps it in its state); reached by its address, the bar is a link to `/settings`. Arriving from a
+row or a link starts a page at its top with focus on its heading. Whatever means Profile (*Edit
+profile*, a claim's "handle taken") names `/settings/profile`, so no form is edited at bare
+`/settings`, the one address whose page turns on the width. *Default view* stays under Language at every
 width. Below `sm` a `SettingRow`'s label gives way first (it grows from nothing with a 96 px
 minimum; `gap-x-4 py-4`, a 12.5 px hint), so the size, measure and theme switches sit beside their
 labels at 360 px; a control too wide still wraps under it, and the rows built by hand use
@@ -470,7 +472,7 @@ Subscribe. Likes and subscriptions are grouped by the viewer's local day, and th
 thirty entries at a time behind "Older activity". The aside lists the people followed (from the device, no request) and a few
 readers to follow: the first five Discover's Readers tab would suggest (ADR 0044), each with its
 reason under the name (the accent dot, 12.5 px `ink-2`). No toasts: a Follow button changes at once.
-On a phone (below `md`, Tela Mobile 10): padded 20/24, the heading 32 px and the intro 14.5; the
+On a phone (below `md`, Tela Mobile 10): padded 24/20, the heading 32 px and the intro 14.5; the
 tabs scroll, their rule edge to edge; a 36 px avatar column, the note 19, and the card padded 16
 with a 21 px title, a 16 px excerpt and no footer (minutes, HEART, "Read →"), still one stretched
 link. The aside follows the feed.
@@ -489,11 +491,14 @@ Tela Mobile 12; CSS alone): a 64 px avatar with 16 px corners, the tagline 19 px
 its rule; posts take a 52 px date column, a 20 px title and a 16 px excerpt, and their meta reads
 "6 min · ES → EN" without the HEART.
 
-Search (`/search`): the query's blogs, by name or address, then the posts in the member's
-subscriptions whose title matches, original or translated. Below `xl` the page carries its own
-field, first, above the heading. A post is its blog, the language badge and the time, the title,
-and beneath it the line the query matched (`hitTitles`), each line with its `lang`. On a phone
-(below `md`, Tela Mobile 15): the field padded 11/16, the heading 28 px and the hint 13 px muted;
+Search (`/search`): the query's blogs, by name, address or description, then the posts in the
+member's subscriptions whose title matches, original or translated. Below `xl` the page carries its
+own field, under the heading and the hint. A post is its blog, the language badge and the time,
+the title, and beneath a translated one the original (`hitTitles`); a language never translated
+reads as written, with the translation beneath only when that is what matched. Each line carries
+its `lang`, and an echoed title (one translated to itself) keeps the original's. On a phone (below
+`md`, Tela Mobile 15) the field comes first, above the heading, and a search made on a touch
+screen lets the keyboard down; the field is padded 11/16, the heading 28 px and the hint 13 px muted;
 each blog is a compact card in place of `SiteCard` (a 36 px avatar with a 9 px radius, the name,
 "{host} · {n} readers" or the host alone, and an outlined Subscribe), and posts are rows ruled
 below with 1.3 line height.

@@ -34,11 +34,13 @@ jump.
 
 **`/settings` is Settings, and Profile is `/settings/profile`.** Below `md`, `/settings` lists the
 seven sections, and each section has a back bar to it under the header, as the article's back bar
-sits under the header. The bar is a link, not history: a deep link arrives with none. From `md`
-up, `/settings` still shows Profile beside the side column. Every link that means Profile
-(Edit profile, a claim's "handle taken") names `/settings/profile`, so nobody edits a profile at
-bare `/settings`, where turning a phone across 768px would swap the form for the list and lose
-what was typed.
+sits under the header. The bar goes back when the list is what lies behind it, so visiting a few
+sections leaves no list between each in the history, and is a link otherwise: a deep link arrives
+with no list to go back to. From `md` up, `/settings` goes to `/settings/profile`, the first
+section beside the side column, and every link that means Profile (Edit profile, a claim's
+"handle taken") names that address. No form is then ever edited at bare `/settings`, the one
+address whose page turns on the width, where turning a phone across 768px would swap the form
+for the list and lose what was typed.
 
 **"Default view" stays under Language** at every width. One setting has one home, and a row that
 opens an undesigned page is not a design.
@@ -56,7 +58,7 @@ opens an undesigned page is not a design.
 
 - From 768 to 1023px the pages keep their desktop layouts while the reader, on the same window,
   shows its phone bars. Each layout follows its own content.
-- `/settings` shows different things either side of `md`. A section's address shows the same
-  section at every width, and so does Profile's, now that it has one.
+- `/settings` is the list below `md` and becomes `/settings/profile` from it. A section's address
+  shows the same section at every width, and so does Profile's, now that it has one.
 - The settings row's label gives way before its control at 360px, so the size, measure and theme
   switches sit beside their labels. A control too wide still wraps under its label, as before.

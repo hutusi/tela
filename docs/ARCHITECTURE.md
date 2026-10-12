@@ -317,7 +317,7 @@ A Vite + React SPA that renders from the device.
 | `/search?q=` | The device first, then blogs and older posts from the server |
 | `/add`, `/claim?url=&taken=`, `/sites/:id/claim` | Add feeds and OPML; claim a blog (For writers' card lands on `/claim` with its blog filled in) |
 | `/writers` | For writers: a calling card made as you type, beside a labelled sample (ADR 0037); SPA-only (ADR 0035) |
-| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out), Privacy (with "Your data"); Invites and Account read `/api/v1/invites` and `/api/v1/account` live, not synced rows (`lib/account-api.ts`). Bare `/settings` is Profile from `md` and the list of sections below it; `/settings/profile` is Profile at every width (ADR 0047) |
+| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out), Privacy (with "Your data"); Invites and Account read `/api/v1/invites` and `/api/v1/account` live, not synced rows (`lib/account-api.ts`). Bare `/settings` is the list of sections below `md` and goes to `/settings/profile`, Profile at every width, from it (ADR 0047) |
 | `/dashboard` | The author's view |
 | `/admin/:area?f=&q=&id=&sort=&dir=` | The admin console (ADR 0039), its own chunk loaded only when an admin opens it, reading tela-api over the network; anyone else sees Not found. The URL alone holds the area, filter, search, open record and sort |
 
