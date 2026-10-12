@@ -69,20 +69,23 @@ export function SearchPage() {
   return (
     <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 pb-20 pt-10 animate-fade max-md:px-5 max-md:pt-[22px] md:px-12">
       {/* The header's field only appears at xl. Below that its search link leads here, so the
-          page has to carry the input or there is no way to run a search at all. It comes first,
-          above what it searched for (Tela Mobile 15): on a phone it is what the page is for. */}
-      <SearchField
-        query={query}
-        testId="search-page-input"
-        glyphClassName="max-md:size-[15px]"
-        className="mb-5 flex w-full max-w-[520px] items-center gap-2 rounded-full border border-line bg-surface px-4 py-2.5 text-[15px] text-muted focus-within:border-muted max-md:py-[11px] xl:hidden"
-      />
-      <h1 className="mb-2 font-serif text-[34px] font-medium leading-tight tracking-tight max-md:mb-1 max-md:text-[28px] max-md:leading-[1.15]">
-        {query ? t('resultsFor', { query }) : t('title')}
-      </h1>
-      <p className="mb-6 text-[15px] text-ink-2 max-md:mb-[22px] max-md:text-[13px] max-md:leading-[1.45] max-md:text-muted">
-        {t('hint')}
-      </p>
+          page has to carry the input or there is no way to run a search at all. On a phone it
+          comes first, above what it searched for (Tela Mobile 15), since there it is what the
+          page is for; from md it sits under the heading and the hint, as it always has. */}
+      <div className="flex flex-col">
+        <SearchField
+          query={query}
+          testId="search-page-input"
+          glyphClassName="max-md:size-[15px]"
+          className="mb-5 flex w-full max-w-[520px] items-center gap-2 rounded-full border border-line bg-surface px-4 py-2.5 text-[15px] text-muted focus-within:border-muted max-md:py-[11px] md:order-last md:mb-8 xl:hidden"
+        />
+        <h1 className="mb-2 font-serif text-[34px] font-medium leading-tight tracking-tight [overflow-wrap:anywhere] max-md:mb-1 max-md:text-[28px] max-md:leading-[1.15]">
+          {query ? t('resultsFor', { query }) : t('title')}
+        </h1>
+        <p className="mb-6 text-[15px] text-ink-2 max-md:mb-[22px] max-md:text-[13px] max-md:leading-[1.45] max-md:text-muted">
+          {t('hint')}
+        </p>
+      </div>
 
       {nothing ? (
         <p className="text-muted" data-testid="search-empty">
@@ -207,7 +210,14 @@ function SiteRow({
       data-testid="site-card"
       data-site-id={site.id}
     >
-      <SiteAvatar id={site.id} title={title} faviconKey={site.faviconKey} size={36} radius={9} />
+      <SiteAvatar
+        id={site.id}
+        title={title}
+        faviconKey={site.faviconKey}
+        size={36}
+        radius={9}
+        className="!text-[15px]"
+      />
       <div className="min-w-0 flex-1">
         <Link to={`/s/${site.id}`} className="block truncate font-medium text-ink hover:underline">
           {title}

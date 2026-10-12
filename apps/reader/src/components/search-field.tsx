@@ -47,6 +47,9 @@ export function SearchField({
       className={className}
       onSubmit={(e) => {
         e.preventDefault()
+        // A touch screen's keyboard would stay up over the results, which the field kept focus
+        // for; a pointer's member may want to refine the query, so there it keeps focus.
+        if (window.matchMedia('(pointer: coarse)').matches) input.current?.blur()
         navigate(`/search?q=${encodeURIComponent(value.trim())}`)
       }}
     >

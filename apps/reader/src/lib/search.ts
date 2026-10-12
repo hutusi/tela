@@ -84,7 +84,8 @@ export function hitTitles(
   const secondary = main !== a.title ? a.title : null
   return {
     main,
-    mainLang: translatedTitle === null ? a.sourceLang : readingLang,
+    // A title the model returned as it was (an echo) is still the original's words.
+    mainLang: main === a.title ? a.sourceLang : readingLang,
     secondary,
     secondaryLang: secondary === null ? null : a.sourceLang,
     badge: translatedTitle !== null && a.sourceLang !== null && a.sourceLang !== readingLang,

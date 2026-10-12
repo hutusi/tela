@@ -113,6 +113,17 @@ describe('how a hit reads', () => {
       badge: false,
     })
   })
+  test('a title translated to itself is still in its own language', () => {
+    const echo = {
+      article: article(4, { title: 'Tokyo', sourceLang: 'ja' }),
+      translatedTitle: 'Tokyo',
+    }
+    expect(hitTitles(echo, 'tokyo', 'en', [])).toMatchObject({
+      main: 'Tokyo',
+      mainLang: 'ja',
+      secondary: null,
+    })
+  })
   test('untranslated, it reads as written, in its own language or in none it knows', () => {
     const plain = { article: article(2, { title: 'Garden notes', sourceLang: 'en' }) }
     expect(hitTitles({ ...plain, translatedTitle: null }, 'garden', 'fr', [])).toEqual({
