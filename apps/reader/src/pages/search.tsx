@@ -72,7 +72,6 @@ export function SearchPage() {
       {/* The header's field only appears at xl. Below that its search link leads here, so the
           page has to carry the input or there is no way to run a search at all. */}
       <SearchField
-        key={query}
         query={query}
         testId="search-page-input"
         className="mb-8 flex w-full max-w-[520px] items-center gap-2 rounded-full border border-line bg-surface px-4 py-2.5 text-[15px] text-muted focus-within:border-muted xl:hidden"

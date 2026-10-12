@@ -269,6 +269,13 @@
     box-sizing: border-box;
   }
 
+  /* SearchField draws its own clear button, in every browser and at every width; WebKit's would
+     sit beside it, drawn its own way. Esc still clears the field. */
+  input[type="search"]::-webkit-search-cancel-button {
+    appearance: none;
+    display: none;
+  }
+
   ::-webkit-scrollbar {
     width: 8px;
   }

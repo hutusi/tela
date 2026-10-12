@@ -155,9 +155,9 @@ function MemberHeader() {
       </nav>
       <div className="flex-1" />
       <SearchField
-        key={query}
         query={query}
         testId="search-input"
+        compact
         className="hidden w-60 min-w-0 items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13px] text-muted focus-within:border-muted xl:flex"
       />
       <div className={CONTROLS}>
