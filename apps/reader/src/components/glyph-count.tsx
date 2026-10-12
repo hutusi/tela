@@ -8,10 +8,19 @@ const SHAPES = { likeCount: HEART, recommendCount: PASS } as const
  * glyph is hidden from screen readers, so the number alone would be read bare ("5 min 3 1"); it
  * is said in words instead ("3 likes"), and the digits are hidden in their place.
  */
-export function GlyphCount({ kind, n }: { kind: keyof typeof SHAPES; n: number }) {
+export function GlyphCount({
+  kind,
+  n,
+  className = '',
+}: {
+  kind: keyof typeof SHAPES
+  n: number
+  /** E.g. `max-md:hidden`, where a page the edge renders leaves it out on a phone. */
+  className?: string
+}) {
   const t = useTranslations('common')
   return (
-    <span className="flex items-center gap-1">
+    <span className={`flex items-center gap-1 ${className}`}>
       <Glyph size={12} className="shrink-0">
         {SHAPES[kind]}
       </Glyph>

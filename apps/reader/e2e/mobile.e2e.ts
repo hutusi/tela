@@ -1,8 +1,10 @@
 import { type APIRequestContext, expect, type Locator, type Page, test } from '@playwright/test'
 import {
+  ADMIN_TOKEN,
   accountMenuOrder,
   BASE,
   expectHeaderFits,
+  FIXTURES,
   measureHeader,
   memberHeaders,
   resetReading,
@@ -805,6 +807,28 @@ test.describe('Following, a profile and a blog page on a phone', () => {
       // The name runs full width under them.
       expect((await box(header.locator('h1'))).y).toBeGreaterThanOrEqual(avatar.y + avatar.height)
       await noSidewaysScroll(page, `/@${handle} at ${width}px`)
+    }
+  })
+
+  test('A blog page: Visit and Subscribe share a row at equal width', async ({ page }) => {
+    // A blog nobody claimed has no public page; an operator featuring it gives it one.
+    const curated = await page.request.post(`${BASE}/api/admin/curate`, {
+      headers: { origin: BASE, authorization: `Bearer ${ADMIN_TOKEN}` },
+      data: { feedUrl: `${FIXTURES}/jvns.xml`, topics: [], featured: true },
+    })
+    expect(curated.ok()).toBe(true)
+    const { siteId } = (await curated.json()) as { siteId: number }
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      await page.goto(`/s/${siteId}`)
+      await expect(page.getByTestId('site-subscribe')).toBeVisible()
+      const visit = await box(page.getByTestId('site-visit'))
+      const subscribe = await box(page.getByTestId('site-subscribe'))
+      expect(visit.y, 'Visit and Subscribe are not on one row').toBe(subscribe.y)
+      expect(Math.abs(visit.width - subscribe.width), 'unequal widths').toBeLessThanOrEqual(1)
+      expect(visit.height).toBeGreaterThanOrEqual(40)
+      expect(subscribe.height).toBeGreaterThanOrEqual(40)
+      await noSidewaysScroll(page, `/s/${siteId} at ${width}px`)
     }
   })
 })
