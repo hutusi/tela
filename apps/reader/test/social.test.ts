@@ -56,7 +56,7 @@ describe('reading prefs', () => {
     expect(readingPrefsOf(tables({}))).toEqual({
       mode: 'side',
       markOnOpen: true,
-      hideRead: false,
+      hideRead: true, // a list shows its unread posts until the member turns its switch to All
       autoTranslate: true,
       never: [],
     })
@@ -72,7 +72,7 @@ describe('reading prefs', () => {
         ],
       }),
     )
-    expect(set).toMatchObject({ markOnOpen: false, hideRead: false, mode: 'trans' })
+    expect(set).toMatchObject({ markOnOpen: false, hideRead: true, mode: 'trans' })
     expect(set.never).toBe(never) // the stored array itself, so memos keyed on it hold
   })
 })
@@ -144,7 +144,7 @@ describe('dates and colours for people', () => {
   })
 })
 
-describe('hiding read posts', () => {
+describe('a list of unread posts', () => {
   const read = (articleId: number, liked = false) => ({
     articleId,
     readAt: 1,
@@ -154,7 +154,8 @@ describe('hiding read posts', () => {
   })
   test('keeps every post the list showed unread, those the catch-up pull brought included', () => {
     const seen = new Set<number>()
-    // Painted from the device: yesterday's posts, all read, one of them liked.
+    // Painted from the device: yesterday's posts, all read, one of them liked, which reads it like
+    // any other (Liked is its own list).
     const painted = tables({
       subscriptions: [sub(1)],
       articles: [article(1), article(2)],
@@ -162,20 +163,20 @@ describe('hiding read posts', () => {
     })
     const list = (t: Tables, open: number | null = null) =>
       withoutRead(t, [...t.articles.values()], NOW, open, seen).map((a) => a.id)
-    expect(list(painted)).toEqual([2]) // the read one goes, the liked one stays
+    expect(list(painted)).toEqual([]) // the read one goes, and the liked one with it
     // The pull brings 4, 5 and 6; the member opens 6, then j takes them to 5.
     const pulled = tables({
       subscriptions: [sub(1)],
       articles: [article(1), article(2), article(4), article(5), article(6)],
       states: [read(1), read(2, true)],
     })
-    expect(list(pulled)).toEqual([2, 4, 5, 6])
+    expect(list(pulled)).toEqual([4, 5, 6])
     const readSix = tables({
       subscriptions: [sub(1)],
       articles: [article(1), article(2), article(4), article(5), article(6)],
       states: [read(1), read(2, true), read(6)],
     })
-    expect(list(readSix, 5)).toEqual([2, 4, 5, 6]) // 6 stays, so k can go back to it
+    expect(list(readSix, 5)).toEqual([4, 5, 6]) // 6 stays, so k can go back to it
   })
 
   test('keeps a post opened already read, after the reader moves on from it', () => {

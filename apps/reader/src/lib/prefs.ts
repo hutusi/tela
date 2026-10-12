@@ -12,7 +12,7 @@ export const PREF_KEYS = {
   mode: 'reader.mode',
   /** Opening a post reads it (default); off, it stays unread until marked. */
   markOnOpen: 'reader.mark_on_open',
-  /** Lists show unread posts only; liked ones are always kept. */
+  /** Lists show unread posts only (default); off, every post. The list's Unread / All switch. */
   hideRead: 'reader.hide_read',
   /** A foreign post asks for its translation as it opens (default); off, only when asked. */
   autoTranslate: 'translate.auto',
@@ -41,7 +41,7 @@ export function readingPrefsOf(t: Tables): ReadingPrefs {
   return {
     mode: readingModeParam((get(PREF_KEYS.mode) as string | undefined) ?? null) ?? 'side',
     markOnOpen: flag(get(PREF_KEYS.markOnOpen), true),
-    hideRead: flag(get(PREF_KEYS.hideRead), false),
+    hideRead: flag(get(PREF_KEYS.hideRead), true),
     autoTranslate: flag(get(PREF_KEYS.autoTranslate), true),
     never: tags(get(PREF_KEYS.never)),
   }

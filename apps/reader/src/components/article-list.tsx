@@ -12,7 +12,12 @@ import { useStore, useTables } from '../store/hooks'
 import type { Stamp } from '../store/local'
 import { feedTitle, isRead, markAllReadCovers, shownRead, shownTitle } from '../store/selectors'
 import { GlyphCount } from './glyph-count'
+import { Segmented } from './segmented'
 import { Swatch } from './swatch'
+
+/** What a list shows: its unread posts, or every post (Tela v5's switch under the heading). */
+export type ListShow = 'unread' | 'all'
+const SHOWS: readonly ListShow[] = ['unread', 'all']
 
 type Props = {
   items: ArticleRow[]
@@ -22,8 +27,13 @@ type Props = {
   locale: string
   now: number
   pendingFetch?: boolean
-  /** Read posts are hidden (a pref), and they are all there is: say so, not "no posts". */
-  hidingRead?: boolean
+  /** The switch's state, or null where the list has none (Liked, which always shows all). */
+  show?: ListShow | null
+  onShow?: (show: ListShow) => void
+  /** Unread is shown, and the list has posts, all read: say so, not "no posts". */
+  caughtUp?: boolean
+  /** Called as Mark all read reads something, so a list of unread posts can let them go. */
+  onMarkAll?: () => void
 }
 
 /**
@@ -55,7 +65,10 @@ export function ArticleList({
   locale,
   now,
   pendingFetch = false,
-  hidingRead = false,
+  show = null,
+  onShow,
+  caughtUp = false,
+  onMarkAll,
 }: Props) {
   const t = useTranslations('list')
   const ts = useTranslations('sidebar')
@@ -94,6 +107,8 @@ export function ArticleList({
       // Today is a window the server knows nothing of: a mark-all up to its newest post would read
       // every older post of every feed too. So each unread post it holds, read on its own.
       const ids = items.filter((a) => !isRead(before, a, at)).map((a) => a.id)
+      if (ids.length === 0) return
+      onMarkAll?.()
       offer(ids, store.mutateMany(ids.map(read), { holdMs: UNDO_HOLD_MS }))
       return
     }
@@ -113,6 +128,7 @@ export function ArticleList({
     // would outlive that Undo), or a list read already. A post the device does not hold is past
     // the horizon, read already too. So nothing is sent, and there is nothing to undo.
     if (covered.length === 0) return
+    onMarkAll?.()
     const stamp = store.mutate(input, { holdMs: UNDO_HOLD_MS })
     if (stamp) offer(covered, [stamp])
   }
@@ -122,36 +138,43 @@ export function ArticleList({
       data-testid="article-list"
     >
       <div
-        className="sticky top-0 z-[1] flex items-baseline gap-2 bg-paper px-5 pb-2.5 pt-5"
+        className="sticky top-0 z-[1] flex flex-col gap-2.5 bg-paper px-5 pb-2.5 pt-5"
         data-list-head
       >
-        <h1 className="min-w-0 flex-1 truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
+        <h1 className="min-w-0 truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
           {heading}
         </h1>
-        {markable ? (
-          <button
-            type="button"
-            onClick={markAllRead}
-            className="whitespace-nowrap rounded-md px-2 py-1 text-[13px] text-muted hover:bg-hover hover:text-ink group-data-[open=1]:hidden"
-            data-testid="mark-all-read"
-          >
-            {t('markAllRead')}
-          </button>
+        {/* The switch, and Mark all read at the row's end while the list is wide. Liked has
+            neither: it is a shelf the member keeps, not an inbox, and liking a post reads it. */}
+        {show !== null ? (
+          <div className="flex min-h-[30px] items-center gap-2">
+            <Segmented
+              label={t('show')}
+              options={SHOWS}
+              value={show}
+              render={(option) => t(option === 'unread' ? 'showUnread' : 'showAll')}
+              onChoose={(option) => onShow?.(option)}
+              testId="list-show"
+              tall
+            />
+            <span className="flex-1" />
+            {markable ? (
+              <button
+                type="button"
+                onClick={markAllRead}
+                className="whitespace-nowrap rounded-md px-2 py-1 text-[13px] text-muted hover:bg-hover hover:text-ink group-data-[open=1]:hidden max-md:min-h-11"
+                data-testid="mark-all-read"
+              >
+                {t('markAllRead')}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
-      {items.length === 0 ? (
+      {items.length === 0 && !caughtUp ? (
         <div className="px-6 py-10 text-[13.5px] text-muted" data-testid="list-empty">
           {pendingFetch ? (
             <p>{t('fetching')}</p>
-          ) : hidingRead ? (
-            <>
-              <p>{t('allRead')}</p>
-              <p>
-                {t.rich('allReadHint', {
-                  settings: (chunks) => <Link to="/settings/reading">{chunks}</Link>,
-                })}
-              </p>
-            </>
           ) : (
             <>
               <p>{t('empty')}</p>
@@ -165,6 +188,23 @@ export function ArticleList({
         </div>
       ) : null}
       <div className="flex flex-col px-3 pb-10">
+        {items.length === 0 && caughtUp ? (
+          // Unread leaves nothing (Tela v5, Tela Mobile 18): one press back to every post.
+          <div
+            className="flex flex-col items-center gap-3.5 border-t border-line px-2.5 py-14 text-center max-md:py-16"
+            data-testid="list-caught-up"
+          >
+            <p className="m-0 font-serif text-[22px] text-ink">{t('caughtUp')}</p>
+            <button
+              type="button"
+              onClick={() => onShow?.('all')}
+              className="rounded-full border border-thumb px-3.5 py-1.5 text-[13px] font-medium text-ink hover:bg-hover max-md:min-h-11 max-md:px-[18px] max-md:text-sm"
+              data-testid="show-all"
+            >
+              {t('showAllPosts')}
+            </button>
+          </div>
+        ) : null}
         {shown.map((a) => {
           const active = a.id === params.articleId
           // The open post counts as read before its markRead lands, unless the member marks

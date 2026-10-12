@@ -221,10 +221,11 @@ export function prefetchPlan(
 }
 
 /**
- * A list with read posts hidden (a pref), keeping every post it has shown unread or open: `seen`
- * is the list's memory of those for this visit, and this adds the ones unread now and the open
- * one. So a post read since, opened or reached by `j`, stays where the reader left it, and so does
- * one opened already read (from a public page, before its row arrived); liked posts always stay.
+ * A list showing unread posts only (the list's Unread / All switch), keeping every post it has
+ * shown unread or open: `seen` is the list's memory of those for this visit, and this adds the
+ * ones unread now and the open one. So a post read since, opened or reached by `j`, stays where
+ * the reader left it, and so does one opened already read (from a public page, before its row
+ * arrived). A liked post is read like any other: Liked is its own list, and shows everything.
  */
 export function withoutRead(
   t: Tables,
@@ -234,7 +235,7 @@ export function withoutRead(
   seen: Set<number>,
 ): ArticleRow[] {
   for (const a of list) if (!isRead(t, a, now) || a.id === openId) seen.add(a.id)
-  return list.filter((a) => seen.has(a.id) || isLiked(t, a.id))
+  return list.filter((a) => seen.has(a.id))
 }
 
 /**

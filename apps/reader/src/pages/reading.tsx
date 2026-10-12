@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
-import { ArticleList, listRow } from '../components/article-list'
+import { ArticleList, type ListShow, listRow } from '../components/article-list'
 import { EmptyState } from '../components/empty-state'
 import { FirstRun, showsFirstRun } from '../components/first-run'
 import { MobileNav } from '../components/mobile-nav'
@@ -61,18 +61,33 @@ export function ReadingPage() {
   const counts = totals(tables, now)
   const prefs = useReadingPrefs(tables)
   const all = articlesFor(tables, params, now)
-  // Hiding read posts (a pref) must not pull a post out from under the reader: a post seen unread
-  // in this list stays in it until the reader moves to another list, so opening a post, or j and
-  // k, never lose their place. That includes posts the catch-up pull brings after the list was
-  // first painted from the device, which are the first a member opens.
-  const listKey = `${params.filter}:${params.feedId}`
+  // Unread or All, the switch under the list's heading (a pref, so every device reads the same
+  // way). Liked has none and shows everything: it is a shelf, and liking a post reads it.
+  const liked = params.feedId === null && params.filter === 'liked'
+  const unreadOnly = prefs.hideRead && !liked
+  // Showing only unread posts must not pull a post out from under the reader: a post seen unread
+  // in this list stays in it until the reader moves to another list or turns the switch, so
+  // opening a post, or j and k, never lose their place. That includes posts the catch-up pull
+  // brings after the list was first painted from the device, which are the first a member opens.
+  // Mark all read lets them all go (`letSeenGo`), so the list says it is caught up.
+  const listKey = `${params.filter}:${params.feedId}:${unreadOnly ? 'unread' : 'all'}`
   const seenUnread = useRef<{ key: string; ids: Set<number> }>({ key: '', ids: new Set() })
   if (seenUnread.current.key !== listKey) seenUnread.current = { key: listKey, ids: new Set() }
   const seen = seenUnread.current.ids
   const items = useMemo(
-    () => (prefs.hideRead ? withoutRead(tables, all, now, params.articleId, seen) : all),
-    [all, prefs.hideRead, seen, tables, now, params.articleId],
+    () => (unreadOnly ? withoutRead(tables, all, now, params.articleId, seen) : all),
+    [all, unreadOnly, seen, tables, now, params.articleId],
   )
+  const onShow = useCallback(
+    (show: ListShow) =>
+      store.mutate({ type: 'setPref', key: PREF_KEYS.hideRead, value: show === 'unread' }),
+    [store],
+  )
+  // A new set, not a cleared one: the list's memo keys on it, and the mark-all's own change
+  // renders the list again.
+  const letSeenGo = useCallback(() => {
+    seenUnread.current = { key: seenUnread.current.key, ids: new Set() }
+  }, [])
   const selected = params.feedId !== null ? subs.find((s) => s.feedId === params.feedId) : undefined
   const listTitle = params.feedId !== null ? (selected?.title ?? '') : undefined
   // What a phone's back bar goes back to, by the name the list's own disclosure gives it.
@@ -372,7 +387,10 @@ export function ReadingPage() {
           locale={locale}
           now={now}
           pendingFetch={pendingFetch}
-          hidingRead={prefs.hideRead && all.length > 0}
+          show={liked ? null : unreadOnly ? 'unread' : 'all'}
+          onShow={onShow}
+          caughtUp={unreadOnly && all.length > 0}
+          onMarkAll={letSeenGo}
         />
       )}
       {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}

@@ -48,6 +48,39 @@ test.describe('mobile fallback', () => {
     await expect(page.getByTestId('mobile-nav')).toBeVisible()
   })
 
+  test("the list's Unread and All, and Mark all read, are a finger's size, as is Show all", async ({
+    page,
+  }) => {
+    await resetReading(page.request)
+    await page.goto('/reading')
+    await page.getByTestId('mobile-nav').locator('summary').click()
+    await page.getByTestId('mobile-subscription').filter({ hasText: '胡涂说' }).first().click()
+    await expect(page).toHaveURL(/feed=\d+/)
+    await expect(page.getByTestId('unread-dot').first()).toBeVisible()
+    const unreadOnly = page.getByTestId('list-show-unread')
+    try {
+      // Tela Mobile 01: 36px segments, and 44px to touch Mark all read.
+      for (const segment of [unreadOnly, page.getByTestId('list-show-all')]) {
+        expect((await restingBox(segment)).height).toBeGreaterThanOrEqual(36)
+      }
+      const markAll = page.getByTestId('mark-all-read')
+      expect((await restingBox(markAll)).height).toBeGreaterThanOrEqual(44)
+      await noSidewaysScroll(page, 'the list')
+
+      // Tela Mobile 18, held for its Undo and taken back.
+      await unreadOnly.click()
+      await markAll.click()
+      const caughtUp = page.getByTestId('list-caught-up')
+      await expect(caughtUp).toBeVisible()
+      expect((await restingBox(page.getByTestId('show-all'))).height).toBeGreaterThanOrEqual(44)
+      await noSidewaysScroll(page, 'All caught up')
+      await page.getByTestId('toast-action').click()
+      await expect(caughtUp).toHaveCount(0)
+    } finally {
+      await resetReading(page.request)
+    }
+  })
+
   test('Manage beside the feeds opens the list in Settings', async ({ page }) => {
     await page.goto('/reading')
     const nav = page.getByTestId('mobile-nav')

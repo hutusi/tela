@@ -247,9 +247,10 @@ test.describe('reader', () => {
       .toEqual({ readAt: true, readUpdatedAt: true })
   })
 
-  test('hiding read posts keeps the one being read, until the reader moves to another list', async ({
+  test('Unread keeps the post being read, until the reader moves to another list', async ({
     page,
   }) => {
+    await resetReading(page.request)
     await page.goto('/reading')
     await synced(page)
     const feed = page.getByTestId('subscription').filter({ hasText: 'Julia Evans' })
@@ -258,15 +259,16 @@ test.describe('reader', () => {
     await expect(page.getByTestId('article-row').first()).toContainText('Julia Evans')
     const rows = page.getByTestId('article-row')
     const unread = rows.filter({ has: page.getByTestId('unread-dot') })
-    // One post read before the pref, one read after it.
+    // One post read under All, one read under Unread.
     const earlier = await unread.first().getAttribute('href')
     await page.locator(`[data-testid="article-row"][href="${earlier}"]`).click()
     await expect(page.locator('.article-body').first()).toBeVisible()
     await page.getByTestId('close-article').click()
-    await setPrefs(page.request, { 'reader.hide_read': true })
+    await expect(page.locator(`[data-testid="article-row"][href="${earlier}"]`)).toBeVisible()
     try {
-      await page.reload()
-      await synced(page)
+      // Turning the switch lets go of what the list had shown: the post read under All goes.
+      await page.getByTestId('list-show-unread').click()
+      await expect(page.getByTestId('list-show-unread')).toHaveAttribute('aria-pressed', 'true')
       await expect(page.getByTestId('article-row').first()).toContainText('Julia Evans')
       await expect(page.locator(`[data-testid="article-row"][href="${earlier}"]`)).toHaveCount(0)
       const later = await unread.first().getAttribute('href')
@@ -542,6 +544,66 @@ test.describe('reader', () => {
     expect(markAllsIn(pushed)).toEqual([])
   })
 
+  test('Unread holds across a reload, and Mark all read empties it to All caught up until Undo', async ({
+    page,
+  }) => {
+    await resetReading(page.request)
+    const { dots, unread } = await openUnreadBlog(page)
+    const unreadOnly = page.getByTestId('list-show-unread')
+    const caughtUp = page.getByTestId('list-caught-up')
+    try {
+      // The member's choice, synced: it holds across a reload once its change has gone.
+      const sent = page.waitForResponse(
+        (r) =>
+          r.url().includes('/api/v1/mutations') &&
+          (r.request().postData() ?? '').includes('reader.hide_read'),
+      )
+      await unreadOnly.click()
+      await sent
+      await page.reload()
+      await synced(page)
+      await expect(unreadOnly).toHaveAttribute('aria-pressed', 'true')
+      await expect(dots).toHaveCount(unread.length)
+      await expect(page.getByTestId('article-row')).toHaveCount(unread.length)
+
+      // What the list kept for this visit goes with the mark-all, and the list says so.
+      await page.getByTestId('mark-all-read').click()
+      await expect(caughtUp).toContainText('All caught up')
+      await expect(page.getByTestId('article-row')).toHaveCount(0)
+      await expect(page.getByTestId('list-empty')).toHaveCount(0)
+      await page.getByTestId('toast-action').click()
+      await expect(caughtUp).toHaveCount(0)
+      await expect(dots).toHaveCount(unread.length)
+    } finally {
+      await resetReading(page.request)
+    }
+  })
+
+  test('Show all, from All caught up, lists the posts read and turns the switch to All', async ({
+    page,
+  }) => {
+    await resetReading(page.request)
+    const { dots, unread } = await openUnreadBlog(page)
+    try {
+      await page.getByTestId('list-show-unread').click()
+      await page.getByTestId('mark-all-read').click()
+      await expect(page.getByTestId('list-caught-up')).toBeVisible()
+      await page.getByTestId('show-all').click()
+      await expect(page.getByTestId('list-show-all')).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.getByTestId('list-caught-up')).toHaveCount(0)
+      // Every post the mark-all read is back, read, while its Undo still shows.
+      for (const id of unread) {
+        await expect(
+          page.locator(`[data-testid="article-row"][data-article-id="${id}"]`),
+        ).toHaveAttribute('data-read', '1')
+      }
+      await page.getByTestId('toast-action').click()
+      await expect(dots).toHaveCount(unread.length)
+    } finally {
+      await resetReading(page.request)
+    }
+  })
+
   test('a mark-all left alone goes to tela-api once its toast has gone, not before', async ({
     page,
   }) => {
@@ -676,7 +738,9 @@ test.describe('reader', () => {
     }
   })
 
-  test('Liked has no Mark all read, since liking a post read it', async ({ page }) => {
+  test('Liked has no switch and no Mark all read, since liking a post read it', async ({
+    page,
+  }) => {
     const rows = await rowsOnServer(page.request)
     const states = new Map(rows.states.map((s) => [s.articleId, s]))
     const watermarks = new Map(rows.subscriptions.map((s) => [s.feedId, s.watermarkId]))
@@ -694,6 +758,8 @@ test.describe('reader', () => {
     if (!post) throw new Error('every post is liked')
     const wasRead = read(post)
     await push(page.request, [{ type: 'setLiked', articleId: post.id, liked: true }])
+    // Under Unread elsewhere, Liked still lists every post it keeps, and offers no switch.
+    await setPrefs(page.request, { 'reader.hide_read': true })
     try {
       await page.goto('/reading?filter=liked')
       await synced(page)
@@ -701,11 +767,20 @@ test.describe('reader', () => {
         page.locator(`[data-testid="article-row"][data-article-id="${post.id}"]`),
       ).toBeVisible()
       await expect(page.getByTestId('mark-all-read')).toHaveCount(0)
+      await expect(page.getByTestId('list-show-unread')).toHaveCount(0)
+      // And the read post, liked, is gone from Unread on its own blog's list.
+      await page.goto(`/reading?feed=${post.feedId}`)
+      await synced(page)
+      await expect(page.getByTestId('list-show-unread')).toHaveAttribute('aria-pressed', 'true')
+      await expect(
+        page.locator(`[data-testid="article-row"][data-article-id="${post.id}"]`),
+      ).toHaveCount(0)
     } finally {
       await push(page.request, [
         { type: 'setLiked', articleId: post.id, liked: false },
         ...(wasRead ? [] : [{ type: 'markUnread', articleId: post.id }]),
       ])
+      await resetReading(page.request)
     }
   })
 
