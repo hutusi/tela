@@ -72,7 +72,8 @@ export const hrefOf = (section: Section) => `/settings/${section}`
 export type SettingsView =
   | { kind: 'section'; section: Section }
   | { kind: 'list' }
-  | { kind: 'redirect'; to: string }
+  /** `wasList`: the entry being replaced is the list's, which a phone may come back to. */
+  | { kind: 'redirect'; to: string; wasList?: true }
 
 /**
  * What `/settings` or `/settings/:section` shows. Bare `/settings` is the list of sections on a
@@ -88,7 +89,7 @@ export function settingsView(
   if (asked === undefined) {
     // A link's return from Google or GitHub is Account's, at any width.
     if (linkingReturn(search)) return { kind: 'redirect', to: `/settings/account${search}` }
-    return phone ? { kind: 'list' } : { kind: 'redirect', to: hrefOf('profile') }
+    return phone ? { kind: 'list' } : { kind: 'redirect', to: hrefOf('profile'), wasList: true }
   }
   const section = SECTIONS.find((s) => s === asked)
   return section ? { kind: 'section', section } : { kind: 'redirect', to: '/settings' }
@@ -116,9 +117,22 @@ export function SettingsPage() {
     window.scrollTo(0, 0)
     heading.current.focus({ preventScroll: true })
   }, [key])
+  // Beside the side column the list's entry is handed to Profile, and that sticks to the entry: a
+  // phone turned wide on the list, then narrow again, would come back (by Back, or the back bar
+  // going back) to Profile where it left the list. Arriving at such an entry on a phone puts the
+  // list back. Only on arriving, never as the width changes, so a form being edited there stays.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per entry navigated to
+  useEffect(() => {
+    if (navigation === 'POP' && phone && asked === 'profile' && wasList(state)) {
+      navigate('/settings', { replace: true, state: { left: leftFor(state) } })
+    }
+  }, [key])
 
   const view = settingsView(asked, search, phone)
-  if (view.kind === 'redirect') return <Navigate to={view.to} replace />
+  if (view.kind === 'redirect') {
+    const marked = view.wasList ? { wasList: true, left: leftFor(state) } : undefined
+    return <Navigate to={view.to} replace state={marked} />
+  }
   if (view.kind === 'list') return <SettingsList />
   const { section } = view
 
@@ -136,8 +150,8 @@ export function SettingsPage() {
             onClick={(e) => {
               // Opened from the list: going back is Back, so a few sections visited leave the
               // history as list, section, not a list between each, and the list's own entry
-              // knows which row to give focus back to.
-              if (!fromList(state)) return
+              // knows which row to give focus back to. A click meant for a new tab stays a link.
+              if (!plainClick(e) || !fromList(state)) return
               e.preventDefault()
               navigate(-1)
             }}
@@ -197,6 +211,14 @@ export function SettingsPage() {
 const fromList = (state: unknown) =>
   typeof state === 'object' && state !== null && 'fromList' in state && state.fromList === true
 
+/** Profile's entry that was the list's until the side column handed it over. */
+const wasList = (state: unknown) =>
+  typeof state === 'object' && state !== null && 'wasList' in state && state.wasList === true
+
+/** A click the browser follows in this tab: the main button, with no key asking for another. */
+const plainClick = (e: React.MouseEvent) =>
+  e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
+
 /** The section the list was left for, kept in the list's own history entry. */
 const leftFor = (state: unknown): string | null =>
   typeof state === 'object' && state !== null && 'left' in state && typeof state.left === 'string'
@@ -212,8 +234,9 @@ function SettingsList() {
   const heading = useRef<HTMLHeadingElement>(null)
   const rows = useRef(new Map<Section, HTMLAnchorElement>())
   // Arriving by a link starts at the heading, as a new page would; coming back to the list (Back,
-  // or the section's back bar) puts focus on the row that was left, where the member was. The row
-  // is in the list entry's own state, so it travels with that entry and nothing else claims it.
+  // the section's back bar, or the list put back in an entry Profile had) puts focus on the row
+  // that was left, where the member was. The row is in the list entry's own state, so it travels
+  // with that entry and nothing else claims it.
   // biome-ignore lint/correctness/useExhaustiveDependencies: once per entry navigated to
   useEffect(() => {
     if (navigation === 'PUSH') {
@@ -222,7 +245,7 @@ function SettingsList() {
       return
     }
     const left = SECTIONS.find((s) => s === leftFor(state))
-    if (navigation === 'POP' && left) rows.current.get(left)?.focus()
+    if (left) rows.current.get(left)?.focus()
   }, [key])
   return (
     <main className="w-full flex-1 animate-fade px-5 pt-6 pb-10">
@@ -240,7 +263,9 @@ function SettingsList() {
                 }}
                 to={hrefOf(s)}
                 state={{ fromList: true }}
-                onClick={() => navigate('/settings', { replace: true, state: { left: s } })}
+                onClick={(e) => {
+                  if (plainClick(e)) navigate('/settings', { replace: true, state: { left: s } })
+                }}
                 className="flex min-h-12 items-center justify-between gap-3 py-3 text-[15px] font-medium text-ink hover:no-underline"
                 data-testid={`settings-section-${s}`}
               >

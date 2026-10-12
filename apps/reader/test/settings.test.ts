@@ -7,9 +7,11 @@ describe('a Settings address', () => {
     expect(settingsView(undefined, '', true)).toEqual({ kind: 'list' })
     // Never Profile in place: a form at the address whose page turns on the width would lose an
     // edit when a phone turned across md.
+    // Marked as the list's entry, which a phone that comes back to it shows as the list again.
     expect(settingsView(undefined, '', false)).toEqual({
       kind: 'redirect',
       to: '/settings/profile',
+      wasList: true,
     })
   })
 

@@ -313,7 +313,10 @@ CHEVRON_RIGHT and a `line` above. On a phone a section is its own page under a 5
 beneath the header (BACK and "Settings", named "Back to Settings"), then the section's name as the
 serif 30 heading. Opened from the list, the bar goes back, so the history holds the list once
 however many sections are visited, and focus returns to the row that was left (the list's entry
-keeps it in its state); reached by its address, the bar is a link to `/settings`. Arriving from a
+keeps it in its state); reached by its address, or clicked for another tab, the bar is a link to
+`/settings`. The list's entry that the side column handed to Profile is marked as the list's, and a
+phone that comes back to it (Back, or the bar) is shown the list again, on arriving only, so a form
+being edited there is never swapped away as the width changes. Arriving from a
 row or a link starts a page at its top with focus on its heading. Whatever means Profile (*Edit
 profile*, a claim's "handle taken") names `/settings/profile`, so no form is edited at bare
 `/settings`, the one address whose page turns on the width. *Default view* stays under Language at every

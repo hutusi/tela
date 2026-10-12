@@ -887,6 +887,44 @@ test.describe('Settings on a phone', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused()
   })
 
+  test('a list turned wide and narrow again is still the list the back bar goes back to', async ({
+    page,
+  }) => {
+    // Found by Codex's review: beside the side column the list's entry is handed to Profile, and
+    // the back bar, trusting the section's "from the list", went back to Profile.
+    await page.setViewportSize({ width: 412, height: 860 })
+    await page.goto('/settings')
+    await page.getByTestId('settings-section-reading').click()
+    await expect(page).toHaveURL(/\/settings\/reading$/)
+    await page.setViewportSize({ width: 1024, height: 860 })
+    await page.goBack()
+    await expect(page).toHaveURL(/\/settings\/profile$/)
+    // Narrowed where it stands, Profile stays: a form being edited there is not swapped away.
+    await page.setViewportSize({ width: 412, height: 860 })
+    await expect(page.getByTestId('settings-form')).toBeVisible()
+    await page.goForward()
+    await expect(page).toHaveURL(/\/settings\/reading$/)
+    await page.getByTestId('settings-back').click()
+    await expect(page).toHaveURL(/\/settings$/)
+    await expect(page.getByTestId(/^settings-section-/)).toHaveCount(SECTIONS.length)
+    await expect(page.getByTestId('settings-section-reading')).toBeFocused()
+  })
+
+  test('the back bar opened with a key held is a link, for another tab', async ({ page }) => {
+    // Found by Codex's review: the bar went back in this tab whatever the click asked for.
+    await page.goto('/settings')
+    await page.getByTestId('settings-section-reading').click()
+    await expect(page).toHaveURL(/\/settings\/reading$/)
+    const opened = page.context().waitForEvent('page')
+    await page.getByTestId('settings-back').click({ modifiers: ['ControlOrMeta'] })
+    const other = await opened
+    await expect(other).toHaveURL(/\/settings$/)
+    await other.close()
+    // This tab stays where it was.
+    await expect(page).toHaveURL(/\/settings\/reading$/)
+    await expect(title(page)).toHaveText('Reading')
+  })
+
   test("Reading's three choices sit beside their labels at 360px", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 800 })
     await page.goto('/settings/reading')
