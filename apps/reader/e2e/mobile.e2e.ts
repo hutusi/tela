@@ -1,4 +1,4 @@
-import { type APIRequestContext, expect, type Locator, type Page, test } from '@playwright/test'
+import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import {
   ADMIN_TOKEN,
   accountMenuOrder,
@@ -7,7 +7,9 @@ import {
   FIXTURES,
   measureHeader,
   memberHeaders,
+  noSidewaysScroll,
   resetReading,
+  restingBox,
   setPrefs,
   signInRequest,
 } from './helpers'
@@ -32,11 +34,7 @@ test.describe('mobile fallback', () => {
     await expect(page.getByTestId('reader')).toBeVisible()
     await expect(page.getByTestId('article-list')).toBeHidden()
     await expect(page.getByTestId('mobile-nav')).toHaveCount(0)
-    // No horizontal overflow: the page body must not scroll sideways.
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    )
-    expect(overflow).toBeLessThanOrEqual(0)
+    await noSidewaysScroll(page, 'the page')
 
     // The back bar goes back to the list by its name, in the toolbar's place.
     const back = page.getByTestId('reader-back')
@@ -555,10 +553,7 @@ test.describe('Discover on a phone', () => {
       await link.scrollIntoViewIfNeeded()
       await link.click()
       await expect(page.getByTestId(`discover-tab-${tab}`)).toHaveAttribute('aria-current', 'page')
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      )
-      expect(overflow).toBeLessThanOrEqual(0)
+      await noSidewaysScroll(page, `Discover's ${tab} tab`)
     }
   })
 })
@@ -629,6 +624,8 @@ test.describe('the Dashboard on a phone', () => {
   }
 
   test('three tiles abreast under short labels, and the posts as rows', async ({ page }) => {
+    // English, whatever an earlier spec left: the labels and dates are read in it.
+    await resetReading(page.request)
     await page.route('**/api/v1/dashboard', (route) => route.fulfill({ json: dashboard }))
     for (const width of [360, 412]) {
       await page.setViewportSize({ width, height: 860 })
@@ -680,10 +677,7 @@ test.describe('the Dashboard on a phone', () => {
       const avatar = await notes.locator('[data-avatar]').boundingBox()
       expect(avatar && Math.round(avatar.width)).toBe(28)
 
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      )
-      expect(overflow, `sideways scroll at ${width}`).toBeLessThanOrEqual(0)
+      await noSidewaysScroll(page, `/dashboard at ${width}px`)
     }
   })
 })
@@ -693,37 +687,6 @@ test.describe('the Dashboard on a phone', () => {
  * below md, the profile's and the blog's by CSS alone, since the edge renders them.
  */
 test.describe('Following, a profile and a blog page on a phone', () => {
-  /** The page never scrolls sideways, as on Discover. */
-  async function noSidewaysScroll(page: Page, what: string) {
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    )
-    expect(overflow, `${what} scrolls sideways`).toBeLessThanOrEqual(0)
-  }
-
-  /**
-   * A box in whole pixels, once the page has come to rest: it fades in from 4px lower, so two
-   * boxes measured during the fade would not line up.
-   */
-  async function box(locator: Locator) {
-    await locator.evaluate((el) => {
-      const page = el.closest('main') ?? document.body
-      const fades = page
-        .getAnimations({ subtree: true })
-        .filter((a) => a.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY)
-      // A fade cancelled by a re-render rejects; the box is measured after it either way.
-      return Promise.all(fades.map((a) => a.finished.catch(() => undefined)))
-    })
-    const b = await locator.boundingBox()
-    if (!b) throw new Error(`${locator} has no box`)
-    return {
-      x: Math.round(b.x),
-      y: Math.round(b.y),
-      width: Math.round(b.width),
-      height: Math.round(b.height),
-    }
-  }
-
   test('Following: a 36px avatar column, and a card without its footer', async ({ page }) => {
     // Whom the setup's member follows depends on the specs before this one: the feed is given.
     const at = Date.now() - 3_600_000
@@ -772,7 +735,7 @@ test.describe('Following, a profile and a blog page on a phone', () => {
       for (const row of await rows.all()) {
         const columns = await row.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
         expect(columns.split(' ')[0], `the avatar column at ${width}px`).toBe('36px')
-        expect((await box(row.locator('[data-avatar]').first())).width).toBe(36)
+        expect((await restingBox(row.locator('[data-avatar]').first())).width).toBe(36)
       }
       // The card drops its minutes, heart and "Read →", and is still one link.
       const card = page.getByTestId('following-card')
@@ -798,15 +761,17 @@ test.describe('Following, a profile and a blog page on a phone', () => {
       await expect(edit).toBeVisible()
       await expect(edit).toHaveAttribute('href', '/settings/profile')
       const header = page.getByTestId('profile-page').locator('header')
-      const avatar = await box(header.locator('[data-avatar]'))
+      const avatar = await restingBox(header.locator('[data-avatar]'))
       expect([avatar.width, avatar.height]).toEqual([72, 72])
       // One row: the pill level with the avatar's top, after it, a finger's height.
-      const pill = await box(edit)
+      const pill = await restingBox(edit)
       expect(pill.y, 'Edit profile is not on the avatar’s row').toBe(avatar.y)
       expect(pill.x).toBeGreaterThan(avatar.x + avatar.width)
       expect(pill.height).toBeGreaterThanOrEqual(40)
       // The name runs full width under them.
-      expect((await box(header.locator('h1'))).y).toBeGreaterThanOrEqual(avatar.y + avatar.height)
+      expect((await restingBox(header.locator('h1'))).y).toBeGreaterThanOrEqual(
+        avatar.y + avatar.height,
+      )
       await noSidewaysScroll(page, `/@${handle} at ${width}px`)
     }
   })
@@ -823,8 +788,8 @@ test.describe('Following, a profile and a blog page on a phone', () => {
       await page.setViewportSize({ width, height: 860 })
       await page.goto(`/s/${siteId}`)
       await expect(page.getByTestId('site-subscribe')).toBeVisible()
-      const visit = await box(page.getByTestId('site-visit'))
-      const subscribe = await box(page.getByTestId('site-subscribe'))
+      const visit = await restingBox(page.getByTestId('site-visit'))
+      const subscribe = await restingBox(page.getByTestId('site-subscribe'))
       expect(visit.y, 'Visit and Subscribe are not on one row').toBe(subscribe.y)
       expect(Math.abs(visit.width - subscribe.width), 'unequal widths').toBeLessThanOrEqual(1)
       expect(visit.height).toBeGreaterThanOrEqual(40)
@@ -877,6 +842,7 @@ test.describe('Settings on a phone', () => {
         const box = await row.boundingBox()
         expect(Math.round(box?.height ?? 0), `${section} at ${width}px`).toBeGreaterThanOrEqual(48)
       }
+      let entries: number | null = null
       for (const [section, name] of SECTIONS) {
         await page.getByTestId(`settings-section-${section}`).click()
         await expect(page).toHaveURL(new RegExp(`/settings/${section}$`))
@@ -887,6 +853,13 @@ test.describe('Settings on a phone', () => {
         await page.getByTestId('settings-back').click()
         await expect(page).toHaveURL(/\/settings$/)
         await expect(rows).toHaveCount(SECTIONS.length)
+        // Back to where the member was: the row they left by has focus.
+        await expect(page.getByTestId(`settings-section-${section}`)).toBeFocused()
+        // The bar went back, not on: seven sections visited leave the history as one went in,
+        // the list and one section ahead of it, not a list between each.
+        const now = await page.evaluate(() => history.length)
+        entries ??= now
+        expect(now, `history after ${section} at ${width}px`).toBe(entries)
       }
     }
   })
@@ -907,10 +880,11 @@ test.describe('Settings on a phone', () => {
     await expect(title(page)).toHaveText('Subscriptions')
     // Loaded, not navigated to: focus is where the browser puts it on any page it loads.
     await expect(title(page)).not.toBeFocused()
-    // No list behind it in the history, and the link goes there all the same.
+    // No list behind it in the history, and the link goes there all the same, to its top.
     await back.click()
     await expect(page).toHaveURL(/\/settings$/)
     await expect(page.getByTestId(/^settings-section-/)).toHaveCount(SECTIONS.length)
+    await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused()
   })
 
   test("Reading's three choices sit beside their labels at 360px", async ({ page }) => {
@@ -950,9 +924,11 @@ test.describe('Settings on a phone', () => {
     // What each page shows once its rows are in: the device's, or tela-api's live answer.
     const shown: Record<string, string> = {
       '/settings': 'settings-section-account',
+      '/settings/profile': 'settings-form',
       '/settings/reading': 'theme-system',
       '/settings/translation': 'never-add',
       '/settings/subscriptions': 'settings-subscription',
+      '/settings/privacy': 'privacy-likes',
       '/settings/account': 'account-email',
       '/settings/invites': 'invite-create',
     }
@@ -967,10 +943,7 @@ test.describe('Settings on a phone', () => {
         await page.evaluate(async () => {
           await document.fonts.ready
         })
-        const overflow = await page.evaluate(
-          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-        )
-        expect(overflow, `${path} at ${width}px`).toBeLessThanOrEqual(0)
+        await noSidewaysScroll(page, `${path} at ${width}px`)
       }
     }
   })
@@ -982,10 +955,6 @@ test.describe('Settings on a phone', () => {
  * Start in a bar fixed at the foot.
  */
 test.describe('Search and the first run on a phone', () => {
-  /** How far the page scrolls sideways: never at all. */
-  const overflow = (page: Page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-
   // The fixture site took its description from the Chinese blog ("胡涂说博客/好奇心周刊"), and two
   // of that blog's posts are issues of the weekly: one word finds a blog, and posts read in English
   // with the original beneath.
@@ -1004,7 +973,7 @@ test.describe('Search and the first run on a phone', () => {
       const hit = page.getByTestId('article-hit').filter({ hasText: WORD }).first()
       await expect(row).toBeVisible()
       await expect(hit).toBeVisible()
-      expect(await overflow(page), 'the page scrolls sideways').toBeLessThanOrEqual(0)
+      await noSidewaysScroll(page, 'the page')
 
       // The field, then what it searched for.
       const above = await field.boundingBox()
@@ -1080,7 +1049,7 @@ test.describe('Search and the first run on a phone', () => {
       const box = await rows.first().boundingBox()
       expect(Math.round(box?.height ?? 0), 'a card, not a row').toBeLessThanOrEqual(80)
       expect(Math.abs((box?.width ?? 0) - ((viewport?.width ?? 0) - 40))).toBeLessThanOrEqual(1)
-      expect(await overflow(page), 'the page scrolls sideways').toBeLessThanOrEqual(0)
+      await noSidewaysScroll(page, 'the page')
 
       // Until one is taken, the bar says what it waits for.
       const bar = page.getByTestId('first-run-bar')
@@ -1111,7 +1080,7 @@ test.describe('Search and the first run on a phone', () => {
       const last = await page.getByTestId('first-run-footer').boundingBox()
       const top = await bar.boundingBox()
       expect(last && top && last.y + last.height <= top.y, 'the footer is under the bar').toBe(true)
-      expect(await overflow(page), 'the page scrolls sideways').toBeLessThanOrEqual(0)
+      await noSidewaysScroll(page, 'the page')
 
       await start.click()
       await expect(firstRun).toHaveCount(0)

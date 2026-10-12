@@ -4,7 +4,7 @@
  */
 import { resolve } from 'node:path'
 import { deflateSync } from 'node:zlib'
-import { type APIRequestContext, expect, type Page, request } from '@playwright/test'
+import { type APIRequestContext, expect, type Locator, type Page, request } from '@playwright/test'
 
 export const BASE = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:8811'
 export const FIXTURES = process.env.E2E_FIXTURE_URL ?? 'http://127.0.0.1:4790'
@@ -443,5 +443,37 @@ export function expectHeaderFits(m: Awaited<ReturnType<typeof measureHeader>>, w
   if (width >= 640) expect(m.client, 'nav is clipped').toBe(m.scroll)
   for (const [id, box] of Object.entries(m.controls)) {
     expect(box.right, `${id} off screen`).toBeLessThanOrEqual(m.viewport)
+  }
+}
+
+/** The page never scrolls sideways: the check every phone layout makes. */
+export async function noSidewaysScroll(page: Page, what: string): Promise<void> {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  )
+  expect(overflow, `${what} scrolls sideways`).toBeLessThanOrEqual(0)
+}
+
+/**
+ * A box in whole pixels once the page has come to rest. Pages fade in from 4px lower on a
+ * transform, so a box measured during the fade is off by up to that, and two measured at different
+ * moments do not line up: wait for the fades, as this does, rather than allow for them.
+ */
+export async function restingBox(locator: Locator) {
+  await locator.evaluate((el) => {
+    const page = el.closest('main') ?? document.body
+    const fades = page
+      .getAnimations({ subtree: true })
+      .filter((a) => a.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY)
+    // A fade cancelled by a re-render rejects; the box is measured after it either way.
+    return Promise.all(fades.map((a) => a.finished.catch(() => undefined)))
+  })
+  const b = await locator.boundingBox()
+  if (!b) throw new Error(`${locator} has no box`)
+  return {
+    x: Math.round(b.x),
+    y: Math.round(b.y),
+    width: Math.round(b.width),
+    height: Math.round(b.height),
   }
 }
