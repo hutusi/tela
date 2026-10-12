@@ -17,14 +17,7 @@ import {
 } from '@tela/shared'
 import type { PrivacyFlag, ProfileRow } from '@tela/sync'
 import { useEffect, useId, useRef, useState } from 'react'
-import {
-  Link,
-  Navigate,
-  useLocation,
-  useNavigate,
-  useNavigationType,
-  useParams,
-} from 'react-router'
+import { Link, useLocation, useNavigate, useNavigationType, useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { AvatarCrop } from '../components/avatar-crop'
 import { BACK, CHEVRON_RIGHT, CLOSE, Glyph } from '../components/glyph'
@@ -101,7 +94,7 @@ const PHONE_TITLE = 'font-serif text-[30px] leading-[1.1] font-medium tracking-[
 export function SettingsPage() {
   const t = useTranslations('settings')
   const { section: asked } = useParams()
-  const { search, key, state } = useLocation()
+  const { pathname, search, key, state } = useLocation()
   const navigate = useNavigate()
   // One layout or the other, not both with one hidden: each holds its own `settings-section-*`.
   const phone = useMediaQuery(BELOW_MD)
@@ -123,16 +116,27 @@ export function SettingsPage() {
   // list back. Only on arriving, never as the width changes, so a form being edited there stays.
   // biome-ignore lint/correctness/useExhaustiveDependencies: once per entry navigated to
   useEffect(() => {
-    if (navigation === 'POP' && phone && asked === 'profile' && wasList(state)) {
-      navigate('/settings', { replace: true, state: { left: leftFor(state) } })
-    }
+    if (navigation !== 'POP' || !phone || asked !== 'profile' || !wasList(state)) return
+    if (!isCurrentEntry(pathname, search)) return
+    navigate('/settings', { replace: true, state: { left: leftFor(state) } })
   }, [key])
 
   const view = settingsView(asked, search, phone)
-  if (view.kind === 'redirect') {
-    const marked = view.wasList ? { wasList: true, left: leftFor(state) } : undefined
-    return <Navigate to={view.to} replace state={marked} />
-  }
+  const redirectTo = view.kind === 'redirect' ? view.to : null
+  const handOver = view.kind === 'redirect' && view.wasList === true
+  // A redirect replaces the browser's current entry, so it waits until that entry is the one this
+  // render is of. React Router moves the location in a transition while a change of width renders
+  // at once: the list, pressed as the window widened, rendered wide at its old address after the
+  // browser had moved to the row's section, and a <Navigate> there replaced the section's entry
+  // with Profile. The render that is current redirects, or has no need to.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per entry and target
+  useEffect(() => {
+    if (redirectTo === null || !isCurrentEntry(pathname, search)) return
+    const marked = handOver ? { wasList: true, left: leftFor(state) } : undefined
+    navigate(redirectTo, { replace: true, state: marked })
+  }, [key, redirectTo])
+
+  if (view.kind === 'redirect') return null
   if (view.kind === 'list') return <SettingsList />
   const { section } = view
 
@@ -210,6 +214,10 @@ export function SettingsPage() {
 /** A section opened from the phone's list, whose back bar can then go back rather than on. */
 const fromList = (state: unknown) =>
   typeof state === 'object' && state !== null && 'fromList' in state && state.fromList === true
+
+/** Whether the browser's entry is the address a render is of, not one it has since moved past. */
+const isCurrentEntry = (pathname: string, search: string) =>
+  window.location.pathname === pathname && window.location.search === search
 
 /** Profile's entry that was the list's until the side column handed it over. */
 const wasList = (state: unknown) =>

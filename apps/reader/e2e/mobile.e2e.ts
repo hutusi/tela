@@ -910,6 +910,33 @@ test.describe('Settings on a phone', () => {
     await expect(page.getByTestId('settings-section-reading')).toBeFocused()
   })
 
+  test('a row pressed as the window widens leaves its section where it opened', async ({
+    page,
+  }) => {
+    // Found by Codex's review: React Router moves the location in a transition, and widening
+    // renders at once, so the list could render wide at its old address while the row's section
+    // was already the browser's entry, and its hand-over to Profile replaced that entry instead.
+    // A slowed renderer holds the transition open for the widening to land inside it.
+    await page.setViewportSize({ width: 412, height: 860 })
+    await page.goto('/settings')
+    await expect(page.getByTestId('settings-section-reading')).toBeVisible()
+    const cdp = await page.context().newCDPSession(page)
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 30 })
+    try {
+      await page.getByTestId('settings-section-reading').click()
+      await page.setViewportSize({ width: 1024, height: 860 })
+    } finally {
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
+    }
+    await expect(page.getByTestId('settings-content')).toHaveAttribute('data-section', 'reading')
+    await expect(page).toHaveURL(/\/settings\/reading$/)
+    // And the entry behind it is still the list's, which a phone shows as the list.
+    await page.setViewportSize({ width: 412, height: 860 })
+    await page.goBack()
+    await expect(page).toHaveURL(/\/settings$/)
+    await expect(page.getByTestId(/^settings-section-/)).toHaveCount(SECTIONS.length)
+  })
+
   test('the back bar opened with a key held is a link, for another tab', async ({ page }) => {
     // Found by Codex's review: the bar went back in this tab whatever the click asked for.
     await page.goto('/settings')
