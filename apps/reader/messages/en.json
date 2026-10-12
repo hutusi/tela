@@ -631,6 +631,7 @@
   },
   "settings": {
     "title": "Settings",
+    "back": "Back to Settings",
     "sections": {
       "profile": "Profile",
       "reading": "Reading",

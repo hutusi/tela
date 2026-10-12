@@ -48,7 +48,7 @@ const FIELD =
   'w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-[15px] text-ink outline-none focus:border-muted'
 
 function Intro({ children }: { children: React.ReactNode }) {
-  return <p className="mb-7 text-[14px] text-muted">{children}</p>
+  return <p className="mb-[18px] text-[14px] text-muted md:mb-7">{children}</p>
 }
 
 // ---------------------------------------------------------------------------------------------

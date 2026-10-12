@@ -1,6 +1,8 @@
 /**
- * Settings, in sections the URL names (`/settings`, `/settings/reading`, …), so Back and a link
- * both land on the section meant (Tela v2). Everything here is the synced tables: a change made on
+ * Settings, in sections the URL names (`/settings/profile`, `/settings/reading`, …), so Back and a
+ * link both land on the section meant (Tela v2). On a phone (below `md`, Tela Mobile 13) bare
+ * `/settings` is the list of sections and each is a page of its own behind a back bar; from `md` up
+ * it is Profile, beside the side column. Everything here is the synced tables: a change made on
  * another device shows here. Most settings are mutations and take effect at once; the handle,
  * name and bio are an RPC, since a handle has to be unique. Invites and Account are the exception,
  * live answers on purpose (`settings-account.tsx`).
@@ -14,11 +16,11 @@ import {
   type UiLocale,
 } from '@tela/shared'
 import type { PrivacyFlag, ProfileRow } from '@tela/sync'
-import { useId, useRef, useState } from 'react'
-import { Link, Navigate, NavLink, useLocation, useParams } from 'react-router'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Link, Navigate, useLocation, useNavigationType, useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { AvatarCrop } from '../components/avatar-crop'
-import { CLOSE, Glyph } from '../components/glyph'
+import { BACK, CHEVRON_RIGHT, CLOSE, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { Segmented } from '../components/segmented'
 import { SETTING_HINT, SettingRow } from '../components/setting-row'
@@ -39,6 +41,7 @@ import {
   THEMES,
   typographyOf,
 } from '../lib/typography'
+import { BELOW_MD, useMediaQuery } from '../lib/use-media'
 import { api, apiJson } from '../store/api'
 import { useNow, usePrivacyUnsettled, useReadingLang, useStore, useTables } from '../store/hooks'
 import { feedTitle } from '../store/selectors'
@@ -56,63 +59,166 @@ export const SECTIONS = [
 ] as const
 export type Section = (typeof SECTIONS)[number]
 
-const hrefOf = (section: Section) => (section === 'profile' ? '/settings' : `/settings/${section}`)
+/** Profile too has an address of its own, so a link to it lands on it at any width. */
+export const hrefOf = (section: Section) => `/settings/${section}`
+
+export type SettingsView =
+  | { kind: 'section'; section: Section }
+  | { kind: 'list' }
+  | { kind: 'redirect'; to: string }
+
+/**
+ * What `/settings` or `/settings/:section` shows. Bare `/settings` is the list of sections on a
+ * phone and Profile from `md` up; Profile's own address is Profile at both, so nothing that edits
+ * it is at an address where crossing `md` would swap the form for the list and lose the edit.
+ */
+export function settingsView(
+  asked: string | undefined,
+  search: string,
+  phone: boolean,
+): SettingsView {
+  if (asked === undefined) {
+    // A link's return from Google or GitHub is Account's, at any width.
+    if (linkingReturn(search)) return { kind: 'redirect', to: `/settings/account${search}` }
+    return phone ? { kind: 'list' } : { kind: 'section', section: 'profile' }
+  }
+  const section = SECTIONS.find((s) => s === asked)
+  return section ? { kind: 'section', section } : { kind: 'redirect', to: '/settings' }
+}
+
+/** A heading on the phone's pages: the list's, and each section's name (Tela Mobile 13). */
+const PHONE_TITLE = 'font-serif text-[30px] leading-[1.1] font-medium tracking-[-0.015em]'
 
 export function SettingsPage() {
   const t = useTranslations('settings')
   const { section: asked } = useParams()
-  const { search } = useLocation()
-  const section = (asked ?? 'profile') as Section
+  const { search, key } = useLocation()
+  // One layout or the other, not both with one hidden: each holds its own `settings-section-*`.
+  const phone = useMediaQuery(BELOW_MD)
+  const navigation = useNavigationType()
+  const heading = useRef<HTMLHeadingElement>(null)
   useTitle(t('title'))
-  if (asked === undefined && linkingReturn(search)) {
-    return <Navigate to={`/settings/account${search}`} replace />
+  // On a phone a section is a page of its own, so arriving by a row or a link starts it at its top
+  // with focus on its name, as a new page would. Back, Forward and a load (`POP`) leave the page
+  // where the browser keeps it, and so does a redirect. Only the phone's heading has the ref.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per entry navigated to
+  useEffect(() => {
+    if (navigation !== 'PUSH' || !heading.current) return
+    window.scrollTo(0, 0)
+    heading.current.focus({ preventScroll: true })
+  }, [key])
+
+  const view = settingsView(asked, search, phone)
+  if (view.kind === 'redirect') return <Navigate to={view.to} replace />
+  if (view.kind === 'list') return <SettingsList />
+  const { section } = view
+
+  if (phone) {
+    return (
+      <main className="w-full flex-1 animate-fade px-5 pb-10">
+        {/* Under the header, as the reader's back bar is. A link, not history: a section reached
+            by its address has no list behind it to go back to. */}
+        <div
+          className="-mx-5 flex h-[52px] items-center border-b border-line pr-2 pl-1"
+          data-testid="settings-back-bar"
+        >
+          <Link
+            to="/settings"
+            aria-label={t('back')}
+            className="flex h-11 min-w-0 items-center gap-0.5 rounded-md px-2.5 text-ink-2 hover:bg-hover hover:text-ink hover:no-underline"
+            data-testid="settings-back"
+          >
+            <Glyph className="shrink-0">{BACK}</Glyph>
+            <span className="truncate">{t('title')}</span>
+          </Link>
+        </div>
+        <div className="pt-[22px]" data-testid="settings-content" data-section={section}>
+          <h1 ref={heading} tabIndex={-1} className={`mb-1.5 outline-none ${PHONE_TITLE}`}>
+            {t(`sections.${section}`)}
+          </h1>
+          <SectionContent section={section} />
+        </div>
+      </main>
+    )
   }
-  if (asked !== undefined && (asked === 'profile' || !SECTIONS.includes(section))) {
-    return <Navigate to="/settings" replace />
-  }
+
   return (
-    <main className="mx-auto grid w-full max-w-[1040px] flex-1 animate-fade grid-cols-1 items-start gap-6 px-4 py-10 md:grid-cols-[200px_minmax(0,1fr)] md:gap-16 md:px-12 md:py-12">
+    <main className="mx-auto grid w-full max-w-[1040px] flex-1 animate-fade grid-cols-[200px_minmax(0,1fr)] items-start gap-16 px-12 py-12">
       <nav
         aria-label={t('title')}
-        className="flex min-w-0 flex-col gap-0.5 md:sticky md:top-24"
+        className="sticky top-24 flex min-w-0 flex-col gap-0.5"
         data-testid="settings-nav"
       >
-        <h1 className="mb-3 font-serif text-[34px] font-medium tracking-tight md:mb-[18px]">
+        <h1 className="mb-[18px] font-serif text-[34px] font-medium tracking-tight">
           {t('title')}
         </h1>
-        {/* One row that scrolls below md, a column beside the section from md up. */}
-        <div className="-mx-4 flex gap-0.5 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:flex-col md:overflow-visible md:px-0">
+        <div className="flex flex-col gap-0.5">
+          {/* Current by the section shown, not by the address: Profile is shown at `/settings`
+              and at `/settings/profile`, and a NavLink would light it at only one. */}
           {SECTIONS.map((s) => (
-            <NavLink
+            <Link
               key={s}
               to={hrefOf(s)}
-              end
+              aria-current={s === section ? 'page' : undefined}
               data-testid={`settings-section-${s}`}
-              className={({ isActive }) =>
-                `shrink-0 rounded-lg px-3 py-2 font-medium whitespace-nowrap text-ink hover:bg-hover hover:no-underline md:-ml-3 ${isActive ? 'bg-hover' : ''}`
-              }
+              className={`-ml-3 rounded-lg px-3 py-2 font-medium whitespace-nowrap text-ink hover:bg-hover hover:no-underline ${s === section ? 'bg-hover' : ''}`}
             >
               {t(`sections.${s}`)}
-            </NavLink>
+            </Link>
           ))}
         </div>
       </nav>
       <div className="min-w-0 max-w-[640px]" data-testid="settings-content" data-section={section}>
         <h2 className="mb-1.5 font-serif text-[30px] font-medium">{t(`sections.${section}`)}</h2>
-        {section === 'profile' ? <ProfileSection /> : null}
-        {section === 'reading' ? <ReadingSection /> : null}
-        {section === 'translation' ? <TranslationSection /> : null}
-        {section === 'subscriptions' ? <SubscriptionsSection /> : null}
-        {section === 'privacy' ? <PrivacySection /> : null}
-        {section === 'invites' ? <InvitesSection /> : null}
-        {section === 'account' ? <AccountSection /> : null}
+        <SectionContent section={section} />
       </div>
     </main>
   )
 }
 
+/** The phone's `/settings` (Tela Mobile 13): the sections as rows, each opening its own page. */
+function SettingsList() {
+  const t = useTranslations('settings')
+  return (
+    <main className="w-full flex-1 animate-fade px-5 pt-6 pb-10">
+      <h1 className={`mb-3 ${PHONE_TITLE}`}>{t('title')}</h1>
+      <nav aria-label={t('title')} data-testid="settings-nav">
+        <ul className="m-0 list-none p-0">
+          {SECTIONS.map((s) => (
+            <li key={s} className="border-t border-line">
+              <Link
+                to={hrefOf(s)}
+                className="flex min-h-12 items-center justify-between gap-3 py-3 text-[15px] font-medium text-ink hover:no-underline"
+                data-testid={`settings-section-${s}`}
+              >
+                {t(`sections.${s}`)}
+                <Glyph className="shrink-0 text-muted">{CHEVRON_RIGHT}</Glyph>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </main>
+  )
+}
+
+function SectionContent({ section }: { section: Section }) {
+  return (
+    <>
+      {section === 'profile' ? <ProfileSection /> : null}
+      {section === 'reading' ? <ReadingSection /> : null}
+      {section === 'translation' ? <TranslationSection /> : null}
+      {section === 'subscriptions' ? <SubscriptionsSection /> : null}
+      {section === 'privacy' ? <PrivacySection /> : null}
+      {section === 'invites' ? <InvitesSection /> : null}
+      {section === 'account' ? <AccountSection /> : null}
+    </>
+  )
+}
+
+/** A section's first line. Closer to its rows on a phone, as Tela Mobile 13 draws it. */
 function Intro({ children }: { children: React.ReactNode }) {
-  return <p className="mb-7 text-[14px] text-muted">{children}</p>
+  return <p className="mb-[18px] text-[14px] text-muted md:mb-7">{children}</p>
 }
 
 // ---------------------------------------------------------------------------------------------

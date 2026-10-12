@@ -631,6 +631,7 @@
   },
   "settings": {
     "title": "設定",
+    "back": "返回設定",
     "sections": {
       "profile": "個人資料",
       "reading": "閱讀",

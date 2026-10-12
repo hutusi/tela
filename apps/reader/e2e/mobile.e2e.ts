@@ -832,3 +832,145 @@ test.describe('Following, a profile and a blog page on a phone', () => {
     }
   })
 })
+
+/**
+ * Settings on a phone (Tela Mobile 13): `/settings` lists the sections, each a page of its own
+ * behind a back bar to the list, and a setting's control sits beside its label where it fits.
+ */
+test.describe('Settings on a phone', () => {
+  test.beforeEach(async ({ page }) => {
+    // English, whatever an earlier spec left: the rows are checked by name.
+    await resetReading(page.request)
+  })
+
+  const SECTIONS = [
+    ['profile', 'Profile'],
+    ['reading', 'Reading'],
+    ['translation', 'Language'],
+    ['subscriptions', 'Subscriptions'],
+    ['privacy', 'Privacy'],
+    ['invites', 'Invites'],
+    ['account', 'Account'],
+  ] as const
+
+  /** A section's name, the heading of its page. */
+  const title = (page: Page) =>
+    page.getByTestId('settings-content').getByRole('heading', { level: 1 })
+
+  test('the list holds the seven sections, rows to touch that each open their own page', async ({
+    page,
+  }) => {
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      await page.goto('/settings')
+      await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+      const rows = page.getByTestId(/^settings-section-/)
+      await expect(rows).toHaveCount(SECTIONS.length)
+      // The list, not Profile beside it.
+      await expect(page.getByTestId('settings-content')).toHaveCount(0)
+      for (const [i, [section, name]] of SECTIONS.entries()) {
+        const row = rows.nth(i)
+        await expect(row).toHaveAttribute('data-testid', `settings-section-${section}`)
+        await expect(row).toHaveText(name)
+        await expect(row).toHaveAttribute('href', `/settings/${section}`)
+        const box = await row.boundingBox()
+        expect(Math.round(box?.height ?? 0), `${section} at ${width}px`).toBeGreaterThanOrEqual(48)
+      }
+      for (const [section, name] of SECTIONS) {
+        await page.getByTestId(`settings-section-${section}`).click()
+        await expect(page).toHaveURL(new RegExp(`/settings/${section}$`))
+        await expect(page.getByTestId('settings-content')).toHaveAttribute('data-section', section)
+        // Its name is the page's heading, and has focus, as a new page's would.
+        await expect(title(page)).toHaveText(name)
+        await expect(title(page)).toBeFocused()
+        await page.getByTestId('settings-back').click()
+        await expect(page).toHaveURL(/\/settings$/)
+        await expect(rows).toHaveCount(SECTIONS.length)
+      }
+    }
+  })
+
+  test('a section reached by its address has the back bar, a link to the list', async ({
+    page,
+  }) => {
+    await page.goto('/settings/subscriptions')
+    await expect(page.getByTestId('settings-subscription').first()).toBeVisible()
+    const bar = page.getByTestId('settings-back-bar')
+    // Rounded: the page fades in on a transform, which can put a 52px box at 51.99.
+    expect((await bar.boundingBox())?.height).toBeCloseTo(52, 0)
+    const back = bar.getByTestId('settings-back')
+    await expect(back).toHaveText('Settings')
+    await expect(back).toHaveAccessibleName('Back to Settings')
+    await expect(back).toHaveAttribute('href', '/settings')
+    expect(Math.round((await back.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(44)
+    await expect(title(page)).toHaveText('Subscriptions')
+    // Loaded, not navigated to: focus is where the browser puts it on any page it loads.
+    await expect(title(page)).not.toBeFocused()
+    // No list behind it in the history, and the link goes there all the same.
+    await back.click()
+    await expect(page).toHaveURL(/\/settings$/)
+    await expect(page.getByTestId(/^settings-section-/)).toHaveCount(SECTIONS.length)
+  })
+
+  test("Reading's three choices sit beside their labels at 360px", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 })
+    await page.goto('/settings/reading')
+    await expect(page.getByTestId('theme-system')).toBeVisible()
+    // Measured in Figtree, as a reader sees them, not in the fallback before it loads.
+    await page.evaluate(async () => {
+      await document.fonts.ready
+    })
+    for (const id of ['size-m', 'measure-normal', 'theme-system']) {
+      // The label is the row's first item and the control its second: beside it, the control
+      // starts after the label ends and before its last line does; wrapped, it is under it.
+      const at = await page.getByTestId(id).evaluate((button) => {
+        const control = button.closest('fieldset')
+        const label = control?.parentElement?.firstElementChild
+        if (!control || !label) return null
+        const c = control.getBoundingClientRect()
+        const l = label.getBoundingClientRect()
+        return { left: c.left, top: c.top, labelRight: l.right, labelBottom: l.bottom }
+      })
+      expect(at, `${id} is not in a row`).not.toBeNull()
+      expect(at!.left, `${id} is under its label`).toBeGreaterThanOrEqual(at!.labelRight)
+      expect(at!.top, `${id} is on a line of its own`).toBeLessThan(at!.labelBottom)
+    }
+  })
+
+  test('Profile has an address of its own, which shows the form', async ({ page }) => {
+    await page.goto('/settings/profile')
+    await expect(page).toHaveURL(/\/settings\/profile$/)
+    await expect(page.getByTestId('settings-form')).toBeVisible()
+    await expect(title(page)).toHaveText('Profile')
+    await expect(page.getByTestId('settings-back')).toBeVisible()
+  })
+
+  test('no page of Settings scrolls sideways', async ({ page }) => {
+    // What each page shows once its rows are in: the device's, or tela-api's live answer.
+    const shown: Record<string, string> = {
+      '/settings': 'settings-section-account',
+      '/settings/reading': 'theme-system',
+      '/settings/translation': 'never-add',
+      '/settings/subscriptions': 'settings-subscription',
+      '/settings/account': 'account-email',
+      '/settings/invites': 'invite-create',
+    }
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      for (const [path, id] of Object.entries(shown)) {
+        await page.goto(path)
+        await expect(page.getByTestId(id).first()).toBeVisible()
+        if (path === '/settings/invites') {
+          await expect(page.getByTestId('invites-left')).not.toBeEmpty()
+        }
+        await page.evaluate(async () => {
+          await document.fonts.ready
+        })
+        const overflow = await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        )
+        expect(overflow, `${path} at ${width}px`).toBeLessThanOrEqual(0)
+      }
+    }
+  })
+})

@@ -75,6 +75,25 @@ test.describe('settings', () => {
     await expect(page).toHaveURL(/\/settings$/)
   })
 
+  test('Profile is at /settings and at its own address, current in the nav at both', async ({
+    page,
+  }) => {
+    for (const path of ['/settings', '/settings/profile']) {
+      await page.goto(path)
+      // Its own address stays: a link to Profile lands on Profile at every width.
+      await expect(page).toHaveURL(new RegExp(`${path}$`))
+      await expect(page.getByTestId('settings-content')).toHaveAttribute('data-section', 'profile')
+      await expect(page.getByTestId('settings-form')).toBeVisible()
+      const nav = page.getByTestId('settings-nav')
+      const profile = nav.getByTestId('settings-section-profile')
+      await expect(profile).toHaveAttribute('aria-current', 'page')
+      await expect(profile).toHaveAttribute('href', '/settings/profile')
+      await expect(nav.locator('[aria-current]')).toHaveCount(1)
+      // The phone's back bar is not drawn beside the side column.
+      await expect(page.getByTestId('settings-back')).toHaveCount(0)
+    }
+  })
+
   test('the privacy switches act at once, and the server has them', async ({ page, request }) => {
     await hideEverything(request)
     await page.goto('/settings/privacy')
