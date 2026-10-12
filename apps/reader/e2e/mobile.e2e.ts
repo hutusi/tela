@@ -974,3 +974,77 @@ test.describe('Settings on a phone', () => {
     }
   })
 })
+
+/**
+ * Search and the first run on a phone (Tela Mobile 15 and 16): the field above what it found,
+ * with a clear button of its own, and blogs as rows; the first run's blogs as rows too, with
+ * Start in a bar fixed at the foot.
+ */
+test.describe('Search and the first run on a phone', () => {
+  /** How far the page scrolls sideways: never at all. */
+  const overflow = (page: Page) =>
+    page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+
+  // The fixture site took its description from the Chinese blog ("胡涂说博客/好奇心周刊"), and two
+  // of that blog's posts are issues of the weekly: one word finds a blog, and posts read in English
+  // with the original beneath.
+  const WORD = '好奇心周刊'
+
+  for (const width of [360, 412]) {
+    test(`at ${width}px the field comes first, clears in place, and blogs are rows`, async ({
+      page,
+    }) => {
+      // English, and nothing left untranslated, whatever an earlier spec left.
+      await resetReading(page.request)
+      await page.setViewportSize({ width, height: 800 })
+      await page.goto(`/search?q=${encodeURIComponent(WORD)}`)
+      const field = page.getByTestId('search-page-input')
+      const row = page.getByTestId('search-sites').getByTestId('site-card').first()
+      const hit = page.getByTestId('article-hit').filter({ hasText: WORD }).first()
+      await expect(row).toBeVisible()
+      await expect(hit).toBeVisible()
+      expect(await overflow(page), 'the page scrolls sideways').toBeLessThanOrEqual(0)
+
+      // The field, then what it searched for.
+      const above = await field.boundingBox()
+      const heading = await page.getByRole('heading', { level: 1 }).boundingBox()
+      expect(above && heading && above.y + above.height <= heading.y).toBe(true)
+
+      // Each line of a hit says its language: the title in the reading language, the original
+      // beneath it in the blog's.
+      await expect(hit.getByTestId('hit-title')).toHaveAttribute('lang', 'en')
+      await expect(hit.getByTestId('hit-secondary')).toHaveAttribute('lang', /^zh/)
+
+      // The clear button: a 44px target that leaves the pill no taller. It empties the field and
+      // keeps it focused, and searches nothing: the address and the results stay.
+      const pill = page.locator('form').filter({ has: field })
+      const clear = page.getByTestId('search-page-input-clear')
+      await expect(field).toHaveValue(WORD)
+      await expect(clear).toHaveAccessibleName('Clear search')
+      const target = await clear.boundingBox()
+      expect(target && [Math.round(target.width), Math.round(target.height)]).toEqual([44, 44])
+      const tall = (await pill.boundingBox())?.height
+      await clear.click()
+      await expect(field).toHaveValue('')
+      await expect(field).toBeFocused()
+      await expect(clear).toHaveCount(0)
+      expect((await pill.boundingBox())?.height).toBe(tall)
+      expect(new URL(page.url()).searchParams.get('q')).toBe(WORD)
+      await expect(row).toBeVisible()
+
+      // A row, not Discover's card: one line of blog, Subscribe at its end.
+      const box = await row.boundingBox()
+      expect(Math.round(box?.height ?? 0), 'a card, not a row').toBeLessThanOrEqual(80)
+      const button = row.getByTestId('site-subscribe')
+      const was = (await button.getAttribute('aria-pressed')) === 'true'
+      await button.click()
+      await expect(button).toHaveAttribute('aria-pressed', String(!was))
+      await expect(button).toHaveText(was ? 'Subscribe' : 'Subscribed')
+      // And back, once the server has it, so later specs keep the member's feeds.
+      const restored = pushed(page, was ? '"type":"subscribe"' : '"type":"unsubscribe"')
+      await button.click()
+      await expect(button).toHaveAttribute('aria-pressed', String(was))
+      await restored
+    })
+  }
+})

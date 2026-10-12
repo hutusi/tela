@@ -783,7 +783,7 @@
   "search": {
     "title": "Search",
     "resultsFor": "Results for “{query}”",
-    "hint": "Blogs by name or address, and posts in your subscriptions by title (original or translated).",
+    "hint": "Blogs by name or address, and posts in your subscriptions by title, original or translated.",
     "clear": "Clear search",
     "none": "Nothing matches “{query}”.",
     "sites": "Blogs",

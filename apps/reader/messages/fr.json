@@ -783,7 +783,7 @@
   "search": {
     "title": "Recherche",
     "resultsFor": "Résultats pour « {query} »",
-    "hint": "Les blogs par nom ou par adresse, et les articles de vos abonnements par titre (original ou traduit).",
+    "hint": "Les blogs par nom ou par adresse, et les articles de vos abonnements par titre, original ou traduit.",
     "clear": "Effacer la recherche",
     "none": "Aucun résultat pour « {query} ».",
     "sites": "Blogs",
