@@ -781,4 +781,30 @@ test.describe('Following, a profile and a blog page on a phone', () => {
       await noSidewaysScroll(page, `/following at ${width}px`)
     }
   })
+
+  test('Your profile: a 72px avatar beside Edit profile, which opens Profile in Settings', async ({
+    page,
+  }) => {
+    const me = await page.request.get(`${BASE}/api/v1/me`)
+    const handle = ((await me.json()) as { profile: { handle: string } | null }).profile?.handle
+    if (!handle) throw new Error('the setup member has no handle')
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      await page.goto(`/@${handle}`)
+      const edit = page.getByTestId('edit-profile')
+      await expect(edit).toBeVisible()
+      await expect(edit).toHaveAttribute('href', '/settings/profile')
+      const header = page.getByTestId('profile-page').locator('header')
+      const avatar = await box(header.locator('[data-avatar]'))
+      expect([avatar.width, avatar.height]).toEqual([72, 72])
+      // One row: the pill level with the avatar's top, after it, a finger's height.
+      const pill = await box(edit)
+      expect(pill.y, 'Edit profile is not on the avatar’s row').toBe(avatar.y)
+      expect(pill.x).toBeGreaterThan(avatar.x + avatar.width)
+      expect(pill.height).toBeGreaterThanOrEqual(40)
+      // The name runs full width under them.
+      expect((await box(header.locator('h1'))).y).toBeGreaterThanOrEqual(avatar.y + avatar.height)
+      await noSidewaysScroll(page, `/@${handle} at ${width}px`)
+    }
+  })
 })
