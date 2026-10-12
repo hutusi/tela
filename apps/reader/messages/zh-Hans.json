@@ -861,6 +861,7 @@
     "waiting": "至少订阅一个，就可以开始阅读。",
     "start": "开始阅读 {n} 个博客 →",
     "more": "在「发现」中查看更多博客 →",
-    "import": "从别的阅读器过来？<opml>导入 OPML 文件</opml>，或<add>粘贴博客地址</add>。"
+    "import": "从别的阅读器过来？<opml>导入 OPML 文件</opml>，或<add>粘贴博客地址</add>。",
+    "footer": "在「<discover>发现</discover>」中查看更多博客。从别的阅读器过来？<opml>导入 OPML 文件</opml>，或<add>粘贴博客地址</add>。"
   }
 }

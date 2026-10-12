@@ -9,6 +9,7 @@ import {
   memberHeaders,
   resetReading,
   setPrefs,
+  signInRequest,
 } from './helpers'
 
 // Runs in the `mobile` project (a Pixel 7 viewport), as the setup's member.
@@ -1047,4 +1048,79 @@ test.describe('Search and the first run on a phone', () => {
       await restored
     })
   }
+
+  test.describe('the first run', () => {
+    test.use({
+      storageState: { cookies: [], origins: [] },
+      // A sign-in of its own, from an address of its own: better-auth allows three tries a minute
+      // per address, and the whole suite comes from 127.0.0.1 (signin.e2e.ts).
+      extraHTTPHeaders: { 'cf-connecting-ip': '198.51.100.62' },
+    })
+
+    test('blogs are rows, and Start is a bar at the foot that the page clears', async ({
+      page,
+      context,
+    }) => {
+      // A blog Discover lists, whatever ran before, as signin.e2e.ts's first run makes sure.
+      const curated = await context.request.post(`${BASE}/api/admin/curate`, {
+        headers: { origin: BASE, authorization: `Bearer ${ADMIN_TOKEN}` },
+        data: { feedUrl: `${FIXTURES}/jvns.xml`, topics: ['tech'], featured: true },
+      })
+      expect(curated.ok()).toBe(true)
+      await signInRequest(context.request, `phone-first-run-${Date.now()}@e2e.test`)
+      await page.goto('/reading')
+
+      const firstRun = page.getByTestId('first-run')
+      await expect(firstRun.getByRole('heading', { level: 1 })).toHaveText('Start with a few blogs')
+      // The Feeds menu stays above it: on a phone it is the only way to Liked.
+      await expect(page.getByTestId('mobile-nav')).toBeVisible()
+      const rows = page.getByTestId('first-run-card')
+      await expect(rows.first()).toBeVisible()
+      const viewport = page.viewportSize()
+      const box = await rows.first().boundingBox()
+      expect(Math.round(box?.height ?? 0), 'a card, not a row').toBeLessThanOrEqual(80)
+      expect(Math.abs((box?.width ?? 0) - ((viewport?.width ?? 0) - 40))).toBeLessThanOrEqual(1)
+      expect(await overflow(page), 'the page scrolls sideways').toBeLessThanOrEqual(0)
+
+      // Until one is taken, the bar says what it waits for.
+      const bar = page.getByTestId('first-run-bar')
+      await expect(bar).toHaveText('Subscribe to at least one to start reading.')
+      await expect(page.getByTestId('first-run-start')).toHaveCount(0)
+
+      const subscribe = rows.first().getByTestId('first-run-subscribe')
+      await expect(subscribe).toHaveText('Subscribe')
+      await subscribe.click()
+      await expect(subscribe).toHaveAttribute('aria-pressed', 'true')
+      await expect(subscribe).toHaveText('Subscribed')
+      const start = bar.getByTestId('first-run-start')
+      await expect(start).toHaveText('Start reading 1 blog →')
+      // In the body, not the page, whose fade-in transform would hold a fixed bar to it.
+      await expect(firstRun.getByTestId('first-run-start')).toHaveCount(0)
+      expect(Math.round((await start.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(48)
+
+      // At the viewport's foot, with its height in --bottom-bar.
+      const foot = await bar.boundingBox()
+      expect(foot && viewport && Math.round(foot.y + foot.height)).toBe(viewport?.height)
+      const variable = await page.evaluate(() =>
+        document.documentElement.style.getPropertyValue('--bottom-bar'),
+      )
+      expect(variable).toBe(`${Math.round(foot?.height ?? 0)}px`)
+
+      // Scrolled to the end, the page's last line clears the bar.
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+      const last = await page.getByTestId('first-run-footer').boundingBox()
+      const top = await bar.boundingBox()
+      expect(last && top && last.y + last.height <= top.y, 'the footer is under the bar').toBe(true)
+      expect(await overflow(page), 'the page scrolls sideways').toBeLessThanOrEqual(0)
+
+      await start.click()
+      await expect(firstRun).toHaveCount(0)
+      await expect(bar).toHaveCount(0)
+      await expect(page.getByTestId('article-list')).toBeVisible()
+      const left = await page.evaluate(() =>
+        document.documentElement.style.getPropertyValue('--bottom-bar'),
+      )
+      expect(left, 'the bar left its height behind').toBe('')
+    })
+  })
 })

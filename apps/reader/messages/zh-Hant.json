@@ -861,6 +861,7 @@
     "waiting": "至少訂閱一個，就可以開始閱讀。",
     "start": "開始閱讀 {n} 個部落格 →",
     "more": "在「發現」中檢視更多部落格 →",
-    "import": "從別的閱讀器過來？<opml>匯入 OPML 檔案</opml>，或<add>貼上部落格網址</add>。"
+    "import": "從別的閱讀器過來？<opml>匯入 OPML 檔案</opml>，或<add>貼上部落格網址</add>。",
+    "footer": "在「<discover>發現</discover>」中檢視更多部落格。從別的閱讀器過來？<opml>匯入 OPML 檔案</opml>，或<add>貼上部落格網址</add>。"
   }
 }

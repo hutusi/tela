@@ -861,6 +861,7 @@
     "waiting": "Abonnez-vous à au moins un blog pour commencer à lire.",
     "start": "{n, plural, one {Commencer à lire # blog →} other {Commencer à lire # blogs →}}",
     "more": "Plus de blogs dans Découvrir →",
-    "import": "Vous venez d’un autre lecteur ? <opml>Importez un fichier OPML</opml> ou <add>collez l’adresse d’un blog</add>."
+    "import": "Vous venez d’un autre lecteur ? <opml>Importez un fichier OPML</opml> ou <add>collez l’adresse d’un blog</add>.",
+    "footer": "Plus de blogs dans <discover>Découvrir</discover>. Vous venez d’un autre lecteur ? <opml>Importez un fichier OPML</opml> ou <add>collez l’adresse d’un blog</add>."
   }
 }

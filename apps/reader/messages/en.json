@@ -861,6 +861,7 @@
     "waiting": "Subscribe to at least one to start reading.",
     "start": "{n, plural, one {Start reading # blog →} other {Start reading # blogs →}}",
     "more": "More blogs in Discover →",
-    "import": "Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>."
+    "import": "Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>.",
+    "footer": "More blogs in <discover>Discover</discover>. Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>."
   }
 }
