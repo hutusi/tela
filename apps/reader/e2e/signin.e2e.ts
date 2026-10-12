@@ -188,7 +188,8 @@ test.describe('by link', () => {
     expect((await page.request.get('/api/v1/me')).status()).toBe(401)
 
     await page.getByTestId('login-submit').click()
-    await expect(page).toHaveURL(/\/settings$/)
+    // Settings, which beside the side column is Profile's own address (ADR 0047).
+    await expect(page).toHaveURL(/\/settings\/profile$/)
     await expect(page.getByTestId('settings-form')).toBeVisible()
     expect(page.url()).not.toContain('otp=')
   })
