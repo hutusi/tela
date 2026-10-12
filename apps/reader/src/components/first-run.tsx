@@ -279,7 +279,14 @@ function BlogRow({ site, member }: { site: DiscoverSite; member: MemberControls 
       data-testid="first-run-card"
       data-site-id={site.id}
     >
-      <SiteAvatar id={site.id} title={title} faviconKey={site.faviconKey} size={40} radius={10} />
+      <SiteAvatar
+        id={site.id}
+        title={title}
+        faviconKey={site.faviconKey}
+        size={40}
+        radius={10}
+        className="!text-[17px]"
+      />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5 font-medium">
           <span className="truncate">{title}</span>

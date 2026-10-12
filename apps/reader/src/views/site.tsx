@@ -48,9 +48,10 @@ export function SiteView({
   const names = LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en
   const claimant = site.claimant
   const author = claimant ? (claimant.displayName ?? `@${claimant.handle}`) : null
-  // On a phone Visit and Subscribe share a row at equal width (Tela Mobile 12).
+  // On a phone Visit and Subscribe share a row at equal width (Tela Mobile 12), and at equal
+  // height when one wraps ("Visiter le blog ↗" at 360px).
   const pill =
-    'rounded-full border px-4 py-[7px] text-[13px] font-medium hover:no-underline max-md:flex max-md:min-h-10 max-md:flex-1 max-md:items-center max-md:justify-center max-md:py-0 max-md:text-center max-md:text-[13.5px]'
+    'rounded-full border px-4 py-[7px] text-[13px] font-medium hover:no-underline max-md:flex max-md:min-h-10 max-md:flex-1 max-md:items-center max-md:justify-center max-md:py-1 max-md:text-center max-md:text-[13.5px]'
 
   return (
     <main
@@ -70,7 +71,7 @@ export function SiteView({
         />
         <div className="flex min-w-[260px] flex-1 flex-col gap-2 max-md:mt-4 max-md:flex-none max-md:gap-0">
           <div className="flex flex-wrap gap-1.5 text-[13px] text-muted md:gap-2">
-            <span>{displayHost(site.homeUrl)}</span>
+            <span className="min-w-0 [overflow-wrap:anywhere]">{displayHost(site.homeUrl)}</span>
             {claimant ? (
               <>
                 <span>·</span>
@@ -88,7 +89,7 @@ export function SiteView({
               </>
             ) : null}
           </div>
-          <h1 className="m-0 font-serif text-[38px] leading-none font-medium tracking-[-0.02em] max-md:mt-1.5 md:text-[56px]">
+          <h1 className="m-0 font-serif text-[38px] leading-none font-medium tracking-[-0.02em] [overflow-wrap:anywhere] max-md:mt-1.5 md:text-[56px]">
             {title}
           </h1>
           {site.description ? (
@@ -122,7 +123,7 @@ export function SiteView({
           ) : null}
         </div>
         <div className="flex flex-col items-end gap-2 max-md:mt-[18px]">
-          <div className="flex items-center gap-2 max-md:self-stretch">
+          <div className="flex items-center gap-2 max-md:items-stretch max-md:self-stretch">
             <a
               href={site.homeUrl}
               target="_blank"

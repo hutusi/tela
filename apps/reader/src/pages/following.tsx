@@ -228,7 +228,7 @@ export function FollowingPage() {
         </p>
         {/* On a phone the rule runs edge to edge and the tabs scroll, as the profile's do. */}
         <nav
-          className="-mx-5 flex gap-5 border-b border-line px-5 [scrollbar-width:none] max-md:overflow-x-auto md:mx-0 md:gap-6 md:px-0"
+          className="-mx-5 flex gap-5 border-b border-line px-5 [scrollbar-width:none] max-md:overflow-x-auto max-md:overflow-y-hidden md:mx-0 md:gap-6 md:px-0"
           aria-label={t('title')}
         >
           {TABS.map((k) => (

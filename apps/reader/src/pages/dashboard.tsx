@@ -283,7 +283,7 @@ function SiteDashboard({
           faviconKey={site.faviconKey}
           size={52}
           radius={13}
-          className="max-md:!size-11 max-md:!rounded-[11px] max-md:!text-[24px]"
+          className="max-md:!size-11 max-md:!rounded-[11px] max-md:!text-[18px]"
         />
         <div className="min-w-[220px] flex-1 max-md:min-w-0">
           <h2 className="m-0 font-serif text-[26px] leading-[1.1] font-medium max-md:text-[22px]">
@@ -291,7 +291,10 @@ function SiteDashboard({
               {title}
             </Link>
           </h2>
-          <div className="mt-1 text-[13px] text-muted" data-testid="dashboard-meta">
+          <div
+            className="mt-1 text-[13px] text-muted [overflow-wrap:anywhere]"
+            data-testid="dashboard-meta"
+          >
             {meta.join(' · ')}
           </div>
         </div>
@@ -389,7 +392,7 @@ function SiteDashboard({
                   displayName={n.displayName}
                   avatar={n.avatar}
                   size={32}
-                  className="max-md:!size-7 max-md:!text-[13px]"
+                  className="max-md:!size-7 max-md:!text-[12px]"
                 />
               </Link>
               <div className="flex min-w-0 flex-col gap-1.5">

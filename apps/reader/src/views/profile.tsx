@@ -84,7 +84,7 @@ export function ProfileView({
           className="col-start-1 row-start-1 max-md:!size-18 max-md:!text-[30px] md:row-end-3 md:mr-4"
         />
         <div className="col-span-full row-start-2 mt-4 min-w-0 md:col-[2] md:row-start-1 md:mt-0">
-          <h1 className="m-0 font-serif text-[34px] leading-[1.05] font-medium tracking-[-0.02em] md:text-[46px]">
+          <h1 className="m-0 font-serif text-[34px] leading-[1.05] font-medium tracking-[-0.02em] [overflow-wrap:anywhere] md:text-[46px]">
             {name}
           </h1>
           <div className="mt-1 text-[13px] text-muted md:mt-2 md:text-[13.5px]">
@@ -168,7 +168,7 @@ export function ProfileView({
 
       {/* On a phone the rule runs edge to edge, as Following's does. */}
       <nav
-        className="-mx-5 mt-6 flex gap-5 overflow-x-auto border-b border-line px-5 [scrollbar-width:none] md:mx-0 md:mt-12 md:gap-7 md:px-0"
+        className="-mx-5 mt-6 flex gap-5 overflow-x-auto overflow-y-hidden border-b border-line px-5 [scrollbar-width:none] md:mx-0 md:mt-12 md:gap-7 md:px-0"
         aria-label={name}
       >
         {tabs.map((k) => (
