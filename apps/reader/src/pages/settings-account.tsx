@@ -8,7 +8,7 @@ import { groupInviteCode } from '@tela/shared'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
-import { SettingRow } from '../components/setting-row'
+import { SETTING_HINT, SETTING_LABEL, SettingRow } from '../components/setting-row'
 import {
   type Account,
   type AccountError,
@@ -334,7 +334,11 @@ export function AccountSection() {
         </p>
       ) : null}
       <SettingRow label={t('email')} hint={t('emailHint')}>
-        <span className="text-[14px] text-ink-2" data-testid="account-email">
+        {/* An address can be longer than a phone is wide: it breaks rather than push the page. */}
+        <span
+          className="min-w-0 text-[14px] text-ink-2 [overflow-wrap:anywhere]"
+          data-testid="account-email"
+        >
           {account.email}
         </span>
       </SettingRow>
@@ -427,11 +431,12 @@ function PasswordRow({
   }
 
   return (
-    <div className="border-t border-line py-5" data-testid="account-password">
-      <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
-        <div className="min-w-0 flex-1 basis-60">
+    <div className="border-t border-line py-4 sm:py-5" data-testid="account-password">
+      {/* Laid out as a SettingRow, which has no room for the form under it. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 sm:gap-x-8">
+        <div className={SETTING_LABEL}>
           <div className="font-medium">{t('password')}</div>
-          <div className="mt-[3px] text-[13px] text-muted" data-testid="account-password-state">
+          <div className={SETTING_HINT} data-testid="account-password-state">
             {has ? t('passwordSet') : t('passwordNone')}
           </div>
         </div>

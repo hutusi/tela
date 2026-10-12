@@ -21,7 +21,7 @@ import { AvatarCrop } from '../components/avatar-crop'
 import { CLOSE, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { Segmented } from '../components/segmented'
-import { SettingRow } from '../components/setting-row'
+import { SETTING_HINT, SettingRow } from '../components/setting-row'
 import { SiteAvatar } from '../components/site-avatar'
 import { Switch } from '../components/switch'
 import { linkingReturn } from '../lib/account-api'
@@ -582,9 +582,9 @@ function NeverTranslate({
     .sort((a, b) => name(a).localeCompare(name(b)))
   const chosen = pool.includes(pick) ? pick : ''
   return (
-    <div className="border-t border-line py-5" data-testid="never-translate">
+    <div className="border-t border-line py-4 sm:py-5" data-testid="never-translate">
       <div className="font-medium">{t('never')}</div>
-      <div className="mt-[3px] text-[13px] text-muted">{t('neverHint')}</div>
+      <div className={SETTING_HINT}>{t('neverHint')}</div>
       <div className="mt-3.5 flex flex-wrap gap-2">
         {never.map((tag) => (
           <span
