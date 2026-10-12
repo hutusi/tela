@@ -26,6 +26,22 @@ type Props = {
   hidingRead?: boolean
 }
 
+/**
+ * The list's row for an article, with the list told to keep rows clear of its heading as one is
+ * scrolled or focused into view: the heading sticks over the rows' top, and a row brought into
+ * view at the list's top edge would sit hidden behind it. Its height is read when asked, since
+ * it is not one height everywhere (wide or beside an article, on a phone).
+ */
+export function listRow(articleId: number): HTMLElement | null {
+  const row = document.querySelector<HTMLElement>(
+    `[data-testid="article-row"][data-article-id="${articleId}"]`,
+  )
+  const list = row?.closest<HTMLElement>('[data-testid="article-list"]')
+  const head = list?.querySelector<HTMLElement>('[data-list-head]')
+  if (list && head) list.style.scrollPaddingTop = `${head.offsetHeight}px`
+  return row ?? null
+}
+
 /** How many rows render; older ones follow on request. The device holds the whole horizon. */
 const PAGE = 200
 
@@ -105,7 +121,10 @@ export function ArticleList({
       className="min-w-0 border-r border-line group-data-[open=1]:hidden lg:sticky lg:top-14 lg:h-[calc(100vh-56px)] lg:overflow-y-auto lg:group-data-[open=1]:block"
       data-testid="article-list"
     >
-      <div className="sticky top-0 z-[1] flex items-baseline gap-2 bg-paper px-5 pb-2.5 pt-5">
+      <div
+        className="sticky top-0 z-[1] flex items-baseline gap-2 bg-paper px-5 pb-2.5 pt-5"
+        data-list-head
+      >
         <h1 className="min-w-0 flex-1 truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
           {heading}
         </h1>

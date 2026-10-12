@@ -368,13 +368,18 @@ test('focus hides the list too while an article is open, and j, k and Esc carry 
   await page.keyboard.press('f')
   await expect(list).toBeVisible()
   expect(await list.evaluate((el) => (el as HTMLElement & { kept?: boolean }).kept)).toBe(true)
+  // In view below the list's heading, which sticks over the rows' top: a row at the list's top
+  // edge would sit behind it, the switch under the title making it taller than the row.
   const rowInView = () =>
     page.evaluate((id) => {
       const list = document.querySelector('[data-testid="article-list"]')?.getBoundingClientRect()
+      const head = document.querySelector('[data-list-head]')?.getBoundingClientRect()
       const row = document
         .querySelector(`[data-testid="article-row"][data-article-id="${id}"]`)
         ?.getBoundingClientRect()
-      return !!list && !!row && row.top >= list.top && row.bottom <= list.bottom
+      return (
+        !!list && !!head && !!row && row.top >= Math.floor(head.bottom) && row.bottom <= list.bottom
+      )
     }, first)
   await expect.poll(rowInView, { message: 'the open row is not in view' }).toBe(true)
   await toggle.click()

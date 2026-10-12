@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
-import { ArticleList } from '../components/article-list'
+import { ArticleList, listRow } from '../components/article-list'
 import { EmptyState } from '../components/empty-state'
 import { FirstRun, showsFirstRun } from '../components/first-run'
 import { MobileNav } from '../components/mobile-nav'
@@ -257,11 +257,9 @@ export function ReadingPage() {
   const navigationType = useNavigationType()
   // biome-ignore lint/correctness/useExhaustiveDependencies: once per article opened or closed, or per focus change; a filter change or a later entry's state is neither
   useEffect(() => {
-    const row = (id: number) =>
-      document.querySelector<HTMLElement>(`[data-testid="article-row"][data-article-id="${id}"]`)
     if (params.articleId !== null) {
       lastOpen.current = params.articleId
-      row(params.articleId)?.scrollIntoView({ block: 'nearest' })
+      listRow(params.articleId)?.scrollIntoView({ block: 'nearest' })
       return
     }
     // A close says what it closed, in the list entry it pushed: renders can batch a j and an Esc
@@ -273,7 +271,7 @@ export function ReadingPage() {
         ? (location.state as { closedFrom?: number | null } | null)?.closedFrom
         : null
     const previous = closedFrom ?? lastOpen.current
-    if (previous !== null) row(previous)?.focus()
+    if (previous !== null) listRow(previous)?.focus()
   }, [params.articleId, focused])
 
   // A feed that has never been fetched: pull quickly until its first posts arrive.
