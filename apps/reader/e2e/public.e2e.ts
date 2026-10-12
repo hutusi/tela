@@ -87,6 +87,14 @@ test.describe('for a visitor', () => {
 })
 
 test.describe('discover and claim', () => {
+  test('a handle taken at joining is changed in Profile, at its own address', async ({ page }) => {
+    await page.goto('/claim?taken=1')
+    await expect(page.getByTestId('claim-taken').getByRole('link')).toHaveAttribute(
+      'href',
+      '/settings/profile',
+    )
+  })
+
   test('claiming a site by meta tag lists it in Discover with the badge', async ({
     page,
     request,
@@ -99,11 +107,12 @@ test.describe('discover and claim', () => {
     const snippet = (await page.getByTestId('meta-snippet').textContent()) ?? ''
     const token = snippet.match(/content="([0-9a-f]+)"/)?.[1]
     expect(token).toBeTruthy()
-    // The profile link is one for the footer, and GitHub waits on linking it in Settings.
+    // The profile link is one for the footer, and GitHub waits on linking it in Settings, which
+    // is done in Account.
     await expect(page.getByTestId('rel-me-snippet')).toContainText('<a rel="me" href=')
     await expect(page.getByTestId('claim-github').getByRole('link')).toHaveAttribute(
       'href',
-      '/settings',
+      '/settings/account',
     )
 
     const stop = keepCycling(page)

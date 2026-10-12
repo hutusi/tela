@@ -616,10 +616,22 @@
       "listed": "listed in Discover",
       "featured": "featured",
       "rejected": "hidden"
+    },
+    "short": {
+      "readers": "Readers",
+      "newReaders": "+{n} in 30 days",
+      "likes": "Likes",
+      "recommendations": "Recs"
+    },
+    "row": {
+      "likes": "<b>{n}</b> {n, plural, one {like} other {likes}}",
+      "recommendations": "<b>{n}</b> {n, plural, one {recommendation} other {recommendations}}",
+      "notes": "{n, plural, one {# note} other {# notes}}"
     }
   },
   "settings": {
     "title": "Settings",
+    "back": "Back to Settings",
     "sections": {
       "profile": "Profile",
       "reading": "Reading",
@@ -771,7 +783,8 @@
   "search": {
     "title": "Search",
     "resultsFor": "Results for “{query}”",
-    "hint": "Blogs by name or address, and posts in your subscriptions by title (original or translated).",
+    "hint": "Blogs by name or address, and posts in your subscriptions by title, original or translated.",
+    "clear": "Clear search",
     "none": "Nothing matches “{query}”.",
     "sites": "Blogs",
     "articles": "Posts in your subscriptions",
@@ -848,6 +861,7 @@
     "waiting": "Subscribe to at least one to start reading.",
     "start": "{n, plural, one {Start reading # blog →} other {Start reading # blogs →}}",
     "more": "More blogs in Discover →",
-    "import": "Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>."
+    "import": "Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>.",
+    "footer": "More blogs in <discover>Discover</discover>. Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>."
   }
 }

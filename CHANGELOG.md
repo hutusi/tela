@@ -35,6 +35,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Phone pages** (ADR 0047). Below 768px, Following, profiles, blogs, the Dashboard, Search and
+  first run have layouts of their own instead of desktop's squeezed. Settings is a list of its
+  sections, each behind a back bar, and Profile has an address of its own,
+  `/settings/profile`. The Dashboard lists its posts as rows. Search puts its field first, with a
+  clear button, and lists blogs as rows. First run lists blogs as rows, with Start reading in a
+  bar at the foot.
 - **The Tela v5 pass.** Claude Design's v5 handoff, taken where it holds up (ADR 0046):
   - **Undo** after Mark all read ("Marked 12 posts read.") and after removing a highlight, by
     click or `u`. The change waits on the device while the toast shows, so an undone one never
@@ -51,8 +57,7 @@ everything so far sits under `[Unreleased]`.
   - **Phones:** the article has a back bar and a bottom bar (Like, Recommend, Mark unread,
     Original), Recommend is a sheet, and language, theme and Search moved into the account menu,
     or the footer for a visitor, so the header's pills fit at 360px. Search was unreachable below
-    640px before. Following, profiles, blogs, Settings, the Dashboard, Search and first run on a
-    phone are designed and come next.
+    640px before.
   - **Smaller things:** muted text at AA contrast; read rows that keep their meta readable; drawn
     icons for every typed glyph, with ↗ kept for links that leave Tela; "blog", not "feed" or
     "site"; an account menu that offers For writers until a blog is claimed; outlined Subscribe in

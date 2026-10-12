@@ -4,9 +4,10 @@
  * sheet. The Reader renders these instead of the desktop controls rather than beside them hidden,
  * so each control, and its test id, exists once.
  */
-import { type RefObject, useEffect, useId, useLayoutEffect, useRef } from 'react'
+import { type RefObject, useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'use-intl'
+import { useBottomBar } from '../lib/use-bottom-bar'
 import { BACK, CHECK, EXTERNAL, Glyph, HEART, HEART_FILLED, PASS } from './glyph'
 import { RecommendForm } from './recommend-popover'
 import { TypographyMenu } from './typography-menu'
@@ -76,20 +77,7 @@ export function ReaderBottomBar({
 }) {
   const t = useTranslations('reader')
   const bar = useRef<HTMLDivElement>(null)
-  useLayoutEffect(() => {
-    const el = bar.current
-    if (!el) return
-    const root = document.documentElement
-    const measure = () => root.style.setProperty('--bottom-bar', `${el.offsetHeight}px`)
-    measure()
-    // The safe area, and so the bar's padding, changes as the phone turns.
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    return () => {
-      observer.disconnect()
-      root.style.removeProperty('--bottom-bar')
-    }
-  }, [])
+  useBottomBar(bar)
   const on = (active: boolean) => (active ? 'font-medium text-ink' : 'text-ink-2')
   // A post with no address of its own has no Original: three items share the width.
   return createPortal(

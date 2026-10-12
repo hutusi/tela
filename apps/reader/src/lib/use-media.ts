@@ -8,6 +8,12 @@ import { useCallback, useSyncExternalStore } from 'react'
 /** Below Tailwind's `lg` (64rem): the list gives way to the article, and a phone's bars show. */
 export const BELOW_LG = 'not all and (min-width: 64rem)'
 
+/**
+ * Below Tailwind's `md` (48rem): a page's phone layout (Tela Mobile 10–16), where one set of
+ * controls gives way to another, as the Settings list does to its side column.
+ */
+export const BELOW_MD = 'not all and (min-width: 48rem)'
+
 export function useMediaQuery(query: string): boolean {
   const subscribe = useCallback(
     (onChange: () => void) => {

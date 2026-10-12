@@ -616,10 +616,22 @@
       "listed": "已在「发现」列出",
       "featured": "精选",
       "rejected": "已隐藏"
+    },
+    "short": {
+      "readers": "读者",
+      "newReaders": "近 30 天 +{n}",
+      "likes": "喜欢",
+      "recommendations": "推荐"
+    },
+    "row": {
+      "likes": "<b>{n}</b> 人喜欢",
+      "recommendations": "<b>{n}</b> 条推荐",
+      "notes": "{n} 条推荐语"
     }
   },
   "settings": {
     "title": "设置",
+    "back": "返回设置",
     "sections": {
       "profile": "个人资料",
       "reading": "阅读",
@@ -771,7 +783,8 @@
   "search": {
     "title": "搜索",
     "resultsFor": "“{query}”的结果",
-    "hint": "按名称或地址搜索博客，按标题（原文或译文）搜索你订阅的文章。",
+    "hint": "按名称或地址搜索博客；你订阅的文章按标题搜索，原文、译文皆可。",
+    "clear": "清空搜索",
     "none": "没有与“{query}”匹配的内容。",
     "sites": "博客",
     "articles": "你订阅的文章",
@@ -848,6 +861,7 @@
     "waiting": "至少订阅一个，就可以开始阅读。",
     "start": "开始阅读 {n} 个博客 →",
     "more": "在「发现」中查看更多博客 →",
-    "import": "从别的阅读器过来？<opml>导入 OPML 文件</opml>，或<add>粘贴博客地址</add>。"
+    "import": "从别的阅读器过来？<opml>导入 OPML 文件</opml>，或<add>粘贴博客地址</add>。",
+    "footer": "在「<discover>发现</discover>」中查看更多博客。从别的阅读器过来？<opml>导入 OPML 文件</opml>，或<add>粘贴博客地址</add>。"
   }
 }

@@ -87,23 +87,56 @@ describe('how a hit reads', () => {
     article: article(1, { title: '漁船が早く戻ってきた', sourceLang: 'ja' }),
     translatedTitle: 'The fishing boats came back early',
   }
-  test('in the translation, badged, with the original beneath', () => {
+  test('in the translation, badged, with the original beneath, each line in its language', () => {
     expect(hitTitles(hit, 'boats', 'en', [])).toEqual({
       main: 'The fishing boats came back early',
+      mainLang: 'en',
       secondary: '漁船が早く戻ってきた',
+      secondaryLang: 'ja',
       badge: true,
     })
   })
   test('as written in a language never translated, with the translation only if that matched', () => {
     expect(hitTitles(hit, '漁船', 'en', ['ja'])).toEqual({
       main: '漁船が早く戻ってきた',
+      mainLang: 'ja',
       secondary: null,
+      secondaryLang: null,
       badge: false,
     })
+    // The line beneath is then the translation, in the reading language.
     expect(hitTitles(hit, 'boats', 'en', ['ja'])).toEqual({
       main: '漁船が早く戻ってきた',
+      mainLang: 'ja',
       secondary: 'The fishing boats came back early',
+      secondaryLang: 'en',
       badge: false,
+    })
+  })
+  test('a title translated to itself is still in its own language', () => {
+    const echo = {
+      article: article(4, { title: 'Tokyo', sourceLang: 'ja' }),
+      translatedTitle: 'Tokyo',
+    }
+    expect(hitTitles(echo, 'tokyo', 'en', [])).toMatchObject({
+      main: 'Tokyo',
+      mainLang: 'ja',
+      secondary: null,
+    })
+  })
+  test('untranslated, it reads as written, in its own language or in none it knows', () => {
+    const plain = { article: article(2, { title: 'Garden notes', sourceLang: 'en' }) }
+    expect(hitTitles({ ...plain, translatedTitle: null }, 'garden', 'fr', [])).toEqual({
+      main: 'Garden notes',
+      mainLang: 'en',
+      secondary: null,
+      secondaryLang: null,
+      badge: false,
+    })
+    const unknown = { article: article(3, { title: 'Garden notes', sourceLang: null }) }
+    expect(hitTitles({ ...unknown, translatedTitle: null }, 'garden', 'fr', [])).toMatchObject({
+      mainLang: null,
+      secondary: null,
     })
   })
 })

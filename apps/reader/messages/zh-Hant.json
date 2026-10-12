@@ -616,10 +616,22 @@
       "listed": "已在「發現」列出",
       "featured": "精選",
       "rejected": "已隱藏"
+    },
+    "short": {
+      "readers": "讀者",
+      "newReaders": "近 30 天 +{n}",
+      "likes": "喜歡",
+      "recommendations": "推薦"
+    },
+    "row": {
+      "likes": "<b>{n}</b> 人喜歡",
+      "recommendations": "<b>{n}</b> 條推薦",
+      "notes": "{n} 條推薦語"
     }
   },
   "settings": {
     "title": "設定",
+    "back": "返回設定",
     "sections": {
       "profile": "個人資料",
       "reading": "閱讀",
@@ -771,7 +783,8 @@
   "search": {
     "title": "搜尋",
     "resultsFor": "「{query}」的結果",
-    "hint": "按名稱或網址搜尋部落格，按標題（原文或譯文）搜尋你訂閱的文章。",
+    "hint": "按名稱或網址搜尋部落格；你訂閱的文章按標題搜尋，原文、譯文皆可。",
+    "clear": "清空搜尋",
     "none": "沒有與「{query}」相符的內容。",
     "sites": "部落格",
     "articles": "你訂閱的文章",
@@ -848,6 +861,7 @@
     "waiting": "至少訂閱一個，就可以開始閱讀。",
     "start": "開始閱讀 {n} 個部落格 →",
     "more": "在「發現」中檢視更多部落格 →",
-    "import": "從別的閱讀器過來？<opml>匯入 OPML 檔案</opml>，或<add>貼上部落格網址</add>。"
+    "import": "從別的閱讀器過來？<opml>匯入 OPML 檔案</opml>，或<add>貼上部落格網址</add>。",
+    "footer": "在「<discover>發現</discover>」中檢視更多部落格。從別的閱讀器過來？<opml>匯入 OPML 檔案</opml>，或<add>貼上部落格網址</add>。"
   }
 }

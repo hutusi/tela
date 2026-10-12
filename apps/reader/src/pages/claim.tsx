@@ -121,7 +121,7 @@ export function ClaimPage() {
           className="m-0 rounded-xl border border-line bg-surface px-4 py-3 text-[14px] leading-relaxed text-ink-2"
           data-testid="claim-taken"
         >
-          {t.rich('taken', { link: (chunks) => <Link to="/settings">{chunks}</Link> })}
+          {t.rich('taken', { link: (chunks) => <Link to="/settings/profile">{chunks}</Link> })}
         </p>
       ) : null}
       <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
@@ -249,7 +249,7 @@ export function ClaimSitePage() {
               {standing.github
                 ? t('optionGitHubHint', { site: standing.homeUrl })
                 : t.rich('optionGitHubUnlinked', {
-                    link: (chunks) => <Link to="/settings">{chunks}</Link>,
+                    link: (chunks) => <Link to="/settings/account">{chunks}</Link>,
                   })}
             </p>
           </section>

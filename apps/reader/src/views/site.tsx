@@ -48,18 +48,30 @@ export function SiteView({
   const names = LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en
   const claimant = site.claimant
   const author = claimant ? (claimant.displayName ?? `@${claimant.handle}`) : null
-  const pill = 'rounded-full border px-4 py-[7px] text-[13px] font-medium hover:no-underline'
+  // On a phone Visit and Subscribe share a row at equal width (Tela Mobile 12), and at equal
+  // height when one wraps ("Visiter le blog ↗" at 360px).
+  const pill =
+    'rounded-full border px-4 py-[7px] text-[13px] font-medium hover:no-underline max-md:flex max-md:min-h-10 max-md:flex-1 max-md:items-center max-md:justify-center max-md:py-1 max-md:text-center max-md:text-[13.5px]'
 
   return (
     <main
-      className="mx-auto w-full max-w-[1080px] flex-1 animate-fade px-4 pt-10 pb-24 md:px-12 md:pt-14"
+      className="mx-auto w-full max-w-[1080px] flex-1 animate-fade px-5 pt-7 pb-24 md:px-12 md:pt-14"
       data-testid="site-page"
     >
-      <header className="flex flex-wrap items-start gap-6 border-b border-line pb-10 md:gap-7">
-        <SiteAvatar id={site.id} title={title} faviconKey={site.faviconKey} size={84} radius={20} />
-        <div className="flex min-w-[260px] flex-1 flex-col gap-2">
-          <div className="flex flex-wrap gap-2 text-[13px] text-muted">
-            <span>{displayHost(site.homeUrl)}</span>
+      {/* On a phone one column, the avatar alone on top and no rule under the buttons. CSS alone:
+          the edge renders this page. */}
+      <header className="flex flex-wrap items-start border-b border-line pb-10 max-md:flex-col max-md:items-stretch max-md:border-b-0 max-md:pb-0 md:gap-7">
+        <SiteAvatar
+          id={site.id}
+          title={title}
+          faviconKey={site.faviconKey}
+          size={84}
+          radius={20}
+          className="max-md:!size-16 max-md:!rounded-2xl max-md:!text-[27px]"
+        />
+        <div className="flex min-w-[260px] flex-1 flex-col gap-2 max-md:mt-4 max-md:flex-none max-md:gap-0">
+          <div className="flex flex-wrap gap-1.5 text-[13px] text-muted md:gap-2">
+            <span className="min-w-0 [overflow-wrap:anywhere]">{displayHost(site.homeUrl)}</span>
             {claimant ? (
               <>
                 <span>·</span>
@@ -77,13 +89,15 @@ export function SiteView({
               </>
             ) : null}
           </div>
-          <h1 className="m-0 font-serif text-[40px] leading-none font-medium tracking-[-0.02em] md:text-[56px]">
+          <h1 className="m-0 font-serif text-[38px] leading-none font-medium tracking-[-0.02em] [overflow-wrap:anywhere] max-md:mt-1.5 md:text-[56px]">
             {title}
           </h1>
           {site.description ? (
-            <p className="mt-1 mb-0 font-serif text-[23px] text-ink-2 italic">{site.description}</p>
+            <p className="mt-1 mb-0 font-serif text-[19px] text-ink-2 italic md:text-[23px]">
+              {site.description}
+            </p>
           ) : null}
-          <div className="mt-2.5 flex flex-wrap gap-x-[18px] gap-y-1 text-[13.5px] text-ink-2">
+          <div className="mt-2.5 flex flex-wrap gap-x-3.5 gap-y-1.5 text-[13px] text-ink-2 md:gap-x-[18px] md:gap-y-1 md:text-[13.5px]">
             {site.primaryLang ? (
               <span>{t('writtenIn', { lang: names[site.primaryLang] ?? site.primaryLang })}</span>
             ) : null}
@@ -108,13 +122,14 @@ export function SiteView({
             </div>
           ) : null}
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col items-end gap-2 max-md:mt-[18px]">
+          <div className="flex items-center gap-2 max-md:items-stretch max-md:self-stretch">
             <a
               href={site.homeUrl}
               target="_blank"
               rel="noopener noreferrer"
               className={`${pill} border-thumb text-ink hover:border-ink`}
+              data-testid="site-visit"
             >
               {t('visit')}
             </a>
@@ -153,7 +168,7 @@ export function SiteView({
 
       {ownerPanel ? <div className="mt-6">{ownerPanel}</div> : null}
 
-      <div className="mt-9 grid grid-cols-1 items-start gap-12 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-16">
+      <div className="mt-[26px] grid grid-cols-1 items-start gap-12 md:mt-9 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-16">
         <section className="min-w-0">
           <h2 className={`${LABEL} mb-1.5`}>{t('posts')}</h2>
           {data.posts.length === 0 ? (
@@ -165,14 +180,14 @@ export function SiteView({
                 return (
                   <li
                     key={a.id}
-                    className="relative grid grid-cols-[72px_minmax(0,1fr)] gap-4 border-b border-line py-[22px] hover:opacity-75 md:grid-cols-[96px_minmax(0,1fr)] md:gap-6"
+                    className="relative grid grid-cols-[52px_minmax(0,1fr)] gap-3 border-b border-line py-4 hover:opacity-75 md:grid-cols-[96px_minmax(0,1fr)] md:gap-6 md:py-[22px]"
                   >
-                    <div className="pt-[5px] text-[12.5px] text-muted">
+                    <div className="pt-1 text-[12.5px] text-muted md:pt-[5px]">
                       {shortDate(a.publishedAt ?? a.fetchedAt, locale, now)}
                     </div>
                     <div className="flex min-w-0 flex-col gap-1.5">
                       <h3
-                        className="m-0 font-serif text-[24px] leading-[1.2] font-medium"
+                        className="m-0 font-serif text-[20px] leading-[1.2] font-medium md:text-[24px]"
                         style={{ textWrap: 'pretty' }}
                       >
                         <PostLink
@@ -185,14 +200,22 @@ export function SiteView({
                         </PostLink>
                       </h3>
                       {a.excerpt ? (
-                        <p className="m-0 line-clamp-2 font-serif text-[17px] leading-[1.45] text-ink-2">
+                        <p className="m-0 line-clamp-2 font-serif text-[16px] leading-[1.4] text-ink-2 md:text-[17px] md:leading-[1.45]">
                           {a.excerpt}
                         </p>
                       ) : null}
-                      <div className="flex gap-3 text-[12px] text-muted">
+                      {/* "6 min · ES → EN" on a phone, with no heart (Tela Mobile 12). */}
+                      <div className="flex gap-1 text-[12px] text-muted md:gap-3">
                         <span>{t('minutes', { n: a.readingMinutes || 1 })}</span>
-                        <GlyphCount kind="likeCount" n={a.likeCount} />
-                        {shown.badge ? <span>{shown.badge}</span> : null}
+                        <GlyphCount kind="likeCount" n={a.likeCount} className="max-md:hidden" />
+                        {shown.badge ? (
+                          <>
+                            <span aria-hidden="true" className="md:hidden">
+                              ·
+                            </span>
+                            <span>{shown.badge}</span>
+                          </>
+                        ) : null}
                       </div>
                     </div>
                   </li>

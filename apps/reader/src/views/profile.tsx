@@ -61,107 +61,114 @@ export function ProfileView({
           ? counts.liked
           : counts.subscriptions
   const pill =
-    'shrink-0 rounded-full border px-4 py-2 font-medium hover:no-underline whitespace-nowrap'
+    'col-start-3 row-start-1 shrink-0 rounded-full border px-4 py-2 font-medium hover:no-underline whitespace-nowrap max-md:flex max-md:min-h-10 max-md:items-center max-md:py-0 max-md:text-[13.5px]'
 
   return (
     <main
-      className="mx-auto w-full max-w-[960px] flex-1 animate-fade px-4 pt-10 pb-24 md:px-12 md:pt-14"
+      className="mx-auto w-full max-w-[960px] flex-1 animate-fade px-5 pt-7 pb-24 md:px-12 md:pt-14"
       data-testid="profile-page"
     >
-      <header className="flex flex-wrap items-start gap-6 md:gap-8">
+      {/*
+        A grid, in the order it reads: avatar, name, the pill, then the rest. On a phone the avatar
+        and the pill share the first row and the rest runs full width below (Tela Mobile 11); from
+        md the avatar spans the rows beside the name, and the rest spans the name's column and the
+        pill's, so its measure is the one a single column had. CSS alone: the edge renders this.
+      */}
+      <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 md:grid-rows-[auto_1fr] md:gap-x-4 md:gap-y-2.5">
         <PersonAvatar
           handle={profile.handle}
           displayName={profile.displayName}
           avatar={profile.avatar}
           size={112}
           me={mine}
-          className="max-md:!size-20 max-md:!text-[36px]"
+          className="col-start-1 row-start-1 max-md:!size-18 max-md:!text-[30px] md:row-end-3 md:mr-4"
         />
-        <div className="flex min-w-[260px] flex-1 flex-col gap-2.5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h1 className="m-0 font-serif text-[36px] leading-[1.05] font-medium tracking-[-0.02em] md:text-[46px]">
-                {name}
-              </h1>
-              <div className="mt-2 text-[13.5px] text-muted">
-                @{profile.handle} · {t('joined', { when: monthYear(profile.memberSince, locale) })}
-              </div>
-            </div>
-            {mine ? (
-              <Link
-                to="/settings"
-                className={`${pill} border-thumb text-ink hover:border-ink`}
-                data-testid="edit-profile"
-              >
-                {t('editProfile')}
-              </Link>
-            ) : member && known ? (
-              <button
-                type="button"
-                aria-pressed={following}
-                onClick={() => member.setFollowing(person, !following)}
-                className={`${pill} ${following ? 'border-thumb text-ink-2' : 'border-ink bg-ink text-paper'}`}
-                data-testid="follow-button"
-              >
-                {following ? t('following') : t('follow')}
-              </button>
-            ) : member ? null : (
-              <Link
-                to={`/login?next=${encodeURIComponent(here)}`}
-                className={`${pill} border-ink bg-ink text-paper`}
-              >
-                {t('follow')}
-              </Link>
-            )}
+        <div className="col-span-full row-start-2 mt-4 min-w-0 md:col-[2] md:row-start-1 md:mt-0">
+          <h1 className="m-0 font-serif text-[34px] leading-[1.05] font-medium tracking-[-0.02em] [overflow-wrap:anywhere] md:text-[46px]">
+            {name}
+          </h1>
+          <div className="mt-1 text-[13px] text-muted md:mt-2 md:text-[13.5px]">
+            @{profile.handle} · {t('joined', { when: monthYear(profile.memberSince, locale) })}
           </div>
-          {profile.bio ? (
-            <p
-              className="mt-1.5 mb-0 max-w-[560px] font-serif text-[20px] leading-[1.45] text-body"
-              style={{ textWrap: 'pretty' }}
-            >
-              {profile.bio}
-            </p>
-          ) : null}
-          {counts ? (
-            <div
-              className="mt-1.5 flex flex-wrap gap-x-[22px] gap-y-1 text-[13.5px] text-ink-2"
-              data-testid="profile-counts"
-            >
-              {(['following', 'followers', 'recommendations'] as const).map((k) => (
-                <span key={k} data-testid={`profile-count-${k}`}>
-                  {t.rich(`stats.${k}`, {
-                    n: counts[k],
-                    b: (chunks) => <b className="font-semibold text-ink">{chunks}</b>,
-                  })}
-                </span>
-              ))}
-            </div>
-          ) : null}
-          {data.blogs.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] text-ink-2">
-              <span>{t('writes')}</span>
-              {data.blogs.map((site) => (
-                <Link
-                  key={site.id}
-                  to={`/s/${site.id}`}
-                  className="flex items-center gap-1.5 font-medium text-ink hover:underline"
-                >
-                  <SiteAvatar
-                    id={site.id}
-                    title={site.title ?? site.homeUrl}
-                    faviconKey={site.faviconKey}
-                    size={18}
-                  />
-                  {site.title ?? displayHost(site.homeUrl)}
-                </Link>
-              ))}
-            </div>
-          ) : null}
         </div>
+        {mine ? (
+          <Link
+            to="/settings/profile"
+            className={`${pill} border-thumb text-ink hover:border-ink`}
+            data-testid="edit-profile"
+          >
+            {t('editProfile')}
+          </Link>
+        ) : member && known ? (
+          <button
+            type="button"
+            aria-pressed={following}
+            onClick={() => member.setFollowing(person, !following)}
+            className={`${pill} ${following ? 'border-thumb text-ink-2' : 'border-ink bg-ink text-paper'}`}
+            data-testid="follow-button"
+          >
+            {following ? t('following') : t('follow')}
+          </button>
+        ) : member ? null : (
+          <Link
+            to={`/login?next=${encodeURIComponent(here)}`}
+            className={`${pill} border-ink bg-ink text-paper`}
+          >
+            {t('follow')}
+          </Link>
+        )}
+        {profile.bio || counts || data.blogs.length > 0 ? (
+          <div className="col-span-full row-start-3 flex min-w-0 flex-col md:col-[2/4] md:row-start-2 md:gap-2.5">
+            {profile.bio ? (
+              <p
+                className="mt-3 mb-0 max-w-[560px] font-serif text-[18px] leading-[1.45] text-body md:mt-1.5 md:text-[20px]"
+                style={{ textWrap: 'pretty' }}
+              >
+                {profile.bio}
+              </p>
+            ) : null}
+            {counts ? (
+              <div
+                className="mt-2.5 flex flex-wrap gap-x-[18px] gap-y-1 text-[13.5px] text-ink-2 md:mt-1.5 md:gap-x-[22px]"
+                data-testid="profile-counts"
+              >
+                {(['following', 'followers', 'recommendations'] as const).map((k) => (
+                  <span key={k} data-testid={`profile-count-${k}`}>
+                    {t.rich(`stats.${k}`, {
+                      n: counts[k],
+                      b: (chunks) => <b className="font-semibold text-ink">{chunks}</b>,
+                    })}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {data.blogs.length > 0 ? (
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] text-ink-2 md:mt-0">
+                <span>{t('writes')}</span>
+                {data.blogs.map((site) => (
+                  <Link
+                    key={site.id}
+                    to={`/s/${site.id}`}
+                    className="flex items-center gap-1.5 font-medium text-ink hover:underline"
+                  >
+                    <SiteAvatar
+                      id={site.id}
+                      title={site.title ?? site.homeUrl}
+                      faviconKey={site.faviconKey}
+                      size={18}
+                    />
+                    {site.title ?? displayHost(site.homeUrl)}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
+      {/* On a phone the rule runs edge to edge, as Following's does. */}
       <nav
-        className="mt-12 flex gap-7 overflow-x-auto border-b border-line [scrollbar-width:none]"
+        className="-mx-5 mt-6 flex gap-5 overflow-x-auto overflow-y-hidden border-b border-line px-5 [scrollbar-width:none] md:mx-0 md:mt-12 md:gap-7 md:px-0"
         aria-label={name}
       >
         {tabs.map((k) => (
@@ -243,15 +250,15 @@ function Posts({
         return (
           <article
             key={item.article.id}
-            className="grid animate-fade grid-cols-[72px_minmax(0,1fr)] gap-4 border-b border-line py-7 md:grid-cols-[96px_minmax(0,1fr)] md:gap-6"
+            className="grid animate-fade grid-cols-[52px_minmax(0,1fr)] gap-3 border-b border-line py-5 md:grid-cols-[96px_minmax(0,1fr)] md:gap-6 md:py-7"
           >
             <div className="pt-[3px] text-[12.5px] text-muted">
               {shortDate(item.at, locale, now)}
             </div>
-            <div className="flex min-w-0 flex-col gap-3">
+            <div className="flex min-w-0 flex-col gap-2 md:gap-3">
               {item.note ? (
                 <p
-                  className="m-0 font-serif text-[21px] leading-[1.4] italic"
+                  className="m-0 font-serif text-[19px] leading-[1.4] italic md:text-[21px]"
                   style={{ textWrap: 'pretty' }}
                 >
                   {tc('quoted', { text: item.note })}
@@ -271,7 +278,7 @@ function Posts({
                     </span>
                   ) : null}
                 </div>
-                <h3 className="m-0 font-serif text-[24px] leading-[1.2] font-medium tracking-[-0.005em]">
+                <h3 className="m-0 font-serif text-[21px] leading-[1.2] font-medium tracking-[-0.005em] md:text-[24px]">
                   <PostLink
                     article={item.article}
                     source={source}

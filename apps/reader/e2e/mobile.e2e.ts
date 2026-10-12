@@ -1,12 +1,17 @@
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
 import {
+  ADMIN_TOKEN,
   accountMenuOrder,
   BASE,
   expectHeaderFits,
+  FIXTURES,
   measureHeader,
   memberHeaders,
+  noSidewaysScroll,
   resetReading,
+  restingBox,
   setPrefs,
+  signInRequest,
 } from './helpers'
 
 // Runs in the `mobile` project (a Pixel 7 viewport), as the setup's member.
@@ -29,11 +34,7 @@ test.describe('mobile fallback', () => {
     await expect(page.getByTestId('reader')).toBeVisible()
     await expect(page.getByTestId('article-list')).toBeHidden()
     await expect(page.getByTestId('mobile-nav')).toHaveCount(0)
-    // No horizontal overflow: the page body must not scroll sideways.
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    )
-    expect(overflow).toBeLessThanOrEqual(0)
+    await noSidewaysScroll(page, 'the page')
 
     // The back bar goes back to the list by its name, in the toolbar's place.
     const back = page.getByTestId('reader-back')
@@ -552,10 +553,608 @@ test.describe('Discover on a phone', () => {
       await link.scrollIntoViewIfNeeded()
       await link.click()
       await expect(page.getByTestId(`discover-tab-${tab}`)).toHaveAttribute('aria-current', 'page')
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      )
-      expect(overflow).toBeLessThanOrEqual(0)
+      await noSidewaysScroll(page, `Discover's ${tab} tab`)
     }
+  })
+})
+
+test.describe('the Dashboard on a phone', () => {
+  // The setup's member has claimed no blog, so the dashboard's answer is the test's own: a post
+  // with notes, one without, and one with no date. The page reads only this answer, never the
+  // device's tables, and the route admits any member.
+  const DAY = 86_400_000
+  const dashboard = {
+    sites: [
+      {
+        id: 999_997,
+        title: 'The Long Margin',
+        homeUrl: 'https://longmargin.example',
+        faviconKey: null,
+        listing: 'listed',
+        primaryLang: 'en',
+        topics: [],
+        readerCount: 86,
+        newReaders30d: 9,
+        translationOptOut: false,
+        totals: { posts: 3, likes: 132, recommendations: 38, notes: 4 },
+        posts: [
+          {
+            id: 999_991,
+            title: 'Editing is mostly deleting',
+            url: 'https://longmargin.example/editing',
+            publishedAt: Date.now() - 6 * DAY,
+            likeCount: 41,
+            recommendCount: 12,
+            noteCount: 2,
+          },
+          {
+            id: 999_992,
+            title: 'Four languages, two of them badly',
+            url: null,
+            publishedAt: Date.now() - 14 * DAY,
+            likeCount: 63,
+            recommendCount: 19,
+            noteCount: 0,
+          },
+          {
+            id: 999_993,
+            title: 'A reading list for the dark months',
+            url: null,
+            publishedAt: null,
+            likeCount: 28,
+            recommendCount: 7,
+            noteCount: 2,
+          },
+        ],
+      },
+    ],
+    notes: [
+      {
+        note: 'Cut the second paragraph, she says, and she is right about mine too.',
+        createdAt: Date.now() - DAY,
+        siteId: 999_997,
+        articleId: 999_991,
+        articleTitle: 'Editing is mostly deleting',
+        articleUrl: null,
+        handle: 'anna',
+        displayName: 'Anna Kowalska',
+        avatar: null,
+      },
+    ],
+  }
+
+  test('three tiles abreast under short labels, and the posts as rows', async ({ page }) => {
+    // English, whatever an earlier spec left: the labels and dates are read in it.
+    await resetReading(page.request)
+    await page.route('**/api/v1/dashboard', (route) => route.fulfill({ json: dashboard }))
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      await page.goto('/dashboard')
+      const rows = page.getByTestId('dashboard-post')
+      await expect(rows).toHaveCount(3)
+      // Rows in the table's place, not beside a hidden one.
+      await expect(page.locator('table')).toHaveCount(0)
+
+      // Each tile keeps its three spans, the label the short one.
+      await expect(page.getByTestId('dashboard-readers').locator('span')).toHaveText([
+        'Readers',
+        '86',
+        '+9 in 30 days',
+      ])
+      await expect(page.getByTestId('dashboard-likes').locator('span')).toHaveText([
+        'Likes',
+        '132',
+        'across 3 posts',
+      ])
+      await expect(page.getByTestId('dashboard-recommendations').locator('span')).toHaveText([
+        'Recs',
+        '38',
+        '4 with a note',
+      ])
+      const boxes = await Promise.all(
+        ['readers', 'likes', 'recommendations'].map((k) =>
+          page.getByTestId(`dashboard-${k}`).boundingBox(),
+        ),
+      )
+      const tops = boxes.map((box) => Math.round(box?.y ?? -1))
+      expect(new Set(tops).size, `the tiles on one row at ${width}`).toBe(1)
+      expect(tops[0]).toBeGreaterThanOrEqual(0)
+      const last = boxes[2]
+      expect(last && last.x + last.width).toBeLessThanOrEqual(width)
+
+      // The date, then the counts with their numbers bold; notes only when there are some, and
+      // no date (nor its separator) for a post without one.
+      const stats = rows.getByTestId('dashboard-post-stats')
+      await expect(stats.nth(0)).toHaveText(/^[^·]+ · 41 likes · 12 recommendations · 2 notes$/)
+      await expect(stats.nth(0).locator('b')).toHaveText(['41', '12'])
+      await expect(stats.nth(1)).toHaveText(/^[^·]+ · 63 likes · 19 recommendations$/)
+      await expect(stats.nth(1)).not.toContainText('note')
+      await expect(stats.nth(2)).toHaveText('28 likes · 7 recommendations · 2 notes')
+
+      // What readers said: the note beside a 28px avatar, its date kept.
+      const notes = page.getByTestId('dashboard-notes')
+      await expect(notes).toContainText('“Cut the second paragraph')
+      const avatar = await notes.locator('[data-avatar]').boundingBox()
+      expect(avatar && Math.round(avatar.width)).toBe(28)
+
+      await noSidewaysScroll(page, `/dashboard at ${width}px`)
+    }
+  })
+})
+
+/**
+ * Following, a profile and a blog page on a phone (Tela Mobile 10–12): the desktop pages resized
+ * below md, the profile's and the blog's by CSS alone, since the edge renders them.
+ */
+test.describe('Following, a profile and a blog page on a phone', () => {
+  test('Following: a 36px avatar column, and a card without its footer', async ({ page }) => {
+    // Whom the setup's member follows depends on the specs before this one: the feed is given.
+    const at = Date.now() - 3_600_000
+    const article = {
+      id: 990_001,
+      feedId: 990_001,
+      url: 'https://kilometrocero.example/bakery',
+      title: 'The bakery that outlived three metro lines',
+      author: null,
+      publishedAt: at,
+      fetchedAt: at,
+      sortAt: at,
+      sourceLang: 'en',
+      excerpt: 'On Calle de Toledo there is a bakery that has been open since 1928.',
+      contentKey: null,
+      wordCount: 1200,
+      readingMinutes: 6,
+      extractState: 'done',
+      likeCount: 3,
+      recommendCount: 1,
+      seq: 1,
+    }
+    const post = {
+      siteId: 990_001,
+      siteTitle: 'Kilómetro Cero',
+      homeUrl: 'https://kilometrocero.example/',
+      listed: true,
+      translatedTitle: null,
+      translatedExcerpt: null,
+      article,
+    }
+    const person = { id: 'mobile-anna', handle: 'anna_mobile', displayName: 'Anna', avatar: null }
+    const items = [
+      { kind: 'recommended', key: 'r:mobile', at, person, note: 'The last line is perfect.', post },
+      { kind: 'liked', key: 'l:mobile', at, person, count: 1, posts: [post] },
+    ]
+    await page.route(/\/api\/v1\/following(\?|$)/, (route) =>
+      route.fulfill({ json: { items, next: null } }),
+    )
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      await page.goto('/following')
+      const rows = page.getByTestId('following-item')
+      await expect(rows).toHaveCount(2)
+      // A liked row takes the same column as a recommended one.
+      for (const row of await rows.all()) {
+        const columns = await row.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
+        expect(columns.split(' ')[0], `the avatar column at ${width}px`).toBe('36px')
+        expect((await restingBox(row.locator('[data-avatar]').first())).width).toBe(36)
+      }
+      // The card drops its minutes, heart and "Read →", and is still one link.
+      const card = page.getByTestId('following-card')
+      await expect(card).toContainText(article.title)
+      await expect(card.getByTestId('following-card-foot')).toBeHidden()
+      await expect(card.getByRole('link')).toHaveCount(1)
+      // Following's own aside stays, below the feed.
+      await expect(page.getByTestId('people-you-follow')).toBeVisible()
+      await noSidewaysScroll(page, `/following at ${width}px`)
+    }
+  })
+
+  test('Your profile: a 72px avatar beside Edit profile, which opens Profile in Settings', async ({
+    page,
+  }) => {
+    const me = await page.request.get(`${BASE}/api/v1/me`)
+    const handle = ((await me.json()) as { profile: { handle: string } | null }).profile?.handle
+    if (!handle) throw new Error('the setup member has no handle')
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      await page.goto(`/@${handle}`)
+      const edit = page.getByTestId('edit-profile')
+      await expect(edit).toBeVisible()
+      await expect(edit).toHaveAttribute('href', '/settings/profile')
+      const header = page.getByTestId('profile-page').locator('header')
+      const avatar = await restingBox(header.locator('[data-avatar]'))
+      expect([avatar.width, avatar.height]).toEqual([72, 72])
+      // One row: the pill level with the avatar's top, after it, a finger's height.
+      const pill = await restingBox(edit)
+      expect(pill.y, 'Edit profile is not on the avatar’s row').toBe(avatar.y)
+      expect(pill.x).toBeGreaterThan(avatar.x + avatar.width)
+      expect(pill.height).toBeGreaterThanOrEqual(40)
+      // The name runs full width under them.
+      expect((await restingBox(header.locator('h1'))).y).toBeGreaterThanOrEqual(
+        avatar.y + avatar.height,
+      )
+      await noSidewaysScroll(page, `/@${handle} at ${width}px`)
+    }
+  })
+
+  test('A blog page: Visit and Subscribe share a row at equal width', async ({ page }) => {
+    // A blog nobody claimed has no public page; an operator featuring it gives it one.
+    const curated = await page.request.post(`${BASE}/api/admin/curate`, {
+      headers: { origin: BASE, authorization: `Bearer ${ADMIN_TOKEN}` },
+      data: { feedUrl: `${FIXTURES}/jvns.xml`, topics: [], featured: true },
+    })
+    expect(curated.ok()).toBe(true)
+    const { siteId } = (await curated.json()) as { siteId: number }
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      await page.goto(`/s/${siteId}`)
+      await expect(page.getByTestId('site-subscribe')).toBeVisible()
+      const visit = await restingBox(page.getByTestId('site-visit'))
+      const subscribe = await restingBox(page.getByTestId('site-subscribe'))
+      expect(visit.y, 'Visit and Subscribe are not on one row').toBe(subscribe.y)
+      expect(Math.abs(visit.width - subscribe.width), 'unequal widths').toBeLessThanOrEqual(1)
+      expect(visit.height).toBeGreaterThanOrEqual(40)
+      expect(subscribe.height).toBeGreaterThanOrEqual(40)
+      await noSidewaysScroll(page, `/s/${siteId} at ${width}px`)
+    }
+  })
+})
+
+/**
+ * Settings on a phone (Tela Mobile 13): `/settings` lists the sections, each a page of its own
+ * behind a back bar to the list, and a setting's control sits beside its label where it fits.
+ */
+test.describe('Settings on a phone', () => {
+  test.beforeEach(async ({ page }) => {
+    // English, whatever an earlier spec left: the rows are checked by name.
+    await resetReading(page.request)
+  })
+
+  const SECTIONS = [
+    ['profile', 'Profile'],
+    ['reading', 'Reading'],
+    ['translation', 'Language'],
+    ['subscriptions', 'Subscriptions'],
+    ['privacy', 'Privacy'],
+    ['invites', 'Invites'],
+    ['account', 'Account'],
+  ] as const
+
+  /** A section's name, the heading of its page. */
+  const title = (page: Page) =>
+    page.getByTestId('settings-content').getByRole('heading', { level: 1 })
+
+  test('the list holds the seven sections, rows to touch that each open their own page', async ({
+    page,
+  }) => {
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      await page.goto('/settings')
+      await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
+      const rows = page.getByTestId(/^settings-section-/)
+      await expect(rows).toHaveCount(SECTIONS.length)
+      // The list, not Profile beside it.
+      await expect(page.getByTestId('settings-content')).toHaveCount(0)
+      for (const [i, [section, name]] of SECTIONS.entries()) {
+        const row = rows.nth(i)
+        await expect(row).toHaveAttribute('data-testid', `settings-section-${section}`)
+        await expect(row).toHaveText(name)
+        await expect(row).toHaveAttribute('href', `/settings/${section}`)
+        const box = await row.boundingBox()
+        expect(Math.round(box?.height ?? 0), `${section} at ${width}px`).toBeGreaterThanOrEqual(48)
+      }
+      let entries: number | null = null
+      for (const [section, name] of SECTIONS) {
+        await page.getByTestId(`settings-section-${section}`).click()
+        await expect(page).toHaveURL(new RegExp(`/settings/${section}$`))
+        await expect(page.getByTestId('settings-content')).toHaveAttribute('data-section', section)
+        // Its name is the page's heading, and has focus, as a new page's would.
+        await expect(title(page)).toHaveText(name)
+        await expect(title(page)).toBeFocused()
+        await page.getByTestId('settings-back').click()
+        await expect(page).toHaveURL(/\/settings$/)
+        await expect(rows).toHaveCount(SECTIONS.length)
+        // Back to where the member was: the row they left by has focus.
+        await expect(page.getByTestId(`settings-section-${section}`)).toBeFocused()
+        // The bar went back, not on: seven sections visited leave the history as one went in,
+        // the list and one section ahead of it, not a list between each.
+        const now = await page.evaluate(() => history.length)
+        entries ??= now
+        expect(now, `history after ${section} at ${width}px`).toBe(entries)
+      }
+    }
+  })
+
+  test('a section reached by its address has the back bar, a link to the list', async ({
+    page,
+  }) => {
+    await page.goto('/settings/subscriptions')
+    await expect(page.getByTestId('settings-subscription').first()).toBeVisible()
+    const bar = page.getByTestId('settings-back-bar')
+    // Rounded: the page fades in on a transform, which can put a 52px box at 51.99.
+    expect((await bar.boundingBox())?.height).toBeCloseTo(52, 0)
+    const back = bar.getByTestId('settings-back')
+    await expect(back).toHaveText('Settings')
+    await expect(back).toHaveAccessibleName('Back to Settings')
+    await expect(back).toHaveAttribute('href', '/settings')
+    expect(Math.round((await back.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(44)
+    await expect(title(page)).toHaveText('Subscriptions')
+    // Loaded, not navigated to: focus is where the browser puts it on any page it loads.
+    await expect(title(page)).not.toBeFocused()
+    // No list behind it in the history, and the link goes there all the same, to its top.
+    await back.click()
+    await expect(page).toHaveURL(/\/settings$/)
+    await expect(page.getByTestId(/^settings-section-/)).toHaveCount(SECTIONS.length)
+    await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused()
+  })
+
+  test('a list turned wide and narrow again is still the list the back bar goes back to', async ({
+    page,
+  }) => {
+    // Found by Codex's review: beside the side column the list's entry is handed to Profile, and
+    // the back bar, trusting the section's "from the list", went back to Profile.
+    await page.setViewportSize({ width: 412, height: 860 })
+    await page.goto('/settings')
+    await page.getByTestId('settings-section-reading').click()
+    await expect(page).toHaveURL(/\/settings\/reading$/)
+    await page.setViewportSize({ width: 1024, height: 860 })
+    await page.goBack()
+    await expect(page).toHaveURL(/\/settings\/profile$/)
+    // Narrowed where it stands, Profile stays: a form being edited there is not swapped away.
+    await page.setViewportSize({ width: 412, height: 860 })
+    await expect(page.getByTestId('settings-form')).toBeVisible()
+    await page.goForward()
+    await expect(page).toHaveURL(/\/settings\/reading$/)
+    await page.getByTestId('settings-back').click()
+    await expect(page).toHaveURL(/\/settings$/)
+    await expect(page.getByTestId(/^settings-section-/)).toHaveCount(SECTIONS.length)
+    await expect(page.getByTestId('settings-section-reading')).toBeFocused()
+  })
+
+  test('a row pressed as the window widens leaves its section where it opened', async ({
+    page,
+  }) => {
+    // Found by Codex's review: React Router moves the location in a transition, and widening
+    // renders at once, so the list could render wide at its old address while the row's section
+    // was already the browser's entry, and its hand-over to Profile replaced that entry instead.
+    // A slowed renderer holds the transition open for the widening to land inside it.
+    await page.setViewportSize({ width: 412, height: 860 })
+    await page.goto('/settings')
+    await expect(page.getByTestId('settings-section-reading')).toBeVisible()
+    const cdp = await page.context().newCDPSession(page)
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 30 })
+    try {
+      await page.getByTestId('settings-section-reading').click()
+      await page.setViewportSize({ width: 1024, height: 860 })
+    } finally {
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
+    }
+    await expect(page.getByTestId('settings-content')).toHaveAttribute('data-section', 'reading')
+    await expect(page).toHaveURL(/\/settings\/reading$/)
+    // And the entry behind it is still the list's, which a phone shows as the list.
+    await page.setViewportSize({ width: 412, height: 860 })
+    await page.goBack()
+    await expect(page).toHaveURL(/\/settings$/)
+    await expect(page.getByTestId(/^settings-section-/)).toHaveCount(SECTIONS.length)
+  })
+
+  test('the back bar opened with a key held is a link, for another tab', async ({ page }) => {
+    // Found by Codex's review: the bar went back in this tab whatever the click asked for.
+    await page.goto('/settings')
+    await page.getByTestId('settings-section-reading').click()
+    await expect(page).toHaveURL(/\/settings\/reading$/)
+    const opened = page.context().waitForEvent('page')
+    await page.getByTestId('settings-back').click({ modifiers: ['ControlOrMeta'] })
+    const other = await opened
+    await expect(other).toHaveURL(/\/settings$/)
+    await other.close()
+    // This tab stays where it was.
+    await expect(page).toHaveURL(/\/settings\/reading$/)
+    await expect(title(page)).toHaveText('Reading')
+  })
+
+  test("Reading's three choices sit beside their labels at 360px", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 })
+    await page.goto('/settings/reading')
+    await expect(page.getByTestId('theme-system')).toBeVisible()
+    // Measured in Figtree, as a reader sees them, not in the fallback before it loads.
+    await page.evaluate(async () => {
+      await document.fonts.ready
+    })
+    for (const id of ['size-m', 'measure-normal', 'theme-system']) {
+      // The label is the row's first item and the control its second: beside it, the control
+      // starts after the label ends and before its last line does; wrapped, it is under it.
+      const at = await page.getByTestId(id).evaluate((button) => {
+        const control = button.closest('fieldset')
+        const label = control?.parentElement?.firstElementChild
+        if (!control || !label) return null
+        const c = control.getBoundingClientRect()
+        const l = label.getBoundingClientRect()
+        return { left: c.left, top: c.top, labelRight: l.right, labelBottom: l.bottom }
+      })
+      expect(at, `${id} is not in a row`).not.toBeNull()
+      expect(at!.left, `${id} is under its label`).toBeGreaterThanOrEqual(at!.labelRight)
+      expect(at!.top, `${id} is on a line of its own`).toBeLessThan(at!.labelBottom)
+    }
+  })
+
+  test('Profile has an address of its own, which shows the form', async ({ page }) => {
+    await page.goto('/settings/profile')
+    await expect(page).toHaveURL(/\/settings\/profile$/)
+    await expect(page.getByTestId('settings-form')).toBeVisible()
+    await expect(title(page)).toHaveText('Profile')
+    await expect(page.getByTestId('settings-back')).toBeVisible()
+  })
+
+  test('no page of Settings scrolls sideways', async ({ page }) => {
+    // What each page shows once its rows are in: the device's, or tela-api's live answer.
+    const shown: Record<string, string> = {
+      '/settings': 'settings-section-account',
+      '/settings/profile': 'settings-form',
+      '/settings/reading': 'theme-system',
+      '/settings/translation': 'never-add',
+      '/settings/subscriptions': 'settings-subscription',
+      '/settings/privacy': 'privacy-likes',
+      '/settings/account': 'account-email',
+      '/settings/invites': 'invite-create',
+    }
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      for (const [path, id] of Object.entries(shown)) {
+        await page.goto(path)
+        await expect(page.getByTestId(id).first()).toBeVisible()
+        if (path === '/settings/invites') {
+          await expect(page.getByTestId('invites-left')).not.toBeEmpty()
+        }
+        await page.evaluate(async () => {
+          await document.fonts.ready
+        })
+        await noSidewaysScroll(page, `${path} at ${width}px`)
+      }
+    }
+  })
+})
+
+/**
+ * Search and the first run on a phone (Tela Mobile 15 and 16): the field above what it found,
+ * with a clear button of its own, and blogs as rows; the first run's blogs as rows too, with
+ * Start in a bar fixed at the foot.
+ */
+test.describe('Search and the first run on a phone', () => {
+  // The fixture site took its description from the Chinese blog ("胡涂说博客/好奇心周刊"), and two
+  // of that blog's posts are issues of the weekly: one word finds a blog, and posts read in English
+  // with the original beneath.
+  const WORD = '好奇心周刊'
+
+  for (const width of [360, 412]) {
+    test(`at ${width}px the field comes first, clears in place, and blogs are rows`, async ({
+      page,
+    }) => {
+      // English, and nothing left untranslated, whatever an earlier spec left.
+      await resetReading(page.request)
+      await page.setViewportSize({ width, height: 800 })
+      await page.goto(`/search?q=${encodeURIComponent(WORD)}`)
+      const field = page.getByTestId('search-page-input')
+      const row = page.getByTestId('search-sites').getByTestId('site-card').first()
+      const hit = page.getByTestId('article-hit').filter({ hasText: WORD }).first()
+      await expect(row).toBeVisible()
+      await expect(hit).toBeVisible()
+      await noSidewaysScroll(page, 'the page')
+
+      // The field, then what it searched for.
+      const above = await field.boundingBox()
+      const heading = await page.getByRole('heading', { level: 1 }).boundingBox()
+      expect(above && heading && above.y + above.height <= heading.y).toBe(true)
+
+      // Each line of a hit says its language: the title in the reading language, the original
+      // beneath it in the blog's.
+      await expect(hit.getByTestId('hit-title')).toHaveAttribute('lang', 'en')
+      await expect(hit.getByTestId('hit-secondary')).toHaveAttribute('lang', /^zh/)
+
+      // The clear button: a 44px target that leaves the pill no taller. It empties the field and
+      // keeps it focused, and searches nothing: the address and the results stay.
+      const pill = page.locator('form').filter({ has: field })
+      const clear = page.getByTestId('search-page-input-clear')
+      await expect(field).toHaveValue(WORD)
+      await expect(clear).toHaveAccessibleName('Clear search')
+      const target = await clear.boundingBox()
+      expect(target && [Math.round(target.width), Math.round(target.height)]).toEqual([44, 44])
+      const tall = (await pill.boundingBox())?.height
+      await clear.click()
+      await expect(field).toHaveValue('')
+      await expect(field).toBeFocused()
+      await expect(clear).toHaveCount(0)
+      expect((await pill.boundingBox())?.height).toBe(tall)
+      expect(new URL(page.url()).searchParams.get('q')).toBe(WORD)
+      await expect(row).toBeVisible()
+
+      // A row, not Discover's card: one line of blog, Subscribe at its end.
+      const box = await row.boundingBox()
+      expect(Math.round(box?.height ?? 0), 'a card, not a row').toBeLessThanOrEqual(80)
+      const button = row.getByTestId('site-subscribe')
+      const was = (await button.getAttribute('aria-pressed')) === 'true'
+      await button.click()
+      await expect(button).toHaveAttribute('aria-pressed', String(!was))
+      await expect(button).toHaveText(was ? 'Subscribe' : 'Subscribed')
+      // And back, once the server has it, so later specs keep the member's feeds.
+      const restored = pushed(page, was ? '"type":"subscribe"' : '"type":"unsubscribe"')
+      await button.click()
+      await expect(button).toHaveAttribute('aria-pressed', String(was))
+      await restored
+    })
+  }
+
+  test.describe('the first run', () => {
+    test.use({
+      storageState: { cookies: [], origins: [] },
+      // A sign-in of its own, from an address of its own: better-auth allows three tries a minute
+      // per address, and the whole suite comes from 127.0.0.1 (signin.e2e.ts).
+      extraHTTPHeaders: { 'cf-connecting-ip': '198.51.100.62' },
+    })
+
+    test('blogs are rows, and Start is a bar at the foot that the page clears', async ({
+      page,
+      context,
+    }) => {
+      // A blog Discover lists, whatever ran before, as signin.e2e.ts's first run makes sure.
+      const curated = await context.request.post(`${BASE}/api/admin/curate`, {
+        headers: { origin: BASE, authorization: `Bearer ${ADMIN_TOKEN}` },
+        data: { feedUrl: `${FIXTURES}/jvns.xml`, topics: ['tech'], featured: true },
+      })
+      expect(curated.ok()).toBe(true)
+      await signInRequest(context.request, `phone-first-run-${Date.now()}@e2e.test`)
+      await page.goto('/reading')
+
+      const firstRun = page.getByTestId('first-run')
+      await expect(firstRun.getByRole('heading', { level: 1 })).toHaveText('Start with a few blogs')
+      // The Feeds menu stays above it: on a phone it is the only way to Liked.
+      await expect(page.getByTestId('mobile-nav')).toBeVisible()
+      const rows = page.getByTestId('first-run-card')
+      await expect(rows.first()).toBeVisible()
+      const viewport = page.viewportSize()
+      const box = await rows.first().boundingBox()
+      expect(Math.round(box?.height ?? 0), 'a card, not a row').toBeLessThanOrEqual(80)
+      expect(Math.abs((box?.width ?? 0) - ((viewport?.width ?? 0) - 40))).toBeLessThanOrEqual(1)
+      await noSidewaysScroll(page, 'the page')
+
+      // Until one is taken, the bar says what it waits for.
+      const bar = page.getByTestId('first-run-bar')
+      await expect(bar).toHaveText('Subscribe to at least one to start reading.')
+      await expect(page.getByTestId('first-run-start')).toHaveCount(0)
+
+      const subscribe = rows.first().getByTestId('first-run-subscribe')
+      await expect(subscribe).toHaveText('Subscribe')
+      await subscribe.click()
+      await expect(subscribe).toHaveAttribute('aria-pressed', 'true')
+      await expect(subscribe).toHaveText('Subscribed')
+      const start = bar.getByTestId('first-run-start')
+      await expect(start).toHaveText('Start reading 1 blog →')
+      // In the body, not the page, whose fade-in transform would hold a fixed bar to it.
+      await expect(firstRun.getByTestId('first-run-start')).toHaveCount(0)
+      expect(Math.round((await start.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(48)
+
+      // At the viewport's foot, with its height in --bottom-bar.
+      const foot = await bar.boundingBox()
+      expect(foot && viewport && Math.round(foot.y + foot.height)).toBe(viewport?.height)
+      const variable = await page.evaluate(() =>
+        document.documentElement.style.getPropertyValue('--bottom-bar'),
+      )
+      expect(variable).toBe(`${Math.round(foot?.height ?? 0)}px`)
+
+      // Scrolled to the end, the page's last line clears the bar.
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+      const last = await page.getByTestId('first-run-footer').boundingBox()
+      const top = await bar.boundingBox()
+      expect(last && top && last.y + last.height <= top.y, 'the footer is under the bar').toBe(true)
+      await noSidewaysScroll(page, 'the page')
+
+      await start.click()
+      await expect(firstRun).toHaveCount(0)
+      await expect(bar).toHaveCount(0)
+      await expect(page.getByTestId('article-list')).toBeVisible()
+      const left = await page.evaluate(() =>
+        document.documentElement.style.getPropertyValue('--bottom-bar'),
+      )
+      expect(left, 'the bar left its height behind').toBe('')
+    })
   })
 })

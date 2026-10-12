@@ -218,20 +218,26 @@ export function FollowingPage() {
   }, [suggested, store])
 
   return (
-    <main className="mx-auto grid w-full max-w-[1120px] flex-1 animate-fade grid-cols-1 items-start gap-12 px-4 pt-10 pb-24 md:px-12 md:pt-11 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-16">
+    <main className="mx-auto grid w-full max-w-[1120px] flex-1 animate-fade grid-cols-1 items-start gap-12 px-5 pt-6 pb-24 md:px-12 md:pt-11 lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-16">
       <div className="min-w-0" data-testid="following-page">
-        <h1 className="m-0 mb-2 font-serif text-[40px] leading-[1.1] font-medium tracking-[-0.015em]">
+        <h1 className="m-0 mb-1.5 font-serif text-[32px] leading-[1.1] font-medium tracking-[-0.015em] md:mb-2 md:text-[40px]">
           {t('title')}
         </h1>
-        <p className="mt-0 mb-7 text-[15px] leading-normal text-ink-2">{t('intro')}</p>
-        <nav className="flex gap-6 border-b border-line" aria-label={t('title')}>
+        <p className="mt-0 mb-4 text-[14.5px] leading-normal text-ink-2 md:mb-7 md:text-[15px]">
+          {t('intro')}
+        </p>
+        {/* On a phone the rule runs edge to edge and the tabs scroll, as the profile's do. */}
+        <nav
+          className="-mx-5 flex gap-5 border-b border-line px-5 [scrollbar-width:none] max-md:overflow-x-auto max-md:overflow-y-hidden md:mx-0 md:gap-6 md:px-0"
+          aria-label={t('title')}
+        >
           {TABS.map((k) => (
             <Link
               key={k}
               to={k === 'all' ? '/following' : `/following?tab=${k}`}
               replace
               aria-current={k === tab ? 'page' : undefined}
-              className={`-mb-px border-b-2 py-2.5 font-medium hover:text-ink hover:no-underline ${
+              className={`-mb-px shrink-0 border-b-2 py-2.5 font-medium hover:text-ink hover:no-underline ${
                 k === tab ? 'border-ink text-ink' : 'border-transparent text-muted'
               }`}
               data-testid={`following-tab-${k}`}
@@ -392,7 +398,7 @@ function Activity({
         : t('subscribed', { n: item.count })
   return (
     <article
-      className="grid animate-fade grid-cols-[40px_minmax(0,1fr)] gap-4 border-b border-line py-7"
+      className="grid animate-fade grid-cols-[36px_minmax(0,1fr)] gap-3 border-b border-line py-5 md:grid-cols-[40px_minmax(0,1fr)] md:gap-4 md:py-7"
       data-testid="following-item"
       data-kind={item.kind}
     >
@@ -402,9 +408,10 @@ function Activity({
           displayName={person.displayName}
           avatar={person.avatar}
           size={40}
+          className="max-md:!size-9 max-md:!text-[15px]"
         />
       </Link>
-      <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex min-w-0 flex-col gap-2.5 md:gap-3">
         <div className="flex flex-wrap items-baseline gap-1.5 pt-0.5 text-[14px]">
           <Link to={profile} className="font-semibold text-ink hover:underline">
             {person.displayName ?? `@${person.handle}`}
@@ -416,7 +423,7 @@ function Activity({
           <>
             {item.note ? (
               <p
-                className="m-0 font-serif text-[21px] leading-[1.4] italic"
+                className="m-0 font-serif text-[19px] leading-[1.4] italic md:text-[21px]"
                 style={{ textWrap: 'pretty' }}
                 data-testid="following-note"
               >
@@ -485,7 +492,10 @@ function PostCard({
   const source = post.siteTitle ?? displayHost(post.homeUrl)
   const { title, excerpt, badge } = titleOf(post, lang, never)
   return (
-    <div className="relative flex flex-col gap-2 rounded-xl border border-line bg-surface px-5 py-[18px] transition-colors hover:border-muted">
+    <div
+      className="relative flex flex-col gap-2 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-muted md:px-5 md:py-[18px]"
+      data-testid="following-card"
+    >
       <div className="flex items-center gap-2 text-[12.5px] text-muted">
         <span
           aria-hidden="true"
@@ -499,7 +509,7 @@ function PostCard({
           <span className="rounded border border-line px-[5px] text-[10.5px]">{badge}</span>
         ) : null}
       </div>
-      <h3 className="m-0 font-serif text-[23px] leading-[1.2] font-medium tracking-[-0.005em]">
+      <h3 className="m-0 font-serif text-[21px] leading-[1.2] font-medium tracking-[-0.005em] md:text-[23px]">
         <PostLink
           article={heldArticle(post, lang)}
           source={source}
@@ -510,11 +520,16 @@ function PostCard({
         </PostLink>
       </h3>
       {excerpt ? (
-        <p className="m-0 line-clamp-2 font-serif text-[16.5px] leading-[1.45] text-ink-2">
+        <p className="m-0 line-clamp-2 font-serif text-[16px] leading-[1.45] text-ink-2 md:text-[16.5px]">
           {excerpt}
         </p>
       ) : null}
-      <div className="mt-0.5 flex gap-3 text-[12px] text-muted">
+      {/* Not on a phone (Tela Mobile 10). It holds no link, so the title's, stretched over the
+          card, stays its one link either way. */}
+      <div
+        className="mt-0.5 flex gap-3 text-[12px] text-muted max-md:hidden"
+        data-testid="following-card-foot"
+      >
         <span>{t('minutes', { n: post.article.readingMinutes || 1 })}</span>
         <GlyphCount kind="likeCount" n={post.article.likeCount} />
         <span className="flex-1" />

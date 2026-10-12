@@ -5,12 +5,15 @@ import {
   type ReadingLanguage,
   type UiLocale,
 } from '@tela/shared'
-import { useState } from 'react'
+import { type ReactNode, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { blogsApiPath } from '../lib/discover-href'
 import { displayHost } from '../lib/format'
 import { useMemberControls } from '../lib/member'
+import { useBottomBar } from '../lib/use-bottom-bar'
+import { BELOW_MD, useMediaQuery } from '../lib/use-media'
 import { usePublic } from '../lib/use-public'
 import type { DiscoverData, DiscoverSite, MemberControls } from '../views/types'
 import { SiteAvatar } from './site-avatar'
@@ -45,6 +48,11 @@ export function showsFirstRun(s: {
  * a Subscribe that flips where it is. It stays up however many the member takes, until they say
  * they are done (`onStart`); offline, or with nothing to offer, it points at Discover and at
  * adding a blog by its address.
+ *
+ * On a phone (below `md`, Tela Mobile 16) the six are rows rather than cards, and Start is a bar
+ * fixed at the foot, where a thumb reaches it however far the list scrolls. Rows or cards, the bar
+ * or the ruled row: one of each renders, never both with one hidden, since both hold the same test
+ * ids and the bar sets `--bottom-bar`.
  */
 export function FirstRun({
   readingLang,
@@ -67,70 +75,132 @@ export function FirstRun({
   if (sites === null && loaded.status === 'ready') {
     setSites(loaded.data.sites.filter((s) => s.feedId !== null).slice(0, CARDS))
   }
+  const phone = useMediaQuery(BELOW_MD)
   const language = (LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en)[readingLang]
   // Nothing to offer here: the request failed (offline, an error), or there was nothing listed.
   const none =
     loaded.status === 'missing' ||
     (loaded.status === 'loading' && loaded.failed === true) ||
     sites?.length === 0
+  const link = (to: string) => (chunks: ReactNode) => (
+    <Link to={to} className={INLINE}>
+      {chunks}
+    </Link>
+  )
   return (
     <main
-      className="w-full min-w-0 max-w-[1000px] px-5 pb-16 pt-8 animate-fade lg:px-12 lg:pb-24 lg:pt-12"
+      // The foot clears the phone's Start bar while it shows (`--bottom-bar`).
+      className="w-full min-w-0 max-w-[1000px] px-5 pb-[calc(1.5rem+var(--bottom-bar,0px))] pt-[26px] animate-fade md:pb-16 md:pt-8 lg:px-12 lg:pb-24 lg:pt-12"
       data-testid="first-run"
     >
-      <h1 className="m-0 mb-2 font-serif text-[32px] font-medium leading-[1.1] tracking-[-0.015em] sm:text-[36px]">
+      <h1 className="m-0 mb-1.5 font-serif text-[30px] font-medium leading-[1.1] tracking-[-0.015em] md:mb-2 md:text-[36px]">
         {t('title')}
       </h1>
       <p
-        className="m-0 mb-7 max-w-[560px] text-[15px] leading-normal text-ink-2"
+        className="m-0 mb-2.5 max-w-[560px] text-[14.5px] leading-normal text-ink-2 md:mb-7 md:text-[15px]"
         style={{ textWrap: 'pretty' }}
       >
         {t('intro', { language: language ?? readingLang })}
       </p>
-      {none ? null : (
+      {none ? null : phone ? (
+        <div className="flex flex-col">
+          {sites
+            ? sites.map((site) => <BlogRow key={site.id} site={site} member={member} />)
+            : Array.from({ length: CARDS }, (_, i) => <RowPlaceholder key={String(i)} />)}
+        </div>
+      ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3.5">
           {sites
             ? sites.map((site) => <BlogCard key={site.id} site={site} member={member} />)
             : Array.from({ length: CARDS }, (_, i) => <CardPlaceholder key={String(i)} />)}
         </div>
       )}
-      <div className="mt-7 flex flex-wrap items-center gap-4 border-t border-line pt-6">
-        {subscribed > 0 ? (
-          <button
-            type="button"
-            onClick={onStart}
-            className="cursor-pointer rounded-full bg-primary px-[18px] py-2.5 font-medium text-on-primary hover:brightness-120"
-            data-testid="first-run-start"
+      {phone ? (
+        <>
+          <p
+            className="m-0 pt-4 text-[13px] leading-[1.6] text-muted"
+            data-testid="first-run-footer"
           >
-            {t('start', { n: subscribed })}
-          </button>
-        ) : none ? null : (
-          <span className="text-[13.5px] text-muted">{t('waiting')}</span>
-        )}
-        <span className="flex-1" />
-        <Link
-          to="/discover/blogs"
-          className="text-[13.5px] font-medium text-ink hover:underline"
-          data-testid="first-run-discover"
-        >
-          {t('more')}
-        </Link>
-      </div>
-      <p className="m-0 mt-[18px] text-[13px] text-muted">
-        {t.rich('import', {
-          opml: (chunks) => (
-            <Link to="/add" className={INLINE}>
-              {chunks}
+            {t.rich('footer', {
+              discover: (chunks) => (
+                <Link to="/discover/blogs" className={INLINE} data-testid="first-run-discover">
+                  {chunks}
+                </Link>
+              ),
+              opml: link('/add'),
+              add: link('/add'),
+            })}
+          </p>
+          {/* Nothing to offer and nothing taken: nothing to start or wait for. */}
+          {subscribed > 0 || !none ? <StartBar subscribed={subscribed} onStart={onStart} /> : null}
+        </>
+      ) : (
+        <>
+          <div className="mt-7 flex flex-wrap items-center gap-4 border-t border-line pt-6">
+            {subscribed > 0 ? (
+              <button
+                type="button"
+                onClick={onStart}
+                className="cursor-pointer rounded-full bg-primary px-[18px] py-2.5 font-medium text-on-primary hover:brightness-120"
+                data-testid="first-run-start"
+              >
+                {t('start', { n: subscribed })}
+              </button>
+            ) : none ? null : (
+              <span className="text-[13.5px] text-muted">{t('waiting')}</span>
+            )}
+            <span className="flex-1" />
+            <Link
+              to="/discover/blogs"
+              className="text-[13.5px] font-medium text-ink hover:underline"
+              data-testid="first-run-discover"
+            >
+              {t('more')}
             </Link>
-          ),
-          add: (chunks) => (
-            <Link to="/add" className={INLINE}>
-              {chunks}
-            </Link>
-          ),
-        })}
-      </p>
+          </div>
+          <p className="m-0 mt-[18px] text-[13px] text-muted">
+            {t.rich('import', { opml: link('/add'), add: link('/add') })}
+          </p>
+        </>
+      )}
     </main>
+  )
+}
+
+/**
+ * Start, fixed at the foot of a phone's screen (Tela Mobile 16), or what it waits for while the
+ * member has taken nothing. It is put in the body, as the reader's bar is: the page fades in on a
+ * transform, which would hold a `fixed` bar to the page. While it shows, `--bottom-bar` says how
+ * tall it is, so the page's foot clears it. Under the sticky header (`z-[9]`), so the account
+ * menu opens over it.
+ */
+function StartBar({ subscribed, onStart }: { subscribed: number; onStart: () => void }) {
+  const t = useTranslations('firstRun')
+  const bar = useRef<HTMLDivElement>(null)
+  useBottomBar(bar)
+  return createPortal(
+    <div
+      ref={bar}
+      className="fixed inset-x-0 bottom-0 z-[9] border-t border-line bg-paper px-5 pb-[max(30px,env(safe-area-inset-bottom))] pt-3"
+      data-testid="first-run-bar"
+    >
+      {/* The waiting line is as tall as the pill, so the bar keeps its height when it turns. */}
+      {subscribed > 0 ? (
+        <button
+          type="button"
+          onClick={onStart}
+          className="flex min-h-12 w-full cursor-pointer items-center justify-center rounded-full bg-primary px-5 font-medium text-on-primary hover:brightness-120"
+          data-testid="first-run-start"
+        >
+          {t('start', { n: subscribed })}
+        </button>
+      ) : (
+        <p className="m-0 flex min-h-12 items-center justify-center text-center text-[13.5px] text-muted">
+          {t('waiting')}
+        </p>
+      )}
+    </div>,
+    document.body,
   )
 }
 
@@ -189,6 +259,72 @@ function BlogCard({ site, member }: { site: DiscoverSite; member: MemberControls
             {on ? t('subscribed') : t('subscribe')}
           </button>
         ) : null}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One of the six on a phone: a row, as v5 draws them, with the language beside the name and the
+ * description cut to one line; no host and no readers, which a card has room for.
+ */
+function BlogRow({ site, member }: { site: DiscoverSite; member: MemberControls | undefined }) {
+  const t = useTranslations('discover')
+  const title = site.title ?? displayHost(site.homeUrl)
+  const { feedId } = site
+  const on = feedId !== null && member?.isSubscribed(feedId) === true
+  return (
+    <div
+      className="flex min-w-0 items-center gap-3 border-b border-line py-3.5"
+      data-testid="first-run-card"
+      data-site-id={site.id}
+    >
+      <SiteAvatar
+        id={site.id}
+        title={title}
+        faviconKey={site.faviconKey}
+        size={40}
+        radius={10}
+        className="!text-[17px]"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1.5 font-medium">
+          <span className="truncate">{title}</span>
+          {site.primaryLang ? (
+            <span className="shrink-0 rounded border border-line px-[5px] text-[10.5px] font-normal text-muted">
+              {languageBadge(site.primaryLang)}
+            </span>
+          ) : null}
+        </div>
+        {site.description ? (
+          <div className="truncate text-[13px] text-ink-2">{site.description}</div>
+        ) : null}
+      </div>
+      {member && feedId !== null ? (
+        <button
+          type="button"
+          onClick={() => member.toggle(feedId, on)}
+          aria-pressed={on}
+          className={`shrink-0 cursor-pointer whitespace-nowrap rounded-full border bg-transparent px-3.5 py-[7px] text-[13px] font-medium hover:bg-hover ${
+            on ? 'border-thumb text-ink-2' : 'border-ink text-ink'
+          }`}
+          data-testid="first-run-subscribe"
+        >
+          {on ? t('subscribed') : t('subscribe')}
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+/** A row's shape while the blogs are on their way. */
+function RowPlaceholder() {
+  return (
+    <div aria-hidden className="flex items-center gap-3 border-b border-line py-3.5">
+      <div className="size-10 shrink-0 rounded-[10px] bg-hover" />
+      <div className="flex flex-1 flex-col gap-1.5">
+        <div className="h-3 w-1/2 rounded bg-hover" />
+        <div className="h-2.5 w-3/4 rounded bg-hover" />
       </div>
     </div>
   )
