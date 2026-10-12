@@ -1,4 +1,4 @@
-import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
+import { type APIRequestContext, expect, type Locator, type Page, test } from '@playwright/test'
 import {
   accountMenuOrder,
   BASE,
@@ -681,6 +681,104 @@ test.describe('the Dashboard on a phone', () => {
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       )
       expect(overflow, `sideways scroll at ${width}`).toBeLessThanOrEqual(0)
+    }
+  })
+})
+
+/**
+ * Following, a profile and a blog page on a phone (Tela Mobile 10–12): the desktop pages resized
+ * below md, the profile's and the blog's by CSS alone, since the edge renders them.
+ */
+test.describe('Following, a profile and a blog page on a phone', () => {
+  /** The page never scrolls sideways, as on Discover. */
+  async function noSidewaysScroll(page: Page, what: string) {
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow, `${what} scrolls sideways`).toBeLessThanOrEqual(0)
+  }
+
+  /**
+   * A box in whole pixels, once the page has come to rest: it fades in from 4px lower, so two
+   * boxes measured during the fade would not line up.
+   */
+  async function box(locator: Locator) {
+    await locator.evaluate((el) => {
+      const page = el.closest('main') ?? document.body
+      const fades = page
+        .getAnimations({ subtree: true })
+        .filter((a) => a.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY)
+      // A fade cancelled by a re-render rejects; the box is measured after it either way.
+      return Promise.all(fades.map((a) => a.finished.catch(() => undefined)))
+    })
+    const b = await locator.boundingBox()
+    if (!b) throw new Error(`${locator} has no box`)
+    return {
+      x: Math.round(b.x),
+      y: Math.round(b.y),
+      width: Math.round(b.width),
+      height: Math.round(b.height),
+    }
+  }
+
+  test('Following: a 36px avatar column, and a card without its footer', async ({ page }) => {
+    // Whom the setup's member follows depends on the specs before this one: the feed is given.
+    const at = Date.now() - 3_600_000
+    const article = {
+      id: 990_001,
+      feedId: 990_001,
+      url: 'https://kilometrocero.example/bakery',
+      title: 'The bakery that outlived three metro lines',
+      author: null,
+      publishedAt: at,
+      fetchedAt: at,
+      sortAt: at,
+      sourceLang: 'en',
+      excerpt: 'On Calle de Toledo there is a bakery that has been open since 1928.',
+      contentKey: null,
+      wordCount: 1200,
+      readingMinutes: 6,
+      extractState: 'done',
+      likeCount: 3,
+      recommendCount: 1,
+      seq: 1,
+    }
+    const post = {
+      siteId: 990_001,
+      siteTitle: 'Kilómetro Cero',
+      homeUrl: 'https://kilometrocero.example/',
+      listed: true,
+      translatedTitle: null,
+      translatedExcerpt: null,
+      article,
+    }
+    const person = { id: 'mobile-anna', handle: 'anna_mobile', displayName: 'Anna', avatar: null }
+    const items = [
+      { kind: 'recommended', key: 'r:mobile', at, person, note: 'The last line is perfect.', post },
+      { kind: 'liked', key: 'l:mobile', at, person, count: 1, posts: [post] },
+    ]
+    await page.route(/\/api\/v1\/following(\?|$)/, (route) =>
+      route.fulfill({ json: { items, next: null } }),
+    )
+    for (const width of [360, 412]) {
+      await page.setViewportSize({ width, height: 860 })
+      await page.goto('/following')
+      const rows = page.getByTestId('following-item')
+      await expect(rows).toHaveCount(2)
+      // A liked row takes the same column as a recommended one.
+      for (const row of await rows.all()) {
+        const columns = await row.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
+        expect(columns.split(' ')[0], `the avatar column at ${width}px`).toBe('36px')
+        expect((await box(row.locator('[data-avatar]').first())).width).toBe(36)
+      }
+      // The card drops its minutes, heart and "Read →", and is still one link.
+      const card = page.getByTestId('following-card')
+      await expect(card).toContainText(article.title)
+      await expect(card.getByTestId('following-card-foot')).toBeHidden()
+      await expect(card.getByRole('link')).toHaveCount(1)
+      // Following's own aside stays, below the feed.
+      await expect(page.getByTestId('people-you-follow')).toBeVisible()
+      await noSidewaysScroll(page, `/following at ${width}px`)
     }
   })
 })
