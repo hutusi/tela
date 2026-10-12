@@ -177,7 +177,11 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
 - `SearchField` is the site's one search input, and `/search` renders it below `xl` while the
   header renders it from `xl` — exactly one is visible at any width. The page needs its own copy
   because the header's collapsed search link lands there: without it the link reaches a results
-  page with nothing to type into.
+  page with nothing to type into. It draws its own clear button while it holds text (CLOSE,
+  "Clear search", `${testId}-clear`), a 44px target on negative margins so neither pill grows: it
+  empties and focuses its own field and goes nowhere, as the browser's cancel did, which is hidden
+  in `@layer base`. The field takes the URL's query when that changes rather than being re-keyed
+  by it, so focus survives a search.
 - **The nav is the only control in the header allowed to shrink**, because it is the only one that
   scrolls: from `sm` up every other control is `shrink-0`, since squeezed below its one-line width
   each one wraps its label into the 56px bar instead. Below `sm` they stay shrinkable — the phone
@@ -298,11 +302,23 @@ let go when the toast goes without it (ADR 0046), so an Undo pressed while it sh
 the change unsent. The reading page's keys stay quiet while a modal dialog (the phone's Recommend
 sheet) is open.
 
-Settings (Tela v2): a 1040 px page, a 200 px section nav on the left (sticky from `md`, one row
-that scrolls below it) holding the serif "Settings" heading, and the section in a 640 px column.
-Each section is an address (`/settings`, `/settings/reading`, `/settings/translation`,
-`/settings/subscriptions`, `/settings/privacy`, `/settings/invites`, `/settings/account`), so Back
-and a shared link land on it. Invites and Account are the two sections that read live answers from
+Settings (Tela v2): from `md`, a 1040 px page, a 200 px sticky section nav on the left holding
+the serif "Settings" heading, and the section in a 640 px column; an item is current by the
+section shown, not by the address. Each section is an address (`/settings/profile`,
+`/settings/reading`, `/settings/translation`, `/settings/subscriptions`, `/settings/privacy`,
+`/settings/invites`, `/settings/account`), so Back and a shared link land on it. Bare `/settings`
+is Profile from `md` and, below it, the list of sections (Tela Mobile 13, ADR 0047): the serif 30
+"Settings", then each section as a row at least 48 px tall, 15/500, with CHEVRON_RIGHT and a
+`line` between. On a phone a section is its own page under a 52 px back bar beneath the header, a
+link to `/settings` (BACK and "Settings", named "Back to Settings") rather than history, since a
+deep link has none, then the section's name as the serif 30 heading; arriving from a row or a
+link starts the page at its top with focus on that name. Whatever means Profile (*Edit profile*,
+a claim's "handle taken") names `/settings/profile`, so no form is edited at bare `/settings`,
+where crossing `md` would swap it for the list. *Default view* stays under Language at every
+width. Below `sm` a `SettingRow`'s label gives way first (it grows from nothing with a 96 px
+minimum; `gap-x-4 py-4`, a 12.5 px hint), so the size, measure and theme switches sit beside their
+labels at 360 px; a control too wide still wraps under it, and the rows built by hand use
+`SETTING_LABEL` and `SETTING_HINT`. Invites and Account are the two sections that read live answers from
 tela-api instead of the synced tables, on purpose: an invite list is counted by the server and holds
 other people's state, and how a member signs in is security state. Invites says how many of the
 five places are left, with *Create a code* (the filled button, disabled once none are left) beside
@@ -423,7 +439,7 @@ always renders and the picture covers it only once it has loaded, so a slow, fai
 load still shows a face of sorts; the picture's address comes from the server (`/avatar/…`),
 never from the page.
 
-Profile (`/@handle`, Tela v2): a 960 px column. The header is a 112 px avatar (80 px below `md`,
+Profile (`/@handle`, Tela v2): a 960 px column. The header is a 112 px avatar (72 px below `md`,
 the accent for the member's own, their colour for anyone else's), the serif name at 46 px,
 "@handle · Joined September 2026", the bio in 20 px serif, and counts ("**N** following · **N**
 followers · **N** recommendations"), then a "Writes" line of their claimed blogs. On the right:
@@ -435,7 +451,14 @@ days; the edge, rendering one page for everyone, uses UTC's, so a post within th
 of midnight can change day when the app takes over), the note in italic serif, then the blog's swatch, name and language badge ("JA → EN" when the page carries the
 title in the reader's language) and the title; the whole post is the link. Subscriptions are a
 grid of cards. The page is edge-cached, so the member's own follow moves the followers count on
-their screen at once, and their own following count comes from their device.
+their screen at once, and their own following count comes from their device. On a phone (below
+`md`, Tela Mobile 11; CSS alone, since the edge renders it) the header is a grid in reading order,
+avatar, name and meta, the button, then bio, counts and Writes: the avatar and the button share
+the first row and the rest runs full width below, while from `md` the avatar spans the rows beside
+the name and the rest spans the name's column and the button's. The name is 34 px, the bio 18,
+the button 13.5 px and at least 40 tall; the tabs' rule runs edge to edge; posts take a 52 px date
+column, the note 19 and the title 21. The design's "Reads in …" is left out: it would publish the
+never-translate list (ADR 0031).
 
 Following (`/following`, Tela v2): a 1120 px page, the feed beside a 280 px aside (sticky from
 `lg`, below the feed on narrower screens). The serif heading and a one-line intro, then underlined
@@ -447,18 +470,35 @@ Subscribe. Likes and subscriptions are grouped by the viewer's local day, and th
 thirty entries at a time behind "Older activity". The aside lists the people followed (from the device, no request) and a few
 readers to follow: the first five Discover's Readers tab would suggest (ADR 0044), each with its
 reason under the name (the accent dot, 12.5 px `ink-2`). No toasts: a Follow button changes at once.
+On a phone (below `md`, Tela Mobile 10): padded 20/24, the heading 32 px and the intro 14.5; the
+tabs scroll, their rule edge to edge; a 36 px avatar column, the note 19, and the card padded 16
+with a 21 px title, a 16 px excerpt and no footer (minutes, HEART, "Read →"), still one stretched
+link. The aside follows the feed.
 
 Blog (`/s/:id`, Tela v2): a 1080 px page. The header is an 84 px avatar (20 px corners), the host
-and "Claimed by {name}" with a CHECK in accent, the title in 56 px serif (40 px on a phone), the blog's
+and "Claimed by {name}" with a CHECK in accent, the title in 56 px serif (38 px on a phone), the blog's
 description as an italic tagline, and "Written in Japanese · Posts weekly · N readers on Tela",
 with topic chips below; on the right, *Visit blog ↗* and Subscribe, and the claim link for an
 unclaimed blog. The owner's topics form follows the header. Posts are the profile's list: a date
 column, a 24 px serif title (translated when the page carries one), two lines of excerpt, minutes
 and a HEART. A 280 px aside holds *About* (the claimant's name and bio), *Readers you follow* (a stack
 of avatars and "Anna and Jonas read this blog.", a member call beside the cached page) and
-*From readers* (the newest notes readers left recommending its posts).
+*From readers* (the newest notes readers left recommending its posts). On a phone (below `md`,
+Tela Mobile 12; CSS alone): a 64 px avatar with 16 px corners, the tagline 19 px and the facts 13;
+*Visit blog ↗* and Subscribe share a row at equal width, at least 40 tall, and the header loses
+its rule; posts take a 52 px date column, a 20 px title and a 16 px excerpt, and their meta reads
+"6 min · ES → EN" without the HEART.
 
-Dashboard (`/dashboard`, Tela v5 §9): a 960 px page, padded 44/48 (16 px at the sides on a phone),
+Search (`/search`): the query's blogs, by name or address, then the posts in the member's
+subscriptions whose title matches, original or translated. Below `xl` the page carries its own
+field, first, above the heading. A post is its blog, the language badge and the time, the title,
+and beneath it the line the query matched (`hitTitles`), each line with its `lang`. On a phone
+(below `md`, Tela Mobile 15): the field padded 11/16, the heading 28 px and the hint 13 px muted;
+each blog is a compact card in place of `SiteCard` (a 36 px avatar with a 9 px radius, the name,
+"{host} · {n} readers" or the host alone, and an outlined Subscribe), and posts are rows ruled
+below with 1.3 line height.
+
+Dashboard (`/dashboard`, Tela v5 §9): a 960 px page, padded 44/48 (24/20 on a phone),
 40 px between sections. The serif "Dashboard" (40/500) and its intro, then each claimed blog:
 - **Its header:** a 52 px `SiteAvatar` with a 13 px radius, the title (serif 26/500) linking to
   the blog's page, and a 13 px muted line, "{host} · Written in {language} · {listing} under
@@ -474,8 +514,8 @@ Dashboard (`/dashboard`, Tela v5 §9): a 960 px page, padded 44/48 (16 px at the
   sum of the 20 rows below, so the tile and the notes under it always agree.
 - **Posts**, a table with its headers in words (11/600 uppercase, muted, a `line` under them):
   the serif 18 title over its 12 px date, then likes, recommendations and notes, right-aligned in
-  tabular figures, with "–" for a post without notes. It scrolls inside itself on a phone, never
-  the page.
+  tabular figures, with "–" for a post without notes. Narrow, it scrolls inside itself, never the
+  page.
 - **What readers said:** the newest twenty notes of each blog (a cap per blog, so one busy blog
   never empties another's section), each a 32 px `PersonAvatar` beside the note in serif italic
   19, in the locale's quotation marks, then "{name} on {post} · {date}", the name opening the
@@ -483,6 +523,13 @@ Dashboard (`/dashboard`, Tela v5 §9): a 960 px page, padded 44/48 (16 px at the
 - **This blog on Tela:** "Let readers translate your posts" as a `SettingRow` with the standard
   switch (on means translation is allowed), confirmed by a toast. The switch shows what tela-api
   answered and ignores a press while one is in flight.
+- **On a phone** (below `md`, Tela Mobile 14): the heading 32, a 44 px avatar and a 22 px title,
+  24 px between sections. The tiles sit three abreast (8 px gap, padded 12; a 12 px label, a 28 px
+  number, an 11.5 px line) under short labels, *Readers*, *Likes*, *Recs*, with "+{n} in 30 days";
+  Likes keeps "across {n} posts", since the tiles count the whole blog (ADR 0047). The posts are
+  rows in the table's place, rendered from `useMediaQuery(BELOW_MD)`: the serif 18 title, then
+  "{date} · **N** likes · **N** recommendations · N notes", without the notes at zero or the date
+  when there is none. The notes take a 28 px avatar and 18 px serif.
 
 Discover (`/discover`, Tela v5 §11, ADR 0044): a 1120 px page, 44 px above (32 px on a phone).
 Every tab opens with the serif "Discover" (40 px, 32 px on a phone), the 15 px `ink-2` intro
@@ -784,7 +831,13 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   sidebar says "No subscriptions yet." and, under "+ Add a blog", "or browse Discover →"; below
   `lg` the Feeds menu stays above the first run, since on a phone it is the only way to Liked,
   which a member who follows nothing may still have kept posts in. Liked and an open article
-  never give way to it.
+  never give way to it. On a phone (below `md`, Tela Mobile 16) the blogs are rows: a 40px avatar
+  with a 10px radius, the name with its language badge, a one-line description, and an outlined
+  Subscribe; no host or readers. One line follows them, "More blogs in Discover. Coming from
+  another reader? Import an OPML file or paste a blog's address.", and *Start reading* moves into
+  a bar fixed at the foot (portalled, `z-[9]`, on `paper` under a `line` rule, with the safe area
+  below), a full-width 48px primary pill, which holds the waiting line until one is subscribed and
+  puts its height in `--bottom-bar` as the article's bar does.
 - **Marking read and hiding read posts** are the member's (Settings → Reading). The action row
   always offers the other state: *Mark as unread* on a read post, *Mark as read* on an unread one,
   whatever the pref, since on a phone, which has no `m`, it is the only way back to unread. It is
@@ -864,8 +917,11 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
 ## Phones (Tela v5, ADR 0046)
 
 Below `lg` the reader is designed, not a fallback (`Tela Mobile.dc.html`, screens 01–05, 07–09
-and 17 so far; Following, a profile, a blog, Settings as a list, the Dashboard, Search and first
-run as rows, screens 10–16, come next).
+and 17, ADR 0046). The pages after it (Following, a profile, a blog, Settings as a list, the
+Dashboard, Search and first run, screens 10–16, ADR 0047) change below `md`, each described with
+its page above. Three boundaries, each where its own layout runs out: the header's at `sm` (its
+width budget), the pages' at `md` (where Settings' side column and the profile's avatar already
+switched), the reader's at `lg` (three panes).
 
 - **The header** below `sm` is the mark, the nav and the avatar; language, theme and Search are in
   the account menu (see the header above), and a visitor's language and theme in the footer.
@@ -895,6 +951,8 @@ run as rows, screens 10–16, come next).
   on `source` in a rounded panel, serif 16/1.5 in `ink-2` (CJK keeps its 18/1.8), padded 10/14.
 - **Highlighting** puts the toolbar under the selection, clear of the system's own menu, with
   40px buttons (see Highlights).
-- One set of controls or the other is rendered from a media query (`useMediaQuery(BELOW_LG)`,
-  `lib/use-media.ts`), not both with one hidden, wherever the hidden copy would repeat a test id
-  or act on its own.
+- One set of controls or the other is rendered from a media query (`useMediaQuery(BELOW_LG)` in
+  the reader, `BELOW_MD` on the pages; `lib/use-media.ts`), not both with one hidden, wherever the
+  hidden copy would repeat a test id or act on its own. A page the edge also renders (a profile, a
+  blog) changes by CSS alone: the app replaces the edge's HTML, so a hook would paint the desktop
+  layout first and then jump.
