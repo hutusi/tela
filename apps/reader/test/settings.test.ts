@@ -3,9 +3,14 @@ import { describe, expect, test } from 'bun:test'
 import { hrefOf, SECTIONS, settingsView } from '../src/pages/settings'
 
 describe('a Settings address', () => {
-  test('bare, is the list on a phone and Profile from md up', () => {
+  test("bare, is the list on a phone and goes to Profile's own address from md up", () => {
     expect(settingsView(undefined, '', true)).toEqual({ kind: 'list' })
-    expect(settingsView(undefined, '', false)).toEqual({ kind: 'section', section: 'profile' })
+    // Never Profile in place: a form at the address whose page turns on the width would lose an
+    // edit when a phone turned across md.
+    expect(settingsView(undefined, '', false)).toEqual({
+      kind: 'redirect',
+      to: '/settings/profile',
+    })
   })
 
   test('Profile has its own, which is Profile at every width and what its links name', () => {

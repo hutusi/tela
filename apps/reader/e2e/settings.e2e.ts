@@ -70,18 +70,17 @@ test.describe('settings', () => {
       'aria-current',
       'page',
     )
-    // An address that names no section is the first one.
+    // An address that names no section is Settings, which beside the side column is Profile.
     await page.goto('/settings/nothing-here')
-    await expect(page).toHaveURL(/\/settings$/)
+    await expect(page).toHaveURL(/\/settings\/profile$/)
   })
 
-  test('Profile is at /settings and at its own address, current in the nav at both', async ({
-    page,
-  }) => {
+  test('Profile is at its own address, where /settings goes from md up', async ({ page }) => {
     for (const path of ['/settings', '/settings/profile']) {
       await page.goto(path)
-      // Its own address stays: a link to Profile lands on Profile at every width.
-      await expect(page).toHaveURL(new RegExp(`${path}$`))
+      // Bare /settings is the list on a phone, so beside the side column it hands over to
+      // Profile's own address rather than show the form at one whose page turns on the width.
+      await expect(page).toHaveURL(/\/settings\/profile$/)
       await expect(page.getByTestId('settings-content')).toHaveAttribute('data-section', 'profile')
       await expect(page.getByTestId('settings-form')).toBeVisible()
       const nav = page.getByTestId('settings-nav')

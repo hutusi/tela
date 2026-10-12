@@ -439,7 +439,7 @@ test('a change made in another tab reaches a tab that was away from the reading 
   await page.goto('/reading')
   await synced(page)
   await fromAccountMenu(page, 'nav-settings')
-  await expect(page).toHaveURL(/\/settings$/)
+  await expect(page).toHaveURL(/\/settings\/profile$/)
 
   const other = await context.newPage()
   await other.goto('/reading')

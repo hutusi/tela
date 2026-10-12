@@ -17,7 +17,14 @@ import {
 } from '@tela/shared'
 import type { PrivacyFlag, ProfileRow } from '@tela/sync'
 import { useEffect, useId, useRef, useState } from 'react'
-import { Link, Navigate, useLocation, useNavigationType, useParams } from 'react-router'
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+  useParams,
+} from 'react-router'
 import { useTranslations } from 'use-intl'
 import { AvatarCrop } from '../components/avatar-crop'
 import { BACK, CHEVRON_RIGHT, CLOSE, Glyph } from '../components/glyph'
@@ -69,8 +76,9 @@ export type SettingsView =
 
 /**
  * What `/settings` or `/settings/:section` shows. Bare `/settings` is the list of sections on a
- * phone and Profile from `md` up; Profile's own address is Profile at both, so nothing that edits
- * it is at an address where crossing `md` would swap the form for the list and lose the edit.
+ * phone and goes to Profile's own address from `md` up, so no form is ever edited at the one
+ * address whose page depends on the width: there, turning a phone across `md` would swap the form
+ * for the list and lose what was typed.
  */
 export function settingsView(
   asked: string | undefined,
@@ -80,7 +88,7 @@ export function settingsView(
   if (asked === undefined) {
     // A link's return from Google or GitHub is Account's, at any width.
     if (linkingReturn(search)) return { kind: 'redirect', to: `/settings/account${search}` }
-    return phone ? { kind: 'list' } : { kind: 'section', section: 'profile' }
+    return phone ? { kind: 'list' } : { kind: 'redirect', to: hrefOf('profile') }
   }
   const section = SECTIONS.find((s) => s === asked)
   return section ? { kind: 'section', section } : { kind: 'redirect', to: '/settings' }
@@ -92,7 +100,8 @@ const PHONE_TITLE = 'font-serif text-[30px] leading-[1.1] font-medium tracking-[
 export function SettingsPage() {
   const t = useTranslations('settings')
   const { section: asked } = useParams()
-  const { search, key } = useLocation()
+  const { search, key, state } = useLocation()
+  const navigate = useNavigate()
   // One layout or the other, not both with one hidden: each holds its own `settings-section-*`.
   const phone = useMediaQuery(BELOW_MD)
   const navigation = useNavigationType()
@@ -116,14 +125,22 @@ export function SettingsPage() {
   if (phone) {
     return (
       <main className="w-full flex-1 animate-fade px-5 pb-10">
-        {/* Under the header, as the reader's back bar is. A link, not history: a section reached
-            by its address has no list behind it to go back to. */}
+        {/* Under the header, as the reader's back bar is. A link, and Back only when the list
+            is what lies behind: a section reached by its address has no list to go back to. */}
         <div
           className="-mx-5 flex h-[52px] items-center border-b border-line pr-2 pl-1"
           data-testid="settings-back-bar"
         >
           <Link
             to="/settings"
+            onClick={(e) => {
+              // Opened from the list: going back is Back, so a few sections visited leave the
+              // history as list, section, not a list between each, and the list's own entry
+              // knows which row to give focus back to.
+              if (!fromList(state)) return
+              e.preventDefault()
+              navigate(-1)
+            }}
             aria-label={t('back')}
             className="flex h-11 min-w-0 items-center gap-0.5 rounded-md px-2.5 text-ink-2 hover:bg-hover hover:text-ink hover:no-underline"
             data-testid="settings-back"
@@ -176,18 +193,54 @@ export function SettingsPage() {
   )
 }
 
+/** A section opened from the phone's list, whose back bar can then go back rather than on. */
+const fromList = (state: unknown) =>
+  typeof state === 'object' && state !== null && 'fromList' in state && state.fromList === true
+
+/** The section the list was left for, kept in the list's own history entry. */
+const leftFor = (state: unknown): string | null =>
+  typeof state === 'object' && state !== null && 'left' in state && typeof state.left === 'string'
+    ? state.left
+    : null
+
 /** The phone's `/settings` (Tela Mobile 13): the sections as rows, each opening its own page. */
 function SettingsList() {
   const t = useTranslations('settings')
+  const { key, state } = useLocation()
+  const navigate = useNavigate()
+  const navigation = useNavigationType()
+  const heading = useRef<HTMLHeadingElement>(null)
+  const rows = useRef(new Map<Section, HTMLAnchorElement>())
+  // Arriving by a link starts at the heading, as a new page would; coming back to the list (Back,
+  // or the section's back bar) puts focus on the row that was left, where the member was. The row
+  // is in the list entry's own state, so it travels with that entry and nothing else claims it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per entry navigated to
+  useEffect(() => {
+    if (navigation === 'PUSH') {
+      window.scrollTo(0, 0)
+      heading.current?.focus({ preventScroll: true })
+      return
+    }
+    const left = SECTIONS.find((s) => s === leftFor(state))
+    if (navigation === 'POP' && left) rows.current.get(left)?.focus()
+  }, [key])
   return (
     <main className="w-full flex-1 animate-fade px-5 pt-6 pb-10">
-      <h1 className={`mb-3 ${PHONE_TITLE}`}>{t('title')}</h1>
+      <h1 ref={heading} tabIndex={-1} className={`mb-3 outline-none ${PHONE_TITLE}`}>
+        {t('title')}
+      </h1>
       <nav aria-label={t('title')} data-testid="settings-nav">
         <ul className="m-0 list-none p-0">
           {SECTIONS.map((s) => (
             <li key={s} className="border-t border-line">
               <Link
+                ref={(el) => {
+                  if (el) rows.current.set(s, el)
+                  else rows.current.delete(s)
+                }}
                 to={hrefOf(s)}
+                state={{ fromList: true }}
+                onClick={() => navigate('/settings', { replace: true, state: { left: s } })}
                 className="flex min-h-12 items-center justify-between gap-3 py-3 text-[15px] font-medium text-ink hover:no-underline"
                 data-testid={`settings-section-${s}`}
               >
