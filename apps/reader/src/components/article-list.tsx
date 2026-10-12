@@ -32,7 +32,10 @@ type Props = {
   onShow?: (show: ListShow) => void
   /** Unread is shown, and the list has posts, all read: say so, not "no posts". */
   caughtUp?: boolean
-  /** Called as Mark all read reads something, so a list of unread posts can let them go. */
+  /**
+   * Called as Mark all read is pressed, so a list of unread posts lets go of those it kept: even
+   * when every one is read already and the press has nothing to send.
+   */
   onMarkAll?: () => void
 }
 
@@ -84,6 +87,7 @@ export function ArticleList({
   // Liking a post reads it, so Liked has nothing to mark.
   const markable = items.length > 0 && !(params.feedId === null && params.filter === 'liked')
   const markAllRead = () => {
+    onMarkAll?.()
     // The device's rows as they are when pressed, which the toast counts against.
     const before = store.getSnapshot().tables
     const at = Date.now()
@@ -108,7 +112,6 @@ export function ArticleList({
       // every older post of every feed too. So each unread post it holds, read on its own.
       const ids = items.filter((a) => !isRead(before, a, at)).map((a) => a.id)
       if (ids.length === 0) return
-      onMarkAll?.()
       offer(ids, store.mutateMany(ids.map(read), { holdMs: UNDO_HOLD_MS }))
       return
     }
@@ -128,7 +131,6 @@ export function ArticleList({
     // would outlive that Undo), or a list read already. A post the device does not hold is past
     // the horizon, read already too. So nothing is sent, and there is nothing to undo.
     if (covered.length === 0) return
-    onMarkAll?.()
     const stamp = store.mutate(input, { holdMs: UNDO_HOLD_MS })
     if (stamp) offer(covered, [stamp])
   }

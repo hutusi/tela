@@ -69,8 +69,10 @@ export function ReadingPage() {
   // in this list stays in it until the reader moves to another list or turns the switch, so
   // opening a post, or j and k, never lose their place. That includes posts the catch-up pull
   // brings after the list was first painted from the device, which are the first a member opens.
-  // Mark all read lets them all go (`letSeenGo`), so the list says it is caught up.
-  const listKey = `${params.filter}:${params.feedId}:${unreadOnly ? 'unread' : 'all'}`
+  // Mark all read lets them all go (`letSeenGo`), so the list says it is caught up: a new key,
+  // since the press may change nothing else to render (the posts kept were read already).
+  const [letGo, setLetGo] = useState(0)
+  const listKey = `${params.filter}:${params.feedId}:${unreadOnly ? 'unread' : 'all'}:${letGo}`
   const seenUnread = useRef<{ key: string; ids: Set<number> }>({ key: '', ids: new Set() })
   if (seenUnread.current.key !== listKey) seenUnread.current = { key: listKey, ids: new Set() }
   const seen = seenUnread.current.ids
@@ -83,11 +85,7 @@ export function ReadingPage() {
       store.mutate({ type: 'setPref', key: PREF_KEYS.hideRead, value: show === 'unread' }),
     [store],
   )
-  // A new set, not a cleared one: the list's memo keys on it, and the mark-all's own change
-  // renders the list again.
-  const letSeenGo = useCallback(() => {
-    seenUnread.current = { key: seenUnread.current.key, ids: new Set() }
-  }, [])
+  const letSeenGo = useCallback(() => setLetGo((n) => n + 1), [])
   const selected = params.feedId !== null ? subs.find((s) => s.feedId === params.feedId) : undefined
   const listTitle = params.feedId !== null ? (selected?.title ?? '') : undefined
   // What a phone's back bar goes back to, by the name the list's own disclosure gives it.

@@ -604,6 +604,41 @@ test.describe('reader', () => {
     }
   })
 
+  test('Mark all read empties Unread to All caught up when every post it kept is read already', async ({
+    page,
+  }) => {
+    await resetReading(page.request)
+    const { dots, unread } = await openUnreadBlog(page)
+    const rows = page.getByTestId('article-row')
+    try {
+      await page.getByTestId('list-show-unread').click()
+      await expect(rows).toHaveCount(unread.length)
+      // Each one opened in turn reads it, and the list keeps it for this visit.
+      for (const id of unread) {
+        const row = page.locator(`[data-testid="article-row"][data-article-id="${id}"]`)
+        await row.click()
+        await expect(page).toHaveURL(new RegExp(`article=${id}`))
+        await expect(row).toHaveAttribute('data-read', '1')
+      }
+      await page.getByTestId('close-article').click()
+      await expect(rows).toHaveCount(unread.length)
+      await expect(dots).toHaveCount(0)
+
+      // Nothing is left to read, so nothing is sent and there is nothing to undo, but the list
+      // still lets go of what it kept.
+      await page.getByTestId('mark-all-read').click()
+      await expect(page.getByTestId('list-caught-up')).toBeVisible()
+      await expect(rows).toHaveCount(0)
+      await expect(page.getByTestId('toast')).toHaveCount(0)
+    } finally {
+      await push(
+        page.request,
+        unread.map((articleId) => ({ type: 'markUnread', articleId })),
+      )
+      await resetReading(page.request)
+    }
+  })
+
   test('a mark-all left alone goes to tela-api once its toast has gone, not before', async ({
     page,
   }) => {
