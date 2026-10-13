@@ -40,18 +40,18 @@ type Props = {
 }
 
 /**
- * The list's row for an article, with the list told to keep rows clear of its heading as one is
- * scrolled or focused into view: the heading sticks over the rows' top, and a row brought into
- * view at the list's top edge would sit hidden behind it. Its height is read when asked, since
- * it is not one height everywhere (wide or beside an article, on a phone).
+ * The list's row for an article, told to keep clear of the list's heading as it is scrolled or
+ * focused into view: the heading sticks over the rows' top, and a row brought into view at the
+ * top edge would sit hidden behind it. A margin on the row, not padding on the list, since the
+ * list scrolls only from `lg`: below it the page does. The heading's height is read when asked,
+ * since it is not one height everywhere (wide or beside an article, on a phone).
  */
 export function listRow(articleId: number): HTMLElement | null {
   const row = document.querySelector<HTMLElement>(
     `[data-testid="article-row"][data-article-id="${articleId}"]`,
   )
-  const list = row?.closest<HTMLElement>('[data-testid="article-list"]')
-  const head = list?.querySelector<HTMLElement>('[data-list-head]')
-  if (list && head) list.style.scrollPaddingTop = `${head.offsetHeight}px`
+  const head = row?.closest('[data-testid="article-list"]')?.querySelector('[data-list-head]')
+  if (row && head instanceof HTMLElement) row.style.scrollMarginTop = `${head.offsetHeight}px`
   return row ?? null
 }
 

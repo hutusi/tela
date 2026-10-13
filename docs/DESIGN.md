@@ -869,7 +869,8 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   pill, which turns the switch to All; a list with no posts at all still says "Nothing here
   yet." On a phone the segments are 36px tall and Mark all read and Show all 44px. The heading
   and the switch stick over the rows, so a row brought into view (`j`, `k`, leaving focus,
-  closing an article) clears them, not the list's top edge (`listRow`).
+  closing an article) clears them, not the list's top edge, whether the list scrolls (from `lg`)
+  or the page does (`listRow`).
 - **Translating is the member's too** (Settings → Translation). With *Translate automatically* off,
   a foreign post opens in the original, and the translation bar says "Written in Japanese." with
   a *Translate into English* button where the mode toggle would be; nothing is requested or

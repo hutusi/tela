@@ -407,6 +407,36 @@ test('focus hides the list too while an article is open, and j, k and Esc carry 
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
 })
 
+test("below lg, Esc focuses the row it closed clear of the list's heading", async ({ page }) => {
+  // Below lg the page scrolls, not the list, and the list comes back at the depth the article
+  // was read to: the row can come back just under the heading, which sticks over the rows.
+  await page.setViewportSize({ width: 900, height: 800 })
+  await page.goto('/reading')
+  const rows = page.getByTestId('article-row')
+  await expect(rows.nth(12)).toBeAttached()
+  const id = await rows.nth(3).getAttribute('data-article-id')
+  const row = page.locator(`[data-testid="article-row"][data-article-id="${id}"]`)
+  const top = await row.evaluate((el) =>
+    Math.round(el.getBoundingClientRect().top + window.scrollY),
+  )
+  await row.click()
+  await expect(page).toHaveURL(new RegExp(`article=${id}$`))
+  await expect(page.getByTestId('reader')).toBeVisible()
+  // Read down to where the row will be 60px from the top once the list is back.
+  await page.evaluate((y) => window.scrollTo(0, y), top - 60)
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(top - 60)
+
+  await page.keyboard.press('Escape')
+  await expect(page).not.toHaveURL(/article=/)
+  await expect(row).toBeFocused()
+  // Both read at once, so the page's fade moves them alike.
+  const { rowTop, headBottom } = await row.evaluate((el) => ({
+    rowTop: el.getBoundingClientRect().top,
+    headBottom: document.querySelector('[data-list-head]')?.getBoundingClientRect().bottom ?? 0,
+  }))
+  expect(rowTop).toBeGreaterThanOrEqual(Math.floor(headBottom))
+})
+
 test('focus is what gives a 1280px window its two bilingual columns', async ({ page }) => {
   // With the sidebar hidden the pane is still 1020px here; only the list going too gets it past
   // 1040: (1216 − 40) / 2 = 588px columns, ~580 in CI's Linux Chromium.
