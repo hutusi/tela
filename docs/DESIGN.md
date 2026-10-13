@@ -824,7 +824,8 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   already sent; ADR 0046). One that would read nothing sends nothing. On Today it marks each of
   Today's unread posts by itself, held as one group and undone whole, since a watermark would read
   older posts in every feed, and Liked has none: its posts lie across every feed and month, so no
-  watermark reads only them.
+  watermark reads only them. Under Unread, the list it read empties to "All caught up" while the
+  toast shows, and Undo brings its posts back.
 - **First run.** A member whose rows have arrived and who follows nothing sees "Start with a few
   blogs" in place of the list and the empty pane, at every width (Tela v5): a 1000px page in a
   `220px 1fr` grid padded 48px, the serif 36 heading, an intro that names their language, and six
@@ -846,18 +847,30 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   a bar fixed at the foot (portalled, `z-[9]`, on `paper` under a `line` rule, with the safe area
   below), a full-width 48px primary pill, which holds the waiting line until one is subscribed and
   puts its height in `--bottom-bar` as the article's bar does.
-- **Marking read and hiding read posts** are the member's (Settings → Reading). The action row
+- **Marking read** is the member's (Settings → Reading). The action row
   always offers the other state: *Mark as unread* on a read post, *Mark as read* on an unread one,
   whatever the pref, since on a phone, which has no `m`, it is the only way back to unread. It is
   one button whose label turns, in the bordered pill style, before "Aa". With marking on opening
   on, the open post is read, so the button says *Mark as unread*; a post marked unread while open
   keeps its dot, and the button says *Mark as read*, until the next open reads it. With marking on
   opening off, the open post keeps its unread dot until the member marks it. Liking a post nobody
-  marked by hand still reads it. With read posts hidden, a list keeps every post it has shown
-  unread or open during the visit, including those the catch-up pull brought after it was
-  painted, so opening a post, `j` and `k` never pull it out from under them; it is gone the next
-  time they come to that list. An empty list then says "all caught up", with a link back to the
-  setting.
+  marked by hand still reads it.
+- **Unread / All** (Tela v5, Tela Mobile 01 and 18) is a `Segmented` switch on its own row under
+  the list's heading, with *Mark all read* at the row's right end (gone while an article is open
+  beside the list, as before). It is the member's, synced as `reader.hide_read`, so every device
+  shows the same; there is no Settings row for it, since the switch is the setting. It starts on
+  Unread. Unread means unread: a liked post is read like any other. Liked has no switch and no
+  Mark all read, and always lists every post it keeps: it is a shelf, not an inbox. Under Unread
+  a list keeps every post it has shown unread or open during the visit, including those the
+  catch-up pull brought after it was painted, so opening a post, `j` and `k` never pull it out
+  from under the reader; it is gone the next time they come to that list or turn the switch.
+  Mark all read lets those go too, so the list empties at once. A list whose posts are all read
+  then says "All caught up" (serif 22, centred under a `line` rule) over an outlined *Show all*
+  pill, which turns the switch to All; a list with no posts at all still says "Nothing here
+  yet." On a phone the segments are 36px tall and Mark all read and Show all 44px. The heading
+  and the switch stick over the rows, so a row brought into view (`j`, `k`, leaving focus,
+  closing an article) clears them, not the list's top edge, whether the list scrolls (from `lg`)
+  or the page does (`listRow`).
 - **Translating is the member's too** (Settings → Translation). With *Translate automatically* off,
   a foreign post opens in the original, and the translation bar says "Written in Japanese." with
   a *Translate into English* button where the mode toggle would be; nothing is requested or

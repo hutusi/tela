@@ -368,13 +368,18 @@ test('focus hides the list too while an article is open, and j, k and Esc carry 
   await page.keyboard.press('f')
   await expect(list).toBeVisible()
   expect(await list.evaluate((el) => (el as HTMLElement & { kept?: boolean }).kept)).toBe(true)
+  // In view below the list's heading, which sticks over the rows' top: a row at the list's top
+  // edge would sit behind it, the switch under the title making it taller than the row.
   const rowInView = () =>
     page.evaluate((id) => {
       const list = document.querySelector('[data-testid="article-list"]')?.getBoundingClientRect()
+      const head = document.querySelector('[data-list-head]')?.getBoundingClientRect()
       const row = document
         .querySelector(`[data-testid="article-row"][data-article-id="${id}"]`)
         ?.getBoundingClientRect()
-      return !!list && !!row && row.top >= list.top && row.bottom <= list.bottom
+      return (
+        !!list && !!head && !!row && row.top >= Math.floor(head.bottom) && row.bottom <= list.bottom
+      )
     }, first)
   await expect.poll(rowInView, { message: 'the open row is not in view' }).toBe(true)
   await toggle.click()
@@ -400,6 +405,36 @@ test('focus hides the list too while an article is open, and j, k and Esc carry 
   await expect(list).toBeVisible()
   await expect(layout).not.toHaveAttribute('data-focus')
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+})
+
+test("below lg, Esc focuses the row it closed clear of the list's heading", async ({ page }) => {
+  // Below lg the page scrolls, not the list, and the list comes back at the depth the article
+  // was read to: the row can come back just under the heading, which sticks over the rows.
+  await page.setViewportSize({ width: 900, height: 800 })
+  await page.goto('/reading')
+  const rows = page.getByTestId('article-row')
+  await expect(rows.nth(12)).toBeAttached()
+  const id = await rows.nth(3).getAttribute('data-article-id')
+  const row = page.locator(`[data-testid="article-row"][data-article-id="${id}"]`)
+  const top = await row.evaluate((el) =>
+    Math.round(el.getBoundingClientRect().top + window.scrollY),
+  )
+  await row.click()
+  await expect(page).toHaveURL(new RegExp(`article=${id}$`))
+  await expect(page.getByTestId('reader')).toBeVisible()
+  // Read down to where the row will be 60px from the top once the list is back.
+  await page.evaluate((y) => window.scrollTo(0, y), top - 60)
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(top - 60)
+
+  await page.keyboard.press('Escape')
+  await expect(page).not.toHaveURL(/article=/)
+  await expect(row).toBeFocused()
+  // Both read at once, so the page's fade moves them alike.
+  const { rowTop, headBottom } = await row.evaluate((el) => ({
+    rowTop: el.getBoundingClientRect().top,
+    headBottom: document.querySelector('[data-list-head]')?.getBoundingClientRect().bottom ?? 0,
+  }))
+  expect(rowTop).toBeGreaterThanOrEqual(Math.floor(headBottom))
 })
 
 test('focus is what gives a 1280px window its two bilingual columns', async ({ page }) => {

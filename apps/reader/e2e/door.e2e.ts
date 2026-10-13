@@ -234,7 +234,9 @@ test.describe("a visitor's theme", () => {
     await page.waitForFunction(() => document.body !== null)
     expect((await theme()).page, 'dark before the app runs').toBe('dark')
     await expect(page.getByTestId('nav-join')).toBeVisible()
-    expect(await theme()).toEqual({ page: 'dark', kept: 'dark', paper: 'rgb(31, 28, 24)' })
+    // Polled: a page reloaded only to its commit can show Join before its stylesheet arrives,
+    // and until then the paper reads transparent (CI caught it 63ms in, the sheet still pending).
+    await expect.poll(theme).toEqual({ page: 'dark', kept: 'dark', paper: 'rgb(31, 28, 24)' })
     await expect(summary).toHaveAccessibleName('Theme: Dark')
 
     // Auto: the system's again, and kept as that for the next visit.

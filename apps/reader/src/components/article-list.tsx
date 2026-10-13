@@ -12,7 +12,12 @@ import { useStore, useTables } from '../store/hooks'
 import type { Stamp } from '../store/local'
 import { feedTitle, isRead, markAllReadCovers, shownRead, shownTitle } from '../store/selectors'
 import { GlyphCount } from './glyph-count'
+import { Segmented } from './segmented'
 import { Swatch } from './swatch'
+
+/** What a list shows: its unread posts, or every post (Tela v5's switch under the heading). */
+export type ListShow = 'unread' | 'all'
+const SHOWS: readonly ListShow[] = ['unread', 'all']
 
 type Props = {
   items: ArticleRow[]
@@ -22,8 +27,32 @@ type Props = {
   locale: string
   now: number
   pendingFetch?: boolean
-  /** Read posts are hidden (a pref), and they are all there is: say so, not "no posts". */
-  hidingRead?: boolean
+  /** The switch's state, or null where the list has none (Liked, which always shows all). */
+  show?: ListShow | null
+  onShow?: (show: ListShow) => void
+  /** Unread is shown, and the list has posts, all read: say so, not "no posts". */
+  caughtUp?: boolean
+  /**
+   * Called as Mark all read is pressed, so a list of unread posts lets go of those it kept: even
+   * when every one is read already and the press has nothing to send.
+   */
+  onMarkAll?: () => void
+}
+
+/**
+ * The list's row for an article, told to keep clear of the list's heading as it is scrolled or
+ * focused into view: the heading sticks over the rows' top, and a row brought into view at the
+ * top edge would sit hidden behind it. A margin on the row, not padding on the list, since the
+ * list scrolls only from `lg`: below it the page does. The heading's height is read when asked,
+ * since it is not one height everywhere (wide or beside an article, on a phone).
+ */
+export function listRow(articleId: number): HTMLElement | null {
+  const row = document.querySelector<HTMLElement>(
+    `[data-testid="article-row"][data-article-id="${articleId}"]`,
+  )
+  const head = row?.closest('[data-testid="article-list"]')?.querySelector('[data-list-head]')
+  if (row && head instanceof HTMLElement) row.style.scrollMarginTop = `${head.offsetHeight}px`
+  return row ?? null
 }
 
 /** How many rows render; older ones follow on request. The device holds the whole horizon. */
@@ -39,7 +68,10 @@ export function ArticleList({
   locale,
   now,
   pendingFetch = false,
-  hidingRead = false,
+  show = null,
+  onShow,
+  caughtUp = false,
+  onMarkAll,
 }: Props) {
   const t = useTranslations('list')
   const ts = useTranslations('sidebar')
@@ -55,6 +87,7 @@ export function ArticleList({
   // Liking a post reads it, so Liked has nothing to mark.
   const markable = items.length > 0 && !(params.feedId === null && params.filter === 'liked')
   const markAllRead = () => {
+    onMarkAll?.()
     // The device's rows as they are when pressed, which the toast counts against.
     const before = store.getSnapshot().tables
     const at = Date.now()
@@ -78,6 +111,7 @@ export function ArticleList({
       // Today is a window the server knows nothing of: a mark-all up to its newest post would read
       // every older post of every feed too. So each unread post it holds, read on its own.
       const ids = items.filter((a) => !isRead(before, a, at)).map((a) => a.id)
+      if (ids.length === 0) return
       offer(ids, store.mutateMany(ids.map(read), { holdMs: UNDO_HOLD_MS }))
       return
     }
@@ -105,34 +139,46 @@ export function ArticleList({
       className="min-w-0 border-r border-line group-data-[open=1]:hidden lg:sticky lg:top-14 lg:h-[calc(100vh-56px)] lg:overflow-y-auto lg:group-data-[open=1]:block"
       data-testid="article-list"
     >
-      <div className="sticky top-0 z-[1] flex items-baseline gap-2 bg-paper px-5 pb-2.5 pt-5">
-        <h1 className="min-w-0 flex-1 truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
+      <div
+        className="sticky top-0 z-[1] flex flex-col gap-2.5 bg-paper px-5 pb-2.5 pt-5"
+        data-list-head
+      >
+        <h1 className="min-w-0 truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
           {heading}
         </h1>
-        {markable ? (
-          <button
-            type="button"
-            onClick={markAllRead}
-            className="whitespace-nowrap rounded-md px-2 py-1 text-[13px] text-muted hover:bg-hover hover:text-ink group-data-[open=1]:hidden"
-            data-testid="mark-all-read"
-          >
-            {t('markAllRead')}
-          </button>
+        {/* The switch, and Mark all read at the row's end while the list is wide. Liked has
+            neither: it is a shelf the member keeps, not an inbox, and liking a post reads it.
+            Where the two do not fit on one line (French on a 320px phone), Mark all read's label
+            wraps rather than push the page sideways. */}
+        {show !== null ? (
+          <div className="flex min-h-[30px] items-center gap-2">
+            <Segmented
+              label={t('show')}
+              options={SHOWS}
+              value={show}
+              render={(option) => t(option === 'unread' ? 'showUnread' : 'showAll')}
+              onChoose={(option) => onShow?.(option)}
+              testId="list-show"
+              tall
+            />
+            <span className="flex-1" />
+            {markable ? (
+              <button
+                type="button"
+                onClick={markAllRead}
+                className="rounded-md px-2 py-1 text-right text-[13px] text-muted hover:bg-hover hover:text-ink group-data-[open=1]:hidden max-md:min-h-11"
+                data-testid="mark-all-read"
+              >
+                {t('markAllRead')}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
-      {items.length === 0 ? (
+      {items.length === 0 && !caughtUp ? (
         <div className="px-6 py-10 text-[13.5px] text-muted" data-testid="list-empty">
           {pendingFetch ? (
             <p>{t('fetching')}</p>
-          ) : hidingRead ? (
-            <>
-              <p>{t('allRead')}</p>
-              <p>
-                {t.rich('allReadHint', {
-                  settings: (chunks) => <Link to="/settings/reading">{chunks}</Link>,
-                })}
-              </p>
-            </>
           ) : (
             <>
               <p>{t('empty')}</p>
@@ -146,6 +192,23 @@ export function ArticleList({
         </div>
       ) : null}
       <div className="flex flex-col px-3 pb-10">
+        {items.length === 0 && caughtUp ? (
+          // Unread leaves nothing (Tela v5, Tela Mobile 18): one press back to every post.
+          <div
+            className="flex flex-col items-center gap-3.5 border-t border-line px-2.5 py-14 text-center max-md:py-16"
+            data-testid="list-caught-up"
+          >
+            <p className="m-0 font-serif text-[22px] text-ink">{t('caughtUp')}</p>
+            <button
+              type="button"
+              onClick={() => onShow?.('all')}
+              className="rounded-full border border-thumb px-3.5 py-1.5 text-[13px] font-medium text-ink hover:bg-hover max-md:min-h-11 max-md:px-[18px] max-md:text-sm"
+              data-testid="show-all"
+            >
+              {t('showAllPosts')}
+            </button>
+          </div>
+        ) : null}
         {shown.map((a) => {
           const active = a.id === params.articleId
           // The open post counts as read before its markRead lands, unless the member marks

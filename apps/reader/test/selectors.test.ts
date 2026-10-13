@@ -53,7 +53,7 @@ describe('what the reading view shows', () => {
     const read = (id: number) => isRead(t, t.articles.get(id) ?? article(id), NOW)
     expect([1, 2, 3, 4].map(read)).toEqual([false, false, true, false])
     expect([1, 2, 3, 4].map((id) => isMarkedUnread(t, id))).toEqual([true, true, false, false])
-    // Everything that asks whether a post is read agrees: counts, hide-read and the prefetch.
+    // Everything that asks whether a post is read agrees: counts, the Unread list and the prefetch.
     expect(totals(t, NOW).all).toBe(3)
     expect(subscriptionItems(t, NOW).map((s) => s.unread)).toEqual([3])
     const list = articlesFor(t, { filter: 'all', feedId: null }, NOW)

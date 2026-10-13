@@ -637,14 +637,6 @@ function ReadingSection() {
           testId="pref-mark-on-open"
         />
       </SettingRow>
-      <SettingRow label={t('hideRead')} hint={t('hideReadHint')}>
-        <Switch
-          checked={prefs.hideRead}
-          onChange={(on) => store.mutate({ type: 'setPref', key: PREF_KEYS.hideRead, value: on })}
-          label={t('hideRead')}
-          testId="pref-hide-read"
-        />
-      </SettingRow>
     </>
   )
 }

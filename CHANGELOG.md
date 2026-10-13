@@ -9,6 +9,10 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **Unread or All, on the list itself.** A switch under each list's heading shows its unread posts
+  or every post, and starts on Unread; *Hide read articles* left Settings for it. A list read to
+  the end says "All caught up", with *Show all* beside it. Liked has no switch: it keeps every post
+  liked, and a liked post is otherwise read like any other.
 - **Log in opens on the password.** The sheet asks for the address and the password, so a
   password manager fills both, and *Email me a code instead* is under the button. Joining by
   email chooses a password, at the code step or from the mail's link (ADR 0043).
