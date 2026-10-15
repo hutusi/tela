@@ -6,7 +6,7 @@
  * not errors.
  */
 import { normalizeOrigin } from '@tela/content'
-import { feedUrlsFromOpml } from '@tela/content/opml'
+import { feedsFromOpml } from '@tela/content/opml'
 import type { TelaDb } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { type DiscoveredFeed, discoverFeeds } from '../discover'
@@ -21,7 +21,13 @@ export type AddFeedResult =
   | { feedId: number; siteId: number; created: boolean }
   | { error: IngestError }
 export type StartClaimResult = { siteId: number; feedId: number } | { error: IngestError }
-export type ReadOpmlResult = { urls: string[] } | { error: 'opml_invalid' }
+/** A folder an OPML document names (ADR 0048), with the feed URLs it lists in it. */
+export type OpmlFolder = { name: string; urls: string[] }
+/**
+ * `folders` is optional because a tela-api reads what an older tela-jobs answers while a deploy
+ * is between the two: without it, the feeds are imported as they always were, in no folder.
+ */
+export type ReadOpmlResult = { urls: string[]; folders?: OpmlFolder[] } | { error: 'opml_invalid' }
 
 export interface Ingest {
   /** Feeds for what a member typed: the URL itself, what the page declares, or well-known paths. */
@@ -33,7 +39,10 @@ export interface Ingest {
   addFeed(input: { feedUrl: string; actorId: string | null }): Promise<AddFeedResult>
   /** Find the blog behind a URL a member says is theirs, and file its feed under that home. */
   startClaim(input: { url: string; actorId: string }): Promise<StartClaimResult>
-  /** The feed URLs of an OPML document. Parsing only: the feed parsers stay in tela-jobs. */
+  /**
+   * The feed URLs of an OPML document, and the folders it lists them in. Parsing only: the feed
+   * parsers stay in tela-jobs.
+   */
   readOpml(input: { opml: string }): Promise<ReadOpmlResult>
 }
 
@@ -110,10 +119,24 @@ export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => nu
     },
 
     async readOpml({ opml }) {
+      let feeds: ReturnType<typeof feedsFromOpml>
       try {
-        return { urls: feedUrlsFromOpml(opml) }
+        feeds = feedsFromOpml(opml)
       } catch {
         return { error: 'opml_invalid' }
+      }
+      // By name, in the order the document first names each; matching a name to a folder the
+      // member has, case aside, is tela-api's, which can read their folders.
+      const folders = new Map<string, string[]>()
+      for (const { url, folder } of feeds) {
+        if (folder === null) continue
+        const urls = folders.get(folder)
+        if (urls) urls.push(url)
+        else folders.set(folder, [url])
+      }
+      return {
+        urls: feeds.map((f) => f.url),
+        folders: [...folders].map(([name, urls]) => ({ name, urls })),
       }
     },
   }
