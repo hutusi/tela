@@ -272,7 +272,7 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
 
 ## Components (`apps/reader/src/components`)
 
-`AppHeader`, `ThemeMenu`, `LanguageMenu` (`MemberLanguage`, `VisitorLanguage`), `FrontDoor` (the sheet and `DoorForm`), `WriterCard`, `Sidebar`, `ManageSubscriptions`, `MobileNav`, `ArticleList`, `Reader`,
+`AppHeader`, `ThemeMenu`, `LanguageMenu` (`MemberLanguage`, `VisitorLanguage`), `FrontDoor` (the sheet and `DoorForm`), `WriterCard`, `Sidebar`, `ManageSubscriptions`, `FolderToggle`, `MobileNav`, `ArticleList`, `Reader`, `Sheet` (a phone's bottom sheet: Recommend's and Move to's), Settings' folders (`folders-manage.tsx`),
 `PairedBody`, `TranslationBar`, `Untranslated`, `LikeButton`, `RecommendPopover`, `EmptyState`,
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `SiteFooter`, `TypographyMenu`, the
 highlight toolbar, note and list (`highlights.tsx`), `Shortcuts`, and Discover's `DiscoverTabs`,
@@ -360,6 +360,30 @@ is not shown, since it decides nothing then. Without one, a `SettingRow` *Use my
 the switch, on by default, and while it is on a quiet *Refresh*, with a hint saying whether
 Gravatar has a picture for their email, is still being asked, or is off (ADR 0033). The design's Notifications section,
 "Who can follow you" and "Delete account" are not built (ADR 0031), so they are not shown.
+
+Settings › Subscriptions (Tela Lists, ADR 0048) groups the blogs by folder. The line above says
+"8 blogs in 3 folders.", or the plain count while there is none, beside *Import OPML*, *Export
+OPML* and *New folder* (the filled button; on a phone it sits at the right of the back bar, as
+screen 27 draws it). A muted line says how a blog moves, without the dragging on a phone.
+- *New folder* opens an inline field with Cancel and Create: Enter creates, Esc cancels. A name
+  the member has already (case aside, accents not) is refused under the field, and past
+  `MAX_FOLDERS` the button is disabled with a line saying why.
+- Each folder is a section, by name: the serif name, its count, then Rename (the same field, in
+  place) and Delete folder, which on a phone fold into a `···` menu. "Not in a folder" comes
+  last, headed only when there are folders. An empty section says "Drag blogs here.", or on a
+  phone that a blog's folder button moves one in.
+- A row is as before, with the language moved into the address line, plus a folder button
+  ("Tech ▾", "No folder ▾") before Unsubscribe; on a phone it sits under the name. The button
+  opens a "Move to" menu of `menuitemradio`s with a check on the current folder (arrow keys,
+  Home and End, Esc back to the button), or below `md` a `Sheet`, "Move ‹blog› to", whose
+  "+ New folder" makes a folder and moves the blog into it. Focus follows the blog's button into
+  the section it lands in.
+- From `md` up a row has a grip and drags onto any section, which takes the `hover` ground while
+  a blog is over it. The folder button is the way that does not need a pointer.
+- Delete folder says "Deleted Tech. Its blogs are no longer in a folder." with Undo, held while
+  the toast shows (ADR 0046). An Undo after the delete went out makes the folder again, under a
+  new id, with the same blogs in it.
+- Unsubscribe keeps its dimmed row, in its folder, to take back in place.
 
 The crop dialog (`AvatarCrop`) is a native modal `<dialog>` on the `surface` ground: a serif title,
 a muted hint, a 280 px square frame with the picture under a round mask (outside the circle dimmed),
@@ -894,6 +918,25 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
   and the rail scrolls with no scrollbar, which would take a third of its width. 48px, not the
   60 the design drew, because 60 would put a 1440px window under the side-by-side threshold. The
   sidebar and the rail exist from `lg` only; below it `MobileNav` holds the filters.
+- **Folders** (Tela Lists, ADR 0048) head the Subscriptions list, by name, and the blogs in no
+  folder follow them, by title.
+  - A folder row is a 34px chevron button (`FolderToggle`: CHEVRON_DOWN at 12px, turned -90°
+    while closed, over 180ms, at once under reduced motion) beside the name, a link in 500
+    weight with the folder's unread count. The chevron's label names the action and the folder
+    ("Collapse Cities"), with `aria-expanded`. The link reads the whole folder (`?folder=<id>`)
+    and has the `hover` ground while it is the list.
+  - An open folder's blogs are indented 34px, to its name. Beside folders, a blog in none moves
+    its swatch under their chevrons. With no folder at all, the rows are as they always were.
+  - Open or closed is device state, like the panes, and folders start open. The rail has no
+    folder rows: its swatches follow the sidebar's order, every folder's blogs, open or closed,
+    then the rest.
+  - In `MobileNav` the rows are 44px, the chevron a 44px target, and blogs in a folder are
+    indented 44px. The summary names the folder being read.
+  - A folder's list names its blogs under the title, in one muted 12.5px line, truncated,
+    joined by `list.blogSeparator` (", ", and "、" in Chinese; `Intl.ListFormat` runs Chinese
+    names together and adds "et" in French). A folder with no blog followed says so, with a link
+    to Settings › Subscriptions. A folder this device does not hold says it is gone, as the
+    heading, with a link to All articles, and has no switch.
 - **Focus** sits beside Close in the action row: one label, `aria-pressed` and the `hover`
   ground while it is on, as a toggle button has, and an `F` key cap (a `kbd`: 1px `line` border,
   2px at the bottom, 4px radius, 11px) in both states. v5 drew "Exit focus [Esc]" while on, but
@@ -966,7 +1009,8 @@ switched), the reader's at `lg` (three panes).
 - **Recommend** opens as a sheet from the foot: a modal `<dialog>` with an 18px top radius, a
   36 × 4 handle, the title and "{post} · {blog}", the form, and Cancel beside Recommend at 1 : 2,
   both 46px. Esc or a tap on the scrim (`dialog.sheet::backdrop`, in both themes) closes it, and
-  focus goes back to the button.
+  focus goes back to the button. `Sheet` (`components/sheet.tsx`) is that dialog, shared with
+  Settings' Move to (Tela Lists 27).
 - **Reading:** the translation bar stacks, its sentence over the modes as a full-width segmented
   control. Titles are 30px and the body 18.5px (CJK keeps its own size); a stacked original sits
   on `source` in a rounded panel, serif 16/1.5 in `ink-2` (CJK keeps its 18/1.8), padded 10/14.
