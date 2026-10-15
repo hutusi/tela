@@ -729,6 +729,7 @@
       "save": "Save",
       "taken": "You already have a folder called {name}.",
       "limit": "You have {max} folders, the most there can be.",
+      "help": "Drag a blog onto a folder to move it, or use the folder button on its row. A blog sits in one folder at most. Folders are private and travel with your OPML export.",
       "helpPhone": "Move a blog with the folder button on its row. A blog sits in one folder at most. Folders are private and travel with your OPML export.",
       "blogs": "{n, plural, one {# blog} other {# blogs}}",
       "unfiled": "Not in a folder",
@@ -737,12 +738,14 @@
       "renameLabel": "New name for {name}",
       "delete": "Delete folder",
       "options": "Options for {name}",
+      "empty": "Drag blogs here.",
       "emptyPhone": "Nothing here yet. A blog’s folder button moves it here.",
       "allFiled": "Every blog is in a folder.",
       "deleted": "Deleted {name}. Its blogs are no longer in a folder.",
       "moveTo": "Move to",
       "moveBlogTo": "Move {blog} to",
-      "folderOf": "Folder for {blog}: {folder}"
+      "folderOf": "Folder for {blog}: {folder}",
+      "drag": "Drag to another folder"
     },
     "privacyIntro": "Choose what others see on your profile.",
     "showLikes": "Show liked posts",

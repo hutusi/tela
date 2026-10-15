@@ -1,13 +1,15 @@
 /**
  * Settings › Subscriptions in folders (ADR 0048, Tela Lists): a section per folder, by name, each
  * with its blogs by title, then the blogs in none. Each row has a folder button that opens Move to,
- * a menu from `md` up and a sheet below it (screen 27). A folder is renamed and deleted from its
- * heading: two buttons from `md` up, a ··· menu below it. Every change is a mutation on the device's rows, so one made on another device shows
+ * a menu from `md` up and a sheet below it (screen 27); from `md` up a row can also be dragged onto
+ * a section. A folder is renamed and deleted from its heading: two buttons from `md` up, a ··· menu
+ * below it. Every change is a mutation on the device's rows, so one made on another device shows
  * here; the page that composes these (`SubscriptionsSection`) makes them.
  */
 import { FOLDER_NAME_MAX, languageBadge } from '@tela/shared'
 import type { SiteRow } from '@tela/sync'
 import {
+  type DragEvent,
   type KeyboardEvent,
   type RefObject,
   useEffect,
@@ -24,6 +26,18 @@ import { useDismiss } from '../lib/use-dismiss'
 import { CHECK, CHEVRON_DOWN, Glyph } from './glyph'
 import { Sheet } from './sheet'
 import { SiteAvatar } from './site-avatar'
+
+/** Six dots: a row that can be dragged. Filled, as the design draws them. */
+const GRIP = (
+  <g fill="currentColor" stroke="none">
+    <circle cx="6" cy="4" r="1.2" />
+    <circle cx="10" cy="4" r="1.2" />
+    <circle cx="6" cy="8" r="1.2" />
+    <circle cx="10" cy="8" r="1.2" />
+    <circle cx="6" cy="12" r="1.2" />
+    <circle cx="10" cy="12" r="1.2" />
+  </g>
+)
 
 /** Three dots in a row: more for this, in a menu. */
 const MORE = (
@@ -51,7 +65,7 @@ export type ManagedRow = {
 
 /** What the sections and their rows need from the page. */
 export type Manage = {
-  /** Below `md`: Move to is a sheet, and a folder's actions are behind ···. */
+  /** Below `md`: no dragging, Move to is a sheet, and a folder's actions are behind ···. */
   phone: boolean
   /** The member's folders, by name. */
   folders: readonly Folder[]
@@ -67,6 +81,83 @@ export type Manage = {
    * in another section by then and so another element.
    */
   focusMove: RefObject<number | null>
+  drag: FolderDrag
+}
+
+// ---------------------------------------------------------------------------------------------
+// Dragging, from md up
+
+/** A section's key while dragging: its folder's id, or '' for the blogs in none. */
+const keyOf = (folderId: string | null) => folderId ?? ''
+
+/** Only a row of this page is dragged here: a file or a link from elsewhere is not a blog. */
+const DRAG_TYPE = 'application/x-tela-feed'
+
+export type FolderDrag = ReturnType<typeof useFolderDrag>
+
+/**
+ * A row dragged onto a section moves its blog there (native drag and drop, from `md` up; the
+ * folder button is the way without a pointer). The blog dragged is kept in a ref as well as in
+ * state, since a drop reads it when it lands and a render may not have caught up with the drag's
+ * start; and the folder it is in is asked when it is needed, of the rows as they are then
+ * (`folderOf`), so a section it is already in neither lights up nor takes it.
+ */
+export function useFolderDrag(
+  folderOf: (feedId: number) => string | null,
+  move: (feedId: number, folderId: string | null) => void,
+) {
+  const dragged = useRef<number | null>(null)
+  const [dragging, setDragging] = useState<number | null>(null)
+  const [over, setOver] = useState<string | null>(null)
+  const end = () => {
+    dragged.current = null
+    setDragging(null)
+    setOver(null)
+  }
+  /** The blog being dragged, if it would move into the section `key`. */
+  const movable = (key: string) => {
+    const feedId = dragged.current
+    return feedId !== null && keyOf(folderOf(feedId)) !== key ? feedId : null
+  }
+  return {
+    dragging,
+    over,
+    row: (feedId: number) => ({
+      draggable: true,
+      onDragStart: (e: DragEvent<HTMLElement>) => {
+        e.dataTransfer.effectAllowed = 'move'
+        // Firefox starts no drag without data.
+        e.dataTransfer.setData(DRAG_TYPE, String(feedId))
+        dragged.current = feedId
+        setDragging(feedId)
+      },
+      onDragEnd: end,
+    }),
+    target: (folderId: string | null) => {
+      const key = keyOf(folderId)
+      return {
+        onDragOver: (e: DragEvent<HTMLElement>) => {
+          if (movable(key) === null) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+          setOver(key)
+        },
+        onDragLeave: (e: DragEvent<HTMLElement>) => {
+          // Into one of its own rows is not out of the section. Safari names no element, and the
+          // next dragover lights it again.
+          if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return
+          setOver((o) => (o === key ? null : o))
+        },
+        onDrop: (e: DragEvent<HTMLElement>) => {
+          const feedId = movable(key)
+          if (feedId === null) return
+          e.preventDefault()
+          move(feedId, folderId)
+          end()
+        },
+      }
+    },
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -170,7 +261,8 @@ export function NewFolderForm({
 /**
  * One section: a folder's (`folder`), or the blogs in none (null), whose heading shows only once
  * there are folders to be outside of. Its heading names it and counts the blogs followed in it; a
- * folder's renames in place and deletes.
+ * folder's renames in place and deletes. From `md` up the section is where a dragged row lands,
+ * lit while one that would move is over it.
  */
 export function FolderSection({
   folder,
@@ -188,14 +280,18 @@ export function FolderSection({
   headingRef?: RefObject<HTMLHeadingElement | null>
 }) {
   const t = useTranslations('settings.folders')
+  const { phone, drag } = manage
   const headingId = useId()
+  const lit = !phone && drag.over === keyOf(folder?.id ?? null)
   const count = rows.filter((r) => r.subscribed).length
   return (
     <section
       aria-labelledby={heading ? headingId : undefined}
-      className="-mx-2.5 mt-[22px] rounded-[14px] px-2.5 pt-1.5 pb-1"
+      {...(phone ? {} : drag.target(folder?.id ?? null))}
+      className={`-mx-2.5 mt-[22px] rounded-[14px] px-2.5 pt-1.5 pb-1 outline-[1.5px] -outline-offset-1 outline-dashed transition-colors ${lit ? 'bg-hover outline-thumb' : 'outline-transparent'}`}
       data-testid="folder-group"
       data-folder-id={folder?.id ?? ''}
+      data-over={lit ? 1 : undefined}
     >
       {heading ? (
         folder ? (
@@ -224,7 +320,7 @@ export function FolderSection({
         </ul>
       ) : heading ? (
         <p className="m-0 border-t border-line py-[18px] text-[13px] text-muted">
-          {folder ? t('emptyPhone') : t('allFiled')}
+          {folder ? t(phone ? 'emptyPhone' : 'empty') : t('allFiled')}
         </p>
       ) : null}
     </section>
@@ -472,8 +568,9 @@ function FolderOptions({
 
 /**
  * A blog: its picture, name, address, language and how often it posts, the folder button, and
- * Unsubscribe (or Subscribe, on a row left from here). From `md` up it is one line; on a phone
- * the folder button is under its name, since a 320px line has no room for it beside Unsubscribe.
+ * Unsubscribe (or Subscribe, on a row left from here). From `md` up it is one line with a grip,
+ * and drags; on a phone the folder button is under its name, since a 320px line has no room for
+ * it beside Unsubscribe.
  */
 function SubscriptionRow({
   row,
@@ -486,7 +583,7 @@ function SubscriptionRow({
 }) {
   const t = useTranslations('settings')
   const td = useTranslations('discover')
-  const { phone } = manage
+  const { phone, drag } = manage
   const listed = row.site?.listing === 'listed' || row.site?.listing === 'featured'
   const meta = [
     row.site ? displayHost(row.site.homeUrl) : null,
@@ -495,12 +592,16 @@ function SubscriptionRow({
   ]
     .filter(Boolean)
     .join(' · ')
-  const dim = row.subscribed ? '' : 'opacity-55'
+  const dim = drag.dragging === row.feedId ? 'opacity-40' : row.subscribed ? '' : 'opacity-55'
   const name = (
     <div className="min-w-0 flex-1">
       <div className="truncate">
         {row.site && listed ? (
-          <Link to={`/s/${row.site.id}`} className="font-medium text-ink hover:underline">
+          <Link
+            to={`/s/${row.site.id}`}
+            draggable={false}
+            className="font-medium text-ink hover:underline"
+          >
             {row.title}
           </Link>
         ) : (
@@ -549,10 +650,14 @@ function SubscriptionRow({
   }
   return (
     <li
-      className={`flex items-center gap-3 border-t border-line py-3 lg:gap-3.5 ${dim}`}
+      {...drag.row(row.feedId)}
+      className={`flex cursor-grab items-center gap-3 border-t border-line py-3 lg:gap-3.5 ${dim}`}
       data-testid="settings-subscription"
       data-feed-id={row.feedId}
     >
+      <span className="flex shrink-0 text-thumb" title={t('folders.drag')} data-testid="drag-grip">
+        <Glyph>{GRIP}</Glyph>
+      </span>
       {avatar}
       {name}
       {button}

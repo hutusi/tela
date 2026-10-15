@@ -729,6 +729,7 @@
       "save": "Enregistrer",
       "taken": "Vous avez déjà un dossier nommé « {name} ».",
       "limit": "Vous avez {max} dossiers, le maximum possible.",
+      "help": "Faites glisser un blog sur un dossier pour l’y déplacer, ou utilisez le bouton de dossier de sa ligne. Un blog est dans un seul dossier au plus. Les dossiers sont privés et suivent votre export OPML.",
       "helpPhone": "Déplacez un blog avec le bouton de dossier de sa ligne. Un blog est dans un seul dossier au plus. Les dossiers sont privés et suivent votre export OPML.",
       "blogs": "{n, plural, one {# blog} other {# blogs}}",
       "unfiled": "Hors dossier",
@@ -737,12 +738,14 @@
       "renameLabel": "Nouveau nom pour {name}",
       "delete": "Supprimer le dossier",
       "options": "Options pour {name}",
+      "empty": "Faites glisser des blogs ici.",
       "emptyPhone": "Rien ici pour l’instant. Le bouton de dossier d’un blog l’y déplace.",
       "allFiled": "Chaque blog est dans un dossier.",
       "deleted": "Dossier « {name} » supprimé. Ses blogs ne sont plus dans aucun dossier.",
       "moveTo": "Déplacer vers",
       "moveBlogTo": "Déplacer {blog} vers",
-      "folderOf": "Dossier de {blog} : {folder}"
+      "folderOf": "Dossier de {blog} : {folder}",
+      "drag": "Faire glisser vers un autre dossier"
     },
     "privacyIntro": "Choisissez ce que les autres voient sur votre profil.",
     "showLikes": "Montrer mes coups de cœur",

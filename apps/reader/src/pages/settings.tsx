@@ -36,6 +36,7 @@ import {
   type ManagedRow,
   MoveSheet,
   NewFolderForm,
+  useFolderDrag,
 } from '../components/folders-manage'
 import { BACK, CHEVRON_RIGHT, CLOSE, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
@@ -879,7 +880,7 @@ export function leaving(
 /**
  * The member's subscriptions in their folders (ADR 0048, Tela Lists): a section per folder, by
  * name, then the blogs in none, with New folder beside Import and Export (in the back bar on a
- * phone). Moving a blog by its folder button is a `fileFeed`;
+ * phone). Moving a blog, by its folder button or by dragging it from `md` up, is a `fileFeed`;
  * deleting a folder is held while its toast offers Undo (ADR 0046), and its blogs are in no folder.
  */
 function SubscriptionsSection() {
@@ -946,6 +947,7 @@ function SubscriptionsSection() {
   const move = (feedId: number, folderId: string | null) => {
     if (folderOf(feedId) !== folderId) store.mutate({ type: 'fileFeed', feedId, folderId })
   }
+  const drag = useFolderDrag(folderOf, move)
   const toggle = (feedId: number, subscribed: boolean) => {
     if (subscribed) setLeft((l) => leaving(l, feedId, posted.get(feedId) ?? 0))
     store.mutate(subscribed ? { type: 'unsubscribe', feedId } : { type: 'subscribe', feedId })
@@ -974,6 +976,7 @@ function SubscriptionsSection() {
     remove,
     toggle,
     focusMove,
+    drag,
   }
   const closeForm = () => {
     refocus.current = 'new'
@@ -1020,7 +1023,9 @@ function SubscriptionsSection() {
         </div>
       </div>
       {rows.length > 0 ? (
-        <p className="mb-2 text-[13px] leading-normal text-muted">{t('folders.helpPhone')}</p>
+        <p className="mb-2 text-[13px] leading-normal text-muted">
+          {t(phone ? 'folders.helpPhone' : 'folders.help')}
+        </p>
       ) : null}
       {canMake ? null : (
         <p id={limitId} className="mb-2 text-[13px] text-muted" data-testid="new-folder-limit">
