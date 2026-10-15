@@ -1,11 +1,17 @@
 import { FOLDER_NAME_MAX } from './constants'
 
 /**
- * A folder's name as it is kept (ADR 0048): trimmed, inner runs of space made one, and no longer
- * than a name may be. Empty means no name.
+ * A folder's name as it is kept (ADR 0048): trimmed, inner runs of space made one, no control
+ * characters (tela-api refuses a name with one), and no longer than a name may be. Empty means no
+ * name.
  */
 export function folderName(raw: string): string {
-  return raw.trim().replace(/\s+/g, ' ').slice(0, FOLDER_NAME_MAX).trim()
+  return raw
+    .replace(/\s+/g, ' ')
+    .replace(/\p{Cc}/gu, '')
+    .trim()
+    .slice(0, FOLDER_NAME_MAX)
+    .trim()
 }
 
 /**

@@ -946,6 +946,13 @@ describe('folders (ADR 0048)', () => {
     expect(res.rejected.map((r) => r.error)).toEqual(['invalid', 'invalid'])
   })
 
+  test('a name with a control character is refused, and the rest of the push applies', async () => {
+    // SQLite's length() stops at a NUL: the table's check would fail and sink the whole push.
+    const res = await push([folder('folder-nul0', '\u0000Cities'), folder('folder-fine', 'Fine')])
+    expect(res.rejected.map((r) => r.error)).toEqual(['invalid_name'])
+    expect((await pull(0)).rows.folders.map((f) => f.name)).toEqual(['Fine'])
+  })
+
   test('past the limit a new folder is not made, though a rename still applies', async () => {
     const many = Array.from({ length: MAX_FOLDERS }, (_, i) =>
       folder(`folder-n${String(i).padStart(4, '0')}`, `F${i}`),

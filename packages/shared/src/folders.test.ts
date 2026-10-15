@@ -6,6 +6,7 @@ describe('folder names (ADR 0048)', () => {
   test('are trimmed, their spaces made one, and cut to the longest a name may be', () => {
     expect(folderName('  Craft \t and   software ')).toBe('Craft and software')
     expect(folderName('   ')).toBe('')
+    expect(folderName('\u0000Cities\u007f')).toBe('Cities')
     expect(folderName(`${'x'.repeat(FOLDER_NAME_MAX)}yz`)).toHaveLength(FOLDER_NAME_MAX)
   })
 

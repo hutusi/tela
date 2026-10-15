@@ -409,10 +409,13 @@ function statementsFor(
 }
 
 /**
- * Refuse what the schema cannot say: a preference value too large to sync cheaply, and a highlight
- * whose range is empty or whose quote is not as long as it.
+ * Refuse what the schema cannot say: a preference value too large to sync cheaply, a highlight
+ * whose range is empty or whose quote is not as long as it, and a folder name holding a control
+ * character. SQLite's `length()` stops at a NUL, so the table's check would fail on such a name
+ * and sink the whole push, and the device would send it again, first, for ever.
  */
 function refusal(m: Mutation): string | null {
+  if (m.type === 'putFolder' && /\p{Cc}/u.test(m.name)) return 'invalid_name'
   if (m.type === 'setPref' && JSON.stringify(m.value).length > PREF_MAX_BYTES)
     return 'pref_too_large'
   if (m.type === 'putHighlight' && (m.end <= m.start || m.quote.length !== m.end - m.start))
