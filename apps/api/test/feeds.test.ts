@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { ACTION_LIMITS, first } from '@tela/data'
+import { MAX_FOLDERS } from '@tela/shared'
+import type { PullResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, rss } from '../../../packages/ingest/test/fixture-server'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
@@ -141,7 +143,7 @@ describe('OPML', () => {
     const res = await importOpml(
       opml(['https://a.example/feed', 'https://b.example/rss', 'https://a.example/feed']),
     )
-    expect(await res.json()).toEqual({ feeds: 2, subscribed: 2 })
+    expect(await res.json()).toEqual({ feeds: 2, subscribed: 2, folders: 0, filed: 0 })
     expect(server.requests).toHaveLength(0)
     const due = await first<{ n: number }>(
       api.db,
@@ -156,6 +158,8 @@ describe('OPML', () => {
     expect(await (await importOpml(opml(['https://a.example/feed']))).json()).toEqual({
       feeds: 1,
       subscribed: 0,
+      folders: 0,
+      filed: 0,
     })
   })
 
@@ -178,5 +182,184 @@ describe('OPML', () => {
     const text = await res.text()
     expect(text).toContain('xmlUrl="https://a.example/feed"')
     expect(text).not.toContain('b.example')
+  })
+})
+
+describe('OPML folders (ADR 0048)', () => {
+  const doc = (body: string) =>
+    `<?xml version="1.0"?><opml version="2.0"><head><title>s</title></head><body>${body}</body></opml>`
+  const blog = (name: string) => `<outline text="${name}" xmlUrl="https://${name}.example/feed"/>`
+  const folder = (name: string, blogs: string[]) =>
+    `<outline text="${name}">${blogs.map(blog).join('')}</outline>`
+  const importRaw = async (text: string, as = reader) => {
+    const res = await api.request('/api/v1/feeds/opml', {
+      raw: text,
+      as,
+      headers: { 'content-type': 'text/x-opml' },
+    })
+    expect(res.status).toBe(200)
+    return res.json()
+  }
+  const importOpml = (body: string) => importRaw(doc(body))
+  const feedId = async (name: string) =>
+    (
+      await first<{ id: number }>(
+        api.db,
+        sql`select id from feeds where feed_url = ${`https://${name}.example/feed`}`,
+      )
+    )?.id ?? 0
+  /** The blogs the member has a filing for, each by the name of its live folder; null is none. */
+  const filed = async (as = reader) =>
+    Object.fromEntries(
+      (
+        await api.db.all<{ host: string; folder: string | null }>(sql`
+          select f.host, d.name as folder from feed_folders ff join feeds f on f.id = ff.feed_id
+          left join folders d on d.id = ff.folder_id and d.deleted_at is null
+          where ff.user_id = ${as.userId}
+        `)
+      ).map((r) => [r.host.replace('.example', ''), r.folder]),
+    )
+  const folderNames = async () =>
+    (
+      await api.db.all<{ name: string }>(
+        sql`select name from folders where user_id = ${reader.userId} and deleted_at is null`,
+      )
+    )
+      .map((r) => r.name)
+      .sort()
+  let mids = 0
+  const push = async (mutations: Record<string, unknown>[]) => {
+    const res = await api.request('/api/v1/mutations', {
+      body: {
+        mutations: mutations.map((m) => ({
+          mid: `mid-${++mids}-folders`,
+          at: api.clock.now(),
+          ...m,
+        })),
+      },
+      as: reader,
+    })
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { rejected: unknown[] }).rejected).toEqual([])
+  }
+  const pull = async (cursor: number) => {
+    const res = await api.request(`/api/v1/sync?cursor=${cursor}`, { as: reader })
+    expect(res.status).toBe(200)
+    return (await res.json()) as PullResponse
+  }
+
+  test('files each blog in the folder the file names, making the folders it needs', async () => {
+    const before = await pull(0)
+    const body = `${folder('Tech', ['a', 'b'])}${folder('  Cities ', ['c'])}${blog('d')}`
+    // A blog listed twice stays in the first folder, and one left holding nothing is not made.
+    expect(await importOpml(`${body}${folder('Again', ['a'])}`)).toEqual({
+      feeds: 4,
+      subscribed: 4,
+      folders: 2,
+      filed: 3,
+    })
+    expect(await folderNames()).toEqual(['Cities', 'Tech'])
+    expect(await filed()).toEqual({ a: 'Tech', b: 'Tech', c: 'Cities' })
+    // The device learns of both in its next pull, as it would of a folder made on another device.
+    const delta = await pull(before.cursor)
+    expect(delta.rows.folders.map((f) => f.name).sort()).toEqual(['Cities', 'Tech'])
+    const tech = delta.rows.folders.find((f) => f.name === 'Tech')?.id
+    expect(tech).toMatch(/^[A-Za-z0-9-]{8,64}$/)
+    expect(
+      delta.rows.feedFolders
+        .filter((f) => f.folderId === tech)
+        .map((f) => f.feedId)
+        .sort(),
+    ).toEqual([await feedId('a'), await feedId('b')].sort())
+  })
+
+  test('files into a folder of the same name, case aside, rather than make a second', async () => {
+    await push([{ type: 'putFolder', id: 'folder-cities', name: 'cities' }])
+    expect(await importOpml(folder('Cities', ['c']))).toMatchObject({ folders: 0, filed: 1 })
+    expect(await folderNames()).toEqual(['cities'])
+    expect(
+      await first<{ folder_id: string | null }>(
+        api.db,
+        sql`select folder_id from feed_folders where feed_id = ${await feedId('c')}`,
+      ),
+    ).toEqual({ folder_id: 'folder-cities' })
+    // Accents are not case: Café is a folder of its own.
+    await importOpml(`${folder('Café', ['e'])}${folder('CAFE', ['f'])}${folder('cafe', ['g'])}`)
+    expect(await folderNames()).toEqual(['CAFE', 'Café', 'cities'])
+    expect(await filed()).toMatchObject({ e: 'Café', f: 'CAFE', g: 'CAFE' })
+  })
+
+  test('never moves a blog the member filed; one in no folder, or a deleted one, is filed', async () => {
+    await importOpml(`${blog('a')}${blog('b')}${blog('c')}`)
+    const [a, b, c] = [await feedId('a'), await feedId('b'), await feedId('c')]
+    await push([
+      { type: 'putFolder', id: 'folder-mine', name: 'Mine' },
+      { type: 'putFolder', id: 'folder-gone', name: 'Gone' },
+      { type: 'fileFeed', feedId: a, folderId: 'folder-mine' },
+      { type: 'fileFeed', feedId: b, folderId: 'folder-gone' },
+      { type: 'fileFeed', feedId: c, folderId: 'folder-mine' },
+    ])
+    api.clock.advance(10)
+    await push([{ type: 'fileFeed', feedId: c, folderId: null }])
+    // A filing still naming a folder that is gone: deleteFolder unfiles its blogs, but a filing
+    // read as filed only while its folder lives cannot be misled by one it missed.
+    await api.db.run(
+      sql`update folders set deleted_at = ${api.clock.now()} where id = 'folder-gone'`,
+    )
+    api.clock.advance(10)
+    expect(await importOpml(folder('Tech', ['a', 'b', 'c']))).toMatchObject({
+      folders: 1,
+      filed: 2,
+    })
+    expect(await filed()).toEqual({ a: 'Mine', b: 'Tech', c: 'Tech' })
+    // A folder whose every blog is filed already is not made.
+    expect(await importOpml(folder('Other', ['a']))).toMatchObject({ folders: 0, filed: 0 })
+    expect(await folderNames()).toEqual(['Mine', 'Tech'])
+  })
+
+  test('makes no folder past MAX_FOLDERS: its blogs stay in none, and one the member has fills', async () => {
+    const ids = JSON.stringify(Array.from({ length: MAX_FOLDERS - 1 }, (_, i) => i))
+    await api.db.run(sql`
+      insert into folders (id, user_id, name, created_at, updated_at)
+      select 'folder-n' || value, ${reader.userId}, 'F' || value, 0, 0 from json_each(${ids})
+    `)
+    const body = `${folder('New one', ['a'])}${folder('New two', ['b'])}${folder('f7', ['c'])}`
+    expect(await importOpml(body)).toMatchObject({ feeds: 3, folders: 1, filed: 2 })
+    expect(await filed()).toEqual({ a: 'New one', c: 'F7' })
+    expect(await folderNames()).toHaveLength(MAX_FOLDERS)
+  })
+
+  test('an export keeps each live folder, and importing it elsewhere puts the blogs back', async () => {
+    const tech = folder('Tech', ['b', 'a'])
+    await importOpml(
+      `${tech}${folder('Cities & <Towns>', ['c'])}${folder('Gone', ['g'])}${blog('d')}`,
+    )
+    const gone = await first<{ id: string }>(
+      api.db,
+      sql`select id from folders where name = 'Gone'`,
+    )
+    await push([{ type: 'deleteFolder', id: gone?.id }])
+    const text = await (await api.request('/api/v1/feeds/opml', { as: reader })).text()
+    // Folders by name, each with its blogs by title, then the blogs in none: a deleted folder's
+    // blogs among them.
+    const outlines = [...text.matchAll(/<outline (?:type="rss" )?text="([^"]+)"/g)].map((m) => m[1])
+    expect(outlines).toEqual([
+      'Cities &amp; &lt;Towns&gt;',
+      'https://c.example',
+      'Tech',
+      'https://a.example',
+      'https://b.example',
+      'https://d.example',
+      'https://g.example',
+    ])
+    expect(text).not.toContain('Gone')
+    const other = await signedIn(api, 'other@x.test')
+    expect(await importRaw(text, other)).toEqual({
+      feeds: 5,
+      subscribed: 5,
+      folders: 2,
+      filed: 3,
+    })
+    expect(await filed(other)).toEqual({ a: 'Tech', b: 'Tech', c: 'Cities & <Towns>' })
   })
 })
