@@ -273,6 +273,20 @@ describe('OPML folders (ADR 0048)', () => {
     ).toEqual([await feedId('a'), await feedId('b')].sort())
   })
 
+  test('what an import made carries no clock: a device behind the server renames and moves it', async () => {
+    await importOpml(`${folder('Tech', ['a', 'b'])}${blog('c')}`)
+    const tech = (await pull(0)).rows.folders.find((f) => f.name === 'Tech')?.id
+    // A device whose clock is a minute behind the server's, just after the import.
+    const behind = api.clock.now() - 60_000
+    await push([
+      { type: 'putFolder', id: tech, name: 'Code', at: behind },
+      { type: 'fileFeed', feedId: await feedId('a'), folderId: null, at: behind },
+      { type: 'fileFeed', feedId: await feedId('c'), folderId: tech, at: behind },
+    ])
+    expect(await folderNames()).toEqual(['Code'])
+    expect(await filed()).toEqual({ a: null, b: 'Code', c: 'Code' })
+  })
+
   test('files into a folder of the same name, case aside, rather than make a second', async () => {
     await push([{ type: 'putFolder', id: 'folder-cities', name: 'cities' }])
     expect(await importOpml(folder('Cities', ['c']))).toMatchObject({ folders: 0, filed: 1 })

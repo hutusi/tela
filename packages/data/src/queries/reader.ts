@@ -82,7 +82,8 @@ export type ImportFiling = {
  * registered them. A name the member has a live folder for, case aside, files into that folder;
  * another makes one, while the member has fewer than MAX_FOLDERS, and past that its blogs stay
  * in none. Only a blog in no live folder is filed: an import never moves one the member filed
- * themselves. No folder is made that would hold nothing.
+ * themselves. No folder is planned that would hold nothing, though one can be made empty when
+ * another device files each of its blogs between the read and the write.
  */
 export async function fileImportedFeeds(
   db: TelaDb,
@@ -156,10 +157,13 @@ export async function writeImportFiling(
   const results = await db.batch([
     bumpSeq(db),
     // The count is read once, before this statement inserts anything, so `key` (each new
-    // folder's place in the list) says which fit.
+    // folder's place in the list) says which fit. What an import writes is no choice made at a
+    // time, so it carries no clock (`updated_at` 0), as a pref taken from a browser does: the
+    // server's `now` would be ahead of a device whose clock runs behind, and that device's rename
+    // or move, made just after the import, would lose to it.
     db.all(sql`
       insert into folders (id, user_id, name, created_at, updated_at, seq)
-      select j.value->>0, ${userId}, j.value->>1, ${now}, ${now}, ${currentSeq}
+      select j.value->>0, ${userId}, j.value->>1, ${now}, 0, ${currentSeq}
       from json_each(${create}) j
       where j.key < ${MAX_FOLDERS} - (
         select count(*) from folders where user_id = ${userId} and deleted_at is null)
@@ -168,12 +172,12 @@ export async function writeImportFiling(
     `),
     db.all(sql`
       insert into feed_folders (user_id, feed_id, folder_id, updated_at, seq)
-      select ${userId}, coalesce(f.merged_into, f.id), j.value->>1, ${now}, ${currentSeq}
+      select ${userId}, coalesce(f.merged_into, f.id), j.value->>1, 0, ${currentSeq}
       from json_each(${file}) j join feeds f on f.id = j.value->>0
       where exists (select 1 from folders d
         where d.id = j.value->>1 and d.user_id = ${userId} and d.deleted_at is null)
       on conflict (user_id, feed_id) do update set
-        folder_id = excluded.folder_id, updated_at = excluded.updated_at, seq = excluded.seq
+        folder_id = excluded.folder_id, seq = excluded.seq
       where feed_folders.folder_id is null or not exists (
         select 1 from folders d where d.id = feed_folders.folder_id and d.deleted_at is null)
       returning feed_id
