@@ -701,7 +701,8 @@ function FolderButton({
     manage.move(row.feedId, folderId)
   }
   return (
-    <div ref={box} className="relative min-w-0 shrink-0">
+    // On a phone it has its own line and gives way to it; on a desktop row the blog's name does.
+    <div ref={box} className={`relative ${manage.phone ? 'min-w-0' : 'shrink-0'}`}>
       <button
         ref={(el) => {
           button.current = el
@@ -718,7 +719,8 @@ function FolderButton({
         onClick={(e) =>
           manage.phone ? manage.openSheet(row, e.currentTarget) : setOpen((o) => !o)
         }
-        className={`flex max-w-40 items-center gap-1.5 rounded-lg border border-line bg-surface pr-2.5 pl-3 text-ink-2 hover:border-thumb hover:text-ink ${manage.phone ? 'min-h-9 text-[13px]' : 'py-[5px] text-[12.5px]'}`}
+        // At md the row is 408px, so a long folder name is cut well before the blog's name is.
+        className={`flex items-center gap-1.5 rounded-lg border border-line bg-surface pr-2.5 pl-3 text-ink-2 hover:border-thumb hover:text-ink ${manage.phone ? 'min-h-9 max-w-full text-[13px]' : 'max-w-32 py-[5px] text-[12.5px] lg:max-w-44'}`}
         data-testid="move-to"
       >
         <span className="truncate">{current}</span>
