@@ -106,7 +106,7 @@ export const en = {
       'Tela keeps what it needs to run your reading list, and nothing for advertising.',
       "We don't sell your data, show ads or use analytics.",
       'What you read, like and highlight stays private unless you choose to show it. Your profile, your recommendations and the blogs you claim are public.',
-      'You can export your subscriptions as OPML, and download your profile, settings, subscriptions, likes, recommendations, highlights and follows as one file, whenever you like.',
+      'You can export your subscriptions, with their folders, as OPML, and download your profile, settings, subscriptions, likes, recommendations, highlights and follows as one file, whenever you like.',
     ],
     sections: {
       collect: {
@@ -126,7 +126,7 @@ export const en = {
           { h: 'Your reading' },
           {
             list: [
-              'The blogs you subscribe to and the feeds you add.',
+              'The blogs you subscribe to, the folders you put them in, and the feeds you add.',
               "Which posts you've read, liked and recommended, and the notes on your recommendations.",
               'Your highlights and the notes on them.',
               'The people you follow.',
@@ -286,7 +286,7 @@ export const en = {
         blocks: [
           {
             list: [
-              'Export your subscriptions as OPML in Settings → Subscriptions.',
+              'Export your subscriptions, with their folders, as OPML in Settings → Subscriptions.',
               'Download your profile, settings, subscriptions, likes, recommendations, highlights and the people you follow as one file in Settings → Privacy → Your data.',
               'Choose what others see in Settings → Privacy. Your picture and Gravatar are in Settings → Profile; an uploaded picture you remove is deleted.',
               'Set or change a password, link or unlink Google and GitHub, and sign out everywhere in Settings → Account.',

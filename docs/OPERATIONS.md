@@ -213,6 +213,26 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        JSON. An older tela-jobs meanwhile only ignores `overruled_at`.
      - Rolling back: tela-web may not go back while the new tela-api is live. tela-api and
        tela-jobs may, and the migration can stay.
+   - Folders (ADR 0048, migration 0011) are additive and keep protocol 3, with no `MIN_CLIENT`
+     bump. The migration adds `folders` and `feed_folders`. Apply it, then deploy tela-jobs,
+     tela-api, tela-web, the usual order:
+     - tela-jobs first, because tela-api reads an OPML file's folders from its `readOpml`. An
+       older tela-jobs sends none, and an import then files nothing, as before.
+     - tela-api before tela-web, because the new shell sends `putFolder`, `deleteFolder` and
+       `fileFeed`. An older tela-api refuses them as invalid, so a folder made, renamed or
+       deleted, or a blog moved, visibly goes back.
+     - Each device starts over from a snapshot once, at its first boot on the new shell: its copy
+       has no folder tables.
+     - **Either Worker may go back alone.** An older tela-web shows the flat sidebar and Settings,
+       and ignores the folder rows a pull sends. An older tela-api sends no folder rows, so a
+       device keeps the folders it holds until it next starts over. A device holding an unsent
+       folder change under an older shell keeps it in its queue and pushes it once the newer
+       shell is back.
+     - After deploy, check that:
+       - a folder made in Settings shows in the sidebar, and on a second device after its pull;
+       - a folder's list (`/reading?folder=…`) has Mark all read, and its Undo works;
+       - an OPML export holds the folder as an outline, and importing that file into another
+         account makes the folder there.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way

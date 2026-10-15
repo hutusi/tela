@@ -70,6 +70,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `block_translations` | The content-addressed block cache: source hash × target language × `NORM_VERSION` |
 | `body_translations` | A body per content version and language: state, reservation, streamed `chunk_keys`, the finished object (ADR 0023) |
 | `subscriptions` | `(user_id, feed_id)` with `watermark_id`: everything at or below it is read (ADR 0009) |
+| `folders`, `feed_folders` | The member's private folders (ADR 0048): a folder by client-minted `id` with its `name`, soft-deleted; and which folder each blog is in, `(user_id, feed_id)` with `folder_id` (null is none) and the move's `updated_at`. A table apart from `subscriptions`, so a move never re-sends a feed's horizon; a filing outlives an unsubscribe |
 | `user_article_states`, `recommendations`, `highlights` | The member's read and like state (a row with `read_updated_at` and no `read_at` is marked unread, which beats the watermark and the horizon until a later read; compaction keeps every row with that clock, ADR 0009), public recommendations with notes (indexed by `created_at` for the week Discover counts, `recommendations_created_idx`), private highlights with notes (ADR 0026) |
 | `follows` | `(follower_id, followee_id)`: one member following another, one-way and public, soft-deleted, synced to the follower (ADR 0031) |
 | `websub_subscriptions` | One per feed with a hub: topic, secret, status, lease |
@@ -294,7 +295,7 @@ A Vite + React SPA that renders from the device.
   `lib/use-highlights.ts` paints them over the rendered text with the CSS Custom Highlight API and
   writes back an anchor the post moved. Typography and theme are synced prefs
   (`lib/typography.ts`); which panes show is this device's, in localStorage (`lib/layout.ts`,
-  ADR 0029). `j`/`k`/`Esc`/`o`/`l`/`m`/`h`/`[`/`f`/`?` work on `/reading`.
+  ADR 0029), as is which folders are open (`lib/folders-open.ts`, ADR 0048). `j`/`k`/`Esc`/`o`/`l`/`m`/`h`/`[`/`f`/`?` work on `/reading`.
 - `public/sw.js` caches the app shell only, and swaps to a new shell only once every file it
   loads is cached; `shell/kill-sw.js` replaces it in an emergency. It fetches the shell from
   `/__tela/shell`, a path tela-web never runs for, because `/` is the landing the edge renders
@@ -309,7 +310,7 @@ A Vite + React SPA that renders from the device.
 |---|---|
 | `/`, `/?titles=translated` | The front page for visitors (ADR 0035), rendered at the edge: the count of public blogs, this week's edition (one post a blog; the latest when the week has none), titles as written or in the reader's language; members go to `/reading` |
 | `/login` | Password first, or an emailed code (ADR 0043); the mail's sign-in and reset links fill their code in and ask before using it (ADR 0036), and a first sign-in's (`join=1`) asks for the joiner's password and goes on to Discover |
-| `/reading?filter=&feed=&article=&mode=` | Sidebar, list and the open article |
+| `/reading?filter=&feed=&folder=&article=&mode=` | Sidebar, list and the open article; `folder` lists every blog in one of the member's folders (ADR 0048) |
 | `/discover`, `/discover/articles?topic=&lang=&sort=new&cursor=`, `/discover/blogs?topic=&lang=&page=`, `/discover/readers` | Discover (ADR 0044): This week (the week's most recommended, else the edition; new blogs; readers to follow), Articles, Blogs and Readers. Public pages, rendered at the edge too; Articles' sorts and pages are cached apart. The device hides the blogs its member reads and matches suggested readers to their likes and blogs (`lib/discover-overlay.ts`, `lib/discover-week.ts`, `lib/suggest-readers.ts`) |
 | `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart |
 | `/about`, `/privacy`, `/terms` | The info pages, for anyone; copy from `src/content/info`, rendered at the edge too, with no data |
@@ -333,7 +334,9 @@ A Vite + React SPA that renders from the device.
 - The push is guarded per mutation by `applied_mutations` and resolves conflicts by the later
   `at`, clamped to the server's clock. The privacy switches are the exception: a hide always
   applies, and a show only against the version in its device's confirmed rows, which waits while
-  that device's own change to the switch is unsettled (ADR 0031, issue #16).
+  that device's own change to the switch is unsettled (ADR 0031, issue #16). A deletion wins
+  over any later edit for highlights and folders; deleting a folder leaves its blogs in none,
+  each keeping its move's clock (ADR 0048).
 - Every member call names the account the device's rows belong to (`x-tela-member`, protocol 2).
   tela-api answers `409 account_changed` when it is missing or not the session's member, and the
   device's stored copy (IndexedDB `tela-2`, apart from earlier builds' `tela`) has one owner
