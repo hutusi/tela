@@ -371,7 +371,7 @@ export function ReadingPage() {
     >
       {/* Over the first run too: on a phone it is the only way to Liked, and a member who follows
           nothing may still have kept posts there, as the sidebar beside it does on a desktop. */}
-      {open ? null : <MobileNav subscriptions={subs} totals={counts} params={params} />}
+      {open ? null : <MobileNav tree={tree} totals={counts} params={params} />}
       {/* The sidebar, or the rail it collapses to (ADR 0030), and neither in focus. Not rendered
           rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no defined
           winner (AGENTS.md), and a column that is gone needs no element. The list is the
