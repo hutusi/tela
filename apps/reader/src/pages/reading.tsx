@@ -30,6 +30,7 @@ import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
   feedTitle,
+  folderTree,
   isLiked,
   isRead,
   prefetchPlan,
@@ -59,6 +60,8 @@ export function ReadingPage() {
   const params = parseReadingParams(search)
 
   const subs = subscriptionItems(tables, now)
+  // The sidebar's order (ADR 0048): the member's folders by name, then the blogs in none.
+  const tree = folderTree(tables, now)
   const counts = totals(tables, now)
   const prefs = useReadingPrefs(tables)
   const all = articlesFor(tables, params, now)
@@ -375,9 +378,9 @@ export function ReadingPage() {
           exception: in focus it stays mounted and styles.css takes it out of the grid, so its
           page of rows and its scroll survive and Esc still finds the row it closed. */}
       {focused ? null : panes.sidebar === 'shown' ? (
-        <Sidebar subscriptions={subs} totals={counts} params={params} />
+        <Sidebar tree={tree} totals={counts} params={params} />
       ) : (
-        <SidebarRail subscriptions={subs} params={params} />
+        <SidebarRail tree={tree} params={params} />
       )}
       {firstRun ? null : (
         <ArticleList

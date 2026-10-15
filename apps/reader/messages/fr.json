@@ -154,7 +154,9 @@
     "hide": "Replier la barre latérale",
     "show": "Déplier la barre latérale",
     "manage": "Gérer les abonnements",
-    "browseDiscover": "ou parcourez Découvrir →"
+    "browseDiscover": "ou parcourez Découvrir →",
+    "collapseFolder": "Replier {name}",
+    "expandFolder": "Déplier {name}"
   },
   "list": {
     "markAllRead": "Tout marquer comme lu",

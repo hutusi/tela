@@ -154,7 +154,9 @@
     "hide": "Collapse the sidebar",
     "show": "Expand the sidebar",
     "manage": "Manage subscriptions",
-    "browseDiscover": "or browse Discover →"
+    "browseDiscover": "or browse Discover →",
+    "collapseFolder": "Collapse {name}",
+    "expandFolder": "Expand {name}"
   },
   "list": {
     "markAllRead": "Mark all read",

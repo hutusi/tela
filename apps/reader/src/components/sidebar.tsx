@@ -1,18 +1,35 @@
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
-import { type ReadingParams, readingHref } from '../lib/href'
-import type { Filter, SubscriptionItem, Totals } from '../store/selectors'
+import { useClosedFolders } from '../lib/folders-open'
+import { listsFilter, type ReadingParams, readingHref } from '../lib/href'
+import type { Filter, FolderItem, SubscriptionItem, Totals } from '../store/selectors'
+import { FolderToggle } from './folder-toggle'
 import { ManageSubscriptions } from './manage-subscriptions'
 import { SidebarToggle, TOGGLE_ROW } from './sidebar-toggle'
 import { Swatch } from './swatch'
 
-type Props = { subscriptions: SubscriptionItem[]; totals: Totals; params: ReadingParams }
+type Props = {
+  tree: { folders: FolderItem[]; unfiled: SubscriptionItem[] }
+  totals: Totals
+  params: ReadingParams
+}
 
-export function Sidebar({ subscriptions, totals, params }: Props) {
+/**
+ * A blog's row. In a folder it is indented to the folder's name; outside one, beside folders,
+ * its swatch sits under their chevrons (Tela Lists). With no folder at all, it is as it was.
+ */
+const BLOG_ROW = {
+  nested: 'py-1.5 pl-[34px] pr-3',
+  unfiled: 'py-[7px] pl-2 pr-3',
+  flat: 'px-3 py-[7px]',
+} as const
+
+export function Sidebar({ tree, totals, params }: Props) {
   const t = useTranslations('sidebar')
   const tn = useTranslations('nav')
+  const closed = useClosedFolders()
   const filterRow = (filter: Filter, label: string, count: number) => {
-    const active = params.feedId === null && params.filter === filter
+    const active = listsFilter(params, filter)
     return (
       <Link
         to={readingHref({ filter })}
@@ -24,6 +41,24 @@ export function Sidebar({ subscriptions, totals, params }: Props) {
       </Link>
     )
   }
+  const blogRow = (s: SubscriptionItem, place: keyof typeof BLOG_ROW) => {
+    const active = params.feedId === s.feedId
+    return (
+      <Link
+        key={s.feedId}
+        to={readingHref({ feedId: s.feedId })}
+        className={`flex w-full items-center gap-2.5 rounded-lg text-left text-ink hover:bg-hover hover:no-underline ${BLOG_ROW[place]} ${active ? 'bg-hover' : ''}`}
+        aria-current={active ? 'page' : undefined}
+        data-testid="subscription"
+      >
+        <Swatch id={s.feedId} title={s.title} size={18} />
+        <span className="flex-1 truncate">{s.title}</span>
+        <span className="text-xs text-muted">{s.unread || ''}</span>
+      </Link>
+    )
+  }
+  const filed = tree.folders.length > 0
+  const subscribed = tree.unfiled.length + tree.folders.reduce((n, f) => n + f.blogs.length, 0)
   return (
     <aside
       data-testid="sidebar"
@@ -54,25 +89,42 @@ export function Sidebar({ subscriptions, totals, params }: Props) {
             </span>
             <ManageSubscriptions className="-my-1.5" />
           </div>
-          {subscriptions.length === 0 ? (
+          {subscribed === 0 ? (
             <p className="px-3 text-[13px] text-muted">{t('noSubscriptions')}</p>
           ) : null}
-          {subscriptions.map((s) => {
-            const active = params.feedId === s.feedId
+          {/* The member's folders by name, each open or closed on this device, then the blogs in
+              none (ADR 0048). The chevron opens and closes; the name reads the whole folder. */}
+          {tree.folders.map((f) => {
+            const active = params.folderId === f.id
+            const open = !closed.has(f.id)
             return (
-              <Link
-                key={s.feedId}
-                to={readingHref({ feedId: s.feedId })}
-                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-[7px] text-left text-ink hover:bg-hover hover:no-underline ${active ? 'bg-hover' : ''}`}
-                aria-current={active ? 'page' : undefined}
-                data-testid="subscription"
-              >
-                <Swatch id={s.feedId} title={s.title} size={18} />
-                <span className="flex-1 truncate">{s.title}</span>
-                <span className="text-xs text-muted">{s.unread || ''}</span>
-              </Link>
+              <div key={f.id} className="flex flex-col gap-0.5">
+                <div
+                  className={`flex items-center rounded-lg hover:bg-hover ${active ? 'bg-hover' : ''}`}
+                  data-testid="folder"
+                  data-folder-id={f.id}
+                >
+                  <FolderToggle
+                    folder={f}
+                    open={open}
+                    className="size-[34px]"
+                    testId="folder-toggle"
+                  />
+                  <Link
+                    to={readingHref({ folderId: f.id })}
+                    className="flex min-w-0 flex-1 items-center justify-between gap-2 py-2 pr-3 font-medium text-ink hover:no-underline"
+                    aria-current={active ? 'page' : undefined}
+                    data-testid="folder-link"
+                  >
+                    <span className="truncate">{f.name}</span>
+                    <span className="text-xs font-normal text-muted">{f.unread || ''}</span>
+                  </Link>
+                </div>
+                {open ? f.blogs.map((s) => blogRow(s, 'nested')) : null}
+              </div>
             )
           })}
+          {tree.unfiled.map((s) => blogRow(s, filed ? 'unfiled' : 'flat'))}
           <Link
             to="/add"
             className="mt-2 rounded-lg border border-dashed border-thumb px-3 py-2 text-left text-muted hover:border-muted hover:text-ink hover:no-underline"

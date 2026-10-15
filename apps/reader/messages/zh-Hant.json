@@ -154,7 +154,9 @@
     "hide": "收起側欄",
     "show": "展開側欄",
     "manage": "管理訂閱",
-    "browseDiscover": "或去「發現」看看 →"
+    "browseDiscover": "或去「發現」看看 →",
+    "collapseFolder": "收起「{name}」",
+    "expandFolder": "展開「{name}」"
   },
   "list": {
     "markAllRead": "全部標為已讀",
