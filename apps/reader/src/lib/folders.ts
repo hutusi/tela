@@ -56,8 +56,25 @@ export function checkFolderName(
   return { ok: name }
 }
 
+/**
+ * The folders a name or the limit must reckon with: those the page shows, and those the server
+ * still holds though the page does not, a folder whose deletion is held while its Undo shows
+ * (ADR 0046). Until the deletion goes, its name is not free, and it still counts towards the
+ * limit: made meanwhile and then undone, a folder of the same name would be a second one, and one
+ * past the limit would vanish with everything moved into it. By name, the page's own first.
+ */
+export function knownFolders(
+  shown: Pick<Tables, 'folders'>,
+  confirmed: ReadonlyMap<string, { id: string; name: string }>,
+): { id: string; name: string }[] {
+  const known = new Map<string, { id: string; name: string }>()
+  for (const f of confirmed.values()) known.set(f.id, { id: f.id, name: f.name })
+  for (const f of shown.folders.values()) known.set(f.id, { id: f.id, name: f.name })
+  return [...known.values()]
+}
+
 /** Whether another folder can be made: the server makes none past `MAX_FOLDERS`. */
-export const canMakeFolder = (t: Pick<Tables, 'folders'>) => t.folders.size < MAX_FOLDERS
+export const canMakeFolder = (known: readonly unknown[]) => known.length < MAX_FOLDERS
 
 /**
  * The blogs filed in a folder, followed or not (a blog left from Settings keeps its filing): what

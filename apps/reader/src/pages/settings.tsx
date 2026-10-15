@@ -44,7 +44,7 @@ import { Segmented } from '../components/segmented'
 import { SETTING_HINT, SettingRow } from '../components/setting-row'
 import { Switch } from '../components/switch'
 import { linkingReturn } from '../lib/account-api'
-import { canMakeFolder, filedIn, folderWith, groupRows } from '../lib/folders'
+import { canMakeFolder, filedIn, folderWith, groupRows, knownFolders } from '../lib/folders'
 import { cadenceKey } from '../lib/format'
 import type { ReadingMode } from '../lib/href'
 import { newId } from '../lib/id'
@@ -940,7 +940,9 @@ function SubscriptionsSection() {
   const count = rows.filter((r) => r.subscribed).length
   const grouped = groupRows(tables, now, rows)
   const folders: Folder[] = grouped.folders.map(({ id, name }) => ({ id, name }))
-  const canMake = canMakeFolder(tables)
+  // A name, and the limit, also reckon with a folder whose deletion is still held.
+  const known = knownFolders(tables, store.confirmedFolders())
+  const canMake = canMakeFolder(known)
 
   // Each reads the device's rows as they are when it runs, not as this render saw them.
   const folderOf = (feedId: number) => folderIdOf(store.getSnapshot().tables, feedId)
@@ -966,6 +968,7 @@ function SubscriptionsSection() {
   const manage: Manage = {
     phone,
     folders,
+    known,
     move,
     openSheet: (row, from) => {
       opener.current = from
@@ -1035,7 +1038,7 @@ function SubscriptionsSection() {
       {creating !== null && canMake ? (
         <NewFolderForm
           key={creating}
-          folders={folders}
+          folders={known}
           onCreate={(name) => {
             store.mutate({ type: 'putFolder', id: newId(), name })
             closeForm()
@@ -1063,6 +1066,7 @@ function SubscriptionsSection() {
           row={moving}
           current={folderIdOf(tables, moving.feedId)}
           folders={folders}
+          known={known}
           opener={opener}
           canCreate={canMake}
           limitHint={t('folders.limit', { max: MAX_FOLDERS })}

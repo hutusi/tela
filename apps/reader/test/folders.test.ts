@@ -10,7 +10,14 @@ import {
   type Tables,
   view,
 } from '@tela/sync'
-import { canMakeFolder, checkFolderName, filedIn, folderWith, groupRows } from '../src/lib/folders'
+import {
+  canMakeFolder,
+  checkFolderName,
+  filedIn,
+  folderWith,
+  groupRows,
+  knownFolders,
+} from '../src/lib/folders'
 import { NOW, pull, sub } from './rows'
 
 const folder = (id: string, name: string): FolderRow => ({
@@ -110,11 +117,28 @@ describe("a folder's name", () => {
 describe('folders to make', () => {
   test('stop at the most a member may have', () => {
     const some = new Map([['a', folder('a', 'A')]])
-    expect(canMakeFolder({ folders: some })).toBe(true)
+    expect(canMakeFolder(knownFolders({ folders: some }, new Map()))).toBe(true)
     const full = new Map(
       Array.from({ length: MAX_FOLDERS }, (_, i) => [`f${i}`, folder(`f${i}`, `F${i}`)] as const),
     )
-    expect(canMakeFolder({ folders: full })).toBe(false)
+    expect(canMakeFolder(knownFolders({ folders: full }, new Map()))).toBe(false)
+  })
+
+  test('a folder whose deletion is held keeps its name and its place until it goes', () => {
+    // Deleted on the page, its Undo still showing: the server holds it yet.
+    const confirmed = new Map([
+      ['a', folder('a', 'Cities')],
+      ['b', folder('b', 'Old name')],
+    ])
+    const shown = new Map([['b', folder('b', 'Renamed')]])
+    const known = knownFolders({ folders: shown }, confirmed)
+    expect(known.map((f) => f.name).sort()).toEqual(['Cities', 'Renamed'])
+    expect(checkFolderName('cities', known)).toEqual({ taken: 'Cities' })
+    const full = new Map(
+      Array.from({ length: MAX_FOLDERS }, (_, i) => [`f${i}`, folder(`f${i}`, `F${i}`)] as const),
+    )
+    const oneHeld = new Map([...full].slice(1))
+    expect(canMakeFolder(knownFolders({ folders: oneHeld }, full))).toBe(false)
   })
 
   test("a folder's blogs are every one filed in it, followed or not", () => {

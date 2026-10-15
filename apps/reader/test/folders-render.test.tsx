@@ -60,6 +60,7 @@ function Section({
   const manage: Manage = {
     phone,
     folders: FOLDERS,
+    known: FOLDERS,
     move() {},
     openSheet() {},
     rename() {},

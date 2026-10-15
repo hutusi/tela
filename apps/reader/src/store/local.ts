@@ -15,6 +15,7 @@ import {
   type Confirmed,
   completePull,
   emptyTables,
+  type FolderRow,
   type FollowRow,
   type Mutation,
   type Pending,
@@ -136,6 +137,13 @@ export class LocalStore {
    * these, so a page asks again when they change, not when a prediction does (ADR 0031).
    */
   confirmedFollowees = (): string => [...this.confirmed.tables.follows.keys()].sort().join(',')
+
+  /**
+   * The member's folders as the server has said, without the changes still on their way. A
+   * folder whose deletion is held (ADR 0046) is gone from the view but still here: its name and
+   * its place under the limit are not free until the deletion goes (ADR 0048).
+   */
+  confirmedFolders = (): ReadonlyMap<string, FolderRow> => this.confirmed.tables.folders
 
   remember(articles: ArticleRow[], source?: string | null): void {
     for (const a of articles) {

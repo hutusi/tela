@@ -69,6 +69,8 @@ export type Manage = {
   phone: boolean
   /** The member's folders, by name. */
   folders: readonly Folder[]
+  /** Every name a folder may not take: these, and a folder whose deletion is held (`knownFolders`). */
+  known: readonly Folder[]
   /** Put a blog in a folder, or in none (null). */
   move: (feedId: number, folderId: string | null) => void
   /** Below `md`: open Move to as a sheet for this row, from its folder button. */
@@ -358,7 +360,7 @@ function FolderHeading({
     return (
       <RenameForm
         folder={folder}
-        folders={manage.folders}
+        folders={manage.known}
         onSave={(name) => {
           if (name !== folder.name) manage.rename(folder, name)
           done()
@@ -853,6 +855,7 @@ export function MoveSheet({
   row,
   current,
   folders,
+  known,
   opener,
   canCreate,
   limitHint,
@@ -863,6 +866,8 @@ export function MoveSheet({
   row: ManagedRow
   current: string | null
   folders: readonly Folder[]
+  /** The names a new folder may not take (`knownFolders`). */
+  known: readonly Folder[]
   opener: RefObject<HTMLElement | null>
   /** False once the member has as many folders as there can be. */
   canCreate: boolean
@@ -907,7 +912,7 @@ export function MoveSheet({
       </div>
       {naming ? (
         <NewFolderForm
-          folders={folders}
+          folders={known}
           onCreate={onCreate}
           onCancel={() => {
             returning.current = true
