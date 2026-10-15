@@ -10,8 +10,18 @@
  * Each test signs in a member of its own, from an address of its own (sign-in is limited per IP
  * and per address), so the shared member's sidebar stays flat for every other spec.
  */
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { type Browser, expect, type Page, test } from '@playwright/test'
-import { addFeed, BASE, cycle, FIXTURES, memberHeaders, signInRequest } from './helpers'
+import {
+  addFeed,
+  BASE,
+  cycle,
+  FIXTURES,
+  memberHeaders,
+  noSidewaysScroll,
+  signInRequest,
+} from './helpers'
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
@@ -186,5 +196,189 @@ test.describe('folders in the sidebar', () => {
     await expect(page).toHaveURL(/folder=e2e-folder-gone/)
     await expect(page.getByTestId('folder')).toHaveCount(0)
     await expect.poll(() => sidebarBlogs(page)).toEqual([JNITO, JVNS, HUTUSI])
+  })
+})
+
+/** A blog's row in Settings › Subscriptions. */
+const settingsRow = (page: Page, blog: string) =>
+  page.getByTestId('settings-subscription').filter({ hasText: blog })
+/** A folder's section in Settings › Subscriptions, by its name. */
+const settingsGroup = (page: Page, name: string) =>
+  page.getByTestId('folder-group').filter({ has: page.getByRole('heading', { name, exact: true }) })
+
+/** What tela-api holds of the member's folders, through a snapshot pull. */
+async function foldersOnServer(page: Page) {
+  const res = await page.request.get(`${BASE}/api/v1/sync?cursor=0`, {
+    headers: await memberHeaders(page.request),
+  })
+  expect(res.ok()).toBe(true)
+  const { rows } = (await res.json()) as {
+    rows: {
+      folders: { id: string; name: string }[]
+      feedFolders: { feedId: number; folderId: string | null }[]
+    }
+  }
+  return rows
+}
+
+test.describe('folders in Settings › Subscriptions', () => {
+  test('New folder, a move by menu and by dragging, a rename, and a delete with Undo', async ({
+    browser,
+  }) => {
+    const { page, feeds } = await member(browser)
+    await page.goto('/settings/subscriptions')
+    await expect(page.getByTestId('settings-subscription')).toHaveCount(3)
+    // No folder yet: one list, no headings.
+    await expect(page.getByTestId('folder-group')).toHaveCount(1)
+    await expect(page.getByTestId('subscription-count')).toHaveText(/^3 blogs\./)
+
+    await page.getByTestId('new-folder').click()
+    await page.getByTestId('new-folder-input').fill('  Tech ')
+    await page.keyboard.press('Enter')
+    const tech = settingsGroup(page, 'Tech')
+    await expect(tech).toBeVisible()
+    await expect(tech).toContainText('Drag blogs here.')
+    await expect(page.getByTestId('subscription-count')).toHaveText('3 blogs in 1 folder.')
+    await expect(page.getByTestId('new-folder')).toBeFocused()
+    // A name the member has, case aside, is refused.
+    await page.getByTestId('new-folder').click()
+    await page.getByTestId('new-folder-input').fill('tech')
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('new-folder-error')).toHaveText(
+      'You already have a folder called Tech.',
+    )
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('new-folder-input')).toHaveCount(0)
+    await expect(page.getByTestId('folder-group')).toHaveCount(2)
+
+    // By the row's folder button.
+    await settingsRow(page, JVNS).getByTestId('move-to').click()
+    const menu = page.getByTestId('move-to-menu')
+    await expect(
+      menu.getByTestId('move-to-option').filter({ hasText: 'No folder' }),
+    ).toHaveAttribute('aria-checked', 'true')
+    await menu.getByTestId('move-to-option').filter({ hasText: 'Tech' }).click()
+    await expect(tech.getByTestId('settings-subscription')).toHaveText([new RegExp(JVNS)])
+    await expect(settingsRow(page, JVNS).getByTestId('move-to')).toHaveText('Tech')
+    // By dragging it onto the folder.
+    await settingsRow(page, JNITO).getByTestId('drag-grip').dragTo(tech)
+    await expect(tech.getByTestId('settings-subscription')).toHaveCount(2)
+    await expect
+      .poll(async () => (await foldersOnServer(page)).feedFolders.filter((f) => f.folderId).length)
+      .toBe(2)
+
+    // The sidebar has it.
+    await page.goto('/reading')
+    await expect(page.getByTestId('folder')).toHaveText(/Tech/)
+    await expect.poll(() => sidebarBlogs(page)).toEqual([JNITO, JVNS, HUTUSI])
+
+    await page.goto('/settings/subscriptions')
+    await settingsGroup(page, 'Tech').getByTestId('folder-rename').click()
+    await page.getByTestId('folder-rename-input').fill('Code')
+    await page.getByTestId('folder-rename-save').click()
+    const code = settingsGroup(page, 'Code')
+    await expect(code.getByTestId('settings-subscription')).toHaveCount(2)
+    await expect(code.getByTestId('folder-rename')).toBeFocused()
+
+    // Deleted, and taken back while its toast shows: the folder and its blogs as they were.
+    await code.getByTestId('folder-delete').click()
+    await expect(page.getByTestId('folder-group')).toHaveCount(1)
+    const toast = page.getByTestId('toast')
+    await expect(toast).toContainText('Deleted Code. Its blogs are no longer in a folder.')
+    await toast.getByTestId('toast-action').click()
+    await expect(code.getByTestId('settings-subscription')).toHaveCount(2)
+    // Deleted for good: the blogs are in none, here and on tela-api.
+    await code.getByTestId('folder-delete').click()
+    await expect(toast).toHaveCount(0, { timeout: 10_000 })
+    await expect.poll(async () => (await foldersOnServer(page)).folders).toEqual([])
+    const filed = (await foldersOnServer(page)).feedFolders
+    expect(filed.filter((f) => f.folderId !== null)).toEqual([])
+    expect(filed.map((f) => f.feedId).sort()).toEqual([feeds.jnito, feeds.jvns].sort())
+  })
+
+  test('OPML: an import makes the folders it names, and an export holds them', async ({
+    browser,
+  }) => {
+    const { page } = await member(browser)
+    await page.goto('/settings/subscriptions')
+    await expect(page.getByTestId('settings-subscription')).toHaveCount(3)
+    // The fixture file lists two of the member's blogs under "Tech".
+    await page
+      .getByTestId('opml-file')
+      .setInputFiles(resolve(import.meta.dirname, 'fixtures/subs.opml'))
+    const tech = settingsGroup(page, 'Tech')
+    await expect(tech.getByTestId('settings-subscription')).toHaveCount(2)
+    await expect(settingsRow(page, HUTUSI).getByTestId('move-to')).toHaveText('No folder')
+
+    const saved = page.waitForEvent('download')
+    await page.getByTestId('opml-export').click()
+    const opml = await readFile(await (await saved).path(), 'utf8')
+    const folder = opml.match(/<outline text="Tech"[^>]*>([\s\S]*?)<\/outline>/)?.[1] ?? ''
+    expect(folder).toContain(`${FIXTURES}/jvns.xml`)
+    expect(folder).toContain(`${FIXTURES}/jnito.xml`)
+    expect(folder).not.toContain(`${FIXTURES}/hutusi.xml`)
+    expect(opml).toContain(`${FIXTURES}/hutusi.xml`)
+  })
+})
+
+test.describe('folders on a phone', () => {
+  test('the Feeds menu holds them, and a blog moves by the sheet', async ({ browser }) => {
+    const { page, feeds } = await member(browser, { width: 390 })
+    await push(page, [
+      { type: 'putFolder', id: 'e2e-folder-phone', name: 'Cities' },
+      { type: 'fileFeed', feedId: feeds.jvns, folderId: 'e2e-folder-phone' },
+    ])
+    await page.goto('/reading')
+    await page.getByTestId('mobile-nav').locator('summary').click()
+    const folder = page.getByTestId('mobile-folder')
+    await expect(folder).toContainText('Cities')
+    const chevron = await folder.getByTestId('mobile-folder-toggle').boundingBox()
+    expect(chevron?.width).toBeGreaterThanOrEqual(44)
+    expect(chevron?.height).toBeGreaterThanOrEqual(44)
+    await expect(page.getByTestId('mobile-subscription').filter({ hasText: JVNS })).toBeVisible()
+    await folder.getByTestId('mobile-folder-toggle').click()
+    await expect(page.getByTestId('mobile-subscription').filter({ hasText: JVNS })).toHaveCount(0)
+    await folder.getByTestId('mobile-folder-link').click()
+    await expect(page).toHaveURL(/folder=e2e-folder-phone/)
+    await expect(page.getByTestId('list-subtitle')).toHaveText(JVNS)
+
+    await page.goto('/settings/subscriptions')
+    await expect(page.getByTestId('drag-grip')).toHaveCount(0)
+    await settingsRow(page, HUTUSI).getByTestId('move-to').click()
+    const sheet = page.getByTestId('move-sheet')
+    await expect(sheet).toContainText(`Move ${HUTUSI} to`)
+    await sheet.getByTestId('move-to-option').filter({ hasText: 'Cities' }).click()
+    await expect(sheet).toHaveCount(0)
+    await expect(settingsGroup(page, 'Cities').getByTestId('settings-subscription')).toHaveCount(2)
+    // "+ New folder" in the sheet makes one and moves the blog into it.
+    await settingsRow(page, JNITO).getByTestId('move-to').click()
+    await page.getByTestId('move-sheet-new-folder').click()
+    await page.getByTestId('new-folder-input').fill('Craft')
+    await page.getByTestId('new-folder-create').click()
+    await expect(settingsGroup(page, 'Craft').getByTestId('settings-subscription')).toHaveText([
+      new RegExp(JNITO),
+    ])
+    // New folder sits in the back bar; ··· holds Rename and Delete folder.
+    await expect(page.getByTestId('settings-back-bar').getByTestId('new-folder')).toBeVisible()
+    await settingsGroup(page, 'Craft').getByTestId('folder-more').click()
+    await expect(page.getByTestId('folder-rename')).toBeVisible()
+    await expect(page.getByTestId('folder-delete')).toBeVisible()
+  })
+
+  test('Settings › Subscriptions with folders fits 320px in French', async ({ browser }) => {
+    const { page, feeds } = await member(browser, { width: 320 })
+    await page.context().addCookies([{ name: 'tela_locale', value: 'fr', url: BASE }])
+    await push(page, [
+      { type: 'setProfile', uiLocale: 'fr' },
+      { type: 'putFolder', id: 'e2e-folder-fr', name: 'Des blogs que je lis le dimanche matin' },
+      { type: 'fileFeed', feedId: feeds.jnito, folderId: 'e2e-folder-fr' },
+    ])
+    await page.goto('/settings/subscriptions')
+    await expect(page.getByTestId('folder-group')).toHaveCount(2)
+    await noSidewaysScroll(page, 'Settings › Subscriptions')
+    await page.goto('/reading')
+    await page.getByTestId('mobile-nav').locator('summary').click()
+    await expect(page.getByTestId('mobile-folder')).toBeVisible()
+    await noSidewaysScroll(page, 'the Feeds menu')
   })
 })
