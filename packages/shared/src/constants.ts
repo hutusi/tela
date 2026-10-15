@@ -86,6 +86,13 @@ export const HIGHLIGHT_QUOTE_MAX = 2000
 export const HIGHLIGHT_CONTEXT = 32
 export const HIGHLIGHT_NOTE_MAX = 2000
 
+/**
+ * A folder holds some of a member's subscriptions, private to them (ADR 0048). A name is a label,
+ * not a description, and a member who needs more than a hundred folders has made each one a blog.
+ */
+export const FOLDER_NAME_MAX = 60
+export const MAX_FOLDERS = 100
+
 /** Unread horizon: articles older than this never count as unread. */
 export const UNREAD_HORIZON_DAYS = 30
 

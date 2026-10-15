@@ -11,12 +11,15 @@
  *
  * No I/O here, so the rules can be tested on their own and shared with anything that syncs.
  */
+import { MAX_FOLDERS } from '@tela/shared'
 import type { Mutation } from './mutations'
 import { completePull, type PullResponse } from './protocol'
 import type {
   ArticleRow,
   ClaimRow,
+  FeedFolderRow,
   FeedRow,
+  FolderRow,
   FollowRow,
   HighlightRow,
   PrefRow,
@@ -50,6 +53,10 @@ export type Tables = {
   translations: Map<string, TranslationRow>
   /** By the followed member's id: the people the member follows (an unfollowed one is not held). */
   follows: Map<string, FollowRow>
+  /** By id: the member's live folders (a deleted one is not held, ADR 0048). */
+  folders: Map<string, FolderRow>
+  /** By feed id: which folder each blog is in, `folderId` null for none. */
+  feedFolders: Map<number, FeedFolderRow>
 }
 
 export type Confirmed = { cursor: number; tables: Tables }
@@ -75,6 +82,8 @@ export const emptyTables = (): Tables => ({
   claims: new Map(),
   translations: new Map(),
   follows: new Map(),
+  folders: new Map(),
+  feedFolders: new Map(),
 })
 
 export const titleKey = (articleId: number, lang: string) => `${articleId}:${lang}`
@@ -96,6 +105,8 @@ function copy(tables: Tables): Tables {
     claims: new Map(tables.claims),
     translations: new Map(tables.translations),
     follows: new Map(tables.follows),
+    folders: new Map(tables.folders),
+    feedFolders: new Map(tables.feedFolders),
   }
 }
 
@@ -149,6 +160,11 @@ export function applyPull(confirmed: Confirmed, given: PullResponse): Confirmed 
     if (row.deletedAt === null) t.follows.set(row.userId, row)
     else t.follows.delete(row.userId)
   }
+  for (const row of r.folders) {
+    if (row.deletedAt === null) t.folders.set(row.id, row)
+    else t.folders.delete(row.id)
+  }
+  for (const row of r.feedFolders) t.feedFolders.set(row.feedId, row)
   for (const stone of pull.tombstones) {
     if (stone.entity === 'article') t.articles.delete(Number(stone.key))
   }
@@ -474,6 +490,45 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       t.follows.delete(m.userId)
       return t
     }
+    case 'putFolder': {
+      // As the server decides: the later `at` wins, and a new folder past the limit is not made.
+      // A folder deleted elsewhere is not held, so a rename of it shows until the pull that says
+      // it was refused; the server never brings it back.
+      const held = t.folders.get(m.id)
+      if (held && m.at < held.updatedAt) return t
+      if (!held && t.folders.size >= MAX_FOLDERS) return t
+      t.folders.set(m.id, {
+        id: m.id,
+        name: m.name.trim(),
+        createdAt: held?.createdAt ?? m.at,
+        updatedAt: m.at,
+        deletedAt: null,
+        seq: held?.seq ?? 0,
+      })
+      return t
+    }
+    case 'deleteFolder': {
+      // Delete wins, and its blogs are in no folder, each keeping its move's clock.
+      if (!t.folders.delete(m.id)) return t
+      for (const [feedId, row] of t.feedFolders) {
+        if (row.folderId === m.id) t.feedFolders.set(feedId, { ...row, folderId: null })
+      }
+      return t
+    }
+    case 'fileFeed': {
+      // Into a folder this device holds, or none; the later `at` wins. A feed merged into another
+      // is filed under the one it became by the server, and the pull says so.
+      if (m.folderId !== null && !t.folders.has(m.folderId)) return t
+      const held = t.feedFolders.get(m.feedId)
+      if (held && m.at < held.updatedAt) return t
+      t.feedFolders.set(m.feedId, {
+        feedId: m.feedId,
+        folderId: m.folderId,
+        updatedAt: m.at,
+        seq: held?.seq ?? 0,
+      })
+      return t
+    }
     default: {
       // Exhaustive for every type this build knows; a change from a later build that a rollback
       // left in this device's queue changes nothing here, and its push says what the server
@@ -527,13 +582,17 @@ export function rowsOf(tables: Tables) {
     claims: [...tables.claims.values()],
     translations: [...tables.translations.values()],
     follows: [...tables.follows.values()],
+    folders: [...tables.folders.values()],
+    feedFolders: [...tables.feedFolders.values()],
   }
 }
 
 export type {
   ArticleRow,
   ClaimRow,
+  FeedFolderRow,
   FeedRow,
+  FolderRow,
   FollowRow,
   HighlightRow,
   SiteRow,
@@ -560,5 +619,7 @@ export function tablesFromRows(rows: TableRows): Tables {
     claims: new Map(rows.claims.map((r) => [r.id, r])),
     translations: new Map(rows.translations.map((r) => [translationKey(r.contentKey, r.lang), r])),
     follows: new Map(rows.follows.map((r) => [r.userId, r])),
+    folders: new Map(rows.folders.map((r) => [r.id, r])),
+    feedFolders: new Map(rows.feedFolders.map((r) => [r.feedId, r])),
   }
 }

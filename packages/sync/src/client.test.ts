@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { MAX_FOLDERS } from '@tela/shared'
 import {
   applyPull,
   type Confirmed,
@@ -259,6 +260,92 @@ describe('highlights on the device', () => {
     )
     expect(deleted.tables.highlights.size).toBe(0)
     expect(deleted.tables.articles.size).toBe(0)
+  })
+})
+
+describe('folders on the device (ADR 0048)', () => {
+  let n = 0
+  const m = (at: number, change: Record<string, unknown>) =>
+    ({ mutation: { mid: `fold-${++n}-pad`, at, ...change } as Mutation }) satisfies Pending
+  const put = (at: number, id: string, name: string) => m(at, { type: 'putFolder', id, name })
+  const file = (at: number, feedId: number, folderId: string | null) =>
+    m(at, { type: 'fileFeed', feedId, folderId })
+  const folderRow = (id: string, name: string, at = 1) => ({
+    id,
+    name,
+    createdAt: at,
+    updatedAt: at,
+    deletedAt: null,
+    seq: 2,
+  })
+  const held = applyPull(
+    start,
+    pull(3, {
+      subscriptions: [sub(1), sub(2)],
+      folders: [folderRow('folder-a', 'A')],
+      feedFolders: [{ feedId: 1, folderId: 'folder-a', updatedAt: 1, seq: 3 }],
+    }),
+  )
+
+  test('a folder and a move show at once, and the later of each wins', () => {
+    const shown = view(held, [
+      put(10, 'folder-b', '  B  '),
+      put(12, 'folder-a', 'Renamed'),
+      put(11, 'folder-a', 'Older, from a slow device'),
+      file(10, 2, 'folder-b'),
+      file(12, 1, 'folder-b'),
+      file(11, 1, null),
+    ])
+    expect(shown.folders.get('folder-b')).toMatchObject({ name: 'B', createdAt: 10 })
+    expect(shown.folders.get('folder-a')?.name).toBe('Renamed')
+    expect(shown.feedFolders.get(2)?.folderId).toBe('folder-b')
+    expect(shown.feedFolders.get(1)?.folderId).toBe('folder-b')
+  })
+
+  test('deleting a folder leaves its blogs in none, and nothing files into it after', () => {
+    const shown = view(held, [
+      m(10, { type: 'deleteFolder', id: 'folder-a' }),
+      file(11, 2, 'folder-a'),
+    ])
+    expect(shown.folders.size).toBe(0)
+    expect(shown.feedFolders.get(1)).toMatchObject({ folderId: null, updatedAt: 1 })
+    expect(shown.feedFolders.has(2)).toBe(false)
+  })
+
+  test('a deletion from a pull lets the folder go; a filing to none stays held, with its clock', () => {
+    const next = applyPull(
+      held,
+      pull(5, {
+        folders: [{ ...folderRow('folder-a', 'A'), deletedAt: 4, updatedAt: 4, seq: 4 }],
+        feedFolders: [{ feedId: 1, folderId: null, updatedAt: 1, seq: 4 }],
+      }),
+    )
+    expect(next.tables.folders.size).toBe(0)
+    expect(next.tables.feedFolders.get(1)).toMatchObject({ folderId: null, updatedAt: 1 })
+    // An older move predicted over it loses, as it will on the server.
+    expect(view(next, [file(0, 1, null)]).feedFolders.get(1)?.updatedAt).toBe(1)
+  })
+
+  test('past the limit a new folder is not shown, though a rename is', () => {
+    const folders = Array.from({ length: MAX_FOLDERS }, (_, i) => folderRow(`folder-${i}`, `F${i}`))
+    const full = applyPull(start, pull(3, { folders }))
+    const shown = view(full, [put(5, 'folder-over', 'Over'), put(5, 'folder-0', 'Renamed')])
+    expect(shown.folders.size).toBe(MAX_FOLDERS)
+    expect(shown.folders.get('folder-0')?.name).toBe('Renamed')
+  })
+
+  test('a pull from a tela-api before folders keeps what the device holds', () => {
+    const { folders: _f, feedFolders: _ff, ...rows } = emptyRows()
+    const old = {
+      cursor: 5,
+      more: false,
+      reset: false,
+      rows,
+      tombstones: [],
+    } as unknown as PullResponse
+    const next = applyPull(held, old)
+    expect(next.tables.folders.get('folder-a')?.name).toBe('A')
+    expect(next.tables.feedFolders.get(1)?.folderId).toBe('folder-a')
   })
 })
 

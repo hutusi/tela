@@ -9,6 +9,7 @@ import {
   readPull,
   type TelaDb,
 } from '@tela/data'
+import { MAX_FOLDERS } from '@tela/shared'
 import {
   type ArticleRow,
   applyPull,
@@ -826,6 +827,175 @@ describe('highlights', () => {
     const delta = await pull(head)
     expect(delta.rows.articles.map((x) => x.id)).toContain(b)
     expect(delta.rows.feeds.map((f) => f.id)).toContain(2)
+  })
+})
+
+describe('folders (ADR 0048)', () => {
+  const folder = (id: string, name: string) => ({ type: 'putFolder', id, name })
+  const file = (feedId: number, folderId: string | null) => ({ type: 'fileFeed', feedId, folderId })
+  /** Move the server's clock on too: a push clamps `at` to it. */
+  const later = (ms: number) => {
+    api.clock.advance(ms)
+    now = api.clock.now()
+  }
+  const filing = (feedId: number, as = reader) =>
+    first<{ folder_id: string | null; updated_at: number }>(
+      db,
+      sql`select folder_id, updated_at from feed_folders where user_id = ${as.userId} and feed_id = ${feedId}`,
+    )
+
+  test('a folder and what is in it round-trip; a delta carries a rename, a snapshot what is live', async () => {
+    await push([{ type: 'subscribe', feedId: 1 }])
+    const head = (await pull(0)).cursor
+    await push([folder('folder-cities', '  Cities  '), file(1, 'folder-cities')])
+    const delta = await pull(head)
+    expect(delta.rows.folders).toMatchObject([
+      { id: 'folder-cities', name: 'Cities', deletedAt: null },
+    ])
+    expect(delta.rows.feedFolders).toMatchObject([{ feedId: 1, folderId: 'folder-cities' }])
+    // Filing a blog moves no subscription, so its horizon is not sent again.
+    expect(delta.rows.subscriptions).toEqual([])
+    later(10)
+    await push([folder('folder-cities', 'Towns')])
+    expect((await pull(delta.cursor)).rows.folders).toMatchObject([{ name: 'Towns' }])
+    const snap = await pull(0)
+    expect(snap.rows.folders.map((f) => f.name)).toEqual(['Towns'])
+    expect(snap.rows.feedFolders).toMatchObject([{ feedId: 1, folderId: 'folder-cities' }])
+  })
+
+  test('two devices: the later rename and the later move win, whatever order they arrive in', async () => {
+    await push([folder('folder-aaaa', 'A'), folder('folder-bbbb', 'B')])
+    const t0 = now
+    later(30)
+    await push([
+      { ...folder('folder-aaaa', 'Later'), at: t0 + 20 },
+      { ...file(1, 'folder-bbbb'), at: t0 + 20 },
+    ])
+    await push([
+      { ...folder('folder-aaaa', 'Earlier'), at: t0 + 10 },
+      { ...file(1, 'folder-aaaa'), at: t0 + 10 },
+    ])
+    const names = await db.all<{ name: string }>(
+      sql`select name from folders where id = 'folder-aaaa'`,
+    )
+    expect(names).toEqual([{ name: 'Later' }])
+    expect(await filing(1)).toMatchObject({ folder_id: 'folder-bbbb' })
+  })
+
+  test('deleting wins: its blogs are in no folder, and no later rename or move brings it back', async () => {
+    await push([folder('folder-gone', 'Gone'), file(1, 'folder-gone'), file(2, 'folder-gone')])
+    const head = (await pull(0)).cursor
+    later(10)
+    await push([{ type: 'deleteFolder', id: 'folder-gone' }])
+    const delta = await pull(head)
+    expect(delta.rows.folders.map((f) => f.id)).toEqual(['folder-gone'])
+    expect(delta.rows.folders[0]?.deletedAt).not.toBeNull()
+    expect(delta.rows.feedFolders.map((f) => [f.feedId, f.folderId])).toEqual([
+      [1, null],
+      [2, null],
+    ])
+    later(10)
+    await push([folder('folder-gone', 'Back'), file(1, 'folder-gone')])
+    const row = await first<{ name: string; deleted_at: number | null }>(
+      db,
+      sql`select name, deleted_at from folders where id = 'folder-gone'`,
+    )
+    expect(row?.name).toBe('Gone')
+    expect(row?.deleted_at).not.toBeNull()
+    expect(await filing(1)).toMatchObject({ folder_id: null })
+    expect((await pull(0)).rows.folders).toEqual([])
+  })
+
+  test('a move made before a delete and pushed after it still takes its blog where it went', async () => {
+    await push([folder('folder-xxxx', 'X'), folder('folder-yyyy', 'Y'), file(1, 'folder-xxxx')])
+    const t0 = now
+    // One device moved the blog to Y at t0 + 10; the other deleted X at t0 + 20, and pushed first.
+    later(20)
+    await push([{ type: 'deleteFolder', id: 'folder-xxxx' }])
+    later(10)
+    await push([{ ...file(1, 'folder-yyyy'), at: t0 + 10 }])
+    expect(await filing(1)).toMatchObject({ folder_id: 'folder-yyyy' })
+    // And an older move loses to it.
+    await push([{ ...file(1, null), at: t0 - 5 }])
+    expect(await filing(1)).toMatchObject({ folder_id: 'folder-yyyy' })
+  })
+
+  test("an id taken from another member's folder cannot rename, delete or fill it", async () => {
+    await push([folder('folder-mine', 'Mine')])
+    const other = await signedIn(api, 'other@x.test')
+    later(10)
+    await push(
+      [
+        folder('folder-mine', 'Theirs'),
+        file(1, 'folder-mine'),
+        { type: 'deleteFolder', id: 'folder-mine' },
+      ],
+      other,
+    )
+    const row = await first<{ user_id: string; name: string; deleted_at: number | null }>(
+      db,
+      sql`select user_id, name, deleted_at from folders where id = 'folder-mine'`,
+    )
+    expect(row).toEqual({ user_id: reader.userId, name: 'Mine', deleted_at: null })
+    expect(await filing(1, other)).toBeUndefined()
+    expect((await pull(0, other)).rows.folders).toEqual([])
+  })
+
+  test('a name that is empty once trimmed, or too long, is refused', async () => {
+    const res = await push([folder('folder-blank', '   '), folder('folder-long', 'x'.repeat(61))])
+    expect(res.rejected.map((r) => r.error)).toEqual(['invalid', 'invalid'])
+  })
+
+  test('past the limit a new folder is not made, though a rename still applies', async () => {
+    const many = Array.from({ length: MAX_FOLDERS }, (_, i) =>
+      folder(`folder-n${String(i).padStart(4, '0')}`, `F${i}`),
+    )
+    for (let i = 0; i < many.length; i += 50) await push(many.slice(i, i + 50))
+    later(10)
+    await push([folder('folder-over', 'Over'), folder('folder-n0000', 'Renamed')])
+    const live = await db.all<{ id: string; name: string }>(
+      sql`select id, name from folders where user_id = ${reader.userId} and deleted_at is null`,
+    )
+    expect(live).toHaveLength(MAX_FOLDERS)
+    expect(live.find((f) => f.id === 'folder-n0000')?.name).toBe('Renamed')
+  })
+
+  test('the filing outlives an unsubscribe, so subscribing again puts the blog back', async () => {
+    await push([
+      { type: 'subscribe', feedId: 1 },
+      folder('folder-keep', 'Keep'),
+      file(1, 'folder-keep'),
+    ])
+    later(10)
+    await push([{ type: 'unsubscribe', feedId: 1 }])
+    later(10)
+    await push([{ type: 'subscribe', feedId: 1 }])
+    expect(await filing(1)).toMatchObject({ folder_id: 'folder-keep' })
+  })
+
+  test('a blog filed under a feed that merged into another is filed under the one it became', async () => {
+    await db.run(sql`update feeds set status = 'paused', merged_into = 1, site_id = 1 where id = 2`)
+    await push([folder('folder-merge', 'Merge'), file(2, 'folder-merge')])
+    expect(await filing(1)).toMatchObject({ folder_id: 'folder-merge' })
+    expect(await filing(2)).toBeUndefined()
+  })
+
+  test('a merge carries a filing to the target, unless the target is filed already', async () => {
+    await push([
+      folder('folder-alias', 'Alias'),
+      folder('folder-targ', 'Target'),
+      file(2, 'folder-alias'),
+    ])
+    await write(...mergeFeed(db, { alias: 2, target: 1, move: [], carry: [] }, now))
+    expect(await filing(1)).toMatchObject({ folder_id: 'folder-alias' })
+
+    const other = await signedIn(api, 'other@x.test')
+    await push([folder('folder-o1', 'O1'), folder('folder-o2', 'O2')], other)
+    await addFeed(3)
+    await addFeed(4)
+    await push([file(3, 'folder-o1'), file(4, 'folder-o2')], other)
+    await write(...mergeFeed(db, { alias: 4, target: 3, move: [], carry: [] }, now))
+    expect(await filing(3, other)).toMatchObject({ folder_id: 'folder-o1' })
   })
 })
 

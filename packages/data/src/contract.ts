@@ -527,6 +527,38 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       ).toEqual({ readAt: 5 })
     })
 
+    it('keeps a blog in its folder under the address it merged into (ADR 0048)', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['blog.example', 'mirror.example'])
+      await db.run(sql`
+        insert into user (id, name, email, email_verified, created_at, updated_at) values
+          ('u1', 'u', 'u@x.y', 1, 0, 0), ('u2', 'v', 'v@x.y', 1, 0, 0)
+      `)
+      await db.run(sql`
+        insert into folders (id, user_id, name, created_at, updated_at) values
+          ('folder-u1', 'u1', 'Cities', 0, 0), ('folder-u2a', 'u2', 'A', 0, 0),
+          ('folder-u2b', 'u2', 'B', 0, 0)
+      `)
+      // u1 filed only the mirror; u2 filed both, the blog itself elsewhere.
+      await db.run(sql`
+        insert into feed_folders (user_id, feed_id, folder_id, updated_at) values
+          ('u1', 2, 'folder-u1', 5), ('u2', 1, 'folder-u2a', 5), ('u2', 2, 'folder-u2b', 6)
+      `)
+      await db.batch([
+        bumpSeq(db),
+        ...mergeFeed(db, { alias: 2, target: 1, move: [], carry: [] }, T0),
+      ] as never)
+      expect(
+        await db.all(sql`
+          select user_id as "userId", folder_id as "folderId", updated_at as "updatedAt",
+            seq > 0 as stamped
+          from feed_folders where feed_id = 1 order by user_id`),
+      ).toEqual([
+        { userId: 'u1', folderId: 'folder-u1', updatedAt: 5, stamped: 1 },
+        { userId: 'u2', folderId: 'folder-u2a', updatedAt: 5, stamped: 0 },
+      ])
+    })
+
     it("carries a moved post's title, translation and read state to the target's readers", async () => {
       const db = await makeDb()
       await seedFeeds(db, ['blog.example', 'mirror.example'])

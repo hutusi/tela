@@ -1,9 +1,10 @@
 /**
- * What each member has done: subscriptions, read and liked state, highlights, recommendations,
- * the members they follow.
+ * What each member has done: subscriptions and the folders they are in, read and liked state,
+ * highlights, recommendations, the members they follow.
  * All of it syncs to the reader's device, so every row carries `seq`, and removals are soft
  * (`deleted_at`) so a pull can see them.
  */
+import { FOLDER_NAME_MAX } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import {
   check,
@@ -135,6 +136,59 @@ export const recommendations = sqliteTable(
     index('recommendations_user_seq_idx').on(t.userId, t.seq),
     /** The week's recommendations, for Discover's This week and Articles (ADR 0044). */
     index('recommendations_created_idx').on(t.createdAt),
+  ],
+)
+
+/**
+ * A folder of the member's subscriptions (ADR 0048), private to them. `id` is minted by the
+ * client, as a highlight's is. A deleted folder stays deleted: a rename from another device never
+ * brings it back.
+ */
+export const folders = sqliteTable(
+  'folders',
+  {
+    id: text().primaryKey(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    createdAt: ms().notNull(),
+    updatedAt: ms().notNull(),
+    deletedAt: ms(),
+    seq: seq(),
+  },
+  (t) => [
+    check(
+      'folders_name_check',
+      sql`length(${t.name}) between 1 and ${sql.raw(String(FOLDER_NAME_MAX))}`,
+    ),
+    index('folders_user_seq_idx').on(t.userId, t.seq),
+  ],
+)
+
+/**
+ * Which folder a blog is in, one at most (ADR 0048): a row of its own rather than a column on the
+ * subscription, because a subscription's seq moving sends its feed's whole horizon again. Null is
+ * no folder. The row outlives an unsubscribe, so subscribing again puts the blog back where it was.
+ */
+export const feedFolders = sqliteTable(
+  'feed_folders',
+  {
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    feedId: integer()
+      .notNull()
+      .references(() => feeds.id, { onDelete: 'cascade' }),
+    folderId: text().references(() => folders.id, { onDelete: 'set null' }),
+    /** When the member last moved it; the later `at` wins across devices. */
+    updatedAt: ms().notNull(),
+    seq: seq(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.feedId] }),
+    index('feed_folders_user_seq_idx').on(t.userId, t.seq),
+    index('feed_folders_folder_idx').on(t.folderId),
   ],
 )
 

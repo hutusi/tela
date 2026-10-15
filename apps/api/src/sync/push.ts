@@ -10,6 +10,7 @@
  *   with a clock in the future cannot win every argument.
  */
 import { bumpSeq, currentSeq, gravatarOn, recountReaders, type TelaDb } from '@tela/data'
+import { MAX_FOLDERS } from '@tela/shared'
 import { type Mutation, mutationSchema, PREF_MAX_BYTES, type PushResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 
@@ -353,6 +354,57 @@ function statementsFor(
           where excluded.updated_at >= follows.updated_at or follows.deleted_at is not null
         `),
       ]
+    case 'putFolder':
+      // As a highlight is put: held to the member's own live folder, so an id guessed from
+      // someone else's renames nothing and a deleted one stays deleted. A new folder past the
+      // limit writes nothing; a rename is never held back by it.
+      return [
+        db.run(sql`
+          insert into folders (id, user_id, name, created_at, updated_at, seq)
+          select ${m.id}, ${userId}, ${m.name}, ${at}, ${at}, ${currentSeq}
+          where ${fresh} and (
+            exists (select 1 from folders where id = ${m.id})
+            or (select count(*) from folders where user_id = ${userId} and deleted_at is null)
+              < ${MAX_FOLDERS})
+          on conflict (id) do update set
+            name = excluded.name, updated_at = excluded.updated_at, seq = excluded.seq
+          where folders.user_id = excluded.user_id and folders.deleted_at is null
+            and excluded.updated_at >= folders.updated_at
+        `),
+      ]
+    case 'deleteFolder':
+      // Delete wins, and its blogs are in no folder after it. Their clocks stay as they were:
+      // a move made elsewhere before the delete, pushed after it, still takes its blog where it
+      // went (a deleted folder takes nothing, so only a move to another folder or to none can).
+      return [
+        db.run(sql`
+          update folders set deleted_at = ${at}, updated_at = ${at}, seq = ${currentSeq}
+          where id = ${m.id} and user_id = ${userId} and deleted_at is null and ${fresh}
+        `),
+        db.run(sql`
+          update feed_folders set folder_id = null, seq = ${currentSeq}
+          where user_id = ${userId} and folder_id = ${m.id} and ${fresh}
+        `),
+      ]
+    case 'fileFeed': {
+      // Into a live folder of the member's own, or none; through the feed a merged one became,
+      // as a subscription goes (ADR 0028). The later `at` wins.
+      const into =
+        m.folderId === null
+          ? sql`true`
+          : sql`exists (select 1 from folders
+              where id = ${m.folderId} and user_id = ${userId} and deleted_at is null)`
+      return [
+        db.run(sql`
+          insert into feed_folders (user_id, feed_id, folder_id, updated_at, seq)
+          select ${userId}, coalesce(merged_into, id), ${m.folderId}, ${at}, ${currentSeq}
+          from feeds where id = ${m.feedId} and ${into} and ${fresh}
+          on conflict (user_id, feed_id) do update set
+            folder_id = excluded.folder_id, updated_at = excluded.updated_at, seq = excluded.seq
+          where excluded.updated_at >= feed_folders.updated_at
+        `),
+      ]
+    }
   }
 }
 

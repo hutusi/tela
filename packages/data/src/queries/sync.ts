@@ -3,8 +3,9 @@
  * every row comes from one snapshot of the database, whatever commits meanwhile.
  *
  * What a member holds:
- * - their own rows: profile, prefs, subscriptions, read/like states, recommendations, highlights,
- *   claims, and the members they follow, with how those members appear (ADR 0031);
+ * - their own rows: profile, prefs, subscriptions and their folders (ADR 0048), read/like states,
+ *   recommendations, highlights, claims, and the members they follow, with how those members
+ *   appear (ADR 0031);
  * - the shared rows of the feeds they subscribe to: feeds, sites, articles, titles, and the body
  *   translations of those articles;
  * - articles they liked, recommended or highlighted, wherever those came from, with the
@@ -39,6 +40,8 @@ export type PullTables =
   | 'claims'
   | 'translations'
   | 'follows'
+  | 'folders'
+  | 'feedFolders'
 
 export type PullRead = {
   /** The newest seq in this snapshot of the database. */
@@ -61,6 +64,10 @@ const PROFILE = sql.raw(`p.handle, p.display_name as "displayName", p.bio,
 const PREF = sql.raw(`key, value_json as "valueJson", updated_at as "updatedAt", seq`)
 const SUBSCRIPTION = sql.raw(`feed_id as "feedId", watermark_id as "watermarkId",
   created_at as "createdAt", deleted_at as "deletedAt", seq`)
+const FOLDER = sql.raw(`id, name, created_at as "createdAt", updated_at as "updatedAt",
+  deleted_at as "deletedAt", seq`)
+const FEED_FOLDER = sql.raw(`feed_id as "feedId", folder_id as "folderId",
+  updated_at as "updatedAt", seq`)
 const FEED = sql.raw(`f.id, f.site_id as "siteId", f.feed_url as "feedUrl", f.title, f.status,
   f.last_fetched_at as "lastFetchedAt", f.last_error as "lastError", f.seq`)
 /** An article as the reader holds one (`ArticleRow`), from a table aliased `a`. */
@@ -194,6 +201,14 @@ export async function readPull(
       : sql`select ${HIGHLIGHT} from highlights where user_id = ${userId} and seq > ${cursor} ${bySeq}`,
     claims: sql`select ${CLAIM} from site_claims where user_id = ${userId}
       ${snapshot ? sql`` : sql`and seq > ${cursor} ${bySeq}`}`,
+    // Folders: a snapshot sends the live ones, a delta every change, a deletion included. Every
+    // filing comes in a snapshot, those to no folder too: each is one small row per blog ever
+    // filed, and its clock is what the device predicts the next move against.
+    folders: snapshot
+      ? sql`select ${FOLDER} from folders where user_id = ${userId} and deleted_at is null`
+      : sql`select ${FOLDER} from folders where user_id = ${userId} and seq > ${cursor} ${bySeq}`,
+    feedFolders: sql`select ${FEED_FOLDER} from feed_folders where user_id = ${userId}
+      ${snapshot ? sql`` : sql`and seq > ${cursor} ${bySeq}`}`,
     // The people the member follows. A delta also sends a live follow whose followee's profile
     // changed since the cursor: the device shows their handle and name.
     follows: snapshot
@@ -278,6 +293,8 @@ export async function readPull(
         'highlights',
         'claims',
         'follows',
+        'folders',
+        'feedFolders',
         'feeds',
         'articles',
         'titles',
@@ -338,6 +355,8 @@ export async function readPull(
       highlights: within(got.highlights),
       claims: within(got.claims),
       follows: within(got.follows),
+      folders: within(got.folders),
+      feedFolders: within(got.feedFolders),
       feeds: merge(
         got.freshFeeds.filter((f) => isFresh(f.id) || freshArticleFeeds.has(Number(f.id))),
         got.feeds,

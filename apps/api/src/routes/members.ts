@@ -245,7 +245,7 @@ export function memberRoutes(deps: ApiDeps) {
     const post = sql`a.url, a.title, s.home_url as "blog"`
     const on = (articleId: ReturnType<typeof sql>) => sql`join articles a on a.id = ${articleId}
       join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id`
-    const [profiles, prefs, subscriptions, likes, recommendations, highlights, following] =
+    const [profiles, prefs, subscriptions, folders, likes, recommendations, highlights, following] =
       (await db.batch([
         db.all(sql`
           select p.handle, p.display_name as "displayName", p.bio, p.reading_lang as "readingLang",
@@ -259,9 +259,16 @@ export function memberRoutes(deps: ApiDeps) {
           sql`select key, value_json as "valueJson" from user_prefs where user_id = ${id} order by key`,
         ),
         db.all(sql`
-          select f.feed_url as "feedUrl", s.home_url as "blog", s.title, sub.created_at as "since"
+          select f.feed_url as "feedUrl", s.home_url as "blog", s.title, fo.name as "folder",
+            sub.created_at as "since"
           from subscriptions sub join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id
+            left join feed_folders ff on ff.user_id = sub.user_id and ff.feed_id = sub.feed_id
+            left join folders fo on fo.id = ff.folder_id and fo.deleted_at is null
           where sub.user_id = ${id} and sub.deleted_at is null order by s.title
+        `),
+        db.all(sql`
+          select name, created_at as "createdAt" from folders
+          where user_id = ${id} and deleted_at is null order by name
         `),
         db.all(sql`
           select ${post}, st.liked_at as "likedAt" from user_article_states st ${on(sql`st.article_id`)}
@@ -298,6 +305,7 @@ export function memberRoutes(deps: ApiDeps) {
         : null,
       prefs: (prefs ?? []).map((p) => ({ key: p.key, value: JSON.parse(String(p.valueJson)) })),
       subscriptions,
+      folders,
       likes,
       recommendations,
       highlights,
