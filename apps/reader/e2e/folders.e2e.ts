@@ -8,11 +8,13 @@
  * - OPML carries them both ways.
  *
  * Each test signs in a member of its own, from an address of its own (sign-in is limited per IP
- * and per address), so the shared member's sidebar stays flat for every other spec.
+ * and per address), so the shared member's sidebar stays flat for every other spec. Each leaves
+ * the fixture blogs again when it ends, passed or not: they are one site, and other specs count
+ * its readers (from three, a count is published, ADR 0041).
  */
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { type Browser, expect, type Page, test } from '@playwright/test'
+import { type APIRequestContext, type Browser, expect, type Page, test } from '@playwright/test'
 import {
   addFeed,
   BASE,
@@ -32,6 +34,12 @@ const JNITO = 'give IT a try'
 const HUTUSI = '胡涂说'
 
 let members = 0
+/** What each test's members must undo when it ends. */
+const leave: (() => Promise<void>)[] = []
+test.afterEach(async () => {
+  for (const undo of leave.splice(0)) await undo()
+})
+
 /** A new member following the three fixture blogs, on a page of their own; their feed ids. */
 async function member(
   browser: Browser,
@@ -50,15 +58,26 @@ async function member(
     jnito: await feed('/jnito.xml'),
     hutusi: await feed('/hutusi.xml'),
   }
+  leave.push(async () => {
+    await push(
+      context.request,
+      Object.values(feeds).map((feedId) => ({ type: 'unsubscribe', feedId })),
+    )
+    await context.close()
+  })
   await cycle(context.request)
   return { page: await context.newPage(), feeds }
 }
 
 /** Changes made as another device makes them: straight to tela-api. */
-async function push(page: Page, mutations: Record<string, unknown>[]): Promise<void> {
+async function push(
+  to: Page | APIRequestContext,
+  mutations: Record<string, unknown>[],
+): Promise<void> {
+  const request = 'request' in to ? to.request : to
   const at = Date.now()
-  const res = await page.request.post(`${BASE}/api/v1/mutations`, {
-    headers: { ...ORIGIN, ...(await memberHeaders(page.request)) },
+  const res = await request.post(`${BASE}/api/v1/mutations`, {
+    headers: { ...ORIGIN, ...(await memberHeaders(request)) },
     data: { mutations: mutations.map((m) => ({ mid: crypto.randomUUID(), at, ...m })) },
   })
   expect(res.ok()).toBe(true)
