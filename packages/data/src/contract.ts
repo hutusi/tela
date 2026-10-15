@@ -3,6 +3,7 @@
  * on libSQL (the portable path) and under the Workers test pool on real D1. A difference between
  * the two is a bug in the portable adapter, which is exactly what this suite exists to catch.
  */
+import { MAX_FOLDERS } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { exportDatabase, verifyExport } from './backup'
 import type { TelaDb } from './db'
@@ -44,7 +45,7 @@ import {
   settleInvite,
 } from './queries/invites'
 import { avatarOf, dueGravatarChecks } from './queries/people'
-import { compactReadStates } from './queries/reader'
+import { compactReadStates, fileImportedFeeds, writeImportFiling } from './queries/reader'
 import { DISCOVER_REVIEW, publicReaderCount, recountReaders } from './queries/sites'
 import { readPull } from './queries/sync'
 import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
@@ -726,6 +727,105 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { articleId: 5, readAt: 10, readUpdatedAt: 30 }, // read at 10: its first time, the later clock
         { articleId: 7, readAt: 35, readUpdatedAt: 40 }, // read later on the copy: unchanged
         { articleId: 9, readAt: 20, readUpdatedAt: null }, // read once: still no clock to keep
+      ])
+    })
+  })
+
+  describe("an OPML import's folders (ADR 0048)", () => {
+    const url = (i: number, host: string) => `https://${host}/feed-${i}.xml`
+    const seedMember = async (db: TelaDb) => {
+      await seedFeeds(db, ['a.example', 'b.example', 'c.example', 'd.example'])
+      await db.run(
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 1, 0, 0)`,
+      )
+    }
+    const filings = (db: TelaDb) =>
+      db.all(sql`
+        select feed_id as "feedId", folder_id as "folderId", seq > 0 as stamped
+        from feed_folders where user_id = 'u1' order by feed_id`)
+
+    it('files only blogs in no live folder, by name case aside, under the feed a merged one became', async () => {
+      const db = await makeDb()
+      await seedMember(db)
+      await db.run(sql`update feeds set merged_into = 3 where id = 4`)
+      await db.run(sql`
+        insert into folders (id, user_id, name, created_at, updated_at, deleted_at) values
+          ('folder-mine', 'u1', 'Mine', 0, 0, null), ('folder-gone', 'u1', 'Gone', 0, 0, 1)
+      `)
+      // Feed 1 is filed; feed 2's folder is gone, which is no folder.
+      await db.run(sql`
+        insert into feed_folders (user_id, feed_id, folder_id, updated_at) values
+          ('u1', 1, 'folder-mine', 1), ('u1', 2, 'folder-gone', 1)
+      `)
+      const filed = await fileImportedFeeds(
+        db,
+        'u1',
+        [
+          { name: 'mine', urls: [url(1, 'a.example'), url(4, 'd.example')] },
+          { name: 'Tech', urls: [url(2, 'b.example')] },
+          { name: 'Empty', urls: [url(1, 'a.example')] },
+        ],
+        T0,
+        () => 'folder-made',
+      )
+      expect(filed).toEqual({ folders: 1, filed: 2 })
+      expect(
+        await db.all(sql`select id, name from folders where user_id = 'u1' order by id`),
+      ).toEqual([
+        { id: 'folder-gone', name: 'Gone' },
+        { id: 'folder-made', name: 'Tech' },
+        { id: 'folder-mine', name: 'Mine' },
+      ])
+      expect(await filings(db)).toEqual([
+        { feedId: 1, folderId: 'folder-mine', stamped: 0 },
+        { feedId: 2, folderId: 'folder-made', stamped: 1 },
+        { feedId: 3, folderId: 'folder-mine', stamped: 1 },
+      ])
+    })
+
+    it('makes no folder past MAX_FOLDERS when others were made meanwhile, nor moves a blog filed meanwhile', async () => {
+      const db = await makeDb()
+      await seedMember(db)
+      // Room for two of the import's three, counted once before it inserts any: counted again
+      // after each, the second would not fit.
+      const ids = JSON.stringify(Array.from({ length: MAX_FOLDERS - 2 }, (_, i) => i))
+      await db.run(sql`
+        insert into folders (id, user_id, name, created_at, updated_at)
+        select 'folder-n' || value, 'u1', 'F' || value, 0, 0 from json_each(${ids})
+      `)
+      await db.run(sql`
+        insert into feed_folders (user_id, feed_id, folder_id, updated_at)
+        values ('u1', 3, 'folder-n0', 1)
+      `)
+      // What an import decided before those folders and that filing were made.
+      const filed = await writeImportFiling(
+        db,
+        'u1',
+        {
+          create: [
+            { id: 'folder-x', name: 'X' },
+            { id: 'folder-y', name: 'Y' },
+            { id: 'folder-z', name: 'Z' },
+          ],
+          file: [
+            { feedId: 1, folderId: 'folder-x' },
+            { feedId: 2, folderId: 'folder-z' },
+            { feedId: 3, folderId: 'folder-x' },
+            { feedId: 4, folderId: 'folder-y' },
+          ],
+        },
+        T0,
+      )
+      expect(filed).toEqual({ folders: 2, filed: 2 })
+      expect(
+        await db.all(
+          sql`select id from folders where user_id = 'u1' and id not like 'folder-n%' order by id`,
+        ),
+      ).toEqual([{ id: 'folder-x' }, { id: 'folder-y' }])
+      expect(await filings(db)).toEqual([
+        { feedId: 1, folderId: 'folder-x', stamped: 1 },
+        { feedId: 3, folderId: 'folder-n0', stamped: 0 },
+        { feedId: 4, folderId: 'folder-y', stamped: 1 },
       ])
     })
   })
