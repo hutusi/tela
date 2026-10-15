@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { detectLocale } from '../src/i18n'
 import { blogsApiPath, blogsHref, parseBlogsParams } from '../src/lib/discover-href'
-import { canonicalReadingHref, parseReadingParams, readingHref } from '../src/lib/href'
+import { canonicalReadingHref, listsFilter, parseReadingParams, readingHref } from '../src/lib/href'
 import { addError } from '../src/lib/opml'
 import { safeDecode } from '../src/lib/safe-decode'
 import {
@@ -33,9 +33,41 @@ describe('reading URLs', () => {
     expect(parseReadingParams(new URLSearchParams('filter=nope&feed=-1&article=x'))).toEqual({
       filter: 'all',
       feedId: null,
+      folderId: null,
       articleId: null,
       mode: null,
     })
+  })
+
+  test('name a folder (ADR 0048) instead of a blog or a filter, never beside them', () => {
+    const folder = 'f-0b6c2a1e'
+    expect(readingHref({ folderId: folder, articleId: 7, mode: 'orig' })).toBe(
+      `/reading?folder=${folder}&article=7&mode=orig`,
+    )
+    // A folder link drops the blog and the filter it was given beside.
+    expect(readingHref({ filter: 'today', feedId: 3, folderId: folder })).toBe(
+      `/reading?folder=${folder}`,
+    )
+    // And a URL that names both reads as the folder.
+    expect(parseReadingParams(new URLSearchParams(`filter=liked&feed=3&folder=${folder}`))).toEqual(
+      { filter: 'all', feedId: null, folderId: folder, articleId: null, mode: null },
+    )
+    // Closing an article, or stepping to the next, keeps the folder.
+    expect(
+      canonicalReadingHref(`?folder=${folder}&article=7&mode=trans`, { articleId: 8, mode: null }),
+    ).toBe(`/reading?folder=${folder}&article=8`)
+    // An id no device would mint is no folder: the list of everything.
+    for (const raw of ['', 'short', 'has space', '<script>', 'x'.repeat(65)]) {
+      expect(parseReadingParams(new URLSearchParams({ folder: raw })).folderId).toBeNull()
+    }
+  })
+
+  test('say which filter is listed only when no blog or folder is', () => {
+    const at = (search: string) => parseReadingParams(new URLSearchParams(search))
+    expect(listsFilter(at(''), 'all')).toBe(true)
+    expect(listsFilter(at('filter=today'), 'today')).toBe(true)
+    expect(listsFilter(at('feed=3'), 'all')).toBe(false)
+    expect(listsFilter(at('folder=f-0b6c2a1e'), 'all')).toBe(false)
   })
 })
 

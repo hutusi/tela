@@ -63,6 +63,31 @@ export function markAllReadCovers(
   return covered
 }
 
+type MarkAllRead = Omit<Extract<Mutation, { type: 'markAllRead' }>, 'mid' | 'at'>
+
+/**
+ * What Mark all read sends for a list other than Today (which reads its posts one by one): one
+ * mark-all for its scope, one blog or every blog followed, or one per blog followed in a folder,
+ * since the server knows nothing of folders (ADR 0048), taken from the tables as they are when
+ * pressed. Each reaches `upTo`, the newest post the list showed, and comes with the posts it turns
+ * read (`markAllReadCovers`); a post is in one feed, so those add up to what the press reads. One
+ * that would read nothing is left out: a second press while the first one's Undo shows (sent
+ * anyway, it would outlive that Undo), or a blog read already.
+ */
+export function markAllReadPlan(
+  t: Tables,
+  where: { feedId: number | null; folderId: string | null },
+  upTo: number,
+  at: number,
+): { input: MarkAllRead; covered: number[] }[] {
+  const scopes = where.folderId !== null ? feedsInFolder(t, where.folderId) : [where.feedId]
+  return scopes.flatMap((feedId) => {
+    const input: MarkAllRead = { type: 'markAllRead', upTo, ...(feedId ? { feedId } : {}) }
+    const covered = markAllReadCovers(t, { ...input, mid: '', at }, at)
+    return covered.length === 0 ? [] : [{ input, covered }]
+  })
+}
+
 export const isLiked = (t: Tables, articleId: number) => t.states.get(articleId)?.likedAt != null
 
 export const isRecommended = (t: Tables, articleId: number) =>
@@ -211,15 +236,25 @@ export function totals(t: Tables, now: number): Totals {
 
 const newestFirst = (a: ArticleRow, b: ArticleRow) => b.sortAt - a.sortAt || b.id - a.id
 
-/** The list for a filter or one feed, newest first. Liked spans every feed the member kept from. */
+/**
+ * The list for a filter, one feed or a folder, newest first. Liked spans every feed the member
+ * kept from; a folder, the feeds followed in it (ADR 0048), so one gone or left lists nothing.
+ */
 export function articlesFor(
   t: Tables,
-  where: { filter: Filter; feedId: number | null },
+  where: { filter: Filter; feedId: number | null; folderId?: string | null },
   now: number,
 ): ArticleRow[] {
-  return cached(t, `list:${where.filter}:${where.feedId}:${Math.floor(now / 60_000)}`, () => {
+  const folderId = where.folderId ?? null
+  const key = `list:${where.filter}:${where.feedId}:${folderId}:${Math.floor(now / 60_000)}`
+  return cached(t, key, () => {
     const out: ArticleRow[] = []
+    const inFolder = folderId === null ? null : new Set(feedsInFolder(t, folderId))
     for (const a of t.articles.values()) {
+      if (inFolder !== null) {
+        if (inFolder.has(a.feedId)) out.push(a)
+        continue
+      }
       if (where.feedId !== null) {
         if (a.feedId === where.feedId) out.push(a)
         continue

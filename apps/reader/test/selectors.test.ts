@@ -9,6 +9,7 @@ import {
   isMarkedUnread,
   isRead,
   markAllReadCovers,
+  markAllReadPlan,
   prefetchPlan,
   shownRead,
   shownTitle,
@@ -210,6 +211,50 @@ describe('what a mark-all-read reads', () => {
     // Every feed's after one feed's still reads the others.
     expect(markAllReadCovers(once, { ...markAll(9), mid: 'mark-all-2' }, NOW)).toEqual([8])
   })
+
+  const plan = (at: Tables, where: { feedId: number | null; folderId: string | null }) =>
+    markAllReadPlan(at, where, 9, AT)
+      .map(({ input, covered }) => ({ input, covered: covered.sort((a, b) => a - b) }))
+      .sort((a, b) => (a.input.feedId ?? 0) - (b.input.feedId ?? 0))
+
+  test('one mark-all for a blog or for everything followed, as the list asks', () => {
+    expect(plan(t, { feedId: 1, folderId: null })).toEqual([
+      { input: { type: 'markAllRead', upTo: 9, feedId: 1 }, covered: [2, 3, 4] },
+    ])
+    expect(plan(t, { feedId: null, folderId: null })).toEqual([
+      { input: { type: 'markAllRead', upTo: 9 }, covered: [2, 3, 4, 8] },
+    ])
+  })
+
+  test("a folder's is one per blog followed in it, and none for a blog it would not read", () => {
+    const folder = { id: 'f-cities', name: 'Cities', createdAt: 1, updatedAt: 1, seq: 1 }
+    const filed = (feedId: number) => ({ feedId, folderId: 'f-cities', updatedAt: 1, seq: 1 })
+    const inFolder = tables({
+      // 1 and 2 as above; 3 was left; 4 has only a post read already; 5 is in no folder.
+      subscriptions: [sub(1, { watermarkId: 2 }), sub(2), sub(3, { deletedAt: 5 }), sub(4), sub(5)],
+      folders: [{ ...folder, deletedAt: null }],
+      feedFolders: [filed(1), filed(2), filed(3), filed(4)],
+      articles: [
+        article(1),
+        article(2),
+        article(3),
+        article(4, { feedId: 2 }),
+        article(5, { feedId: 3 }),
+        article(6, { feedId: 4 }),
+        article(7, { feedId: 5 }),
+      ],
+      states: [state(2, null, AT - 10), state(6, 3, null)],
+    })
+    const marks = plan(inFolder, { feedId: null, folderId: 'f-cities' })
+    expect(marks).toEqual([
+      { input: { type: 'markAllRead', upTo: 9, feedId: 1 }, covered: [2, 3] },
+      { input: { type: 'markAllRead', upTo: 9, feedId: 2 }, covered: [4] },
+    ])
+    // What the toast counts is everything the group reads, and nothing outside the folder.
+    expect(marks.flatMap((m) => m.covered)).toEqual([2, 3, 4])
+    // A folder gone has nothing to read, and so sends nothing.
+    expect(plan(inFolder, { feedId: null, folderId: 'f-deleted' })).toEqual([])
+  })
 })
 
 describe('what the idle prefetch would fetch', () => {
@@ -393,5 +438,40 @@ describe('folders (ADR 0048)', () => {
   test("a folder's feeds are those followed in it", () => {
     expect(feedsInFolder(t, 'f-cities').sort()).toEqual([1, 2])
     expect(feedsInFolder(t, 'f-craft')).toEqual([])
+  })
+
+  test("a folder lists its followed blogs' posts, newest first, and one gone lists none", () => {
+    const listed = tables({
+      subscriptions: [sub(1), sub(2), sub(3), sub(4, { deletedAt: 5 })],
+      feeds: [feed(1, 'Zebra'), feed(2, 'apple'), feed(3, 'Mango'), feed(4, 'Left')],
+      folders: [folder('f-cities', 'Cities'), folder('f-craft', 'craft')],
+      feedFolders: [filed(1, 'f-cities'), filed(2, 'f-cities'), filed(4, 'f-cities')],
+      articles: [
+        article(1, { feedId: 1, sortAt: NOW - 3 * DAY }),
+        article(2, { feedId: 2, sortAt: NOW - DAY }),
+        article(3, { feedId: 3, sortAt: NOW - DAY / 2 }),
+        // Filed in the folder, but the member left the blog.
+        article(4, { feedId: 4, sortAt: NOW - DAY / 4 }),
+        article(5, { feedId: 1, sortAt: NOW - DAY / 8 }),
+      ],
+    })
+    const ids = (at: Tables, folderId: string | null, feedId: number | null = null) =>
+      articlesFor(at, { filter: 'all', feedId, folderId }, NOW).map((a) => a.id)
+    expect(ids(listed, 'f-cities')).toEqual([5, 2, 1])
+    expect(ids(listed, 'f-craft')).toEqual([])
+    expect(ids(listed, 'f-deleted')).toEqual([])
+    // Each folder its own answer, and none of them the list of everything or of one blog.
+    expect(ids(listed, null)).toEqual([5, 3, 2, 1])
+    expect(ids(listed, null, 1)).toEqual([5, 1])
+    // A blog moved out is out of the folder's list in the very next tables.
+    const moved = applyMutation(listed, {
+      type: 'fileFeed',
+      mid: 'move-1',
+      at: NOW,
+      feedId: 2,
+      folderId: 'f-craft',
+    })
+    expect(ids(moved, 'f-cities')).toEqual([5, 1])
+    expect(ids(moved, 'f-craft')).toEqual([2])
   })
 })

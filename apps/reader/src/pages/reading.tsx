@@ -18,6 +18,7 @@ import { toggleSidebarKeepingFocus } from '../components/sidebar-toggle'
 import { ReaderPaneSkeleton } from '../components/skeletons'
 import {
   canonicalReadingHref,
+  listsFilter,
   parseReadingParams,
   type ReadingMode,
   readingHref,
@@ -63,7 +64,7 @@ export function ReadingPage() {
   const all = articlesFor(tables, params, now)
   // Unread or All, the switch under the list's heading (a pref, so every device reads the same
   // way). Liked has none and shows everything: it is a shelf, and liking a post reads it.
-  const liked = params.feedId === null && params.filter === 'liked'
+  const liked = listsFilter(params, 'liked')
   const unreadOnly = prefs.hideRead && !liked
   // Showing only unread posts must not pull a post out from under the reader: a post seen unread
   // in this list stays in it until the reader moves to another list or turns the switch, so
@@ -72,7 +73,8 @@ export function ReadingPage() {
   // Mark all read lets them all go (`letSeenGo`), so the list says it is caught up: a new key,
   // since the press may change nothing else to render (the posts kept were read already).
   const [letGo, setLetGo] = useState(0)
-  const listKey = `${params.filter}:${params.feedId}:${unreadOnly ? 'unread' : 'all'}:${letGo}`
+  const list = `${params.filter}:${params.feedId}:${params.folderId}`
+  const listKey = `${list}:${unreadOnly ? 'unread' : 'all'}:${letGo}`
   const seenUnread = useRef<{ key: string; ids: Set<number> }>({ key: '', ids: new Set() })
   if (seenUnread.current.key !== listKey) seenUnread.current = { key: listKey, ids: new Set() }
   const seen = seenUnread.current.ids
@@ -133,7 +135,7 @@ export function ReadingPage() {
   const after = at === -1 ? undefined : items[at + 1]
   const next = after
     ? {
-        href: readingHref({ filter: params.filter, feedId: params.feedId, articleId: after.id }),
+        href: readingHref({ ...params, articleId: after.id, mode: null }),
         title: shownTitle(tables, after, readingLang, prefs.never).title,
         blog: feedTitle(tables, after.feedId) || store.sourceName(after.feedId),
       }
@@ -211,8 +213,9 @@ export function ReadingPage() {
         const next = items[at === -1 ? (step === 1 ? 0 : items.length - 1) : at + step]
         if (!next) return
         e.preventDefault()
-        // The row's own href: no mode, so the remembered one applies (as a click does).
-        navigate(readingHref({ filter: now.filter, feedId: now.feedId, articleId: next.id }))
+        // The row's own href, in the list the URL names now: no mode, so the remembered one
+        // applies (as a click does).
+        navigate(canonicalReadingHref(window.location.search, { articleId: next.id, mode: null }))
       } else if (e.key === 'Escape') {
         if (help) setHelp(false)
         else if (now.articleId !== null) close()

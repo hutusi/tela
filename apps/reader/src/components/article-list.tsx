@@ -4,13 +4,13 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { relativeTime } from '../lib/format'
-import { canonicalReadingHref, type ReadingParams, readingHref } from '../lib/href'
+import { canonicalReadingHref, listsFilter, type ReadingParams, readingHref } from '../lib/href'
 import { readingPrefsOf } from '../lib/prefs'
 import { showToast, UNDO_HOLD_MS } from '../lib/toasts'
 import { offerUndo, unreadAgain } from '../lib/undo'
 import { useStore, useTables } from '../store/hooks'
 import type { Stamp } from '../store/local'
-import { feedTitle, isRead, markAllReadCovers, shownRead, shownTitle } from '../store/selectors'
+import { feedTitle, isRead, markAllReadPlan, shownRead, shownTitle } from '../store/selectors'
 import { GlyphCount } from './glyph-count'
 import { Segmented } from './segmented'
 import { Swatch } from './swatch'
@@ -85,7 +85,7 @@ export function ArticleList({
   const [limit, setLimit] = useState(PAGE)
   const shown = items.slice(0, limit)
   // Liking a post reads it, so Liked has nothing to mark.
-  const markable = items.length > 0 && !(params.feedId === null && params.filter === 'liked')
+  const markable = items.length > 0 && !listsFilter(params, 'liked')
   const markAllRead = () => {
     onMarkAll?.()
     // The device's rows as they are when pressed, which the toast counts against.
@@ -107,7 +107,7 @@ export function ArticleList({
         },
       )
     }
-    if (params.feedId === null && params.filter === 'today') {
+    if (listsFilter(params, 'today')) {
       // Today is a window the server knows nothing of: a mark-all up to its newest post would read
       // every older post of every feed too. So each unread post it holds, read on its own.
       const ids = items.filter((a) => !isRead(before, a, at)).map((a) => a.id)
@@ -119,20 +119,16 @@ export function ArticleList({
     // reader looked stays unread (ADR 0025).
     const upTo = shown.reduce((max, a) => (a.id > max ? a.id : max), 0)
     if (upTo === 0) return
-    const input = {
-      type: 'markAllRead',
-      upTo,
-      ...(params.feedId ? { feedId: params.feedId } : {}),
-    } as const
-    // Counted from what the change does, as the server will apply it: every post of the scope up
-    // to `upTo`, the ones this list never showed included.
-    const covered = markAllReadCovers(before, { ...input, mid: '', at }, at)
-    // Nothing it would read: a second press while the first one's Undo shows (sent anyway, it
-    // would outlive that Undo), or a list read already. A post the device does not hold is past
-    // the horizon, read already too. So nothing is sent, and there is nothing to undo.
-    if (covered.length === 0) return
-    const stamp = store.mutate(input, { holdMs: UNDO_HOLD_MS })
-    if (stamp) offer(covered, [stamp])
+    // A folder's is one mark-all per blog in it, held as one group: one toast, one Undo.
+    const marks = markAllReadPlan(before, params, upTo, at)
+    if (marks.length === 0) return
+    offer(
+      marks.flatMap((m) => m.covered),
+      store.mutateMany(
+        marks.map((m) => m.input),
+        { holdMs: UNDO_HOLD_MS },
+      ),
+    )
   }
   return (
     <section
@@ -219,11 +215,7 @@ export function ArticleList({
           const { title: rowTitle, excerpt, badge } = shownTitle(tables, a, readingLang, never)
           const name = feedTitle(tables, a.feedId)
           // No mode in the href: the remembered mode is the one an open should use (ADR 0017).
-          const href = readingHref({
-            filter: params.filter,
-            feedId: params.feedId,
-            articleId: a.id,
-          })
+          const href = readingHref({ ...params, articleId: a.id, mode: null })
           return (
             <Link
               key={a.id}
