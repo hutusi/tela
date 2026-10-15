@@ -94,6 +94,24 @@ included.
 - Dragging is a pointer's way to move a blog, from `md` up. The folder button on each row is the
   way that works everywhere: a menu, or below `md` a bottom sheet with "+ New folder".
 - A filing pointing at a folder this device no longer holds reads as no folder, until the pull
-  that unfiles it arrives.
+  that unfiles it arrives. The other way round, a link to a folder made on another device reads
+  as gone at boot until the first pull brings it, as a link to an unknown feed shows nothing.
+- A folder whose deletion is held while its Undo shows keeps its name and its place under the
+  limit until the deletion goes: made again meanwhile, and the delete undone, the member would
+  have two folders of one name, or lose one past the limit and every blog moved into it.
+- What an OPML import writes carries no clock (`updated_at` 0), as a pref taken from a browser
+  does. Stamped with the server's time, it would beat a rename or a move made just after it on a
+  device whose clock runs behind.
+- A folder name with a control character is refused (`invalid_name`). SQLite's `length()`
+  stops at a NUL, so the table's check would sink the whole push, and the device would send it
+  again, first, for ever.
+- Mark all read on a folder predicts one mark per blog, each over a copy of the device's tables.
+  Measured at 300 blogs of 30 posts each: about 20 ms to plan when pressed (its marks applied
+  together and compared once, not once per blog, which took 100 to 130 ms), and 20 ms per
+  recompute while the marks are held or pending, on a laptop. A phone is several times slower.
+  That is the price of keeping the protocol. An optional `feedIds` would be worse: a tela-api
+  that predates it strips the field, and reads the mark as one over every feed.
+- The export groups folders by name, so two folders of one name (two devices offline) come out
+  as one outline.
 - Collections, blogrolls, Save and "subscribe to a blogroll into a folder" are later rounds. A
   folder holds blogs only, never posts, so collections will need their own table, not this one.

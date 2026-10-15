@@ -80,11 +80,32 @@ export function markAllReadPlan(
   upTo: number,
   at: number,
 ): { input: MarkAllRead; covered: number[] }[] {
-  const scopes = where.folderId !== null ? feedsInFolder(t, where.folderId) : [where.feedId]
-  return scopes.flatMap((feedId) => {
-    const input: MarkAllRead = { type: 'markAllRead', upTo, ...(feedId ? { feedId } : {}) }
+  if (where.folderId === null) {
+    const input: MarkAllRead = {
+      type: 'markAllRead',
+      upTo,
+      ...(where.feedId ? { feedId: where.feedId } : {}),
+    }
     const covered = markAllReadCovers(t, { ...input, mid: '', at }, at)
     return covered.length === 0 ? [] : [{ input, covered }]
+  }
+  // A folder's marks, each held to its own blog, are applied together and compared once, which
+  // reads as one per blog would: a mark-all with a feed changes that feed's posts alone. One pass
+  // over the posts, not one per blog, which on a folder of hundreds was most of the press.
+  const inputs = feedsInFolder(t, where.folderId).map(
+    (feedId): MarkAllRead => ({ type: 'markAllRead', upTo, feedId }),
+  )
+  let after = t
+  for (const input of inputs) after = applyMutation(after, { ...input, mid: '', at })
+  const covered = new Map<number, number[]>()
+  for (const a of t.articles.values()) {
+    if (!isRead(t, a, at) && isRead(after, a, at)) {
+      covered.set(a.feedId, [...(covered.get(a.feedId) ?? []), a.id])
+    }
+  }
+  return inputs.flatMap((input) => {
+    const mine = covered.get(input.feedId ?? 0) ?? []
+    return mine.length === 0 ? [] : [{ input, covered: mine }]
   })
 }
 
