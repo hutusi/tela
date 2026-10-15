@@ -172,7 +172,12 @@
     "caughtUp": "都讀完了",
     "showAllPosts": "顯示全部",
     "markedRead": "已將 {n} 篇文章標為已讀。",
-    "undoTooMany": "已經傳送，涉及的文章太多，無法在這裡撤銷。"
+    "undoTooMany": "已經傳送，涉及的文章太多，無法在這裡撤銷。",
+    "blogSeparator": "、",
+    "folderEmpty": "這個資料夾裡還沒有部落格。",
+    "folderEmptyHint": "去<manage>訂閱</manage>裡把部落格放進來。",
+    "folderGone": "這個資料夾已不存在",
+    "folderGoneLink": "前往全部文章"
   },
   "reader": {
     "close": "關閉",

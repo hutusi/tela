@@ -172,7 +172,12 @@
     "caughtUp": "All caught up",
     "showAllPosts": "Show all",
     "markedRead": "{n, plural, one {Marked # post read.} other {Marked # posts read.}}",
-    "undoTooMany": "Already sent, and too many posts to mark unread from here."
+    "undoTooMany": "Already sent, and too many posts to mark unread from here.",
+    "blogSeparator": ", ",
+    "folderEmpty": "No blogs in this folder yet.",
+    "folderEmptyHint": "Add blogs to it in <manage>Subscriptions</manage>.",
+    "folderGone": "This folder is gone",
+    "folderGoneLink": "Go to All articles"
   },
   "reader": {
     "close": "Close",

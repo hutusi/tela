@@ -10,7 +10,14 @@ import { showToast, UNDO_HOLD_MS } from '../lib/toasts'
 import { offerUndo, unreadAgain } from '../lib/undo'
 import { useStore, useTables } from '../store/hooks'
 import type { Stamp } from '../store/local'
-import { feedTitle, isRead, markAllReadPlan, shownRead, shownTitle } from '../store/selectors'
+import {
+  type FolderItem,
+  feedTitle,
+  isRead,
+  markAllReadPlan,
+  shownRead,
+  shownTitle,
+} from '../store/selectors'
 import { GlyphCount } from './glyph-count'
 import { Segmented } from './segmented'
 import { Swatch } from './swatch'
@@ -37,6 +44,11 @@ type Props = {
    * when every one is read already and the press has nothing to send.
    */
   onMarkAll?: () => void
+  /**
+   * The folder this list is (ADR 0048), whose blogs are named under the heading; or `gone`, a
+   * folder the device does not hold now that it holds the member's rows.
+   */
+  folder?: FolderItem | 'gone' | undefined
 }
 
 /**
@@ -72,6 +84,7 @@ export function ArticleList({
   onShow,
   caughtUp = false,
   onMarkAll,
+  folder,
 }: Props) {
   const t = useTranslations('list')
   const ts = useTranslations('sidebar')
@@ -79,7 +92,10 @@ export function ArticleList({
   const tables = useTables()
   const { store } = useStore()
   const location = useLocation()
-  const heading = title ?? ts(params.filter)
+  const gone = folder === 'gone'
+  const heading = gone ? t('folderGone') : (title ?? ts(params.filter))
+  // A folder's blogs, by title as the sidebar has them, on one line that cuts off (Tela Lists).
+  const blogs = folder && folder !== 'gone' ? folder.blogs.map((b) => b.title) : []
   const { markOnOpen, never } = readingPrefsOf(tables)
   const target = languageBadge(readingLang)
   const [limit, setLimit] = useState(PAGE)
@@ -142,6 +158,14 @@ export function ArticleList({
         <h1 className="min-w-0 truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
           {heading}
         </h1>
+        {blogs.length > 0 ? (
+          <p
+            className="-mt-1.5 min-w-0 truncate text-[12.5px] text-muted"
+            data-testid="list-subtitle"
+          >
+            {blogs.join(t('blogSeparator'))}
+          </p>
+        ) : null}
         {/* The switch, and Mark all read at the row's end while the list is wide. Liked has
             neither: it is a shelf the member keeps, not an inbox, and liking a post reads it.
             Where the two do not fit on one line (French on a 320px phone), Mark all read's label
@@ -171,10 +195,32 @@ export function ArticleList({
           </div>
         ) : null}
       </div>
-      {items.length === 0 && !caughtUp ? (
+      {gone ? (
+        // Deleted here or on another device, or a link to one that never was: said in place, not
+        // redirected, since a redirect a render decides can replace the wrong entry (AGENTS.md).
+        <div className="px-6 py-10 text-[13.5px] text-muted" data-testid="folder-gone">
+          <p>
+            <Link to={readingHref({})}>{t('folderGoneLink')}</Link>
+          </p>
+        </div>
+      ) : items.length === 0 && !caughtUp ? (
         <div className="px-6 py-10 text-[13.5px] text-muted" data-testid="list-empty">
           {pendingFetch ? (
             <p>{t('fetching')}</p>
+          ) : folder !== undefined ? (
+            blogs.length === 0 ? (
+              <>
+                <p>{t('folderEmpty')}</p>
+                <p>
+                  {t.rich('folderEmptyHint', {
+                    manage: (chunks) => <Link to="/settings/subscriptions">{chunks}</Link>,
+                  })}
+                </p>
+              </>
+            ) : (
+              // Its blogs have posted nothing the device holds: there is nothing to add here.
+              <p>{t('empty')}</p>
+            )
           ) : (
             <>
               <p>{t('empty')}</p>

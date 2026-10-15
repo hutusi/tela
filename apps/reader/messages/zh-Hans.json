@@ -172,7 +172,12 @@
     "caughtUp": "都读完了",
     "showAllPosts": "显示全部",
     "markedRead": "已将 {n} 篇文章标为已读。",
-    "undoTooMany": "已经发送，涉及的文章太多，无法在这里撤销。"
+    "undoTooMany": "已经发送，涉及的文章太多，无法在这里撤销。",
+    "blogSeparator": "、",
+    "folderEmpty": "这个文件夹里还没有博客。",
+    "folderEmptyHint": "去<manage>订阅</manage>里把博客放进来。",
+    "folderGone": "这个文件夹已不存在",
+    "folderGoneLink": "前往全部文章"
   },
   "reader": {
     "close": "关闭",

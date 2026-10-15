@@ -172,7 +172,12 @@
     "caughtUp": "Vous êtes à jour",
     "showAllPosts": "Tout afficher",
     "markedRead": "{n, plural, one {# article marqué comme lu.} other {# articles marqués comme lus.}}",
-    "undoTooMany": "Déjà envoyé, et trop d’articles à marquer comme non lus d’ici."
+    "undoTooMany": "Déjà envoyé, et trop d’articles à marquer comme non lus d’ici.",
+    "blogSeparator": ", ",
+    "folderEmpty": "Aucun blog dans ce dossier pour l’instant.",
+    "folderEmptyHint": "Ajoutez-y des blogs dans <manage>Abonnements</manage>.",
+    "folderGone": "Ce dossier n’existe plus",
+    "folderGoneLink": "Aller à Tous les articles"
   },
   "reader": {
     "close": "Fermer",

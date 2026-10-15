@@ -92,10 +92,24 @@ export function ReadingPage() {
   )
   const letSeenGo = useCallback(() => setLetGo((n) => n + 1), [])
   const selected = params.feedId !== null ? subs.find((s) => s.feedId === params.feedId) : undefined
-  const listTitle = params.feedId !== null ? (selected?.title ?? '') : undefined
+  const folder =
+    params.folderId !== null ? tree.folders.find((f) => f.id === params.folderId) : undefined
+  // A folder the device does not hold once it holds the member's rows (the profile comes in the
+  // first snapshot, with the folders): deleted, here or on another device, or never one of theirs.
+  const folderGone = params.folderId !== null && folder === undefined && tables.profile !== null
+  const listTitle =
+    params.feedId !== null
+      ? (selected?.title ?? '')
+      : params.folderId !== null
+        ? (folder?.name ?? '')
+        : undefined
   // What a phone's back bar goes back to, by the name the list's own disclosure gives it.
   const listName =
-    params.feedId !== null ? (selected?.title ?? ts('subscriptions')) : ts(params.filter)
+    params.feedId !== null
+      ? (selected?.title ?? ts('subscriptions'))
+      : params.folderId !== null
+        ? (folder?.name ?? ts('subscriptions'))
+        : ts(params.filter)
   const pendingFetch = selected !== undefined && selected.lastFetchedAt === null
   const article =
     params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
@@ -391,10 +405,11 @@ export function ReadingPage() {
           locale={locale}
           now={now}
           pendingFetch={pendingFetch}
-          show={liked ? null : unreadOnly ? 'unread' : 'all'}
+          show={liked || folderGone ? null : unreadOnly ? 'unread' : 'all'}
           onShow={onShow}
           caughtUp={unreadOnly && all.length > 0}
           onMarkAll={letSeenGo}
+          folder={folderGone ? 'gone' : folder}
         />
       )}
       {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}
