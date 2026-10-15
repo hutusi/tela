@@ -2,7 +2,10 @@ import { describe, expect, test } from 'bun:test'
 import { applyMutation, applyPull, emptyTables, type Tables, titleKey, view } from '@tela/sync'
 import {
   articlesFor,
+  feedsInFolder,
   feedTitle,
+  folderIdOf,
+  folderTree,
   isMarkedUnread,
   isRead,
   markAllReadCovers,
@@ -329,5 +332,66 @@ describe('what a feed is called', () => {
       sites: [site(1, 'One Blog')],
     })
     expect([feedTitle(t, 1), feedTitle(t, 2)]).toEqual(['Posts', 'Links'])
+  })
+})
+
+describe('folders (ADR 0048)', () => {
+  const folder = (id: string, name: string) => ({
+    id,
+    name,
+    createdAt: 1,
+    updatedAt: 1,
+    deletedAt: null,
+    seq: 1,
+  })
+  const filed = (feedId: number, folderId: string | null) => ({
+    feedId,
+    folderId,
+    updatedAt: 1,
+    seq: 1,
+  })
+  const feed = (id: number, title: string) => ({
+    id,
+    siteId: id,
+    feedUrl: `https://blog${id}.example/feed`,
+    title,
+    status: 'active',
+    lastFetchedAt: null,
+    lastError: null,
+    seq: 1,
+  })
+  const t = tables({
+    subscriptions: [sub(1), sub(2), sub(3), sub(4, { deletedAt: 5 })],
+    feeds: [feed(1, 'Zebra'), feed(2, 'apple'), feed(3, 'Mango'), feed(4, 'Left')],
+    folders: [folder('f-craft', 'craft'), folder('f-cities', 'Cities'), folder('f-empty', 'Bare')],
+    feedFolders: [filed(1, 'f-cities'), filed(2, 'f-cities'), filed(4, 'f-craft'), filed(3, null)],
+    articles: [article(1, { feedId: 1 }), article(2, { feedId: 2 }), article(3, { feedId: 2 })],
+  })
+
+  test('folders by name, each with the blogs followed in it by title, then the rest', () => {
+    const tree = folderTree(t, NOW)
+    expect(tree.folders.map((f) => [f.name, f.blogs.map((b) => b.title), f.unread])).toEqual([
+      ['Bare', [], 0],
+      ['Cities', ['apple', 'Zebra'], 3],
+      // Its only blog was left: the folder stays, empty.
+      ['craft', [], 0],
+    ])
+    expect(tree.unfiled.map((b) => b.title)).toEqual(['Mango'])
+  })
+
+  test('a blog filed in a folder since deleted, or never held, is in none', () => {
+    const gone = tables({
+      subscriptions: [sub(1), sub(2)],
+      feeds: [feed(1, 'One'), feed(2, 'Two')],
+      folders: [],
+      feedFolders: [filed(1, 'f-deleted'), filed(2, null)],
+    })
+    expect(folderIdOf(gone, 1)).toBeNull()
+    expect(folderTree(gone, NOW).unfiled.map((b) => b.feedId)).toEqual([1, 2])
+  })
+
+  test("a folder's feeds are those followed in it", () => {
+    expect(feedsInFolder(t, 'f-cities').sort()).toEqual([1, 2])
+    expect(feedsInFolder(t, 'f-craft')).toEqual([])
   })
 })

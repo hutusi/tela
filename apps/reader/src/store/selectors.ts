@@ -139,8 +139,56 @@ export function subscriptionItems(t: Tables, now: number): SubscriptionItem[] {
         lastError: feed?.lastError ?? null,
       })
     }
-    return items.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+    return items.sort((a, b) => byName(a.title, b.title))
   })
+}
+
+const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
+
+/** A folder of the member's (ADR 0048), with the blogs in it they follow and their unread total. */
+export type FolderItem = { id: string; name: string; unread: number; blogs: SubscriptionItem[] }
+
+/**
+ * The member's folders by name, each holding its subscriptions by title, then the subscriptions
+ * in no folder (ADR 0048). A folder with no blog followed in it is still a folder: it is listed,
+ * empty.
+ */
+export function folderTree(
+  t: Tables,
+  now: number,
+): { folders: FolderItem[]; unfiled: SubscriptionItem[] } {
+  return cached(t, `folders:${Math.floor(now / 60_000)}`, () => {
+    const folders = new Map<string, FolderItem>()
+    for (const f of t.folders.values()) {
+      folders.set(f.id, { id: f.id, name: f.name, unread: 0, blogs: [] })
+    }
+    const unfiled: SubscriptionItem[] = []
+    for (const item of subscriptionItems(t, now)) {
+      const folder = folders.get(folderIdOf(t, item.feedId) ?? '')
+      if (!folder) {
+        unfiled.push(item)
+        continue
+      }
+      folder.blogs.push(item)
+      folder.unread += item.unread
+    }
+    return { folders: [...folders.values()].sort((a, b) => byName(a.name, b.name)), unfiled }
+  })
+}
+
+/** The live folder a blog is in, or null: one deleted, or never held, is none. */
+export function folderIdOf(t: Tables, feedId: number): string | null {
+  const id = t.feedFolders.get(feedId)?.folderId ?? null
+  return id !== null && t.folders.has(id) ? id : null
+}
+
+/** The feeds in a folder that the member follows. */
+export function feedsInFolder(t: Tables, folderId: string): number[] {
+  const out: number[] = []
+  for (const sub of t.subscriptions.values()) {
+    if (sub.deletedAt === null && folderIdOf(t, sub.feedId) === folderId) out.push(sub.feedId)
+  }
+  return out
 }
 
 export type Totals = { all: number; today: number; liked: number }
