@@ -33,7 +33,7 @@ import {
 } from '@tela/sync'
 import { newId } from '../lib/id'
 import type { Person } from '../views/types'
-import type { Change, Persistence } from './db'
+import { type Change, type Persistence, TABLES } from './db'
 
 /** A mutation as the UI states it: the store adds the id and the time. */
 export type MutationInput = Mutation extends infer M
@@ -69,6 +69,11 @@ type Hold = { handle: unknown; count: number }
 
 export class LocalStore {
   private confirmed: Confirmed = { cursor: 0, tables: emptyTables() }
+  /**
+   * The tables the confirmed copy holds whole up to its cursor: those the server sent since it was
+   * last a snapshot (`Persisted.covered`). A tela-api from before a table leaves it out.
+   */
+  private covered: ReadonlySet<string> = new Set()
   private pending: Pending[] = []
   /**
    * Changes in `pending` held back from the server for an Undo, by id, with the timer that lets
@@ -182,6 +187,7 @@ export class LocalStore {
       cursor: saved.cursor,
       tables: saved.rows ? tablesFromRows(saved.rows) : emptyTables(),
     }
+    this.covered = new Set(saved.covered)
     this.pending = saved.pending
     this.pruneHolds()
     this.recompute()
@@ -217,6 +223,7 @@ export class LocalStore {
     this.epoch++
     this.userId = owner
     this.confirmed = { cursor: 0, tables: emptyTables() }
+    this.covered = new Set()
     this.pending = []
     // A held change was the old account's: it is never let go into the new one's.
     this.pruneHolds()
@@ -375,11 +382,25 @@ export class LocalStore {
    * Fold in a pull asked for in `epoch`, unless the tab has stopped holding those rows since. Only
    * the tables it touched are rewritten, in one write with the cursor, which storage refuses
    * when it would move the stored cursor back over newer tables another tab of this account
-   * wrote (`Change` in db.ts).
+   * wrote (`Change` in db.ts). Says whether to pull again from the start: a delta that sends a
+   * table this copy has not held whole since its last snapshot (a tela-api back from a rollback
+   * to before it, ADR 0048) is not folded in, since the rows of that table written meanwhile lie
+   * behind the cursor, and only a snapshot brings them. The rows held stay on screen until it
+   * comes.
    */
-  async applyPull(given: PullResponse, epoch: number): Promise<void> {
+  async applyPull(given: PullResponse, epoch: number): Promise<boolean> {
     const owner = this.userId
-    if (owner === null || epoch !== this.epoch) return
+    if (owner === null || epoch !== this.epoch) return false
+    const sent = new Set(Object.keys(given.rows))
+    if (!given.reset && TABLES.some((t) => sent.has(t) && !this.covered.has(t))) {
+      this.confirmed = { ...this.confirmed, cursor: 0 }
+      return true
+    }
+    // What the copy holds whole from here: what this snapshot sent, or what the copy held and
+    // this delta sent too.
+    this.covered = new Set(
+      TABLES.filter((t) => sent.has(t) && (given.reset || this.covered.has(t))),
+    )
     // Every table this build knows, so the loop below never reads one an older tela-api left out.
     const pull = completePull(given)
     const before = this.confirmed.tables
@@ -415,8 +436,10 @@ export class LocalStore {
       cursor: this.confirmed.cursor,
       from,
       whole: rows,
+      covered: [...this.covered],
       drop: gone(queued, this.pending),
     })
+    return false
   }
 
   /**

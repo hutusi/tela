@@ -227,9 +227,10 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        moved the cursor past folder rows it dropped. That boot waits on the network for its list.
      - **Either Worker may go back alone.** An older tela-web shows the flat sidebar and Settings,
        and ignores the folder rows a pull sends. An older tela-api sends no folder rows, so a
-       device keeps the folders it holds until it next starts over. A device holding an unsent
-       folder change under an older shell keeps it in its queue and pushes it once the newer
-       shell is back.
+       device keeps the folders it holds, or none if it took a snapshot meanwhile. Once tela-api
+       is forward again, each device's first pull asks for a snapshot, because its copy recorded
+       the folder tables as not whole (`kept`). A device holding an unsent folder change under an
+       older shell keeps it in its queue and pushes it once the newer shell is back.
      - After deploy, check that:
        - a folder made in Settings shows in the sidebar, and on a second device after its pull;
        - a folder's list (`/reading?folder=…`) has Mark all read, and its Undo works;

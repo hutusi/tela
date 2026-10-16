@@ -63,11 +63,23 @@ That last rule had a hole, which 0031 accepted for follows: a tab of the earlier
 across the deploy shares the device's database. Once this build has written the folder tables,
 that tab's pulls move the shared cursor past folder rows it drops, and the next boot finds every
 table present and trusts the cursor. A follow it dropped comes back the next time the followee's
-profile changes. A folder deleted, renamed or emptied elsewhere would never come back. So the copy
-now records which tables the build that last moved its cursor keeps (`kept`, beside the cursor in
-`apps/reader/src/store/db.ts`). An earlier build moves the cursor without it, and the next boot
-starts over from a snapshot. A later build that keeps more tables is trusted. Every table a later
-round adds is covered the same way.
+profile changes. A folder deleted, renamed or emptied elsewhere would never come back. So every
+move of the cursor now records where it moved it, and which tables the copy holds whole up to
+there (`kept`, beside the cursor in `apps/reader/src/store/db.ts`). An earlier build moves the
+cursor without it, and the next boot starts over from a snapshot. A later build that keeps more
+tables is trusted. Every table a later round adds is covered the same way.
+
+A tela-api rolled back to before folders leaves the same hole from the other side, which Codex's
+second review found. Its pulls carry no folder tables, and the device used to fill them in as
+empty, so a snapshot taken during the rollback was recorded as complete. Once tela-api was back,
+pulls went on past the folders it had never sent. So "whole" means what the server sent since the
+last snapshot, not what this build knows:
+- a table a pull leaves out is left out of `kept`;
+- a delta that sends one the copy does not hold whole is not folded in, and the device asks for a
+  snapshot, showing what it holds until then;
+- a boot during the rollback loads the copy as it is, and does not wait on the network each time;
+- a write that puts a table puts the writer's whole copy of it, so it may make that table whole
+  again, and one that leaves it alone never does.
 
 **A folder's list is `/reading?folder=<id>`.** The address alone says which folder is open, as it
 says which feed is. One that no folder has (deleted on another device, or a stale link) shows

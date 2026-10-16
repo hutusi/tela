@@ -120,8 +120,37 @@ describe('the device database', () => {
     expect(loaded.cursor).toBe(0)
     expect(loaded.rows).toBeNull()
     // The snapshot it then takes is trusted again.
-    expect(await now.commit('a', { tables, cursor: 21 })).toBe(true)
+    expect(await now.commit('a', { tables, cursor: 21, covered: Object.keys(tables) })).toBe(true)
     expect((await now.load()).cursor).toBe(21)
+  })
+
+  test('a table the server left out loads as it is, and stays out until a write puts it whole', async () => {
+    const name = fresh()
+    const now = await indexedDbPersistence(name)
+    await now.claim('a')
+    const tables = tablesOf(pull(5, { profile: [profile], subscriptions: [sub(1)] }, true))
+    const all = Object.keys(tables)
+    const withoutFolders = all.filter((t) => t !== 'folders' && t !== 'feedFolders')
+    // A snapshot from a tela-api before folders: every table written, two of them not whole.
+    expect(await now.commit('a', { tables, cursor: 5, covered: withoutFolders })).toBe(true)
+    let loaded = await now.load()
+    expect(loaded.cursor).toBe(5)
+    expect(loaded.rows).not.toBeNull()
+    expect(loaded.covered).toEqual(withoutFolders)
+    // A tab that holds them whole writes a delta that leaves them alone: still not whole here.
+    const { articles } = tables
+    expect(await now.commit('a', { tables: { articles }, cursor: 7, from: 5, covered: all })).toBe(
+      true,
+    )
+    expect((await now.load()).covered).toEqual(withoutFolders)
+    // One that writes them puts its whole copy of them.
+    const { folders, feedFolders } = tables
+    expect(
+      await now.commit('a', { tables: { folders, feedFolders }, cursor: 8, from: 7, covered: all }),
+    ).toBe(true)
+    loaded = await now.load()
+    expect(loaded.cursor).toBe(8)
+    expect([...loaded.covered].sort()).toEqual([...all].sort())
   })
 
   test('a later build that keeps every table this one does, and more, is trusted', async () => {
@@ -147,7 +176,14 @@ describe('the device database', () => {
     })
     const now = await indexedDbPersistence(name)
     const loaded = await now.load()
-    expect(loaded).toEqual({ owner: null, unverified: null, cursor: 0, rows: null, pending: [] })
+    expect(loaded).toEqual({
+      owner: null,
+      unverified: null,
+      cursor: 0,
+      rows: null,
+      covered: [],
+      pending: [],
+    })
     // Nothing of it is left to be read back later, under anyone.
     expect(await metaKeys(name)).toEqual([])
     expect(await now.bodyKeys()).toEqual([])
@@ -163,6 +199,7 @@ describe('the device database', () => {
       unverified: null,
       cursor: 0,
       rows: null,
+      covered: [],
       pending: [],
     })
     expect(await metaKeys(name)).toEqual(['owner'])
@@ -242,6 +279,7 @@ describe('the device database', () => {
         unverified: null,
         cursor: 0,
         rows: null,
+        covered: [],
         pending: [],
       })
       expect(await metaKeys(name)).toEqual(['owner'])
@@ -296,6 +334,7 @@ describe('the device database', () => {
       unverified: null,
       cursor: 0,
       rows: null,
+      covered: [],
       pending: [],
     })
     await now.claim('b')
@@ -460,6 +499,7 @@ describe('the mark an earlier build having run leaves', () => {
         unverified: newer,
         cursor: 0,
         rows: null,
+        covered: [],
         pending: [],
       })
       expect(await one.claim('b', loaded)).toBe(true)
