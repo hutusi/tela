@@ -229,8 +229,15 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        and ignores the folder rows a pull sends. An older tela-api sends no folder rows, so a
        device keeps the folders it holds, or none if it took a snapshot meanwhile. Once tela-api
        is forward again, each device's first pull asks for a snapshot, because its copy recorded
-       the folder tables as not whole (`kept`). A device holding an unsent folder change under an
-       older shell keeps it in its queue and pushes it once the newer shell is back.
+       the folder tables as not whole (`kept`).
+     - A folder change still unsent when a Worker goes back is not kept for later:
+       - Under an older tela-web, the shell sends it as queued, since it pushes whatever is queued
+         whatever its type, and the newer tela-api applies it. That shell only shows nothing of
+         it.
+       - Under an older tela-api, the push is refused as invalid and the change leaves the queue,
+         from whichever shell sent it. A folder made, renamed or deleted, or a blog moved, in
+         that window, is lost, and the member has to do it again once tela-api is forward.
+         Keep a tela-api rollback short.
      - After deploy, check that:
        - a folder made in Settings shows in the sidebar, and on a second device after its pull;
        - a folder's list (`/reading?folder=…`) has Mark all read, and its Undo works;
