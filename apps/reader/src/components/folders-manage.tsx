@@ -459,7 +459,9 @@ function RenameForm({
               e.preventDefault()
               save()
             } else if (e.key === 'Escape') {
+              // Only the form, as New folder's does.
               e.preventDefault()
+              e.stopPropagation()
               onCancel()
             }
           }}
