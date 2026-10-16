@@ -57,18 +57,19 @@ export function checkFolderName(
 }
 
 /**
- * The folders a name or the limit must reckon with: those the page shows, and those the server
- * still holds though the page does not, a folder whose deletion is held while its Undo shows
- * (ADR 0046). Until the deletion goes, its name is not free, and it still counts towards the
- * limit: made meanwhile and then undone, a folder of the same name would be a second one, and one
- * past the limit would vanish with everything moved into it. By name, the page's own first.
+ * The folders a name or the limit must reckon with: those the page shows, and those it would show
+ * were every held change taken back (`foldersBeforeHolds`), a folder whose deletion is held while
+ * its Undo shows (ADR 0046), made on this device or not. Until the deletion goes, its name is not
+ * free, and it still counts towards the limit: made meanwhile and then undone, a folder of the
+ * same name would be a second one, and one past the limit would vanish with everything moved into
+ * it. By id, the page's own name first.
  */
 export function knownFolders(
   shown: Pick<Tables, 'folders'>,
-  confirmed: ReadonlyMap<string, { id: string; name: string }>,
+  beforeHolds: ReadonlyMap<string, { id: string; name: string }>,
 ): { id: string; name: string }[] {
   const known = new Map<string, { id: string; name: string }>()
-  for (const f of confirmed.values()) known.set(f.id, { id: f.id, name: f.name })
+  for (const f of beforeHolds.values()) known.set(f.id, { id: f.id, name: f.name })
   for (const f of shown.folders.values()) known.set(f.id, { id: f.id, name: f.name })
   return [...known.values()]
 }

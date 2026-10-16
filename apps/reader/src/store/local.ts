@@ -139,11 +139,16 @@ export class LocalStore {
   confirmedFollowees = (): string => [...this.confirmed.tables.follows.keys()].sort().join(',')
 
   /**
-   * The member's folders as the server has said, without the changes still on their way. A
-   * folder whose deletion is held (ADR 0046) is gone from the view but still here: its name and
-   * its place under the limit are not free until the deletion goes (ADR 0048).
+   * The member's folders as they would be were every held change taken back (ADR 0046): the view
+   * without what an Undo may still retract. A folder whose deletion is held is gone from the view
+   * but here, whether the server has it or it was made on this device and is still on its way:
+   * its name and its place under the limit are not free until the deletion goes (ADR 0048).
    */
-  confirmedFolders = (): ReadonlyMap<string, FolderRow> => this.confirmed.tables.folders
+  foldersBeforeHolds = (): ReadonlyMap<string, FolderRow> =>
+    view(
+      this.confirmed,
+      this.pending.filter((p) => !this.holds.has(p.mutation.mid)),
+    ).folders
 
   remember(articles: ArticleRow[], source?: string | null): void {
     for (const a of articles) {

@@ -941,7 +941,7 @@ function SubscriptionsSection() {
   const grouped = groupRows(tables, now, rows)
   const folders: Folder[] = grouped.folders.map(({ id, name }) => ({ id, name }))
   // A name, and the limit, also reckon with a folder whose deletion is still held.
-  const known = knownFolders(tables, store.confirmedFolders())
+  const known = knownFolders(tables, store.foldersBeforeHolds())
   const canMake = canMakeFolder(known)
 
   // Each reads the device's rows as they are when it runs, not as this render saw them.

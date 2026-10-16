@@ -495,6 +495,18 @@ describe('a change held back for an Undo', () => {
     expect(made(store.mutate({ type: 'markRead', articleId: 7 })).at).toBe(NOW + 100)
   })
 
+  test('a folder whose deletion is held is still one, made here and unsent or not (ADR 0048)', async () => {
+    const { store } = await holding()
+    // Made on this device, so the server has never heard of it.
+    store.mutate({ type: 'putFolder', id: 'folder-made-here', name: 'Cities' })
+    const deleted = made(store.mutate({ type: 'deleteFolder', id: 'folder-made-here' }, HOLD))
+    expect(store.getSnapshot().tables.folders.size).toBe(0)
+    expect([...store.foldersBeforeHolds().values()].map((f) => f.name)).toEqual(['Cities'])
+    // Once the deletion goes, the name and its place are free.
+    store.release(deleted.mid)
+    expect(store.foldersBeforeHolds().size).toBe(0)
+  })
+
   test('release lets one held change go now: stored, then sent', async () => {
     const { storage, timers, store, pushes } = await holding()
     const one = made(store.mutate(markAll, HOLD))

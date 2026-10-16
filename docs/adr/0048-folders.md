@@ -107,8 +107,10 @@ included.
   that unfiles it arrives. The other way round, a link to a folder made on another device reads
   as gone at boot until the first pull brings it, as a link to an unknown feed shows nothing.
 - A folder whose deletion is held while its Undo shows keeps its name and its place under the
-  limit until the deletion goes: made again meanwhile, and the delete undone, the member would
-  have two folders of one name, or lose one past the limit and every blog moved into it.
+  limit until the deletion goes, whether the server has it or it was made on this device and is
+  still on its way (`foldersBeforeHolds`: the view with every held change taken back). Made again
+  meanwhile, and the delete undone, the member would have two folders of one name, or lose one
+  past the limit and every blog moved into it.
 - What an OPML import writes carries no clock (`updated_at` 0), as a pref taken from a browser
   does. Stamped with the server's time, it would beat a rename or a move made just after it on a
   device whose clock runs behind.
