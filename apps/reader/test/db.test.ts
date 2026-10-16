@@ -99,6 +99,45 @@ describe('the device database', () => {
     })
   }
 
+  test('an earlier build that moves the cursor past a table it does not keep makes the copy start over (ADR 0048)', async () => {
+    const name = fresh()
+    const now = await indexedDbPersistence(name)
+    await now.claim('a')
+    const tables = tablesOf(pull(5, { profile: [profile], subscriptions: [sub(1)] }, true))
+    expect(await now.commit('a', { tables, cursor: 5 })).toBe(true)
+    // A delta this build commits moves the stamp with the cursor.
+    expect(await now.commit('a', { tables: {}, cursor: 8, from: 5 })).toBe(true)
+    expect((await now.load()).cursor).toBe(8)
+    // A tab of the build before folders, left open across the deploy: its pull lands as that
+    // build writes it, every table it knows and the cursor, and folders untouched. The folder
+    // tables are there, as this build wrote them at 8, and stale past it.
+    const raw = await openDB(name)
+    await raw.put('tables', [sub(1), sub(2)], 'subscriptions')
+    await raw.put('meta', 20, 'cursor')
+    raw.close()
+    const loaded = await now.load()
+    expect(loaded.owner).toBe('a')
+    expect(loaded.cursor).toBe(0)
+    expect(loaded.rows).toBeNull()
+    // The snapshot it then takes is trusted again.
+    expect(await now.commit('a', { tables, cursor: 21 })).toBe(true)
+    expect((await now.load()).cursor).toBe(21)
+  })
+
+  test('a later build that keeps every table this one does, and more, is trusted', async () => {
+    const name = fresh()
+    const now = await indexedDbPersistence(name)
+    await now.claim('a')
+    const tables = tablesOf(pull(5, { profile: [profile], subscriptions: [sub(1)] }, true))
+    expect(await now.commit('a', { tables, cursor: 5 })).toBe(true)
+    const raw = await openDB(name)
+    const kept = (await raw.get('meta', 'kept')) as { tables: string[] }
+    await raw.put('meta', 9, 'cursor')
+    await raw.put('meta', { tables: [...kept.tables, 'collections'], cursor: 9 }, 'kept')
+    raw.close()
+    expect((await now.load()).cursor).toBe(9)
+  })
+
   test('a copy an earlier build wrote starts over', async () => {
     const name = fresh()
     await seedEarlierBuild(name, pull(5, { profile: [profile], subscriptions: [sub(1)] }, true), {
@@ -130,7 +169,7 @@ describe('the device database', () => {
     // Claiming it again as the same member keeps it.
     await one.commit('a', { from: 0, cursor: 3 })
     expect(await one.claim('a')).toBe(false)
-    expect(await metaKeys(name)).toEqual(['cursor', 'owner'])
+    expect(await metaKeys(name)).toEqual(['cursor', 'kept', 'owner'])
   })
 
   test('a pending record tagged with another owner, or with none, is dropped on load', async () => {
@@ -179,7 +218,7 @@ describe('the device database', () => {
         i % 2 ? [one.release('a'), two.claim('b')] : [two.claim('b'), one.release('a')],
       )
       expect(await two.commit('b', { from: 0, cursor: 6 })).toBe(true)
-      expect(await metaKeys(name)).toEqual(['cursor', 'owner'])
+      expect(await metaKeys(name)).toEqual(['cursor', 'kept', 'owner'])
       expect((await two.load()).owner).toBe('b')
     }
   })

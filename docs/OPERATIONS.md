@@ -222,7 +222,9 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        `fileFeed`. An older tela-api refuses them as invalid, so a folder made, renamed or
        deleted, or a blog moved, visibly goes back.
      - Each device starts over from a snapshot once, at its first boot on the new shell: its copy
-       has no folder tables.
+       has no folder tables. It starts over again at a boot after a tab of the earlier shell, left
+       open, has pulled into the shared copy (`kept` in `apps/reader/src/store/db.ts`): that tab
+       moved the cursor past folder rows it dropped. That boot waits on the network for its list.
      - **Either Worker may go back alone.** An older tela-web shows the flat sidebar and Settings,
        and ignores the folder rows a pull sends. An older tela-api sends no folder rows, so a
        device keeps the folders it holds until it next starts over. A device holding an unsent

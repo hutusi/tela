@@ -59,6 +59,16 @@ folder of the same name.
 - a tela-api from before refuses the new mutations as invalid, so they visibly roll back;
 - a device copy written before the tables existed starts over from a snapshot.
 
+That last rule had a hole, which 0031 accepted for follows: a tab of the earlier build left open
+across the deploy shares the device's database. Once this build has written the folder tables,
+that tab's pulls move the shared cursor past folder rows it drops, and the next boot finds every
+table present and trusts the cursor. A follow it dropped comes back the next time the followee's
+profile changes. A folder deleted, renamed or emptied elsewhere would never come back. So the copy
+now records which tables the build that last moved its cursor keeps (`kept`, beside the cursor in
+`apps/reader/src/store/db.ts`). An earlier build moves the cursor without it, and the next boot
+starts over from a snapshot. A later build that keeps more tables is trusted. Every table a later
+round adds is covered the same way.
+
 **A folder's list is `/reading?folder=<id>`.** The address alone says which folder is open, as it
 says which feed is. One that no folder has (deleted on another device, or a stale link) shows
 that the folder is gone, with a link to All articles. It does not redirect, because a redirect

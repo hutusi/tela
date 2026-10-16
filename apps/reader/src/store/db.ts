@@ -2,8 +2,9 @@
  * What the device keeps between visits, in IndexedDB (`idb`: a thin wrapper over the web
  * standard, chosen so there is almost nothing between Tela and the browser to age):
  *
- * - `meta`: whose rows these are (`owner`), the cursor, and the pending mutations, one record
- *   each (`pending:<mid>`, tagged with the owner that queued it). Tabs share this database, and
+ * - `meta`: whose rows these are (`owner`), the cursor and which tables the build that moved it
+ *   keeps (`kept`), and the pending mutations, one record each (`pending:<mid>`, tagged with the
+ *   owner that queued it). Tabs share this database, and
  *   each holds only its own pending list in memory: one record for the whole list let a tab's
  *   save erase another tab's unsent changes.
  * - `tables`: one record per synced table (a few thousand rows at most; written whole).
@@ -134,7 +135,7 @@ export interface Persistence {
  * Every table the device holds. One missing from storage means it was written by a build that
  * did not know it, so the device starts over from a snapshot rather than trust a cursor that has
  * passed rows it never kept (highlights, added after the first devices synced; follows, ADR 0031;
- * folders, ADR 0048).
+ * folders, ADR 0048). Present is not enough: see `KEPT`.
  */
 const TABLES: (keyof TableRows)[] = [
   'profile',
@@ -258,6 +259,26 @@ export const earlierBuild: EarlierBuild = {
 
 const OWNER = 'owner'
 const CURSOR = 'cursor'
+/**
+ * Which tables the build that last moved the cursor keeps, and where it moved it to. Every move
+ * of the cursor here writes it. A build from before a table (a tab left open across the deploy,
+ * sharing this database) moves the cursor past that table's rows, dropping them, and leaves this
+ * behind: the table is there, written by this build earlier, but stale, and its rows never come
+ * again (ADR 0048: a folder deleted elsewhere would stay for good). So the copy is trusted only
+ * while this says the cursor was moved by a build that keeps every table this one does; a later
+ * build, keeping more, is one.
+ */
+const KEPT = 'kept'
+type Kept = { tables: string[]; cursor: number }
+const keptAt = (cursor: number): Kept => ({ tables: [...TABLES], cursor })
+/** Whether the copy's cursor was last moved by a build that keeps every table this one does. */
+function keptAll(kept: unknown, cursor: number): boolean {
+  if (typeof kept !== 'object' || kept === null) return false
+  const k = kept as Partial<Kept>
+  return (
+    k.cursor === cursor && Array.isArray(k.tables) && TABLES.every((t) => k.tables?.includes(t))
+  )
+}
 const UNVERIFIED = 'unverified'
 /** Earlier builds' keys: the owner, and the whole pending list in one record. Never read. */
 const LEGACY = ['userId', 'pending']
@@ -345,8 +366,9 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
           return { owner: null, unverified: await markOf(tx), cursor: 0, rows: null, pending: [] }
         }
         const meta = tx.objectStore('meta')
-        const [cursor, unverified, keys, records, values] = await Promise.all([
+        const [cursor, kept, unverified, keys, records, values] = await Promise.all([
           meta.get(CURSOR),
+          meta.get(KEPT),
           markOf(tx),
           meta.getAllKeys(pendingRange()),
           meta.getAll(pendingRange()) as Promise<StoredPending[]>,
@@ -361,7 +383,7 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
           else if (key !== undefined) stray.push(meta.delete(key))
         })
         await Promise.all(stray)
-        const complete = values.every((v) => v !== undefined)
+        const complete = values.every((v) => v !== undefined) && keptAll(kept, Number(cursor ?? 0))
         return {
           owner,
           unverified,
@@ -410,7 +432,9 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
           ...Object.entries(rows ?? {}).map(([t, value]) =>
             tables.put(value, t as keyof TableRows),
           ),
-          ...(rows && change.cursor !== undefined ? [meta.put(change.cursor, CURSOR)] : []),
+          ...(rows && change.cursor !== undefined
+            ? [meta.put(change.cursor, CURSOR), meta.put(keptAt(change.cursor), KEPT)]
+            : []),
           ...(change.put ?? []).map((e) =>
             meta.put({ ...e, owner } satisfies StoredPending, pendingKey(e.mutation.mid)),
           ),
