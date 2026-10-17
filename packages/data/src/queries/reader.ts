@@ -1,4 +1,8 @@
-/** A member's subscriptions and the compaction of their read state. */
+/**
+ * A member's subscriptions, the folders an import files them in, and the compaction of their
+ * read state.
+ */
+import { folderName, MAX_FOLDERS, sameFolderName } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
 import { subscriptions } from '../schema'
@@ -62,6 +66,125 @@ export async function subscribeMany(
     ),
   ] as never)
   return ((results as unknown[])[1] as unknown[]).length
+}
+
+/** A folder an OPML import names, with the feed URLs it lists in it. */
+export type ImportedFolder = { name: string; urls: string[] }
+
+/** What an import writes: the folders it makes, and which feed goes in which folder. */
+export type ImportFiling = {
+  create: { id: string; name: string }[]
+  file: { feedId: number; folderId: string }[]
+}
+
+/**
+ * File an OPML import's blogs in the folders it names (ADR 0048), after `importFeedUrls` has
+ * registered them. A name the member has a live folder for, case aside, files into that folder;
+ * another makes one, while the member has fewer than MAX_FOLDERS, and past that its blogs stay
+ * in none. Only a blog in no live folder is filed: an import never moves one the member filed
+ * themselves. No folder is planned that would hold nothing, though one can be made empty when
+ * another device files each of its blogs between the read and the write.
+ */
+export async function fileImportedFeeds(
+  db: TelaDb,
+  userId: string,
+  folders: ImportedFolder[],
+  now: number,
+  mintId: () => string = () => crypto.randomUUID(),
+): Promise<{ folders: number; filed: number }> {
+  const urls = [...new Set(folders.flatMap((f) => f.urls))]
+  if (urls.length === 0) return { folders: 0, filed: 0 }
+  // A URL is its feed as importFeedUrls subscribed it: the one a merged feed became (ADR 0028).
+  // Filed is in a live folder; a filing to none, or to a folder since deleted, is not.
+  const [live, feeds] = (await db.batch([
+    db.all(sql`
+      select id, name from folders where user_id = ${userId} and deleted_at is null
+      order by created_at, id
+    `),
+    db.all(sql`
+      select j.value as url, coalesce(f.merged_into, f.id) as feed_id, exists (
+        select 1 from feed_folders ff join folders d on d.id = ff.folder_id
+        where ff.user_id = ${userId} and ff.feed_id = coalesce(f.merged_into, f.id)
+          and d.deleted_at is null
+      ) as filed
+      from json_each(${JSON.stringify(urls)}) j join feeds f on f.feed_url = j.value
+    `),
+  ] as never)) as [
+    { id: string; name: string }[],
+    { url: string; feed_id: number; filed: number }[],
+  ]
+
+  const unfiled = new Map(feeds.filter((f) => !f.filed).map((f) => [f.url, Number(f.feed_id)]))
+  const known = [...live]
+  const plan: ImportFiling = { create: [], file: [] }
+  const placed = new Set<number>()
+  for (const group of folders) {
+    const name = folderName(group.name)
+    if (!name) continue
+    const ids = new Set(group.urls.flatMap((url) => unfiled.get(url) ?? []))
+    const into = [...ids].filter((id) => !placed.has(id))
+    if (into.length === 0) continue
+    let folder = known.find((f) => sameFolderName(f.name, name))
+    if (!folder) {
+      if (known.length >= MAX_FOLDERS) continue
+      folder = { id: mintId(), name }
+      known.push(folder)
+      plan.create.push(folder)
+    }
+    for (const feedId of into) {
+      placed.add(feedId)
+      plan.file.push({ feedId, folderId: folder.id })
+    }
+  }
+  return writeImportFiling(db, userId, plan, now)
+}
+
+/**
+ * Write what `fileImportedFeeds` decided, in one batch. The statements hold to the same rules as
+ * the decision, which was read before them: a folder made meanwhile on another device counts
+ * towards MAX_FOLDERS, so the import's last folders are not made, and their blogs stay in none;
+ * and a blog filed meanwhile keeps that folder.
+ */
+export async function writeImportFiling(
+  db: TelaDb,
+  userId: string,
+  plan: ImportFiling,
+  now: number,
+): Promise<{ folders: number; filed: number }> {
+  if (plan.file.length === 0) return { folders: 0, filed: 0 }
+  const create = JSON.stringify(plan.create.map((f) => [f.id, f.name]))
+  const file = JSON.stringify(plan.file.map((f) => [f.feedId, f.folderId]))
+  const results = await db.batch([
+    bumpSeq(db),
+    // The count is read once, before this statement inserts anything, so `key` (each new
+    // folder's place in the list) says which fit. What an import writes is no choice made at a
+    // time, so it carries no clock (`updated_at` 0), as a pref taken from a browser does: the
+    // server's `now` would be ahead of a device whose clock runs behind, and that device's rename
+    // or move, made just after the import, would lose to it.
+    db.all(sql`
+      insert into folders (id, user_id, name, created_at, updated_at, seq)
+      select j.value->>0, ${userId}, j.value->>1, ${now}, 0, ${currentSeq}
+      from json_each(${create}) j
+      where j.key < ${MAX_FOLDERS} - (
+        select count(*) from folders where user_id = ${userId} and deleted_at is null)
+      on conflict (id) do nothing
+      returning id
+    `),
+    db.all(sql`
+      insert into feed_folders (user_id, feed_id, folder_id, updated_at, seq)
+      select ${userId}, coalesce(f.merged_into, f.id), j.value->>1, 0, ${currentSeq}
+      from json_each(${file}) j join feeds f on f.id = j.value->>0
+      where exists (select 1 from folders d
+        where d.id = j.value->>1 and d.user_id = ${userId} and d.deleted_at is null)
+      on conflict (user_id, feed_id) do update set
+        folder_id = excluded.folder_id, seq = excluded.seq
+      where feed_folders.folder_id is null or not exists (
+        select 1 from folders d where d.id = feed_folders.folder_id and d.deleted_at is null)
+      returning feed_id
+    `),
+  ] as never)
+  const [, made, filed] = results as unknown as [unknown, unknown[], unknown[]]
+  return { folders: made.length, filed: filed.length }
 }
 
 /**

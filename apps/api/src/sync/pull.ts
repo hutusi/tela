@@ -63,6 +63,8 @@ function shape(rows: Record<keyof SyncRows, RawRow[]>): SyncRows {
     'highlights',
     'claims',
     'follows',
+    'folders',
+    'feedFolders',
   ] as const) {
     ;(out[name] as RawRow[]) = rows[name]
   }

@@ -199,6 +199,30 @@ export type FollowRow = {
   seq: number
 }
 
+/**
+ * A folder of the member's subscriptions (ADR 0048). Private to them. `deletedAt` set means
+ * deleted, and the device lets the row go: a deleted folder never comes back.
+ */
+export type FolderRow = {
+  id: string
+  name: string
+  createdAt: number
+  updatedAt: number
+  deletedAt: number | null
+  seq: number
+}
+
+/**
+ * Which folder a blog is in (ADR 0048), by feed id; `folderId` null is none. It outlives an
+ * unsubscribe, and `updatedAt` is the move's clock: the later move wins.
+ */
+export type FeedFolderRow = {
+  feedId: number
+  folderId: string | null
+  updatedAt: number
+  seq: number
+}
+
 export type Tombstone = { entity: string; key: string; seq: number }
 
 export type SyncRows = {
@@ -215,6 +239,8 @@ export type SyncRows = {
   claims: ClaimRow[]
   translations: TranslationRow[]
   follows: FollowRow[]
+  folders: FolderRow[]
+  feedFolders: FeedFolderRow[]
 }
 
 export type SyncTable = keyof SyncRows

@@ -4,13 +4,20 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { relativeTime } from '../lib/format'
-import { canonicalReadingHref, type ReadingParams, readingHref } from '../lib/href'
+import { canonicalReadingHref, listsFilter, type ReadingParams, readingHref } from '../lib/href'
 import { readingPrefsOf } from '../lib/prefs'
 import { showToast, UNDO_HOLD_MS } from '../lib/toasts'
 import { offerUndo, unreadAgain } from '../lib/undo'
 import { useStore, useTables } from '../store/hooks'
 import type { Stamp } from '../store/local'
-import { feedTitle, isRead, markAllReadCovers, shownRead, shownTitle } from '../store/selectors'
+import {
+  type FolderItem,
+  feedTitle,
+  isRead,
+  markAllReadPlan,
+  shownRead,
+  shownTitle,
+} from '../store/selectors'
 import { GlyphCount } from './glyph-count'
 import { Segmented } from './segmented'
 import { Swatch } from './swatch'
@@ -37,6 +44,11 @@ type Props = {
    * when every one is read already and the press has nothing to send.
    */
   onMarkAll?: () => void
+  /**
+   * The folder this list is (ADR 0048), whose blogs are named under the heading; or `gone`, a
+   * folder the device does not hold now that it holds the member's rows.
+   */
+  folder?: FolderItem | 'gone' | undefined
 }
 
 /**
@@ -72,6 +84,7 @@ export function ArticleList({
   onShow,
   caughtUp = false,
   onMarkAll,
+  folder,
 }: Props) {
   const t = useTranslations('list')
   const ts = useTranslations('sidebar')
@@ -79,13 +92,16 @@ export function ArticleList({
   const tables = useTables()
   const { store } = useStore()
   const location = useLocation()
-  const heading = title ?? ts(params.filter)
+  const gone = folder === 'gone'
+  const heading = gone ? t('folderGone') : (title ?? ts(params.filter))
+  // A folder's blogs, by title as the sidebar has them, on one line that cuts off (Tela Lists).
+  const blogs = folder && folder !== 'gone' ? folder.blogs.map((b) => b.title) : []
   const { markOnOpen, never } = readingPrefsOf(tables)
   const target = languageBadge(readingLang)
   const [limit, setLimit] = useState(PAGE)
   const shown = items.slice(0, limit)
   // Liking a post reads it, so Liked has nothing to mark.
-  const markable = items.length > 0 && !(params.feedId === null && params.filter === 'liked')
+  const markable = items.length > 0 && !listsFilter(params, 'liked')
   const markAllRead = () => {
     onMarkAll?.()
     // The device's rows as they are when pressed, which the toast counts against.
@@ -107,7 +123,7 @@ export function ArticleList({
         },
       )
     }
-    if (params.feedId === null && params.filter === 'today') {
+    if (listsFilter(params, 'today')) {
       // Today is a window the server knows nothing of: a mark-all up to its newest post would read
       // every older post of every feed too. So each unread post it holds, read on its own.
       const ids = items.filter((a) => !isRead(before, a, at)).map((a) => a.id)
@@ -119,20 +135,16 @@ export function ArticleList({
     // reader looked stays unread (ADR 0025).
     const upTo = shown.reduce((max, a) => (a.id > max ? a.id : max), 0)
     if (upTo === 0) return
-    const input = {
-      type: 'markAllRead',
-      upTo,
-      ...(params.feedId ? { feedId: params.feedId } : {}),
-    } as const
-    // Counted from what the change does, as the server will apply it: every post of the scope up
-    // to `upTo`, the ones this list never showed included.
-    const covered = markAllReadCovers(before, { ...input, mid: '', at }, at)
-    // Nothing it would read: a second press while the first one's Undo shows (sent anyway, it
-    // would outlive that Undo), or a list read already. A post the device does not hold is past
-    // the horizon, read already too. So nothing is sent, and there is nothing to undo.
-    if (covered.length === 0) return
-    const stamp = store.mutate(input, { holdMs: UNDO_HOLD_MS })
-    if (stamp) offer(covered, [stamp])
+    // A folder's is one mark-all per blog in it, held as one group: one toast, one Undo.
+    const marks = markAllReadPlan(before, params, upTo, at)
+    if (marks.length === 0) return
+    offer(
+      marks.flatMap((m) => m.covered),
+      store.mutateMany(
+        marks.map((m) => m.input),
+        { holdMs: UNDO_HOLD_MS },
+      ),
+    )
   }
   return (
     <section
@@ -146,6 +158,14 @@ export function ArticleList({
         <h1 className="min-w-0 truncate font-serif font-medium tracking-tight text-[26px] group-data-[open=1]:text-[20px]">
           {heading}
         </h1>
+        {blogs.length > 0 ? (
+          <p
+            className="-mt-1.5 min-w-0 truncate text-[12.5px] text-muted"
+            data-testid="list-subtitle"
+          >
+            {blogs.join(t('blogSeparator'))}
+          </p>
+        ) : null}
         {/* The switch, and Mark all read at the row's end while the list is wide. Liked has
             neither: it is a shelf the member keeps, not an inbox, and liking a post reads it.
             Where the two do not fit on one line (French on a 320px phone), Mark all read's label
@@ -175,10 +195,32 @@ export function ArticleList({
           </div>
         ) : null}
       </div>
-      {items.length === 0 && !caughtUp ? (
+      {gone ? (
+        // Deleted here or on another device, or a link to one that never was: said in place, not
+        // redirected, since a redirect a render decides can replace the wrong entry (AGENTS.md).
+        <div className="px-6 py-10 text-[13.5px] text-muted" data-testid="folder-gone">
+          <p>
+            <Link to={readingHref({})}>{t('folderGoneLink')}</Link>
+          </p>
+        </div>
+      ) : items.length === 0 && !caughtUp ? (
         <div className="px-6 py-10 text-[13.5px] text-muted" data-testid="list-empty">
           {pendingFetch ? (
             <p>{t('fetching')}</p>
+          ) : folder !== undefined ? (
+            blogs.length === 0 ? (
+              <>
+                <p>{t('folderEmpty')}</p>
+                <p>
+                  {t.rich('folderEmptyHint', {
+                    manage: (chunks) => <Link to="/settings/subscriptions">{chunks}</Link>,
+                  })}
+                </p>
+              </>
+            ) : (
+              // Its blogs have posted nothing the device holds: there is nothing to add here.
+              <p>{t('empty')}</p>
+            )
           ) : (
             <>
               <p>{t('empty')}</p>
@@ -219,11 +261,7 @@ export function ArticleList({
           const { title: rowTitle, excerpt, badge } = shownTitle(tables, a, readingLang, never)
           const name = feedTitle(tables, a.feedId)
           // No mode in the href: the remembered mode is the one an open should use (ADR 0017).
-          const href = readingHref({
-            filter: params.filter,
-            feedId: params.feedId,
-            articleId: a.id,
-          })
+          const href = readingHref({ ...params, articleId: a.id, mode: null })
           return (
             <Link
               key={a.id}

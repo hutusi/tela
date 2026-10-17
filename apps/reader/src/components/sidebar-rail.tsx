@@ -1,13 +1,16 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
-import { type ReadingParams, readingHref } from '../lib/href'
-import type { Filter, SubscriptionItem } from '../store/selectors'
+import { listsFilter, type ReadingParams, readingHref } from '../lib/href'
+import type { Filter, FolderItem, SubscriptionItem } from '../store/selectors'
 import { Glyph, HEART, LIST } from './glyph'
 import { SidebarToggle, TOGGLE_ROW } from './sidebar-toggle'
 import { Swatch } from './swatch'
 
-type Props = { subscriptions: SubscriptionItem[]; params: ReadingParams }
+type Props = {
+  tree: { folders: FolderItem[]; unfiled: SubscriptionItem[] }
+  params: ReadingParams
+}
 
 /** The filters' glyphs: All and Liked from the drawn set, and Today's dot in a circle, its own. */
 const GLYPHS: Record<Filter, ReactNode> = {
@@ -32,8 +35,12 @@ const item = (active: boolean) => `${ITEM} ${active ? 'bg-hover text-ink' : 'tex
  * label and tooltip, since there is no room to print them. From `lg`, like the sidebar; it
  * scrolls without a scrollbar, which would take a third of its width, and the toggle stays at its
  * top on the Library row's line, so between the two states it only moves sideways.
+ *
+ * Folders have no row here (ADR 0048): there is no room to name one, and a swatch for a folder
+ * would read as a blog. The swatches keep the sidebar's order instead, each folder's blogs, open
+ * or closed, and then the blogs in none, so a blog is where the sidebar has it.
  */
-export function SidebarRail({ subscriptions, params }: Props) {
+export function SidebarRail({ tree, params }: Props) {
   const t = useTranslations('sidebar')
   const tn = useTranslations('nav')
   const tr = useTranslations('reader')
@@ -49,7 +56,7 @@ export function SidebarRail({ subscriptions, params }: Props) {
       <div className="mb-3 h-px w-6 shrink-0 bg-line" />
       <nav className="flex flex-col items-center gap-1" aria-label={tn('reading')}>
         {(['all', 'today', 'liked'] as const).map((filter) => {
-          const active = params.feedId === null && params.filter === filter
+          const active = listsFilter(params, filter)
           return (
             <Link
               key={filter}
@@ -66,7 +73,7 @@ export function SidebarRail({ subscriptions, params }: Props) {
       </nav>
       <div className="my-3 h-px w-6 shrink-0 bg-line" />
       <div className="flex flex-col items-center gap-1">
-        {subscriptions.map((s) => {
+        {[...tree.folders.flatMap((f) => f.blogs), ...tree.unfiled].map((s) => {
           const active = params.feedId === s.feedId
           const label = s.unread ? `${s.title} · ${tr('unreadCount', { n: s.unread })}` : s.title
           return (

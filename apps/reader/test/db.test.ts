@@ -77,20 +77,94 @@ describe('the device database', () => {
     expect(stored.pending).toEqual([])
   })
 
-  test('a copy written before a table existed starts over from a snapshot (follows, ADR 0031)', async () => {
+  for (const [table, adr] of [
+    ['follows', '0031'],
+    ['folders', '0048'],
+    ['feedFolders', '0048'],
+  ] as const) {
+    test(`a copy written before a table existed starts over from a snapshot (${table}, ADR ${adr})`, async () => {
+      const name = fresh()
+      const one = await indexedDbPersistence(name)
+      await one.claim('a')
+      const tables = tablesOf(pull(5, { profile: [profile], subscriptions: [sub(1)] }, true))
+      expect(await one.commit('a', { tables, cursor: 5 })).toBe(true)
+      // What the build before it left: every other table, and a cursor past rows it dropped.
+      const raw = await openDB(name)
+      await raw.delete('tables', table)
+      raw.close()
+      const loaded = await one.load()
+      expect(loaded.owner).toBe('a')
+      expect(loaded.cursor).toBe(0)
+      expect(loaded.rows).toBeNull()
+    })
+  }
+
+  test('an earlier build that moves the cursor past a table it does not keep makes the copy start over (ADR 0048)', async () => {
     const name = fresh()
-    const one = await indexedDbPersistence(name)
-    await one.claim('a')
+    const now = await indexedDbPersistence(name)
+    await now.claim('a')
     const tables = tablesOf(pull(5, { profile: [profile], subscriptions: [sub(1)] }, true))
-    expect(await one.commit('a', { tables, cursor: 5 })).toBe(true)
-    // What the build before follows left: every other table, and a cursor past rows it dropped.
+    expect(await now.commit('a', { tables, cursor: 5 })).toBe(true)
+    // A delta this build commits moves the stamp with the cursor.
+    expect(await now.commit('a', { tables: {}, cursor: 8, from: 5 })).toBe(true)
+    expect((await now.load()).cursor).toBe(8)
+    // A tab of the build before folders, left open across the deploy: its pull lands as that
+    // build writes it, every table it knows and the cursor, and folders untouched. The folder
+    // tables are there, as this build wrote them at 8, and stale past it.
     const raw = await openDB(name)
-    await raw.delete('tables', 'follows')
+    await raw.put('tables', [sub(1), sub(2)], 'subscriptions')
+    await raw.put('meta', 20, 'cursor')
     raw.close()
-    const loaded = await one.load()
+    const loaded = await now.load()
     expect(loaded.owner).toBe('a')
     expect(loaded.cursor).toBe(0)
     expect(loaded.rows).toBeNull()
+    // The snapshot it then takes is trusted again.
+    expect(await now.commit('a', { tables, cursor: 21, covered: Object.keys(tables) })).toBe(true)
+    expect((await now.load()).cursor).toBe(21)
+  })
+
+  test('a table the server left out loads as it is, and stays out until a write puts it whole', async () => {
+    const name = fresh()
+    const now = await indexedDbPersistence(name)
+    await now.claim('a')
+    const tables = tablesOf(pull(5, { profile: [profile], subscriptions: [sub(1)] }, true))
+    const all = Object.keys(tables)
+    const withoutFolders = all.filter((t) => t !== 'folders' && t !== 'feedFolders')
+    // A snapshot from a tela-api before folders: every table written, two of them not whole.
+    expect(await now.commit('a', { tables, cursor: 5, covered: withoutFolders })).toBe(true)
+    let loaded = await now.load()
+    expect(loaded.cursor).toBe(5)
+    expect(loaded.rows).not.toBeNull()
+    expect(loaded.covered).toEqual(withoutFolders)
+    // A tab that holds them whole writes a delta that leaves them alone: still not whole here.
+    const { articles } = tables
+    expect(await now.commit('a', { tables: { articles }, cursor: 7, from: 5, covered: all })).toBe(
+      true,
+    )
+    expect((await now.load()).covered).toEqual(withoutFolders)
+    // One that writes them puts its whole copy of them.
+    const { folders, feedFolders } = tables
+    expect(
+      await now.commit('a', { tables: { folders, feedFolders }, cursor: 8, from: 7, covered: all }),
+    ).toBe(true)
+    loaded = await now.load()
+    expect(loaded.cursor).toBe(8)
+    expect([...loaded.covered].sort()).toEqual([...all].sort())
+  })
+
+  test('a later build that keeps every table this one does, and more, is trusted', async () => {
+    const name = fresh()
+    const now = await indexedDbPersistence(name)
+    await now.claim('a')
+    const tables = tablesOf(pull(5, { profile: [profile], subscriptions: [sub(1)] }, true))
+    expect(await now.commit('a', { tables, cursor: 5 })).toBe(true)
+    const raw = await openDB(name)
+    const kept = (await raw.get('meta', 'kept')) as { tables: string[] }
+    await raw.put('meta', 9, 'cursor')
+    await raw.put('meta', { tables: [...kept.tables, 'collections'], cursor: 9 }, 'kept')
+    raw.close()
+    expect((await now.load()).cursor).toBe(9)
   })
 
   test('a copy an earlier build wrote starts over', async () => {
@@ -102,7 +176,14 @@ describe('the device database', () => {
     })
     const now = await indexedDbPersistence(name)
     const loaded = await now.load()
-    expect(loaded).toEqual({ owner: null, unverified: null, cursor: 0, rows: null, pending: [] })
+    expect(loaded).toEqual({
+      owner: null,
+      unverified: null,
+      cursor: 0,
+      rows: null,
+      covered: [],
+      pending: [],
+    })
     // Nothing of it is left to be read back later, under anyone.
     expect(await metaKeys(name)).toEqual([])
     expect(await now.bodyKeys()).toEqual([])
@@ -118,13 +199,14 @@ describe('the device database', () => {
       unverified: null,
       cursor: 0,
       rows: null,
+      covered: [],
       pending: [],
     })
     expect(await metaKeys(name)).toEqual(['owner'])
     // Claiming it again as the same member keeps it.
     await one.commit('a', { from: 0, cursor: 3 })
     expect(await one.claim('a')).toBe(false)
-    expect(await metaKeys(name)).toEqual(['cursor', 'owner'])
+    expect(await metaKeys(name)).toEqual(['cursor', 'kept', 'owner'])
   })
 
   test('a pending record tagged with another owner, or with none, is dropped on load', async () => {
@@ -173,7 +255,7 @@ describe('the device database', () => {
         i % 2 ? [one.release('a'), two.claim('b')] : [two.claim('b'), one.release('a')],
       )
       expect(await two.commit('b', { from: 0, cursor: 6 })).toBe(true)
-      expect(await metaKeys(name)).toEqual(['cursor', 'owner'])
+      expect(await metaKeys(name)).toEqual(['cursor', 'kept', 'owner'])
       expect((await two.load()).owner).toBe('b')
     }
   })
@@ -197,6 +279,7 @@ describe('the device database', () => {
         unverified: null,
         cursor: 0,
         rows: null,
+        covered: [],
         pending: [],
       })
       expect(await metaKeys(name)).toEqual(['owner'])
@@ -251,6 +334,7 @@ describe('the device database', () => {
       unverified: null,
       cursor: 0,
       rows: null,
+      covered: [],
       pending: [],
     })
     await now.claim('b')
@@ -415,6 +499,7 @@ describe('the mark an earlier build having run leaves', () => {
         unverified: newer,
         cursor: 0,
         rows: null,
+        covered: [],
         pending: [],
       })
       expect(await one.claim('b', loaded)).toBe(true)

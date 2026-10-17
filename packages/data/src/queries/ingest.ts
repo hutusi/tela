@@ -148,6 +148,16 @@ export function mergeFeed(
         deleted_at = null, watermark_id = max(subscriptions.watermark_id, excluded.watermark_id),
         updated_at = excluded.updated_at, seq = excluded.seq
     `),
+    // A blog in a folder stays in it under its other address (ADR 0048), unless the member has
+    // put the target somewhere already.
+    db.run(sql`
+      insert into feed_folders (user_id, feed_id, folder_id, updated_at, seq)
+      select user_id, ${target}, folder_id, updated_at, ${currentSeq} from feed_folders
+      where feed_id = ${alias} and folder_id is not null
+      on conflict (user_id, feed_id) do update set
+        folder_id = excluded.folder_id, updated_at = excluded.updated_at, seq = excluded.seq
+      where feed_folders.folder_id is null and excluded.updated_at > feed_folders.updated_at
+    `),
     db.run(sql`
       update subscriptions set deleted_at = ${now}, updated_at = ${now}, seq = ${currentSeq}
       where feed_id = ${alias} and deleted_at is null

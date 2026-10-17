@@ -4,12 +4,13 @@
  * sheet. The Reader renders these instead of the desktop controls rather than beside them hidden,
  * so each control, and its test id, exists once.
  */
-import { type RefObject, useEffect, useId, useRef } from 'react'
+import { type RefObject, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'use-intl'
 import { useBottomBar } from '../lib/use-bottom-bar'
 import { BACK, CHECK, EXTERNAL, Glyph, HEART, HEART_FILLED, PASS } from './glyph'
 import { RecommendForm } from './recommend-popover'
+import { Sheet } from './sheet'
 import { TypographyMenu } from './typography-menu'
 
 /** An open circle: the unread dot, to put back. Drawn as the other glyphs are. */
@@ -143,9 +144,8 @@ export function ReaderBottomBar({
 }
 
 /**
- * Recommend as a bottom sheet: a modal dialog, so the page under it is out of reach and Tab stays
- * in it, with the scrim under it (`dialog.sheet::backdrop`, styles.css). Esc, Cancel and a tap on
- * the scrim close it, and focus goes back to the button that opened it.
+ * Recommend as a bottom sheet (`Sheet`): Esc, Cancel and a tap on the scrim close it, and focus
+ * goes back to the button that opened it.
  */
 export function RecommendSheet({
   articleId,
@@ -161,51 +161,15 @@ export function RecommendSheet({
   opener: RefObject<HTMLElement | null>
   onClose: () => void
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
   const titleId = useId()
-  useEffect(() => {
-    const el = dialog.current
-    const back = opener.current
-    // Once: React may run this twice in development, and an open dialog refuses a second.
-    if (el && !el.open) el.showModal()
-    return () => {
-      el?.close()
-      back?.focus()
-    }
-  }, [opener])
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby={titleId}
-      // A close request with no key, such as Android's back gesture.
-      onCancel={(e) => {
-        e.preventDefault()
-        onClose()
-      }}
-      // Esc is taken here, wherever focus is in the sheet, and marked handled, so the reader's
-      // own Esc does not close the article under it.
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          onClose()
-        }
-      }}
-      // The dialog is its content's box, so a click on the dialog itself is one on the scrim.
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-      className="sheet mx-0 mb-0 mt-auto max-h-[calc(100dvh-24px)] w-full max-w-none overflow-y-auto rounded-t-[18px] border-0 bg-surface p-0 text-ink shadow-[0_-8px_30px_rgba(0,0,0,.12)] animate-fade"
-      data-testid="recommend-sheet"
-    >
-      <div className="flex flex-col gap-3.5 px-5 pb-[max(30px,env(safe-area-inset-bottom))] pt-2.5">
-        <span aria-hidden="true" className="h-1 w-9 self-center rounded-sm bg-thumb" />
-        <RecommendForm
-          articleId={articleId}
-          note={note}
-          onClose={onClose}
-          sheet={{ titleId, post }}
-        />
-      </div>
-    </dialog>
+    <Sheet labelledBy={titleId} opener={opener} onClose={onClose} testId="recommend-sheet">
+      <RecommendForm
+        articleId={articleId}
+        note={note}
+        onClose={onClose}
+        sheet={{ titleId, post }}
+      />
+    </Sheet>
   )
 }

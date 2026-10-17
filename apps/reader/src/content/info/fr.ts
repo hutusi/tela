@@ -108,7 +108,7 @@ export const fr = {
       'Tela garde ce dont il a besoin pour faire fonctionner votre liste de lecture, et rien pour la publicité.',
       'Nous ne vendons pas vos données, n’affichons pas de publicité et n’utilisons aucun outil de mesure d’audience.',
       'Ce que vous lisez, aimez et surlignez reste privé, sauf si vous choisissez de le montrer. Votre profil, vos recommandations et les blogs que vous revendiquez sont publics.',
-      'Vous pouvez exporter vos abonnements en OPML, et télécharger votre profil, vos paramètres, abonnements, coups de cœur, recommandations, surlignages et suivis en un seul fichier, quand vous voulez.',
+      'Vous pouvez exporter vos abonnements, avec leurs dossiers, en OPML, et télécharger votre profil, vos paramètres, abonnements, coups de cœur, recommandations, surlignages et suivis en un seul fichier, quand vous voulez.',
     ],
     sections: {
       collect: {
@@ -128,7 +128,7 @@ export const fr = {
           { h: 'Votre lecture' },
           {
             list: [
-              'Vos abonnements aux blogs et les flux que vous ajoutez.',
+              'Vos abonnements aux blogs, les dossiers où vous les rangez, et les flux que vous ajoutez.',
               'Les articles que vous avez lus, aimés et recommandés, et les mots joints à vos recommandations.',
               'Vos surlignages et les notes qui les accompagnent.',
               'Les personnes que vous suivez.',
@@ -292,7 +292,7 @@ export const fr = {
         blocks: [
           {
             list: [
-              'Exportez vos abonnements en OPML dans Paramètres → Abonnements.',
+              'Exportez vos abonnements, avec leurs dossiers, en OPML dans Paramètres → Abonnements.',
               'Téléchargez votre profil, vos paramètres, abonnements, coups de cœur, recommandations, surlignages et les personnes que vous suivez en un seul fichier dans Paramètres → Confidentialité → Vos données.',
               'Choisissez ce que les autres voient dans Paramètres → Confidentialité. Votre photo et votre Gravatar sont dans Paramètres → Profil ; une photo envoyée que vous retirez est supprimée.',
               'Définissez ou changez un mot de passe, associez ou dissociez Google et GitHub, et déconnectez-vous partout dans Paramètres → Compte.',

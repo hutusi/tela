@@ -63,6 +63,52 @@ export function markAllReadCovers(
   return covered
 }
 
+type MarkAllRead = Omit<Extract<Mutation, { type: 'markAllRead' }>, 'mid' | 'at'>
+
+/**
+ * What Mark all read sends for a list other than Today (which reads its posts one by one): one
+ * mark-all for its scope, one blog or every blog followed, or one per blog followed in a folder,
+ * since the server knows nothing of folders (ADR 0048), taken from the tables as they are when
+ * pressed. Each reaches `upTo`, the newest post the list showed, and comes with the posts it turns
+ * read (`markAllReadCovers`); a post is in one feed, so those add up to what the press reads. One
+ * that would read nothing is left out: a second press while the first one's Undo shows (sent
+ * anyway, it would outlive that Undo), or a blog read already.
+ */
+export function markAllReadPlan(
+  t: Tables,
+  where: { feedId: number | null; folderId: string | null },
+  upTo: number,
+  at: number,
+): { input: MarkAllRead; covered: number[] }[] {
+  if (where.folderId === null) {
+    const input: MarkAllRead = {
+      type: 'markAllRead',
+      upTo,
+      ...(where.feedId ? { feedId: where.feedId } : {}),
+    }
+    const covered = markAllReadCovers(t, { ...input, mid: '', at }, at)
+    return covered.length === 0 ? [] : [{ input, covered }]
+  }
+  // A folder's marks, each held to its own blog, are applied together and compared once, which
+  // reads as one per blog would: a mark-all with a feed changes that feed's posts alone. One pass
+  // over the posts, not one per blog, which on a folder of hundreds was most of the press.
+  const inputs = feedsInFolder(t, where.folderId).map(
+    (feedId): MarkAllRead => ({ type: 'markAllRead', upTo, feedId }),
+  )
+  let after = t
+  for (const input of inputs) after = applyMutation(after, { ...input, mid: '', at })
+  const covered = new Map<number, number[]>()
+  for (const a of t.articles.values()) {
+    if (!isRead(t, a, at) && isRead(after, a, at)) {
+      covered.set(a.feedId, [...(covered.get(a.feedId) ?? []), a.id])
+    }
+  }
+  return inputs.flatMap((input) => {
+    const mine = covered.get(input.feedId ?? 0) ?? []
+    return mine.length === 0 ? [] : [{ input, covered: mine }]
+  })
+}
+
 export const isLiked = (t: Tables, articleId: number) => t.states.get(articleId)?.likedAt != null
 
 export const isRecommended = (t: Tables, articleId: number) =>
@@ -139,8 +185,56 @@ export function subscriptionItems(t: Tables, now: number): SubscriptionItem[] {
         lastError: feed?.lastError ?? null,
       })
     }
-    return items.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+    return items.sort((a, b) => byName(a.title, b.title))
   })
+}
+
+const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
+
+/** A folder of the member's (ADR 0048), with the blogs in it they follow and their unread total. */
+export type FolderItem = { id: string; name: string; unread: number; blogs: SubscriptionItem[] }
+
+/**
+ * The member's folders by name, each holding its subscriptions by title, then the subscriptions
+ * in no folder (ADR 0048). A folder with no blog followed in it is still a folder: it is listed,
+ * empty.
+ */
+export function folderTree(
+  t: Tables,
+  now: number,
+): { folders: FolderItem[]; unfiled: SubscriptionItem[] } {
+  return cached(t, `folders:${Math.floor(now / 60_000)}`, () => {
+    const folders = new Map<string, FolderItem>()
+    for (const f of t.folders.values()) {
+      folders.set(f.id, { id: f.id, name: f.name, unread: 0, blogs: [] })
+    }
+    const unfiled: SubscriptionItem[] = []
+    for (const item of subscriptionItems(t, now)) {
+      const folder = folders.get(folderIdOf(t, item.feedId) ?? '')
+      if (!folder) {
+        unfiled.push(item)
+        continue
+      }
+      folder.blogs.push(item)
+      folder.unread += item.unread
+    }
+    return { folders: [...folders.values()].sort((a, b) => byName(a.name, b.name)), unfiled }
+  })
+}
+
+/** The live folder a blog is in, or null: one deleted, or never held, is none. */
+export function folderIdOf(t: Tables, feedId: number): string | null {
+  const id = t.feedFolders.get(feedId)?.folderId ?? null
+  return id !== null && t.folders.has(id) ? id : null
+}
+
+/** The feeds in a folder that the member follows. */
+export function feedsInFolder(t: Tables, folderId: string): number[] {
+  const out: number[] = []
+  for (const sub of t.subscriptions.values()) {
+    if (sub.deletedAt === null && folderIdOf(t, sub.feedId) === folderId) out.push(sub.feedId)
+  }
+  return out
 }
 
 export type Totals = { all: number; today: number; liked: number }
@@ -163,15 +257,25 @@ export function totals(t: Tables, now: number): Totals {
 
 const newestFirst = (a: ArticleRow, b: ArticleRow) => b.sortAt - a.sortAt || b.id - a.id
 
-/** The list for a filter or one feed, newest first. Liked spans every feed the member kept from. */
+/**
+ * The list for a filter, one feed or a folder, newest first. Liked spans every feed the member
+ * kept from; a folder, the feeds followed in it (ADR 0048), so one gone or left lists nothing.
+ */
 export function articlesFor(
   t: Tables,
-  where: { filter: Filter; feedId: number | null },
+  where: { filter: Filter; feedId: number | null; folderId?: string | null },
   now: number,
 ): ArticleRow[] {
-  return cached(t, `list:${where.filter}:${where.feedId}:${Math.floor(now / 60_000)}`, () => {
+  const folderId = where.folderId ?? null
+  const key = `list:${where.filter}:${where.feedId}:${folderId}:${Math.floor(now / 60_000)}`
+  return cached(t, key, () => {
     const out: ArticleRow[] = []
+    const inFolder = folderId === null ? null : new Set(feedsInFolder(t, folderId))
     for (const a of t.articles.values()) {
+      if (inFolder !== null) {
+        if (inFolder.has(a.feedId)) out.push(a)
+        continue
+      }
       if (where.feedId !== null) {
         if (a.feedId === where.feedId) out.push(a)
         continue

@@ -148,8 +148,9 @@ export class SyncEngine {
             const res = await api(`/api/v1/sync?cursor=${this.store.cursor}`, { member: owner })
             if (!res.ok) throw new Error(`pull ${res.status}`)
             const body = (await res.json()) as PullResponse
-            await this.store.applyPull(body, epoch)
-            more = body.more
+            // Asked to start over, by a table the server sends again after leaving it out.
+            const again = await this.store.applyPull(body, epoch)
+            more = body.more || again
           }
         } while (this.pullAgain && !this.stopped)
       } catch (err) {

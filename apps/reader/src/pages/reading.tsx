@@ -18,6 +18,7 @@ import { toggleSidebarKeepingFocus } from '../components/sidebar-toggle'
 import { ReaderPaneSkeleton } from '../components/skeletons'
 import {
   canonicalReadingHref,
+  listsFilter,
   parseReadingParams,
   type ReadingMode,
   readingHref,
@@ -29,6 +30,7 @@ import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
   feedTitle,
+  folderTree,
   isLiked,
   isRead,
   prefetchPlan,
@@ -58,12 +60,14 @@ export function ReadingPage() {
   const params = parseReadingParams(search)
 
   const subs = subscriptionItems(tables, now)
+  // The sidebar's order (ADR 0048): the member's folders by name, then the blogs in none.
+  const tree = folderTree(tables, now)
   const counts = totals(tables, now)
   const prefs = useReadingPrefs(tables)
   const all = articlesFor(tables, params, now)
   // Unread or All, the switch under the list's heading (a pref, so every device reads the same
   // way). Liked has none and shows everything: it is a shelf, and liking a post reads it.
-  const liked = params.feedId === null && params.filter === 'liked'
+  const liked = listsFilter(params, 'liked')
   const unreadOnly = prefs.hideRead && !liked
   // Showing only unread posts must not pull a post out from under the reader: a post seen unread
   // in this list stays in it until the reader moves to another list or turns the switch, so
@@ -72,7 +76,8 @@ export function ReadingPage() {
   // Mark all read lets them all go (`letSeenGo`), so the list says it is caught up: a new key,
   // since the press may change nothing else to render (the posts kept were read already).
   const [letGo, setLetGo] = useState(0)
-  const listKey = `${params.filter}:${params.feedId}:${unreadOnly ? 'unread' : 'all'}:${letGo}`
+  const list = `${params.filter}:${params.feedId}:${params.folderId}`
+  const listKey = `${list}:${unreadOnly ? 'unread' : 'all'}:${letGo}`
   const seenUnread = useRef<{ key: string; ids: Set<number> }>({ key: '', ids: new Set() })
   if (seenUnread.current.key !== listKey) seenUnread.current = { key: listKey, ids: new Set() }
   const seen = seenUnread.current.ids
@@ -87,10 +92,24 @@ export function ReadingPage() {
   )
   const letSeenGo = useCallback(() => setLetGo((n) => n + 1), [])
   const selected = params.feedId !== null ? subs.find((s) => s.feedId === params.feedId) : undefined
-  const listTitle = params.feedId !== null ? (selected?.title ?? '') : undefined
+  const folder =
+    params.folderId !== null ? tree.folders.find((f) => f.id === params.folderId) : undefined
+  // A folder the device does not hold once it holds the member's rows (the profile comes in the
+  // first snapshot, with the folders): deleted, here or on another device, or never one of theirs.
+  const folderGone = params.folderId !== null && folder === undefined && tables.profile !== null
+  const listTitle =
+    params.feedId !== null
+      ? (selected?.title ?? '')
+      : params.folderId !== null
+        ? (folder?.name ?? '')
+        : undefined
   // What a phone's back bar goes back to, by the name the list's own disclosure gives it.
   const listName =
-    params.feedId !== null ? (selected?.title ?? ts('subscriptions')) : ts(params.filter)
+    params.feedId !== null
+      ? (selected?.title ?? ts('subscriptions'))
+      : params.folderId !== null
+        ? (folder?.name ?? ts('subscriptions'))
+        : ts(params.filter)
   const pendingFetch = selected !== undefined && selected.lastFetchedAt === null
   const article =
     params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
@@ -133,7 +152,7 @@ export function ReadingPage() {
   const after = at === -1 ? undefined : items[at + 1]
   const next = after
     ? {
-        href: readingHref({ filter: params.filter, feedId: params.feedId, articleId: after.id }),
+        href: readingHref({ ...params, articleId: after.id, mode: null }),
         title: shownTitle(tables, after, readingLang, prefs.never).title,
         blog: feedTitle(tables, after.feedId) || store.sourceName(after.feedId),
       }
@@ -211,8 +230,9 @@ export function ReadingPage() {
         const next = items[at === -1 ? (step === 1 ? 0 : items.length - 1) : at + step]
         if (!next) return
         e.preventDefault()
-        // The row's own href: no mode, so the remembered one applies (as a click does).
-        navigate(readingHref({ filter: now.filter, feedId: now.feedId, articleId: next.id }))
+        // The row's own href, in the list the URL names now: no mode, so the remembered one
+        // applies (as a click does).
+        navigate(canonicalReadingHref(window.location.search, { articleId: next.id, mode: null }))
       } else if (e.key === 'Escape') {
         if (help) setHelp(false)
         else if (now.articleId !== null) close()
@@ -365,16 +385,16 @@ export function ReadingPage() {
     >
       {/* Over the first run too: on a phone it is the only way to Liked, and a member who follows
           nothing may still have kept posts there, as the sidebar beside it does on a desktop. */}
-      {open ? null : <MobileNav subscriptions={subs} totals={counts} params={params} />}
+      {open ? null : <MobileNav tree={tree} totals={counts} params={params} />}
       {/* The sidebar, or the rail it collapses to (ADR 0030), and neither in focus. Not rendered
           rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no defined
           winner (AGENTS.md), and a column that is gone needs no element. The list is the
           exception: in focus it stays mounted and styles.css takes it out of the grid, so its
           page of rows and its scroll survive and Esc still finds the row it closed. */}
       {focused ? null : panes.sidebar === 'shown' ? (
-        <Sidebar subscriptions={subs} totals={counts} params={params} />
+        <Sidebar tree={tree} totals={counts} params={params} />
       ) : (
-        <SidebarRail subscriptions={subs} params={params} />
+        <SidebarRail tree={tree} params={params} />
       )}
       {firstRun ? null : (
         <ArticleList
@@ -385,10 +405,11 @@ export function ReadingPage() {
           locale={locale}
           now={now}
           pendingFetch={pendingFetch}
-          show={liked ? null : unreadOnly ? 'unread' : 'all'}
+          show={liked || folderGone ? null : unreadOnly ? 'unread' : 'all'}
           onShow={onShow}
           caughtUp={unreadOnly && all.length > 0}
           onMarkAll={letSeenGo}
+          folder={folderGone ? 'gone' : folder}
         />
       )}
       {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}

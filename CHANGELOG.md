@@ -39,6 +39,11 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Folders.** A member groups their subscriptions into private folders, one folder per blog.
+  The sidebar and the phone's Feeds menu list folders that open and close, a folder's name reads
+  all its blogs as one list, and Settings › Subscriptions makes, renames and deletes them and
+  moves blogs by menu, by dragging, or on a phone by a bottom sheet. Folders travel with OPML,
+  in and out (ADR 0048).
 - **Phone pages** (ADR 0047). Below 768px, Following, profiles, blogs, the Dashboard, Search and
   first run have layouts of their own instead of desktop's squeezed. Settings is a list of its
   sections, each behind a back bar, and Profile has an address of its own,

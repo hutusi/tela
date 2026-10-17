@@ -173,16 +173,19 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       { mid: 'workers-flags-1', at: now, type: 'setPrivacy', publicLikes: true },
       // An unfollow of someone never followed is a tombstone upsert through their profile.
       { mid: 'workers-unfollow-1', at: now, type: 'unfollow', userId: 'workers-bo-0000002' },
+      // A folder is an insert-select upsert held to a count; filing, one through the feed.
+      { mid: 'workers-folder-1', at: now, type: 'putFolder', id: 'workers-folder-1', name: 'D1' },
+      { mid: 'workers-file-1', at: now, type: 'fileFeed', feedId: 1, folderId: 'workers-folder-1' },
     ],
   }
   const pushed = (await (
     await call('/api/v1/mutations', { body: push, ...member })
   ).json()) as PushResponse
-  expect(pushed.applied).toHaveLength(7)
+  expect(pushed.applied).toHaveLength(9)
   const again = (await (
     await call('/api/v1/mutations', { body: push, ...member })
   ).json()) as PushResponse
-  expect(again.applied).toHaveLength(7)
+  expect(again.applied).toHaveLength(9)
   const tombstones = await db.all<{ deleted_at: number }>(
     sql`select deleted_at from follows where followee_id = 'workers-bo-0000002'`,
   )
@@ -200,11 +203,28 @@ it('invites, signs in, pushes and pulls on D1', async () => {
   expect(snap.rows.highlights).toMatchObject([{ id: 'workers-hl-1', end: 4, note: 'on D1' }])
   expect(snap.rows.follows).toMatchObject([{ userId: 'workers-anna-00001', handle: 'anna' }])
   expect(snap.rows.profile).toMatchObject([{ publicLikes: true }])
+  expect(snap.rows.folders).toMatchObject([{ id: 'workers-folder-1', name: 'D1' }])
+  expect(snap.rows.feedFolders).toMatchObject([{ feedId: 1, folderId: 'workers-folder-1' }])
   const delta = (await (
     await call(`/api/v1/sync?cursor=${snap.cursor}`, member)
   ).json()) as PullResponse
   expect(delta.rows.articles).toEqual([])
   expect(delta.more).toBe(false)
+  // Deleting a folder is two statements in one batch: the folder, and every blog that was in it.
+  await call('/api/v1/mutations', {
+    body: {
+      mutations: [
+        { mid: 'workers-unfolder-1', at: now, type: 'deleteFolder', id: 'workers-folder-1' },
+      ],
+    },
+    ...member,
+  })
+  const unfiled = (await (
+    await call(`/api/v1/sync?cursor=${delta.cursor}`, member)
+  ).json()) as PullResponse
+  expect(unfiled.rows.folders).toMatchObject([{ id: 'workers-folder-1' }])
+  expect(unfiled.rows.folders[0]?.deletedAt).not.toBeNull()
+  expect(unfiled.rows.feedFolders).toMatchObject([{ feedId: 1, folderId: null }])
   // A rename sends the follow again, in a delta.
   await db.batch([
     bumpSeq(db),
@@ -212,7 +232,7 @@ it('invites, signs in, pushes and pulls on D1', async () => {
       where user_id = 'workers-anna-00001'`),
   ])
   const renamed = (await (
-    await call(`/api/v1/sync?cursor=${delta.cursor}`, member)
+    await call(`/api/v1/sync?cursor=${unfiled.cursor}`, member)
   ).json()) as PullResponse
   expect(renamed.rows.follows).toMatchObject([{ handle: 'anna_k' }])
 

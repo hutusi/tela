@@ -213,6 +213,36 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        JSON. An older tela-jobs meanwhile only ignores `overruled_at`.
      - Rolling back: tela-web may not go back while the new tela-api is live. tela-api and
        tela-jobs may, and the migration can stay.
+   - Folders (ADR 0048, migration 0011) are additive and keep protocol 3, with no `MIN_CLIENT`
+     bump. The migration adds `folders` and `feed_folders`. Apply it, then deploy tela-jobs,
+     tela-api, tela-web, the usual order:
+     - tela-jobs first, because tela-api reads an OPML file's folders from its `readOpml`. An
+       older tela-jobs sends none, and an import then files nothing, as before.
+     - tela-api before tela-web, because the new shell sends `putFolder`, `deleteFolder` and
+       `fileFeed`. An older tela-api refuses them as invalid, so a folder made, renamed or
+       deleted, or a blog moved, visibly goes back.
+     - Each device starts over from a snapshot once, at its first boot on the new shell: its copy
+       has no folder tables. It starts over again at a boot after a tab of the earlier shell, left
+       open, has pulled into the shared copy (`kept` in `apps/reader/src/store/db.ts`): that tab
+       moved the cursor past folder rows it dropped. That boot waits on the network for its list.
+     - **Either Worker may go back alone.** An older tela-web shows the flat sidebar and Settings,
+       and ignores the folder rows a pull sends. An older tela-api sends no folder rows, so a
+       device keeps the folders it holds, or none if it took a snapshot meanwhile. Once tela-api
+       is forward again, each device's first pull asks for a snapshot, because its copy recorded
+       the folder tables as not whole (`kept`).
+     - A folder change still unsent when a Worker goes back is not kept for later:
+       - Under an older tela-web, the shell sends it as queued, since it pushes whatever is queued
+         whatever its type, and the newer tela-api applies it. That shell only shows nothing of
+         it.
+       - Under an older tela-api, the push is refused as invalid and the change leaves the queue,
+         from whichever shell sent it. A folder made, renamed or deleted, or a blog moved, in
+         that window, is lost, and the member has to do it again once tela-api is forward.
+         Keep a tela-api rollback short.
+     - After deploy, check that:
+       - a folder made in Settings shows in the sidebar, and on a second device after its pull;
+       - a folder's list (`/reading?folder=…`) has Mark all read, and its Undo works;
+       - an OPML export holds the folder as an outline, and importing that file into another
+         account makes the folder there.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way

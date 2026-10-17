@@ -2,8 +2,9 @@
  * What the device keeps between visits, in IndexedDB (`idb`: a thin wrapper over the web
  * standard, chosen so there is almost nothing between Tela and the browser to age):
  *
- * - `meta`: whose rows these are (`owner`), the cursor, and the pending mutations, one record
- *   each (`pending:<mid>`, tagged with the owner that queued it). Tabs share this database, and
+ * - `meta`: whose rows these are (`owner`), the cursor and which tables the build that moved it
+ *   keeps (`kept`), and the pending mutations, one record each (`pending:<mid>`, tagged with the
+ *   owner that queued it). Tabs share this database, and
  *   each holds only its own pending list in memory: one record for the whole list let a tab's
  *   save erase another tab's unsent changes.
  * - `tables`: one record per synced table (a few thousand rows at most; written whole).
@@ -61,6 +62,13 @@ export type Persisted = {
   unverified: string | null
   cursor: number
   rows: TableRows | null
+  /**
+   * The tables the copy holds whole up to `cursor` (`KEPT`): those the server sent since the copy
+   * was last a snapshot. One a tela-api from before it left out is not among them, though the
+   * copy holds it (empty, or as it was); when the server sends it again, only a snapshot can
+   * bring its rows back. Empty with no rows.
+   */
+  covered: string[]
   pending: Pending[]
 }
 
@@ -84,6 +92,11 @@ export type Change = {
    * so a tab ahead of the copy keeps it current rather than waiting for that tab to pull again.
    */
   whole?: TableRows
+  /**
+   * The tables the writer's copy holds whole up to `cursor` (`Persisted.covered`). A write that
+   * moves the cursor without it covers none: the copy is not trusted until a snapshot.
+   */
+  covered?: readonly string[]
   /** Unsent changes to record, one record each, so no tab writes over another's. */
   put?: readonly Pending[]
   /** Changes to forget: answered and caught up with, or refused. */
@@ -133,9 +146,10 @@ export interface Persistence {
 /**
  * Every table the device holds. One missing from storage means it was written by a build that
  * did not know it, so the device starts over from a snapshot rather than trust a cursor that has
- * passed rows it never kept (highlights, added after the first devices synced; follows, ADR 0031).
+ * passed rows it never kept (highlights, added after the first devices synced; follows, ADR 0031;
+ * folders, ADR 0048). Present is not enough: see `KEPT`.
  */
-const TABLES: (keyof TableRows)[] = [
+export const TABLES: (keyof TableRows)[] = [
   'profile',
   'prefs',
   'subscriptions',
@@ -149,6 +163,8 @@ const TABLES: (keyof TableRows)[] = [
   'claims',
   'translations',
   'follows',
+  'folders',
+  'feedFolders',
 ]
 
 /** This layout's database. Earlier builds used 'tela', with no owner and no checks. */
@@ -255,6 +271,50 @@ export const earlierBuild: EarlierBuild = {
 
 const OWNER = 'owner'
 const CURSOR = 'cursor'
+/**
+ * Where the cursor was last moved by a build that writes this, and which tables the copy holds
+ * whole up to it: every table the server sent since the copy was last a snapshot. Every move of
+ * the cursor here writes it. Two writers leave it behind, and either makes the copy untrustworthy
+ * in a way that a table being present cannot show (ADR 0048):
+ *
+ * - A build from before a table (a tab left open across the deploy, sharing this database) moves
+ *   the cursor past that table's rows, dropping them. The table is there, written here earlier,
+ *   but stale, and its rows never come again: a folder deleted elsewhere would stay for good. Its
+ *   move leaves `cursor` behind, and the copy starts over at the next load.
+ * - A tela-api from before a table (a rollback) sends no rows of it, and the device keeps it empty
+ *   or as it was. The table is left out of `tables`. The copy loads as it is, and starts over when
+ *   the server sends that table again (`LocalStore.applyPull`), so a boot during the rollback does
+ *   not wait on the network each time.
+ */
+const KEPT = 'kept'
+type Kept = { tables: string[]; cursor: number }
+
+/** What the copy holds whole up to its cursor, if a build that writes `KEPT` moved it last. */
+function keptAt(kept: unknown, cursor: number): string[] | null {
+  if (typeof kept !== 'object' || kept === null) return null
+  const k = kept as Partial<Kept>
+  if (k.cursor !== cursor || !Array.isArray(k.tables)) return null
+  return k.tables.filter((t): t is string => typeof t === 'string')
+}
+
+/**
+ * `KEPT` after a write of `rows` at `cursor` over a copy that held `stored` whole (null: not
+ * trusted). A table the write puts is the writer's whole copy of it, so it is whole if the writer
+ * holds it whole; one it leaves is whole if it was and the writer holds it whole too, since the
+ * writer's pull covered everything after the stored cursor. A write of every table is the
+ * writer's whole copy.
+ */
+export function keptAfter(
+  stored: readonly string[] | null,
+  rows: Partial<TableRows>,
+  covered: readonly string[],
+  cursor: number,
+): Kept {
+  const writes = new Set<string>(Object.keys(rows))
+  const all = TABLES.every((t) => writes.has(t))
+  const was = new Set(stored ?? [])
+  return { tables: covered.filter((t) => all || writes.has(t) || was.has(t)), cursor }
+}
 const UNVERIFIED = 'unverified'
 /** Earlier builds' keys: the owner, and the whole pending list in one record. Never read. */
 const LEGACY = ['userId', 'pending']
@@ -339,11 +399,19 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
         const owner = await ownerOf(tx)
         if (owner === null) {
           await wipe(tx)
-          return { owner: null, unverified: await markOf(tx), cursor: 0, rows: null, pending: [] }
+          return {
+            owner: null,
+            unverified: await markOf(tx),
+            cursor: 0,
+            rows: null,
+            covered: [],
+            pending: [],
+          }
         }
         const meta = tx.objectStore('meta')
-        const [cursor, unverified, keys, records, values] = await Promise.all([
+        const [cursor, kept, unverified, keys, records, values] = await Promise.all([
           meta.get(CURSOR),
+          meta.get(KEPT),
           markOf(tx),
           meta.getAllKeys(pendingRange()),
           meta.getAll(pendingRange()) as Promise<StoredPending[]>,
@@ -358,7 +426,8 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
           else if (key !== undefined) stray.push(meta.delete(key))
         })
         await Promise.all(stray)
-        const complete = values.every((v) => v !== undefined)
+        const covered = keptAt(kept, Number(cursor ?? 0))
+        const complete = values.every((v) => v !== undefined) && covered !== null
         return {
           owner,
           unverified,
@@ -366,6 +435,7 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
           rows: complete
             ? (Object.fromEntries(TABLES.map((t, i) => [t, values[i]])) as TableRows)
             : null,
+          covered: complete ? (covered ?? []) : [],
           pending: inOrder(pending),
         }
       }),
@@ -399,15 +469,24 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
     commit: (owner, change) =>
       write(['meta', 'tables'], async (tx) => {
         const meta = tx.objectStore('meta')
-        const [stored, storedCursor] = await Promise.all([ownerOf(tx), meta.get(CURSOR)])
+        const [stored, storedCursor, storedKept] = await Promise.all([
+          ownerOf(tx),
+          meta.get(CURSOR),
+          meta.get(KEPT),
+        ])
         if (stored !== owner) return false
         const tables = tx.objectStore('tables')
-        const rows = placed(change, Number(storedCursor ?? 0))
+        const at = Number(storedCursor ?? 0)
+        const rows = placed(change, at)
+        const kept =
+          rows && change.cursor !== undefined
+            ? keptAfter(keptAt(storedKept, at), rows, change.covered ?? [], change.cursor)
+            : null
         await Promise.all([
           ...Object.entries(rows ?? {}).map(([t, value]) =>
             tables.put(value, t as keyof TableRows),
           ),
-          ...(rows && change.cursor !== undefined ? [meta.put(change.cursor, CURSOR)] : []),
+          ...(kept ? [meta.put(kept.cursor, CURSOR), meta.put(kept, KEPT)] : []),
           ...(change.put ?? []).map((e) =>
             meta.put({ ...e, owner } satisfies StoredPending, pendingKey(e.mutation.mid)),
           ),
@@ -462,6 +541,8 @@ export function memoryPersistence(): Persistence {
   let unverified: string | null = null
   let cursor = 0
   let tables: Partial<TableRows> = {}
+  // What `tables` holds whole up to `cursor`, as `KEPT` says it in IndexedDB.
+  let covered: string[] = []
   // Only the owner's: a claim wipes them with everything else, and every write checks.
   const pending = new Map<string, Pending>()
   const bodies = new Map<string, StoredBody>()
@@ -470,6 +551,7 @@ export function memoryPersistence(): Persistence {
   const wipe = () => {
     cursor = 0
     tables = {}
+    covered = []
     pending.clear()
     bodies.clear()
     objects.clear()
@@ -478,7 +560,7 @@ export function memoryPersistence(): Persistence {
     async load() {
       if (owner === null) {
         wipe()
-        return { owner: null, unverified, cursor: 0, rows: null, pending: [] }
+        return { owner: null, unverified, cursor: 0, rows: null, covered: [], pending: [] }
       }
       const complete = TABLES.every((t) => t in tables)
       return {
@@ -486,6 +568,7 @@ export function memoryPersistence(): Persistence {
         unverified,
         cursor: complete ? cursor : 0,
         rows: complete ? (tables as TableRows) : null,
+        covered: complete ? covered : [],
         pending: inOrder(pending.values()),
       }
     },
@@ -513,7 +596,10 @@ export function memoryPersistence(): Persistence {
       const rows = placed(change, cursor)
       if (rows) {
         tables = { ...tables, ...rows }
-        if (change.cursor !== undefined) cursor = change.cursor
+        if (change.cursor !== undefined) {
+          covered = keptAfter(covered, rows, change.covered ?? [], change.cursor).tables
+          cursor = change.cursor
+        }
       }
       for (const e of change.put ?? []) pending.set(e.mutation.mid, e)
       for (const mid of change.drop ?? []) pending.delete(mid)

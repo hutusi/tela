@@ -111,6 +111,48 @@ describe('the device store', () => {
     expect((await storage.load()).cursor).toBe(9)
   })
 
+  test('a copy taken from a tela-api before folders starts over when they come back (ADR 0048)', async () => {
+    const storage = memoryPersistence()
+    const store = await member(storage)
+    // A snapshot during a rollback of tela-api: no folder tables at all.
+    const {
+      folders: _f,
+      feedFolders: _ff,
+      ...old
+    } = pull(9, { subscriptions: [sub(1)] }, true).rows
+    const shape = (p: object) => p as unknown as Parameters<LocalStore['applyPull']>[0]
+    expect(
+      await store.applyPull(
+        shape({ cursor: 9, more: false, reset: true, rows: old, tombstones: [] }),
+        store.epoch,
+      ),
+    ).toBe(false)
+    expect((await storage.load()).covered).not.toContain('folders')
+    // A delta from the older tela-api changes nothing about that.
+    expect(
+      await store.applyPull(
+        shape({ cursor: 10, more: false, reset: false, rows: old, tombstones: [] }),
+        store.epoch,
+      ),
+    ).toBe(false)
+    expect(store.cursor).toBe(10)
+    // tela-api is back. Its delta starts past the folder made meanwhile: it is not folded in, and
+    // the device asks for a snapshot, keeping what it shows until then.
+    const folder = { id: 'folder-back', name: 'Back', createdAt: 1, updatedAt: 1, deletedAt: null }
+    expect(await store.applyPull(pull(12, { articles: [article(12)] }), store.epoch)).toBe(true)
+    expect(store.cursor).toBe(0)
+    expect(store.getSnapshot().tables.subscriptions.has(1)).toBe(true)
+    expect(store.getSnapshot().tables.articles.has(12)).toBe(false)
+    expect(
+      await store.applyPull(
+        pull(12, { subscriptions: [sub(1)], folders: [{ ...folder, seq: 11 }] }, true),
+        store.epoch,
+      ),
+    ).toBe(false)
+    expect(store.getSnapshot().tables.folders.get('folder-back')?.name).toBe('Back')
+    expect((await storage.load()).covered).toContain('folders')
+  })
+
   test('keeps an acknowledged change until a pull reaches it, then drops it', async () => {
     const store = await member()
     store.mutate({ type: 'markRead', articleId: 7 })
@@ -142,7 +184,7 @@ describe('the device store', () => {
   test('a pull rewrites only the tables it touched', async () => {
     const storage = recording()
     const store = await member(storage)
-    expect(storage.saved.at(-1)).toHaveLength(13) // a snapshot writes every table
+    expect(storage.saved.at(-1)).toHaveLength(15) // a snapshot writes every table
     await store.applyPull(pull(6, { articles: [article(9)] }), store.epoch)
     expect(storage.saved.at(-1)).toEqual(['articles'])
     // Unsubscribing prunes the feed's articles: no article row named them, yet they changed.
@@ -493,6 +535,18 @@ describe('a change held back for an Undo', () => {
     // Once the clock is ahead again, it is the clock's time.
     clock = NOW + 100
     expect(made(store.mutate({ type: 'markRead', articleId: 7 })).at).toBe(NOW + 100)
+  })
+
+  test('a folder whose deletion is held is still one, made here and unsent or not (ADR 0048)', async () => {
+    const { store } = await holding()
+    // Made on this device, so the server has never heard of it.
+    store.mutate({ type: 'putFolder', id: 'folder-made-here', name: 'Cities' })
+    const deleted = made(store.mutate({ type: 'deleteFolder', id: 'folder-made-here' }, HOLD))
+    expect(store.getSnapshot().tables.folders.size).toBe(0)
+    expect([...store.foldersBeforeHolds().values()].map((f) => f.name)).toEqual(['Cities'])
+    // Once the deletion goes, the name and its place are free.
+    store.release(deleted.mid)
+    expect(store.foldersBeforeHolds().size).toBe(0)
   })
 
   test('release lets one held change go now: stored, then sent', async () => {

@@ -55,6 +55,26 @@ async function member(storage = memoryPersistence(), id = 'a', timers?: Timers) 
   return store
 }
 
+describe('a tela-api back from a rollback (ADR 0048)', () => {
+  test('a delta with a table the copy missed is not taken, and a snapshot is asked for at once', async () => {
+    const store = new LocalStore(memoryPersistence(), () => NOW)
+    await store.open()
+    await store.setUser('a')
+    // Taken while tela-api had no folders.
+    const { folders: _f, feedFolders: _ff, ...old } = snapshot.rows
+    await store.applyPull({ ...snapshot, rows: old } as typeof snapshot, store.epoch)
+    const answers = [
+      pull(8, { subscriptions: [sub(1)] }),
+      pull(8, { profile: [profile], subscriptions: [sub(1), sub(2)] }, true),
+    ]
+    const calls = server(() => Response.json(answers.shift()))
+    await engineFor(store).pull()
+    expect(calls.map((c) => c.path)).toEqual(['/api/v1/sync?cursor=5', '/api/v1/sync?cursor=0'])
+    expect(store.cursor).toBe(8)
+    expect(store.getSnapshot().tables.subscriptions.has(2)).toBe(true)
+  })
+})
+
 describe('another tab signing in as someone else', () => {
   test('every sync call names whose rows the device holds', async () => {
     const store = await member()

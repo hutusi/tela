@@ -8,6 +8,7 @@
  * answer.
  */
 import {
+  FOLDER_NAME_MAX,
   HIGHLIGHT_CONTEXT,
   HIGHLIGHT_NOTE_MAX,
   HIGHLIGHT_QUOTE_MAX,
@@ -29,6 +30,9 @@ const memberId = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/)
 
 /** Client-minted, like `mid`, so a replayed push cannot make a second highlight. */
 const highlightId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
+
+/** Client-minted too (ADR 0048), so a replayed push cannot make a second folder. */
+const folderId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
 
 export const mutationSchema = z.discriminatedUnion('type', [
   /**
@@ -140,6 +144,28 @@ export const mutationSchema = z.discriminatedUnion('type', [
    */
   z.object({ ...base, type: z.literal('follow'), userId: memberId }),
   z.object({ ...base, type: z.literal('unfollow'), userId: memberId }),
+  /**
+   * Make a folder, or rename one (ADR 0048). The later `at` wins, and a deleted folder stays
+   * deleted. A member who already has `MAX_FOLDERS` makes no more: the push writes nothing.
+   */
+  z.object({
+    ...base,
+    type: z.literal('putFolder'),
+    id: folderId,
+    name: z.string().trim().min(1).max(FOLDER_NAME_MAX),
+  }),
+  /** Delete wins, and the folder's blogs are in no folder from then on. */
+  z.object({ ...base, type: z.literal('deleteFolder'), id: folderId }),
+  /**
+   * Put a blog in a folder, or in none (null). A blog is in one folder at most, and the later `at`
+   * wins. A folder deleted meanwhile takes nothing.
+   */
+  z.object({
+    ...base,
+    type: z.literal('fileFeed'),
+    feedId: id,
+    folderId: folderId.nullable(),
+  }),
 ])
 
 export type Mutation = z.infer<typeof mutationSchema>

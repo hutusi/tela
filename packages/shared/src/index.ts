@@ -1,5 +1,6 @@
 export * from './claims'
 export * from './constants'
+export * from './folders'
 export * from './handles'
 export * from './invites'
 export * from './languages'

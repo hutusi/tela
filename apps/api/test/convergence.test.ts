@@ -87,6 +87,13 @@ function live(t: Tables) {
     follows: [...t.follows.values()]
       .map((f) => ({ userId: f.userId, handle: f.handle, displayName: f.displayName }))
       .sort((a, b) => a.userId.localeCompare(b.userId)),
+    folders: [...t.folders.values()]
+      .map((f) => ({ id: f.id, name: f.name }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+    filed: [...t.feedFolders.values()]
+      .filter((f) => f.folderId !== null)
+      .map((f) => ({ feedId: f.feedId, folderId: f.folderId }))
+      .sort((a, b) => a.feedId - b.feedId),
     flags: {
       publicSubscriptions: t.profile?.publicSubscriptions,
       publicLikes: t.profile?.publicLikes,
@@ -234,7 +241,7 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
     const at = api.clock.now() - d.skew
     api.clock.advance(1 + Math.floor(random() * 5))
     const mid = `seed${seed}-m${++mids}-pad`
-    const choice = only ? (pick(only) as number) : Math.floor(random() * 18)
+    const choice = only ? (pick(only) as number) : Math.floor(random() * 21)
     const article = pick(articleIds)
     const feed = pick(FEEDS) as number
     let m: Mutation | null = null
@@ -324,6 +331,27 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
       }
     }
     if (choice === 17 && article) m = { mid, at, type: 'markUnread', articleId: article }
+    // Folders (ADR 0048): a new one or a rename of one held, a deletion, and a move to one held
+    // or to none.
+    const folder = pick([...shown.folders.keys()])
+    const name = pick(['Cities', 'Craft', 'Quiet']) as string
+    if (choice === 18)
+      m = {
+        mid,
+        at,
+        type: 'putFolder',
+        id: folder && random() < 0.5 ? folder : `seed${seed}-f${mids}`,
+        name,
+      }
+    if (choice === 19 && folder) m = { mid, at, type: 'deleteFolder', id: folder }
+    if (choice === 20)
+      m = {
+        mid,
+        at,
+        type: 'fileFeed',
+        feedId: feed,
+        folderId: folder && random() < 0.8 ? folder : null,
+      }
     if (m) d.pending.push({ mutation: m })
   }
 
@@ -360,6 +388,15 @@ describe('sync converges', () => {
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
     test(`seed ${seed}: two devices, one behind; any interleaving of changes, pushes, lost responses and pulls`, async () => {
       await scenario(seed, 160)
+    })
+  }
+})
+
+describe('folders converge (ADR 0048)', () => {
+  // Folders alone, so a rename, a delete and a move meet each other, and the other device's, often.
+  for (const seed of [1, 2, 3, 4, 5, 6]) {
+    test(`seed ${seed}: two devices making, renaming, deleting and filling folders`, async () => {
+      await scenario(seed, 160, [18, 18, 19, 20, 20, 20])
     })
   }
 })

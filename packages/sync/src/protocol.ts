@@ -83,4 +83,6 @@ export const emptyRows = (): SyncRows => ({
   claims: [],
   translations: [],
   follows: [],
+  folders: [],
+  feedFolders: [],
 })

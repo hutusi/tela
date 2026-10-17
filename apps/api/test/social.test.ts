@@ -330,12 +330,18 @@ describe('your data', () => {
       { type: 'recommend', articleId: a, note: 'mine' },
       { type: 'follow', userId: ANNA },
       { type: 'setPref', key: 'reader.size', value: 'l' },
+      { type: 'putFolder', id: 'folder-cities', name: 'Cities' },
+      { type: 'putFolder', id: 'folder-empty', name: 'Empty' },
+      { type: 'fileFeed', feedId: 1, folderId: 'folder-cities' },
     ])
     await recommend(CLEO, a, now, 'not mine')
     const res = await api.request('/api/v1/export', { as: me })
     expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="tela-/)
     const body = (await res.json()) as Record<string, unknown[]>
-    expect(body.subscriptions).toMatchObject([{ feedUrl: 'https://blog1.example/feed' }])
+    expect(body.subscriptions).toMatchObject([
+      { feedUrl: 'https://blog1.example/feed', folder: 'Cities' },
+    ])
+    expect(body.folders).toMatchObject([{ name: 'Cities' }, { name: 'Empty' }])
     expect(body.likes).toMatchObject([{ title: `Post ${a}` }])
     expect(body.recommendations).toMatchObject([{ note: 'mine' }])
     expect(body.following).toMatchObject([{ handle: 'anna' }])

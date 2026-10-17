@@ -1,7 +1,8 @@
 /**
  * Adding feeds (ADR 0024): discovery and adding by URL go to tela-jobs' `Ingest` RPC, because they
  * fetch; OPML import registers without fetching, in three statements, and the sweeps fetch the
- * feeds from there. Subscribing to a feed Tela already has is a mutation, not an RPC (ADR 0025).
+ * feeds from there. Its folders become the member's folders (ADR 0048), and an export keeps them.
+ * Subscribing to a feed Tela already has is a mutation, not an RPC (ADR 0025).
  */
 
 import { buildOpml, MAX_OPML_BYTES } from '@tela/content/opml'
@@ -11,6 +12,7 @@ import {
   consumeLimit,
   dueFeeds,
   FEED_FETCH_TTL_MS,
+  fileImportedFeeds,
   first,
   importFeedUrls,
   type JobQueues,
@@ -108,20 +110,36 @@ export function feedRoutes(deps: ApiDeps) {
     })
     const feedIds = await importFeedUrls(db, feeds, member.id, now)
     const subscribed = await subscribeMany(db, member.id, feedIds, now)
+    // An older tela-jobs reads no folders; its import files nothing, as imports always did.
+    const filed = await fileImportedFeeds(db, member.id, read.folders ?? [], now)
     // New feeds are due now: the next sweep fetches them, politely per host.
-    return c.json({ feeds: feedIds.length, subscribed })
+    return c.json({ feeds: feedIds.length, subscribed, folders: filed.folders, filed: filed.filed })
   })
 
   routes.get('/opml', async (c) => {
     const member = c.get('member')
-    const rows = await db.all<{ feed_url: string; title: string; home_url: string }>(sql`
-      select f.feed_url, coalesce(f.title, s.title, s.home_url) as title, s.home_url
+    // Each folder by name, its blogs by title, then the blogs in none. A deleted folder is none.
+    const rows = await db.all<{
+      feed_url: string
+      title: string
+      home_url: string
+      folder: string | null
+    }>(sql`
+      select f.feed_url, coalesce(f.title, s.title, s.home_url) as title, s.home_url,
+        d.name as folder
       from subscriptions sub join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id
+      left join feed_folders ff on ff.user_id = sub.user_id and ff.feed_id = sub.feed_id
+      left join folders d on d.id = ff.folder_id and d.deleted_at is null
       where sub.user_id = ${member.id} and sub.deleted_at is null
-      order by lower(coalesce(f.title, s.title, s.home_url))
+      order by d.name is null, lower(d.name), d.name, lower(coalesce(f.title, s.title, s.home_url))
     `)
     const opml = buildOpml(
-      rows.map((r) => ({ feedUrl: r.feed_url, title: r.title, homeUrl: r.home_url })),
+      rows.map((r) => ({
+        feedUrl: r.feed_url,
+        title: r.title,
+        homeUrl: r.home_url,
+        folder: r.folder,
+      })),
       new Date(deps.clock.now()),
     )
     return c.body(opml, 200, {
