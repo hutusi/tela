@@ -71,6 +71,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `body_translations` | A body per content version and language: state, reservation, streamed `chunk_keys`, the finished object (ADR 0023) |
 | `subscriptions` | `(user_id, feed_id)` with `watermark_id`: everything at or below it is read (ADR 0009) |
 | `folders`, `feed_folders` | The member's private folders (ADR 0048): a folder by client-minted `id` with its `name`, soft-deleted; and which folder each blog is in, `(user_id, feed_id)` with `folder_id` (null is none) and the move's `updated_at`. A table apart from `subscriptions`, so a move never re-sends a feed's horizon; a filing outlives an unsubscribe |
+| `blogrolls`, `blogroll_blogs` | The member's blogrolls (ADR 0050), synced to their member only; others read a public one through tela-api. A blogroll by a client-minted 12-character `id`, which is its address (`/l/<id>`), with its `name` and `description` (their clock is `updated_at`), `is_public` with a version of its own that a show must name (`public_version`, as the profile's switches, issue #16), `public_since` (when it first went public, never cleared: Discover's order) and the operator's Hide from Discover (`hidden_at`, never synced and never moving `seq`), soft-deleted. The blogs in each, `(blogroll_id, feed_id)` with `user_id`: the `note` on a clock of its own (`note_at`), so it outlives a removal, `added_at` (the order), and putting in and taking out on `updated_at` and `removed_at`. Unsubscribing touches neither |
 | `user_article_states`, `recommendations`, `highlights` | The member's read and like state (a row with `read_updated_at` and no `read_at` is marked unread, which beats the watermark and the horizon until a later read; compaction keeps every row with that clock, ADR 0009), public recommendations with notes (indexed by `created_at` for the week Discover counts, `recommendations_created_idx`), private highlights with notes (ADR 0026) |
 | `follows` | `(follower_id, followee_id)`: one member following another, one-way and public, soft-deleted, synced to the follower (ADR 0031) |
 | `websub_subscriptions` | One per feed with a hub: topic, secret, status, lease |
@@ -118,9 +119,10 @@ and hashes as the `NORM_VERSION` contract.
 - One blog, one feed (`pipeline/merge.ts`, ADR 0028): before fetching, a feed whose blog has
   other active feeds checks whether it holds the same post URLs as one of them over the time
   both cover. If it does and the other is canonical (on the blog's own host, else older), it
-  pauses itself with `merged_into`, moves its readers, the posts only it had and their titles,
-  translations and read states across, and stops. Adding, importing or subscribing to a merged
-  feed lands on its target.
+  pauses itself with `merged_into`, moves its readers, their filings and its places in blogrolls
+  (with their notes, unless the target is in that blogroll already: ADRs 0048, 0050), the posts
+  only it had and their titles, translations and read states across, and stops. Adding,
+  importing or subscribing to a merged feed lands on its target.
 - Scheduling: interval = half the average gap between posts over 7 days, clamped to 30 min…24 h,
   ×1.5 when unchanged, raised to the publisher's `ttl`/`max-age`; ±10% jitter on the derived
   `next_fetch_at` only. Errors back off `interval × 2^n` up to 7 days; 429/503 honour
@@ -221,16 +223,18 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `/api/v1/claims` | Start a claim, see its proofs (and whether the member has a GitHub to claim by), ask for the check; a failed check comes back as a `reason` the page words, or as text |
 | `/api/v1/profile`, `/api/v1/sites/:id/*`, `/api/v1/dashboard`, `/api/v1/search` | Handle and profile, owner-only topics and opt-out, the author dashboard (per blog its language, topics, readers and those new in 30 days, and its live totals of posts, likes, recommendations and notes; per post, the newest twenty, likes, recommendations and notes; readers' notes with their avatars), search past the device's horizon |
 | `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest; which of them read a blog. Only as far as each shows it (ADR 0031). Readers to follow come from Discover's pool, matched on the device (ADR 0044): `suggested` is always empty, kept for shells cached before that, which read it |
-| `GET /api/v1/export` | "Your data": the member's own rows as one JSON file |
+| `GET /api/v1/export` | "Your data": the member's own rows as one JSON file, their live blogrolls included, private ones too, with their blogs and notes |
 | `GET /api/v1/public/auth` | Which providers the sign-in sheet may offer, `{google, github}`: each once its app is configured (ADR 0036) |
-| `/api/v1/public/*` | Discover's Blogs at `/discover`, which the page `/discover/blogs` reads (60 blogs a page, `?page=`, with the `total` its filters match), a blog's page (with its claimant and readers' notes), a profile (with follow counts, and liked posts only if shown): listed and featured blogs only, edge-cacheable. A blog's reader count is given from three readers and is null below, in Discover's order as well as its value (`publicReaderCount`, ADR 0041); member search gives it the same way |
+| `/api/v1/public/*` | Discover's Blogs at `/discover`, which the page `/discover/blogs` reads (60 blogs a page, `?page=`, with the `total` its filters match), a blog's page (with its claimant and readers' notes), a profile (with follow counts, its public blogrolls newest first, each with its first three blogs and its count, hidden from Discover or not, and liked posts only if shown): listed and featured blogs only, edge-cacheable. A blog's reader count is given from three readers and is null below, in Discover's order as well as its value (`publicReaderCount`, ADR 0041); member search gives it the same way |
 | `GET /api/v1/public/avatars/:userId?v=` | A member's picture, only at the version it is at (ADR 0032, 0033): the one they uploaded, from R2, else their Gravatar while they show it and the check found one, fetched here by the hash of their email, which never leaves tela-api; raster types only, 512 KB, immutable for 30 days; none is a 404 the letter stands in for |
 | `GET /api/v1/public/front` | The front page's edition (ADR 0035): each public blog's newest post, newest first, from the last seven days, or the latest ones when nobody wrote that week, eleven at most, with its titles and translated excerpts, its blog and its claimant; and the counts the copy states, public blogs and the week's distinct blogs, languages and posts. Each blog's newest post is one seek per live feed down `articles_feed_sort_idx`; future-dated posts wait. Cached as a profile is |
 | `GET /api/v1/public/discover/week`, `/articles`, `/readers` | Discover's other tabs (ADR 0044), in `apps/api/src/routes/discover.ts`: one answer for everyone, which the device personalizes from its own rows, so nothing about the viewer is asked. This week: the rolling seven days' recommended posts, the most recommended first, then the newest; the front page's edition beside them (`editionStatement`, shared with `/front`), for the device to fall back on; twelve blogs new in the directory, every listed blog alike, by when it arrived or was claimed and never by an operator's review; and readers to suggest. Articles (`?topic&lang&cursor`): every public post newest first, thirty a page behind a `sortAt:id` cursor cut by key down `articles_sort_idx`, never by offset; the week's recommended, whole, on the first page only; the languages of the last 90 days within the topic. Readers: `readersPool`, the people who recommend or show what they read, in two round trips, each with their newest recommendations as `[articleId, siteId]`, the public blogs they show (null unless they do), their earliest find (by recommendation id, never the device's `at`, from two others after) and their newest note, of posts whose date has come. A post carries its week's recommendations, up to twenty recommender ids and its newest note. Listed and featured blogs, live feeds and posts whose date has come only; no answer says how a blog was listed. Cached as a profile is |
+| `GET /api/v1/public/blogrolls/:id` | A public blogroll's page (ADR 0050, `routes/blogrolls.ts`): its name, description and `updatedAt` (the latest of its own clock and its blogs'), its owner, and its blogs in the order added. Each blog has its name (`BLOG_NAME`: the blog's title, or its feed's beside another feed of the same blog), home, favicon, language, description (300 characters at most), whether it is listed (the page links a listed one to `/s/:id`, any other to the blog), its reader count from three, whether its feed is dead, and the owner's note. Blogs the operator rejected are left out. A malformed id, or a blogroll unknown, deleted or private, is a 404. Cached as a profile is |
+| `GET /api/v1/public/discover/blogrolls?cursor=` | Discover's Blogrolls tab (ADR 0050), in `apps/api/src/routes/discover.ts`: public, live blogrolls the operator has not hidden, with three or more blogs others see (`inDiscover`), newest public first by `(public_since, id)`, thirty a page behind a `<publicSince>:<id>` cursor cut by key, never by offset; each with its first five blogs and how many others see. Cached as a profile is |
 | `GET /api/v1/public/handles/:handle` | Whether a handle is free, for For writers' card as it is typed: `invalid`, `reserved`, `taken` or `available` (by `@tela/shared`'s rules, read lowercase), and the first free one among it, it plus a digit and it plus `_writes`. `no-store`; a valid shape is counted per IP (`handleCheck`, 300 an hour) |
 | `PUT`, `DELETE /api/v1/avatar` | A member's own picture (ADR 0033): its bytes say what it is (PNG, JPEG or WebP, square, 64–1024 px, 512 KB), kept in R2 `tela-content` under `avatars/<userId>/<random id>.<ext>`, a key never used twice, so a deletion can only take the object its own change replaced; the body is read no further than 512 KB, and twenty an hour are counted before any is read; each change moves the version and deletes the object it replaces |
 | `POST /api/admin/admins` | Bearer `ADMIN_TOKEN`: open or close the admin console to a member (`profiles.is_admin`, ADR 0039); only the token grants it |
-| `/api/v1/admin/*` | The admin console (ADR 0039), for a member with `is_admin`, read from D1 on every call past the signed session copy: `counts` and `overview`; `claims`, `sites`, `feeds`, `discover`, `people`, `invites`, `translation` and `system` as filtered, searched lists (500 rows at most; People and Invitations take a search as a POST body, since it is often an email address and a URL reaches the Workers' logs) and their records; `translation/report` and `system/report`; `POST act` (an action on up to 50 targets, each its own audited batch) and `POST undo` (a group restored only while every target still holds what the action wrote). Under `/api/v1`, never `/api/admin`, so its writes are held to the same origin |
+| `/api/v1/admin/*` | The admin console (ADR 0039), for a member with `is_admin`, read from D1 on every call past the signed session copy: `counts` and `overview`; `claims`, `sites`, `feeds`, `discover`, `people`, `invites`, `translation` and `system` as filtered, searched lists (500 rows at most; People and Invitations take a search as a POST body, since it is often an email address and a URL reaches the Workers' logs) and their records; `translation/report` and `system/report`; `POST act` (an action on up to 50 targets, each its own audited batch) and `POST undo` (a group restored only while every target still holds what the action wrote). Discover's `blogrolls` filter and `blogrolls/:id` list public, live blogrolls only, never a private one, with the owner's handle and their visible and total counts; `blogroll.hide` and `blogroll.restore` write `hidden_at` with no `seq` and no `updated_at`, so nothing syncs and the owner is not told (ADR 0050). Under `/api/v1`, never `/api/admin`, so its writes are held to the same origin |
 | `/api/websub/:feedId` | The hub callback: intent checks, and signed pings that make the feed due |
 | `/api/health` | Liveness and D1 latency |
 
@@ -253,13 +257,20 @@ The only public Worker, unpinned, with no D1.
   address that names no member or version.
 - Sessions come from the signed cookie cache; when it has lapsed, tela-api's get-session is asked
   and its fresh cookie passed on.
-- Discover's four tabs (`/discover`, `/discover/articles`, `/discover/blogs`,
-  `/discover/readers`; ADR 0044), `/s/:id` and `/@handle` are rendered here (`src/ssr.tsx`) with
-  the SPA's own views, from tela-api's public JSON, into the built `index.html`, cached per colo,
-  locale and deploy for five minutes, with the data handed to the SPA in `#tela-data`. The page is
-  the visitor's: a member's device hides their own blogs and adds whom they follow once the app
-  boots. `/discover` with the Blogs page's old filters (`topic`, `lang`, `page`) is answered 301 to
-  `/discover/blogs` with its whole query, asking tela-api nothing.
+- Discover's five tabs (`/discover`, `/discover/articles`, `/discover/blogs`,
+  `/discover/blogrolls`, `/discover/readers`; ADRs 0044, 0050), `/s/:id`, `/@handle` and a
+  blogroll's `/l/:id` (ADR 0050) are rendered here (`src/ssr.tsx`) with the SPA's own views, from
+  tela-api's public JSON, into the built `index.html`, cached per colo, locale and deploy for five
+  minutes, with the data handed to the SPA in `#tela-data`. The page is the visitor's: a member's
+  device hides their own blogs and adds whom they follow once the app boots. A 404 is cached the
+  same way: a private, deleted or unknown blogroll is the Not found page, which boots the app with
+  `createRoot`, so the owner's device renders their own blogroll over it from the local store. A
+  blogroll made public just after someone opened its link is still that Not found page at the
+  colo for up to five minutes, which the app replaces once its own request finds the blogroll.
+  `/discover/blogrolls` always exists, so an
+  answer missing from tela-api is the plain shell, not a 404. `/discover` with the Blogs page's
+  old filters (`topic`, `lang`, `page`) is answered 301 to `/discover/blogs` with its whole query,
+  asking tela-api nothing.
 - `/` is the front page (ADR 0035), rendered the same way for visitors from
   `/api/v1/public/front`, one page for each title mode (`?titles=translated`), and from its own
   key, never the address asked. A request whose cookie holds `tela.session_token` is a member's:
@@ -290,9 +301,11 @@ A Vite + React SPA that renders from the device.
 - `store/selectors.ts` answers the reading view: unread, lists, counts, the title to show.
 - The URL alone says which article is open (ADR 0017's rule, kept): a click, a filter change or
   Back is a render, not a request.
-- `views/` are the front page, Discover, a blog's page, a profile and the info pages as pure
-  components the edge renders too. `/` renders the front page while the session is unknown on a
-  device that holds no account, so the edge's copy is never replaced by a blank page.
+- `views/` are the front page, Discover, a blog's page, a profile, a blogroll's page and the info
+  pages as pure components the edge renders too. What only the app adds (a blogroll's owner tools,
+  each row's Remove and note editor, Subscribe to all) comes in through slots. `/` renders the
+  front page while the session is unknown on a device that holds no account, so the edge's copy
+  is never replaced by a blank page.
 - Highlights: `lib/anchor.ts` finds a highlight again by leaf, quote and context;
   `lib/use-highlights.ts` paints them over the rendered text with the CSS Custom Highlight API and
   writes back an anchor the post moved. Typography and theme are synced prefs
@@ -313,14 +326,15 @@ A Vite + React SPA that renders from the device.
 | `/`, `/?titles=translated` | The front page for visitors (ADR 0035), rendered at the edge: the count of public blogs, this week's edition (one post a blog; the latest when the week has none), titles as written or in the reader's language; members go to `/reading` |
 | `/login` | Password first, or an emailed code (ADR 0043); the mail's sign-in and reset links fill their code in and ask before using it (ADR 0036), and a first sign-in's (`join=1`) asks for the joiner's password and goes on to Discover |
 | `/reading?filter=&feed=&folder=&article=&mode=` | Sidebar, list and the open article; `folder` lists every blog in one of the member's folders (ADR 0048) |
-| `/discover`, `/discover/articles?topic=&lang=&sort=new&cursor=`, `/discover/blogs?topic=&lang=&page=`, `/discover/readers` | Discover (ADR 0044): This week (the week's most recommended, else the edition; new blogs; readers to follow), Articles, Blogs and Readers. Public pages, rendered at the edge too; Articles' sorts and pages are cached apart. The device hides the blogs its member reads and matches suggested readers to their likes and blogs (`lib/discover-overlay.ts`, `lib/discover-week.ts`, `lib/suggest-readers.ts`) |
-| `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart |
+| `/discover`, `/discover/articles?topic=&lang=&sort=new&cursor=`, `/discover/blogs?topic=&lang=&page=`, `/discover/blogrolls?cursor=`, `/discover/readers` | Discover (ADRs 0044, 0050): This week (the week's most recommended, else the edition; new blogs; readers to follow), Articles, Blogs, Blogrolls (public blogrolls of three blogs or more, newest public first, with why each is there worked out on the device: "Yours", or that the member follows its owner) and Readers. Public pages, rendered at the edge too; Articles' sorts and pages are cached apart. The device hides the blogs its member reads and matches suggested readers to their likes and blogs (`lib/discover-overlay.ts`, `lib/discover-week.ts`, `lib/suggest-readers.ts`) |
+| `/s/:id`, `/@handle?tab=` | Public pages, rendered at the edge too; a profile's tabs are cached apart. A profile's Blogrolls tab shows a visitor its public blogrolls, and only when it has one; the member's own always shows it, from the device, private ones included, with New blogroll (ADR 0050) |
+| `/l/:id` | A blogroll (ADR 0050). One the device holds is its owner's, rendered from the store, with Public or Private, Edit, Add blogs and Copy link, and Remove and a note on each row; one whose deletion is held is Not found; anyone else's comes from `/api/v1/public/blogrolls/:id`, with Subscribe to all and Subscribe on each row, or links to sign in for a visitor. Open to guests, rendered at the edge too; a malformed id is Not found with no request |
 | `/about`, `/privacy`, `/terms` | The info pages, for anyone; copy from `src/content/info`, rendered at the edge too, with no data |
 | `/following?tab=` | What the people a member follows did, by RPC; whom they follow, from the device (ADR 0031); readers to follow from Discover's pool, by the same rule (ADR 0044) |
 | `/search?q=` | The device first, then blogs and older posts from the server |
 | `/add`, `/claim?url=&taken=`, `/sites/:id/claim` | Add feeds and OPML; claim a blog (For writers' card lands on `/claim` with its blog filled in) |
 | `/writers` | For writers: a calling card made as you type, beside a labelled sample (ADR 0037); SPA-only (ADR 0035) |
-| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out; from `lg` up the manager of `components/subscriptions-manager.tsx`, below it the sections of `components/folders-manage.tsx`, ADR 0049), Privacy (with "Your data"); Invites and Account read `/api/v1/invites` and `/api/v1/account` live, not synced rows (`lib/account-api.ts`). Bare `/settings` is the list of sections below `md` and goes to `/settings/profile`, Profile at every width, from it (ADR 0047) |
+| `/settings/:section?` | Profile, Reading, Translation, Subscriptions (with OPML in and out; from `lg` up the manager of `components/subscriptions-manager.tsx`, below it the sections of `components/folders-manage.tsx`, ADR 0049; a folder makes a private blogroll of its blogs from either, ADR 0050), Privacy (with "Your data"); Invites and Account read `/api/v1/invites` and `/api/v1/account` live, not synced rows (`lib/account-api.ts`). Bare `/settings` is the list of sections below `md` and goes to `/settings/profile`, Profile at every width, from it (ADR 0047) |
 | `/dashboard` | The author's view |
 | `/admin/:area?f=&q=&id=&sort=&dir=` | The admin console (ADR 0039), its own chunk loaded only when an admin opens it, reading tela-api over the network; anyone else sees Not found. The URL alone holds the area, filter, search, open record and sort |
 
@@ -332,13 +346,25 @@ A Vite + React SPA that renders from the device.
   articles they keep (liked, recommended, highlighted) and the posts of feeds they follow that
   they marked unread, which beat the horizon (ADR 0009), in one batch. The members they follow
   come as their own rows, re-sent when a followee's profile changes; what those members do does
-  not sync at all, and arrives by RPC (ADR 0031).
+  not sync at all, and arrives by RPC (ADR 0031). The feed and site rows of every blog in the
+  member's live blogrolls come too, subscribed or not, without their posts (`rolledFeeds` in a
+  snapshot, `newlyRolled` in a delta), and the device keeps them when it prunes, so a blogroll
+  still names a blog its owner left (ADR 0050).
 - The push is guarded per mutation by `applied_mutations` and resolves conflicts by the later
   `at`, clamped to the server's clock. The privacy switches are the exception: a hide always
   applies, and a show only against the version in its device's confirmed rows, which waits while
-  that device's own change to the switch is unsettled (ADR 0031, issue #16). A deletion wins
-  over any later edit for highlights and folders; deleting a folder leaves its blogs in none,
-  each keeping its move's clock (ADR 0048).
+  that device's own change to the switch is unsettled (ADR 0031, issue #16), and a blogroll's
+  Public is the same (ADR 0050). A deletion wins over any later edit for highlights, folders and
+  blogrolls; deleting a folder leaves its blogs in none, each keeping its move's clock (ADR 0048).
+- Blogrolls (ADR 0050) are six mutations: `putBlogroll` (make one, or change its name and
+  description; never revives a deleted one; `isPublic` only when it makes it), `setBlogrollPublic`
+  (versioned, as above, never moving `updated_at`), `deleteBlogroll`, `rollBlog` (a blog put back
+  goes to the end), `unrollBlog` (its clock moves forward even on a blog already out) and
+  `noteBlog` (the note's own clock, so a note never puts back a blog taken out). Past their limits
+  (50 blogrolls, 200 blogs) they write nothing and are acknowledged, as `putFolder` is; a control
+  character is refused as `invalid_name` or `invalid_text`. The device's `view()` applies the
+  pending and held mutations over one copy of the tables, not one copy each, which a held
+  Subscribe to all of some 400 mutations made necessary.
 - Every member call names the account the device's rows belong to (`x-tela-member`, protocol 2).
   tela-api answers `409 account_changed` when it is missing or not the session's member, and the
   device's stored copy (IndexedDB `tela-2`, apart from earlier builds' `tela`) has one owner

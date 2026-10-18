@@ -39,6 +39,14 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Blogrolls** (ADR 0050). A member keeps named lists of blogs to share, each blog with a note,
+  private until they make one public. A public blogroll has a page of its own at `/l/<id>`,
+  rendered for visitors too, a place on its owner's profile, and, from three blogs, a place in
+  Discover's new Blogrolls tab. Anyone signed in can subscribe to all of it at once, into a new
+  folder named after it, one they have, or none: it copies the blogs once, and Undo takes it all
+  back. A blogroll is made from a profile's Blogrolls tab or from a folder in Settings, filled
+  from the member's subscriptions by a filter that ignores accents and case, and left alone by an
+  unsubscribe. The admin console can hide a blogroll from Discover.
 - **Settings › Subscriptions as a manager** (ADR 0049). From 1024px it is two panes: All blogs,
   Not in a folder and each folder down the left, and on the right the blogs of the one chosen,
   filtered by name or address, sorted A to Z, by latest post or by the longest quiet, each with
