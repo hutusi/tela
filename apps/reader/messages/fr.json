@@ -304,6 +304,7 @@
       "intro": "Des blogs que des lecteurs recommandent ensemble. Abonnez-vous à tout l’ensemble d’un coup.",
       "more": "Plus de blogrolls",
       "empty": "Aucune blogroll publique pour l’instant.",
+      "by": "Une blogroll de {name}",
       "reasons": {
         "follows": "Vous suivez {name}",
         "yours": "La vôtre"

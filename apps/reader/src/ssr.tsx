@@ -1,10 +1,10 @@
 /**
- * Public pages, rendered at the edge (ADR 0025, 0035): the front page, Discover's four tabs (ADR
- * 0044), a blog's page, a member's profile, and About, Privacy and Terms, for visitors who have no
- * shell cached yet and for link previews. The same views the SPA renders, with a guest session
- * and an empty store; the page's data is handed over in `#tela-data`, so the SPA's first render
- * needs no request of its own. About, Privacy and Terms take no data at all (ADR 0035): their copy
- * is in the bundle.
+ * Public pages, rendered at the edge (ADR 0025, 0035): the front page, Discover's tabs (ADR 0044;
+ * Blogrolls, ADR 0050), a blog's page, a member's profile, a public blogroll (ADR 0050), and About,
+ * Privacy and Terms, for visitors who have no shell cached yet and for link previews. The same
+ * views the SPA renders, with a guest session and an empty store; the page's data is handed over
+ * in `#tela-data`, so the SPA's first render needs no request of its own. About, Privacy and Terms
+ * take no data at all (ADR 0035): their copy is in the bundle.
  */
 import type { UiLocale } from '@tela/shared'
 import { renderToString } from 'react-dom/server'
@@ -13,6 +13,13 @@ import { createTranslator } from 'use-intl'
 import { AppHeader } from './components/app-header'
 import { type InfoPageId, isInfoPage } from './content/info/types'
 import { I18n, MESSAGES } from './i18n'
+import {
+  blogrollPath,
+  blogrollsApiPath,
+  blogrollsCursor,
+  blogrollsHref,
+  isBlogrollId,
+} from './lib/blogroll-href'
 import {
   type ArticlesParams,
   articlesApiPath,
@@ -43,17 +50,21 @@ import { StoreProvider } from './store/hooks'
 import { LocalStore } from './store/local'
 import { Objects } from './store/objects'
 import { UiContext } from './ui'
+import { BlogrollView } from './views/blogroll'
 import { DiscoverView } from './views/discover'
 import { articlesList, DiscoverArticlesView } from './views/discover-articles'
+import { DiscoverBlogrollsView } from './views/discover-blogrolls'
 import { DiscoverReadersView } from './views/discover-readers'
 import { DiscoverWeekView, WEEK_READERS } from './views/discover-week'
 import { InfoView, infoDescription } from './views/info'
 import { LandingView } from './views/landing'
 import { ProfileView, profileTab } from './views/profile'
-import { profileDataOf, siteDataOf } from './views/public-data'
+import { blogrollDataOf, profileDataOf, siteDataOf } from './views/public-data'
 import { SiteView } from './views/site'
 import type {
   ArticlesData,
+  BlogrollData,
+  BlogrollsData,
   DiscoverData,
   FrontData,
   ProfileData,
@@ -84,10 +95,12 @@ export type PublicRoute =
   | { kind: 'week'; api: string; alwaysExists: true }
   | { kind: 'articles'; params: ArticlesParams; api: string; key: string; alwaysExists: true }
   | { kind: 'blogs'; params: BlogsParams; api: string; alwaysExists: true }
+  | { kind: 'blogrolls'; cursor: string | null; api: string; key: string; alwaysExists: true }
   | { kind: 'readers'; api: string; alwaysExists: true }
   | { kind: 'redirect'; api: null; redirect: string }
   | { kind: 'site'; siteId: number; api: string }
   | { kind: 'profile'; handle: string; tab: string | null; api: string; key: string }
+  | { kind: 'blogroll'; id: string; api: string }
   | { kind: 'info'; page: InfoPageId; api: null; key: string }
 
 /** The public page a URL names, and the endpoint its data comes from; null for anything else. */
@@ -118,6 +131,12 @@ export function publicRoute(url: URL): PublicRoute | null {
     const params = parseBlogsParams(url.searchParams)
     return { kind: 'blogs', params, api: blogsApiPath(params), alwaysExists: true }
   }
+  if (url.pathname === '/discover/blogrolls') {
+    // Only a cursor tela-api could have written; anything else is the first page.
+    const cursor = blogrollsCursor(url.searchParams)
+    const api = blogrollsApiPath(cursor)
+    return { kind: 'blogrolls', cursor, api, key: blogrollsHref(cursor), alwaysExists: true }
+  }
   if (url.pathname === '/discover/readers') {
     return { kind: 'readers', api: READERS_PATH, alwaysExists: true }
   }
@@ -125,10 +144,15 @@ export function publicRoute(url: URL): PublicRoute | null {
   if (isInfoPage(info)) return { kind: 'info', page: info, api: null, key: `/info/${info}` }
   const site = url.pathname.match(/^\/s\/(\d{1,12})$/)
   if (site) return { kind: 'site', siteId: Number(site[1]), api: sitePath(Number(site[1])) }
+  // A blogroll's page by its id, and nothing else under `/l/`. A private one is a 404 here, and
+  // the SPA that boots on that page shows its owner their own (ADR 0050).
+  const blogroll = url.pathname.match(/^\/l\/([^/]*)$/)?.[1]
+  if (isBlogrollId(blogroll)) return { kind: 'blogroll', id: blogroll, api: blogrollPath(blogroll) }
   const handle = handleFrom(url.pathname)
   if (handle) {
     const asked = url.searchParams.get('tab')
-    const tab = asked === 'liked' || asked === 'subscriptions' ? asked : null
+    const tab =
+      asked === 'blogrolls' || asked === 'liked' || asked === 'subscriptions' ? asked : null
     const api = profilePath(handle)
     return { kind: 'profile', handle, tab, api, key: tab ? `${api}?tab=${tab}` : api }
   }
@@ -144,6 +168,7 @@ function pageAddress(route: PublicRoute, url: URL): string {
   switch (route.kind) {
     case 'landing':
     case 'articles':
+    case 'blogrolls':
       return route.key
     case 'week':
       return tabHref('week')
@@ -178,13 +203,26 @@ function titleOf(
   if (data === null || route.kind === 'redirect')
     return { title: t('notFound.title'), description: null }
   if (route.kind === 'week') return { title: t('nav.discover'), description: t('discover.intro') }
-  if (route.kind === 'articles' || route.kind === 'blogs' || route.kind === 'readers') {
+  if (
+    route.kind === 'articles' ||
+    route.kind === 'blogs' ||
+    route.kind === 'blogrolls' ||
+    route.kind === 'readers'
+  ) {
     const title = `${t(`discover.tabs.${route.kind}`)} · ${t('nav.discover')}`
     return { title, description: t('discover.intro') }
   }
   if (route.kind === 'site') {
     const { site } = data as SiteData
     return { title: site.title ?? displayHost(site.homeUrl), description: site.description }
+  }
+  if (route.kind === 'blogroll') {
+    const { blogroll, owner } = blogrollDataOf(data as BlogrollData)
+    const by = owner.displayName ?? `@${owner.handle}`
+    return {
+      title: blogroll.name,
+      description: blogroll.description || t('discover.blogrolls.by', { name: by }),
+    }
   }
   const { profile } = data as ProfileData
   return { title: profile.displayName ?? `@${profile.handle}`, description: profile.bio }
@@ -246,6 +284,12 @@ export function renderPublicPage(input: {
       />
     ) : route.kind === 'blogs' ? (
       <DiscoverView data={data as DiscoverData} params={route.params} locale={locale} />
+    ) : route.kind === 'blogrolls' ? (
+      // For a visitor: no reasons, and the cards as tela-api sent them.
+      <DiscoverBlogrollsView
+        cards={(data as BlogrollsData).blogrolls ?? []}
+        next={(data as BlogrollsData).next ?? null}
+      />
     ) : route.kind === 'readers' ? (
       <DiscoverReadersView
         suggestions={suggestReaders((data as ReadersData).readers, null)}
@@ -253,6 +297,8 @@ export function renderPublicPage(input: {
       />
     ) : route.kind === 'site' ? (
       <SiteView data={siteDataOf(data as SiteData)} reading={reading} locale={locale} now={now} />
+    ) : route.kind === 'blogroll' ? (
+      <BlogrollView data={blogrollDataOf(data as BlogrollData)} locale={locale} now={now} />
     ) : (
       <ProfileView
         data={profileDataOf(data as ProfileData)}
