@@ -13,8 +13,9 @@ import {
   blogrollsList,
   fetchingBlogrolls,
   fetchMoreBlogrolls,
-  forgetBlogrollsPages,
+  forgetDiscoverBlogrolls,
   heldBlogrolls,
+  resetBlogrollsPages,
 } from '../src/lib/blogroll-pages'
 import { DiscoverBlogrollsView } from '../src/views/discover-blogrolls'
 import { type OwnBlogrolls, ProfileView, profileTab } from '../src/views/profile'
@@ -140,7 +141,7 @@ describe("Blogrolls' pages after the first", () => {
   })
 
   test('a page is kept only where it carries on, and a fresh first page starts over', async () => {
-    forgetBlogrollsPages()
+    resetBlogrollsPages()
     const answers: Record<string, BlogrollsData> = {
       '/two': page('2:bbbbbbbbbbbb', ['bbbbbbbbbbbb']),
       '/three': page(null, ['cccccccccccc']),
@@ -161,6 +162,44 @@ describe("Blogrolls' pages after the first", () => {
     // A first page that ends elsewhere starts the held pages over.
     await fetchMoreBlogrolls({ base: 'b', start: '8:x', from: '1:x', url: '/two' }, fetcher)
     expect(heldBlogrolls('b')).toEqual({ after: '8:x', pages: [] })
+  })
+
+  test('forgotten, the pages More brought go, an answer still out lands nowhere, and More asks again past the cache', async () => {
+    resetBlogrollsPages()
+    const page2 = page('2:bbbbbbbbbbbb', ['bbbbbbbbbbbb'])
+    const inits: (RequestInit | undefined)[] = []
+    let answer!: () => void
+    const slow = new Promise<void>((resolve) => {
+      answer = resolve
+    })
+    const fetcher = ((url: string, init?: RequestInit) => {
+      inits.push(init)
+      const page = Response.json(
+        url === '/two' ? page2 : { blogrolls: [card('cccccccccccc', 'c')], next: null },
+      )
+      return url === '/slow' ? slow.then(() => page) : Promise.resolve(page)
+    }) as unknown as typeof fetch
+    const start = '9:aaaaaaaaaaaa'
+    await fetchMoreBlogrolls({ base: 'b', start, from: start, url: '/two' }, fetcher)
+    expect(heldBlogrolls('b')?.pages).toEqual([page2])
+    const out = fetchMoreBlogrolls(
+      { base: 'b', start, from: '2:bbbbbbbbbbbb', url: '/slow' },
+      fetcher,
+    )
+
+    // One of the member's blogrolls changed: the first page is fetched again, and if it still
+    // ends at `start`, nothing held may carry on from it.
+    forgetDiscoverBlogrolls()
+    expect(heldBlogrolls('b')).toBeUndefined()
+    expect(fetchingBlogrolls('b')).toBe(false)
+    answer()
+    await out
+    expect(heldBlogrolls('b')).toBeUndefined()
+
+    await fetchMoreBlogrolls({ base: 'b', start, from: start, url: '/two' }, fetcher)
+    expect(heldBlogrolls('b')?.pages).toEqual([page2])
+    expect(inits.map((init) => init?.cache)).toEqual([undefined, undefined, 'reload'])
+    resetBlogrollsPages()
   })
 
   test('list each blogroll once, where it first comes', () => {

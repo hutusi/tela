@@ -9,6 +9,8 @@
  * Nothing on the tab is left out for the member, so a page is never asked for unasked.
  */
 import type { BlogrollsData } from '../views/types'
+import { BLOGROLLS_PATH } from './blogroll-href'
+import { forgetPublic } from './use-public'
 
 export type HeldBlogrolls = { after: string; pages: BlogrollsData[] }
 
@@ -16,6 +18,13 @@ const held = new Map<string, HeldBlogrolls>()
 const fetching = new Set<string>()
 const listeners = new Set<() => void>()
 let version = 0
+/** Moved on when the pages are forgotten: an answer to a request made before lands nowhere. */
+let generation = 0
+/**
+ * Whether the pages were forgotten this visit: More then asks past the browser's copy, as
+ * `usePublic` asks for the first page, or it could bring back the very page just forgotten.
+ */
+let forgotten = false
 
 function changed() {
   version += 1
@@ -52,11 +61,12 @@ export function fetchMoreBlogrolls(
   held.set(base, kept && kept.after === start ? kept : { after: start, pages: [] })
   fetching.add(base)
   changed()
-  return fetcher(url, { credentials: 'same-origin' })
+  const asked = generation
+  return fetcher(url, { credentials: 'same-origin', ...(forgotten ? { cache: 'reload' } : {}) })
     .then((res) => (res.ok ? (res.json() as Promise<BlogrollsData>) : null))
     .then((page) => {
       const now = held.get(base)
-      if (!page || !now || now.after !== start) return
+      if (!page || !now || now.after !== start || asked !== generation) return
       // The held pages' end: the last one's next (none, once they reached the end), else `after`.
       const last = now.pages.at(-1)
       if ((last ? last.next : now.after) !== from) return
@@ -64,6 +74,8 @@ export function fetchMoreBlogrolls(
     })
     .catch(() => undefined)
     .finally(() => {
+      // Forgotten meanwhile: what is fetching now is a request made since, not this one.
+      if (asked !== generation) return
       fetching.delete(base)
       changed()
     })
@@ -87,9 +99,29 @@ export function blogrollsList(pages: readonly BlogrollsData[]): BlogrollsData['b
   return out
 }
 
-/** Forget every held page, for tests. */
-export function forgetBlogrollsPages(): void {
+function dropPages(): void {
+  generation += 1
   held.clear()
   fetching.clear()
   changed()
+}
+
+/**
+ * Forget Discover's Blogrolls once one of the member's own has changed (`useForgetBlogrolls`): the
+ * first page, through `forgetPublic`, and every page More brought after it. Those are held here,
+ * not by `usePublic`, and a fresh first page that still ends where it did carries on into them, so
+ * a card edited, made private or deleted on a later page would stay as it was, on this visit's
+ * every return to the tab (Codex's review). The list goes back to its first page, and More
+ * brings the rest again.
+ */
+export function forgetDiscoverBlogrolls(): void {
+  forgotten = true
+  dropPages()
+  forgetPublic(BLOGROLLS_PATH)
+}
+
+/** Forget every held page, and that any was forgotten, for tests. */
+export function resetBlogrollsPages(): void {
+  forgotten = false
+  dropPages()
 }

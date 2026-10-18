@@ -1,7 +1,8 @@
 /**
  * Forget the public copies of the member's own blogrolls once the server has a change to one
- * (ADR 0050): its page, their profile and Discover, held this visit and cached by the browser,
- * still show what they showed. Called from `Routed`, as the profile's own watch is.
+ * (ADR 0050): its page, their profile and Discover (the pages More brought too), held this visit
+ * and cached by the browser, still show what they showed. Called from `Routed`, as the profile's
+ * own watch is.
  *
  * It watches each blogroll's sequence numbers, its own row's and its blogs': a prediction keeps
  * the `seq` its row had, so only a pull that brought the server's rows moves them. A deletion is
@@ -14,7 +15,8 @@ import type { Tables } from '@tela/sync'
 import { useEffect, useMemo, useRef } from 'react'
 import { profilePath } from '../pages/profile'
 import { useStore, useTables } from '../store/hooks'
-import { BLOGROLLS_PATH, blogrollPath } from './blogroll-href'
+import { blogrollPath } from './blogroll-href'
+import { forgetDiscoverBlogrolls } from './blogroll-pages'
 import { forgetPublic } from './use-public'
 
 /**
@@ -71,7 +73,7 @@ export function useForgetBlogrolls(): void {
       }
       if (!any) return
       for (const h of new Set(profiles)) if (h) forgetPublic(profilePath(h))
-      forgetPublic(BLOGROLLS_PATH)
+      forgetDiscoverBlogrolls()
     }
     const { moved, gone } = changedBlogrolls(was.seqs, seqs)
     forget([...moved, ...gone], [was.handle, handle])
@@ -88,6 +90,6 @@ export function useForgetBlogrolls(): void {
     again.current = null
     for (const id of pending.ids) forgetPublic(blogrollPath(id))
     if (handle) forgetPublic(profilePath(handle))
-    forgetPublic(BLOGROLLS_PATH)
+    forgetDiscoverBlogrolls()
   }, [cursor, handle])
 }
