@@ -267,6 +267,42 @@ export function privacyChange(
   return { type: 'setPrivacy', [flag]: true, base: { [flag]: held } }
 }
 
+type SetBlogrollPublic = Extract<Mutation, { type: 'setBlogrollPublic' }>
+
+/**
+ * Whether a blogroll cannot be made public yet (ADR 0050), as `privacyUnsettled` says of a
+ * privacy switch: a change this device made to it is not in the confirmed rows yet, or the
+ * confirmed rows do not hold the blogroll at all (made on this device and not pulled back). A show
+ * names the version the server held, and until then the device cannot know it.
+ */
+export function blogrollPublicUnsettled(
+  confirmed: Confirmed,
+  pending: readonly Pending[],
+  id: string,
+): boolean {
+  if (!confirmed.tables.blogrolls.has(id)) return true
+  return settle(confirmed, pending).some(
+    (p) => p.mutation.type === 'setBlogrollPublic' && p.mutation.id === id,
+  )
+}
+
+/**
+ * A blogroll made public or private now, as the mutation to make, or null for a show that has to
+ * wait (`blogrollPublicUnsettled`). A hide always applies; a show names in `base` the version in
+ * the **confirmed** rows, never the view's, for the reason `privacyChange` gives.
+ */
+export function blogrollPublicChange(
+  confirmed: Confirmed,
+  pending: readonly Pending[],
+  id: string,
+  on: boolean,
+): Omit<SetBlogrollPublic, 'mid' | 'at'> | null {
+  const held = confirmed.tables.blogrolls.get(id)?.publicVersion ?? 0
+  if (!on) return { type: 'setBlogrollPublic', id, isPublic: false, base: held }
+  if (blogrollPublicUnsettled(confirmed, pending, id)) return null
+  return { type: 'setBlogrollPublic', id, isPublic: true, base: held }
+}
+
 /**
  * Predict one mutation, as the server will apply it (`apps/api/src/sync/push.ts`). Same rules:
  * read is set once, unless the member marks the post unread, and then read and unread go to the
