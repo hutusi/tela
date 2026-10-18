@@ -42,6 +42,8 @@ export type PullTables =
   | 'follows'
   | 'folders'
   | 'feedFolders'
+  | 'blogrolls'
+  | 'blogrollBlogs'
 
 export type PullRead = {
   /** The newest seq in this snapshot of the database. */
@@ -68,6 +70,12 @@ const FOLDER = sql.raw(`id, name, created_at as "createdAt", updated_at as "upda
   deleted_at as "deletedAt", seq`)
 const FEED_FOLDER = sql.raw(`feed_id as "feedId", folder_id as "folderId",
   updated_at as "updatedAt", seq`)
+const BLOGROLL = sql.raw(`id, name, description, is_public as "isPublic",
+  public_version as "publicVersion", created_at as "createdAt", updated_at as "updatedAt",
+  deleted_at as "deletedAt", seq`)
+const BLOGROLL_BLOG = sql.raw(`blogroll_id as "blogrollId", feed_id as "feedId", note,
+  note_at as "noteAt", added_at as "addedAt", updated_at as "updatedAt",
+  removed_at as "removedAt", seq`)
 const FEED = sql.raw(`f.id, f.site_id as "siteId", f.feed_url as "feedUrl", f.title, f.status,
   f.last_fetched_at as "lastFetchedAt", f.last_error as "lastError",
   f.last_item_at as "lastItemAt", f.seq`)
@@ -210,6 +218,16 @@ export async function readPull(
       : sql`select ${FOLDER} from folders where user_id = ${userId} and seq > ${cursor} ${bySeq}`,
     feedFolders: sql`select ${FEED_FOLDER} from feed_folders where user_id = ${userId}
       ${snapshot ? sql`` : sql`and seq > ${cursor} ${bySeq}`}`,
+    // Blogrolls (ADR 0050), to their member only: a snapshot sends the live ones and every blog
+    // row of them, removed ones too (a removed blog keeps its note for when it is put back); a
+    // delta sends every change, a deletion included.
+    blogrolls: snapshot
+      ? sql`select ${BLOGROLL} from blogrolls where user_id = ${userId} and deleted_at is null`
+      : sql`select ${BLOGROLL} from blogrolls where user_id = ${userId} and seq > ${cursor} ${bySeq}`,
+    blogrollBlogs: snapshot
+      ? sql`select ${BLOGROLL_BLOG} from blogroll_blogs where user_id = ${userId}
+          and blogroll_id in (select id from blogrolls where user_id = ${userId} and deleted_at is null)`
+      : sql`select ${BLOGROLL_BLOG} from blogroll_blogs where user_id = ${userId} and seq > ${cursor} ${bySeq}`,
     // The people the member follows. A delta also sends a live follow whose followee's profile
     // changed since the cursor: the device shows their handle and name.
     follows: snapshot
@@ -296,6 +314,8 @@ export async function readPull(
         'follows',
         'folders',
         'feedFolders',
+        'blogrolls',
+        'blogrollBlogs',
         'feeds',
         'articles',
         'titles',
@@ -358,6 +378,8 @@ export async function readPull(
       follows: within(got.follows),
       folders: within(got.folders),
       feedFolders: within(got.feedFolders),
+      blogrolls: within(got.blogrolls),
+      blogrollBlogs: within(got.blogrollBlogs),
       feeds: merge(
         got.freshFeeds.filter((f) => isFresh(f.id) || freshArticleFeeds.has(Number(f.id))),
         got.feeds,

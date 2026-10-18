@@ -8,11 +8,16 @@
  * answer.
  */
 import {
+  BLOGROLL_DESCRIPTION_MAX,
+  BLOGROLL_ID,
+  BLOGROLL_NAME_MAX,
+  BLOGROLL_NOTE_MAX,
   FOLDER_NAME_MAX,
   HIGHLIGHT_CONTEXT,
   HIGHLIGHT_NOTE_MAX,
   HIGHLIGHT_QUOTE_MAX,
   READING_LANGUAGES,
+  textLength,
   UI_LOCALES,
 } from '@tela/shared'
 import { z } from 'zod'
@@ -33,6 +38,15 @@ const highlightId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
 
 /** Client-minted too (ADR 0048), so a replayed push cannot make a second folder. */
 const folderId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
+
+/** Client-minted and short (ADR 0050): it is the blogroll's address, `/l/<id>`. */
+const blogrollId = z.string().regex(BLOGROLL_ID)
+
+/**
+ * Text no longer than `max` characters as a person counts them (code points, as SQLite's
+ * `length()` does), not as UTF-16 counts them: zod's `max` would take 140 emoji for 280.
+ */
+const upTo = (max: number) => z.string().refine((v) => textLength(v) <= max)
 
 export const mutationSchema = z.discriminatedUnion('type', [
   /**
@@ -165,6 +179,53 @@ export const mutationSchema = z.discriminatedUnion('type', [
     type: z.literal('fileFeed'),
     feedId: id,
     folderId: folderId.nullable(),
+  }),
+  /**
+   * Make a blogroll, or change its name and description (ADR 0050). The later `at` wins, and a
+   * deleted blogroll stays deleted. `isPublic` counts only when it makes the blogroll: after that,
+   * public or private is `setBlogrollPublic`'s alone. A member who already has `MAX_BLOGROLLS`
+   * makes no more: the push writes nothing. A name or description with a control character (a
+   * line break aside, in a description) is refused.
+   */
+  z.object({
+    ...base,
+    type: z.literal('putBlogroll'),
+    id: blogrollId,
+    name: z.string().trim().min(1).pipe(upTo(BLOGROLL_NAME_MAX)),
+    description: z.string().trim().pipe(upTo(BLOGROLL_DESCRIPTION_MAX)),
+    isPublic: z.boolean(),
+  }),
+  /**
+   * Make a blogroll public or private, as the profile's switches are (issue #16): a hide always
+   * applies; a show applies only while the blogroll's `publicVersion` is still `base`, the version
+   * the device's confirmed rows held.
+   */
+  z.object({
+    ...base,
+    type: z.literal('setBlogrollPublic'),
+    id: blogrollId,
+    isPublic: z.boolean(),
+    base: z.number().int().nonnegative(),
+  }),
+  /** Delete wins. */
+  z.object({ ...base, type: z.literal('deleteBlogroll'), id: blogrollId }),
+  /**
+   * Put a blog in a blogroll, or back in, to the later `at`; one put back goes to the end. A
+   * blogroll of `MAX_BLOGROLL_BLOGS` takes no more, and a deleted one takes nothing.
+   */
+  z.object({ ...base, type: z.literal('rollBlog'), blogrollId, feedId: id }),
+  /** Take a blog out, to the later `at`. Its note stays, for when it is put back. */
+  z.object({ ...base, type: z.literal('unrollBlog'), blogrollId, feedId: id }),
+  /**
+   * Write a blog's note, or clear it (null), to the later `at` on the note's own clock, so a note
+   * never puts back a blog that was taken out.
+   */
+  z.object({
+    ...base,
+    type: z.literal('noteBlog'),
+    blogrollId,
+    feedId: id,
+    note: z.string().trim().pipe(upTo(BLOGROLL_NOTE_MAX)).nullable(),
   }),
 ])
 

@@ -93,6 +93,19 @@ export const HIGHLIGHT_NOTE_MAX = 2000
 export const FOLDER_NAME_MAX = 60
 export const MAX_FOLDERS = 100
 
+/**
+ * A blogroll is a member's list of blogs to share (ADR 0050), each with a note. A name is a title,
+ * a description a line or two, a note a sentence about one blog. Two hundred blogs is a long page,
+ * not a directory; fifty blogrolls is more than anyone shares.
+ */
+export const BLOGROLL_NAME_MAX = 60
+export const BLOGROLL_DESCRIPTION_MAX = 280
+export const BLOGROLL_NOTE_MAX = 280
+export const MAX_BLOGROLL_BLOGS = 200
+export const MAX_BLOGROLLS = 50
+/** A public blogroll reaches Discover once this many of its blogs are shown to others. */
+export const BLOGROLL_DISCOVER_MIN = 3
+
 /** Unread horizon: articles older than this never count as unread. */
 export const UNREAD_HORIZON_DAYS = 30
 

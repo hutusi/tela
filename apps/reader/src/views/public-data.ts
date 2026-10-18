@@ -6,7 +6,7 @@
  * no error boundary the whole page went blank. One normalized copy per answer, so a page keyed by
  * its data's identity sees the same object every render.
  */
-import type { ProfileData, SiteData } from './types'
+import type { BlogrollData, ProfileData, SiteData } from './types'
 
 const profiles = new WeakMap<object, ProfileData>()
 const sites = new WeakMap<object, SiteData>()
@@ -24,6 +24,8 @@ export function profileDataOf(raw: ProfileData): ProfileData {
     subscriptions:
       raw.subscriptions?.map((s) => ({ ...s, description: s.description ?? null })) ?? null,
     liked: raw.liked ?? null,
+    // A tela-api before blogrolls (ADR 0050) sends none.
+    blogrolls: raw.blogrolls ?? [],
   }
   profiles.set(raw, data)
   return data
@@ -48,5 +50,20 @@ export function siteDataOf(raw: SiteData): SiteData {
     notes: raw.notes ?? [],
   }
   sites.set(raw, data)
+  return data
+}
+
+const blogrolls = new WeakMap<object, BlogrollData>()
+
+/** A public blogroll's answer, with every field a view reads present. */
+export function blogrollDataOf(raw: BlogrollData): BlogrollData {
+  const held = blogrolls.get(raw)
+  if (held) return held
+  const data: BlogrollData = {
+    ...raw,
+    blogroll: { ...raw.blogroll, description: raw.blogroll.description ?? '' },
+    blogs: raw.blogs ?? [],
+  }
+  blogrolls.set(raw, data)
   return data
 }

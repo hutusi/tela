@@ -85,6 +85,13 @@
       "when": 1792104544151,
       "tag": "0011_bored_dreadnoughts",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1792306628786,
+      "tag": "0012_peaceful_mandroid",
+      "breakpoints": true
     }
   ]
 }

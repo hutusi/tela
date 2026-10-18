@@ -16,6 +16,8 @@ import type { Mutation } from './mutations'
 import { completePull, type PullResponse } from './protocol'
 import type {
   ArticleRow,
+  BlogrollBlogRow,
+  BlogrollRow,
   ClaimRow,
   FeedFolderRow,
   FeedRow,
@@ -57,6 +59,13 @@ export type Tables = {
   folders: Map<string, FolderRow>
   /** By feed id: which folder each blog is in, `folderId` null for none. */
   feedFolders: Map<number, FeedFolderRow>
+  /** By id: the member's live blogrolls (a deleted one is not held, ADR 0050). */
+  blogrolls: Map<string, BlogrollRow>
+  /**
+   * By `${blogrollId}:${feedId}` (`blogrollBlogKey`): the blogs in the member's blogrolls, removed
+   * ones included, so a blog put back gets its note back.
+   */
+  blogrollBlogs: Map<string, BlogrollBlogRow>
 }
 
 export type Confirmed = { cursor: number; tables: Tables }
@@ -84,10 +93,13 @@ export const emptyTables = (): Tables => ({
   follows: new Map(),
   folders: new Map(),
   feedFolders: new Map(),
+  blogrolls: new Map(),
+  blogrollBlogs: new Map(),
 })
 
 export const titleKey = (articleId: number, lang: string) => `${articleId}:${lang}`
 export const translationKey = (contentKey: string, lang: string) => `${contentKey}:${lang}`
+export const blogrollBlogKey = (blogrollId: string, feedId: number) => `${blogrollId}:${feedId}`
 
 /** A shallow copy whose maps can be changed without touching the original. */
 function copy(tables: Tables): Tables {
@@ -107,6 +119,8 @@ function copy(tables: Tables): Tables {
     follows: new Map(tables.follows),
     folders: new Map(tables.folders),
     feedFolders: new Map(tables.feedFolders),
+    blogrolls: new Map(tables.blogrolls),
+    blogrollBlogs: new Map(tables.blogrollBlogs),
   }
 }
 
@@ -529,6 +543,14 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       })
       return t
     }
+    // Blogrolls (ADR 0050). PLACEHOLDER: slice 1 (sync core) writes their predictions.
+    case 'putBlogroll':
+    case 'setBlogrollPublic':
+    case 'deleteBlogroll':
+    case 'rollBlog':
+    case 'unrollBlog':
+    case 'noteBlog':
+      return t
     default: {
       // Exhaustive for every type this build knows; a change from a later build that a rollback
       // left in this device's queue changes nothing here, and its push says what the server
@@ -584,11 +606,15 @@ export function rowsOf(tables: Tables) {
     follows: [...tables.follows.values()],
     folders: [...tables.folders.values()],
     feedFolders: [...tables.feedFolders.values()],
+    blogrolls: [...tables.blogrolls.values()],
+    blogrollBlogs: [...tables.blogrollBlogs.values()],
   }
 }
 
 export type {
   ArticleRow,
+  BlogrollBlogRow,
+  BlogrollRow,
   ClaimRow,
   FeedFolderRow,
   FeedRow,
@@ -621,5 +647,9 @@ export function tablesFromRows(rows: TableRows): Tables {
     follows: new Map(rows.follows.map((r) => [r.userId, r])),
     folders: new Map(rows.folders.map((r) => [r.id, r])),
     feedFolders: new Map(rows.feedFolders.map((r) => [r.feedId, r])),
+    blogrolls: new Map(rows.blogrolls.map((r) => [r.id, r])),
+    blogrollBlogs: new Map(
+      rows.blogrollBlogs.map((r) => [blogrollBlogKey(r.blogrollId, r.feedId), r]),
+    ),
   }
 }

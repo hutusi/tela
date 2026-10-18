@@ -147,7 +147,7 @@ export interface Persistence {
  * Every table the device holds. One missing from storage means it was written by a build that
  * did not know it, so the device starts over from a snapshot rather than trust a cursor that has
  * passed rows it never kept (highlights, added after the first devices synced; follows, ADR 0031;
- * folders, ADR 0048). Present is not enough: see `KEPT`.
+ * folders, ADR 0048; blogrolls, ADR 0050). Present is not enough: see `KEPT`.
  */
 export const TABLES: (keyof TableRows)[] = [
   'profile',
@@ -165,6 +165,8 @@ export const TABLES: (keyof TableRows)[] = [
   'follows',
   'folders',
   'feedFolders',
+  'blogrolls',
+  'blogrollBlogs',
 ]
 
 /** This layout's database. Earlier builds used 'tela', with no owner and no checks. */

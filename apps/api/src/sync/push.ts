@@ -405,6 +405,14 @@ function statementsFor(
         `),
       ]
     }
+    // Blogrolls (ADR 0050). PLACEHOLDER: slice 1 (sync core) writes their statements.
+    case 'putBlogroll':
+    case 'setBlogrollPublic':
+    case 'deleteBlogroll':
+    case 'rollBlog':
+    case 'unrollBlog':
+    case 'noteBlog':
+      return []
   }
 }
 
