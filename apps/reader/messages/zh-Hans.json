@@ -892,7 +892,8 @@
       "noPosts": "还没有文章",
       "movedTo": "已把{n, plural, =1 {{blog}} other {# 个博客}}移到“{folder}”。",
       "movedOut": "已把{n, plural, =1 {{blog}} other {# 个博客}}移出文件夹。",
-      "unsubscribed": "已取消订阅{n, plural, =1 {{blog}} other {# 个博客}}。"
+      "unsubscribed": "已取消订阅{n, plural, =1 {{blog}} other {# 个博客}}。",
+      "makeBlogroll": "创建博客链…"
     },
     "privacyIntro": "选择别人在你的个人页上能看到什么。",
     "showLikes": "展示喜欢的文章",

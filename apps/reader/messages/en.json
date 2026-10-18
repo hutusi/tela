@@ -892,7 +892,8 @@
       "noPosts": "No posts yet",
       "movedTo": "Moved {n, plural, =1 {{blog}} other {# blogs}} to {folder}.",
       "movedOut": "Moved {n, plural, =1 {{blog}} other {# blogs}} out of folders.",
-      "unsubscribed": "Unsubscribed from {n, plural, =1 {{blog}} other {# blogs}}."
+      "unsubscribed": "Unsubscribed from {n, plural, =1 {{blog}} other {# blogs}}.",
+      "makeBlogroll": "Make a blogroll…"
     },
     "privacyIntro": "Choose what others see on your profile.",
     "showLikes": "Show liked posts",

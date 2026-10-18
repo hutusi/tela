@@ -892,7 +892,8 @@
       "noPosts": "Pas encore de billet",
       "movedTo": "{n, plural, =1 {{blog} déplacé} other {# blogs déplacés}} vers « {folder} ».",
       "movedOut": "{n, plural, =1 {{blog} sorti de son dossier} other {# blogs sortis de leurs dossiers}}.",
-      "unsubscribed": "Désabonné de {n, plural, =1 {{blog}} other {# blogs}}."
+      "unsubscribed": "Désabonné de {n, plural, =1 {{blog}} other {# blogs}}.",
+      "makeBlogroll": "Créer une blogroll…"
     },
     "privacyIntro": "Choisissez ce que les autres voient sur votre profil.",
     "showLikes": "Montrer mes coups de cœur",
