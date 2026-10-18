@@ -359,8 +359,11 @@ test.describe('a blogroll of my own', () => {
       .toBe(NOTE)
 
     // Removed, and taken back while its toast shows: nothing was sent.
+    // By feed: with one fixture feed left, the blogroll names it by the blog the fixtures share.
+    const shownFeeds = () =>
+      rows.evaluateAll((els) => els.map((e) => e.getAttribute('data-feed-id')))
     await rows.filter({ hasText: JNITO }).getByTestId('blogroll-remove').click()
-    await expect(rows).toHaveText([new RegExp(JVNS)])
+    await expect.poll(shownFeeds).toEqual([String(feeds.jvns)])
     const toast = page.getByTestId('toast')
     await toast.getByTestId('toast-action').click()
     await expect(rows).toHaveText([new RegExp(JVNS), new RegExp(JNITO)])

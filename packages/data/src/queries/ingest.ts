@@ -176,6 +176,18 @@ export function mergeFeed(
         seq = excluded.seq
       where blogroll_blogs.removed_at is not null
     `),
+    // One taken out goes along too, still out, where the target has no row: its note outlives the
+    // take-out (ADR 0050), so putting the blog back under the address the member now reads
+    // brings it back, as putting it back under the alias would have.
+    db.run(sql`
+      insert into blogroll_blogs (blogroll_id, feed_id, user_id, note, note_at, added_at,
+        updated_at, removed_at, seq)
+      select bb.blogroll_id, ${target}, bb.user_id, bb.note, bb.note_at, bb.added_at,
+        bb.updated_at, bb.removed_at, ${currentSeq}
+      from blogroll_blogs bb join blogrolls r on r.id = bb.blogroll_id
+      where bb.feed_id = ${alias} and bb.removed_at is not null and r.deleted_at is null
+      on conflict (blogroll_id, feed_id) do nothing
+    `),
     db.run(sql`
       update blogroll_blogs set removed_at = ${now}, updated_at = max(updated_at, ${now}),
         seq = ${currentSeq}

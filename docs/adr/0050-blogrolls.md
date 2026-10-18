@@ -98,7 +98,10 @@ id, takes its `at` clamped to the server's clock, and runs in a batch that start
 - **`rollBlog {blogrollId, feedId}`** puts a blog in, or back, to the later `updated_at`.
   - It goes through the feed a merged one became.
   - The blogroll must be the member's and live, with fewer than 200 blogs in it.
-  - A blog already in keeps its place. One put back gets `added_at = at`, and goes to the end.
+  - A blog already in keeps its place. One put back goes to the end. Its place, `added_at`, is
+    the device's own stamp (a day ahead of the server at most), not the clamped `at`: it decides
+    no conflict, and clamped, a device whose clock runs ahead had every blog of a push tied at the
+    server's `now` and listed by feed id instead of as put in (review).
   - Its note is untouched.
 - **`unrollBlog {blogrollId, feedId}`** takes a blog out. `removed_at` keeps the first time, and
   `updated_at` moves forward even on a row already out, the lesson `unfollow` taught, so a put-in
@@ -121,13 +124,14 @@ outside the directory.
 - A listed blog links to its page on Tela (`/s/<siteId>`), and any other to the blog itself.
 - A reader count shows from three readers (0041), as everywhere else.
 - Names, descriptions and notes show as written, never translated.
-- A blog is named by its blog's title, or by its feed's once the blogroll has held another feed of
-  the same blog, so the two stay apart (`BLOG_NAME` in `packages/data/src/queries/blogrolls.ts`,
-  and the device's `blogNameIn`). Rows taken out count, so taking a neighbour out renames nothing:
-  counted over live rows, as first built, a blog was renamed when its neighbour was taken out,
-  which the e2e fixtures (three feeds of one blog) showed at once. Counted across Tela instead,
-  as tried next, a second feed of an unlisted blog that another member added privately renamed it
-  on the public page, and in a beta of two that named their subscription (review).
+- A blog is named by its blog's title, or by its feed's while the blogroll holds another live feed
+  of the same blog, so the two stay apart (`BLOG_NAME` in `packages/data/src/queries/blogrolls.ts`,
+  and the device's `blogNameIn`). Within the blogroll, not across Tela: a second feed of an
+  unlisted blog is one another member added privately, and a public name that changed with it
+  would say so (review). Live rows only, so the address a merge took out never counts. Taking one
+  of two feeds out gives the other its blog's name back, which is right for one real blog; the
+  e2e fixtures, three unrelated blogs on one site, make it look like a rename, so their specs find
+  rows by feed.
 - The owner sees every row: a blog they do not subscribe to says "Not in your subscriptions", and
   one the operator rejected says that only they see it.
 
@@ -213,7 +217,9 @@ place.
 
 **Merges carry blogroll rows.** `mergeFeed` (0028), after the filings, puts the target in every
 blogroll the alias is live in, with the alias's `added_at` and note, unless the target is live
-there already, whose own values win. It then takes the alias out.
+there already, whose own values win. A row of the alias already taken out goes along too, still
+out, where the target has none, so its note outlives the merge as it outlives a take-out (review).
+It then takes the alias out.
 
 **Deferred**, for the collections round or later:
 

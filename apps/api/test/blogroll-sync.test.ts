@@ -409,6 +409,24 @@ describe('blogrolls (ADR 0050)', () => {
     expect(await blog(2)).toBeUndefined()
   })
 
+  test('a device whose clock runs ahead keeps its blogs in the order it put them in', async () => {
+    // Make a blogroll from a folder stamps its blogs a millisecond apart. Clamped to the server's
+    // clock they would tie, and list by feed id (1, 2, 3) instead of as put in (3, 1, 2).
+    const ahead = now + 2_000
+    await push([
+      { ...put(ID, 'Friends'), at: ahead },
+      { ...roll(3), at: ahead + 1 },
+      { ...roll(1), at: ahead + 2 },
+      { ...roll(2), at: ahead + 3 },
+    ])
+    const order = await db.all<{ feed_id: number }>(
+      sql`select feed_id from blogroll_blogs where blogroll_id = ${ID} order by added_at, feed_id`,
+    )
+    expect(order.map((r) => r.feed_id)).toEqual([3, 1, 2])
+    // The presence clock is still the server's: a device ahead never wins an argument by it.
+    expect((await blog(3))?.updated_at).toBe(now)
+  })
+
   test("an id taken from another member's blogroll cannot edit, switch, delete, fill, empty or annotate it", async () => {
     await push([put(ID, 'Mine'), roll(1), note(1, 'mine')])
     const other = await signedIn(api, 'other@x.test')

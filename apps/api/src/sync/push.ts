@@ -16,6 +16,9 @@ import { sql } from 'drizzle-orm'
 
 type Statement = Parameters<TelaDb['batch']>[0][number]
 
+/** How far ahead of the server's clock a blog's place in a blogroll may be stamped (`rollBlog`). */
+const PLACE_AHEAD_MS = 86_400_000
+
 function statementsFor(
   db: TelaDb,
   userId: string,
@@ -460,15 +463,21 @@ function statementsFor(
           where id = ${m.id} and user_id = ${userId} and deleted_at is null and ${fresh}
         `),
       ]
-    case 'rollBlog':
+    case 'rollBlog': {
       // Into a live blogroll of the member's own, through the feed a merged one became, to the
       // later `at` on the blog's presence clock. One put back goes to the end; one already in
       // keeps its place. Its note is left alone. Past the limit nothing is written, unless the
       // blog is in already.
+      //
+      // Its place (`added_at`) is the device's own stamp, not the clamped clock: it decides no
+      // conflict, only the order, and a device whose clock runs ahead of the server's would have
+      // every blog of a push clamped to one `now`, tied, and listed by feed id instead of as put
+      // in (Make a blogroll from a folder stamps them a millisecond apart). A day ahead at most.
+      const place = Math.min(Math.max(m.at, 0), now + PLACE_AHEAD_MS)
       return [
         db.run(sql`
           insert into blogroll_blogs (blogroll_id, feed_id, user_id, added_at, updated_at, seq)
-          select ${m.blogrollId}, coalesce(f.merged_into, f.id), ${userId}, ${at}, ${at},
+          select ${m.blogrollId}, coalesce(f.merged_into, f.id), ${userId}, ${place}, ${at},
             ${currentSeq}
           from feeds f
           where f.id = ${m.feedId} and ${fresh}
@@ -486,6 +495,7 @@ function statementsFor(
           where excluded.updated_at >= blogroll_blogs.updated_at
         `),
       ]
+    }
     case 'unrollBlog':
       // To the later `at`, and the clock moves forward even on a blog already out, as an
       // unfollow's does: otherwise an older put-back arriving after a second take-out would see

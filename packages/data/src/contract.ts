@@ -621,7 +621,18 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
           removedAt: T0,
           stamped: 1,
         },
-        // An already removed alias row stays as it was, and carries nothing.
+        // An alias row already taken out goes along, still out, with its note; it stays as it was.
+        {
+          blogrollId: 'RollAliasOut0',
+          feedId: 1,
+          userId: 'u1',
+          note: 'Gone',
+          noteAt: 1,
+          addedAt: 1,
+          updatedAt: 3,
+          removedAt: 3,
+          stamped: 1,
+        },
         {
           blogrollId: 'RollAliasOut0',
           feedId: 2,

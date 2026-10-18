@@ -256,7 +256,7 @@ describe("a public blogroll's page", () => {
     expect(text).not.toContain('anna@x.test')
   })
 
-  test('names a blog by its feed once the blogroll has held another feed of that blog', async () => {
+  test('names a blog by its feed while the blogroll holds another feed of that blog', async () => {
     // As the e2e fixtures are: two feeds of one blog.
     await blog(1, { title: 'Fixture blog' })
     await feed(2, 1, { title: 'Fixture comments' })
@@ -272,13 +272,12 @@ describe("a public blogroll's page", () => {
       // No title of its own: its feed's, though another member added a second feed of it.
       'Untitled blog feed',
     ])
-    // Its sibling taken out, a feed keeps its name: a name that changed with its neighbours would
-    // rename a blog nobody touched.
+    // Its sibling taken out, a feed goes back to its blog's name: one feed of a blog is the blog.
     await write(
       db.run(sql`update blogroll_blogs set removed_at = 9 where feed_id = 2`),
       db.run(sql`delete from blogroll_blogs where feed_id = 4`),
     )
-    expect((await page('annasRoll001')).blogs.map((b) => b.name)).toEqual(['Fixture posts'])
+    expect((await page('annasRoll001')).blogs.map((b) => b.name)).toEqual(['Fixture blog'])
   })
 
   test('says it was updated only when something others see changed', async () => {

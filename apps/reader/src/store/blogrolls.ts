@@ -37,19 +37,16 @@ const hostOf = (url: string) => {
 
 /**
  * What a blog in a blogroll is called, as tela-api names it for others (`BLOG_NAME`): its blog's
- * title, or the feed's own once the blogroll has held another feed of the same blog (rows taken
- * out count, so taking a neighbour out renames nothing), else the blog's host. Null while the
- * device holds no row for the feed (before the pull brings it).
+ * title, or the feed's own while the blogroll holds another live feed of the same blog, else the
+ * blog's host. Null while the device holds no row for the feed (before the pull brings it).
  */
 export function blogNameIn(t: Tables, blogrollId: string, feedId: number): string | null {
   const feed = t.feeds.get(feedId)
   if (!feed) return null
   const site = t.sites.get(feed.siteId)
-  let sibling = false
-  for (const row of t.blogrollBlogs.values()) {
-    if (row.blogrollId !== blogrollId || row.feedId === feedId) continue
-    if (t.feeds.get(row.feedId)?.siteId === feed.siteId) sibling = true
-  }
+  const sibling = liveBlogs(t, blogrollId).some(
+    (b) => b.feedId !== feedId && t.feeds.get(b.feedId)?.siteId === feed.siteId,
+  )
   const name = sibling ? (feed.title ?? site?.title) : (site?.title ?? feed.title)
   return name ?? (site ? hostOf(site.homeUrl) : null)
 }

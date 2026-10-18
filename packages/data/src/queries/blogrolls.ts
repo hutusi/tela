@@ -24,15 +24,15 @@ export const visibleBlogCount = (r: string): SQL =>
 
 /**
  * What a blog in a blogroll is called, from `bb`, `f` and `s`: its blog's title, or the feed's own
- * once the blogroll has held another feed of the same blog, so the two stay apart; null when
- * neither has one, and the page shows the host. Counted within the blogroll, taken-out rows too:
- * not across Tela, where a second feed of an unlisted blog would be one another member added
- * privately, and the public name would say so; and not over live rows alone, which renamed a
- * blog when its neighbour was taken out.
+ * while the blogroll holds another feed of the same blog, so the two stay apart; null when neither
+ * has one, and the page shows the host. Counted over the blogroll's live rows only: not across
+ * Tela, where a second feed of an unlisted blog would be one another member added privately and
+ * the public name would say so; and a merged address, whose row the merge took out, never counts.
  */
 export const BLOG_NAME = sql.raw(`case when exists (
     select 1 from blogroll_blogs b2 join feeds f2 on f2.id = b2.feed_id
-    where b2.blogroll_id = bb.blogroll_id and b2.feed_id <> bb.feed_id and f2.site_id = f.site_id
+    where b2.blogroll_id = bb.blogroll_id and b2.removed_at is null
+      and b2.feed_id <> bb.feed_id and f2.site_id = f.site_id
   ) then coalesce(f.title, s.title) else coalesce(s.title, f.title) end`)
 
 /**
