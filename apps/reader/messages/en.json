@@ -266,6 +266,7 @@
       "week": "This week",
       "articles": "Articles",
       "blogs": "Blogs",
+      "blogrolls": "Blogrolls",
       "readers": "Readers"
     },
     "minutes": "{n} min",
@@ -298,6 +299,15 @@
       },
       "more": "More articles",
       "empty": "No articles match. Try another topic or language."
+    },
+    "blogrolls": {
+      "intro": "Blogs that readers recommend as a set. Subscribe to a whole set at once.",
+      "more": "More blogrolls",
+      "empty": "No public blogrolls yet.",
+      "reasons": {
+        "follows": "You follow {name}",
+        "yours": "Yours"
+      }
     },
     "reason": {
       "followed": "{name}, whom you follow, recommended it",
@@ -573,6 +583,13 @@
       "recommendations": "Recommendations",
       "liked": "Liked",
       "subscriptions": "Subscriptions"
+    },
+    "blogrolls": {
+      "card": {
+        "kind": "Blogroll",
+        "private": "Private",
+        "blogs": "{n, plural, one {# blog} other {# blogs}}"
+      }
     },
     "nothing": "Nothing to show yet."
   },

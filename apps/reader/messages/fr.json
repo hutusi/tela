@@ -266,6 +266,7 @@
       "week": "Cette semaine",
       "articles": "Articles",
       "blogs": "Blogs",
+      "blogrolls": "Blogrolls",
       "readers": "Lecteurs"
     },
     "minutes": "{n} min",
@@ -298,6 +299,15 @@
       },
       "more": "Plus d’articles",
       "empty": "Aucun article ne correspond. Essayez un autre thème ou une autre langue."
+    },
+    "blogrolls": {
+      "intro": "Des blogs que des lecteurs recommandent ensemble. Abonnez-vous à tout l’ensemble d’un coup.",
+      "more": "Plus de blogrolls",
+      "empty": "Aucune blogroll publique pour l’instant.",
+      "reasons": {
+        "follows": "Vous suivez {name}",
+        "yours": "La vôtre"
+      }
     },
     "reason": {
       "followed": "{name}, que vous suivez, l’a recommandé",
@@ -573,6 +583,13 @@
       "recommendations": "Recommandations",
       "liked": "Coups de cœur",
       "subscriptions": "Abonnements"
+    },
+    "blogrolls": {
+      "card": {
+        "kind": "Blogroll",
+        "private": "Privée",
+        "blogs": "{n, plural, one {# blog} other {# blogs}}"
+      }
     },
     "nothing": "Rien à afficher pour l’instant."
   },

@@ -1,12 +1,19 @@
 /**
- * Discover's URLs (ADR 0044): This week at `/discover`, then Articles, Blogs and Readers, each
- * with the public endpoint it reads. A page's API path is written beside its URL, never derived
- * from it: the Blogs page moved to `/discover/blogs`, and its endpoint stayed where it was.
+ * Discover's URLs (ADR 0044): This week at `/discover`, then Articles, Blogs, Blogrolls (ADR 0050,
+ * whose cursor and endpoint are in `blogroll-href.ts`) and Readers, each with the public endpoint
+ * it reads. A page's API path is written beside its URL, never derived from it: the Blogs page
+ * moved to `/discover/blogs`, and its endpoint stayed where it was.
  */
 import { isTopic } from '@tela/shared'
 
-export type DiscoverTab = 'week' | 'articles' | 'blogs' | 'readers'
-export const DISCOVER_TABS: readonly DiscoverTab[] = ['week', 'articles', 'blogs', 'readers']
+export type DiscoverTab = 'week' | 'articles' | 'blogs' | 'blogrolls' | 'readers'
+export const DISCOVER_TABS: readonly DiscoverTab[] = [
+  'week',
+  'articles',
+  'blogs',
+  'blogrolls',
+  'readers',
+]
 
 export function tabHref(tab: DiscoverTab): string {
   return tab === 'week' ? '/discover' : `/discover/${tab}`
@@ -15,7 +22,7 @@ export function tabHref(tab: DiscoverTab): string {
 /** The tab a path names, or null for a path that is not one of Discover's. */
 export function tabOf(pathname: string): DiscoverTab | null {
   if (pathname === '/discover') return 'week'
-  const tab = pathname.match(/^\/discover\/(articles|blogs|readers)$/)?.[1]
+  const tab = pathname.match(/^\/discover\/(articles|blogs|blogrolls|readers)$/)?.[1]
   return (tab as DiscoverTab | undefined) ?? null
 }
 

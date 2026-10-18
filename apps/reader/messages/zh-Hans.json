@@ -266,6 +266,7 @@
       "week": "本周",
       "articles": "文章",
       "blogs": "博客",
+      "blogrolls": "博客链",
       "readers": "读者"
     },
     "minutes": "{n} 分钟",
@@ -298,6 +299,15 @@
       },
       "more": "更多文章",
       "empty": "没有符合的文章。换个话题或语言试试。"
+    },
+    "blogrolls": {
+      "intro": "读者成组推荐的博客，一键就能订阅整组。",
+      "more": "更多博客链",
+      "empty": "还没有公开的博客链。",
+      "reasons": {
+        "follows": "你关注了 {name}",
+        "yours": "你的"
+      }
     },
     "reason": {
       "followed": "你关注的 {name} 推荐了它",
@@ -573,6 +583,13 @@
       "recommendations": "推荐",
       "liked": "喜欢",
       "subscriptions": "订阅"
+    },
+    "blogrolls": {
+      "card": {
+        "kind": "博客链",
+        "private": "私密",
+        "blogs": "{n, plural, other {# 个博客}}"
+      }
     },
     "nothing": "这里还什么都没有。"
   },
