@@ -67,8 +67,24 @@ export const mutationSchema = z.discriminatedUnion('type', [
    * arrived after the reader looked are not swept up. One feed, or every feed without `feedId`.
    */
   z.object({ ...base, type: z.literal('markAllRead'), feedId: id.optional(), upTo: id }),
-  z.object({ ...base, type: z.literal('subscribe'), feedId: id }),
-  z.object({ ...base, type: z.literal('unsubscribe'), feedId: id }),
+  /**
+   * Subscribe, or unsubscribe, through the feed a merged one became (ADR 0028). With `exact`, this
+   * feed only, never the one it merged into: a change made from a public copy that may predate
+   * the merge (Subscribe to all, ADR 0050) must not reach a subscription the member already had
+   * under the other address. A tela-api that predates the flag strips it and follows the merge.
+   */
+  z.object({
+    ...base,
+    type: z.literal('subscribe'),
+    feedId: id,
+    exact: z.literal(true).optional(),
+  }),
+  z.object({
+    ...base,
+    type: z.literal('unsubscribe'),
+    feedId: id,
+    exact: z.literal(true).optional(),
+  }),
   /**
    * A preference, to the later `at`. With `ifAbsent`, a value the account takes from this browser
    * rather than one the member chose (a visitor's theme, on joining, ADR 0037): written only
@@ -172,13 +188,14 @@ export const mutationSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('deleteFolder'), id: folderId }),
   /**
    * Put a blog in a folder, or in none (null). A blog is in one folder at most, and the later `at`
-   * wins. A folder deleted meanwhile takes nothing.
+   * wins. A folder deleted meanwhile takes nothing. `exact` as for `subscribe`.
    */
   z.object({
     ...base,
     type: z.literal('fileFeed'),
     feedId: id,
     folderId: folderId.nullable(),
+    exact: z.literal(true).optional(),
   }),
   /**
    * Make a blogroll, or change its name and description (ADR 0050). The later `at` wins, and a

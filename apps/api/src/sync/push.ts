@@ -39,6 +39,12 @@ function statementsFor(
     `)
   }
   const siteOf = (feedId: number) => sql`(select site_id from feeds where id = ${feedId})`
+  // Selecting from `feeds where id = …`: the feed a merged one became (ADR 0028), or with `exact`
+  // the one named and only while nothing has merged it away (ADR 0050).
+  const feedOf = (m: { exact?: true | undefined }) =>
+    m.exact ? sql`id` : sql`coalesce(merged_into, id)`
+  const unmerged = (m: { exact?: true | undefined }) =>
+    m.exact ? sql`and merged_into is null` : sql``
 
   switch (m.type) {
     case 'markRead':
@@ -137,8 +143,8 @@ function statementsFor(
       return [
         db.run(sql`
           insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at, seq)
-          select ${userId}, coalesce(merged_into, id), 0, ${now}, ${now}, ${currentSeq}
-          from feeds where id = ${m.feedId} and ${fresh}
+          select ${userId}, ${feedOf(m)}, 0, ${now}, ${now}, ${currentSeq}
+          from feeds where id = ${m.feedId} ${unmerged(m)} and ${fresh}
           on conflict (user_id, feed_id) do update set
             deleted_at = null, updated_at = excluded.updated_at, seq = excluded.seq
           where subscriptions.deleted_at is not null
@@ -150,7 +156,7 @@ function statementsFor(
         db.run(sql`
           update subscriptions set deleted_at = ${now}, updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and deleted_at is null and ${fresh}
-            and feed_id = (select coalesce(merged_into, id) from feeds where id = ${m.feedId})
+            and feed_id = ${m.exact ? sql`${m.feedId}` : sql`(select coalesce(merged_into, id) from feeds where id = ${m.feedId})`}
         `),
         ...recountReaders(db, siteOf(m.feedId), now),
       ]
@@ -391,7 +397,7 @@ function statementsFor(
       ]
     case 'fileFeed': {
       // Into a live folder of the member's own, or none; through the feed a merged one became,
-      // as a subscription goes (ADR 0028). The later `at` wins.
+      // as a subscription goes (ADR 0028), unless `exact`. The later `at` wins.
       const into =
         m.folderId === null
           ? sql`true`
@@ -400,8 +406,8 @@ function statementsFor(
       return [
         db.run(sql`
           insert into feed_folders (user_id, feed_id, folder_id, updated_at, seq)
-          select ${userId}, coalesce(merged_into, id), ${m.folderId}, ${at}, ${currentSeq}
-          from feeds where id = ${m.feedId} and ${into} and ${fresh}
+          select ${userId}, ${feedOf(m)}, ${m.folderId}, ${at}, ${currentSeq}
+          from feeds where id = ${m.feedId} ${unmerged(m)} and ${into} and ${fresh}
           on conflict (user_id, feed_id) do update set
             folder_id = excluded.folder_id, updated_at = excluded.updated_at, seq = excluded.seq
           where excluded.updated_at >= feed_folders.updated_at

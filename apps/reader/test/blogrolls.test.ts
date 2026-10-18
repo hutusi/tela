@@ -327,13 +327,13 @@ describe('Subscribe to all', () => {
     const plan = subscribeAllPlan(t, ids, { kind: 'new', id: 'f-new', name: 'Cities, on foot' })
     expect(plan.fresh).toEqual([2, 3, 4])
     expect(plan.inputs).toEqual([
-      { type: 'subscribe', feedId: 2 },
-      { type: 'subscribe', feedId: 3 },
-      { type: 'subscribe', feedId: 4 },
+      { type: 'subscribe', feedId: 2, exact: true },
+      { type: 'subscribe', feedId: 3, exact: true },
+      { type: 'subscribe', feedId: 4, exact: true },
       { type: 'putFolder', id: 'f-new', name: 'Cities, on foot' },
-      { type: 'fileFeed', feedId: 2, folderId: 'f-new' },
-      { type: 'fileFeed', feedId: 3, folderId: 'f-new' },
-      { type: 'fileFeed', feedId: 4, folderId: 'f-new' },
+      { type: 'fileFeed', feedId: 2, folderId: 'f-new', exact: true },
+      { type: 'fileFeed', feedId: 3, folderId: 'f-new', exact: true },
+      { type: 'fileFeed', feedId: 4, folderId: 'f-new', exact: true },
     ])
     expect(plan.made).toBe('f-new')
     const after = applied(t, plan.inputs)
@@ -349,8 +349,8 @@ describe('Subscribe to all', () => {
   test('into a folder of theirs: those already there are not filed again', () => {
     const plan = subscribeAllPlan(t, ids, { kind: 'folder', id: 'f-tech' })
     expect(plan.inputs.filter((m) => m.type === 'fileFeed')).toEqual([
-      { type: 'fileFeed', feedId: 2, folderId: 'f-tech' },
-      { type: 'fileFeed', feedId: 4, folderId: 'f-tech' },
+      { type: 'fileFeed', feedId: 2, folderId: 'f-tech', exact: true },
+      { type: 'fileFeed', feedId: 4, folderId: 'f-tech', exact: true },
     ])
     expect(plan.inputs.some((m) => m.type === 'putFolder')).toBe(false)
   })
@@ -358,7 +358,7 @@ describe('Subscribe to all', () => {
   test('into no folder: a blog followed once does not go back to its old folder', () => {
     const plan = subscribeAllPlan(t, ids, { kind: 'none' })
     expect(plan.inputs.filter((m) => m.type === 'fileFeed')).toEqual([
-      { type: 'fileFeed', feedId: 3, folderId: null },
+      { type: 'fileFeed', feedId: 3, folderId: null, exact: true },
     ])
     const after = applied(t, plan.inputs)
     expect(folderIdOf(after, 3)).toBeNull()
@@ -367,7 +367,7 @@ describe('Subscribe to all', () => {
 
   test('a folder chosen that has gone since is no folder', () => {
     const plan = subscribeAllPlan(t, [4], { kind: 'folder', id: 'f-gone' })
-    expect(plan.inputs).toEqual([{ type: 'subscribe', feedId: 4 }])
+    expect(plan.inputs).toEqual([{ type: 'subscribe', feedId: 4, exact: true }])
   })
 
   test('nothing to add makes nothing, not even the folder', () => {
@@ -379,10 +379,10 @@ describe('Subscribe to all', () => {
     const plan = subscribeAllPlan(t, ids, { kind: 'new', id: 'f-new', name: 'Cities, on foot' })
     const undo = undoSubscribeAll(plan, applied(t, plan.inputs))
     expect(undo).toEqual([
-      { type: 'unsubscribe', feedId: 2 },
-      { type: 'unsubscribe', feedId: 3 },
-      { type: 'unsubscribe', feedId: 4 },
-      { type: 'fileFeed', feedId: 3, folderId: 'f-tech' },
+      { type: 'unsubscribe', feedId: 2, exact: true },
+      { type: 'unsubscribe', feedId: 3, exact: true },
+      { type: 'unsubscribe', feedId: 4, exact: true },
+      { type: 'fileFeed', feedId: 3, folderId: 'f-tech', exact: true },
       { type: 'deleteFolder', id: 'f-new' },
     ])
     const back = applied(applied(t, plan.inputs), undo, 2000)
@@ -395,17 +395,17 @@ describe('Subscribe to all', () => {
     const plan = subscribeAllPlan(t, ids, { kind: 'none' })
     const later = tablesWith({ folders: [{ id: 'f-cities', name: 'Cities' }] })
     expect(undoSubscribeAll(plan, later)).toEqual([
-      { type: 'unsubscribe', feedId: 2 },
-      { type: 'unsubscribe', feedId: 3 },
-      { type: 'unsubscribe', feedId: 4 },
+      { type: 'unsubscribe', feedId: 2, exact: true },
+      { type: 'unsubscribe', feedId: 3, exact: true },
+      { type: 'unsubscribe', feedId: 4, exact: true },
       // Tech was deleted meanwhile.
-      { type: 'fileFeed', feedId: 3, folderId: null },
+      { type: 'fileFeed', feedId: 3, folderId: null, exact: true },
     ])
     const into = subscribeAllPlan(t, ids, { kind: 'folder', id: 'f-cities' })
     expect(undoSubscribeAll(into, t).filter((m) => m.type === 'fileFeed')).toEqual([
-      { type: 'fileFeed', feedId: 2, folderId: null },
-      { type: 'fileFeed', feedId: 3, folderId: 'f-tech' },
-      { type: 'fileFeed', feedId: 4, folderId: null },
+      { type: 'fileFeed', feedId: 2, folderId: null, exact: true },
+      { type: 'fileFeed', feedId: 3, folderId: 'f-tech', exact: true },
+      { type: 'fileFeed', feedId: 4, folderId: null, exact: true },
     ])
   })
 

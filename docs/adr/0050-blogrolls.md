@@ -155,6 +155,11 @@ their posts, and the device keeps those rows when it prunes.
 - A later change to the blogroll changes nothing in the member's subscriptions.
 - It waits until the device has synced, so a blog the device has not heard of is never counted as
   new, and it counts again when pressed.
+- Its changes, and its late Undo's, are `exact`: each touches the feed it names, never the one a
+  merge made it (0028). The page is a public copy, which can name an address merged since, and
+  the device cannot tell: followed through the merge, its `fileFeed` moved a subscription the
+  member already had under the other address, and a late Undo unsubscribed it (Codex's review).
+  Such a blog is now left alone both ways. A tela-api that predates the flag strips it.
 
 **`view()` copies once.** A held Subscribe to all of 200 blogs is about 400 mutations, and the
 reducer copied every table for each mutation it applied, so every recompute of the view replayed

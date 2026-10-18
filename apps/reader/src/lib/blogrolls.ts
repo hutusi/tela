@@ -151,6 +151,11 @@ export type SubscribeAllPlan = {
  * those, in one place (Tela Lists, screen 24): a blog already followed stays where it is. A filing
  * outlives an unsubscribe, so a blog followed once before would go back to its old folder: each is
  * filed where the member chose, No folder too. A folder chosen that is gone by now is none.
+ *
+ * Every change is `exact`. The blogroll is a public copy, which can name an address merged into a
+ * feed since (`visibleBlogsFrom` keeps such rows, and a copy cached before the merge has nothing
+ * else); followed through the merge, its `fileFeed` would move a subscription the member already
+ * had, and a late Undo would unsubscribe it. Exact, such a blog is left alone both ways.
  */
 export function subscribeAllPlan(
   t: Pick<Tables, 'subscriptions' | 'folders' | 'feedFolders'>,
@@ -169,9 +174,11 @@ export function subscribeAllPlan(
   return {
     fresh,
     inputs: [
-      ...fresh.map((feedId) => ({ type: 'subscribe', feedId }) as const),
+      ...fresh.map((feedId) => ({ type: 'subscribe', feedId, exact: true }) as const),
       ...(to.kind === 'new' ? [{ type: 'putFolder', id: to.id, name: to.name } as const] : []),
-      ...from.map(([feedId]) => ({ type: 'fileFeed', feedId, folderId: target }) as const),
+      ...from.map(
+        ([feedId]) => ({ type: 'fileFeed', feedId, folderId: target, exact: true }) as const,
+      ),
     ],
     from,
     made: to.kind === 'new' ? to.id : null,
@@ -182,7 +189,7 @@ export function subscribeAllPlan(
  * Undo Subscribe to all after it went to the server: each blog it added unsubscribed, and each it
  * filed back where it was, in a folder that is still there, or none. The folder it made is
  * deleted, which leaves what was in it in none, so only a blog that was somewhere else before is
- * filed back.
+ * filed back. Exact, as the change it undoes was.
  */
 export function undoSubscribeAll(
   plan: Pick<SubscribeAllPlan, 'fresh' | 'from' | 'made'>,
@@ -192,10 +199,10 @@ export function undoSubscribeAll(
     .filter(([, was]) => plan.made === null || was !== null)
     .map(([feedId, was]) => {
       const folderId = was !== null && t.folders.has(was) ? was : null
-      return { type: 'fileFeed', feedId, folderId } as const
+      return { type: 'fileFeed', feedId, folderId, exact: true } as const
     })
   return [
-    ...plan.fresh.map((feedId) => ({ type: 'unsubscribe', feedId }) as const),
+    ...plan.fresh.map((feedId) => ({ type: 'unsubscribe', feedId, exact: true }) as const),
     ...back,
     ...(plan.made !== null ? [{ type: 'deleteFolder', id: plan.made } as const] : []),
   ]
