@@ -3,7 +3,7 @@
  * profile tab and cards read these, never tela-api. Others' blogrolls come by RPC.
  */
 import type { BlogrollBlogRow, BlogrollRow, Tables } from '@tela/sync'
-import type { BlogrollCard, Person } from '../views/types'
+import type { BlogrollBlog, BlogrollCard, BlogrollData, Person } from '../views/types'
 import { cached } from './selectors'
 
 /** How many blogs a card names before "N blogs". */
@@ -79,4 +79,73 @@ export function ownCard(t: Tables, row: BlogrollRow, owner: Person): BlogrollCar
     publicSince: null,
     updatedAt: Math.max(row.updatedAt, ...blogs.map((b) => Math.max(b.updatedAt, b.noteAt))),
   }
+}
+
+/** The member's own blogrolls as cards, newest first: their profile tab's. */
+export function myBlogrollCards(t: Tables, owner: Person): BlogrollCard[] {
+  return myBlogrolls(t).map((row) => ownCard(t, row, owner))
+}
+
+/**
+ * What the owner's page says of a blog that others' pages do not: that the member no longer
+ * follows it (it stays in the blogroll), and that the operator hid its blog, so nobody else sees
+ * it here.
+ */
+export type OwnBlogFlags = { notSubscribed: boolean; hiddenFromOthers: boolean }
+
+/** Below this, a blog's readers are nobody's to count (ADR 0041): the row says nothing of them. */
+const READERS_SHOWN_FROM = 3
+
+/**
+ * The member's own blogroll as its page shows it, from the device's rows (ADR 0050): what
+ * tela-api would answer for it, but with every blog the member put in, those the operator hid
+ * included, each with what only the owner is told (`OwnBlogFlags`). A blog whose feed the device
+ * holds no row for yet (before the pull brings it) has no name, and its host is blank. Null for a
+ * blogroll the device does not hold.
+ */
+export function selectBlogrollPage(
+  t: Tables,
+  id: string,
+  owner: Person,
+): { data: BlogrollData; flags: ReadonlyMap<number, OwnBlogFlags> } | null {
+  const row = t.blogrolls.get(id)
+  if (!row) return null
+  const key = `blogrollPage:${id}:${owner.id}:${owner.handle}:${owner.displayName}:${owner.avatar}`
+  return cached(t, key, () => {
+    const live = liveBlogs(t, id)
+    const flags = new Map<number, OwnBlogFlags>()
+    const blogs = live.map((b): BlogrollBlog => {
+      const feed = t.feeds.get(b.feedId)
+      const site = feed ? t.sites.get(feed.siteId) : undefined
+      flags.set(b.feedId, {
+        notSubscribed: t.subscriptions.get(b.feedId)?.deletedAt !== null,
+        hiddenFromOthers: site?.listing === 'rejected',
+      })
+      return {
+        feedId: b.feedId,
+        siteId: site?.id ?? 0,
+        name: blogNameIn(t, live, b.feedId),
+        homeUrl: site?.homeUrl ?? feed?.feedUrl ?? '',
+        faviconKey: site?.faviconKey ?? null,
+        primaryLang: site?.primaryLang ?? null,
+        description: site?.description ?? null,
+        listed: site?.listing === 'listed' || site?.listing === 'featured',
+        readerCount: site && site.readerCount >= READERS_SHOWN_FROM ? site.readerCount : null,
+        dead: feed?.status === 'dead',
+        note: b.note,
+        addedAt: b.addedAt,
+      }
+    })
+    const data: BlogrollData = {
+      blogroll: {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        updatedAt: Math.max(row.updatedAt, ...live.map((b) => Math.max(b.updatedAt, b.noteAt))),
+      },
+      owner,
+      blogs,
+    }
+    return { data, flags }
+  })
 }
