@@ -1,18 +1,23 @@
 /**
- * The library's ledgers and records: Claims, Sites, Feeds and Discover (ADR 0039). A ledger is
- * one batch, so its counts and its rows come from one snapshot: every filter's size under the
- * search, and the filter's rows up to the limit. A record is one batch too, with the history an
+ * The library's ledgers and records: Claims, Sites, Feeds and Discover (ADR 0039), whose
+ * Blogrolls filter lists members' public blogrolls (ADR 0050). A ledger is one batch, so its
+ * counts and its rows come from one snapshot: every filter's size under the search, and the
+ * filter's rows up to the limit. A record is one batch too, with the history an
  * operator left read after it (the log only grows, so a moment's difference shows one entry more).
  */
-import { DISCOVER_REVIEW, historyOf, type TelaDb } from '@tela/data'
+import { BLOG_NAME, DISCOVER_REVIEW, historyOf, isShown, type TelaDb } from '@tela/data'
 import {
   ADMIN_FILTERS,
   ADMIN_LIST_LIMIT,
+  type AdminBlogrollBlog,
+  type AdminBlogrollDetail,
+  type AdminBlogrollRow,
   type AdminClaimDetail,
   type AdminFeedDetail,
   type AdminFilter,
   type AdminList,
   type AdminSiteDetail,
+  type AdminSiteRow,
   isAdminFilter,
   type LedgerArea,
 } from '@tela/shared/admin'
@@ -21,8 +26,13 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { ApiDeps } from '../../../deps'
 import { type AdminEnv, runBatch } from '../framework'
-import { idOf, likePattern } from './common'
+import { blogrollIdOf, idOf, likePattern } from './common'
 import {
+  BLOGROLL_SELECT,
+  type BlogrollRaw,
+  blogOf,
+  blogrollMatches,
+  blogrollRow,
   CLAIM_SELECT,
   type ClaimRaw,
   claimMatches,
@@ -52,12 +62,15 @@ const SITE_FILTERS: Record<AdminFilter<'sites'>, SQL> = {
   hidden: sql`s.listing = 'rejected'`,
 }
 
+/** Discover's filters over blogs; Blogrolls is over `blogrolls`, and counted on its own. */
+type DiscoverSiteFilter = Exclude<AdminFilter<'discover'>, 'blogrolls'>
+
 /**
  * Discover's filters. To review (`candidates`) is the queue of blogs members added (ADR 0041);
  * Not for Discover (`dismissed`) the ones an operator decided against, which three readers can
  * still list. A private blog that waits for nothing (unread, unfetched) is the Sites ledger's.
  */
-const DISCOVER_FILTERS: Record<AdminFilter<'discover'>, SQL> = {
+const DISCOVER_FILTERS: Record<DiscoverSiteFilter, SQL> = {
   candidates: DISCOVER_REVIEW,
   featured: sql`s.listing = 'featured'`,
   listed: sql`s.listing = 'listed'`,
@@ -114,26 +127,64 @@ function listOf<R, A extends LedgerArea>(counts: unknown, rows: R[]): AdminList<
 
 const OVER_LIMIT = sql.raw(`limit ${ADMIN_LIST_LIMIT + 1}`)
 const SITES_FROM = sql`from sites s left join profiles op on op.user_id = s.claimed_by`
+const BLOGROLLS_FROM = sql`from blogrolls r left join profiles p on p.user_id = r.user_id`
 
-async function siteLedger<A extends 'sites' | 'discover'>(
+async function siteLedger(
   db: TelaDb,
-  area: A,
-  filters: Record<AdminFilter<A>, SQL>,
-  filter: AdminFilter<A>,
+  filter: AdminFilter<'sites'>,
   pattern: string | null,
   now: number,
-): Promise<AdminList<ReturnType<typeof siteRow>, A>> {
+): Promise<AdminList<AdminSiteRow, 'sites'>> {
   const matches = siteMatches(pattern)
   const [counts, rows] = await runBatch(db, [
-    db.all(countsOf(filters, SITES_FROM, matches)),
+    db.all(countsOf(SITE_FILTERS, SITES_FROM, matches)),
     db.all(sql`
-      ${siteSelect(now - 30 * DAY)} where ${filters[filter]} and ${matches}
+      ${siteSelect(now - 30 * DAY)} where ${SITE_FILTERS[filter]} and ${matches}
       order by s.reader_count desc, s.id desc ${OVER_LIMIT}
     `),
   ])
   return listOf(
     counts,
-    (rows as SiteRaw[]).map((raw) => siteRow(raw, area)),
+    (rows as SiteRaw[]).map((raw) => siteRow(raw, 'sites')),
+  )
+}
+
+/**
+ * Discover's ledger: blogs under every filter but Blogrolls, which lists every public, live
+ * blogroll (ADR 0050), the newest to go public first, hidden ones included. A private blogroll is
+ * its member's alone, and the console never names it. The Blogrolls count is the blogrolls the
+ * search matches, beside the blogs it matches under the other filters.
+ */
+async function discoverLedger(
+  db: TelaDb,
+  filter: AdminFilter<'discover'>,
+  pattern: string | null,
+  now: number,
+): Promise<AdminList<AdminSiteRow | AdminBlogrollRow, 'discover'>> {
+  const sites = siteMatches(pattern)
+  const blogrolls = blogrollMatches(pattern)
+  const [counts, rolls, rows] = await runBatch(db, [
+    db.all(countsOf(DISCOVER_FILTERS, SITES_FROM, sites)),
+    db.all(sql`select count(*) as n ${BLOGROLLS_FROM} where ${isShown('r')} and ${blogrolls}`),
+    filter === 'blogrolls'
+      ? db.all(sql`
+          ${BLOGROLL_SELECT} where ${isShown('r')} and ${blogrolls}
+          order by r.public_since desc, r.id desc ${OVER_LIMIT}
+        `)
+      : db.all(sql`
+          ${siteSelect(now - 30 * DAY)} where ${DISCOVER_FILTERS[filter]} and ${sites}
+          order by s.reader_count desc, s.id desc ${OVER_LIMIT}
+        `),
+  ])
+  const counted = {
+    ...((counts as Record<string, number>[])[0] ?? {}),
+    blogrolls: (rolls as { n: number }[])[0]?.n ?? 0,
+  }
+  return listOf<AdminSiteRow | AdminBlogrollRow, 'discover'>(
+    [counted],
+    filter === 'blogrolls'
+      ? (rows as BlogrollRaw[]).map(blogrollRow)
+      : (rows as SiteRaw[]).map((raw) => siteRow(raw, 'discover')),
   )
 }
 
@@ -182,16 +233,48 @@ export function libraryReads(deps: ApiDeps) {
     const query = ledgerQuery(c, 'sites')
     if (!query) return c.json({ error: 'invalid' }, 400)
     const now = deps.clock.now()
-    return c.json(await siteLedger(db, 'sites', SITE_FILTERS, query.filter, query.pattern, now))
+    return c.json(await siteLedger(db, query.filter, query.pattern, now))
   })
 
   routes.get('/discover', async (c) => {
     const query = ledgerQuery(c, 'discover')
     if (!query) return c.json({ error: 'invalid' }, 400)
     const now = deps.clock.now()
-    return c.json(
-      await siteLedger(db, 'discover', DISCOVER_FILTERS, query.filter, query.pattern, now),
-    )
+    return c.json(await discoverLedger(db, query.filter, query.pattern, now))
+  })
+
+  // A public, live blogroll's record: every blog in it, in its order, and what operators did.
+  // Not found for a private or deleted one: those are their member's alone.
+  routes.get('/blogrolls/:id', async (c) => {
+    const id = blogrollIdOf(c.req.param('id'))
+    if (id === null) return c.json({ error: 'not_found' }, 404)
+    const [rows, blogs] = await runBatch(db, [
+      db.all(sql`${BLOGROLL_SELECT} where r.id = ${id} and ${isShown('r')}`),
+      db.all(sql`
+        select bb.feed_id, f.site_id, ${BLOG_NAME} as name, s.home_url, s.favicon_key,
+          s.listing <> 'rejected' as shown
+        from blogroll_blogs bb join feeds f on f.id = bb.feed_id join sites s on s.id = f.site_id
+        where bb.blogroll_id = ${id} and bb.removed_at is null
+        order by bb.added_at, bb.feed_id
+      `),
+    ])
+    const raw = (rows as BlogrollRaw[])[0]
+    if (!raw) return c.json({ error: 'not_found' }, 404)
+    const detail: AdminBlogrollDetail = {
+      blogroll: blogrollRow(raw),
+      blogs: (blogs as Record<string, unknown>[]).flatMap((b) => {
+        const blog: AdminBlogrollBlog | null = blogOf({
+          feedId: b.feed_id,
+          siteId: b.site_id,
+          name: b.name,
+          homeUrl: b.home_url,
+          faviconKey: b.favicon_key,
+        })
+        return blog ? [{ ...blog, shown: b.shown === 1 }] : []
+      }),
+      history: await historyOf(db, 'blogroll', id),
+    }
+    return c.json(detail)
   })
 
   routes.get('/sites/:id', async (c) => {

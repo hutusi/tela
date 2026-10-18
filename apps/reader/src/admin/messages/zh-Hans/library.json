@@ -26,7 +26,8 @@
       "featured": "精选",
       "listed": "已列入",
       "dismissed": "不列入发现",
-      "hidden": "已隐藏"
+      "hidden": "已隐藏",
+      "blogrolls": "博客链"
     }
   },
   "names": { "blog": "博客", "site": "博客", "feed": "订阅源" },

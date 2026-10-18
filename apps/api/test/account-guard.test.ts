@@ -94,6 +94,10 @@ beforeEach(async () => {
     // a's failed claim on blog 2, for the Claims area's record.
     db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status, created_at)
       values (1, 2, ${a.userId}, 'meta', 'guard-token', 'failed', 0)`),
+    // a's public blogroll, for Discover's Blogrolls record (ADR 0050).
+    db.run(sql`insert into blogrolls (id, user_id, name, is_public, public_version, public_since,
+        created_at, updated_at)
+      values ('AbCdEf012345', ${a.userId}, 'Guarded', 1, 1, 0, 0, 0)`),
   ] as never)
 })
 
@@ -264,6 +268,11 @@ const MEMBER_ROUTES: MemberRoute[] = [
   {
     route: 'GET /api/v1/admin/discover',
     path: '/api/v1/admin/discover?f=featured',
+    effect: 'reads',
+  },
+  {
+    route: 'GET /api/v1/admin/blogrolls/:id',
+    path: '/api/v1/admin/blogrolls/AbCdEf012345',
     effect: 'reads',
   },
   { route: 'GET /api/v1/admin/counts', path: '/api/v1/admin/counts', effect: 'reads' },

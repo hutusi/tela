@@ -210,7 +210,7 @@ describe('Discover (ADR 0041)', () => {
     reviewedAt: 1_759_400_000_000,
   }
   const LIST: AdminList<AdminSiteRow, 'discover'> = {
-    counts: { candidates: 1, featured: 0, listed: 1, dismissed: 2, hidden: 0 },
+    counts: { candidates: 1, featured: 0, listed: 1, dismissed: 2, hidden: 0, blogrolls: 0 },
     rows: [candidate, listed],
     truncated: false,
   }

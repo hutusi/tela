@@ -1,9 +1,12 @@
 /**
- * The library's rows as the console reads them: a blog, a claim on one, a feed. Each is a select
+ * The library's rows as the console reads them: a blog, a claim on one, a feed, a public blogroll.
+ * Each is a select
  * over its table and the few joins that name people, and a mapping to the contract's shape that
  * also says which actions apply to the row now. Lists and records read the same columns, so a row
  * in a ledger and the same row in a record never disagree.
  */
+
+import { BLOG_NAME, inDiscover, visibleBlogCount, visibleBlogsFrom } from '@tela/data'
 import type {
   ClaimMethod,
   ClaimStatus,
@@ -12,7 +15,14 @@ import type {
   FetchRegion,
   SiteReview,
 } from '@tela/shared'
-import type { AdminActionName, AdminClaimRow, AdminFeedRow, AdminSiteRow } from '@tela/shared/admin'
+import type {
+  AdminActionName,
+  AdminBlogrollBlog,
+  AdminBlogrollRow,
+  AdminClaimRow,
+  AdminFeedRow,
+  AdminSiteRow,
+} from '@tela/shared/admin'
 import { type SQL, sql } from 'drizzle-orm'
 import { like, personOf } from './common'
 
@@ -369,3 +379,91 @@ export const RELAY_SELECT = sql`
 
 export const relayOf = (rows: unknown): boolean =>
   Array.isArray(rows) && (rows[0] as { relay?: unknown } | undefined)?.relay === 1
+
+// ---------------------------------------------------------------------------------------------
+// Blogrolls
+
+/** How many of a blogroll's blogs its row names: enough to tell what it is about. */
+const FIRST_BLOGS = 3
+
+/**
+ * Every column a blogroll row needs, from `blogrolls r left join profiles p` (its member): the
+ * blogs others see and every blog put in, whether Discover lists it, and its first few blogs, by
+ * the rules every reader of others' blogrolls shares (`@tela/data`'s blogroll queries). Callers
+ * keep to public, live blogrolls (`isShown`): a private one is its member's alone.
+ */
+export const BLOGROLL_SELECT = sql`
+  select r.id, r.name, r.description, r.user_id, p.handle as owner_handle,
+    p.display_name as owner_name, r.public_since, r.hidden_at,
+    ${visibleBlogCount('r')} as blog_count,
+    (select count(*) from blogroll_blogs bb where bb.blogroll_id = r.id and bb.removed_at is null)
+      as total_count,
+    ${inDiscover('r')} as in_discover,
+    (select json_group_array(json_object('feedId', feed_id, 'siteId', site_id, 'name', name,
+        'homeUrl', home_url, 'faviconKey', favicon_key))
+      from (select bb.feed_id, f.site_id, ${BLOG_NAME} as name, s.home_url, s.favicon_key
+        from ${visibleBlogsFrom('r')} order by bb.added_at, bb.feed_id
+        limit ${sql.raw(String(FIRST_BLOGS))})) as first_blogs
+  from blogrolls r left join profiles p on p.user_id = r.user_id`
+
+export type BlogrollRaw = {
+  id: string
+  name: string
+  description: string
+  user_id: string
+  owner_handle: string | null
+  owner_name: string | null
+  public_since: number | null
+  hidden_at: number | null
+  blog_count: number
+  total_count: number
+  in_discover: number
+  first_blogs: string | null
+}
+
+/** A blogroll matching a search (alias `r`, member `p`): its name, its member's handle, its id. */
+export function blogrollMatches(pattern: string | null): SQL {
+  if (pattern === null) return sql`true`
+  return sql`(${like(sql`r.name`, pattern)} or ${like(sql`p.handle`, pattern)}
+    or ${like(sql`r.id`, pattern)})`
+}
+
+/** A blog of a blogroll from a JSON object a select built, or null for one it could not read. */
+export function blogOf(value: unknown): AdminBlogrollBlog | null {
+  if (typeof value !== 'object' || value === null) return null
+  const v = value as Record<string, unknown>
+  if (typeof v.feedId !== 'number' || typeof v.siteId !== 'number') return null
+  if (typeof v.homeUrl !== 'string') return null
+  return {
+    feedId: v.feedId,
+    siteId: v.siteId,
+    name: typeof v.name === 'string' ? v.name : null,
+    homeUrl: v.homeUrl,
+    faviconKey: typeof v.faviconKey === 'string' ? v.faviconKey : null,
+  }
+}
+
+/** A blogroll row: Hide while Discover may list it, Restore once hidden. */
+export function blogrollRow(raw: BlogrollRaw): AdminBlogrollRow {
+  let blogs: AdminBlogrollBlog[] = []
+  try {
+    const parsed = JSON.parse(raw.first_blogs ?? '[]') as unknown
+    if (Array.isArray(parsed)) {
+      blogs = parsed.map(blogOf).filter((b): b is AdminBlogrollBlog => b !== null)
+    }
+  } catch {}
+  return {
+    id: raw.id,
+    actions: raw.hidden_at === null ? ['blogroll.hide'] : ['blogroll.restore'],
+    blogrollId: raw.id,
+    name: raw.name,
+    description: raw.description,
+    owner: personOf(raw.user_id, raw.owner_handle, raw.owner_name),
+    blogCount: raw.blog_count,
+    totalCount: raw.total_count,
+    publicSince: raw.public_since,
+    hiddenAt: raw.hidden_at,
+    inDiscover: raw.in_discover === 1,
+    blogs,
+  }
+}

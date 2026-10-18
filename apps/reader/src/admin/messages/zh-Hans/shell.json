@@ -58,6 +58,10 @@
       "relay": { "label": "通过中国中转抓取", "short": "用中转", "done": "改为通过中转抓取" },
       "global": { "label": "直接抓取", "short": "直连", "done": "改为直接抓取" }
     },
+    "blogroll": {
+      "hide": { "label": "从发现中隐藏", "short": "隐藏", "done": "已从发现中隐藏" },
+      "restore": { "label": "恢复到发现", "short": "恢复", "done": "已恢复" }
+    },
     "dead": {
       "retry": { "label": "立即重试", "short": "重试", "done": "已重新排队" },
       "dismiss": { "label": "忽略", "short": "忽略", "done": "已忽略" }

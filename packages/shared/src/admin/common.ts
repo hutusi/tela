@@ -25,8 +25,9 @@ export const ADMIN_FILTERS = {
   sites: ['discover', 'private', 'attention', 'hidden'],
   feeds: ['failing', 'timeout', 'dead', 'paused', 'merged', 'fetching'],
   // `candidates` is the review queue (ADR 0041), "To review"; `dismissed`, the blogs judged not
-  // for Discover, which three readers can still list.
-  discover: ['candidates', 'featured', 'listed', 'dismissed', 'hidden'],
+  // for Discover, which three readers can still list. `blogrolls` lists members' public
+  // blogrolls (ADR 0050), not blogs: its rows are `AdminBlogrollRow`s.
+  discover: ['candidates', 'featured', 'listed', 'dismissed', 'hidden', 'blogrolls'],
   people: ['admins', 'members'],
   invites: ['codes', 'waiting', 'revoked'],
   translation: ['blogs', 'jobs', 'models'],
@@ -54,7 +55,8 @@ export type AdminTone = (typeof ADMIN_TONES)[number]
 /**
  * Everything an operator can do. The server lists, per row, which of these apply to it now; the
  * console maps each to its label, its look and its key. Grouped by what they act on: the id of a
- * request names a site, claim, feed, dead letter, lease (`kind:key`), member, code or hold.
+ * request names a site, claim, feed, blogroll, dead letter, lease (`kind:key`), member, code or
+ * hold.
  */
 export const ADMIN_ACTIONS = [
   'site.feature',
@@ -77,6 +79,8 @@ export const ADMIN_ACTIONS = [
   'feed.revive',
   'feed.relay',
   'feed.global',
+  'blogroll.hide',
+  'blogroll.restore',
   'dead.retry',
   'dead.dismiss',
   'lease.retryNow',
@@ -113,6 +117,8 @@ export const UNDOABLE_ACTIONS = [
   'feed.resume',
   'feed.relay',
   'feed.global',
+  'blogroll.hide',
+  'blogroll.restore',
   'dead.dismiss',
   'code.revoke',
   'code.restore',
@@ -148,6 +154,9 @@ export const ACTION_WRITES = {
   'feed.revive': 'status',
   'feed.relay': 'region',
   'feed.global': 'region',
+  // Whether Discover may list a blogroll (ADR 0050): the operator's `hidden_at`, nothing else.
+  'blogroll.hide': 'hidden',
+  'blogroll.restore': 'hidden',
   'dead.retry': 'resolution',
   'dead.dismiss': 'resolution',
   'lease.retryNow': null,

@@ -26,7 +26,8 @@
       "featured": "Featured",
       "listed": "Listed",
       "dismissed": "Not for Discover",
-      "hidden": "Hidden"
+      "hidden": "Hidden",
+      "blogrolls": "Blogrolls"
     }
   },
   "names": { "blog": "Blog", "site": "Site", "feed": "Feed" },
