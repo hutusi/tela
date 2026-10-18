@@ -160,6 +160,17 @@ their posts, and the device keeps those rows when it prunes.
   the device cannot tell: followed through the merge, its `fileFeed` moved a subscription the
   member already had under the other address, and a late Undo unsubscribed it (Codex's review).
   Such a blog is now left alone both ways. A tela-api that predates the flag strips it.
+- The other side of `exact`, accepted: a merge that lands after the change went out and before a
+  late Undo carries the subscription it made to the other address, where the Undo no longer
+  reaches it, so that one blog stays followed, in no folder or the one chosen (Codex's second
+  review). Telling it from a subscription the member had before needs to know which change
+  started a subscription, which nothing records. An Undo is late in two ways: the page was left
+  while it showed, which sends a held change at once, and the toast's few seconds run on; or a
+  pointer over the toast or focus in it kept it up past the hold's 30-second backstop, which
+  lets the change go regardless, and then for as long as the member keeps it there (Codex's
+  third review). Against that, a merge happens once in a feed's life, at one of its scheduled
+  fetches; and what it leaves is a subscription the member can see and drop, where following the
+  merge took away one they had.
 
 **`view()` copies once.** A held Subscribe to all of 200 blogs is about 400 mutations, and the
 reducer copied every table for each mutation it applied, so every recompute of the view replayed
