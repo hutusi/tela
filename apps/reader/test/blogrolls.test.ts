@@ -28,6 +28,7 @@ import {
   subscribeAllPlan,
   undoSubscribeAll,
 } from '../src/lib/blogrolls'
+import { blogrollSeqs, changedBlogrolls } from '../src/lib/use-forget-blogrolls'
 import { myBlogrollCards, selectBlogrollPage } from '../src/store/blogrolls'
 import type { MutationInput } from '../src/store/local'
 import { folderIdOf } from '../src/store/selectors'
@@ -411,6 +412,36 @@ describe('Subscribe to all', () => {
   test('a blog is named as a sentence names it: its name, else its host', () => {
     expect(blogLabel({ name: 'Kerb', homeUrl: 'https://kerb.example/' })).toBe('Kerb')
     expect(blogLabel({ name: null, homeUrl: 'https://www.kerb.example/x' })).toBe('kerb.example')
+  })
+})
+
+describe('forgetting the public copies', () => {
+  test("each blogroll's newest sequence number, its blogs' included", () => {
+    const t = tablesWith({
+      blogrolls: [blogroll({ seq: 4 }), blogroll({ id: 'Other0000000', seq: 2 })],
+      blogs: [rolled(1, { seq: 9 }), rolled(2, { seq: 3, removedAt: 5 })],
+    })
+    expect(blogrollSeqs(t)).toEqual(
+      new Map([
+        [ID, 9],
+        ['Other0000000', 2],
+      ]),
+    )
+  })
+
+  test('a number that moved, a blogroll that came and one that went', () => {
+    const before = new Map([
+      ['a', 1],
+      ['b', 2],
+      ['c', 3],
+    ])
+    const after = new Map([
+      ['a', 1],
+      ['b', 5],
+      ['d', 1],
+    ])
+    expect(changedBlogrolls(before, after)).toEqual({ moved: ['b', 'd'], gone: ['c'] })
+    expect(changedBlogrolls(after, after)).toEqual({ moved: [], gone: [] })
   })
 })
 
