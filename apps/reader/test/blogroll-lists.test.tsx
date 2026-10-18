@@ -1,6 +1,8 @@
 /**
- * Blogrolls in lists (ADR 0050): Discover's tab with the reasons a member's device puts on it, and
- * the pages "More" brings.
+ * Blogrolls in lists (ADR 0050): a profile's Blogrolls tab as its owner sees it (their device's
+ * blogrolls, private ones too, and New blogroll), Discover's tab with the reasons a member's device
+ * puts on it, and the pages "More" brings. The visitor's pages, as the edge renders them, are in
+ * `edge.test.ts`.
  */
 import { describe, expect, test } from 'bun:test'
 import type { ReactNode } from 'react'
@@ -15,7 +17,8 @@ import {
   heldBlogrolls,
 } from '../src/lib/blogroll-pages'
 import { DiscoverBlogrollsView } from '../src/views/discover-blogrolls'
-import type { BlogrollCard, BlogrollsData, Person } from '../src/views/types'
+import { type OwnBlogrolls, ProfileView, profileTab } from '../src/views/profile'
+import type { BlogrollCard, BlogrollsData, Person, ProfileData } from '../src/views/types'
 
 const render = (node: ReactNode) =>
   renderToString(
@@ -38,7 +41,62 @@ const card = (id: string, name: string, owner: Person = ann): BlogrollCard => ({
   updatedAt: 1,
 })
 
+const profile = (blogrolls: BlogrollCard[]): ProfileData => ({
+  profile: { id: ann.id, handle: 'ann', displayName: 'Ann K', bio: null, memberSince: 0 },
+  counts: { following: 0, followers: 0, recommendations: 0, liked: null, subscriptions: null },
+  blogs: [],
+  recommendations: [],
+  subscriptions: null,
+  liked: null,
+  blogrolls,
+})
+
+const own = (cards: OwnBlogrolls['cards']): OwnBlogrolls => ({ cards, onNew: () => {} })
+
 const count = (html: string, needle: string) => html.split(needle).length - 1
+
+describe("a profile's Blogrolls tab", () => {
+  const reading = { lang: 'en', never: [] }
+  const view = (data: ProfileData, tab: 'blogrolls' | 'recommendations', mine?: OwnBlogrolls) =>
+    render(<ProfileView data={data} tab={tab} reading={reading} locale="en" now={0} own={mine} />)
+
+  test('is shown to others once there is a public blogroll, and always to its owner', () => {
+    const none = profile([])
+    expect(profileTab('blogrolls', none)).toBe('recommendations')
+    expect(profileTab('blogrolls', none, true)).toBe('blogrolls')
+    expect(profileTab('blogrolls', profile([card('abcdefABCDEF', 'Cities')]))).toBe('blogrolls')
+    expect(view(none, 'recommendations')).not.toContain('data-testid="profile-tab-blogrolls"')
+    expect(view(none, 'recommendations', own([]))).toContain('data-testid="profile-tab-blogrolls"')
+  })
+
+  test("its owner's lists every one of theirs, private ones marked, with New blogroll", () => {
+    // The page's copy knows one public blogroll; the device holds that one and a private one.
+    const html = view(
+      profile([card('abcdefABCDEF', 'Cities')]),
+      'blogrolls',
+      own([
+        { card: card('0123456789ab', 'Drafts'), isPublic: false },
+        { card: card('abcdefABCDEF', 'Cities'), isPublic: true },
+      ]),
+    )
+    expect(html).toMatch(/data-testid="profile-tab-blogrolls"[^>]*>Blogrolls<span[^>]*>2<\/span>/)
+    const cards = [...html.matchAll(/data-testid="blogroll-card" data-blogroll-id="(\w+)"/g)]
+    expect(cards.map((m) => m[1])).toEqual(['0123456789ab', 'abcdefABCDEF'])
+    expect(count(html, 'data-testid="blogroll-private"')).toBe(1)
+    expect(html.split('Cities')[0]).toContain('Private')
+    expect(html).toContain('Others can subscribe to every blog in a blogroll at once.')
+    expect(count(html, 'data-testid="new-blogroll"')).toBe(1)
+  })
+
+  test('its owner with none is offered one, once', () => {
+    const html = view(profile([]), 'blogrolls', own([]))
+    expect(html).toContain('data-testid="profile-blogrolls"')
+    expect(html).toContain('No blogrolls yet. Make one to share the blogs you read.')
+    expect(count(html, 'data-testid="new-blogroll"')).toBe(1)
+    expect(html).not.toContain('data-testid="blogroll-card"')
+    expect(html).toContain('New blogroll')
+  })
+})
 
 describe("Discover's Blogrolls", () => {
   test("says why the member is shown one, from their device, and nothing for a visitor's", () => {

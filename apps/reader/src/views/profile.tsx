@@ -1,22 +1,44 @@
 /**
  * A member's public profile (`/@handle`, Tela v2): who they are, how many they follow and are
- * followed by, and what they recommend, like and read, as far as they show it. Pure: the SPA and
- * the edge both render it, and a member's own state (Follow, their counts) comes in by props.
+ * followed by, and what they recommend, like, read and share as blogrolls (ADR 0050), as far as
+ * they show it. Pure: the SPA and the edge both render it, and a member's own state (Follow, their
+ * counts, their own blogrolls) comes in by props.
  */
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { BLOGROLL_GRID, BlogrollCard } from '../components/blogroll-card'
 import { PersonAvatar } from '../components/person-avatar'
 import { SiteAvatar } from '../components/site-avatar'
 import { displayHost, monthYear, shortDate, swatchColor } from '../lib/format'
 import { publicTitle } from '../lib/public-title'
 import { PostLink } from './post-link'
-import type { MemberControls, ProfileData, PublicArticle, Reading } from './types'
+import type {
+  BlogrollCard as BlogrollCardData,
+  MemberControls,
+  ProfileData,
+  PublicArticle,
+  Reading,
+} from './types'
 
-export const PROFILE_TABS = ['recommendations', 'liked', 'subscriptions'] as const
+export const PROFILE_TABS = ['recommendations', 'blogrolls', 'liked', 'subscriptions'] as const
 export type ProfileTab = (typeof PROFILE_TABS)[number]
 
-/** The tab a URL asks for, as far as the profile shows it; recommendations otherwise. */
-export function profileTab(asked: string | null, data: ProfileData): ProfileTab {
+/**
+ * The member's own blogrolls on their own profile, from their device (ADR 0050): every one,
+ * private ones too, newest first. Given, the Blogrolls tab always shows, with New blogroll.
+ */
+export type OwnBlogrolls = {
+  cards: readonly { card: BlogrollCardData; isPublic: boolean }[]
+  /** New blogroll: the page opens its dialog, which gives focus back to the button pressed. */
+  onNew: (opener: HTMLElement) => void
+}
+
+/**
+ * The tab a URL asks for, as far as the profile shows it; recommendations otherwise. Blogrolls
+ * show to others once the member has a public one, and always on their own profile (`own`).
+ */
+export function profileTab(asked: string | null, data: ProfileData, own = false): ProfileTab {
+  if (asked === 'blogrolls' && (own || data.blogrolls.length > 0)) return 'blogrolls'
   if (asked === 'liked' && data.liked) return 'liked'
   if (asked === 'subscriptions' && data.subscriptions) return 'subscriptions'
   return 'recommendations'
@@ -30,6 +52,7 @@ export function ProfileView({
   locale,
   now,
   counts = data.counts,
+  own,
 }: {
   data: ProfileData
   tab: ProfileTab
@@ -39,6 +62,8 @@ export function ProfileView({
   now: number
   /** The counts to show: the page's, or the member's own device's where it knows better. */
   counts?: ProfileData['counts'] | undefined
+  /** The member's own profile: their blogrolls as their device holds them. */
+  own?: OwnBlogrolls | undefined
 }) {
   const t = useTranslations('profile')
   const { profile } = data
@@ -50,16 +75,25 @@ export function ProfileView({
   const following = known && member?.isFollowing(profile.id) === true
   const person = { id: profile.id, handle: profile.handle, displayName: profile.displayName }
   const tabs = PROFILE_TABS.filter((k) =>
-    k === 'recommendations' ? true : k === 'liked' ? data.liked : data.subscriptions,
-  )
-  const countOf = (k: ProfileTab) =>
-    !counts
-      ? null
-      : k === 'recommendations'
-        ? counts.recommendations
+    k === 'recommendations'
+      ? true
+      : k === 'blogrolls'
+        ? own !== undefined || data.blogrolls.length > 0
         : k === 'liked'
-          ? counts.liked
-          : counts.subscriptions
+          ? data.liked
+          : data.subscriptions,
+  )
+  // The page counts the blogrolls it lists; the owner's device counts their private ones too.
+  const countOf = (k: ProfileTab) =>
+    k === 'blogrolls'
+      ? (own?.cards.length ?? data.blogrolls.length)
+      : !counts
+        ? null
+        : k === 'recommendations'
+          ? counts.recommendations
+          : k === 'liked'
+            ? counts.liked
+            : counts.subscriptions
   const pill =
     'col-start-3 row-start-1 shrink-0 rounded-full border px-4 py-2 font-medium hover:no-underline whitespace-nowrap max-md:flex max-md:min-h-10 max-md:items-center max-md:py-0 max-md:text-[13.5px]'
 
@@ -188,7 +222,12 @@ export function ProfileView({
         ))}
       </nav>
 
-      {tab === 'subscriptions' && data.subscriptions ? (
+      {tab === 'blogrolls' ? (
+        <Blogrolls
+          cards={own ? own.cards : data.blogrolls.map((card) => ({ card, isPublic: true }))}
+          onNew={own?.onNew}
+        />
+      ) : tab === 'subscriptions' && data.subscriptions ? (
         <Subscriptions subscriptions={data.subscriptions} />
       ) : (
         <Posts
@@ -294,6 +333,59 @@ function Posts({
         )
       })}
     </div>
+  )
+}
+
+/**
+ * The Blogrolls tab. Others see the public ones; the owner sees every one, with a line on what a
+ * blogroll is for and New blogroll, or an empty state that offers it.
+ */
+function Blogrolls({
+  cards,
+  onNew,
+}: {
+  cards: OwnBlogrolls['cards']
+  onNew: OwnBlogrolls['onNew'] | undefined
+}) {
+  const t = useTranslations('profile.blogrolls')
+  const create = onNew ? (
+    <button
+      type="button"
+      onClick={(e) => onNew(e.currentTarget)}
+      className="shrink-0 rounded-full border border-thumb px-3.5 py-[7px] text-[13px] font-medium whitespace-nowrap text-ink hover:border-ink max-md:min-h-10"
+      data-testid="new-blogroll"
+    >
+      {t('new')}
+    </button>
+  ) : null
+  if (cards.length === 0) {
+    // Only the owner's: others see the tab once there is a blogroll in it.
+    return (
+      <div
+        className="flex flex-col items-center gap-4 py-12 text-center"
+        data-testid="profile-blogrolls"
+      >
+        <p className="m-0 max-w-[420px] text-muted">{t('empty')}</p>
+        {create}
+      </div>
+    )
+  }
+  return (
+    <section className="mt-7" data-testid="profile-blogrolls">
+      {create ? (
+        <div className="mb-[18px] flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p className="m-0 text-[13.5px] text-muted">{t('intro')}</p>
+          {create}
+        </div>
+      ) : null}
+      <ul className={BLOGROLL_GRID.profile}>
+        {cards.map(({ card, isPublic }) => (
+          <li key={card.id} className="flex min-w-0">
+            <BlogrollCard card={card} variant="profile" isPrivate={!isPublic} />
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 

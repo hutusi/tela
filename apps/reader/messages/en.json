@@ -581,10 +581,14 @@
     "writes": "Writes",
     "tabs": {
       "recommendations": "Recommendations",
+      "blogrolls": "Blogrolls",
       "liked": "Liked",
       "subscriptions": "Subscriptions"
     },
     "blogrolls": {
+      "intro": "Others can subscribe to every blog in a blogroll at once.",
+      "new": "New blogroll",
+      "empty": "No blogrolls yet. Make one to share the blogs you read.",
       "card": {
         "kind": "Blogroll",
         "private": "Private",

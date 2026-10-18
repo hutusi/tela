@@ -581,10 +581,14 @@
     "writes": "Écrit sur",
     "tabs": {
       "recommendations": "Recommandations",
+      "blogrolls": "Blogrolls",
       "liked": "Coups de cœur",
       "subscriptions": "Abonnements"
     },
     "blogrolls": {
+      "intro": "D’autres peuvent s’abonner d’un coup à tous les blogs d’une blogroll.",
+      "new": "Nouvelle blogroll",
+      "empty": "Pas encore de blogroll. Créez-en une pour partager les blogs que vous lisez.",
       "card": {
         "kind": "Blogroll",
         "private": "Privée",

@@ -581,10 +581,14 @@
     "writes": "写作",
     "tabs": {
       "recommendations": "推荐",
+      "blogrolls": "博客链",
       "liked": "喜欢",
       "subscriptions": "订阅"
     },
     "blogrolls": {
+      "intro": "别人可以一键订阅一条博客链里的所有博客。",
+      "new": "新建博客链",
+      "empty": "还没有博客链。建一条，分享你在读的博客。",
       "card": {
         "kind": "博客链",
         "private": "私密",

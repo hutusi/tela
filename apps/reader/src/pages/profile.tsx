@@ -1,13 +1,15 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
+import { BlogrollDialog } from '../components/blogroll-dialog'
 import { useMemberControls } from '../lib/member'
 import { readingPrefsOf } from '../lib/prefs'
 import { safeDecode } from '../lib/safe-decode'
 import { useTitle } from '../lib/title'
 import { usePublic } from '../lib/use-public'
+import { myBlogrolls, ownCard } from '../store/blogrolls'
 import { useConfirmedFollowees, useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import { useUi } from '../ui'
-import { ProfileView, profileTab } from '../views/profile'
+import { type OwnBlogrolls, ProfileView, profileTab } from '../views/profile'
 import { profileDataOf } from '../views/public-data'
 import type { ProfileData } from '../views/types'
 import { NotFoundPage } from './not-found'
@@ -66,6 +68,26 @@ export function ProfilePage() {
     countedFollowing.set(data, { owner, counted: confirmed.split(',').includes(data.profile.id) })
   }
 
+  // Their own blogrolls come from the device, private ones and the newest change included
+  // (ADR 0050): the page's copy has only the public ones, as they were when it was cached.
+  const [creating, setCreating] = useState<{ opener: HTMLElement } | null>(null)
+  const onNew = useCallback((opener: HTMLElement) => setCreating({ opener }), [])
+  const shown = data?.profile
+  const own = useMemo<OwnBlogrolls | undefined>(() => {
+    if (!mine || !shown) return undefined
+    const person = {
+      id: shown.id,
+      handle: shown.handle,
+      displayName: shown.displayName,
+      avatar: shown.avatar ?? null,
+    }
+    const cards = myBlogrolls(tables).map((row) => ({
+      card: ownCard(tables, row, person),
+      isPublic: row.isPublic,
+    }))
+    return { cards, onNew }
+  }, [mine, shown, tables, onNew])
+
   if (!handle || loaded.status === 'missing') return <NotFoundPage />
   if (!data) return <main className="flex-1" aria-busy="true" />
   const base = countedFollowing.get(data)
@@ -77,14 +99,20 @@ export function ProfilePage() {
     following: mine ? tables.follows.size : data.counts.following,
   }
   return (
-    <ProfileView
-      data={data}
-      tab={profileTab(search.get('tab'), data)}
-      member={member}
-      reading={reading}
-      locale={locale}
-      now={now}
-      counts={counts}
-    />
+    <>
+      <ProfileView
+        data={data}
+        tab={profileTab(search.get('tab'), data, own !== undefined)}
+        member={member}
+        reading={reading}
+        locale={locale}
+        now={now}
+        counts={counts}
+        own={own}
+      />
+      {creating ? (
+        <BlogrollDialog opener={creating.opener} onClose={() => setCreating(null)} />
+      ) : null}
+    </>
   )
 }
