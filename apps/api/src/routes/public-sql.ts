@@ -1,8 +1,8 @@
 /**
- * The SQL the public answers share (`public.ts`, `discover.ts`): which blogs are public, a reader
- * count as anyone may see it, a post's titles and excerpts in the launch languages, a blog as a
- * Discover card shows it, and the front page's edition. Each is written once, so two answers that
- * show the same post or blog cannot disagree about what it is or whether it may be shown.
+ * The SQL the public answers share (`public.ts`, `discover.ts`, `blogrolls.ts`): which blogs are
+ * public, a reader count as anyone may see it, a post's titles and excerpts in the launch
+ * languages, a blog as a Discover card shows it, and the front page's edition. Each is written once, so two answers that show the same post or blog cannot
+ * disagree about what it is or whether it may be shown.
  */
 import { ARTICLE_COLUMNS, avatarOf, publicReaderCount } from '@tela/data'
 import { type SQL, sql } from 'drizzle-orm'
@@ -18,6 +18,20 @@ export const PUBLIC_CACHE = 'public, max-age=60, s-maxage=300, stale-while-reval
  * tabs carry recommendations and public subscriptions, so they are cached as a profile is.
  */
 export const PROFILE_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=240'
+/**
+ * A public answer that has nothing to show: a minute in the browser and at the edge, so a page made
+ * public (a blog listed, a blogroll shown) is found within minutes of a visit that missed it.
+ */
+export function publicNotFound(): Response {
+  return new Response(JSON.stringify({ error: 'not_found' }), {
+    status: 404,
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': 'public, max-age=60, s-maxage=60',
+    },
+  })
+}
+
 /** A language filter as a query string may give one: a tag, never a pattern or a list. */
 export const LANG = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/
 export const DAY = 24 * 60 * 60 * 1000
@@ -164,3 +178,12 @@ export const editionStatement = (now: number, extras?: SQL): SQL => sql`
   order by a.sort_at desc, a.id desc
   limit 60
 `
+
+/**
+ * When others last saw a blogroll change, over `blogrolls r` (ADR 0050): the latest of its own
+ * clock (name and description) and its blog rows' (a blog put in or taken out, a note written).
+ * Public or private keeps a version, not a clock, and changes nothing others read on the page.
+ */
+export const BLOGROLL_UPDATED_AT = sql.raw(`max(r.updated_at, coalesce((
+    select max(max(b.updated_at, b.note_at)) from blogroll_blogs b where b.blogroll_id = r.id
+  ), 0))`)

@@ -26,6 +26,7 @@ import {
   PUBLIC_CACHE,
   PUBLIC_LISTING,
   parseLangMap,
+  publicNotFound,
   READER_COUNT,
   siteCard,
   TITLES,
@@ -50,14 +51,6 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
   const { db } = deps
   const routes = new Hono<ApiEnv>()
   const cached = { 'cache-control': PUBLIC_CACHE }
-  const notFound = () =>
-    new Response(JSON.stringify({ error: 'not_found' }), {
-      status: 404,
-      headers: {
-        'content-type': 'application/json',
-        'cache-control': 'public, max-age=60, s-maxage=60',
-      },
-    })
 
   /**
    * Which providers the sign-in sheet may offer (ADR 0036): each only once its app is configured.
@@ -129,7 +122,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
 
   routes.get('/sites/:siteId', async (c) => {
     const siteId = Number(c.req.param('siteId'))
-    if (!Number.isInteger(siteId)) return notFound()
+    if (!Number.isInteger(siteId)) return publicNotFound()
     const since = deps.clock.now() - 30 * DAY
     const [sites, feeds, posts, topics, notes] = (await db.batch([
       db.all(sql`
@@ -171,7 +164,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       `),
     ] as never)) as unknown as Record<string, unknown>[][]
     const row = sites?.[0]
-    if (!row) return notFound()
+    if (!row) return publicNotFound()
     const { claimantName, claimantBio, claimantAvatar, ...site } = row
     return c.json(
       {
@@ -217,7 +210,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
             ${avatarOf('p')} as avatar
           from profiles p where handle = ${handle}`,
     )
-    if (!profile) return notFound()
+    if (!profile) return publicNotFound()
     const id = profile.user_id
     const none = sql`select 1 where false`
     const [blogs, recommendations, subscriptions, liked, counts] = (await db.batch([
