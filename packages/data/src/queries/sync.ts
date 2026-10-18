@@ -4,10 +4,11 @@
  *
  * What a member holds:
  * - their own rows: profile, prefs, subscriptions and their folders (ADR 0048), read/like states,
- *   recommendations, highlights, claims, and the members they follow, with how those members
- *   appear (ADR 0031);
+ *   recommendations, highlights, claims, the members they follow, with how those members
+ *   appear (ADR 0031), and their blogrolls with the blogs in them (ADR 0050);
  * - the shared rows of the feeds they subscribe to: feeds, sites, articles, titles, and the body
- *   translations of those articles;
+ *   translations of those articles; and the feed and site, never the posts, of each blog in
+ *   their blogrolls;
  * - articles they liked, recommended or highlighted, wherever those came from, with the
  *   subscription row of a feed since left: its watermark is what says such a post was read once
  *   compaction has dropped its read state.
@@ -153,7 +154,16 @@ function scope(userId: string, horizon: number, cursor: number) {
   const horizonOf = (feeds: SQL) =>
     sql`select id from articles where feed_id in (${feeds})
       and (fetched_at >= ${horizon} or id in (${markedUnread(feeds)}))`
-  return { activeFeeds, newFeeds, kept, newlyKept, horizonOf }
+  /**
+   * The blogs in the member's live blogrolls (ADR 0050), subscribed or not: the owner's page names
+   * each one, so the device holds its feed and site, though none of its posts.
+   */
+  const rolledFeeds = sql`select bb.feed_id from blogroll_blogs bb
+    join blogrolls r on r.id = bb.blogroll_id
+    where bb.user_id = ${userId} and bb.removed_at is null and r.deleted_at is null`
+  /** Blogs put in (or back) since the cursor: their feed and site come whole. */
+  const newlyRolled = sql`${rolledFeeds} and bb.seq > ${cursor}`
+  return { activeFeeds, newFeeds, kept, newlyKept, horizonOf, rolledFeeds, newlyRolled }
 }
 
 /**
@@ -165,17 +175,26 @@ export async function readPull(
   options: { userId: string; cursor: number; horizon: number; limit: number },
 ): Promise<PullRead> {
   const { userId, cursor, horizon, limit } = options
-  const { activeFeeds, newFeeds, kept, newlyKept, horizonOf } = scope(userId, horizon, cursor)
+  const { activeFeeds, newFeeds, kept, newlyKept, horizonOf, rolledFeeds, newlyRolled } = scope(
+    userId,
+    horizon,
+    cursor,
+  )
   const snapshot = cursor === 0
   const over = limit + 1
   const bySeq = sql.raw(`order by seq limit ${over}`)
 
   // In a snapshot every subscribed feed is new, and so are the feeds of articles kept from
-  // elsewhere (a liked post from a feed since unsubscribed still names its blog). In a delta:
-  // the feeds subscribed since the cursor, and those of articles the member began to keep.
+  // elsewhere (a liked post from a feed since unsubscribed still names its blog) and of blogs in
+  // the member's blogrolls. In a delta: the feeds subscribed since the cursor, those of articles
+  // the member began to keep, and blogs put in a blogroll since.
   const fresh = snapshot
-    ? sql`${activeFeeds} union select feed_id from articles where id in (${kept})`
-    : sql`${newFeeds} union select feed_id from articles where id in (${newlyKept})`
+    ? sql`${activeFeeds} union select feed_id from articles where id in (${kept})
+        union ${rolledFeeds}`
+    : sql`${newFeeds} union select feed_id from articles where id in (${newlyKept})
+        union ${newlyRolled}`
+  /** The feeds whose rows (and sites) the device holds: subscribed, or in a blogroll. */
+  const heldFeeds = sql`${activeFeeds} union ${rolledFeeds}`
   const freshArticles = snapshot
     ? sql`select id from articles where id in (${horizonOf(activeFeeds)}) or id in (${kept})`
     : sql`select id from articles where id in (${horizonOf(newFeeds)}) or id in (${newlyKept})`
@@ -242,7 +261,7 @@ export async function readPull(
     freshFeeds: sql`select ${FEED} from feeds f where f.id in (${fresh})`,
     feeds: snapshot
       ? sql`select 1 where false`
-      : sql`select ${FEED} from feeds f where f.id in (${activeFeeds}) and f.seq > ${cursor}
+      : sql`select ${FEED} from feeds f where f.id in (${heldFeeds}) and f.seq > ${cursor}
           order by f.seq limit ${over}`,
     freshArticles: sql`select ${ARTICLE_COLUMNS} from articles a where a.id in (${freshArticles})`,
     articles: snapshot
@@ -278,12 +297,12 @@ export async function readPull(
             where feed_id in (${activeFeeds}) or id in (${kept}))
           order by b.seq limit ${over}`,
     // A site comes with any feed sent (a feed can move to a site the client has never seen),
-    // changed sites of subscribed feeds, and sites the member claimed.
+    // changed sites of feeds subscribed or in a blogroll, and sites the member claimed.
     sites: sql`select ${siteColumns(userId)} from sites s where s.id in (
         select site_id from feeds where id in (${fresh})
-        ${snapshot ? sql`` : sql`union select site_id from feeds where id in (${activeFeeds}) and seq > ${cursor}`}
+        ${snapshot ? sql`` : sql`union select site_id from feeds where id in (${heldFeeds}) and seq > ${cursor}`}
       )
-      or (s.id in (select site_id from feeds where id in (${activeFeeds})) ${snapshot ? sql`` : sql`and s.seq > ${cursor}`})
+      or (s.id in (select site_id from feeds where id in (${heldFeeds})) ${snapshot ? sql`` : sql`and s.seq > ${cursor}`})
       or (s.claimed_by = ${userId} ${snapshot ? sql`` : sql`and s.seq > ${cursor}`})`,
     tombstones: snapshot
       ? sql`select 1 where false`
@@ -345,6 +364,11 @@ export async function readPull(
     ? null
     : new Set(subscriptions.filter((s) => s.deletedAt === null).map((s) => Number(s.feedId)))
   const isFresh = (feedId: unknown) => freshFeedIds === null || freshFeedIds.has(Number(feedId))
+  // And a blog's feed belongs to the page that puts it in a blogroll.
+  const blogrollBlogs = within(got.blogrollBlogs)
+  const rolledIds = new Set(
+    blogrollBlogs.filter((b) => b.removedAt === null).map((b) => Number(b.feedId)),
+  )
   const newlyKeptIds = new Set(got.newlyKept.map((r) => Number(r.id)))
   const merge = (fresh: RawRow[], changed: RawRow[], key: (r: RawRow) => string) => {
     const out = new Map<string, RawRow>()
@@ -379,9 +403,12 @@ export async function readPull(
       folders: within(got.folders),
       feedFolders: within(got.feedFolders),
       blogrolls: within(got.blogrolls),
-      blogrollBlogs: within(got.blogrollBlogs),
+      blogrollBlogs,
       feeds: merge(
-        got.freshFeeds.filter((f) => isFresh(f.id) || freshArticleFeeds.has(Number(f.id))),
+        got.freshFeeds.filter(
+          (f) =>
+            isFresh(f.id) || freshArticleFeeds.has(Number(f.id)) || rolledIds.has(Number(f.id)),
+        ),
         got.feeds,
         (r) => String(r.id),
       ),

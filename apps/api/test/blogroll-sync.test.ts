@@ -30,6 +30,16 @@ async function addFeed(n: number, site = n) {
   )
 }
 
+let nextArticle = 1
+async function addArticle(feedId: number) {
+  const id = nextArticle++
+  await write(
+    db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at, seq)
+      values (${id}, ${feedId}, ${`k${id}`}, ${`Post ${id}`}, ${now}, ${now}, ${currentSeq})`),
+  )
+  return id
+}
+
 const pull = async (cursor: number, as = reader) => {
   const res = await api.request(`/api/v1/sync?cursor=${cursor}`, { as })
   expect(res.status).toBe(200)
@@ -107,6 +117,7 @@ beforeEach(async () => {
   api = await createTestApi()
   db = api.db
   now = api.clock.now()
+  nextArticle = 1
   reader = await signedIn(api, 'reader@x.test')
   await addFeed(1)
   await addFeed(2)
@@ -159,6 +170,38 @@ describe('blogrolls (ADR 0050)', () => {
     expect(theirs.rows.blogrolls).toEqual([])
     expect(theirs.rows.blogrollBlogs).toEqual([])
   })
+
+  test('a blog in a blogroll brings its feed and site to the owner, though not subscribed, and none of its posts', async () => {
+    await addArticle(3)
+    const head = (await pull(0)).cursor
+    await push([put(ID, 'Friends'), roll(3)])
+    const delta = await pull(head)
+    expect(delta.rows.feeds.map((f) => f.id)).toEqual([3])
+    expect(delta.rows.sites.map((s) => s.id)).toEqual([3])
+    expect(delta.rows.articles).toEqual([])
+    const snap = await pull(0)
+    expect(snap.rows.feeds.map((f) => f.id)).toEqual([3])
+    expect(snap.rows.sites.map((s) => s.id)).toEqual([3])
+    expect(snap.rows.articles).toEqual([])
+    expect(snap.rows.subscriptions).toEqual([])
+    // A change to its feed or site reaches the owner too.
+    await write(
+      db.run(sql`update feeds set title = 'Renamed feed', seq = ${currentSeq} where id = 3`),
+      db.run(sql`update sites set title = 'Renamed blog', seq = ${currentSeq} where id = 3`),
+    )
+    const changed = await pull(delta.cursor)
+    expect(changed.rows.feeds).toMatchObject([{ id: 3, title: 'Renamed feed' }])
+    expect(changed.rows.sites).toMatchObject([{ id: 3, title: 'Renamed blog' }])
+    expect(changed.rows.articles).toEqual([])
+    // Taken out, or its blogroll deleted, it is no longer sent.
+    later(10)
+    await push([unroll(3)])
+    const out = await pull(changed.cursor)
+    await write(db.run(sql`update feeds set title = 'Again', seq = ${currentSeq} where id = 3`))
+    expect((await pull(out.cursor)).rows.feeds).toEqual([])
+    expect((await pull(0)).rows.feeds).toEqual([])
+  })
+
   test('refuses a name with a control character, and a description or note with one other than a line break', async () => {
     await push([put(ID, 'Friends'), roll(1)])
     const res = await push([
