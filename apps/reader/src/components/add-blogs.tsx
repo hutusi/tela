@@ -177,8 +177,10 @@ function AddBlogsBody({
           const disabled = !on && full
           return (
             <li key={r.feedId}>
+              {/* `relative` holds the hidden box to its row. Without it the box is placed as if the
+                  list had not scrolled, so ticking a row far down scrolled the page to it. */}
               <label
-                className={`flex items-center gap-2.5 rounded-lg px-2 text-ink ${phone ? 'min-h-12' : 'py-2'} ${disabled ? 'opacity-60' : 'cursor-pointer hover:bg-hover'}`}
+                className={`relative flex items-center gap-2.5 rounded-lg px-2 text-ink ${phone ? 'min-h-12' : 'py-2'} ${disabled ? 'opacity-60' : 'cursor-pointer hover:bg-hover'}`}
                 data-testid="add-blogs-item"
                 data-feed-id={r.feedId}
               >

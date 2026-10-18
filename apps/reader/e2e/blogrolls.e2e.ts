@@ -389,6 +389,34 @@ test.describe('a blogroll of my own', () => {
     )
   })
 
+  test('ticking a blog far down Add blogs leaves the page where it is', async ({ browser }) => {
+    const { page } = await member(browser)
+    const id = await blogroll(page, [], { name: `Long list ${RUN}` })
+    await page.goto(`/l/${id}`)
+    await page.getByTestId('blogroll-add-blogs').click()
+    const add = page.getByTestId('add-blogs')
+    const items = add.getByTestId('add-blogs-item')
+    await expect(items).toHaveCount(3)
+    // The list as a member with many subscriptions has it: scrolled, and its foot at the window's.
+    // Each row's box is hidden, and it once sat where its row would be with the list not
+    // scrolled: ticking a row far down put focus below the window, and the page jumped to it.
+    const list = add.locator('ul')
+    await list.evaluate((el) => {
+      el.style.maxHeight = '48px'
+      el.scrollTop = el.scrollHeight
+    })
+    const foot = await list.evaluate((el) => el.getBoundingClientRect().bottom)
+    await page.setViewportSize({ width: 1280, height: Math.ceil(foot) + 2 })
+    const last = items.last()
+    const box = await last.boundingBox()
+    if (!box) throw new Error('the last row has no box')
+    const before = await page.evaluate(() => window.scrollY)
+    // A pointer's click: Playwright's own scrolls a row the list clips into view first.
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    await expect(last.getByRole('checkbox')).toBeChecked()
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(before)
+  })
+
   test('a folder in Settings makes one, and a blog I leave stays in it', async ({ browser }) => {
     const { page, feeds } = await member(browser)
     const folderId = `e2e-roll-folder-${RUN}`
