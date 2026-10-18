@@ -71,6 +71,7 @@ function Section({
     unsubscribe() {},
     activity,
     focusMove: { current: null },
+    focusLeave: { current: null },
   }
   return (
     <FolderSection

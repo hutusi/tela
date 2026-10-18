@@ -87,6 +87,8 @@ export type Manage = {
    * in another section by then and so another element.
    */
   focusMove: RefObject<number | null>
+  /** The blog whose Unsubscribe takes focus at the next render: the next row, once one has gone. */
+  focusLeave: RefObject<number | null>
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -541,6 +543,12 @@ function SubscriptionRow({
         />
         <BlogName row={row} meta={rowMeta(row, manage.activity(row))} />
         <button
+          ref={(el) => {
+            if (el && manage.focusLeave.current === row.feedId) {
+              manage.focusLeave.current = null
+              el.focus()
+            }
+          }}
           type="button"
           onClick={() => manage.unsubscribe(row)}
           data-testid="settings-unsubscribe"

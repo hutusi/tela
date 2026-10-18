@@ -620,9 +620,10 @@ test.describe('folders on a phone', () => {
     await filter.fill('')
     await expect(page.getByTestId('settings-subscription')).toHaveCount(3)
 
-    // Unsubscribe takes the row away, and its toast's Undo brings it back.
+    // Unsubscribe takes the row away, focus to the next row's, and its toast's Undo brings it back.
     await settingsRow(page, HUTUSI).getByTestId('settings-unsubscribe').click()
     await expect(settingsRow(page, HUTUSI)).toHaveCount(0)
+    await expect(settingsRow(page, JNITO).getByTestId('settings-unsubscribe')).toBeFocused()
     const toast = page.getByTestId('toast')
     await expect(toast).toContainText(`Unsubscribed from ${HUTUSI}.`)
     await toast.getByTestId('toast-action').click()

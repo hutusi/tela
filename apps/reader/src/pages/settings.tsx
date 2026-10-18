@@ -897,6 +897,7 @@ function SubscriptionsSection() {
   const [moving, setMoving] = useState<ManagedRow | null>(null)
   const opener = useRef<HTMLElement | null>(null)
   const focusMove = useRef<number | null>(null)
+  const focusLeave = useRef<number | null>(null)
   const newFolder = useRef<HTMLButtonElement>(null)
   const unfiledHeading = useRef<HTMLHeadingElement>(null)
   const limitId = useId()
@@ -1108,9 +1109,19 @@ function SubscriptionsSection() {
       remove(folder)
       refocus.current = 'deleted'
     },
-    unsubscribe: (row) => unsubscribe([row.feedId]),
+    unsubscribe: (row) => {
+      // Its row goes, and focus with it: to the next row's Unsubscribe, or the one before, or
+      // with no row left to New folder.
+      const order = [...shown.flatMap((g) => g.rows), ...shownUnfiled].map((r) => r.feedId)
+      const at = order.indexOf(row.feedId)
+      const next = order[at + 1] ?? order[at - 1] ?? null
+      if (next === null) refocus.current = 'new'
+      else focusLeave.current = next
+      unsubscribe([row.feedId])
+    },
     activity,
     focusMove,
+    focusLeave,
   }
   const closeForm = () => {
     refocus.current = 'new'
