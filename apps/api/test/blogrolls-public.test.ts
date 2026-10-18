@@ -1,7 +1,7 @@
 /**
- * Blogrolls as others see them (ADR 0050): a public blogroll's page, and its card on its member's
- * profile and on Discover. Rows are written here directly: the mutations that write them have
- * their own tests (`blogroll-sync.test.ts`).
+ * Blogrolls as others see them (ADR 0050): a public blogroll's page, its card on its member's
+ * profile and on Discover, and every blogroll in "Your data". Rows are written here directly: the
+ * mutations that write them have their own tests (`blogroll-sync.test.ts`).
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { bumpSeq, currentSeq, type TelaDb } from '@tela/data'
@@ -10,7 +10,7 @@ import { sql } from 'drizzle-orm'
 import { BLOG_DESCRIPTION_MAX } from '../src/routes/blogrolls'
 import { BLOGROLLS_PAGE, DISCOVER_CARD_BLOGS } from '../src/routes/discover'
 import { PROFILE_CACHE, PROFILE_CARD_BLOGS } from '../src/routes/public'
-import { createTestApi, type TestApi } from './helpers'
+import { createTestApi, signedIn, type TestApi } from './helpers'
 
 const ANNA = 'member-anna-0000001'
 const BORIS = 'member-boris-000002'
@@ -411,5 +411,63 @@ describe("Discover's Blogrolls", () => {
     await filled('onlyRoll0001', ANNA, [1, 2, 3])
     for (const cursor of ['nonsense', '12:short', '-1:onlyRoll0001', ''])
       expect((await discover(cursor)).blogrolls.map((b) => b.id)).toEqual(['onlyRoll0001'])
+  })
+})
+
+describe('your data', () => {
+  test('carries every blogroll the member keeps, private ones too, with its blogs and notes', async () => {
+    const me = await signedIn(api, 'reader@x.test')
+    await blog(1)
+    await blog(2, { listing: 'rejected' })
+    await blog(3)
+    await blogroll('publicRoll01', me.userId, { name: 'Shared', createdAt: 10 })
+    await roll('publicRoll01', 1, me.userId, { addedAt: 11, note: 'A good one' })
+    await roll('publicRoll01', 2, me.userId, { addedAt: 12 })
+    await roll('publicRoll01', 3, me.userId, { addedAt: 13, removedAt: 14, note: 'Gone' })
+    await blogroll('privateRoll1', me.userId, {
+      name: 'Mine',
+      description: 'Just for me',
+      isPublic: false,
+      createdAt: 20,
+    })
+    await blogroll('deletedRoll1', me.userId, { name: 'Deleted', deletedAt: 30 })
+    await filled('annasRoll001', ANNA, [1], { name: 'Not mine' })
+    const res = await api.request('/api/v1/export', { as: me })
+    const body = (await res.json()) as { blogrolls: unknown[] }
+    expect(body.blogrolls).toEqual([
+      {
+        id: 'publicRoll01',
+        name: 'Shared',
+        description: '',
+        isPublic: true,
+        createdAt: 10,
+        blogs: [
+          {
+            title: 'Blog 1',
+            homeUrl: 'https://blog1.example',
+            feedUrl: 'https://blog1.example/feed1',
+            note: 'A good one',
+            addedAt: 11,
+          },
+          // Hidden from others by the operator, and still the member's.
+          {
+            title: 'Blog 2',
+            homeUrl: 'https://blog2.example',
+            feedUrl: 'https://blog2.example/feed2',
+            note: null,
+            addedAt: 12,
+          },
+        ],
+      },
+      {
+        id: 'privateRoll1',
+        name: 'Mine',
+        description: 'Just for me',
+        isPublic: false,
+        createdAt: 20,
+        blogs: [],
+      },
+    ])
+    expect(JSON.stringify(body)).not.toContain('Not mine')
   })
 })

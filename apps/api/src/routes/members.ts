@@ -6,6 +6,7 @@
 import {
   ARTICLE_COLUMNS,
   avatarOf,
+  BLOG_NAME,
   bumpSeq,
   consumeLimit,
   currentSeq,
@@ -245,51 +246,76 @@ export function memberRoutes(deps: ApiDeps) {
     const post = sql`a.url, a.title, s.home_url as "blog"`
     const on = (articleId: ReturnType<typeof sql>) => sql`join articles a on a.id = ${articleId}
       join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id`
-    const [profiles, prefs, subscriptions, folders, likes, recommendations, highlights, following] =
-      (await db.batch([
-        db.all(sql`
-          select p.handle, p.display_name as "displayName", p.bio, p.reading_lang as "readingLang",
-            p.ui_locale as "uiLocale", p.public_subscriptions as "publicSubscriptions",
-            p.public_likes as "publicLikes", ${gravatarOn('p')} as "showsGravatar",
-            (p.avatar_key is not null) as "pictureUploaded", ${avatarOf('p')} as "picture",
-            p.created_at as "memberSince"
-          from profiles p where p.user_id = ${id}
-        `),
-        db.all(
-          sql`select key, value_json as "valueJson" from user_prefs where user_id = ${id} order by key`,
-        ),
-        db.all(sql`
-          select f.feed_url as "feedUrl", s.home_url as "blog", s.title, fo.name as "folder",
-            sub.created_at as "since"
-          from subscriptions sub join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id
-            left join feed_folders ff on ff.user_id = sub.user_id and ff.feed_id = sub.feed_id
-            left join folders fo on fo.id = ff.folder_id and fo.deleted_at is null
-          where sub.user_id = ${id} and sub.deleted_at is null order by s.title
-        `),
-        db.all(sql`
-          select name, created_at as "createdAt" from folders
-          where user_id = ${id} and deleted_at is null order by name
-        `),
-        db.all(sql`
-          select ${post}, st.liked_at as "likedAt" from user_article_states st ${on(sql`st.article_id`)}
-          where st.user_id = ${id} and st.liked_at is not null order by st.liked_at desc
-        `),
-        db.all(sql`
-          select ${post}, r.note, r.created_at as "recommendedAt"
-          from recommendations r ${on(sql`r.article_id`)}
-          where r.user_id = ${id} and r.deleted_at is null order by r.created_at desc
-        `),
-        db.all(sql`
-          select ${post}, h.quote, h.note, h.side, h.lang, h.created_at as "createdAt"
-          from highlights h ${on(sql`h.article_id`)}
-          where h.user_id = ${id} and h.deleted_at is null order by h.created_at desc
-        `),
-        db.all(sql`
-          select p.handle, p.display_name as "displayName", fo.created_at as "since"
-          from follows fo join profiles p on p.user_id = fo.followee_id
-          where fo.follower_id = ${id} and fo.deleted_at is null order by p.handle
-        `),
-      ] as never)) as unknown as Record<string, unknown>[][]
+    const [
+      profiles,
+      prefs,
+      subscriptions,
+      folders,
+      likes,
+      recommendations,
+      highlights,
+      following,
+      blogrolls,
+    ] = (await db.batch([
+      db.all(sql`
+        select p.handle, p.display_name as "displayName", p.bio, p.reading_lang as "readingLang",
+          p.ui_locale as "uiLocale", p.public_subscriptions as "publicSubscriptions",
+          p.public_likes as "publicLikes", ${gravatarOn('p')} as "showsGravatar",
+          (p.avatar_key is not null) as "pictureUploaded", ${avatarOf('p')} as "picture",
+          p.created_at as "memberSince"
+        from profiles p where p.user_id = ${id}
+      `),
+      db.all(
+        sql`select key, value_json as "valueJson" from user_prefs where user_id = ${id} order by key`,
+      ),
+      db.all(sql`
+        select f.feed_url as "feedUrl", s.home_url as "blog", s.title, fo.name as "folder",
+          sub.created_at as "since"
+        from subscriptions sub join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id
+          left join feed_folders ff on ff.user_id = sub.user_id and ff.feed_id = sub.feed_id
+          left join folders fo on fo.id = ff.folder_id and fo.deleted_at is null
+        where sub.user_id = ${id} and sub.deleted_at is null order by s.title
+      `),
+      db.all(sql`
+        select name, created_at as "createdAt" from folders
+        where user_id = ${id} and deleted_at is null order by name
+      `),
+      db.all(sql`
+        select ${post}, st.liked_at as "likedAt" from user_article_states st ${on(sql`st.article_id`)}
+        where st.user_id = ${id} and st.liked_at is not null order by st.liked_at desc
+      `),
+      db.all(sql`
+        select ${post}, r.note, r.created_at as "recommendedAt"
+        from recommendations r ${on(sql`r.article_id`)}
+        where r.user_id = ${id} and r.deleted_at is null order by r.created_at desc
+      `),
+      db.all(sql`
+        select ${post}, h.quote, h.note, h.side, h.lang, h.created_at as "createdAt"
+        from highlights h ${on(sql`h.article_id`)}
+        where h.user_id = ${id} and h.deleted_at is null order by h.created_at desc
+      `),
+      db.all(sql`
+        select p.handle, p.display_name as "displayName", fo.created_at as "since"
+        from follows fo join profiles p on p.user_id = fo.followee_id
+        where fo.follower_id = ${id} and fo.deleted_at is null order by p.handle
+      `),
+      // Every blogroll they keep (ADR 0050), private ones too, with the blogs in it now and
+      // their notes: blogs the operator hid from others are still theirs.
+      db.all(sql`
+        select r.id, r.name, r.description, r.is_public as "isPublic", r.created_at as "createdAt",
+          (select json_group_array(json_object('title', x.title, 'homeUrl', x.home_url,
+              'feedUrl', x.feed_url, 'note', x.note, 'addedAt', x.added_at))
+            from (
+              select ${BLOG_NAME} as title, s.home_url, f.feed_url, bb.note, bb.added_at
+              from blogroll_blogs bb join feeds f on f.id = bb.feed_id
+              join sites s on s.id = f.site_id
+              where bb.blogroll_id = r.id and bb.removed_at is null
+              order by bb.added_at, bb.feed_id
+            ) x) as blogs
+        from blogrolls r where r.user_id = ${id} and r.deleted_at is null
+        order by r.created_at, r.id
+      `),
+    ] as never)) as unknown as Record<string, unknown>[][]
     const profile = profiles?.[0]
     const body = {
       exportedAt: new Date(now).toISOString(),
@@ -310,6 +336,11 @@ export function memberRoutes(deps: ApiDeps) {
       recommendations,
       highlights,
       following,
+      blogrolls: (blogrolls ?? []).map(({ isPublic, blogs, ...blogroll }) => ({
+        ...blogroll,
+        isPublic: isPublic === 1,
+        blogs: JSON.parse(String(blogs ?? '[]')),
+      })),
     }
     return new Response(JSON.stringify(body, null, 2), {
       headers: {
