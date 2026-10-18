@@ -22,7 +22,8 @@ member pruning their list wants to know. The owner redrew the page in Claude Des
   column heads become a bar: "3 selected", Move to (with "New folder with these…"), Unsubscribe and
   Clear.
 - **Out of Select mode a row only drags,** and dragging a ticked row in Select mode drags them all.
-- **Every move and every unsubscribe says so, with Undo.**
+- **Every move and every unsubscribe says so, with Undo.** A folder made with blogs in it says so
+  too, without an Undo, as the design draws it.
 - **On a phone, the page that shipped:** sections, a folder button that opens Move to as a sheet,
   and a ··· per folder.
 
