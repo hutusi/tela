@@ -365,7 +365,9 @@ describe('Subscribe to all', () => {
     expect(await button({ profile, subscriptions: [sub(2)] })).toContain('Subscribe to 2</button>')
     const none = await button({ profile, subscriptions: [sub(1), sub(2), sub(3)] })
     expect(none).toContain('Subscribed to all')
-    expect(none).toContain('disabled=""')
+    // Said, not disabled: subscribing turns the button to it, and its focus must stay there.
+    expect(none).toContain('aria-disabled="true"')
+    expect(none).not.toContain('disabled=""')
   })
 
   test("waits for the device's first pull, which says what is followed already", async () => {

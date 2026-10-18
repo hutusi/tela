@@ -6,12 +6,15 @@ import { FOLDER_NAME_MAX } from './constants'
  * name.
  */
 export function folderName(raw: string): string {
-  return raw
+  const cut = raw
     .replace(/\s+/g, ' ')
     .replace(/\p{Cc}/gu, '')
     .trim()
     .slice(0, FOLDER_NAME_MAX)
-    .trim()
+  // Counted in UTF-16 units, as tela-api's check is; a cut through an emoji drops its first half,
+  // which would otherwise be stored as a replacement character (a blogroll's name, counted in
+  // characters, can be longer in units than a folder takes).
+  return cut.replace(/[\uD800-\uDBFF]$/, '').trim()
 }
 
 /**

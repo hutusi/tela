@@ -57,9 +57,14 @@ export function SubscribeAll({ data }: { data: BlogrollData }) {
         ref={button}
         type="button"
         aria-expanded={fresh.length > 0 ? showing : undefined}
-        disabled={!ready || fresh.length === 0}
+        // Subscribed to all stays focusable: subscribing is what turns the button to it, and the
+        // focus a submit hands back here would otherwise fall to the page's body.
+        aria-disabled={fresh.length === 0 || undefined}
+        disabled={!ready}
         title={ready ? undefined : t('waiting')}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (fresh.length > 0) setOpen((o) => !o)
+        }}
         className={fresh.length === 0 ? QUIET_PILL : PRIMARY_PILL}
         data-testid="blogroll-subscribe-all"
       >

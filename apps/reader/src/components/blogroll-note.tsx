@@ -31,6 +31,8 @@ export function BlogrollNote({
   const { store } = useStore()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
+  /** The note as the editor opened on it: Save sends only a change the member made. */
+  const [openedWith, setOpenedWith] = useState<string | null>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const button = useRef<HTMLButtonElement>(null)
   // Closing the editor puts focus back on what opened it, which is back by then.
@@ -49,6 +51,7 @@ export function BlogrollNote({
 
   const open = () => {
     setValue(note ?? '')
+    setOpenedWith(note ?? null)
     setEditing(true)
   }
   const close = () => {
@@ -61,7 +64,9 @@ export function BlogrollNote({
     if (over) return
     const kept = blogrollText(value, BLOGROLL_NOTE_MAX)
     const next = kept === '' ? null : kept
-    if (next !== note) store.mutate({ type: 'noteBlog', blogrollId, feedId, note: next })
+    // Only what the member changed: a note written on another device while this editor was open
+    // is not overwritten with the one it opened with.
+    if (next !== openedWith) store.mutate({ type: 'noteBlog', blogrollId, feedId, note: next })
     close()
   }
 

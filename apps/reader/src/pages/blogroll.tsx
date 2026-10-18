@@ -50,7 +50,8 @@ export function BlogrollPage() {
   const data = loaded.status === 'ready' ? blogrollDataOf(loaded.data) : null
   useTitle(own ? own.name : data ? data.blogroll.name : null)
 
-  if (id === null || heldGone) return <NotFoundPage />
+  if (id === null) return <NotFoundPage />
+  if (heldGone) return <HeldBlogroll id={id} />
   if (own) return <OwnBlogroll id={id} />
   if (loaded.status === 'missing') return <NotFoundPage />
   if (!data) return <main className="flex-1" aria-busy="true" />
@@ -77,6 +78,38 @@ function OthersBlogroll({ data }: { data: BlogrollData }) {
   )
 }
 
+/** The member as their own blogroll names its owner. */
+function useOwner(): Person {
+  const { store } = useStore()
+  const profile = useTables().profile
+  return useMemo(
+    () => ({
+      id: store.userId ?? '',
+      handle: profile?.handle ?? '',
+      displayName: profile?.displayName ?? null,
+      avatar: profile?.avatar ?? null,
+    }),
+    [store.userId, profile?.handle, profile?.displayName, profile?.avatar],
+  )
+}
+
+/**
+ * The member's own blogroll while its deletion is held for Undo: as it was, with no tools. Not
+ * Not found, which the tab that deleted it would paint for a frame before its navigation to the
+ * profile lands (a store change renders at once, a navigation in a transition), and which would
+ * greet a Back to it while the Undo still stands.
+ */
+function HeldBlogroll({ id }: { id: string }) {
+  const { store } = useStore()
+  useTables()
+  const { locale } = useUi()
+  const now = useNow()
+  const owner = useOwner()
+  const page = selectBlogrollPage(store.tablesBeforeHolds(), id, owner)
+  if (!page) return <NotFoundPage />
+  return <BlogrollView data={page.data} locale={locale} now={now} readOnly />
+}
+
 /** The member's own blogroll, from the device's rows, with its tools. */
 function OwnBlogroll({ id }: { id: string }) {
   const t = useTranslations('blogroll')
@@ -86,21 +119,16 @@ function OwnBlogroll({ id }: { id: string }) {
   const { locale } = useUi()
   const now = useNow()
   const location = useLocation()
-  const profile = tables.profile
-  const owner: Person = useMemo(
-    () => ({
-      id: store.userId ?? '',
-      handle: profile?.handle ?? '',
-      displayName: profile?.displayName ?? null,
-      avatar: profile?.avatar ?? null,
-    }),
-    [store.userId, profile?.handle, profile?.displayName, profile?.avatar],
-  )
+  const owner = useOwner()
   const page = selectBlogrollPage(tables, id, owner)
   const row = tables.blogrolls.get(id)
-  // A blogroll just made with nothing in it opens with Add blogs (its page is told so).
+  // A blogroll just made with nothing in it opens with Add blogs (its page is told so). Only while
+  // it is still empty: the flag stays in the history entry, and a Back or a reload after blogs
+  // went in should not open the panel, or on a phone its sheet, over them again.
   const [adding, setAdding] = useState(
-    () => (location.state as BlogrollPageState | null)?.addBlogs === true,
+    () =>
+      (location.state as BlogrollPageState | null)?.addBlogs === true &&
+      (page?.data.blogs.length ?? 0) === 0,
   )
   const addButton = useRef<HTMLButtonElement>(null)
 

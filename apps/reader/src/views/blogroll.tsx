@@ -84,7 +84,7 @@ export const PRIMARY_PILL =
 
 /** The outlined pill of the header's other buttons, and Subscribed to all. */
 export const QUIET_PILL =
-  'inline-flex items-center justify-center gap-[7px] rounded-full border border-thumb bg-transparent px-4 py-2 font-medium whitespace-nowrap text-ink hover:border-ink hover:no-underline disabled:opacity-60 disabled:hover:border-thumb'
+  'inline-flex items-center justify-center gap-[7px] rounded-full border border-thumb bg-transparent px-4 py-2 font-medium whitespace-nowrap text-ink hover:border-ink hover:no-underline disabled:opacity-60 disabled:hover:border-thumb aria-disabled:cursor-default aria-disabled:hover:border-thumb'
 
 /** A row's Subscribe, outlined as a grid of choices is (Tela v5), and Remove the same. */
 export const ROW_PILL =

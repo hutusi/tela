@@ -97,6 +97,14 @@ export function BlogrollDialog({ editing, initial, opener, onClose }: BlogrollDi
   const [name, setName] = useState(() => row?.name ?? initial?.name ?? '')
   const [description, setDescription] = useState(() => row?.description ?? '')
   const [isPublic, setPublic] = useState(() => row?.isPublic ?? false)
+  // What the dialog opened on: Save sends only what the member changed here, so a rename, or a
+  // switch to private, made on another device while it was open is not undone by its stale copy
+  // (a show would even pass, against the version the pull brought).
+  const [openedWith] = useState(() => ({
+    name: row?.name ?? '',
+    description: row?.description ?? '',
+    isPublic: row?.isPublic ?? false,
+  }))
   const unsettled = useBlogrollPublicUnsettled(editing)
 
   // Deleted elsewhere while open: there is nothing left to edit.
@@ -127,16 +135,21 @@ export function BlogrollDialog({ editing, initial, opener, onClose }: BlogrollDi
     if (!valid) return
     const desc = blogrollText(description, BLOGROLL_DESCRIPTION_MAX)
     if (row) {
-      if (clean !== row.name || desc !== row.description) {
+      const renamed = clean !== openedWith.name
+      const described = desc !== openedWith.description
+      if (renamed || described) {
         store.mutate({
           type: 'putBlogroll',
           id: row.id,
-          name: clean,
-          description: desc,
+          // A field the member left alone keeps what the row holds now.
+          name: renamed ? clean : row.name,
+          description: described ? desc : row.description,
           isPublic: row.isPublic,
         })
       }
-      if (isPublic !== row.isPublic) store.setBlogrollPublic(row.id, isPublic)
+      if (isPublic !== openedWith.isPublic && isPublic !== row.isPublic) {
+        store.setBlogrollPublic(row.id, isPublic)
+      }
       onClose()
       return
     }
