@@ -61,28 +61,35 @@ describe('latestPosts', () => {
 })
 
 describe('postedAgo', () => {
-  const ago = (days: number, locale = 'en') => postedAgo(NOW - days * DAY, locale, NOW)
+  // In the machine's own time zone: the column counts days by the calendar here.
+  const at = (month: number, day: number, hour = 12) => new Date(2026, month, day, hour).getTime()
+  const now = at(9, 18, 8)
+  const ago = (when: number, locale = 'en') => postedAgo(when, locale, now)
 
-  test('reads as the design has it, in English', () => {
-    expect(ago(0.2)).toBe('Today')
-    expect(ago(1.5)).toBe('Yesterday')
-    expect(ago(3)).toBe('3 days ago')
-    expect(ago(8)).toBe('Last week')
-    expect(ago(15)).toBe('2 weeks ago')
-    expect(ago(60)).toBe('2 months ago')
-    expect(ago(300)).toBe('10 months ago')
-    expect(ago(400)).toBe('Last year')
-    expect(ago(800)).toBe('2 years ago')
+  test('counts days by the calendar: last evening is yesterday, this small hour today', () => {
+    expect(ago(at(9, 18, 1))).toBe('Today')
+    expect(ago(at(9, 17, 20))).toBe('Yesterday')
+    expect(ago(at(9, 16, 23))).toBe('2 days ago')
+  })
+
+  test('then weeks, months and years, as the design has them', () => {
+    expect(ago(at(9, 15))).toBe('3 days ago')
+    expect(ago(at(9, 10))).toBe('Last week')
+    expect(ago(at(9, 3))).toBe('2 weeks ago')
+    expect(ago(at(7, 19))).toBe('2 months ago')
+    expect(ago(at(0, 1))).toBe('10 months ago')
+    expect(ago(new Date(2025, 8, 1, 12).getTime())).toBe('Last year')
+    expect(ago(new Date(2024, 6, 1, 12).getTime())).toBe('2 years ago')
   })
 
   test('a date ahead of now, from a feed whose clock is wrong, is today', () => {
-    expect(postedAgo(NOW + 3 * DAY, 'en', NOW)).toBe('Today')
+    expect(ago(at(9, 21))).toBe('Today')
   })
 
   test('in the other interface languages, capitalised where they have capitals', () => {
-    expect(ago(15, 'fr')).toBe('Il y a 2 semaines')
-    expect(ago(0.2, 'zh-Hans')).toBe('今天')
-    expect(ago(60, 'zh-Hant')).toBe('2個月前')
+    expect(ago(at(9, 3), 'fr')).toBe('Il y a 2 semaines')
+    expect(ago(at(9, 18, 1), 'zh-Hans')).toBe('今天')
+    expect(ago(at(7, 19), 'zh-Hant')).toBe('2個月前')
   })
 })
 

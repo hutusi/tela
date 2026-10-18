@@ -29,26 +29,31 @@ export function latestPosts(t: Pick<Tables, 'feeds' | 'articles'>): Map<number, 
 /** Past this, a blog's latest post is shown muted: it has gone quiet (Tela Lists). */
 export const QUIET_AFTER_MS = 60 * DAY
 
+/** Local midnight before `at`: where its calendar day begins, here. */
+function dayStart(at: number): number {
+  const d = new Date(at)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
 /**
- * How long ago `at` was, as the Latest post column says it: today, yesterday, days, then weeks,
- * months and years, in the reader's language ("2 weeks ago", "上个月", "il y a 3 mois"), with a
- * capital where the language has one. A date ahead of `now` (a feed's clock) is today.
+ * How long ago `at` was, as the Latest post column says it: today, yesterday and days by the
+ * calendar here (a post at 20:00 yesterday is yesterday at 08:00), then weeks, months and years,
+ * in the reader's language ("2 weeks ago", "上个月", "il y a 3 mois"), with a capital where the
+ * language has one. A date ahead of `now` (a feed's clock) is today.
  */
 export function postedAgo(at: number, locale: string, now: number): string {
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
-  const days = Math.max(0, now - at) / DAY
+  // Rounded, since a day across a change of clocks is 23 or 25 hours.
+  const days = Math.round((dayStart(now) - dayStart(Math.min(at, now))) / DAY)
   const said =
-    days < 1
-      ? rtf.format(0, 'day')
-      : days < 2
-        ? rtf.format(-1, 'day')
-        : days < 7
-          ? rtf.format(-Math.round(days), 'day')
-          : days < 45
-            ? rtf.format(-Math.round(days / 7), 'week')
-            : days < 365
-              ? rtf.format(-Math.max(2, Math.round(days / 30)), 'month')
-              : rtf.format(-Math.round(days / 365), 'year')
+    days < 7
+      ? rtf.format(-days, 'day')
+      : days < 45
+        ? rtf.format(-Math.round(days / 7), 'week')
+        : days < 365
+          ? rtf.format(-Math.max(2, Math.round(days / 30)), 'month')
+          : rtf.format(-Math.round(days / 365), 'year')
   return said.charAt(0).toLocaleUpperCase(locale) + said.slice(1)
 }
 
