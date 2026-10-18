@@ -151,7 +151,13 @@ their posts, and the device keeps those rows when it prunes.
 **`view()` copies once.** A held Subscribe to all of 200 blogs is about 400 mutations, and the
 reducer copied every table for each mutation it applied, so every recompute of the view replayed
 400 copies. It now applies them in place over one copy (`applyInPlace`, with a copying wrapper for
-the callers that want one), and an equivalence test pins the result to the old one. Measured: …
+the callers that want one), and an equivalence test pins the result to the old one. Measured
+on a device of 60 subscriptions of 30 posts each, titles in four languages and 200 other feeds,
+with that 400-mutation group pending (medians): V8 went from 173.5 ms to 0.41 ms a recompute, and
+JavaScriptCore from 16.3 ms to 0.07 ms; with 50 pending, 38.6 ms to 0.50 ms on V8. A phone is
+several times slower than the laptop measured, which is what made the old cost matter. With
+nothing pending the view is still the confirmed tables themselves, so caches keyed by their
+identity keep working.
 
 **`/l/<id>` is a public page while the blogroll is public.** The edge renders it as it renders
 `/s/:id` and `/@handle`, caches it five minutes per colo, and hands the data over. Anyone else

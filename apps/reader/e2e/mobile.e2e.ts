@@ -610,7 +610,7 @@ test.describe('Discover on a phone', () => {
     await context.addCookies([{ name: 'tela_locale', value: 'fr', url: BASE }])
     await page.goto('/discover')
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
-    for (const tab of ['readers', 'articles', 'blogs', 'week']) {
+    for (const tab of ['readers', 'blogrolls', 'articles', 'blogs', 'week']) {
       const link = page.getByTestId(`discover-tab-${tab}`)
       await link.scrollIntoViewIfNeeded()
       await link.click()
