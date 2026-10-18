@@ -90,7 +90,8 @@ describe('postedAgo', () => {
   test('in the other interface languages, capitalised where they have capitals', () => {
     expect(ago(at(9, 3), 'fr')).toBe('Il y a 2 semaines')
     expect(ago(at(9, 18, 1), 'zh-Hans')).toBe('今天')
-    expect(ago(at(7, 19), 'zh-Hant')).toBe('2個月前')
+    // ICU builds space it differently: macOS writes 2個月前, CI's Linux 2 個月前.
+    expect(ago(at(7, 19), 'zh-Hant').replace(/\s/g, '')).toBe('2個月前')
   })
 })
 
