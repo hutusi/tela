@@ -4,20 +4,32 @@
  * hiding is the veto that sticks (ADR 0018); Not for Discover takes a blog out of the queue and
  * leaves the community door open. A record's topic chips set where Discover files the blog. A
  * row shows the blog, never who added it.
+ *
+ * The Blogrolls filter lists members' public blogrolls instead (ADR 0050), which Discover lists on
+ * its own once three blogs others see are in one; Hide from Discover keeps one out. Its columns,
+ * its search and its record loader come from the filter, but every part that reads a row asks the
+ * row what it is: for a moment the filter and the rows drawn under it can disagree (an answer
+ * still on its way, a record found under another filter), and a blog's words read from a
+ * blogroll's row would fail.
  */
-import { TOPICS } from '@tela/shared'
+import { BLOGROLL_DISCOVER_MIN, TOPICS } from '@tela/shared'
 import type {
   AdminActionName,
+  AdminBlogrollDetail,
+  AdminBlogrollRow,
   AdminFilter,
   AdminSiteDetail,
   AdminSiteRow,
 } from '@tela/shared/admin'
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { useLocale, useTranslations } from 'use-intl'
-import { displayHost, relativeTime } from '../../lib/format'
-import { adminList } from '../api'
-import type { AnyAreaSpec, AreaSpec, RecordProps, Status } from '../area'
-import { History, KeyValues, Note, Section, useWhen } from '../components/record'
+import { Swatch } from '../../components/swatch'
+import { displayHost, personColor, relativeTime } from '../../lib/format'
+import { adminGet, adminList } from '../api'
+import type { AnyAreaSpec, AreaSpec, Column, RecordProps, Status } from '../area'
+import { History, KeyValues, Note, Section, StatusPill, useWhen } from '../components/record'
+import { parseLedgerState } from '../state'
 import {
   BlogTile,
   blogName,
@@ -34,8 +46,29 @@ import {
   useDescribe,
 } from './sites'
 
+/** A row of Discover's ledger: a blog, or under Blogrolls a member's public blogroll. */
+export type DiscoverRow = AdminSiteRow | AdminBlogrollRow
+type DiscoverDetail = AdminSiteDetail | AdminBlogrollDetail
+
+/** Whether a row is a blogroll's: what every part of the area asks before reading one. */
+export const isBlogroll = (row: DiscoverRow): row is AdminBlogrollRow => 'blogrollId' in row
+
+/** `site` over a blog's row, `blogroll` over a blogroll's. */
+function byKind<T>(
+  row: DiscoverRow,
+  site: (row: AdminSiteRow) => T,
+  blogroll: (row: AdminBlogrollRow) => T,
+): T {
+  return isBlogroll(row) ? blogroll(row) : site(row)
+}
+
+/** One endpoint for every filter: the server answers Blogrolls with blogrolls. */
 const loadDiscover = (filter: AdminFilter<'discover'>, q: string, signal?: AbortSignal) =>
-  adminList<AdminSiteRow, 'discover'>('discover', filter, q, signal)
+  adminList<DiscoverRow, 'discover'>('discover', filter, q, signal)
+
+/** A public blogroll's record (`GET /blogrolls/:id`); a private one has none. */
+export const loadBlogroll = (id: string, signal?: AbortSignal) =>
+  adminGet<AdminBlogrollDetail>(`blogrolls/${encodeURIComponent(id)}`, signal)
 
 /** A private blog nobody claimed: one a member added, still to review or judged not for Discover. */
 const added = (row: AdminSiteRow) => row.listing === 'private' && row.owner === null
@@ -100,45 +133,131 @@ function discoverSub(t: Translate, row: AdminSiteRow, locale: string): string {
     .join(' · ')
 }
 
+/**
+ * A blogroll's dot: listed in Discover is good news, hidden the operator's veto, and one with
+ * fewer blogs others see than Discover asks for simply waits (ADR 0050).
+ */
+export function blogrollStatus(t: Translate, row: AdminBlogrollRow): Status {
+  if (row.hiddenAt !== null) return { tone: 'bad', label: t('blogrolls.status.hidden') }
+  if (row.inDiscover) return { tone: 'ok', label: t('blogrolls.status.listed') }
+  return { tone: 'neutral', label: t('blogrolls.status.few', { n: BLOGROLL_DISCOVER_MIN }) }
+}
+
+/** How many blogs others see; and of how many, when the operator hid some of them. */
+function blogCountWords(t: Translate, row: AdminBlogrollRow, locale: string): string {
+  if (row.blogCount === row.totalCount) return count(row.blogCount, locale)
+  return t('blogrolls.blogsOf', {
+    shown: count(row.blogCount, locale),
+    total: count(row.totalCount, locale),
+  })
+}
+
+/** Its first blogs others see, by name: what a row says the blogroll is about. */
+const firstBlogs = (t: Translate, row: AdminBlogrollRow) =>
+  row.blogs.length
+    ? row.blogs.map((b) => blogName(b.name, b.homeUrl)).join(t('listSeparator'))
+    : t('none')
+
+/** The square a blogroll's row starts with: its initial, in a colour its id keeps. */
+function BlogrollTile({ id, name }: { id: string; name: string }) {
+  return <Swatch id={0} title={name} color={personColor(id)} size={28} />
+}
+
 function discoverSpec(
   t: Translate,
   locale: string,
-): AreaSpec<'discover', AdminSiteRow, AdminSiteDetail> {
+  blogrolls: boolean,
+): AreaSpec<'discover', DiscoverRow, DiscoverDetail> {
+  const none = () => t('none')
+  const unknown = () => null
+  const blogColumns: readonly [Column<DiscoverRow>, Column<DiscoverRow>, Column<DiscoverRow>] = [
+    {
+      label: t('columns.latest'),
+      text: (row) => byKind(row, (r) => r.latestTitle ?? t('none'), none),
+      number: (row) => byKind(row, (r) => r.latestAt, unknown),
+    },
+    {
+      label: t('columns.posts30d'),
+      text: (row) => byKind(row, (r) => count(r.postsLast30d, locale), none),
+      number: (row) => byKind(row, (r) => r.postsLast30d, unknown),
+    },
+    {
+      label: t('columns.readers'),
+      text: (row) => byKind(row, (r) => count(r.readerCount, locale), none),
+      number: (row) => byKind(row, (r) => r.readerCount, unknown),
+    },
+  ]
+  const blogrollColumns: readonly [Column<DiscoverRow>, Column<DiscoverRow>, Column<DiscoverRow>] =
+    [
+      {
+        label: t('columns.includes'),
+        text: (row) => byKind(row, none, (r) => firstBlogs(t, r)),
+      },
+      {
+        label: t('columns.blogs'),
+        text: (row) => byKind(row, none, (r) => blogCountWords(t, r, locale)),
+        number: (row) => byKind(row, unknown, (r) => r.blogCount),
+      },
+      {
+        label: t('columns.publicSince'),
+        text: (row) => byKind(row, none, (r) => relativeTime(r.publicSince, locale) || t('none')),
+        number: (row) => byKind(row, unknown, (r) => r.publicSince),
+      },
+    ]
   return {
     area: 'discover',
     filterLabel: (filter) => t(`filters.discover.${filter}`),
-    searchHint: t('search.discover'),
+    searchHint: blogrolls ? t('search.blogrolls') : t('search.discover'),
     load: loadDiscover,
-    loadDetail: loadSite,
-    rowOf: (detail) => detail.site,
+    // Each kind of record its own way: the ledger draws a record only with the loader that
+    // fetched it, so one fetched under a blog filter is fetched again under Blogrolls.
+    loadDetail: blogrolls ? loadBlogroll : loadSite,
+    rowOf: (detail) => ('blogroll' in detail ? detail.blogroll : detail.site),
     name: {
-      label: t('names.blog'),
-      title: (row) => blogName(row.title, row.homeUrl),
-      sub: (row) => discoverSub(t, row, locale),
-      tile: (row) => <BlogTile {...row} />,
+      label: blogrolls ? t('names.blogroll') : t('names.blog'),
+      title: (row) =>
+        byKind(
+          row,
+          (r) => blogName(r.title, r.homeUrl),
+          (r) => r.name,
+        ),
+      sub: (row) =>
+        byKind(
+          row,
+          (r) => discoverSub(t, r, locale),
+          (r) => (r.owner ? personName(t, r.owner) : t('none')),
+        ),
+      tile: (row) =>
+        byKind(
+          row,
+          (r) => <BlogTile {...r} />,
+          (r) => <BlogrollTile id={r.id} name={r.name} />,
+        ),
     },
-    columns: [
-      {
-        label: t('columns.latest'),
-        text: (row) => row.latestTitle ?? t('none'),
-        number: (row) => row.latestAt,
-      },
-      {
-        label: t('columns.posts30d'),
-        text: (row) => count(row.postsLast30d, locale),
-        number: (row) => row.postsLast30d,
-      },
-      {
-        label: t('columns.readers'),
-        text: (row) => count(row.readerCount, locale),
-        number: (row) => row.readerCount,
-      },
-    ],
-    status: (row) => discoverStatus(t, row),
-    Record: DiscoverRecord,
-    bulk: ['site.list', 'site.dismiss', 'site.feature', 'site.hide'],
-    actionLabel: (row, action) => restoreLabel(t, row, action),
-    actionDone: (row, action) => discoverDone(t, row, action),
+    columns: blogrolls ? blogrollColumns : blogColumns,
+    status: (row) =>
+      byKind(
+        row,
+        (r) => discoverStatus(t, r),
+        (r) => blogrollStatus(t, r),
+      ),
+    Record: DiscoverAreaRecord,
+    bulk: blogrolls
+      ? ['blogroll.hide', 'blogroll.restore']
+      : ['site.list', 'site.dismiss', 'site.feature', 'site.hide'],
+    // A blogroll's actions read as the shell names them.
+    actionLabel: (row, action) =>
+      byKind(
+        row,
+        (r) => restoreLabel(t, r, action),
+        () => undefined,
+      ),
+    actionDone: (row, action) =>
+      byKind(
+        row,
+        (r) => discoverDone(t, r, action),
+        () => undefined,
+      ),
     queue: true,
   }
 }
@@ -146,7 +265,20 @@ function discoverSpec(
 export function useDiscoverArea(): AnyAreaSpec {
   const t = useTranslations('admin.library')
   const locale = useLocale()
-  return useMemo(() => discoverSpec(t, locale), [t, locale])
+  // The filter the address names, as the ledger reads it in the same render.
+  const [params] = useSearchParams()
+  const blogrolls = parseLedgerState('discover', params).filter === 'blogrolls'
+  return useMemo(() => discoverSpec(t, locale, blogrolls), [t, locale, blogrolls])
+}
+
+/** A record drawn as what its row is, with the detail only when it is that kind's. */
+function DiscoverAreaRecord({ row, detail, ...rest }: RecordProps<DiscoverRow, DiscoverDetail>) {
+  if (isBlogroll(row)) {
+    const own = detail && 'blogroll' in detail ? detail : null
+    return <BlogrollRecord row={row} detail={own} {...rest} />
+  }
+  const own = detail && 'site' in detail ? detail : null
+  return <DiscoverRecord row={row} detail={own} {...rest} />
 }
 
 const chip = (on: boolean) =>
@@ -244,6 +376,67 @@ function DiscoverRecord({
       ) : null}
       {shown(site.listing) && topics.length === 0 ? <Note>{t('notes.noTopics')}</Note> : null}
       <TopicChips topics={topics} busy={busy} onToggle={toggle} />
+      <Note>{t('notes.discoverLag')}</Note>
+      {detail ? <History entries={detail.history} describe={describe} /> : null}
+    </div>
+  )
+}
+
+/**
+ * A public blogroll's record (ADR 0050): its member, its blogs in its order (those the operator
+ * hid marked, since others do not see them), and what operators did. A Hide keeps it out of
+ * Discover alone: its page and its place on its member's profile stay, and its member is not told.
+ */
+function BlogrollRecord({ row, detail, open }: RecordProps<AdminBlogrollRow, AdminBlogrollDetail>) {
+  const t = useTranslations('admin.library')
+  const locale = useLocale()
+  const when = useWhen()
+  const describe = useDescribe()
+  const roll = detail?.blogroll ?? row
+  const owner = roll.owner
+  const ownerLink = owner ? (
+    <RecordLink onClick={() => open('people', owner.id)}>{personName(t, owner)}</RecordLink>
+  ) : (
+    t('none')
+  )
+  return (
+    <div className="flex flex-col gap-5" data-testid="admin-blogroll-record">
+      <KeyValues
+        rows={[
+          [t('kv.status'), blogrollStatus(t, roll).label],
+          [t('kv.owner'), ownerLink],
+          [t('kv.blogs'), blogCountWords(t, roll, locale)],
+          [t('kv.publicSince'), roll.publicSince === null ? null : when(roll.publicSince)],
+          [t('kv.hidden'), roll.hiddenAt === null ? null : when(roll.hiddenAt)],
+          [t('kv.about'), roll.description || null],
+        ]}
+      />
+      {detail && detail.blogs.length > 0 ? (
+        <Section label={t('sections.blogs')}>
+          <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-[13.5px]">
+            {detail.blogs.map((blog) => (
+              <li key={blog.feedId} className="flex min-w-0 items-center justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2">
+                  <BlogTile
+                    siteId={blog.siteId}
+                    title={blog.name}
+                    homeUrl={blog.homeUrl}
+                    faviconKey={blog.faviconKey}
+                  />
+                  <RecordLink onClick={() => open('sites', String(blog.siteId))}>
+                    <span className="[overflow-wrap:anywhere]">
+                      {blogName(blog.name, blog.homeUrl)}
+                    </span>
+                  </RecordLink>
+                </span>
+                {blog.shown ? null : <StatusPill tone="bad" label={t('listing.rejected')} />}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+      {detail?.blogs.some((b) => !b.shown) ? <Note>{t('notes.blogrollHiddenBlogs')}</Note> : null}
+      <Note>{t('notes.blogrollHide')}</Note>
       <Note>{t('notes.discoverLag')}</Note>
       {detail ? <History entries={detail.history} describe={describe} /> : null}
     </div>

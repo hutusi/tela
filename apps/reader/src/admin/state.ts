@@ -77,10 +77,17 @@ export function ledgerHref(area: LedgerArea, state: Partial<LedgerState> = {}): 
  * The ledger that acts on an audit entry's target, and the row id it gives that target. The audit
  * log keys a target as its own table does; the ledgers that list two kinds of row tell them apart
  * by a prefix (`dead:<n>` and `lease:<kind>:<key>` in System, `code:<CODE>` and `hold:<n>` in
- * Invitations), so a bare key there names no row. Null for a kind no ledger lists.
+ * Invitations), so a bare key there names no row. A blogroll is Discover's, under the one filter
+ * that lists blogrolls (ADR 0050), so its record opens there at once. Null for a kind no ledger
+ * lists.
  */
-export function auditedRow(kind: string, key: string): { area: LedgerArea; id: string } | null {
+export function auditedRow(
+  kind: string,
+  key: string,
+): { area: LedgerArea; id: string; filter?: AdminFilter } | null {
   switch (kind) {
+    case 'blogroll':
+      return { area: 'discover', id: key, filter: 'blogrolls' }
     case 'site':
       return { area: 'sites', id: key }
     case 'feed':

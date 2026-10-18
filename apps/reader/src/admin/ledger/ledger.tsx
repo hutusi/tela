@@ -189,27 +189,34 @@ export function Ledger({
   }, [])
 
   // ---- The open record --------------------------------------------------------------------
-  const [detail, setDetail] = useState<{ id: string; value: unknown } | null>(null)
-  const hasDetail = spec.loadDetail !== null
+  // A record is the answer of the loader that fetched it: an area whose filters list two kinds of
+  // row (Discover's blogs and blogrolls) loads each kind its own way, so a record fetched for one
+  // filter is never drawn as the other's, and moving to the other filter loads it again.
+  const [detail, setDetail] = useState<{
+    id: string
+    value: unknown
+    from: AnyAreaSpec['loadDetail']
+  } | null>(null)
+  const loadDetail = spec.loadDetail
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new version loads the record again
   useEffect(() => {
     const id = state.id
-    const loadDetail = specRef.current.loadDetail
     if (!id || !loadDetail) return
     const controller = new AbortController()
     loadDetail(id, controller.signal).then(
       (value) => {
-        if (!controller.signal.aborted) setDetail({ id, value })
+        if (!controller.signal.aborted) setDetail({ id, value, from: loadDetail })
       },
       (error: unknown) => {
         if (controller.signal.aborted) return
         if (error instanceof NotAdmin) deny()
-        else setDetail({ id, value: null })
+        else setDetail({ id, value: null, from: loadDetail })
       },
     )
     return () => controller.abort()
-  }, [state.id, version, hasDetail, deny])
-  const openDetail = detail && detail.id === state.id ? detail.value : null
+  }, [state.id, version, loadDetail, deny])
+  const openDetail =
+    detail && detail.id === state.id && detail.from === loadDetail ? detail.value : null
   const openRow = openedRecord(rows, ids, state.id, openDetail, spec.rowOf).row
   const openRowRef = useRef(openRow)
   openRowRef.current = openRow

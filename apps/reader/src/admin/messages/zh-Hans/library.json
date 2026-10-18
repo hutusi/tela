@@ -3,7 +3,8 @@
     "claims": "搜索博客或成员",
     "sites": "搜索博客、订阅源或主人",
     "feeds": "搜索订阅源、博客或主人",
-    "discover": "搜索博客或主人"
+    "discover": "搜索博客或主人",
+    "blogrolls": "搜索博客链或主人"
   },
   "filters": {
     "claims": { "review": "待审核", "checking": "检查中", "verified": "已验证" },
@@ -30,7 +31,7 @@
       "blogrolls": "博客链"
     }
   },
-  "names": { "blog": "博客", "site": "博客", "feed": "订阅源" },
+  "names": { "blog": "博客", "site": "博客", "feed": "订阅源", "blogroll": "博客链" },
   "columns": {
     "claimant": "认领人",
     "method": "方式",
@@ -44,7 +45,10 @@
     "topics": "话题",
     "language": "语言",
     "latest": "最新文章",
-    "posts30d": "30 天内文章"
+    "posts30d": "30 天内文章",
+    "includes": "包含",
+    "blogs": "博客",
+    "publicSince": "公开于"
   },
   "methods": {
     "meta": "Meta 标签",
@@ -173,7 +177,10 @@
     "region": "线路",
     "format": "格式",
     "address": "地址",
-    "mergedInto": "合并到"
+    "mergedInto": "合并到",
+    "blogs": "博客",
+    "publicSince": "公开于",
+    "hidden": "隐藏于"
   },
   "status": {
     "active": "正常运行",
@@ -186,7 +193,8 @@
     "claims": "认领",
     "topics": "话题",
     "lastCheck": "上次检查 · {when}",
-    "lastError": "最近的错误"
+    "lastError": "最近的错误",
+    "blogs": "博客"
   },
   "history": {
     "topics": "{action}：{topics}",
@@ -204,6 +212,16 @@
     "topicsHint": "话题决定博客在发现里出现在哪里。点击一个话题来添加或移除。",
     "noTopics": "还没有话题，所以发现只会在「全部」下显示这个博客。在下面选一个或几个。",
     "review": "这是成员添加的博客。列入发现，或标为不列入发现，都会把它移出这个队列。无论这里怎么决定，有三位读者后它都会列入发现，除非被隐藏。这里只显示有多少人在读，从不显示是谁。",
-    "dismissed": "{when}标为不列入发现。有三位读者后它仍会列入；隐藏才能让它一直不出现。"
+    "dismissed": "{when}标为不列入发现。有三位读者后它仍会列入；隐藏才能让它一直不出现。",
+    "blogrollHide": "被隐藏的博客链仍保留自己的页面，也仍显示在名片上。",
+    "blogrollHiddenBlogs": "标为已隐藏的博客是管理员隐藏的：别人在这个博客链里看不到它们，它们也不计入列入发现所需的数量。"
+  },
+  "blogrolls": {
+    "status": {
+      "listed": "在发现中",
+      "hidden": "已隐藏",
+      "few": "不足 {n} 个博客"
+    },
+    "blogsOf": "{shown} / {total}"
   }
 }

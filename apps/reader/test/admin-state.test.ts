@@ -98,6 +98,15 @@ describe('the address', () => {
     })
     expect(auditedRow('code', 'WRITERS')).toEqual({ area: 'invites', id: 'code:WRITERS' })
     expect(auditedRow('hold', '17')).toEqual({ area: 'invites', id: 'hold:17' })
+    // A blogroll opens under the one filter that lists blogrolls (ADR 0050).
+    expect(auditedRow('blogroll', 'AbCdEf012345')).toEqual({
+      area: 'discover',
+      id: 'AbCdEf012345',
+      filter: 'blogrolls',
+    })
+    expect(ledgerHref('discover', { id: 'AbCdEf012345', filter: 'blogrolls' })).toBe(
+      '/admin/discover?f=blogrolls&id=AbCdEf012345',
+    )
     expect(auditedRow('report', '1')).toBeNull()
   })
 

@@ -143,6 +143,7 @@ describe('how an action looks', () => {
   test('a taking-away action is danger wherever it is', () => {
     for (const action of [
       'site.hide',
+      'blogroll.hide',
       'claim.reject',
       'claim.remove',
       'code.revoke',

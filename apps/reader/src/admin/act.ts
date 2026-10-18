@@ -22,6 +22,7 @@ export type Translate = (key: string, values?: Record<string, string | number>) 
 /** Actions that take something away, drawn in `danger` wherever they are offered. */
 const DANGER: ReadonlySet<AdminActionName> = new Set([
   'site.hide',
+  'blogroll.hide',
   'claim.reject',
   'claim.remove',
   'code.revoke',

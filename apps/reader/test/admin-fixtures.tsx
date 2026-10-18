@@ -4,6 +4,7 @@
  */
 import type {
   AdminActionName,
+  AdminBlogrollRow,
   AdminClaimRow,
   AdminFeedRow,
   AdminList,
@@ -178,6 +179,31 @@ export const candidate: AdminSiteRow = {
   latestAt: 1_759_500_000_000,
   review: null,
   reviewedAt: null,
+}
+
+/** A member's public blogroll as Discover's Blogrolls filter lists it (ADR 0050). */
+export const blogroll: AdminBlogrollRow = {
+  id: 'AbCdEf012345',
+  actions: ['blogroll.hide'],
+  blogrollId: 'AbCdEf012345',
+  name: 'Essays I return to',
+  description: 'Long reads, slowly.',
+  owner: { id: 'u-mara', handle: 'mara', name: 'Mara' },
+  blogCount: 3,
+  totalCount: 4,
+  publicSince: 1_759_500_000_000,
+  hiddenAt: null,
+  inDiscover: true,
+  blogs: [
+    {
+      feedId: 88,
+      siteId: 12,
+      name: 'Nordvest',
+      homeUrl: 'https://nordvest.example/',
+      faviconKey: null,
+    },
+    { feedId: 90, siteId: 30, name: null, homeUrl: 'https://hibi.example/', faviconKey: null },
+  ],
 }
 
 export const OVERVIEW: AdminOverview = {
