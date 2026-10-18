@@ -404,7 +404,6 @@
     "removeLabel": "Remove {name} from this blogroll",
     "removed": "Removed {name} from this blogroll.",
     "owner": {
-      "switchTitle": "Change who can see it",
       "whoIs": "Who can see it: {state}",
       "edit": "Edit",
       "addBlogs": "Add blogs",

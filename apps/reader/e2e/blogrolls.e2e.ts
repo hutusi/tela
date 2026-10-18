@@ -369,11 +369,18 @@ test.describe('a blogroll of my own', () => {
     await expect(rows).toHaveText([new RegExp(JVNS), new RegExp(JNITO)])
     expect(sent).not.toContain('unrollBlog')
 
-    // Public: tela-api holds it so, and anyone can read it, its note with it.
-    const pill = view.getByTestId('blogroll-public-toggle')
-    await expect(pill).toContainText('Private')
-    await pill.click()
-    await expect(pill).toContainText('Public')
+    // Public, from Edit: the page only says which it is. tela-api holds it so, and anyone can
+    // read it, its note with it.
+    const visibility = view.getByTestId('blogroll-visibility')
+    await expect(visibility).toContainText('Private')
+    await expect(view.getByRole('button', { name: /Private|Public/ })).toHaveCount(0)
+    await view.getByTestId('blogroll-edit').click()
+    const editing = page.getByTestId('blogroll-dialog')
+    await editing.getByTestId('blogroll-dialog-public').click()
+    await editing.getByTestId('blogroll-dialog-submit').click()
+    await expect(editing).toHaveCount(0)
+    await expect(toast).toContainText('Anyone can open this blogroll')
+    await expect(visibility).toContainText('Public')
     await expect.poll(() => isPublicOnServer(page, id), { timeout: 15_000 }).toBe(true)
     const shown = await publicBlogroll(id)
     expect(shown?.blogroll.name).toBe(name)
@@ -445,7 +452,7 @@ test.describe('a blogroll of my own', () => {
     await expect(rows).toHaveCount(2)
     await expect(rows.filter({ hasText: JVNS })).toHaveCount(1)
     await expect(rows.filter({ hasText: JNITO })).toHaveCount(1)
-    await expect(view.getByTestId('blogroll-public-toggle')).toContainText('Private')
+    await expect(view.getByTestId('blogroll-visibility')).toContainText('Private')
     await expect(view).not.toContainText('Not in your subscriptions')
     await expect
       .poll(
@@ -477,7 +484,7 @@ test.describe('a blogroll of my own', () => {
     expect(res?.status()).toBe(404)
     const view = page.getByTestId('blogroll-page')
     await expect(view.getByRole('heading', { level: 1 })).toHaveText(name)
-    await expect(view.getByTestId('blogroll-public-toggle')).toContainText('Private')
+    await expect(view.getByTestId('blogroll-visibility')).toContainText('Private')
     await expect(view.getByTestId('blogroll-row')).toHaveCount(2)
     await expect(page.getByTestId('not-found')).toHaveCount(0)
 
@@ -536,7 +543,7 @@ test.describe("someone else's blogroll", () => {
     await expect(rows).toHaveCount(3)
     await expect(rows.filter({ hasText: JNITO })).toContainText(NOTE)
     // Not the owner's page: no tools of theirs, and Subscribe on each row.
-    await expect(view.getByTestId('blogroll-public-toggle')).toHaveCount(0)
+    await expect(view.getByTestId('blogroll-visibility')).toHaveCount(0)
     await expect(view.getByTestId('blogroll-remove')).toHaveCount(0)
     await expect(view.getByTestId('blogroll-row-subscribe')).toHaveCount(3)
 
@@ -818,7 +825,10 @@ test.describe('blogrolls on a phone', () => {
     await owner.page.keyboard.press('Escape')
     await expect(add).toHaveCount(0)
     await expect(rows).toHaveCount(3)
-    await owner.page.getByTestId('blogroll-public-toggle').click()
+    await owner.page.getByTestId('blogroll-edit').click()
+    const editing = owner.page.getByTestId('blogroll-dialog')
+    await editing.getByTestId('blogroll-dialog-public').click()
+    await editing.getByTestId('blogroll-dialog-submit').click()
     await expect.poll(() => isPublicOnServer(owner.page, id), { timeout: 15_000 }).toBe(true)
 
     // Someone else's Subscribe to all is a sheet too.

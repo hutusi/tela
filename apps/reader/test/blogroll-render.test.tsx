@@ -297,8 +297,10 @@ describe("the owner's own blogroll, from the store", () => {
   test('its tools under the title, and each row with Remove and its note', async () => {
     const html = page(await storeWith(OWN))
     expect(html).toContain('data-testid="blogroll-page"')
-    expect(html).toContain('aria-label="Who can see it: Private"')
-    for (const id of ['blogroll-public-toggle', 'blogroll-edit', 'blogroll-add-blogs']) {
+    // Said, not switched: it changes in Edit.
+    expect(html).toContain('<span class="sr-only">Who can see it: Private</span>')
+    expect(html).not.toContain('blogroll-public-toggle')
+    for (const id of ['blogroll-visibility', 'blogroll-edit', 'blogroll-add-blogs']) {
       expect(count(html, id)).toBe(1)
     }
     expect(count(html, 'blogroll-copy-link')).toBe(1)
@@ -318,9 +320,9 @@ describe("the owner's own blogroll, from the store", () => {
     expect(count(html, 'add-blogs')).toBe(0)
   })
 
-  test('public, it says so, and the switch says Public', async () => {
+  test('public, it says so', async () => {
     const html = page(await storeWith({ ...OWN, blogrolls: [ownRow({ isPublic: true })] }))
-    expect(html).toContain('aria-label="Who can see it: Public"')
+    expect(html).toContain('<span class="sr-only">Who can see it: Public</span>')
     expect(html).toContain('Public. It shows on your profile and can appear in Discover.')
   })
 

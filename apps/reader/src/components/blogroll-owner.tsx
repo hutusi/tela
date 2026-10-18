@@ -1,20 +1,19 @@
 /**
- * The owner's tools under their blogroll's title (ADR 0050, Tela Lists): who can see it, as a pill
- * that says Public or Private and switches it; Edit, which opens the dialog; Add blogs, which opens
- * the checklist of their subscriptions under the row (a sheet on a phone); and Copy link. Each
- * change is made at once, with no Undo (only Remove, Delete and Subscribe to all are held). Making
- * it public waits while this device's last change to the switch is on its way, as the profile's
- * privacy switches do (issue #16).
+ * The owner's tools under their blogroll's title (ADR 0050, Tela Lists): who can see it, said and
+ * not switched here; Edit, which opens the dialog, where it is changed; Add blogs, which opens the
+ * checklist of their subscriptions under the row (a sheet on a phone); and Copy link. Public or
+ * private was first a pill that switched at a press, with no Undo: one stray tap published a
+ * blogroll, to Discover too and for minutes of caches, or broke every link to it. In Edit it is a
+ * choice that says what each means, and takes Save.
  */
 import type { BlogrollRow } from '@tela/sync'
 import { useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
 import { blogrollHref } from '../lib/blogroll-href'
 import { showToast } from '../lib/toasts'
-import { useStore } from '../store/hooks'
 import { QUIET_PILL } from '../views/blogroll'
 import { AddBlogs } from './add-blogs'
-import { BlogrollDialog, useBlogrollPublicUnsettled } from './blogroll-dialog'
+import { BlogrollDialog } from './blogroll-dialog'
 import { Glyph } from './glyph'
 
 /** A padlock: only the owner can open it. */
@@ -40,21 +39,9 @@ export function BlogrollOwner({
 }) {
   const t = useTranslations('blogroll.owner')
   const td = useTranslations('blogroll.dialog')
-  const { store } = useStore()
   const [editing, setEditing] = useState(false)
   const editButton = useRef<HTMLButtonElement>(null)
-  const unsettled = useBlogrollPublicUnsettled(row.id)
-  const locked = !row.isPublic && unsettled
-
-  const switchPublic = () => {
-    if (row.isPublic) {
-      store.setBlogrollPublic(row.id, false)
-      showToast(t('madePrivate'))
-    } else if (!unsettled) {
-      store.setBlogrollPublic(row.id, true)
-      showToast(t('madePublic'))
-    }
-  }
+  const state = row.isPublic ? td('public') : td('private')
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(`${location.origin}${blogrollHref(row.id)}`)
@@ -67,23 +54,21 @@ export function BlogrollOwner({
   return (
     <>
       <div className="flex flex-wrap justify-center gap-2">
-        <button
-          type="button"
-          onClick={switchPublic}
-          disabled={locked}
-          title={locked ? td('publicWait') : t('switchTitle')}
-          aria-label={t('whoIs', { state: row.isPublic ? td('public') : td('private') })}
-          className={QUIET_PILL}
-          data-testid="blogroll-public-toggle"
+        <span
+          className="relative inline-flex items-center px-2 py-2 text-muted"
+          data-testid="blogroll-visibility"
           data-public={row.isPublic ? 1 : 0}
         >
-          {row.isPublic ? null : (
-            <Glyph size={13} className="block shrink-0">
-              {LOCK}
-            </Glyph>
-          )}
-          {row.isPublic ? td('public') : td('private')}
-        </button>
+          <span aria-hidden="true" className="inline-flex items-center gap-[7px]">
+            {row.isPublic ? null : (
+              <Glyph size={13} className="block shrink-0">
+                {LOCK}
+              </Glyph>
+            )}
+            {state}
+          </span>
+          <span className="sr-only">{t('whoIs', { state })}</span>
+        </span>
         <button
           ref={editButton}
           type="button"

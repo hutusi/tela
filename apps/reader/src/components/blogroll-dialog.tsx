@@ -6,8 +6,10 @@
  *
  * From the design (Tela Lists, the New and Edit modal): the serif title, Name, an optional
  * Description, "Who can see it" as two choices with what each means, then Cancel and Create or
- * Save, and on Edit, Delete on the left. Making it public on Edit is the blogroll's own switch
- * (`setBlogrollPublic`), which waits while this device's last change to it is on its way.
+ * Save, and on Edit, Delete on the left. Edit is the one place a blogroll goes public or private
+ * after it is made (the page only says which it is): the blogroll's own switch
+ * (`setBlogrollPublic`), which waits while this device's last change to it is on its way, and
+ * which Save says it made, as a change seen nowhere else on the page.
  */
 import {
   BLOGROLL_DESCRIPTION_MAX,
@@ -37,7 +39,7 @@ import {
   knownBlogrolls,
   newBlogrollId,
 } from '../lib/blogrolls'
-import { UNDO_HOLD_MS } from '../lib/toasts'
+import { showToast, UNDO_HOLD_MS } from '../lib/toasts'
 import { offerUndo } from '../lib/undo'
 import { liveBlogs } from '../store/blogrolls'
 import { useStore, useTables } from '../store/hooks'
@@ -84,6 +86,7 @@ function Counter({ n, max }: { n: number; max: number }) {
 
 export function BlogrollDialog({ editing, initial, opener, onClose }: BlogrollDialogProps) {
   const t = useTranslations('blogroll.dialog')
+  const to = useTranslations('blogroll.owner')
   const tt = useTranslations('toast')
   const { store } = useStore()
   const tables = useTables()
@@ -149,6 +152,7 @@ export function BlogrollDialog({ editing, initial, opener, onClose }: BlogrollDi
       }
       if (isPublic !== openedWith.isPublic && isPublic !== row.isPublic) {
         store.setBlogrollPublic(row.id, isPublic)
+        showToast(isPublic ? to('madePublic') : to('madePrivate'))
       }
       onClose()
       return

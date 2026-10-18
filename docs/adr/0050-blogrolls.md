@@ -191,6 +191,14 @@ blogrolls: the edge's 404 page boots the app, and the app finds the blogroll in 
 another device that has not pulled it yet, the owner sees what others see, read-only, until the
 pull lands.
 
+**Who can see it is said on the owner's page and changed in Edit** (2026-10-19, after the
+owner's first use). The design drew it as a pill beside Edit that switched at a press, and it was
+built so: with no Undo, one stray tap published a blogroll, to Discover too and for the minutes the
+caches above keep it, or broke every link to it. The page now only says Private or Public, and
+Edit's "Who can see it" is the one place it changes, two choices that each say what they mean,
+then Save, which says what it did. Making one public still waits while the device's last change
+to it is on its way.
+
 **A signed-out visitor's actions are links to `/login?next=/l/<id>`**, as on a blog's page and a
 profile. The design's join dialog for a shared link is not built. A page that opened a dialog
 where its neighbours link would be the odd one out, and the header already offers Log in and
@@ -226,7 +234,7 @@ and says so.
 | Delete blogroll | Yes, then the page goes to the member's Blogrolls tab |
 | Remove a blog | Yes |
 | Subscribe to all | Yes |
-| A tick in Add blogs, the Public switch, a note, an edit, New, Make from a folder | No, and no Undo |
+| A tick in Add blogs, a note, an edit (who can see it included), New, Make from a folder | No, and no Undo |
 
 The last row follows 0049's folder made with blogs: each is undone by doing the opposite, in
 place.

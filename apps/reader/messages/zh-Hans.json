@@ -404,7 +404,6 @@
     "removeLabel": "从这个博客链移除{name}",
     "removed": "已从这个博客链移除{name}。",
     "owner": {
-      "switchTitle": "更改谁能看到",
       "whoIs": "谁能看到：{state}",
       "edit": "编辑",
       "addBlogs": "添加博客",
