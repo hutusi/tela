@@ -1,10 +1,11 @@
 /**
- * Folders (ADR 0048):
+ * Folders (ADRs 0048, 0049):
  * - in the sidebar a folder opens and closes on this device, and its name reads every blog in it
  *   as one list, with the Unread/All switch, Mark all read and its Undo;
  * - a folder deleted elsewhere is gone, not a redirect;
- * - Settings › Subscriptions makes, renames and deletes folders, and moves blogs by menu and by
- *   dragging;
+ * - Settings › Subscriptions from `lg` up is the manager: folders made, renamed and deleted in its
+ *   pane, blogs moved by menu and by dragging, several at once in Select mode, filtered and
+ *   sorted, each change with its Undo; below `lg` it is the sections, moved by a sheet;
  * - OPML carries them both ways.
  *
  * Each test signs in a member of its own, from an address of its own (sign-in is limited per IP
@@ -221,9 +222,14 @@ test.describe('folders in the sidebar', () => {
 /** A blog's row in Settings › Subscriptions. */
 const settingsRow = (page: Page, blog: string) =>
   page.getByTestId('settings-subscription').filter({ hasText: blog })
-/** A folder's section in Settings › Subscriptions, by its name. */
+/** A folder's section in Settings › Subscriptions below `lg`, by its name. */
 const settingsGroup = (page: Page, name: string) =>
   page.getByTestId('folder-group').filter({ has: page.getByRole('heading', { name, exact: true }) })
+/** A place in the manager's pane, from `lg` up: a folder's by its name. */
+const place = (page: Page, name: string) =>
+  page.getByTestId('subscriptions-manager').getByTestId('place').filter({ hasText: name })
+/** The count a place in the pane shows. */
+const placeCount = (page: Page, name: string) => place(page, name).locator('span').last()
 
 /** What tela-api holds of the member's folders, through a snapshot pull. */
 async function foldersOnServer(page: Page) {
@@ -235,30 +241,43 @@ async function foldersOnServer(page: Page) {
     rows: {
       folders: { id: string; name: string }[]
       feedFolders: { feedId: number; folderId: string | null }[]
+      subscriptions: { feedId: number; deletedAt: number | null }[]
     }
   }
   return rows
 }
 
-test.describe('folders in Settings › Subscriptions', () => {
-  test('New folder, a move by menu and by dragging, a rename, and a delete with Undo', async ({
+/** The mutations the page pushes, by type, as they go. */
+function pushes(page: Page): string[] {
+  const types: string[] = []
+  page.on('request', (r) => {
+    if (!r.url().includes('/api/v1/mutations')) return
+    const body = JSON.parse(r.postData() ?? '{}') as { mutations?: { type: string }[] }
+    for (const m of body.mutations ?? []) types.push(m.type)
+  })
+  return types
+}
+
+test.describe('Settings › Subscriptions, the manager from lg up', () => {
+  test('New folder, a move by its menu and by dragging, each with Undo, Rename, and a delete', async ({
     browser,
   }) => {
     const { page, feeds } = await member(browser)
+    const sent = pushes(page)
     await page.goto('/settings/subscriptions')
-    await expect(page.getByTestId('settings-subscription')).toHaveCount(3)
-    // No folder yet: one list, no headings.
-    await expect(page.getByTestId('folder-group')).toHaveCount(1)
-    await expect(page.getByTestId('subscription-count')).toHaveText(/^3 blogs\./)
+    const manager = page.getByTestId('subscriptions-manager')
+    await expect(manager.getByTestId('settings-subscription')).toHaveCount(3)
+    await expect(page.getByTestId('manager-title')).toHaveText('All blogs')
+    await expect(placeCount(page, 'All blogs')).toHaveText('3')
+    await expect(placeCount(page, 'Not in a folder')).toHaveText('3')
 
     await page.getByTestId('new-folder').click()
     await page.getByTestId('new-folder-input').fill('  Tech ')
     await page.keyboard.press('Enter')
-    const tech = settingsGroup(page, 'Tech')
-    await expect(tech).toBeVisible()
-    await expect(tech).toContainText('Drag blogs here.')
+    await expect(placeCount(page, 'Tech')).toHaveText('0')
+    await expect(place(page, 'Tech')).toBeFocused()
+    await expect(page.getByTestId('toast')).toContainText('Created Tech. Drag blogs onto it.')
     await expect(page.getByTestId('subscription-count')).toHaveText('3 blogs in 1 folder.')
-    await expect(page.getByTestId('new-folder')).toBeFocused()
     // A name the member has, case aside, is refused.
     await page.getByTestId('new-folder').click()
     await page.getByTestId('new-folder-input').fill('tech')
@@ -268,22 +287,39 @@ test.describe('folders in Settings › Subscriptions', () => {
     )
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('new-folder-input')).toHaveCount(0)
-    await expect(page.getByTestId('folder-group')).toHaveCount(2)
+    await expect(page.getByTestId('new-folder')).toBeFocused()
 
-    // By the row's folder button.
-    await settingsRow(page, JVNS).getByTestId('move-to').click()
+    // By the row's folder button, and taken back while its toast shows: nothing was sent.
+    const chip = settingsRow(page, JVNS).getByTestId('move-to')
+    await chip.click()
     const menu = page.getByTestId('move-to-menu')
     await expect(
       menu.getByTestId('move-to-option').filter({ hasText: 'No folder' }),
     ).toHaveAttribute('aria-checked', 'true')
     await menu.getByTestId('move-to-option').filter({ hasText: 'Tech' }).click()
-    await expect(tech.getByTestId('settings-subscription')).toHaveText([new RegExp(JVNS)])
-    await expect(settingsRow(page, JVNS).getByTestId('move-to')).toHaveText('Tech')
-    // By dragging it onto the folder.
-    await settingsRow(page, JNITO).getByTestId('drag-grip').dragTo(tech)
-    await expect(tech.getByTestId('settings-subscription')).toHaveCount(2)
+    await expect(chip).toHaveText('Tech')
+    await expect(chip).toBeFocused()
+    const toast = page.getByTestId('toast')
+    await expect(toast).toContainText(`Moved ${JVNS} to Tech.`)
+    await toast.getByTestId('toast-action').click()
+    await expect(chip).toHaveText('No folder')
+    expect(sent).not.toContain('fileFeed')
+    await chip.click()
+    await menu.getByTestId('move-to-option').filter({ hasText: 'Tech' }).click()
+    await expect(placeCount(page, 'Tech')).toHaveText('1')
+
+    // By dragging the row onto the folder in the pane.
+    await settingsRow(page, JNITO).dragTo(place(page, 'Tech'))
+    await expect(placeCount(page, 'Tech')).toHaveText('2')
+    await expect(toast).toContainText(`Moved ${JNITO} to Tech.`)
+    // Let go once their toasts go, both moves reach tela-api.
     await expect
-      .poll(async () => (await foldersOnServer(page)).feedFolders.filter((f) => f.folderId).length)
+      .poll(
+        async () => (await foldersOnServer(page)).feedFolders.filter((f) => f.folderId).length,
+        {
+          timeout: 15_000,
+        },
+      )
       .toBe(2)
 
     // The sidebar has it.
@@ -292,27 +328,172 @@ test.describe('folders in Settings › Subscriptions', () => {
     await expect.poll(() => sidebarBlogs(page)).toEqual([JNITO, JVNS, HUTUSI])
 
     await page.goto('/settings/subscriptions')
-    await settingsGroup(page, 'Tech').getByTestId('folder-rename').click()
+    await place(page, 'Tech').click()
+    await expect(page.getByTestId('manager-title')).toHaveText('Tech')
+    await expect(page.getByTestId('manager-count')).toHaveText('2 blogs')
+    await page.getByTestId('folder-rename').click()
     await page.getByTestId('folder-rename-input').fill('Code')
     await page.getByTestId('folder-rename-save').click()
-    const code = settingsGroup(page, 'Code')
-    await expect(code.getByTestId('settings-subscription')).toHaveCount(2)
-    await expect(code.getByTestId('folder-rename')).toBeFocused()
+    await expect(page.getByTestId('manager-title')).toHaveText('Code')
+    await expect(page.getByTestId('folder-rename')).toBeFocused()
 
-    // Deleted, and taken back while its toast shows: the folder and its blogs as they were.
-    await code.getByTestId('folder-delete').click()
-    await expect(page.getByTestId('folder-group')).toHaveCount(1)
-    const toast = page.getByTestId('toast')
+    // Deleted, its blogs are in none, and that is where the manager looks; taken back while its
+    // toast shows, the folder and its blogs are as they were.
+    await page.getByTestId('folder-delete').click()
+    await expect(page.getByTestId('manager-title')).toHaveText('Not in a folder')
+    await expect(place(page, 'Not in a folder')).toBeFocused()
+    await expect(place(page, 'Code')).toHaveCount(0)
     await expect(toast).toContainText('Deleted Code. Its blogs are no longer in a folder.')
     await toast.getByTestId('toast-action').click()
-    await expect(code.getByTestId('settings-subscription')).toHaveCount(2)
+    await expect(placeCount(page, 'Code')).toHaveText('2')
     // Deleted for good: the blogs are in none, here and on tela-api.
-    await code.getByTestId('folder-delete').click()
+    await place(page, 'Code').click()
+    await page.getByTestId('folder-delete').click()
     await expect(toast).toHaveCount(0, { timeout: 10_000 })
     await expect.poll(async () => (await foldersOnServer(page)).folders).toEqual([])
     const filed = (await foldersOnServer(page)).feedFolders
     expect(filed.filter((f) => f.folderId !== null)).toEqual([])
     expect(filed.map((f) => f.feedId).sort()).toEqual([feeds.jnito, feeds.jvns].sort())
+  })
+
+  test('Select: a run by Shift-click, a bulk move and its Undo, New folder with these, and Esc', async ({
+    browser,
+  }) => {
+    const { page } = await member(browser)
+    await push(page, [{ type: 'putFolder', id: 'e2e-folder-pile', name: 'Reading pile' }])
+    await page.goto('/settings/subscriptions')
+    const rows = page.getByTestId('subscriptions-manager').getByTestId('settings-subscription')
+    await expect(rows).toHaveCount(3)
+    // Out of Select mode a click on a row is no tick, and there are no boxes.
+    await expect(page.getByTestId('subscription-tick')).toHaveCount(0)
+    const select = page.getByTestId('select-toggle')
+    await expect(select).toHaveAttribute('aria-pressed', 'false')
+    await select.click()
+    await expect(select).toHaveAttribute('aria-pressed', 'true')
+    await expect(select).toHaveText('Done')
+    await expect(page.getByTestId('subscription-tick')).toHaveCount(3)
+
+    // A click ticks; Shift ticks the run from it.
+    await settingsRow(page, JNITO).click()
+    await settingsRow(page, HUTUSI).click({ modifiers: ['Shift'] })
+    await expect(page.getByTestId('bulk-count')).toHaveText('3 selected')
+    await expect(page.getByTestId('select-all')).toBeChecked()
+    await settingsRow(page, JVNS).getByTestId('subscription-tick').click()
+    await expect(page.getByTestId('bulk-count')).toHaveText('2 selected')
+    expect(
+      await page.getByTestId('select-all').evaluate((el) => (el as HTMLInputElement).indeterminate),
+    ).toBe(true)
+    // A tick the filter hides still counts, and the bar says so.
+    const filter = page.getByTestId('subscriptions-filter')
+    await filter.fill('give it')
+    await expect(rows).toHaveCount(1)
+    await expect(page.getByTestId('manager-count')).toHaveText('1 of 3')
+    await expect(page.getByTestId('bulk-count')).toHaveText('2 selected, 1 hidden by the filter')
+    // Esc in the filter clears it, and leaves Select mode alone.
+    await filter.press('Escape')
+    await expect(filter).toHaveValue('')
+    await expect(rows).toHaveCount(3)
+    await expect(select).toHaveAttribute('aria-pressed', 'true')
+
+    // Both, in one move, taken back as one.
+    await page.getByTestId('bulk-move').click()
+    await page.getByTestId('move-to-option').filter({ hasText: 'Reading pile' }).click()
+    await expect(placeCount(page, 'Reading pile')).toHaveText('2')
+    await expect(page.getByTestId('bulk-bar')).toHaveCount(0)
+    await expect(page.getByTestId('select-all')).toBeFocused()
+    const toast = page.getByTestId('toast')
+    await expect(toast).toContainText('Moved 2 blogs to Reading pile.')
+    await toast.getByTestId('toast-action').click()
+    await expect(placeCount(page, 'Reading pile')).toHaveText('0')
+
+    // A new folder with the blog ticked in it, opened.
+    await settingsRow(page, JVNS).click()
+    await page.getByTestId('bulk-move').click()
+    await page.getByTestId('bulk-new-folder').click()
+    await expect(page.getByText('New folder with 1 blog')).toBeVisible()
+    await page.getByTestId('new-folder-input').fill('Solo')
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('manager-title')).toHaveText('Solo')
+    await expect(rows).toHaveText([new RegExp(JVNS)])
+    await expect(toast).toContainText('Created Solo with 1 blog.')
+
+    // Esc leaves Select mode, and takes the ticks with it.
+    await rows.first().click()
+    await expect(page.getByTestId('bulk-count')).toHaveText('1 selected')
+    await page.keyboard.press('Escape')
+    await expect(select).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByTestId('subscription-tick')).toHaveCount(0)
+  })
+
+  test('several blogs left at once go together, and Undo brings them all back unsent', async ({
+    browser,
+  }) => {
+    const { page, feeds } = await member(browser)
+    const sent = pushes(page)
+    await page.goto('/settings/subscriptions')
+    const rows = page.getByTestId('subscriptions-manager').getByTestId('settings-subscription')
+    await expect(rows).toHaveCount(3)
+    await page.getByTestId('select-toggle').click()
+    await settingsRow(page, JNITO).click()
+    await settingsRow(page, HUTUSI).click()
+    await page.getByTestId('bulk-unsubscribe').click()
+    await expect(rows).toHaveText([new RegExp(JVNS)])
+    await expect(page.getByTestId('subscription-count')).toHaveText(/^1 blog\./)
+    const toast = page.getByTestId('toast')
+    await expect(toast).toContainText('Unsubscribed from 2 blogs.')
+    await toast.getByTestId('toast-action').click()
+    await expect(rows).toHaveCount(3)
+    expect(sent).not.toContain('unsubscribe')
+
+    // One by its folder button's menu, left alone: it goes to tela-api once the toast does.
+    await page.getByTestId('select-toggle').click()
+    await settingsRow(page, HUTUSI).getByTestId('move-to').click()
+    await page.getByTestId('row-unsubscribe').click()
+    await expect(rows).toHaveCount(2)
+    await expect(toast).toContainText(`Unsubscribed from ${HUTUSI}.`)
+    // A snapshot holds only the blogs followed.
+    await expect
+      .poll(
+        async () =>
+          (await foldersOnServer(page)).subscriptions.some(
+            (s) => s.feedId === feeds.hutusi && s.deletedAt === null,
+          ),
+        { timeout: 15_000 },
+      )
+      .toBe(false)
+  })
+
+  test('the filter ignores accents and case, and the sort puts the quietest first', async ({
+    browser,
+  }) => {
+    const { page } = await member(browser)
+    await page.goto('/settings/subscriptions')
+    const rows = page.getByTestId('subscriptions-manager').getByTestId('settings-subscription')
+    await expect(rows).toHaveCount(3)
+    const names = () => rows.locator('.font-medium').allTextContents()
+    expect(await names()).toEqual([JNITO, JVNS, HUTUSI])
+    // Every row says when its blog last posted.
+    for (const latest of await page.getByTestId('latest-post').allTextContents()) {
+      expect(latest).toMatch(/ago|Yesterday|Today|Last/)
+    }
+    await page.getByTestId('subscriptions-filter').fill('JÚLIA')
+    await expect(rows).toHaveText([new RegExp(JVNS)])
+    // By address: the feed's own.
+    await page.getByTestId('subscriptions-filter').fill('hutusi.xml')
+    await expect(rows).toHaveText([new RegExp(HUTUSI)])
+    await page.getByTestId('subscriptions-filter').fill('nothing like it')
+    await expect(page.getByTestId('manager-empty')).toHaveText(
+      'No blogs here match “nothing like it”.',
+    )
+    await page.getByTestId('subscriptions-filter').fill('')
+
+    await page.getByTestId('subscriptions-sort').click()
+    await page.getByTestId('sort-option').filter({ hasText: 'Quiet longest' }).click()
+    await expect(page.getByTestId('subscriptions-sort')).toHaveText('Quiet longest')
+    const quiet = await names()
+    await page.getByTestId('subscriptions-sort').click()
+    await page.getByTestId('sort-option').filter({ hasText: 'Recently posted' }).click()
+    await expect.poll(names).toEqual([...quiet].reverse())
   })
 
   test('OPML: an import makes the folders it names, and an export holds them', async ({
@@ -325,8 +506,8 @@ test.describe('folders in Settings › Subscriptions', () => {
     await page
       .getByTestId('opml-file')
       .setInputFiles(resolve(import.meta.dirname, 'fixtures/subs.opml'))
-    const tech = settingsGroup(page, 'Tech')
-    await expect(tech.getByTestId('settings-subscription')).toHaveCount(2)
+    await expect(placeCount(page, 'Tech')).toHaveText('2')
+    await expect(settingsRow(page, JVNS).getByTestId('move-to')).toHaveText('Tech')
     await expect(settingsRow(page, HUTUSI).getByTestId('move-to')).toHaveText('No folder')
 
     const saved = page.waitForEvent('download')
@@ -337,6 +518,43 @@ test.describe('folders in Settings › Subscriptions', () => {
     expect(folder).toContain(`${FIXTURES}/jnito.xml`)
     expect(folder).not.toContain(`${FIXTURES}/hutusi.xml`)
     expect(opml).toContain(`${FIXTURES}/hutusi.xml`)
+  })
+
+  test('the manager from 1024px, the sections below it, and neither scrolls sideways', async ({
+    browser,
+  }) => {
+    const { page, feeds } = await member(browser, { width: 1023 })
+    await push(page, [
+      { type: 'setProfile', uiLocale: 'fr' },
+      { type: 'putFolder', id: 'e2e-folder-width', name: 'Des blogs que je lis le dimanche matin' },
+      { type: 'fileFeed', feedId: feeds.jnito, folderId: 'e2e-folder-width' },
+    ])
+    await page.context().addCookies([{ name: 'tela_locale', value: 'fr', url: BASE }])
+    await page.goto('/settings/subscriptions')
+    await expect(page.getByTestId('folder-group')).toHaveCount(2)
+    await expect(page.getByTestId('subscriptions-manager')).toHaveCount(0)
+    // Not a phone: Settings' side column, so New folder is in the page, and Move to a sheet.
+    await expect(page.getByTestId('settings-nav')).toBeVisible()
+    await expect(page.getByTestId('settings-back-bar')).toHaveCount(0)
+    await expect(page.getByTestId('new-folder')).toBeVisible()
+    await noSidewaysScroll(page, 'Settings › Subscriptions at 1023px')
+    await settingsRow(page, HUTUSI).getByTestId('move-to').click()
+    await expect(page.getByTestId('move-sheet')).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    await page.setViewportSize({ width: 1024, height: 860 })
+    await expect(page.getByTestId('subscriptions-manager')).toBeVisible()
+    await expect(page.getByTestId('folder-group')).toHaveCount(0)
+    await place(page, 'Des blogs').click()
+    await page.getByTestId('select-toggle').click()
+    await noSidewaysScroll(page, 'the manager at 1024px')
+    // The longest bar of the four languages still fits its row.
+    await settingsRow(page, JNITO).click()
+    const bar = await page.getByTestId('bulk-bar').boundingBox()
+    const card = await page.getByTestId('subscriptions-manager').boundingBox()
+    expect((bar?.x ?? 0) + (bar?.width ?? 0)).toBeLessThanOrEqual(
+      (card?.x ?? 0) + (card?.width ?? 0),
+    )
   })
 })
 
@@ -382,6 +600,23 @@ test.describe('folders on a phone', () => {
     await settingsGroup(page, 'Craft').getByTestId('folder-more').click()
     await expect(page.getByTestId('folder-rename')).toBeVisible()
     await expect(page.getByTestId('folder-delete')).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    // The filter keeps the sections it matches, by name or address, accents and case aside.
+    const filter = page.getByTestId('subscriptions-filter')
+    await filter.fill('GIVE')
+    await expect(page.getByTestId('settings-subscription')).toHaveText([new RegExp(JNITO)])
+    await expect(page.getByTestId('folder-group')).toHaveCount(1)
+    await filter.fill('')
+    await expect(page.getByTestId('settings-subscription')).toHaveCount(3)
+
+    // Unsubscribe takes the row away, and its toast's Undo brings it back.
+    await settingsRow(page, HUTUSI).getByTestId('settings-unsubscribe').click()
+    await expect(settingsRow(page, HUTUSI)).toHaveCount(0)
+    const toast = page.getByTestId('toast')
+    await expect(toast).toContainText(`Unsubscribed from ${HUTUSI}.`)
+    await toast.getByTestId('toast-action').click()
+    await expect(settingsRow(page, HUTUSI)).toHaveCount(1)
   })
 
   test('Settings › Subscriptions with folders fits 320px in French', async ({ browser }) => {
