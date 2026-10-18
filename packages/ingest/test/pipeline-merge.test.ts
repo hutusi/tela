@@ -75,6 +75,11 @@ const feedOf = (id: number) =>
     sql`select status, merged_into from feeds where id = ${id}`,
   )
 
+const dueAt = (id: number) =>
+  first<{ at: number }>(db, sql`select next_fetch_at as at from feeds where id = ${id}`).then(
+    (r) => r?.at,
+  )
+
 describe('a feed that is another address for the blog it belongs to', () => {
   test('hands its readers, its read posts and the posts only it had to the canonical feed', async () => {
     // The blog's own feed carries its latest four posts; a mirror of it carries six.
@@ -154,6 +159,24 @@ describe('a feed that is another address for the blog it belongs to', () => {
     ).toEqual([own])
   })
 
+  test('an address imported after the blog’s feed is due again at once, and merges then', async () => {
+    server.text('/feed', posts([1, 2, 3]))
+    server.text('/feed.xml', posts([1, 2, 3]))
+    const own = await register('/feed')
+    await fetchNow(own)
+    const imported = await register('/feed.xml')
+    await fetchNow(imported)
+    // Not a day later: until it merges, its readers have the blog twice.
+    expect((await dueAt(imported)) ?? Infinity).toBeLessThanOrEqual(clock.now())
+    // The blog's first feed had nothing to be an alias of, and keeps its interval.
+    expect((await dueAt(own)) ?? 0).toBeGreaterThan(clock.now() + 20 * MIN)
+    expect(await fetchNow(imported)).toEqual({
+      status: 'skipped',
+      reason: 'merged',
+      duplicateOf: own,
+    })
+  })
+
   test('a feed carrying only some of the blog’s posts stays its own feed', async () => {
     server.text('/feed.xml', posts([1, 2, 3, 4, 5, 6]))
     server.text('/tech.xml', posts([2, 4, 6]))
@@ -163,5 +186,7 @@ describe('a feed that is another address for the blog it belongs to', () => {
     await fetchNow(tech)
     expect(await fetchNow(tech)).toMatchObject({ status: 'unchanged' })
     expect(await feedOf(tech)).toEqual({ status: 'active', merged_into: null })
+    // It came back once, to be compared; from then on it keeps its own schedule.
+    expect((await dueAt(tech)) ?? 0).toBeGreaterThan(clock.now() + 20 * MIN)
   })
 })

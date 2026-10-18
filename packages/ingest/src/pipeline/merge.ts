@@ -3,7 +3,8 @@
  * over the stretch of time both hold posts for, they hold the same post URLs, at least
  * `MIN_SHARED_POSTS` of them: a mirror such as FeedBurner, or a second format of the same feed
  * (`/feed/` and `/feed/atom/`). A category or a language feed differs inside that stretch and
- * stays its own feed. The alias merges itself into the canonical feed when it is next due.
+ * stays its own feed. The alias merges itself into the canonical feed when it is next due, which
+ * its first fetch makes the next tick.
  */
 import type { SiteFeedPosts } from '@tela/data'
 

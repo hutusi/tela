@@ -729,7 +729,9 @@ says who holds it:
 - **Revive a dead feed:** `update feeds set status = 'active', error_count = 0, next_fetch_at = 0
   where id = …`. The nightly upkeep does this itself after seven days.
 - **Merged feeds** (ADR 0028): `select id, feed_url, merged_into from feeds where merged_into is
-  not null`. A merge moves readers and the posts only the alias had (with their titles,
+  not null`. An alias merges at the tick after its first fetch; one that has not yet (a blog a
+  member follows twice) merges at once on the admin console's Fetch now. A merge moves readers
+  and the posts only the alias had (with their titles,
   translations and read states), and deletes nothing. To undo
   a wrong one (a category feed taken for the blog's), reactivate the alias with
   `update feeds set status = 'active', merged_into = null, next_fetch_at = 0 where id = …`.

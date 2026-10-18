@@ -585,6 +585,12 @@ export async function ingestFeed(ctx: IngestContext, lease: Lease): Promise<Inge
   const newInWindow = planned.inserts.filter(
     (a) => (a.publishedAt ?? now) > now - 7 * DAY_MS,
   ).length
+  // Another address of a feed its blog already has merges as a fetch starts, once it holds posts
+  // to compare (ADR 0028). Until then its readers have the blog twice, so after the first fetch
+  // that stores them it is due again at the next tick, not an interval later: an OPML import
+  // naming `/feed.xml` for a blog followed at `/feed` showed it twice for a day.
+  const mayBeAlias =
+    feed.lastBodyHash === null && (feed.site.otherFeeds > 0 || adopted.outcome === 'joined')
 
   const feedSet = {
     ...successSet(ctx, feed, now, startedAt, {
@@ -604,6 +610,7 @@ export async function ingestFeed(ctx: IngestContext, lease: Lease): Promise<Inge
     // A permanent redirect onto a URL another feed already holds keeps our own URL.
     feedUrl:
       res.permanentRedirectTo && !redirectTargetExists ? res.permanentRedirectTo : feed.feedUrl,
+    ...(mayBeAlias ? { nextFetchAt: now } : {}),
   }
 
   const statements: Statement[] = [...moved.statements]

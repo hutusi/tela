@@ -65,8 +65,10 @@ blog's page and search never pick a merged feed.
 
 ## Consequences
 
-- **A newly imported alias shows duplicates for one fetch interval:** its first fetch files it
-  under the blog, and its second merges it.
+- **A newly imported alias shows duplicates until the next tick:** its first fetch files it under
+  the blog and, since the blog has another feed, makes it due again at once; that visit merges it.
+  Until 2026-10-18 the second visit waited out a fetch interval, up to a day: an OPML file naming
+  `/feed.xml` for a blog followed at `/feed` showed it twice that long.
 - **Likes are not carried.** A like on a duplicate keeps that copy on the member's device
   (liked posts are kept), beside the canonical copy. Carrying likes would mean recounting them;
   at one reader, not worth it.
