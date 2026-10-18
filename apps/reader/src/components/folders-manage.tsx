@@ -1,16 +1,16 @@
 /**
- * Settings › Subscriptions in folders (ADR 0048, Tela Lists): a section per folder, by name, each
- * with its blogs by title, then the blogs in none. Each row has a folder button that opens Move to,
- * a menu from `md` up and a sheet below it (screen 27); from `md` up a row can also be dragged onto
- * a section. A folder is renamed and deleted from its heading: two buttons from `md` up, a ··· menu
- * below it. Every change is a mutation on the device's rows, so one made on another device shows
- * here; the page that composes these (`SubscriptionsSection`) makes them.
+ * Settings › Subscriptions below `lg` (ADR 0049, Tela Lists screen 27): a section per folder, by
+ * name, each with its blogs by title, then the blogs in none. Each row's folder button opens Move
+ * to as a sheet, and a ··· beside a folder's name holds Rename and Delete folder. The forms and the
+ * Move to menu are the manager's too (`subscriptions-manager.tsx`, from `lg` up). Every change is a
+ * mutation on the device's rows, so one made on another device shows here; the page that composes
+ * these (`SubscriptionsSection`) makes them.
  */
 import { FOLDER_NAME_MAX, languageBadge } from '@tela/shared'
 import type { SiteRow } from '@tela/sync'
 import {
-  type DragEvent,
   type KeyboardEvent,
+  type ReactNode,
   type RefObject,
   useEffect,
   useId,
@@ -19,25 +19,14 @@ import {
   useState,
 } from 'react'
 import { Link } from 'react-router'
-import { useTranslations } from 'use-intl'
+import { useLocale, useTranslations } from 'use-intl'
 import { checkFolderName } from '../lib/folders'
-import { type cadenceKey, displayHost } from '../lib/format'
+import { displayHost } from '../lib/format'
+import { postedAgo } from '../lib/subscriptions'
 import { useDismiss } from '../lib/use-dismiss'
 import { CHECK, CHEVRON_DOWN, Glyph } from './glyph'
 import { Sheet } from './sheet'
 import { SiteAvatar } from './site-avatar'
-
-/** Six dots: a row that can be dragged. Filled, as the design draws them. */
-const GRIP = (
-  <g fill="currentColor" stroke="none">
-    <circle cx="6" cy="4" r="1.2" />
-    <circle cx="10" cy="4" r="1.2" />
-    <circle cx="6" cy="8" r="1.2" />
-    <circle cx="10" cy="8" r="1.2" />
-    <circle cx="6" cy="12" r="1.2" />
-    <circle cx="10" cy="12" r="1.2" />
-  </g>
-)
 
 /** Three dots in a row: more for this, in a menu. */
 const MORE = (
@@ -49,128 +38,68 @@ const MORE = (
 )
 
 /** A plus: make one. */
-const PLUS = <path d="M8 4v8M4 8h8" />
+export const PLUS = <path d="M8 4v8M4 8h8" />
 
 /** One of the member's folders, as a choice. */
 export type Folder = { id: string; name: string }
 
-/** A blog the page lists: one followed, or one left from the page, dimmed, to take back. */
+/** A blog the member follows, as Subscriptions lists it. */
 export type ManagedRow = {
   feedId: number
-  subscribed: boolean
   title: string
   site: SiteRow | undefined
-  cadence: ReturnType<typeof cadenceKey>
+  feedUrl: string | undefined
+  /** The live folder it is in, or null for none. */
+  folderId: string | null
+  /** When it last posted (`latestPosts`), or null if nothing says. */
+  latest: number | null
+  /** Its feed no longer updates: it reads "Not updating", whatever its last date. */
+  dead: boolean
+}
+
+/** What a row says of how its blog posts: when it last did, or that it has stopped. */
+export function useActivity(now: number): (row: ManagedRow) => string {
+  const t = useTranslations('settings.folders')
+  const locale = useLocale()
+  return (row) =>
+    row.dead
+      ? t('notUpdating')
+      : row.latest === null
+        ? t('noPosts')
+        : postedAgo(row.latest, locale, now)
 }
 
 /** What the sections and their rows need from the page. */
 export type Manage = {
-  /** Below `md`: no dragging, Move to is a sheet, and a folder's actions are behind ···. */
-  phone: boolean
   /** The member's folders, by name. */
   folders: readonly Folder[]
   /** Every name a folder may not take: these, and a folder whose deletion is held (`knownFolders`). */
   known: readonly Folder[]
-  /** Put a blog in a folder, or in none (null). */
-  move: (feedId: number, folderId: string | null) => void
-  /** Below `md`: open Move to as a sheet for this row, from its folder button. */
+  /** Open Move to as a sheet for this row, from its folder button. */
   openSheet: (row: ManagedRow, from: HTMLButtonElement) => void
   rename: (folder: Folder, name: string) => void
   remove: (folder: Folder) => void
-  toggle: (feedId: number, subscribed: boolean) => void
+  unsubscribe: (row: ManagedRow) => void
+  /** Each row's second line: its address, language and latest post (`useActivity`). */
+  activity: (row: ManagedRow) => string
   /**
    * The blog whose folder button takes focus at the next render: the row Move to moved, which is
    * in another section by then and so another element.
    */
   focusMove: RefObject<number | null>
-  drag: FolderDrag
-}
-
-// ---------------------------------------------------------------------------------------------
-// Dragging, from md up
-
-/** A section's key while dragging: its folder's id, or '' for the blogs in none. */
-const keyOf = (folderId: string | null) => folderId ?? ''
-
-/** Only a row of this page is dragged here: a file or a link from elsewhere is not a blog. */
-const DRAG_TYPE = 'application/x-tela-feed'
-
-export type FolderDrag = ReturnType<typeof useFolderDrag>
-
-/**
- * A row dragged onto a section moves its blog there (native drag and drop, from `md` up; the
- * folder button is the way without a pointer). The blog dragged is kept in a ref as well as in
- * state, since a drop reads it when it lands and a render may not have caught up with the drag's
- * start; and the folder it is in is asked when it is needed, of the rows as they are then
- * (`folderOf`), so a section it is already in neither lights up nor takes it.
- */
-export function useFolderDrag(
-  folderOf: (feedId: number) => string | null,
-  move: (feedId: number, folderId: string | null) => void,
-) {
-  const dragged = useRef<number | null>(null)
-  const [dragging, setDragging] = useState<number | null>(null)
-  const [over, setOver] = useState<string | null>(null)
-  const end = () => {
-    dragged.current = null
-    setDragging(null)
-    setOver(null)
-  }
-  /** The blog being dragged, if it would move into the section `key`. */
-  const movable = (key: string) => {
-    const feedId = dragged.current
-    return feedId !== null && keyOf(folderOf(feedId)) !== key ? feedId : null
-  }
-  return {
-    dragging,
-    over,
-    row: (feedId: number) => ({
-      draggable: true,
-      onDragStart: (e: DragEvent<HTMLElement>) => {
-        e.dataTransfer.effectAllowed = 'move'
-        // Firefox starts no drag without data.
-        e.dataTransfer.setData(DRAG_TYPE, String(feedId))
-        dragged.current = feedId
-        setDragging(feedId)
-      },
-      onDragEnd: end,
-    }),
-    target: (folderId: string | null) => {
-      const key = keyOf(folderId)
-      return {
-        onDragOver: (e: DragEvent<HTMLElement>) => {
-          if (movable(key) === null) return
-          e.preventDefault()
-          e.dataTransfer.dropEffect = 'move'
-          setOver(key)
-        },
-        onDragLeave: (e: DragEvent<HTMLElement>) => {
-          // Into one of its own rows is not out of the section. Safari names no element, and the
-          // next dragover lights it again.
-          if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return
-          setOver((o) => (o === key ? null : o))
-        },
-        onDrop: (e: DragEvent<HTMLElement>) => {
-          const feedId = movable(key)
-          if (feedId === null) return
-          e.preventDefault()
-          move(feedId, folderId)
-          end()
-        },
-      }
-    },
-  }
+  /** The blog whose Unsubscribe takes focus at the next render: the next row, once one has gone. */
+  focusLeave: RefObject<number | null>
 }
 
 // ---------------------------------------------------------------------------------------------
 // New folder
 
 /** The quiet text button of a form here: Cancel, and a heading's Rename. */
-const QUIET =
+export const QUIET =
   'rounded-full px-3 py-[7px] text-[13px] whitespace-nowrap text-muted hover:bg-hover hover:text-ink'
 
 /** The filled one: Create, Save. */
-const FILLED =
+export const FILLED =
   'rounded-full bg-ink px-[15px] py-2 text-[13px] font-medium whitespace-nowrap text-paper hover:brightness-125 disabled:opacity-60'
 
 const INPUT =
@@ -179,19 +108,22 @@ const INPUT =
 /**
  * A folder's name, to make one: Enter creates, Esc cancels. A name the member already has is
  * refused here, saying which (`checkFolderName`), and an empty one does nothing. `onCreate` is
- * given the name as it is kept, and makes the folder.
+ * given the name as it is kept, and makes the folder. On the page it is a card; in Move to's sheet
+ * a row with a phone's targets; in the manager's folder pane (`pane`) a column, under a line that
+ * says which blogs go in it, if any (`label`).
  */
 export function NewFolderForm({
   folders,
   onCreate,
   onCancel,
-  inSheet = false,
+  variant = 'page',
+  label,
 }: {
   folders: readonly Folder[]
   onCreate: (name: string) => void
   onCancel: () => void
-  /** In Move to's sheet: on its surface, with a phone's targets. */
-  inSheet?: boolean
+  variant?: 'page' | 'sheet' | 'pane'
+  label?: string | undefined
 }) {
   const t = useTranslations('settings.folders')
   const [value, setValue] = useState('')
@@ -205,37 +137,80 @@ export function NewFolderForm({
     else if ('taken' in checked) setTaken(checked.taken)
     else input.current?.focus()
   }
+  const pane = variant === 'pane'
+  const field = (
+    <input
+      ref={input}
+      value={value}
+      onChange={(e) => {
+        setValue(e.target.value)
+        setTaken(null)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          create()
+        } else if (e.key === 'Escape') {
+          // Only the form: in the sheet, Esc would close the sheet too, and in the manager leave
+          // Select mode.
+          e.preventDefault()
+          e.stopPropagation()
+          onCancel()
+        }
+      }}
+      maxLength={FOLDER_NAME_MAX}
+      placeholder={t('name')}
+      aria-label={label ?? t('name')}
+      aria-invalid={taken !== null}
+      aria-describedby={taken !== null ? errorId : undefined}
+      className={`${INPUT} ${variant === 'sheet' ? 'min-h-11 text-[15px]' : ''} ${pane ? 'w-full flex-none border-muted px-2.5 py-[7px] text-[13.5px]' : ''}`}
+      data-testid="new-folder-input"
+    />
+  )
+  const error =
+    taken !== null ? (
+      <p
+        id={errorId}
+        role="alert"
+        className={`text-danger ${pane ? 'm-0 px-1 text-[12px]' : 'mt-2 text-[13px]'}`}
+        data-testid="new-folder-error"
+      >
+        {t('taken', { name: taken })}
+      </p>
+    ) : null
+  if (pane) {
+    return (
+      <div className="flex animate-fade flex-col gap-1.5 px-0.5 pt-0.5 pb-2.5">
+        {label ? <span className="px-1 text-[12px] text-muted">{label}</span> : null}
+        {field}
+        {error}
+        <div className="flex justify-end gap-1">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-full px-2.5 py-[5px] text-[12.5px] text-muted hover:bg-hover hover:text-ink"
+          >
+            {t('cancel')}
+          </button>
+          <button
+            type="button"
+            onClick={create}
+            className="rounded-full bg-ink px-3 py-[5px] text-[12.5px] font-medium text-paper hover:brightness-125"
+            data-testid="new-folder-create"
+          >
+            {t('create')}
+          </button>
+        </div>
+      </div>
+    )
+  }
+  const inSheet = variant === 'sheet'
   return (
     <div className={inSheet ? 'border-t border-line py-3' : 'mt-6 animate-fade'}>
       <div
         className={`flex items-center gap-2 ${inSheet ? '' : 'rounded-xl border border-line bg-surface p-3.5'}`}
       >
-        <input
-          ref={input}
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value)
-            setTaken(null)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              create()
-            } else if (e.key === 'Escape') {
-              // Only the form: in the sheet, Esc would close the sheet too.
-              e.preventDefault()
-              e.stopPropagation()
-              onCancel()
-            }
-          }}
-          maxLength={FOLDER_NAME_MAX}
-          placeholder={t('name')}
-          aria-label={t('name')}
-          aria-invalid={taken !== null}
-          aria-describedby={taken !== null ? errorId : undefined}
-          className={`${INPUT} ${inSheet ? 'min-h-11 text-[15px]' : ''}`}
-          data-testid="new-folder-input"
-        />
+        {field}
         <button type="button" onClick={onCancel} className={QUIET}>
           {t('cancel')}
         </button>
@@ -243,16 +218,7 @@ export function NewFolderForm({
           {t('create')}
         </button>
       </div>
-      {taken !== null ? (
-        <p
-          id={errorId}
-          role="alert"
-          className="mt-2 text-[13px] text-danger"
-          data-testid="new-folder-error"
-        >
-          {t('taken', { name: taken })}
-        </p>
-      ) : null}
+      {error}
     </div>
   )
 }
@@ -262,14 +228,14 @@ export function NewFolderForm({
 
 /**
  * One section: a folder's (`folder`), or the blogs in none (null), whose heading shows only once
- * there are folders to be outside of. Its heading names it and counts the blogs followed in it; a
- * folder's renames in place and deletes. From `md` up the section is where a dragged row lands,
- * lit while one that would move is over it.
+ * there are folders to be outside of. Its heading names it and counts its blogs (those the filter
+ * shows, while there is one); a folder's renames in place and deletes, from its ···.
  */
 export function FolderSection({
   folder,
   rows,
   heading,
+  filtering,
   manage,
   headingRef,
 }: {
@@ -277,40 +243,36 @@ export function FolderSection({
   rows: readonly ManagedRow[]
   /** Whether the section is named: the blogs in none are, once there are folders. */
   heading: boolean
+  /** A filter is on: an empty section is one it emptied, and is not shown at all. */
+  filtering: boolean
   manage: Manage
   /** The heading of the blogs in none, which focus goes to once a folder is deleted. */
   headingRef?: RefObject<HTMLHeadingElement | null>
 }) {
   const t = useTranslations('settings.folders')
-  const { phone, drag } = manage
   const headingId = useId()
-  const lit = !phone && drag.over === keyOf(folder?.id ?? null)
-  const count = rows.filter((r) => r.subscribed).length
+  if (filtering && rows.length === 0) return null
   return (
     <section
       aria-labelledby={heading ? headingId : undefined}
-      {...(phone ? {} : drag.target(folder?.id ?? null))}
-      className={`-mx-2.5 mt-[22px] rounded-[14px] px-2.5 pt-1.5 pb-1 outline-[1.5px] -outline-offset-1 outline-dashed transition-colors ${lit ? 'bg-hover outline-thumb' : 'outline-transparent'}`}
+      className="mt-[22px]"
       data-testid="folder-group"
       data-folder-id={folder?.id ?? ''}
-      data-over={lit ? 1 : undefined}
     >
       {heading ? (
         folder ? (
-          <FolderHeading id={headingId} folder={folder} count={count} manage={manage} />
+          <FolderHeading id={headingId} folder={folder} count={rows.length} manage={manage} />
         ) : (
           <div className="flex min-h-12 items-center gap-3 pt-2 pb-3">
             <h3
               id={headingId}
               ref={headingRef}
               tabIndex={-1}
-              className="m-0 font-serif text-[20px] font-medium tracking-[-0.005em] outline-none md:text-[22px]"
+              className="m-0 font-serif text-[20px] font-medium tracking-[-0.005em] outline-none"
             >
               {t('unfiled')}
             </h3>
-            <span className="text-[12.5px] text-muted md:text-[13px]">
-              {t('blogs', { n: count })}
-            </span>
+            <span className="text-[12.5px] text-muted">{t('blogs', { n: rows.length })}</span>
           </div>
         )
       ) : null}
@@ -322,14 +284,14 @@ export function FolderSection({
         </ul>
       ) : heading ? (
         <p className="m-0 border-t border-line py-[18px] text-[13px] text-muted">
-          {folder ? t(phone ? 'emptyPhone' : 'empty') : t('allFiled')}
+          {folder ? t('emptyPhone') : t('allFiled')}
         </p>
       ) : null}
     </section>
   )
 }
 
-/** A folder's name and count, and Rename and Delete folder: buttons, or behind ··· on a phone. */
+/** A folder's name and count, and its ···: Rename and Delete folder. */
 function FolderHeading({
   id,
   folder,
@@ -344,7 +306,7 @@ function FolderHeading({
 }) {
   const t = useTranslations('settings.folders')
   const [renaming, setRenaming] = useState(false)
-  // What had focus before renaming gets it back after: Rename, or the ··· it was chosen from.
+  // The ··· that Rename was chosen from has focus back after it.
   const back = useRef<HTMLButtonElement>(null)
   const returning = useRef(false)
   useLayoutEffect(() => {
@@ -370,45 +332,23 @@ function FolderHeading({
     )
   }
   return (
-    <div className="flex min-h-12 items-center gap-2.5 pt-2 pb-3 md:gap-3">
+    <div className="flex min-h-12 items-center gap-2.5 pt-2 pb-3">
       <h3
         id={id}
-        className="m-0 min-w-0 truncate font-serif text-[20px] font-medium tracking-[-0.005em] md:text-[22px]"
+        className="m-0 min-w-0 truncate font-serif text-[20px] font-medium tracking-[-0.005em]"
       >
         {folder.name}
       </h3>
-      <span className="shrink-0 text-[12.5px] whitespace-nowrap text-muted md:text-[13px]">
+      <span className="shrink-0 text-[12.5px] whitespace-nowrap text-muted">
         {t('blogs', { n: count })}
       </span>
       <span className="flex-1" />
-      {manage.phone ? (
-        <FolderOptions
-          folder={folder}
-          button={back}
-          onRename={() => setRenaming(true)}
-          onDelete={() => manage.remove(folder)}
-        />
-      ) : (
-        <div className="flex shrink-0 items-center">
-          <button
-            ref={back}
-            type="button"
-            onClick={() => setRenaming(true)}
-            className="rounded-md px-[9px] py-[5px] text-[13px] whitespace-nowrap text-muted hover:bg-hover hover:text-ink"
-            data-testid="folder-rename"
-          >
-            {t('rename')}
-          </button>
-          <button
-            type="button"
-            onClick={() => manage.remove(folder)}
-            className="rounded-md px-[9px] py-[5px] text-[13px] whitespace-nowrap text-muted hover:bg-hover hover:text-danger"
-            data-testid="folder-delete"
-          >
-            {t('delete')}
-          </button>
-        </div>
-      )}
+      <FolderOptions
+        folder={folder}
+        button={back}
+        onRename={() => setRenaming(true)}
+        onDelete={() => manage.remove(folder)}
+      />
     </div>
   )
 }
@@ -416,18 +356,21 @@ function FolderHeading({
 /**
  * A folder's name, edited in place: Enter saves, Esc cancels, and an empty name changes nothing.
  * A name another of the member's folders has is refused, saying which; its own, in another case,
- * is not.
+ * is not. In a section's heading it takes the line; in the manager's toolbar (`inToolbar`) it
+ * takes up to 380px of it.
  */
-function RenameForm({
+export function RenameForm({
   folder,
   folders,
   onSave,
   onCancel,
+  inToolbar = false,
 }: {
   folder: Folder
   folders: readonly Folder[]
   onSave: (name: string) => void
   onCancel: () => void
+  inToolbar?: boolean
 }) {
   const t = useTranslations('settings.folders')
   const [value, setValue] = useState(folder.name)
@@ -445,8 +388,8 @@ function RenameForm({
     else onCancel()
   }
   return (
-    <div className="pt-2 pb-3">
-      <div className="flex min-h-12 items-center gap-2">
+    <div className={inToolbar ? 'min-w-0 flex-[0_1_380px]' : 'pt-2 pb-3'}>
+      <div className={`flex items-center ${inToolbar ? 'gap-1.5' : 'min-h-12 gap-2'}`}>
         <input
           ref={input}
           value={value}
@@ -469,7 +412,7 @@ function RenameForm({
           aria-label={t('renameLabel', { name: folder.name })}
           aria-invalid={taken !== null}
           aria-describedby={taken !== null ? errorId : undefined}
-          className="min-w-0 flex-1 rounded-lg border border-thumb bg-surface px-2.5 py-1 font-serif text-[20px] text-ink outline-none focus:border-muted"
+          className={`min-w-0 flex-1 rounded-lg border bg-surface px-2.5 font-serif text-ink outline-none focus:border-muted ${inToolbar ? 'border-muted py-[3px] text-[19px]' : 'border-thumb py-1 text-[20px]'}`}
           data-testid="folder-rename-input"
         />
         <button type="button" onClick={onCancel} className={QUIET}>
@@ -493,7 +436,7 @@ function RenameForm({
   )
 }
 
-/** A phone's ··· beside a folder's name: Rename and Delete folder (screen 27). */
+/** The ··· beside a folder's name: Rename and Delete folder (screen 27). */
 function FolderOptions({
   folder,
   button,
@@ -571,10 +514,9 @@ function FolderOptions({
 // A row
 
 /**
- * A blog: its picture, name, address, language and how often it posts, the folder button, and
- * Unsubscribe (or Subscribe, on a row left from here). From `md` up it is one line with a grip,
- * and drags; on a phone the folder button is under its name, since a 320px line has no room for
- * it beside Unsubscribe.
+ * A blog: its picture and name, then its address, language and latest post, and Unsubscribe; its
+ * folder button on a line of its own under its name, since a 320px line has no room for it
+ * beside Unsubscribe.
  */
 function SubscriptionRow({
   row,
@@ -586,21 +528,69 @@ function SubscriptionRow({
   manage: Manage
 }) {
   const t = useTranslations('settings')
-  const td = useTranslations('discover')
-  const { phone, drag } = manage
-  const listed = row.site?.listing === 'listed' || row.site?.listing === 'featured'
-  const meta = [
+  return (
+    <li
+      className="border-t border-line py-3"
+      data-testid="settings-subscription"
+      data-feed-id={row.feedId}
+    >
+      <div className="flex items-center gap-3">
+        <SiteAvatar
+          id={row.site?.id ?? row.feedId}
+          title={row.title}
+          faviconKey={row.site?.faviconKey ?? null}
+          size={30}
+        />
+        <BlogName row={row} meta={rowMeta(row, manage.activity(row))} />
+        <button
+          ref={(el) => {
+            if (el && manage.focusLeave.current === row.feedId) {
+              manage.focusLeave.current = null
+              el.focus()
+            }
+          }}
+          type="button"
+          onClick={() => manage.unsubscribe(row)}
+          data-testid="settings-unsubscribe"
+          className="shrink-0 rounded-full border border-thumb px-3 py-[5px] text-[12.5px] font-medium text-ink-2 hover:border-ink hover:text-ink"
+        >
+          {t('unsubscribe')}
+        </button>
+      </div>
+      <div className="mt-2 flex pl-[42px]">
+        <FolderButton row={row} folder={folder} manage={manage} />
+      </div>
+    </li>
+  )
+}
+
+/** A row's second line: its address, its language, and how it posts. */
+export function rowMeta(row: ManagedRow, activity: string): string {
+  return [
     row.site ? displayHost(row.site.homeUrl) : null,
     row.site?.primaryLang ? languageBadge(row.site.primaryLang) : null,
-    td(`cadence.${row.cadence}`),
+    activity,
   ]
     .filter(Boolean)
     .join(' · ')
-  const dim = drag.dragging === row.feedId ? 'opacity-40' : row.subscribed ? '' : 'opacity-55'
-  const name = (
+}
+
+/** A blog's name, a link to its page where it has one, over its second line. */
+export function BlogName({
+  row,
+  meta,
+  link = true,
+}: {
+  row: ManagedRow
+  meta: string
+  /** False where a click on the row is the row's own (the manager in Select mode). */
+  link?: boolean
+}) {
+  const listed = row.site?.listing === 'listed' || row.site?.listing === 'featured'
+  return (
     <div className="min-w-0 flex-1">
       <div className="truncate">
-        {row.site && listed ? (
+        {link && row.site && listed ? (
           <Link
             to={`/s/${row.site.id}`}
             draggable={false}
@@ -612,68 +602,15 @@ function SubscriptionRow({
           <span className="font-medium">{row.title}</span>
         )}
       </div>
-      <div className="truncate text-[12.5px] text-muted">{meta}</div>
+      <div className="truncate text-[12.5px] text-muted lg:text-[12px]">{meta}</div>
     </div>
-  )
-  const toggle = (
-    <button
-      type="button"
-      onClick={() => manage.toggle(row.feedId, row.subscribed)}
-      data-testid="settings-subscription-toggle"
-      className={`min-w-[104px] shrink-0 rounded-full border px-3 py-[5px] text-[12.5px] font-medium ${
-        row.subscribed ? 'border-thumb text-ink-2' : 'border-ink bg-ink text-paper'
-      }`}
-    >
-      {row.subscribed ? t('unsubscribe') : t('subscribe')}
-    </button>
-  )
-  const avatar = (
-    <SiteAvatar
-      id={row.site?.id ?? row.feedId}
-      title={row.title}
-      faviconKey={row.site?.faviconKey ?? null}
-      size={phone ? 30 : 32}
-    />
-  )
-  const button = <FolderButton row={row} folder={folder} manage={manage} />
-  if (phone) {
-    return (
-      <li
-        className={`border-t border-line py-3 ${dim}`}
-        data-testid="settings-subscription"
-        data-feed-id={row.feedId}
-      >
-        <div className="flex items-center gap-3">
-          {avatar}
-          {name}
-          {toggle}
-        </div>
-        <div className="mt-2 flex pl-[42px]">{button}</div>
-      </li>
-    )
-  }
-  return (
-    <li
-      {...drag.row(row.feedId)}
-      className={`flex cursor-grab items-center gap-3 border-t border-line py-3 lg:gap-3.5 ${dim}`}
-      data-testid="settings-subscription"
-      data-feed-id={row.feedId}
-    >
-      <span className="flex shrink-0 text-thumb" title={t('folders.drag')} data-testid="drag-grip">
-        <Glyph>{GRIP}</Glyph>
-      </span>
-      {avatar}
-      {name}
-      {button}
-      {toggle}
-    </li>
   )
 }
 
 /**
- * The folder a row's blog is in, as a button: Move to opens from it, a menu from `md` up and a
- * sheet below it. It takes focus back when the row it is on was just moved (`focusMove`): the
- * row is in another section by then, and the button another element.
+ * The folder a row's blog is in, as a button that opens Move to as a sheet. It takes focus back
+ * when the row it is on was just moved (`focusMove`): the row is in another section by then, and
+ * the button another element.
  */
 function FolderButton({
   row,
@@ -685,72 +622,42 @@ function FolderButton({
   manage: Manage
 }) {
   const t = useTranslations('settings.folders')
-  const [open, setOpen] = useState(false)
-  const box = useRef<HTMLDivElement>(null)
-  const button = useRef<HTMLButtonElement | null>(null)
-  const panel = useId()
-  useDismiss(
-    open,
-    (by) => {
-      setOpen(false)
-      if (by === 'escape') button.current?.focus()
-    },
-    box,
-  )
   const current = folder?.name ?? t('none')
-  const choose = (folderId: string | null) => {
-    // Focus stays with this blog's button, wherever the move puts it.
-    manage.focusMove.current = row.feedId
-    setOpen(false)
-    manage.move(row.feedId, folderId)
-  }
   return (
-    // On a phone it has its own line and gives way to it; on a desktop row the blog's name does.
-    <div ref={box} className={`relative ${manage.phone ? 'min-w-0' : 'shrink-0'}`}>
-      <button
-        ref={(el) => {
-          button.current = el
-          if (el && manage.focusMove.current === row.feedId) {
-            manage.focusMove.current = null
-            el.focus()
-          }
-        }}
-        type="button"
-        aria-haspopup={manage.phone ? 'dialog' : 'menu'}
-        aria-expanded={manage.phone ? undefined : open}
-        aria-controls={open ? panel : undefined}
-        aria-label={t('folderOf', { blog: row.title, folder: current })}
-        onClick={(e) =>
-          manage.phone ? manage.openSheet(row, e.currentTarget) : setOpen((o) => !o)
+    <button
+      ref={(el) => {
+        if (el && manage.focusMove.current === row.feedId) {
+          manage.focusMove.current = null
+          el.focus()
         }
-        // At md the row is 408px, so a long folder name is cut well before the blog's name is.
-        className={`flex items-center gap-1.5 rounded-lg border border-line bg-surface pr-2.5 pl-3 text-ink-2 hover:border-thumb hover:text-ink ${manage.phone ? 'min-h-9 max-w-full text-[13px]' : 'max-w-32 py-[5px] text-[12.5px] lg:max-w-44'}`}
-        data-testid="move-to"
-      >
-        <span className="truncate">{current}</span>
-        <Glyph size={12} className="shrink-0">
-          {CHEVRON_DOWN}
-        </Glyph>
-      </button>
-      {open ? (
-        <div
-          id={panel}
-          className="absolute top-[calc(100%+6px)] right-0 z-[7] flex max-h-[min(360px,60vh)] min-w-[200px] animate-fade flex-col overflow-y-auto rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,.08)]"
-        >
-          <MoveOptions folders={manage.folders} current={folder?.id ?? null} onChoose={choose} />
-        </div>
-      ) : null}
-    </div>
+      }}
+      type="button"
+      aria-haspopup="dialog"
+      aria-label={t('folderOf', { blog: row.title, folder: current })}
+      onClick={(e) => manage.openSheet(row, e.currentTarget)}
+      className="flex min-h-9 max-w-full min-w-0 items-center gap-1.5 rounded-lg border border-line bg-surface pr-2.5 pl-3 text-[13px] text-ink-2 hover:border-thumb hover:text-ink"
+      data-testid="move-to"
+    >
+      <span className="truncate">{current}</span>
+      <Glyph size={12} className="shrink-0">
+        {CHEVRON_DOWN}
+      </Glyph>
+    </button>
   )
 }
 
-/** The choice a Move to menu has checked: where focus goes as it opens. */
-const checkedIn = (el: HTMLElement | null) =>
-  el?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]') ?? null
+// ---------------------------------------------------------------------------------------------
+// Move to
 
-/** Up, Down, Home and End between the choices of a menu, as an ARIA menu moves. */
-function menuKeys(e: KeyboardEvent<HTMLElement>) {
-  const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
+/** The choice a Move to menu has checked, or its first: where focus goes as it opens. */
+const startIn = (el: HTMLElement | null) =>
+  el?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]') ??
+  el?.querySelector<HTMLElement>('[role^="menuitem"]') ??
+  null
+
+/** Up, Down, Home and End between the items of a menu, as an ARIA menu moves. */
+export function menuKeys(e: KeyboardEvent<HTMLElement>) {
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role^="menuitem"]')]
   const active = document.activeElement
   const at = active instanceof HTMLElement ? items.indexOf(active) : -1
   const to =
@@ -768,23 +675,54 @@ function menuKeys(e: KeyboardEvent<HTMLElement>) {
   items[to]?.focus()
 }
 
+/** An item of a menu beside its choices, after a rule: Unsubscribe, New folder with these. */
+export function MenuItem({
+  onClick,
+  testId,
+  muted = false,
+  children,
+}: {
+  onClick: () => void
+  testId: string
+  muted?: boolean
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      tabIndex={-1}
+      onClick={onClick}
+      className={`rounded-md px-2.5 py-[7px] text-left text-[13px] hover:bg-hover hover:text-ink ${muted ? 'text-muted' : 'text-ink'}`}
+      data-testid={testId}
+    >
+      {children}
+    </button>
+  )
+}
+
 /**
- * Move to: each folder, then No folder, the one the blog is in checked. Opened, it puts focus on
- * that one; Up and Down go between them, and Esc or Tab leaves.
+ * Move to: each folder, then No folder, the one the blog is in checked (none, for several blogs in
+ * different folders: `current` undefined). Opened, it puts focus on that one, or the first; Up and
+ * Down go between them and any `extra` items under a rule, and Esc or Tab leaves.
  */
-function MoveOptions({
+export function MoveOptions({
   folders,
   current,
   onChoose,
   inSheet = false,
   labelledBy,
+  heading = true,
+  extra,
 }: {
   folders: readonly Folder[]
-  current: string | null
+  current: string | null | undefined
   onChoose: (folderId: string | null) => void
   inSheet?: boolean
-  /** The sheet's title, which names its menu; the menu's own heading names it otherwise. */
+  /** The sheet's title, or the button, that names its menu; its own heading names it otherwise. */
   labelledBy?: string
+  heading?: boolean
+  extra?: ReactNode
 }) {
   const t = useTranslations('settings.folders')
   const menu = useRef<HTMLDivElement>(null)
@@ -793,31 +731,32 @@ function MoveOptions({
   // anything in it has had its effects run.
   // biome-ignore lint/correctness/useExhaustiveDependencies: once, as the menu opens
   useEffect(() => {
-    if (!inSheet) checkedIn(menu.current)?.focus()
+    if (!inSheet) startIn(menu.current)?.focus()
   }, [])
   const options: { id: string | null; name: string }[] = [
     ...folders.map((f) => ({ id: f.id, name: f.name })),
     { id: null, name: t('none') },
   ]
+  const named = !inSheet && heading
   return (
     <>
-      {inSheet ? null : (
+      {named ? (
         <div
           id={headingId}
           className="px-2.5 py-1.5 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase"
         >
           {t('moveTo')}
         </div>
-      )}
+      ) : null}
       <div
         ref={menu}
         role="menu"
-        aria-labelledby={labelledBy ?? headingId}
+        aria-labelledby={labelledBy ?? (named ? headingId : undefined)}
         onKeyDown={menuKeys}
         className="flex flex-col"
         data-testid="move-to-menu"
       >
-        {options.map((o) => {
+        {options.map((o, i) => {
           const on = o.id === current
           return (
             <button
@@ -825,7 +764,7 @@ function MoveOptions({
               type="button"
               role="menuitemradio"
               aria-checked={on}
-              tabIndex={on ? 0 : -1}
+              tabIndex={on || (current === undefined && i === 0) ? 0 : -1}
               onClick={() => onChoose(o.id)}
               className={
                 inSheet
@@ -843,13 +782,19 @@ function MoveOptions({
             </button>
           )
         })}
+        {extra ? (
+          <>
+            <hr className="my-1 h-px border-0 bg-line" />
+            {extra}
+          </>
+        ) : null}
       </div>
     </>
   )
 }
 
 /**
- * Move to on a phone (screen 27): a sheet titled with the blog, its folders and No folder, the one
+ * Move to below `lg` (screen 27): a sheet titled with the blog, its folders and No folder, the one
  * it is in checked, and New folder, which makes a folder and puts the blog in it. Choosing closes
  * it, and focus goes back to the blog's folder button.
  */
@@ -887,7 +832,7 @@ export function MoveSheet({
   const plus = useRef<HTMLButtonElement>(null)
   // After the sheet's own effect has opened it (a child's effects run first), which put focus on
   // its first choice: the one the blog is in is where a choice starts.
-  useEffect(() => checkedIn(body.current)?.focus(), [])
+  useEffect(() => startIn(body.current)?.focus(), [])
   // New folder cancelled: focus goes back to its row, which is back by then.
   const returning = useRef(false)
   useLayoutEffect(() => {
@@ -920,7 +865,7 @@ export function MoveSheet({
             returning.current = true
             setNaming(false)
           }}
-          inSheet
+          variant="sheet"
         />
       ) : (
         <>

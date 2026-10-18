@@ -126,25 +126,29 @@ test.describe('settings', () => {
     expect(await serverProfile(request)).toMatchObject({ publicLikes: false })
   })
 
-  test('a blog left from the list stays there, dimmed, to take back', async ({ page }) => {
+  test('a blog left from the list goes, and its toast takes it back before anything is sent', async ({
+    page,
+  }) => {
+    const sent: string[] = []
+    page.on('request', (r) => {
+      if (r.url().includes('/api/v1/mutations')) sent.push(r.postData() ?? '')
+    })
     await page.goto('/settings/subscriptions')
     const rows = page.getByTestId('settings-subscription')
     await expect(rows.first()).toBeVisible()
     const count = await rows.count()
     const row = rows.filter({ hasText: 'Julia Evans' })
-    const toggle = row.getByTestId('settings-subscription-toggle')
-    // The button names what it does, not a pressed state ("Unsubscribe, pressed" read backwards).
-    await expect(toggle).toHaveText('Unsubscribe')
-    await expect(toggle).not.toHaveAttribute('aria-pressed')
-    await toggle.click()
-    await expect(toggle).toHaveText('Subscribe')
-    await expect(rows).toHaveCount(count)
+    await row.getByTestId('move-to').click()
+    await page.getByTestId('row-unsubscribe').click()
+    await expect(row).toHaveCount(0)
     await expect(page.getByTestId('subscription-count')).toContainText(`${count - 1} blog`)
-    const back = page.waitForResponse((r) => r.url().includes('/api/v1/mutations') && r.ok())
-    await toggle.click()
-    await expect(toggle).toHaveText('Unsubscribe')
+    const toast = page.getByTestId('toast')
+    await expect(toast).toContainText('Unsubscribed from Julia Evans.')
+    await toast.getByTestId('toast-action').click()
+    await expect(row).toHaveCount(1)
     await expect(page.getByTestId('subscription-count')).toContainText(`${count} blog`)
-    await back
+    // Held while its toast showed: the shared member never left the blog, even for a moment.
+    expect(sent.filter((body) => body.includes('"unsubscribe"'))).toEqual([])
   })
 
   test('"Your data" is one file holding the subscriptions', async ({ page }) => {

@@ -36,20 +36,22 @@ import {
   type ManagedRow,
   MoveSheet,
   NewFolderForm,
-  useFolderDrag,
+  useActivity,
 } from '../components/folders-manage'
 import { BACK, CHEVRON_RIGHT, CLOSE, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { Segmented } from '../components/segmented'
 import { SETTING_HINT, SettingRow } from '../components/setting-row'
+import { SubscriptionsManager } from '../components/subscriptions-manager'
 import { Switch } from '../components/switch'
 import { linkingReturn } from '../lib/account-api'
 import { canMakeFolder, filedIn, folderWith, groupRows, knownFolders } from '../lib/folders'
-import { cadenceKey } from '../lib/format'
+import { displayHost } from '../lib/format'
 import type { ReadingMode } from '../lib/href'
 import { newId } from '../lib/id'
 import { type AddError, importOpml, saveDownload } from '../lib/opml'
 import { PREF_KEYS, readingPrefsOf } from '../lib/prefs'
+import { latestPosts, matcher } from '../lib/subscriptions'
 import { useTitle } from '../lib/title'
 import { UNDO_HOLD_MS } from '../lib/toasts'
 import {
@@ -62,7 +64,7 @@ import {
   typographyOf,
 } from '../lib/typography'
 import { offerUndo } from '../lib/undo'
-import { BELOW_MD, useMediaQuery } from '../lib/use-media'
+import { BELOW_LG, BELOW_MD, useMediaQuery } from '../lib/use-media'
 import { api, apiJson } from '../store/api'
 import { useNow, usePrivacyUnsettled, useReadingLang, useStore, useTables } from '../store/hooks'
 import { feedTitle, folderIdOf } from '../store/selectors'
@@ -210,7 +212,7 @@ export function SettingsPage() {
   }
 
   return (
-    <main className="mx-auto grid w-full max-w-[1040px] flex-1 animate-fade grid-cols-[200px_minmax(0,1fr)] items-start gap-16 px-12 py-12">
+    <main className="mx-auto grid w-full max-w-[1280px] flex-1 animate-fade grid-cols-[clamp(136px,14vw,184px)_minmax(0,1fr)] items-start gap-[clamp(16px,2.5vw,32px)] px-[clamp(20px,3vw,40px)] pt-9 pb-10">
       <nav
         aria-label={t('title')}
         className="sticky top-24 flex min-w-0 flex-col gap-0.5"
@@ -235,7 +237,12 @@ export function SettingsPage() {
           ))}
         </div>
       </nav>
-      <div className="min-w-0 max-w-[640px]" data-testid="settings-content" data-section={section}>
+      {/* A column of text, but for the Subscriptions manager, which takes the width (Tela Lists). */}
+      <div
+        className={`min-w-0 max-w-[640px] ${section === 'subscriptions' ? 'lg:max-w-none' : ''}`}
+        data-testid="settings-content"
+        data-section={section}
+      >
         <h2 className="mb-1.5 font-serif text-[30px] font-medium">{t(`sections.${section}`)}</h2>
         <SectionContent section={section} />
       </div>
@@ -862,46 +869,35 @@ function NeverTranslate({
 // ---------------------------------------------------------------------------------------------
 // Subscriptions
 
-const DAY = 86_400_000
-
 /**
- * The blogs left from this page, with the count of recent posts each had: the larger of the one
- * kept and what the device holds now. Left, taken back and left again before a pull returns its
- * posts, the device holds none of them, and that 0 would read as "quiet lately".
- */
-export function leaving(
-  left: ReadonlyMap<number, number>,
-  feedId: number,
-  held: number,
-): ReadonlyMap<number, number> {
-  return new Map(left).set(feedId, Math.max(left.get(feedId) ?? 0, held))
-}
-
-/**
- * The member's subscriptions in their folders (ADR 0048, Tela Lists): a section per folder, by
- * name, then the blogs in none, with New folder beside Import and Export (in the back bar on a
- * phone). Moving a blog, by its folder button or by dragging it from `md` up, is a `fileFeed`;
- * deleting a folder is held while its toast offers Undo (ADR 0046), and its blogs are in no folder.
+ * The member's subscriptions in their folders (ADR 0049, Tela Lists). From `lg` up, the manager: a
+ * pane of places beside the blogs of the one chosen. Below it (a tablet upright, a phone), a
+ * section per folder, by name, then the blogs in none, each moved by its folder button's sheet,
+ * with New folder in the back bar on a phone. Either way a move, an unsubscribe and a folder's
+ * deletion are held while their toast offers Undo (ADR 0046), several blogs at once as one change
+ * to take back. A folder deleted leaves its blogs in none; a blog left keeps its filing, so
+ * following it again puts it back where it was.
  */
 function SubscriptionsSection() {
   const t = useTranslations('settings')
+  const tf = useTranslations('settings.folders')
   const tt = useTranslations('toast')
   const tables = useTables()
   const now = useNow()
   const { store, engine } = useStore()
+  // The manager wants a pointer and room for its pane: below `lg`, the sections.
+  const narrow = useMediaQuery(BELOW_LG)
   const phone = useMediaQuery(BELOW_MD)
   const barEnd = useContext(BarEnd)
-  // Blogs left from this page stay listed, dimmed, so a slip can be undone where it was made. The
-  // subscription row is still there with its `deletedAt`: this is which rows to show, not a
-  // second record of what is subscribed. Each keeps the count of posts it had when left, since
-  // leaving drops the feed's posts from the device and would read as "quiet lately".
-  const [left, setLeft] = useState<ReadonlyMap<number, number>>(new Map())
+  const activity = useActivity(now)
+  const [query, setQuery] = useState('')
   // New folder's form, keyed so that pressing New folder again starts it afresh.
   const [creating, setCreating] = useState<number | null>(null)
-  // The blog whose Move to sheet is open, on a phone, and the folder button it opened from.
+  // The blog whose Move to sheet is open, and the folder button it opened from.
   const [moving, setMoving] = useState<ManagedRow | null>(null)
   const opener = useRef<HTMLElement | null>(null)
   const focusMove = useRef<number | null>(null)
+  const focusLeave = useRef<number | null>(null)
   const newFolder = useRef<HTMLButtonElement>(null)
   const unfiledHeading = useRef<HTMLHeadingElement>(null)
   const limitId = useId()
@@ -916,28 +912,25 @@ function SubscriptionsSection() {
   })
   // Wide, the sheet is not shown; turned narrow again, it would open by itself.
   useEffect(() => {
-    if (!phone) setMoving(null)
-  }, [phone])
+    if (!narrow) setMoving(null)
+  }, [narrow])
 
-  const posted = new Map<number, number>()
-  for (const a of tables.articles.values()) {
-    if (a.sortAt >= now - 30 * DAY) posted.set(a.feedId, (posted.get(a.feedId) ?? 0) + 1)
-  }
+  const latest = latestPosts(tables)
   const rows: ManagedRow[] = [...tables.subscriptions.values()]
-    .filter((s) => s.deletedAt === null || left.has(s.feedId))
+    .filter((s) => s.deletedAt === null)
     .map((s) => {
       const feed = tables.feeds.get(s.feedId)
-      const site = feed ? tables.sites.get(feed.siteId) : undefined
       return {
         feedId: s.feedId,
-        subscribed: s.deletedAt === null,
         title: feedTitle(tables, s.feedId) || '…',
-        site,
-        cadence: cadenceKey(Math.max(posted.get(s.feedId) ?? 0, left.get(s.feedId) ?? 0)),
+        site: feed ? tables.sites.get(feed.siteId) : undefined,
+        feedUrl: feed?.feedUrl,
+        folderId: folderIdOf(tables, s.feedId),
+        latest: latest.get(s.feedId) ?? null,
+        dead: feed?.status === 'dead',
       }
     })
     .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
-  const count = rows.filter((r) => r.subscribed).length
   const grouped = groupRows(tables, now, rows)
   const folders: Folder[] = grouped.folders.map(({ id, name }) => ({ id, name }))
   // A name, and the limit, also reckon with a folder whose deletion is still held.
@@ -946,89 +939,202 @@ function SubscriptionsSection() {
 
   // Each reads the device's rows as they are when it runs, not as this render saw them.
   const folderOf = (feedId: number) => folderIdOf(store.getSnapshot().tables, feedId)
-  const move = (feedId: number, folderId: string | null) => {
-    if (folderOf(feedId) !== folderId) store.mutate({ type: 'fileFeed', feedId, folderId })
+  /** Which blogs a toast names: the one by its name, or how many. */
+  const what = (ids: readonly number[]) => ({
+    n: ids.length,
+    blog: ids.length === 1 ? feedTitle(store.getSnapshot().tables, ids[0] ?? 0) || '…' : '',
+  })
+  const move = (feedIds: readonly number[], folderId: string | null) => {
+    const before = store.getSnapshot().tables
+    const from = new Map<number, string | null>()
+    for (const feedId of feedIds) {
+      const was = folderIdOf(before, feedId)
+      if (was !== folderId) from.set(feedId, was)
+    }
+    const ids = [...from.keys()]
+    const text =
+      folderId === null
+        ? tf('movedOut', what(ids))
+        : tf('movedTo', { ...what(ids), folder: before.folders.get(folderId)?.name ?? '' })
+    const held = store.mutateMany(
+      ids.map((feedId) => ({ type: 'fileFeed', feedId, folderId }) as const),
+      { holdMs: UNDO_HOLD_MS },
+    )
+    const last = held[held.length - 1]
+    if (!last) return
+    // Sent already, each goes back where it was, if that folder is still there.
+    offerUndo(
+      store,
+      text,
+      tt('undo'),
+      held.map((h) => h.mid),
+      () => {
+        const live = store.getSnapshot().tables.folders
+        store.mutateMany(
+          ids.map((feedId) => {
+            const was = from.get(feedId) ?? null
+            return {
+              type: 'fileFeed',
+              feedId,
+              folderId: was !== null && live.has(was) ? was : null,
+            } as const
+          }),
+          { after: last.at },
+        )
+      },
+    )
   }
-  const drag = useFolderDrag(folderOf, move)
-  const toggle = (feedId: number, subscribed: boolean) => {
-    if (subscribed) setLeft((l) => leaving(l, feedId, posted.get(feedId) ?? 0))
-    store.mutate(subscribed ? { type: 'unsubscribe', feedId } : { type: 'subscribe', feedId })
+  const unsubscribe = (feedIds: readonly number[]) => {
+    const ids = feedIds.filter(
+      (feedId) => store.getSnapshot().tables.subscriptions.get(feedId)?.deletedAt === null,
+    )
+    const text = tf('unsubscribed', what(ids))
+    const held = store.mutateMany(
+      ids.map((feedId) => ({ type: 'unsubscribe', feedId }) as const),
+      { holdMs: UNDO_HOLD_MS },
+    )
+    const last = held[held.length - 1]
+    if (!last) return
+    // Sent already, each is followed again; its filing outlived the unsubscribe.
+    offerUndo(
+      store,
+      text,
+      tt('undo'),
+      held.map((h) => h.mid),
+      () =>
+        store.mutateMany(
+          ids.map((feedId) => ({ type: 'subscribe', feedId }) as const),
+          { after: last.at },
+        ),
+    )
+  }
+  const create = (name: string, feedIds: readonly number[]) => {
+    const id = newId()
+    return store.mutateMany(folderWith(name, feedIds, id)).length > 0 ? id : null
+  }
+  const rename = (folder: Folder, name: string) => {
+    store.mutate({ type: 'putFolder', id: folder.id, name })
   }
   const remove = (folder: Folder) => {
     // Its blogs as they are filed now, before the delete leaves them in none.
     const filed = filedIn(store.getSnapshot().tables, folder.id)
     const held = store.mutate({ type: 'deleteFolder', id: folder.id }, { holdMs: UNDO_HOLD_MS })
     if (!held) return
-    refocus.current = 'deleted'
     // Sent already, the folder is made again under a new id with the same blogs in it.
-    offerUndo(store, t('folders.deleted', { name: folder.name }), tt('undo'), [held.mid], () =>
+    offerUndo(store, tf('deleted', { name: folder.name }), tt('undo'), [held.mid], () =>
       store.mutateMany(folderWith(folder.name, filed), { after: held.at }),
     )
   }
+
+  const header = (
+    <div className="mb-2.5 flex flex-wrap items-end justify-between gap-4">
+      <p className="text-[14px] text-muted" data-testid="subscription-count">
+        {folders.length > 0
+          ? t('subscriptionsInFolders', { blogs: rows.length, folders: folders.length })
+          : t('subscriptionsIntro', { n: rows.length })}
+      </p>
+      <div className="flex flex-wrap items-start gap-2">
+        <OpmlImport onImported={() => void engine.pull()} />
+        <ExportButton
+          path="/api/v1/feeds/opml"
+          fallbackName="tela-subscriptions.opml"
+          label={t('opmlExport')}
+          testId="opml-export"
+        />
+        {narrow && !phone ? newFolderButton() : null}
+      </div>
+    </div>
+  )
+
+  function newFolderButton() {
+    return (
+      <button
+        ref={newFolder}
+        type="button"
+        disabled={!canMake}
+        aria-describedby={canMake ? undefined : limitId}
+        onClick={() => setCreating((n) => (n ?? 0) + 1)}
+        className={
+          phone
+            ? 'flex min-h-11 shrink-0 items-center rounded-md px-2.5 text-[13.5px] font-medium whitespace-nowrap text-ink hover:bg-hover disabled:opacity-60'
+            : 'rounded-full bg-ink px-[15px] py-2 text-[13px] font-medium whitespace-nowrap text-paper hover:brightness-125 disabled:opacity-60'
+        }
+        data-testid="new-folder"
+      >
+        {t('folders.new')}
+      </button>
+    )
+  }
+
+  if (!narrow) {
+    return (
+      <>
+        {header}
+        <SubscriptionsManager
+          rows={rows}
+          folders={folders}
+          known={known}
+          canMake={canMake}
+          folderOf={folderOf}
+          activity={activity}
+          now={now}
+          actions={{ move, unsubscribe, create, rename, remove }}
+        />
+      </>
+    )
+  }
+
+  const matches = matcher(query)
+  const filtering = query.trim() !== ''
+  const shown = grouped.folders.map((g) => ({
+    ...g,
+    rows: g.rows.filter((r) =>
+      matches([r.title, r.site ? displayHost(r.site.homeUrl) : null, r.feedUrl]),
+    ),
+  }))
+  const shownUnfiled = grouped.unfiled.filter((r) =>
+    matches([r.title, r.site ? displayHost(r.site.homeUrl) : null, r.feedUrl]),
+  )
+  const anyShown = shownUnfiled.length > 0 || shown.some((g) => g.rows.length > 0)
   const manage: Manage = {
-    phone,
     folders,
     known,
-    move,
     openSheet: (row, from) => {
       opener.current = from
       setCreating(null)
       setMoving(row)
     },
-    rename: (folder, name) => store.mutate({ type: 'putFolder', id: folder.id, name }),
-    remove,
-    toggle,
+    rename,
+    remove: (folder) => {
+      remove(folder)
+      refocus.current = 'deleted'
+    },
+    unsubscribe: (row) => {
+      // Its row goes, and focus with it: to the next row's Unsubscribe, or the one before, or
+      // with no row left to New folder.
+      const order = [...shown.flatMap((g) => g.rows), ...shownUnfiled].map((r) => r.feedId)
+      const at = order.indexOf(row.feedId)
+      const next = order[at + 1] ?? order[at - 1] ?? null
+      if (next === null) refocus.current = 'new'
+      else focusLeave.current = next
+      unsubscribe([row.feedId])
+    },
+    activity,
     focusMove,
-    drag,
+    focusLeave,
   }
   const closeForm = () => {
     refocus.current = 'new'
     setCreating(null)
   }
 
-  const newFolderButton = (
-    <button
-      ref={newFolder}
-      type="button"
-      disabled={!canMake}
-      aria-describedby={canMake ? undefined : limitId}
-      onClick={() => setCreating((n) => (n ?? 0) + 1)}
-      className={
-        phone
-          ? 'flex min-h-11 shrink-0 items-center rounded-md px-2.5 text-[13.5px] font-medium whitespace-nowrap text-ink hover:bg-hover disabled:opacity-60'
-          : 'rounded-full bg-ink px-[15px] py-2 text-[13px] font-medium whitespace-nowrap text-paper hover:brightness-125 disabled:opacity-60'
-      }
-      data-testid="new-folder"
-    >
-      {t('folders.new')}
-    </button>
-  )
-
   return (
     <>
       {/* A phone's New folder is at the right of the back bar (screen 27). */}
-      {phone && barEnd ? createPortal(newFolderButton, barEnd) : null}
-      <div className="mb-2.5 flex flex-wrap items-end justify-between gap-4">
-        <p className="text-[14px] text-muted" data-testid="subscription-count">
-          {folders.length > 0
-            ? t('subscriptionsInFolders', { blogs: count, folders: folders.length })
-            : t('subscriptionsIntro', { n: count })}
-        </p>
-        <div className="flex flex-wrap items-start gap-2">
-          <OpmlImport onImported={() => void engine.pull()} />
-          <ExportButton
-            path="/api/v1/feeds/opml"
-            fallbackName="tela-subscriptions.opml"
-            label={t('opmlExport')}
-            testId="opml-export"
-          />
-          {phone ? null : newFolderButton}
-        </div>
-      </div>
+      {phone && barEnd ? createPortal(newFolderButton(), barEnd) : null}
+      {header}
       {rows.length > 0 ? (
-        <p className="mb-2 text-[13px] leading-normal text-muted">
-          {t(phone ? 'folders.helpPhone' : 'folders.help')}
-        </p>
+        <p className="mb-2 text-[13px] leading-normal text-muted">{t('folders.helpPhone')}</p>
       ) : null}
       {canMake ? null : (
         <p id={limitId} className="mb-2 text-[13px] text-muted" data-testid="new-folder-limit">
@@ -1040,28 +1146,62 @@ function SubscriptionsSection() {
           key={creating}
           folders={known}
           onCreate={(name) => {
-            store.mutate({ type: 'putFolder', id: newId(), name })
+            create(name, [])
             closeForm()
           }}
           onCancel={closeForm}
         />
       ) : null}
+      {rows.length > 0 ? (
+        <label className="mt-4 flex min-h-11 items-center gap-2 rounded-full border border-line bg-surface px-3.5 text-muted focus-within:border-muted">
+          <Glyph size={14} className="shrink-0">
+            {SEARCH}
+          </Glyph>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && query !== '') {
+                e.preventDefault()
+                setQuery('')
+              }
+            }}
+            placeholder={tf('filter')}
+            aria-label={tf('filterLabel')}
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] text-ink outline-none placeholder:text-muted"
+            data-testid="subscriptions-filter"
+          />
+        </label>
+      ) : null}
       <div data-testid="settings-subscriptions">
-        {grouped.folders.map((g) => (
-          <FolderSection key={g.id} folder={g} rows={g.rows} heading manage={manage} />
+        {shown.map((g) => (
+          <FolderSection
+            key={g.id}
+            folder={g}
+            rows={g.rows}
+            heading
+            filtering={filtering}
+            manage={manage}
+          />
         ))}
         {rows.length > 0 ? (
           <FolderSection
             folder={null}
-            rows={grouped.unfiled}
+            rows={shownUnfiled}
             heading={folders.length > 0}
+            filtering={filtering}
             manage={manage}
             headingRef={unfiledHeading}
           />
         ) : null}
       </div>
+      {filtering && !anyShown ? (
+        <p className="mt-6 text-muted" data-testid="manager-empty">
+          {tf('noMatch', { query: query.trim() })}
+        </p>
+      ) : null}
       {rows.length === 0 ? <p className="mt-6 text-muted">{t('noSubscriptions')}</p> : null}
-      {phone && moving ? (
+      {moving ? (
         <MoveSheet
           row={moving}
           current={folderIdOf(tables, moving.feedId)}
@@ -1072,12 +1212,12 @@ function SubscriptionsSection() {
           limitHint={t('folders.limit', { max: MAX_FOLDERS })}
           onChoose={(folderId) => {
             focusMove.current = moving.feedId
-            move(moving.feedId, folderId)
+            move([moving.feedId], folderId)
             setMoving(null)
           }}
           onCreate={(name) => {
             focusMove.current = moving.feedId
-            store.mutateMany(folderWith(name, [moving.feedId]))
+            create(name, [moving.feedId])
             setMoving(null)
           }}
           onClose={() => setMoving(null)}
@@ -1086,6 +1226,14 @@ function SubscriptionsSection() {
     </>
   )
 }
+
+/** A magnifier: the filter. */
+const SEARCH = (
+  <g strokeLinejoin="round">
+    <circle cx="7" cy="7" r="4.25" />
+    <path d="m10.25 10.25 3.25 3.25" />
+  </g>
+)
 
 /** A file picker that imports as soon as a file is chosen, and says what came of it. */
 function OpmlImport({ onImported }: { onImported: () => void }) {

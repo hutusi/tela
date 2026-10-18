@@ -57,7 +57,7 @@ export function Sheet({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
-      className="sheet mx-0 mb-0 mt-auto max-h-[calc(100dvh-24px)] w-full max-w-none overflow-y-auto rounded-t-[18px] border-0 bg-surface p-0 text-ink shadow-[0_-8px_30px_rgba(0,0,0,.12)] animate-fade"
+      className="sheet mx-0 mb-0 mt-auto max-h-[calc(100dvh-24px)] w-full max-w-none overflow-y-auto md:mx-auto md:max-w-[560px] rounded-t-[18px] border-0 bg-surface p-0 text-ink shadow-[0_-8px_30px_rgba(0,0,0,.12)] animate-fade"
       data-testid={testId}
     >
       <div

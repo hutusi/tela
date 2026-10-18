@@ -69,7 +69,8 @@ const FOLDER = sql.raw(`id, name, created_at as "createdAt", updated_at as "upda
 const FEED_FOLDER = sql.raw(`feed_id as "feedId", folder_id as "folderId",
   updated_at as "updatedAt", seq`)
 const FEED = sql.raw(`f.id, f.site_id as "siteId", f.feed_url as "feedUrl", f.title, f.status,
-  f.last_fetched_at as "lastFetchedAt", f.last_error as "lastError", f.seq`)
+  f.last_fetched_at as "lastFetchedAt", f.last_error as "lastError",
+  f.last_item_at as "lastItemAt", f.seq`)
 /** An article as the reader holds one (`ArticleRow`), from a table aliased `a`. */
 export const ARTICLE_COLUMNS = sql.raw(`a.id, a.feed_id as "feedId", a.url, a.title, a.author,
   a.published_at as "publishedAt", a.fetched_at as "fetchedAt", a.sort_at as "sortAt",
