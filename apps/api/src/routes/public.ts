@@ -10,7 +10,7 @@
  * says how a blog was listed: nothing public renders it, and beside a held-back count it would
  * tell a blog an operator listed from the queue from an editorial pick (ADR 0041).
  */
-import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first } from '@tela/data'
+import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first, isShown } from '@tela/data'
 import { HANDLE, isTopic, RESERVED_HANDLES } from '@tela/shared'
 import { getIP } from 'better-auth/api'
 import { sql } from 'drizzle-orm'
@@ -19,6 +19,8 @@ import type { ApiEnv } from '../app'
 import type { Auth } from '../auth'
 import type { ApiDeps } from '../deps'
 import {
+  blogrollCard,
+  blogrollCardOf,
   DAY,
   editionStatement,
   LANG,
@@ -46,6 +48,8 @@ export const DISCOVER_PAGE = 60
 const NO_IP = 'no-trusted-ip'
 /** Suffixes tried, in order, for a free handle near one that is taken or reserved. */
 const HANDLE_SUFFIXES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '_writes']
+/** Blogs a blogroll's card on a profile names, in the blogroll's order. */
+export const PROFILE_CARD_BLOGS = 3
 
 export function publicRoutes(deps: ApiDeps, auth: Auth) {
   const { db } = deps
@@ -213,7 +217,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
     if (!profile) return publicNotFound()
     const id = profile.user_id
     const none = sql`select 1 where false`
-    const [blogs, recommendations, subscriptions, liked, counts] = (await db.batch([
+    const [blogs, recommendations, subscriptions, liked, counts, blogrolls] = (await db.batch([
       db.all(sql`
         select id, title, home_url as "homeUrl", favicon_key as "faviconKey" from sites
         where claimed_by = ${id} and listing in ${PUBLIC_LISTING} order by title
@@ -256,6 +260,14 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
           (select count(*) from user_article_states where user_id = ${id} and liked_at is not null)
             as liked
       `),
+      // Every public blogroll (ADR 0050), the ones the operator hid from Discover too: Hide takes
+      // a blogroll out of Discover, not off its member's profile.
+      db.all(sql`
+        select ${blogrollCard(PROFILE_CARD_BLOGS)}
+        from blogrolls r join profiles p on p.user_id = r.user_id
+        where r.user_id = ${id} and ${isShown('r')}
+        order by r.created_at desc, r.id desc
+      `),
     ] as never)) as unknown as Record<string, unknown>[][]
     const count = counts?.[0] ?? {}
     const shownSubscriptions = profile.public_subscriptions
@@ -296,6 +308,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
         // The member chose to show what they read; a private blog shows no link to its page.
         subscriptions: shownSubscriptions,
         liked: profile.public_likes ? (liked ?? []).map(withArticle) : null,
+        blogrolls: (blogrolls ?? []).map(blogrollCardOf),
       },
       200,
       { 'cache-control': PROFILE_CACHE },

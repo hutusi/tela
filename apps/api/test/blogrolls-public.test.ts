@@ -1,12 +1,15 @@
 /**
- * Blogrolls as others see them (ADR 0050): a public blogroll's page. Rows are written here
- * directly: the mutations that write them have their own tests (`blogroll-sync.test.ts`).
+ * Blogrolls as others see them (ADR 0050): a public blogroll's page, and its card on its member's
+ * profile and on Discover. Rows are written here directly: the mutations that write them have
+ * their own tests (`blogroll-sync.test.ts`).
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { bumpSeq, currentSeq, type TelaDb } from '@tela/data'
+import { BLOGROLL_DISCOVER_MIN } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { BLOG_DESCRIPTION_MAX } from '../src/routes/blogrolls'
-import { PROFILE_CACHE } from '../src/routes/public'
+import { BLOGROLLS_PAGE, DISCOVER_CARD_BLOGS } from '../src/routes/discover'
+import { PROFILE_CACHE, PROFILE_CARD_BLOGS } from '../src/routes/public'
 import { createTestApi, type TestApi } from './helpers'
 
 const ANNA = 'member-anna-0000001'
@@ -14,6 +17,7 @@ const BORIS = 'member-boris-000002'
 
 let api: TestApi
 let db: TelaDb
+let now: number
 
 type Person = { id: string; handle: string; displayName: string | null; avatar: string | null }
 type BlogrollBlog = {
@@ -35,6 +39,17 @@ type BlogrollData = {
   owner: Person
   blogs: BlogrollBlog[]
 }
+type BlogrollCard = {
+  id: string
+  name: string
+  description: string
+  owner: Person
+  blogCount: number
+  blogs: { feedId: number; siteId: number; name: string | null; homeUrl: string }[]
+  publicSince: number | null
+  updatedAt: number
+}
+type BlogrollsData = { blogrolls: BlogrollCard[]; next: string | null }
 
 async function write(...statements: ReturnType<TelaDb['run']>[]) {
   await db.batch([bumpSeq(db), ...statements] as never)
@@ -139,10 +154,22 @@ async function page(id: string): Promise<BlogrollData> {
   expect(res.status).toBe(200)
   return (await res.json()) as BlogrollData
 }
+async function profileCards(handle: string): Promise<BlogrollCard[]> {
+  const res = await get(`/api/v1/public/profiles/${handle}`)
+  expect(res.status).toBe(200)
+  return ((await res.json()) as { blogrolls: BlogrollCard[] }).blogrolls
+}
+async function discover(cursor?: string): Promise<BlogrollsData> {
+  const query = cursor === undefined ? '' : `?cursor=${encodeURIComponent(cursor)}`
+  const res = await get(`/api/v1/public/discover/blogrolls${query}`)
+  expect(res.status).toBe(200)
+  return (await res.json()) as BlogrollsData
+}
 
 beforeEach(async () => {
   api = await createTestApi()
   db = api.db
+  now = api.clock.now()
   await person(ANNA, 'anna')
   await person(BORIS, 'boris')
 })
@@ -267,6 +294,7 @@ describe("a public blogroll's page", () => {
         where user_id = ${ANNA}`),
     )
     expect((await page('annasRoll001')).owner.avatar).toBe(`/avatar/${ANNA}?v=9`)
+    expect((await profileCards('anna'))[0]?.owner.avatar).toBe(`/avatar/${ANNA}?v=9`)
   })
 
   test('stays open while the operator hides it from Discover', async () => {
@@ -280,5 +308,108 @@ describe("a public blogroll's page", () => {
     await blogroll('annasRoll001', ANNA, { updatedAt: 10 })
     await roll('annasRoll001', 1, ANNA, { addedAt: 20, note: 'Later', noteAt: 70 })
     expect((await page('annasRoll001')).blogroll.updatedAt).toBe(70)
+  })
+})
+
+describe("a member's profile", () => {
+  test('carries their public blogrolls, hidden ones too, newest first', async () => {
+    for (const id of [1, 2, 3, 4, 5]) await blog(id)
+    await blog(6, { listing: 'rejected' })
+    await filled('olderRoll001', ANNA, [6, 4, 2, 3, 1], { createdAt: 10, publicSince: 15 })
+    await filled('hiddenRoll01', ANNA, [5], { createdAt: 20, hiddenAt: 30 })
+    await filled('privateRoll1', ANNA, [1], { createdAt: 30, isPublic: false })
+    await filled('deletedRoll1', ANNA, [1], { createdAt: 40, deletedAt: 45 })
+    await filled('borissRoll01', BORIS, [1], { createdAt: 50 })
+    const cards = await profileCards('anna')
+    expect(cards.map((c) => c.id)).toEqual(['hiddenRoll01', 'olderRoll001'])
+    expect(cards[1]).toEqual({
+      id: 'olderRoll001',
+      name: 'Roll olderRoll001',
+      description: '',
+      owner: { id: ANNA, handle: 'anna', displayName: 'Name anna', avatar: null },
+      // The rejected blog is neither counted nor named.
+      blogCount: 4,
+      blogs: [4, 2, 3].map((id) => ({
+        feedId: id,
+        siteId: id,
+        name: `Blog ${id}`,
+        homeUrl: `https://blog${id}.example`,
+      })),
+      publicSince: 15,
+      updatedAt: 10,
+    })
+    expect(cards[1]?.blogs).toHaveLength(PROFILE_CARD_BLOGS)
+    expect(await profileCards('boris')).toMatchObject([{ id: 'borissRoll01', blogCount: 1 }])
+    // With none public, an empty list, never none.
+    await write(db.run(sql`update blogrolls set is_public = 0 where id = 'borissRoll01'`))
+    expect(await profileCards('boris')).toEqual([])
+  })
+})
+
+describe("Discover's Blogrolls", () => {
+  test(`lists public blogrolls with ${BLOGROLL_DISCOVER_MIN} blogs others see, newest public first`, async () => {
+    for (const id of [1, 2, 3, 4, 5, 6]) await blog(id)
+    await blog(7, { listing: 'rejected' })
+    await filled('sixBlogs0001', ANNA, [1, 2, 3, 4, 5, 6], { createdAt: 1, publicSince: 100 })
+    await filled('threeBlogs01', BORIS, [1, 2, 3], { createdAt: 2, publicSince: 200 })
+    // Two blogs others see, with a rejected one and one taken out.
+    await filled('twoShown0001', BORIS, [1, 2, 7], { publicSince: 300 })
+    await roll('twoShown0001', 4, BORIS, { removedAt: 5 })
+    await filled('hiddenRoll01', ANNA, [1, 2, 3], { publicSince: 400, hiddenAt: 401 })
+    await filled('privateRoll1', ANNA, [1, 2, 3], { isPublic: false })
+    await filled('deletedRoll1', ANNA, [1, 2, 3], { publicSince: 500, deletedAt: 501 })
+    const res = await get('/api/v1/public/discover/blogrolls')
+    expect(res.headers.get('cache-control')).toBe(PROFILE_CACHE)
+    const data = (await res.json()) as BlogrollsData
+    expect(data.next).toBeNull()
+    expect(data.blogrolls.map((b) => b.id)).toEqual(['threeBlogs01', 'sixBlogs0001'])
+    expect(data.blogrolls[1]).toMatchObject({
+      owner: { id: ANNA, handle: 'anna' },
+      blogCount: 6,
+      publicSince: 100,
+    })
+    expect(data.blogrolls[1]?.blogs.map((b) => b.feedId)).toEqual([1, 2, 3, 4, 5])
+    expect(data.blogrolls[1]?.blogs).toHaveLength(DISCOVER_CARD_BLOGS)
+    // Hidden from Discover only: still on its page and its member's profile.
+    expect((await page('hiddenRoll01')).blogs).toHaveLength(3)
+    expect((await profileCards('anna')).map((c) => c.id)).toContain('hiddenRoll01')
+  })
+
+  test('pages by key: a change between pages repeats nothing and skips nothing', async () => {
+    for (const id of [1, 2, 3]) await blog(id)
+    const ids: string[] = []
+    for (let i = 0; i < BLOGROLLS_PAGE + 5; i++) {
+      const id = `roll${String(i).padStart(8, '0')}`
+      ids.push(id)
+      // Pairs share a moment, so the id breaks the tie.
+      await filled(id, i % 2 ? ANNA : BORIS, [1, 2, 3], { publicSince: 1000 + Math.floor(i / 2) })
+    }
+    const first = await discover()
+    expect(first.blogrolls).toHaveLength(BLOGROLLS_PAGE)
+    expect(first.next).not.toBeNull()
+    // Made public meanwhile: newer than everything, so before the first page, not on the second.
+    await filled('newcomer0001', ANNA, [1, 2, 3], { publicSince: now })
+    // One already shown made private: counted by offset, the second page would skip one.
+    const gone = first.blogrolls[0]?.id ?? ''
+    await write(db.run(sql`update blogrolls set is_public = 0 where id = ${gone}`))
+    const second = await discover(first.next ?? '')
+    expect(second.next).toBeNull()
+    expect(second.blogrolls).toHaveLength(5)
+    const seen = [...first.blogrolls, ...second.blogrolls].map((b) => b.id)
+    const newestFirst = [...ids].sort((a, b) => {
+      const at = (id: string) => Math.floor(Number(id.slice(4)) / 2)
+      return at(b) - at(a) || (b < a ? -1 : 1)
+    })
+    expect(seen).toEqual(newestFirst)
+    const again = (await discover()).blogrolls.map((b) => b.id)
+    expect(again[0]).toBe('newcomer0001')
+    expect(again).not.toContain(gone)
+  })
+
+  test('a cursor it cannot read is the first page', async () => {
+    for (const id of [1, 2, 3]) await blog(id)
+    await filled('onlyRoll0001', ANNA, [1, 2, 3])
+    for (const cursor of ['nonsense', '12:short', '-1:onlyRoll0001', ''])
+      expect((await discover(cursor)).blogrolls.map((b) => b.id)).toEqual(['onlyRoll0001'])
   })
 })

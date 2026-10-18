@@ -1,8 +1,9 @@
 /**
- * Discover's tabs past Blogs (ADR 0044): This week, Articles and Readers. Each answer is the same
- * for everyone, so the edge renders it for visitors and caches it; what is personal (hiding the
- * blogs a member reads, naming the people they follow, grouping suggested readers by what they
- * like) is worked out on the device, from its own rows. Nothing about the viewer reaches here.
+ * Discover's tabs past Blogs (ADR 0044): This week, Articles, Blogrolls (ADR 0050) and Readers.
+ * Each answer is the same for everyone, so the edge renders it for visitors and caches it; what is
+ * personal (hiding the blogs a member reads, naming the people they follow, grouping suggested
+ * readers by what they like) is worked out on the device, from its own rows. Nothing about the
+ * viewer reaches here.
  *
  * As everywhere public: listed and featured blogs only, a merged feed's posts never (they are
  * copies of its target's, ADR 0028), future-dated posts not before their date, and nothing that
@@ -12,13 +13,15 @@
  *
  * Mounted at `/api/v1/public/discover`, beside the Blogs answer at that path itself (`public.ts`).
  */
-import { ARTICLE_COLUMNS, avatarOf, type TelaDb } from '@tela/data'
+import { ARTICLE_COLUMNS, avatarOf, inDiscover, type TelaDb } from '@tela/data'
 import { isTopic } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
 import {
+  blogrollCard,
+  blogrollCardOf,
   DAY,
   EXCERPTS,
   editionStatement,
@@ -38,6 +41,9 @@ export { RECOMMENDERS_SHOWN }
 
 /** Posts on one page of Articles. */
 export const ARTICLES_PAGE = 30
+/** Blogrolls on one page of Blogrolls, and the blogs each card names. */
+export const BLOGROLLS_PAGE = 30
+export const DISCOVER_CARD_BLOGS = 5
 /** Recommended posts in This week and on Articles' first page, and posts of This week's edition. */
 export const WEEK_POSTS = 30
 /** Blogs new in the directory, in This week. */
@@ -83,6 +89,8 @@ export type ReaderCandidate = Person & {
 
 /** A cursor into Articles: the last post shown's `sortAt:id`. */
 const CURSOR = /^(-?\d{1,15}):(\d{1,12})$/
+/** A cursor into Blogrolls: the last blogroll shown's `publicSince:id`. */
+const BLOGROLLS_CURSOR = /^(\d{1,15}):([A-Za-z0-9]{12})$/
 
 function parseJson(value: unknown): unknown {
   if (typeof value !== 'string') return null
@@ -397,6 +405,40 @@ export function discoverRoutes(deps: ApiDeps) {
         posts: page.map(discoverPost),
         next: (posts ?? []).length > ARTICLES_PAGE && last ? `${last.sortAt}:${last.id}` : null,
         languages: (languages ?? []).map((l) => ({ lang: String(l.lang), count: Number(l.count) })),
+      },
+      200,
+      cached,
+    )
+  })
+
+  /**
+   * Blogrolls: every public blogroll with enough blogs others see (`inDiscover`), the newest made
+   * public first, a page at a time behind a `publicSince:id` cursor, cut by key and never by
+   * offset. `public_since` is when a blogroll first went public, never moved or cleared: one made
+   * public meanwhile goes before the first page, and one made private meanwhile moves no other,
+   * so nothing already listed repeats and nothing is skipped. A blogroll the operator hid is left
+   * out here only; its page and its place on its member's profile stay.
+   */
+  routes.get('/blogrolls', async (c) => {
+    const cursor = BLOGROLLS_CURSOR.exec(c.req.query('cursor') ?? '')
+    const after = cursor
+      ? sql`and (r.public_since, r.id) < (${Number(cursor[1])}, ${cursor[2]})`
+      : sql``
+    // `public_since is not null` is what a public blogroll always has; without it, a row that
+    // somehow lacked one could not be paged past.
+    const rows = await db.all<Row>(sql`
+      select ${blogrollCard(DISCOVER_CARD_BLOGS)}
+      from blogrolls r join profiles p on p.user_id = r.user_id
+      where ${inDiscover('r')} and r.public_since is not null ${after}
+      order by r.public_since desc, r.id desc
+      limit ${BLOGROLLS_PAGE + 1}
+    `)
+    const page = rows.slice(0, BLOGROLLS_PAGE).map(blogrollCardOf)
+    const last = page.at(-1)
+    return c.json(
+      {
+        blogrolls: page,
+        next: rows.length > BLOGROLLS_PAGE && last ? `${last.publicSince}:${last.id}` : null,
       },
       200,
       cached,
