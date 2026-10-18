@@ -123,6 +123,19 @@ function useBlogDrag(
     setDragging(null)
     setOver(null)
   }
+  // A drag whose row went from the page meanwhile (a pull, another device) never says it ended
+  // there: a drop or a drag's end anywhere ends it.
+  useEffect(() => {
+    if (dragging === null) return
+    // After the drop's own handler, which reads what is dragged.
+    const ended = () => setTimeout(end, 0)
+    window.addEventListener('drop', ended, true)
+    window.addEventListener('dragend', ended, true)
+    return () => {
+      window.removeEventListener('drop', ended, true)
+      window.removeEventListener('dragend', ended, true)
+    }
+  })
   /** The blogs being dragged that the place `key` would move. */
   const movable = (key: string) =>
     (dragged.current ?? []).filter((id) => keyOfFolder(folderOf(id)) !== key)
