@@ -131,6 +131,19 @@ describe('pull', () => {
     expect(delta.rows.sites.map((s) => s.id)).toContain(2)
   })
 
+  test('a feed row says when its newest post was, and a fetch that moves it sends it again', async () => {
+    await push([{ type: 'subscribe', feedId: 1 }])
+    const snap = await pull(0)
+    expect(snap.rows.feeds).toMatchObject([{ id: 1, lastItemAt: null }])
+    // As a fetch writes it (`updateFeed`): every fetch stamps the feed row's seq.
+    const posted = now - 200 * DAY
+    await write(
+      db.run(sql`update feeds set last_item_at = ${posted}, seq = ${currentSeq} where id = 1`),
+    )
+    const delta = await pull(snap.cursor)
+    expect(delta.rows.feeds).toMatchObject([{ id: 1, lastItemAt: posted }])
+  })
+
   test('after unsubscribing, the feed stops flowing', async () => {
     await push([{ type: 'subscribe', feedId: 1 }])
     const snap = await pull(0)

@@ -63,6 +63,11 @@ export type FeedRow = {
   status: string
   lastFetchedAt: number | null
   lastError: string | null
+  /**
+   * The newest post the feed listed when last fetched, by its own date: how a blog that has gone
+   * quiet says how long ago. Absent from a tela-api before it, and from rows kept since then.
+   */
+  lastItemAt?: number | null
   seq: number
 }
 
