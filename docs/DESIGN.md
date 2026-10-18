@@ -361,29 +361,59 @@ the switch, on by default, and while it is on a quiet *Refresh*, with a hint say
 Gravatar has a picture for their email, is still being asked, or is off (ADR 0033). The design's Notifications section,
 "Who can follow you" and "Delete account" are not built (ADR 0031), so they are not shown.
 
-Settings › Subscriptions (Tela Lists, ADR 0048) groups the blogs by folder. The line above says
-"8 blogs in 3 folders.", or the plain count while there is none, beside *Import OPML*, *Export
-OPML* and *New folder* (the filled button; on a phone it sits at the right of the back bar, as
-screen 27 draws it). A muted line says how a blog moves, without the dragging on a phone.
-- *New folder* opens an inline field with Cancel and Create: Enter creates, Esc cancels. A name
-  the member has already (case aside, accents not) is refused under the field, and past
-  `MAX_FOLDERS` the button is disabled with a line saying why.
-- Each folder is a section, by name: the serif name, its count, then Rename (the same field, in
-  place) and Delete folder, which on a phone fold into a `···` menu. "Not in a folder" comes
-  last, headed only when there are folders. An empty section says "Drag blogs here.", or on a
-  phone that a blog's folder button moves one in.
-- A row is as before, with the language moved into the address line, plus a folder button
-  ("Tech ▾", "No folder ▾") before Unsubscribe; on a phone it sits under the name. The button
-  opens a "Move to" menu of `menuitemradio`s with a check on the current folder (arrow keys,
-  Home and End, Esc back to the button), or below `md` a `Sheet`, "Move ‹blog› to", whose
-  "+ New folder" makes a folder and moves the blog into it. Focus follows the blog's button into
-  the section it lands in.
-- From `md` up a row has a grip and drags onto any section, which takes the `hover` ground while
-  a blog is over it. The folder button is the way that does not need a pointer.
-- Delete folder says "Deleted Tech. Its blogs are no longer in a folder." with Undo, held while
-  the toast shows (ADR 0046). An Undo after the delete went out makes the folder again, under a
-  new id, with the same blogs in it.
-- Unsubscribe keeps its dimmed row, in its folder, to take back in place.
+Settings › Subscriptions (Tela Lists, ADRs 0048 and 0049) is two layouts, switched at `lg`. Both
+have a line saying "8 blogs in 3 folders.", or the plain count while there are no folders, beside
+*Import OPML* and *Export OPML*.
+
+**From `lg` up, the manager.** One card (`surface`, 14 px corners, `line` border) that grows with
+its rows. It clips nothing, so a menu near its foot is never cut off, and its corner pieces are
+rounded instead.
+- **The pane** (`clamp(176px, 18vw, 236px)`, `paper` ground) sticks under the header.
+  - It lists *All blogs*, *Not in a folder*, then a FOLDERS label with a "+" and each folder, each
+    with a 15 px glyph and its count.
+  - The place shown has the `hover` ground. While a blog is dragged, every place it could drop on
+    gets a 1 px `thumb` ring, and the one under it gets the accent at 18% with a 1.5 px accent ring.
+  - There is no accent dot on Not in a folder, since in Tela that dot means unread.
+  - "+" opens a compact form in the pane, under "New folder with N blogs" when it came from the
+    bulk bar.
+  - The footer says how a blog moves and that folders are private and travel with OPML.
+- **The toolbar** sticks above the rows.
+  - It has the place's serif name and its count ("3 of 7" while filtering), then *Rename* and
+    *Delete folder* for a folder (Rename is the same field, in place).
+  - Then a pill "Filter by name or address", the sort (A to Z, Recently posted, Quiet longest) and
+    *Select* / *Done* (`aria-pressed`).
+  - It wraps when it must, with the filter shrinking from 230 px to 140 px before anything else
+    moves.
+- **Under the toolbar**, the column heads (Blog, Folder, Latest post) take the same grid as the rows.
+  In Select mode, a select-all box (`indeterminate` while some are ticked) comes first. With ticks,
+  the heads give way to the bulk bar: "3 selected" (and how many the filter hides), a filled
+  *Move to* whose menu ends in "New folder with these…", *Unsubscribe* and *Clear*.
+- **A row** has the 28 px avatar, the name with host · language, the folder as a chip (muted for
+  "No folder") and the latest post's age, muted past 60 days. Out of Select mode it drags, as a
+  `ink` pill naming what moves. In Select mode its checkbox shows, a click ticks it, a Shift-click
+  ticks a run, and a ticked row has the accent at 11%. The chip's menu is Move to's choices, then
+  *Unsubscribe* under a rule.
+
+**Below `lg`, the sections** (phones, and tablets held upright).
+- **New folder** is the filled button beside the OPML buttons, or on a phone at the right of the
+  back bar (screen 27). It opens an inline field with Cancel and Create: Enter creates, Esc cancels.
+  A name the member already has (case aside, accents not) is refused under the field. Past
+  `MAX_FOLDERS` the button is disabled, with a line saying why.
+- **A 44 px filter** sits above the sections. A section the filter empties is not shown.
+- **Each folder is a section, by name:** the serif name, its count, and a `···` for Rename and
+  Delete folder. "Not in a folder" comes last, headed only when there are folders. An empty section
+  says that a blog's folder button moves one in.
+- **A row** has the name, with host · language · latest post under it, and *Unsubscribe*. Its
+  folder button ("Tech ▾", "No folder ▾") sits on a line under the name and opens a `Sheet`, "Move
+  ‹blog› to", whose "+ New folder" makes a folder and moves the blog into it. The sheet is
+  full-width on a phone and 560 px, centred, from `md`. Focus follows the blog's button into the
+  section it lands in.
+
+**Undo.** A move ("Moved Julia Evans to Tech.", "Moved 3 blogs out of folders."), an unsubscribe
+("Unsubscribed from 2 blogs.") and Delete folder ("Deleted Tech. Its blogs are no longer in a
+folder.") are each held while their toast shows (ADR 0046), several blogs at once as one. An Undo
+after the change went out puts things back another way: each blog back in its old folder, each
+blog followed again, or the folder made again under a new id.
 
 The crop dialog (`AvatarCrop`) is a native modal `<dialog>` on the `surface` ground: a serif title,
 a muted hint, a 280 px square frame with the picture under a round mask (outside the circle dimmed),

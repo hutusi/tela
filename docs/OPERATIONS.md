@@ -243,6 +243,12 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        - a folder's list (`/reading?folder=…`) has Mark all read, and its Undo works;
        - an OPML export holds the folder as an outline, and importing that file into another
          account makes the folder there.
+   - The Subscriptions manager (ADR 0049) changes no table and keeps protocol 3. The pull sends
+     each feed's `lastItemAt` (`feeds.last_item_at`), which a device learns at each feed's next
+     fetch, since every fetch stamps the feed row's `seq`. Either Worker may go first or go back
+     alone. An older tela-api sends no date, and the column falls back to the posts the device
+     holds: a blog quiet past the 30-day horizon then reads "No posts yet". An older tela-web shows
+     0048's sections and ignores the field.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way

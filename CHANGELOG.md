@@ -39,6 +39,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Added
 
+- **Settings › Subscriptions as a manager** (ADR 0049). From 1024px it is two panes: All blogs,
+  Not in a folder and each folder down the left, and on the right the blogs of the one chosen,
+  filtered by name or address, sorted A to Z, by latest post or by the longest quiet, each with
+  when it last posted. Select ticks several blogs, Shift-click a run, to move them or leave them
+  at once. Every move and unsubscribe has its Undo, and a blog left from Settings now goes rather
+  than staying dimmed. Below 1024px it is the sections, with a filter.
 - **Folders.** A member groups their subscriptions into private folders, one folder per blog.
   The sidebar and the phone's Feeds menu list folders that open and close, a folder's name reads
   all its blogs as one list, and Settings › Subscriptions makes, renames and deletes them and
