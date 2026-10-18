@@ -598,7 +598,19 @@ export function SubscriptionsManager({
                     <input
                       type="checkbox"
                       checked={on}
-                      readOnly
+                      // Its own click ticks it, with Shift for a run, and goes no further: the
+                      // row's click is for a click anywhere else on it.
+                      onChange={(e) =>
+                        setTicks(
+                          clickRow(
+                            ticks,
+                            shownIds,
+                            row.feedId,
+                            (e.nativeEvent as MouseEvent).shiftKey === true,
+                          ),
+                        )
+                      }
+                      onClick={(e) => e.stopPropagation()}
                       aria-label={row.title}
                       className="size-4 shrink-0 cursor-pointer accent-ink"
                       data-testid="subscription-tick"
