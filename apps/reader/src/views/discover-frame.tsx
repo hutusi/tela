@@ -1,4 +1,4 @@
-/** What Discover's four tabs share (ADR 0044): the page, its heading and intro, and the tabs. */
+/** What Discover's tabs share (ADR 0044): the page, its heading and intro, and the tabs. */
 import { useTranslations } from 'use-intl'
 import { DiscoverTabs } from '../components/discover-tabs'
 import type { DiscoverTab } from '../lib/discover-href'

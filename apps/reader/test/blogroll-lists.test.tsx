@@ -108,7 +108,7 @@ describe("Discover's Blogrolls", () => {
         reasonOf={(c) => (c.owner.id === bo.id ? 'yours' : 'follows')}
       />,
     )
-    expect(reasons).toContain('You follow Ann K')
+    expect(reasons).toContain('Someone you follow')
     expect(reasons).toContain('Yours')
     // An owner with no name is named by their handle.
     expect(reasons).toContain('@bo')

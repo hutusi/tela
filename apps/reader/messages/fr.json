@@ -306,7 +306,7 @@
       "empty": "Aucune blogroll publique pour l’instant.",
       "by": "Une blogroll de {name}",
       "reasons": {
-        "follows": "Vous suivez {name}",
+        "follows": "Une personne que vous suivez",
         "yours": "La vôtre"
       }
     },

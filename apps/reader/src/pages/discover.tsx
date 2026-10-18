@@ -1,6 +1,6 @@
 /**
- * Discover's four tabs (ADR 0044): This week, Articles, Blogs and Readers. Each reads one public
- * answer, the same for everyone, which the edge hands over for the first render; what is the
+ * Discover's tabs (ADRs 0044, 0050): This week, Articles, Blogs, Blogrolls and Readers. Each
+ * reads one public answer, the same for everyone, which the edge hands over for the first render; what is the
  * member's own (the blogs they read, whom they follow) is put on it here, from the device.
  */
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'

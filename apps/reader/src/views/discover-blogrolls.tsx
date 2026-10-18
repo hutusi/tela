@@ -52,7 +52,6 @@ export function DiscoverBlogrollsView({
         <ul className={BLOGROLL_GRID.discover} data-testid="blogrolls-list">
           {cards.map((card) => {
             const reason = reasonOf(card)
-            const name = card.owner.displayName ?? `@${card.owner.handle}`
             return (
               <li key={card.id} className="flex min-w-0">
                 <BlogrollCard
@@ -62,7 +61,7 @@ export function DiscoverBlogrollsView({
                     reason === 'yours'
                       ? t('reasons.yours')
                       : reason === 'follows'
-                        ? t('reasons.follows', { name })
+                        ? t('reasons.follows')
                         : null
                   }
                   mine={reason === 'yours'}

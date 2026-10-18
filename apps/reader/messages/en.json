@@ -306,7 +306,7 @@
       "empty": "No public blogrolls yet.",
       "by": "A blogroll by {name}",
       "reasons": {
-        "follows": "You follow {name}",
+        "follows": "Someone you follow",
         "yours": "Yours"
       }
     },

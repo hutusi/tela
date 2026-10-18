@@ -306,7 +306,7 @@
       "empty": "还没有公开的博客链。",
       "by": "{name} 的博客链",
       "reasons": {
-        "follows": "你关注了 {name}",
+        "follows": "你关注的人",
         "yours": "你的"
       }
     },
