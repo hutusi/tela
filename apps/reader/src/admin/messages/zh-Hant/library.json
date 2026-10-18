@@ -3,7 +3,8 @@
     "claims": "搜尋部落格或成員",
     "sites": "搜尋部落格、訂閱源或主人",
     "feeds": "搜尋訂閱源、部落格或主人",
-    "discover": "搜尋部落格或主人"
+    "discover": "搜尋部落格或主人",
+    "blogrolls": "搜尋部落格鏈或主人"
   },
   "filters": {
     "claims": { "review": "待稽核", "checking": "檢查中", "verified": "已驗證" },
@@ -26,10 +27,11 @@
       "featured": "精選",
       "listed": "已列入",
       "dismissed": "不列入發現",
-      "hidden": "已隱藏"
+      "hidden": "已隱藏",
+      "blogrolls": "部落格鏈"
     }
   },
-  "names": { "blog": "部落格", "site": "部落格", "feed": "訂閱源" },
+  "names": { "blog": "部落格", "site": "部落格", "feed": "訂閱源", "blogroll": "部落格鏈" },
   "columns": {
     "claimant": "認領人",
     "method": "方式",
@@ -43,7 +45,10 @@
     "topics": "話題",
     "language": "語言",
     "latest": "最新文章",
-    "posts30d": "30 天內文章"
+    "posts30d": "30 天內文章",
+    "includes": "包含",
+    "blogs": "部落格",
+    "publicSince": "公開於"
   },
   "methods": {
     "meta": "Meta 標籤",
@@ -172,7 +177,10 @@
     "region": "線路",
     "format": "格式",
     "address": "地址",
-    "mergedInto": "合併到"
+    "mergedInto": "合併到",
+    "blogs": "部落格",
+    "publicSince": "公開於",
+    "hidden": "隱藏於"
   },
   "status": {
     "active": "正常執行",
@@ -185,7 +193,8 @@
     "claims": "認領",
     "topics": "話題",
     "lastCheck": "上次檢查 · {when}",
-    "lastError": "最近的錯誤"
+    "lastError": "最近的錯誤",
+    "blogs": "部落格"
   },
   "history": {
     "topics": "{action}：{topics}",
@@ -203,6 +212,16 @@
     "topicsHint": "話題決定部落格在發現裡出現在哪裡。點選一個話題來新增或移除。",
     "noTopics": "還沒有話題，所以發現只會在「全部」下顯示這個部落格。在下面選一個或幾個。",
     "review": "這是成員新增的部落格。列入發現，或標為不列入發現，都會把它移出這個佇列。無論這裡怎麼決定，有三位讀者後它都會列入發現，除非被隱藏。這裡只顯示有多少人在讀，從不顯示是誰。",
-    "dismissed": "{when}標為不列入發現。有三位讀者後它仍會列入；隱藏才能讓它一直不出現。"
+    "dismissed": "{when}標為不列入發現。有三位讀者後它仍會列入；隱藏才能讓它一直不出現。",
+    "blogrollHide": "被隱藏的部落格鏈仍保留自己的頁面，也仍顯示在名片上。",
+    "blogrollHiddenBlogs": "標為已隱藏的部落格是管理員隱藏的：別人在這個部落格鏈裡看不到它們，它們也不計入列入發現所需的數量。"
+  },
+  "blogrolls": {
+    "status": {
+      "listed": "在發現中",
+      "hidden": "已隱藏",
+      "few": "不足 {n} 個部落格"
+    },
+    "blogsOf": "{shown} / {total}"
   }
 }
