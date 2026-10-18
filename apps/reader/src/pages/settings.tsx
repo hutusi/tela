@@ -210,7 +210,7 @@ export function SettingsPage() {
   }
 
   return (
-    <main className="mx-auto grid w-full max-w-[1040px] flex-1 animate-fade grid-cols-[200px_minmax(0,1fr)] items-start gap-16 px-12 py-12">
+    <main className="mx-auto grid w-full max-w-[1280px] flex-1 animate-fade grid-cols-[clamp(136px,14vw,184px)_minmax(0,1fr)] items-start gap-[clamp(16px,2.5vw,32px)] px-[clamp(20px,3vw,40px)] pt-9 pb-10">
       <nav
         aria-label={t('title')}
         className="sticky top-24 flex min-w-0 flex-col gap-0.5"
