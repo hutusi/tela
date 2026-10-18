@@ -68,6 +68,7 @@ function Section({
     openSheet() {},
     rename() {},
     remove() {},
+    makeBlogroll() {},
     unsubscribe() {},
     activity,
     focusMove: { current: null },
@@ -171,6 +172,7 @@ describe('from lg up, the manager as it first shows', () => {
           create: () => null,
           rename() {},
           remove() {},
+          makeBlogroll() {},
         }}
         {...over}
       />,

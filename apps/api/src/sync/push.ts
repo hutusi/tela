@@ -10,11 +10,14 @@
  *   with a clock in the future cannot win every argument.
  */
 import { bumpSeq, currentSeq, gravatarOn, recountReaders, type TelaDb } from '@tela/data'
-import { MAX_FOLDERS } from '@tela/shared'
+import { hasControl, MAX_BLOGROLL_BLOGS, MAX_BLOGROLLS, MAX_FOLDERS } from '@tela/shared'
 import { type Mutation, mutationSchema, PREF_MAX_BYTES, type PushResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
 
 type Statement = Parameters<TelaDb['batch']>[0][number]
+
+/** How far ahead of the server's clock a blog's place in a blogroll may be stamped (`rollBlog`). */
+const PLACE_AHEAD_MS = 86_400_000
 
 function statementsFor(
   db: TelaDb,
@@ -36,6 +39,12 @@ function statementsFor(
     `)
   }
   const siteOf = (feedId: number) => sql`(select site_id from feeds where id = ${feedId})`
+  // Selecting from `feeds where id = …`: the feed a merged one became (ADR 0028), or with `exact`
+  // the one named and only while nothing has merged it away (ADR 0050).
+  const feedOf = (m: { exact?: true | undefined }) =>
+    m.exact ? sql`id` : sql`coalesce(merged_into, id)`
+  const unmerged = (m: { exact?: true | undefined }) =>
+    m.exact ? sql`and merged_into is null` : sql``
 
   switch (m.type) {
     case 'markRead':
@@ -134,8 +143,8 @@ function statementsFor(
       return [
         db.run(sql`
           insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at, seq)
-          select ${userId}, coalesce(merged_into, id), 0, ${now}, ${now}, ${currentSeq}
-          from feeds where id = ${m.feedId} and ${fresh}
+          select ${userId}, ${feedOf(m)}, 0, ${now}, ${now}, ${currentSeq}
+          from feeds where id = ${m.feedId} ${unmerged(m)} and ${fresh}
           on conflict (user_id, feed_id) do update set
             deleted_at = null, updated_at = excluded.updated_at, seq = excluded.seq
           where subscriptions.deleted_at is not null
@@ -147,7 +156,7 @@ function statementsFor(
         db.run(sql`
           update subscriptions set deleted_at = ${now}, updated_at = ${now}, seq = ${currentSeq}
           where user_id = ${userId} and deleted_at is null and ${fresh}
-            and feed_id = (select coalesce(merged_into, id) from feeds where id = ${m.feedId})
+            and feed_id = ${m.exact ? sql`${m.feedId}` : sql`(select coalesce(merged_into, id) from feeds where id = ${m.feedId})`}
         `),
         ...recountReaders(db, siteOf(m.feedId), now),
       ]
@@ -388,7 +397,7 @@ function statementsFor(
       ]
     case 'fileFeed': {
       // Into a live folder of the member's own, or none; through the feed a merged one became,
-      // as a subscription goes (ADR 0028). The later `at` wins.
+      // as a subscription goes (ADR 0028), unless `exact`. The later `at` wins.
       const into =
         m.folderId === null
           ? sql`true`
@@ -397,25 +406,148 @@ function statementsFor(
       return [
         db.run(sql`
           insert into feed_folders (user_id, feed_id, folder_id, updated_at, seq)
-          select ${userId}, coalesce(merged_into, id), ${m.folderId}, ${at}, ${currentSeq}
-          from feeds where id = ${m.feedId} and ${into} and ${fresh}
+          select ${userId}, ${feedOf(m)}, ${m.folderId}, ${at}, ${currentSeq}
+          from feeds where id = ${m.feedId} ${unmerged(m)} and ${into} and ${fresh}
           on conflict (user_id, feed_id) do update set
             folder_id = excluded.folder_id, updated_at = excluded.updated_at, seq = excluded.seq
           where excluded.updated_at >= feed_folders.updated_at
         `),
       ]
     }
+    case 'putBlogroll':
+      // As a folder is put (ADR 0050): held to the member's own live blogroll, so an id taken
+      // from someone else's edits nothing and a deleted one stays deleted; a new one past the
+      // limit writes nothing, an edit is never held back by it. Public or private counts only
+      // when it is made, and then `public_since` is the server's now; after that it is
+      // `setBlogrollPublic`'s alone, so a stale device's edit never makes public again what
+      // another device made private.
+      return [
+        db.run(sql`
+          insert into blogrolls (id, user_id, name, description, is_public, public_version,
+            public_since, created_at, updated_at, seq)
+          select ${m.id}, ${userId}, ${m.name}, ${m.description}, ${m.isPublic ? 1 : 0}, 0,
+            ${m.isPublic ? now : null}, ${at}, ${at}, ${currentSeq}
+          where ${fresh} and (
+            exists (select 1 from blogrolls where id = ${m.id})
+            or (select count(*) from blogrolls where user_id = ${userId} and deleted_at is null)
+              < ${MAX_BLOGROLLS})
+          on conflict (id) do update set
+            name = excluded.name, description = excluded.description,
+            updated_at = excluded.updated_at, seq = excluded.seq
+          where blogrolls.user_id = excluded.user_id and blogrolls.deleted_at is null
+            and excluded.updated_at >= blogrolls.updated_at
+        `),
+      ]
+    case 'setBlogrollPublic': {
+      // As a privacy switch (issue #16): a hide always applies, whatever its `at`, failing
+      // closed; a show applies only while the version is still the one it was made against.
+      // Each change counts the version up. The first show sets `public_since`, Discover's key,
+      // which nothing clears, so hiding and showing again never moves a blogroll up the list.
+      // Never the name's clock. Stamped whether or not it applied, so the next pull hands the
+      // device the row that beat it. SQLite reads the row as it was in every SET.
+      const set = m.isPublic
+        ? sql`is_public = case when public_version = ${m.base} then 1 else is_public end,
+            public_since = case when public_version = ${m.base}
+              then coalesce(public_since, ${now}) else public_since end,
+            public_version = case when public_version = ${m.base}
+              then public_version + 1 else public_version end,`
+        : sql`is_public = 0, public_version = public_version + 1,`
+      return [
+        db.run(sql`
+          update blogrolls set ${set} seq = ${currentSeq}
+          where id = ${m.id} and user_id = ${userId} and deleted_at is null and ${fresh}
+        `),
+      ]
+    }
+    case 'deleteBlogroll':
+      // Delete wins. Its blogs' rows stay: no pull, page or count reads the blogs of a deleted
+      // blogroll.
+      return [
+        db.run(sql`
+          update blogrolls set deleted_at = ${at}, updated_at = max(updated_at, ${at}),
+            seq = ${currentSeq}
+          where id = ${m.id} and user_id = ${userId} and deleted_at is null and ${fresh}
+        `),
+      ]
+    case 'rollBlog': {
+      // Into a live blogroll of the member's own, through the feed a merged one became, to the
+      // later `at` on the blog's presence clock. One put back goes to the end; one already in
+      // keeps its place. Its note is left alone. Past the limit nothing is written, unless the
+      // blog is in already.
+      //
+      // Its place (`added_at`) is the device's own stamp, not the clamped clock: it decides no
+      // conflict, only the order, and a device whose clock runs ahead of the server's would have
+      // every blog of a push clamped to one `now`, tied, and listed by feed id instead of as put
+      // in (Make a blogroll from a folder stamps them a millisecond apart). A day ahead at most.
+      const place = Math.min(Math.max(m.at, 0), now + PLACE_AHEAD_MS)
+      return [
+        db.run(sql`
+          insert into blogroll_blogs (blogroll_id, feed_id, user_id, added_at, updated_at, seq)
+          select ${m.blogrollId}, coalesce(f.merged_into, f.id), ${userId}, ${place}, ${at},
+            ${currentSeq}
+          from feeds f
+          where f.id = ${m.feedId} and ${fresh}
+            and exists (select 1 from blogrolls
+              where id = ${m.blogrollId} and user_id = ${userId} and deleted_at is null)
+            and (
+              exists (select 1 from blogroll_blogs where blogroll_id = ${m.blogrollId}
+                and feed_id = coalesce(f.merged_into, f.id) and removed_at is null)
+              or (select count(*) from blogroll_blogs
+                where blogroll_id = ${m.blogrollId} and removed_at is null) < ${MAX_BLOGROLL_BLOGS})
+          on conflict (blogroll_id, feed_id) do update set
+            added_at = case when blogroll_blogs.removed_at is null then blogroll_blogs.added_at
+              else excluded.added_at end,
+            removed_at = null, updated_at = excluded.updated_at, seq = excluded.seq
+          where excluded.updated_at >= blogroll_blogs.updated_at
+        `),
+      ]
+    }
+    case 'unrollBlog':
+      // To the later `at`, and the clock moves forward even on a blog already out, as an
+      // unfollow's does: otherwise an older put-back arriving after a second take-out would see
+      // the first one's clock and bring the blog back. The first take-out keeps its time. No row,
+      // no write.
+      return [
+        db.run(sql`
+          update blogroll_blogs set removed_at = coalesce(removed_at, ${at}),
+            updated_at = max(updated_at, ${at}), seq = ${currentSeq}
+          where blogroll_id = ${m.blogrollId} and user_id = ${userId}
+            and feed_id = (select coalesce(merged_into, id) from feeds where id = ${m.feedId})
+            and (updated_at <= ${at} or removed_at is not null)
+            and exists (select 1 from blogrolls
+              where id = ${m.blogrollId} and user_id = ${userId} and deleted_at is null)
+            and ${fresh}
+        `),
+      ]
+    case 'noteBlog':
+      // The note's own clock, so a note never puts back a blog another device took out, and is
+      // kept on a removed blog for when it is put back. A note of nothing but spaces is none.
+      return [
+        db.run(sql`
+          update blogroll_blogs set note = ${m.note || null}, note_at = ${at}, seq = ${currentSeq}
+          where blogroll_id = ${m.blogrollId} and user_id = ${userId}
+            and feed_id = (select coalesce(merged_into, id) from feeds where id = ${m.feedId})
+            and note_at <= ${at}
+            and exists (select 1 from blogrolls
+              where id = ${m.blogrollId} and user_id = ${userId} and deleted_at is null)
+            and ${fresh}
+        `),
+      ]
   }
 }
 
 /**
  * Refuse what the schema cannot say: a preference value too large to sync cheaply, a highlight
- * whose range is empty or whose quote is not as long as it, and a folder name holding a control
- * character. SQLite's `length()` stops at a NUL, so the table's check would fail on such a name
- * and sink the whole push, and the device would send it again, first, for ever.
+ * whose range is empty or whose quote is not as long as it, and a folder or blogroll name holding
+ * a control character, or a blogroll's description or a blog's note holding one other than a line
+ * break. SQLite's `length()` stops at a NUL, so the table's check would fail on such a name and
+ * sink the whole push, and the device would send it again, first, for ever.
  */
 function refusal(m: Mutation): string | null {
   if (m.type === 'putFolder' && /\p{Cc}/u.test(m.name)) return 'invalid_name'
+  if (m.type === 'putBlogroll' && hasControl(m.name, false)) return 'invalid_name'
+  if (m.type === 'putBlogroll' && hasControl(m.description, true)) return 'invalid_text'
+  if (m.type === 'noteBlog' && m.note !== null && hasControl(m.note, true)) return 'invalid_text'
   if (m.type === 'setPref' && JSON.stringify(m.value).length > PREF_MAX_BYTES)
     return 'pref_too_large'
   if (m.type === 'putHighlight' && (m.end <= m.start || m.quote.length !== m.end - m.start))

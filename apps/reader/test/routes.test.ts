@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { detectLocale } from '../src/i18n'
-import { blogsApiPath, blogsHref, parseBlogsParams } from '../src/lib/discover-href'
+import { blogsApiPath, blogsHref, parseBlogsParams, tabOf } from '../src/lib/discover-href'
 import { canonicalReadingHref, listsFilter, parseReadingParams, readingHref } from '../src/lib/href'
 import { addError } from '../src/lib/opml'
 import { safeDecode } from '../src/lib/safe-decode'
@@ -216,8 +216,12 @@ describe('public pages at the edge', () => {
       '/discover/articles?sort=new',
       '/discover/blogs?topic=tech',
       '/discover/readers',
+      '/discover/blogrolls',
+      '/discover/blogrolls?cursor=1700000000000:abcdefABCDEF',
       '/s/12',
+      '/l/abcdefABCDEF',
       '/@reader_1',
+      '/@reader_1?tab=blogrolls',
       '/about',
       '/privacy',
       '/terms',
@@ -238,8 +242,70 @@ describe('public pages at the edge', () => {
       '/discover',
       '/discover/articles',
       '/discover/blogs',
+      '/discover/blogrolls',
       '/discover/readers',
     ])
+  })
+})
+
+describe('blogrolls at the edge (ADR 0050)', () => {
+  const route = (path: string) => publicRoute(new URL(path, 'https://tela.test'))
+
+  test("a blogroll's page is `/l/` and its id, and nothing else under `/l/` is a page", () => {
+    expect(route('/l/abcdefABCDEF?utm_source=x')).toEqual({
+      kind: 'blogroll',
+      id: 'abcdefABCDEF',
+      api: '/api/v1/public/blogrolls/abcdefABCDEF',
+    })
+    expect(route('/l/0123456789ab')).toMatchObject({ id: '0123456789ab' })
+    for (const path of [
+      '/l',
+      '/l/',
+      '/l/short',
+      '/l/abcdefABCDEFG',
+      '/l/x/y',
+      '/l/abcdefABCDEF/',
+      '/l/abcdefABCDEF/x',
+      '/l/abcdefABCDE!',
+      '/l/abcdefABCD%20',
+      '/l/%',
+      '/L/abcdefABCDEF',
+    ])
+      expect(route(path)).toBeNull()
+  })
+
+  test("Discover's Blogrolls always exists, and a page reached by cursor is a page of its own", () => {
+    expect(route('/discover/blogrolls?utm_source=x')).toEqual({
+      kind: 'blogrolls',
+      cursor: null,
+      api: '/api/v1/public/discover/blogrolls',
+      key: '/discover/blogrolls',
+      alwaysExists: true,
+    })
+    expect(route('/discover/blogrolls?cursor=1700000000000:abcdefABCDEF')).toMatchObject({
+      cursor: '1700000000000:abcdefABCDEF',
+      api: '/api/v1/public/discover/blogrolls?cursor=1700000000000%3AabcdefABCDEF',
+      key: '/discover/blogrolls?cursor=1700000000000%3AabcdefABCDEF',
+    })
+    // A cursor tela-api never wrote is the first page, under the first page's key.
+    for (const cursor of ['x', '1700:short', '-1:abcdefABCDEF', '1700000000000:abcdefABCDE!'])
+      expect(route(`/discover/blogrolls?cursor=${encodeURIComponent(cursor)}`)).toMatchObject({
+        cursor: null,
+        key: '/discover/blogrolls',
+      })
+    expect(route('/discover/blogrolls/')).toBeNull()
+    expect(route('/discover/blogrolls/x')).toBeNull()
+    expect(tabOf('/discover/blogrolls')).toBe('blogrolls')
+    expect(tabOf('/discover/blogrolls/')).toBeNull()
+  })
+
+  test("a profile's Blogrolls tab is a page of its own, cached apart", () => {
+    expect(route('/@reader_1?tab=blogrolls')).toMatchObject({
+      kind: 'profile',
+      tab: 'blogrolls',
+      api: '/api/v1/public/profiles/reader_1',
+      key: '/api/v1/public/profiles/reader_1?tab=blogrolls',
+    })
   })
 })
 

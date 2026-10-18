@@ -61,6 +61,8 @@ export type ManagerActions = {
   create: (name: string, feedIds: readonly number[]) => string | null
   rename: (folder: Folder, name: string) => void
   remove: (folder: Folder) => void
+  /** Open New blogroll with this folder's name and blogs in it (ADR 0050), from this button. */
+  makeBlogroll: (folder: Folder, from: HTMLElement) => void
 }
 
 /** Where the manager is looking: every blog, those in no folder, or a folder's, by its id. */
@@ -481,6 +483,14 @@ export function SubscriptionsManager({
                       data-testid="folder-rename"
                     >
                       {t('rename')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => actions.makeBlogroll(folder, e.currentTarget)}
+                      className="rounded-md px-[9px] py-[5px] text-[13px] whitespace-nowrap text-muted hover:bg-hover hover:text-ink"
+                      data-testid="folder-make-blogroll"
+                    >
+                      {t('makeBlogroll')}
                     </button>
                     <button
                       type="button"

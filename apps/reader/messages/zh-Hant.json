@@ -266,6 +266,7 @@
       "week": "本週",
       "articles": "文章",
       "blogs": "部落格",
+      "blogrolls": "部落格鏈",
       "readers": "讀者"
     },
     "minutes": "{n} 分鐘",
@@ -298,6 +299,16 @@
       },
       "more": "更多文章",
       "empty": "沒有符合的文章。換個話題或語言試試。"
+    },
+    "blogrolls": {
+      "intro": "讀者成組推薦的部落格，一鍵就能訂閱整組。",
+      "more": "更多部落格鏈",
+      "empty": "還沒有公開的部落格鏈。",
+      "by": "{name} 的部落格鏈",
+      "reasons": {
+        "follows": "你追蹤的人",
+        "yours": "你的"
+      }
     },
     "reason": {
       "followed": "你追蹤的 {name} 推薦了它",
@@ -375,6 +386,98 @@
       "title": "你有部落格嗎？",
       "intro": "認領你的部落格，看看有多少人在讀你、你的文章反響如何，以及讀者推薦時說了什麼。",
       "cta": "認領你的部落格"
+    }
+  },
+  "blogroll": {
+    "eyebrow": "部落格鏈",
+    "blogs": "{n} 個部落格",
+    "updatedDay": "{when}更新",
+    "updatedOn": "更新於 {when}",
+    "subscribeAll": "全部訂閱（{n} 個）",
+    "count": "{n}/{max}",
+    "emptyVisitor": "這裡還沒有部落格。",
+    "emptyOwner": "還沒有部落格",
+    "emptyOwnerHint": "從你的訂閱裡新增部落格，願意的話，每個都可以附上一句話。",
+    "notInSubscriptions": "不在你的訂閱中",
+    "hiddenFromOthers": "只有你能在這裡看到它",
+    "remove": "移除",
+    "removeLabel": "從這個部落格鏈移除{name}",
+    "removed": "已從這個部落格鏈移除{name}。",
+    "owner": {
+      "switchTitle": "更改誰能看到",
+      "whoIs": "誰能看到：{state}",
+      "edit": "編輯",
+      "addBlogs": "新增部落格",
+      "copyLink": "複製連結",
+      "copied": "連結已複製。",
+      "copiedPrivate": "連結已複製。設為私密期間，只有你能開啟。",
+      "copyFailed": "無法複製連結。",
+      "madePublic": "已公開。任何人都能開啟這個部落格鏈。",
+      "madePrivate": "已設為私密。只有你能開啟這個部落格鏈。",
+      "footerPublic": "已公開。它會顯示在你的個人主頁上，也可能出現在發現頁。",
+      "footerPrivate": "只有你能看到這個部落格鏈。設為公開後即可分享。"
+    },
+    "dialog": {
+      "new": "新建部落格鏈",
+      "edit": "編輯部落格鏈",
+      "name": "名稱",
+      "namePlaceholder": "我最先讀的慢部落格",
+      "description": "簡介",
+      "optional": "（選填）",
+      "descriptionPlaceholder": "用一兩句話說說裡面有什麼",
+      "who": "誰能看到",
+      "private": "私密",
+      "privateHint": "只有你能看到。",
+      "public": "公開",
+      "publicHint": "顯示在你的個人主頁和發現頁。其他人可以一次訂閱其中的每個部落格。",
+      "publicWait": "等你上一次的更改儲存後，才能設為公開。",
+      "fromFolder": "它會先收入這個資料夾裡的 {n} 個部落格。",
+      "capped": "這個資料夾有 {n} 個部落格。一個部落格鏈最多收 {max} 個，所以先按名稱收入前 {max} 個。",
+      "limit": "你已有 {max} 個部落格鏈，不能再多了。",
+      "cancel": "取消",
+      "create": "建立",
+      "save": "儲存",
+      "delete": "刪除部落格鏈",
+      "deleted": "已刪除「{name}」。"
+    },
+    "add": {
+      "title": "從你的訂閱中新增",
+      "filter": "按名稱或網址篩選",
+      "filterLabel": "篩選你的訂閱",
+      "noMatch": "沒有相符的訂閱。",
+      "none": "你還沒有訂閱任何部落格。",
+      "limit": "這個部落格鏈已有 {max} 個部落格，不能再多了。",
+      "hint": "之後取消訂閱某個部落格，它也不會從這個部落格鏈裡移除。",
+      "done": "完成"
+    },
+    "note": {
+      "add": "新增一句話",
+      "addTo": "為{name}新增一句話",
+      "edit": "編輯關於{name}的話",
+      "editTitle": "編輯這句話",
+      "label": "關於{name}的話",
+      "placeholder": "你為什麼推薦它",
+      "cancel": "取消",
+      "save": "儲存"
+    },
+    "subscribe": {
+      "all": "已全部訂閱",
+      "some": "訂閱其餘 {n} 個",
+      "waiting": "你的訂閱還在載入。",
+      "title": "訂閱 {n} 個部落格",
+      "already": {
+        "one": "你已經訂閱了{a}。",
+        "two": "你已經訂閱了{a}和{b}。",
+        "more": "你已經訂閱了{a}、{b}和另外 {n} 個部落格。"
+      },
+      "putIn": "放到",
+      "newFolder": "新資料夾",
+      "folderName": "新資料夾名稱",
+      "hint": "這會把這些部落格複製到你的訂閱裡。之後部落格鏈有變化，你的訂閱不會跟著變。",
+      "cancel": "取消",
+      "submit": "訂閱 {n} 個",
+      "done": "已訂閱{n, plural, =1 {{blog}} other {# 個部落格}}。",
+      "doneIn": "已訂閱{n, plural, =1 {{blog}} other {# 個部落格}}，放在「{folder}」裡。"
     }
   },
   "site": {
@@ -571,8 +674,19 @@
     "writes": "寫作",
     "tabs": {
       "recommendations": "推薦",
+      "blogrolls": "部落格鏈",
       "liked": "喜歡",
       "subscriptions": "訂閱"
+    },
+    "blogrolls": {
+      "intro": "別人可以一鍵訂閱一條部落格鏈裡的所有部落格。",
+      "new": "新建部落格鏈",
+      "empty": "還沒有部落格鏈。建一條，分享你在讀的部落格。",
+      "card": {
+        "kind": "部落格鏈",
+        "private": "私密",
+        "blogs": "{n, plural, other {# 個部落格}}"
+      }
     },
     "nothing": "這裡還什麼都沒有。"
   },
@@ -778,7 +892,8 @@
       "noPosts": "還沒有文章",
       "movedTo": "已把{n, plural, =1 {{blog}} other {# 個部落格}}移到「{folder}」。",
       "movedOut": "已把{n, plural, =1 {{blog}} other {# 個部落格}}移出資料夾。",
-      "unsubscribed": "已取消訂閱{n, plural, =1 {{blog}} other {# 個部落格}}。"
+      "unsubscribed": "已取消訂閱{n, plural, =1 {{blog}} other {# 個部落格}}。",
+      "makeBlogroll": "建立部落格鏈…"
     },
     "privacyIntro": "選擇別人在你的個人頁上能看到什麼。",
     "showLikes": "展示喜歡的文章",

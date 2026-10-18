@@ -1,11 +1,12 @@
 /**
  * What every library action is made of (ADR 0039). One target is one batch: the sync sequence
- * first (every table here is one readers sync, bar a claim's review stamp), the audit row read
- * under the change's own condition, the change with `RETURNING`, then whatever must follow it,
- * and a last select that tells a target that is gone from one the action does not apply to.
+ * first (every table here is one readers sync, bar a claim's review stamp and a blogroll's Hide),
+ * the audit row read under the change's own condition, the change with `RETURNING`, then whatever
+ * must follow it, and a last select that tells a target that is gone from one the action does not
+ * apply to.
  */
 import { audit, bumpSeq, currentSeq, type TelaDb } from '@tela/data'
-import { COMMUNITY_LISTING_MIN_READERS } from '@tela/shared'
+import { BLOGROLL_ID, COMMUNITY_LISTING_MIN_READERS } from '@tela/shared'
 import type { AdminActionName, AdminPerson } from '@tela/shared/admin'
 import { type SQL, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
@@ -32,13 +33,27 @@ export const idOf = (id: string): number | null => {
 /** The site's id from a request's id, or null. */
 export const siteIdOf = idOf
 
-/** The tables library actions write, and what the audit log calls a row of each. */
+/** A blogroll's id from a request's id, or null: the shape its member's device mints. */
+export const blogrollIdOf = (id: string): string | null => (BLOGROLL_ID.test(id) ? id : null)
+
+/**
+ * The tables library actions write: what the audit log calls a row of each, how a request or an
+ * audit row's key names one (null for a key that names none), and whether a change stamps
+ * `updated_at`. A blogroll's `updated_at` is its member's clock for its name and description, the
+ * later one winning (ADR 0050): an operator's stamp there would make the member's next rename,
+ * made on a device that had not seen it, lose.
+ */
 export const TABLES = {
-  sites: { kind: 'site', updatedAt: true },
-  feeds: { kind: 'feed', updatedAt: true },
-  site_claims: { kind: 'claim', updatedAt: false },
+  sites: { kind: 'site', keyOf: idOf, updatedAt: true },
+  feeds: { kind: 'feed', keyOf: idOf, updatedAt: true },
+  site_claims: { kind: 'claim', keyOf: idOf, updatedAt: false },
+  blogrolls: { kind: 'blogroll', keyOf: blogrollIdOf, updatedAt: false },
 } as const
 export type Table = keyof typeof TABLES
+
+/** A row's key in `table`: a number, or a blogroll's text id. */
+export type KeyOf<T extends Table> = NonNullable<ReturnType<(typeof TABLES)[T]['keyOf']>>
+export type RowKey = KeyOf<Table>
 
 /**
  * True, in a statement after the change in the same batch, when the change applied: it stamped
@@ -46,7 +61,7 @@ export type Table = keyof typeof TABLES
  * to break, topics to replace) runs exactly when the change did, without a second condition that
  * could read the row after the change and disagree.
  */
-export const stamped = (table: Table, id: number) =>
+export const stamped = (table: Table, id: RowKey) =>
   sql`exists (select 1 from ${sql.raw(table)} where id = ${id} and seq = ${currentSeq})`
 
 /**
@@ -59,7 +74,7 @@ export const breakLease = (db: TelaDb, kind: string, id: number, when: SQL) =>
 export type Change = {
   action: AdminActionName
   table: Table
-  id: number
+  id: RowKey
   /** The row's state the action applies to, over the table's own columns. */
   applies: SQL
   /** `set` assignments, without `seq` and `updated_at`, which are added; none to only stamp. */
@@ -70,7 +85,10 @@ export type Change = {
   to: unknown
   /** Statements that must follow the change, conditioned on `stamped(table, id)`. */
   after?: (db: TelaDb) => BatchItem<'sqlite'>[]
-  /** False for a column no device holds (a claim's review stamp): no seq, and nothing follows. */
+  /**
+   * False for a column no device holds (a claim's review stamp, a blogroll's Hide): no seq, and
+   * nothing follows.
+   */
   synced?: boolean
 }
 
@@ -127,18 +145,21 @@ export type Columns = Record<string, string>
  * moves on its own (a feed's timeout streak), which is restored but not compared. `set` adds
  * what a restore also writes, and `after` what follows it (a lease to break), like `Change`'s.
  */
-export function restoreColumns(options: {
-  table: Table
+export function restoreColumns<T extends Table>(options: {
+  table: T
   columns: Columns
   match?: string[]
   set?: (now: number) => SQL
-  after?: (db: TelaDb, id: number) => BatchItem<'sqlite'>[]
+  after?: (db: TelaDb, id: KeyOf<T>) => BatchItem<'sqlite'>[]
   synced?: boolean
 }): Inverse {
   const { table, columns } = options
   const synced = options.synced ?? true
   return (db, change, now) => {
-    const id = Number(change.targetKey)
+    const id = TABLES[table].keyOf(change.targetKey) as KeyOf<T> | null
+    // A key no row of the table could have: nothing holds what the action set, so nothing is put
+    // back and the undo is refused.
+    if (id === null) return { changed: sql`true`, restore: [], synced }
     const from = (change.from ?? {}) as Record<string, unknown>
     const to = (change.to ?? {}) as Record<string, unknown>
     const keys = options.match ?? Object.keys(columns)

@@ -6,6 +6,7 @@
  * as a single JSON parameter.
  */
 import { splitBodyKey, type TelaDb } from '@tela/data'
+import { BLOGROLL_ID } from '@tela/shared'
 import type { AdminDeadRow, AdminHistoryEntry } from '@tela/shared/admin'
 import { sql } from 'drizzle-orm'
 import { runBatch } from '../framework'
@@ -29,6 +30,8 @@ export type Names = {
   members: Map<string, string>
   /** A dead letter's kind and key. */
   dead: Map<number, string>
+  /** A public, live blogroll's name. */
+  blogrolls: Map<string, string>
 }
 
 export type Wanted = {
@@ -39,6 +42,7 @@ export type Wanted = {
   claims: Set<number>
   members: Set<string>
   dead: Set<number>
+  blogrolls: Set<string>
 }
 
 export function wanted(): Wanted {
@@ -50,6 +54,7 @@ export function wanted(): Wanted {
     claims: new Set(),
     members: new Set(),
     dead: new Set(),
+    blogrolls: new Set(),
   }
 }
 
@@ -128,13 +133,16 @@ export function wantAudited(w: Wanted, entry: AdminHistoryEntry) {
       return w.members.add(key)
     case 'dead':
       return add(w.dead, intKey(key))
+    case 'blogroll':
+      return add(w.blogrolls, BLOGROLL_ID.test(key) ? key : null)
   }
 }
 
 /**
  * An audit row's target in words: a site's title, a feed's address, the claimed site, a member's
- * handle, a code as itself, a dead letter's kind and key. Null for what has no name to show (an
- * invitation held for an address, which an audit row never names) or no longer exists.
+ * handle, a code as itself, a dead letter's kind and key, a blogroll's name. Null for what has no
+ * name to show (an invitation held for an address, which an audit row never names, or a blogroll
+ * its member has made private since) or no longer exists.
  */
 export function auditedLabel(names: Names, entry: AdminHistoryEntry): string | null {
   const key = entry.targetKey
@@ -154,6 +162,8 @@ export function auditedLabel(names: Names, entry: AdminHistoryEntry): string | n
       return (n !== null && names.dead.get(n)) || null
     case 'lease':
       return key.replace(':', ' ')
+    case 'blogroll':
+      return names.blogrolls.get(key) ?? null
     default:
       return null
   }
@@ -171,6 +181,7 @@ export async function lookUp(db: TelaDb, w: Wanted): Promise<Names> {
     claims: new Map(),
     members: new Map(),
     dead: new Map(),
+    blogrolls: new Map(),
   }
   const json = (set: Set<unknown>) => JSON.stringify([...set])
   const steps: { run: () => ReturnType<TelaDb['all']>; take: (rows: Row[]) => void }[] = []
@@ -267,6 +278,19 @@ export async function lookUp(db: TelaDb, w: Wanted): Promise<Names> {
         `),
       take: (rows) => {
         for (const r of rows) names.dead.set(Number(r.id), String(r.label))
+      },
+    })
+  if (w.blogrolls.size > 0)
+    steps.push({
+      // Named only while others can open it: a private blogroll is its member's alone.
+      run: () =>
+        db.all(sql`
+          select id, name from blogrolls
+          where id in (select value from json_each(${json(w.blogrolls)}))
+            and is_public = 1 and deleted_at is null
+        `),
+      take: (rows) => {
+        for (const r of rows) names.blogrolls.set(String(r.id), String(r.name))
       },
     })
   const results = await runBatch(

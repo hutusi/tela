@@ -2,7 +2,8 @@
 
 Status: accepted (2026-10-16). Amends 0025: two synced tables and three mutations join the
 protocol, which stays at 3. Its Settings consequences (the dimmed row, dragging onto sections from
-`md`) are superseded by 0049 (2026-10-18).
+`md`) are superseded by 0049 (2026-10-18). Its later-rounds line is taken up by 0050 for
+blogrolls (2026-10-18).
 
 ## Context
 

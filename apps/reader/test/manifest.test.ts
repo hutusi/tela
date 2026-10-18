@@ -4,8 +4,8 @@
  * `public.e2e.ts` checks they are served as what they are, not as the app's HTML.
  */
 import { describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, relative, sep } from 'node:path'
 import { PAPER } from '../src/lib/typography'
 import { publicRoute, renderPublicPage } from '../src/ssr'
 
@@ -67,8 +67,14 @@ describe('the manifest', () => {
         p.endsWith('*') ? path.startsWith(p.slice(0, -1)) : path === p,
       )
     expect(runsFirst(start.pathname)).toBe(false)
-    // The manifest and its icons are static assets too.
-    for (const path of ['/manifest.webmanifest', ...manifest.icons.map((i) => i.src)])
+    // The manifest and its icons are static assets too, as is everything else in public/: a
+    // pattern that caught one (a page's `/l/*`, ADR 0050) would put the Worker in front of it.
+    const dir = join(import.meta.dir, '..', 'public')
+    const statics = readdirSync(dir, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => `/${relative(dir, join(entry.parentPath, entry.name)).split(sep).join('/')}`)
+    expect(statics).toContain('/manifest.webmanifest')
+    for (const path of new Set([...statics, ...manifest.icons.map((i) => i.src)]))
       expect(runsFirst(path)).toBe(false)
   })
 
@@ -120,6 +126,21 @@ describe('the pages that name it', () => {
     const route = publicRoute(url)
     if (!route) throw new Error('/about is a public page')
     const html = renderPublicPage({ route, url, data: null, locale: 'en', now: 0, template: INDEX })
+    expect(html).toContain('<div id="root"><')
+    expect(html).toContain(LINK)
+    expect(html.match(/<meta name="theme-color"/g)).toHaveLength(2)
+  })
+
+  test("and a blogroll's page, the address its owner shares (ADR 0050)", () => {
+    const url = new URL('https://tela.test/l/abcdefABCDEF')
+    const route = publicRoute(url)
+    if (!route) throw new Error('/l/<id> is a public page')
+    const data = {
+      blogroll: { id: 'abcdefABCDEF', name: 'Cities, on foot', description: '', updatedAt: 1 },
+      owner: { id: 'u1', handle: 'ann', displayName: 'Ann K' },
+      blogs: [],
+    }
+    const html = renderPublicPage({ route, url, data, locale: 'en', now: 0, template: INDEX })
     expect(html).toContain('<div id="root"><')
     expect(html).toContain(LINK)
     expect(html.match(/<meta name="theme-color"/g)).toHaveLength(2)

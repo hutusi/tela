@@ -8,11 +8,14 @@ import { FrontDoorProvider, ToReading } from './components/front-door'
 import { Toast } from './components/toast'
 import { chooseLocale, detectLocale, I18n, localeCookie, localeToAdopt } from './i18n'
 import { applyTheme, deviceTheme, PREFS, themeToAdopt, typographyOf } from './lib/typography'
+import { useForgetBlogrolls } from './lib/use-forget-blogrolls'
 import { forgetPublic } from './lib/use-public'
 import { AddPage } from './pages/add'
+import { BlogrollPage } from './pages/blogroll'
 import { ClaimPage, ClaimSitePage } from './pages/claim'
 import { DashboardPage } from './pages/dashboard'
 import { ArticlesPage, BlogsPage, DiscoverHome, ReadersPage } from './pages/discover'
+import { BlogrollsPage } from './pages/discover-blogrolls'
 import { FollowingPage } from './pages/following'
 import { InfoPage } from './pages/info'
 import { JoinPage } from './pages/join'
@@ -183,6 +186,7 @@ function Routed() {
     if (last.handle) forgetPublic(profilePath(last.handle))
     if (ownHandle && ownHandle !== last.handle) forgetPublic(profilePath(ownHandle))
   }, [ownSeq, ownHandle])
+  useForgetBlogrolls()
   const [locale, setLocaleState] = useState<UiLocale>(() =>
     detectLocale(document.cookie, navigator.languages ?? [navigator.language]),
   )
@@ -283,6 +287,7 @@ function Routed() {
                       <Route path="/discover" element={<DiscoverHome />} />
                       <Route path="/discover/articles" element={<ArticlesPage />} />
                       <Route path="/discover/blogs" element={<BlogsPage />} />
+                      <Route path="/discover/blogrolls" element={<BlogrollsPage />} />
                       <Route path="/discover/readers" element={<ReadersPage />} />
                       <Route path="/writers" element={<WritersPage />} />
                       <Route
@@ -294,6 +299,7 @@ function Routed() {
                         }
                       />
                       <Route path="/s/:siteId" element={<SitePage />} />
+                      <Route path="/l/:id" element={<BlogrollPage />} />
                       <Route path="/about" element={<InfoPage page="about" />} />
                       <Route path="/privacy" element={<InfoPage page="privacy" />} />
                       <Route path="/terms" element={<InfoPage page="terms" />} />

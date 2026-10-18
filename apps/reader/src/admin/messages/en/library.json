@@ -3,7 +3,8 @@
     "claims": "Search blogs or members",
     "sites": "Search blogs, feeds or owners",
     "feeds": "Search feeds, blogs or owners",
-    "discover": "Search blogs or owners"
+    "discover": "Search blogs or owners",
+    "blogrolls": "Search blogrolls or owners"
   },
   "filters": {
     "claims": { "review": "Needs review", "checking": "Checking", "verified": "Verified" },
@@ -26,10 +27,11 @@
       "featured": "Featured",
       "listed": "Listed",
       "dismissed": "Not for Discover",
-      "hidden": "Hidden"
+      "hidden": "Hidden",
+      "blogrolls": "Blogrolls"
     }
   },
-  "names": { "blog": "Blog", "site": "Site", "feed": "Feed" },
+  "names": { "blog": "Blog", "site": "Site", "feed": "Feed", "blogroll": "Blogroll" },
   "columns": {
     "claimant": "Claimant",
     "method": "Method",
@@ -43,7 +45,10 @@
     "topics": "Topics",
     "language": "Language",
     "latest": "Latest post",
-    "posts30d": "Posts, 30 days"
+    "posts30d": "Posts, 30 days",
+    "includes": "Includes",
+    "blogs": "Blogs",
+    "publicSince": "Public since"
   },
   "methods": {
     "meta": "Meta tag",
@@ -172,7 +177,10 @@
     "region": "Region",
     "format": "Format",
     "address": "Address",
-    "mergedInto": "Merged into"
+    "mergedInto": "Merged into",
+    "blogs": "Blogs",
+    "publicSince": "Public since",
+    "hidden": "Hidden"
   },
   "status": {
     "active": "Active",
@@ -185,7 +193,8 @@
     "claims": "Claims",
     "topics": "Topics",
     "lastCheck": "Last check · {when}",
-    "lastError": "Last error"
+    "lastError": "Last error",
+    "blogs": "Blogs"
   },
   "history": {
     "topics": "{action}: {topics}",
@@ -203,6 +212,16 @@
     "topicsHint": "Topics decide where Discover shows the blog. Click one to add or remove it.",
     "noTopics": "No topics yet, so Discover shows this blog only under All. Pick one or more below.",
     "review": "A member added this blog. List it, or say it is not for Discover: either takes it out of this queue. Three readers list it whatever is decided here, unless it is hidden. Only how many read it is shown, never who.",
-    "dismissed": "Judged not for Discover {when}. Three readers still list it; Hide keeps it out for good."
+    "dismissed": "Judged not for Discover {when}. Three readers still list it; Hide keeps it out for good.",
+    "blogrollHide": "Hidden blogrolls keep their page and their place on the profile.",
+    "blogrollHiddenBlogs": "Blogs marked Hidden are ones an operator hid: nobody else sees them in this blogroll, and they do not count toward Discover."
+  },
+  "blogrolls": {
+    "status": {
+      "listed": "In Discover",
+      "hidden": "Hidden",
+      "few": "Fewer than {n} blogs"
+    },
+    "blogsOf": "{shown} of {total}"
   }
 }

@@ -29,6 +29,7 @@ import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useNavigationType, useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { AvatarCrop } from '../components/avatar-crop'
+import { BlogrollDialog } from '../components/blogroll-dialog'
 import {
   type Folder,
   FolderSection,
@@ -67,7 +68,7 @@ import { offerUndo } from '../lib/undo'
 import { BELOW_LG, BELOW_MD, useMediaQuery } from '../lib/use-media'
 import { api, apiJson } from '../store/api'
 import { useNow, usePrivacyUnsettled, useReadingLang, useStore, useTables } from '../store/hooks'
-import { feedTitle, folderIdOf } from '../store/selectors'
+import { feedsInFolder, feedTitle, folderIdOf } from '../store/selectors'
 import { useUi } from '../ui'
 import { AccountSection, InvitesSection } from './settings-account'
 
@@ -900,6 +901,11 @@ function SubscriptionsSection() {
   const focusLeave = useRef<number | null>(null)
   const newFolder = useRef<HTMLButtonElement>(null)
   const unfiledHeading = useRef<HTMLHeadingElement>(null)
+  // New blogroll, made from a folder (ADR 0050): its name and blogs, and the control it came from.
+  const [blogroll, setBlogroll] = useState<{
+    initial: { name: string; feedIds: number[] }
+    opener: HTMLElement | null
+  } | null>(null)
   const limitId = useId()
   // Where focus goes once the control that had it has gone: New folder after its form closes, and
   // the blogs in none (or New folder, with no folder left) after a folder is deleted.
@@ -1015,6 +1021,27 @@ function SubscriptionsSection() {
   const rename = (folder: Folder, name: string) => {
     store.mutate({ type: 'putFolder', id: folder.id, name })
   }
+  // The blogs it holds now, by name, as Subscriptions lists them: past the most a blogroll holds,
+  // the dialog keeps the first (and says so).
+  const makeBlogroll = (folder: Folder, from: HTMLElement | null) => {
+    const now = store.getSnapshot().tables
+    const named = feedsInFolder(now, folder.id).map((feedId) => ({
+      feedId,
+      title: feedTitle(now, feedId),
+    }))
+    named.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+    setBlogroll({
+      initial: { name: folder.name, feedIds: named.map((n) => n.feedId) },
+      opener: from,
+    })
+  }
+  const blogrollDialog = blogroll ? (
+    <BlogrollDialog
+      initial={blogroll.initial}
+      opener={blogroll.opener}
+      onClose={() => setBlogroll(null)}
+    />
+  ) : null
   const remove = (folder: Folder) => {
     // Its blogs as they are filed now, before the delete leaves them in none.
     const filed = filedIn(store.getSnapshot().tables, folder.id)
@@ -1078,8 +1105,9 @@ function SubscriptionsSection() {
           folderOf={folderOf}
           activity={activity}
           now={now}
-          actions={{ move, unsubscribe, create, rename, remove }}
+          actions={{ move, unsubscribe, create, rename, remove, makeBlogroll }}
         />
+        {blogrollDialog}
       </>
     )
   }
@@ -1109,6 +1137,7 @@ function SubscriptionsSection() {
       remove(folder)
       refocus.current = 'deleted'
     },
+    makeBlogroll,
     unsubscribe: (row) => {
       // Its row goes, and focus with it: to the next row's Unsubscribe, or the one before, or
       // with no row left to New folder.
@@ -1223,6 +1252,7 @@ function SubscriptionsSection() {
           onClose={() => setMoving(null)}
         />
       ) : null}
+      {blogrollDialog}
     </>
   )
 }

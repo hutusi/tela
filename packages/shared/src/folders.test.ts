@@ -10,6 +10,13 @@ describe('folder names (ADR 0048)', () => {
     expect(folderName(`${'x'.repeat(FOLDER_NAME_MAX)}yz`)).toHaveLength(FOLDER_NAME_MAX)
   })
 
+  test('never end in half an emoji', () => {
+    // 59 letters then an emoji: its two UTF-16 units straddle the 60th.
+    const name = folderName(`${'a'.repeat(59)}😀`)
+    expect(name).toBe('a'.repeat(59))
+    expect(folderName(`${'a'.repeat(58)}😀`)).toBe(`${'a'.repeat(58)}😀`)
+  })
+
   test('are the same name whatever their case, but not whatever their accents', () => {
     expect(sameFolderName('cities', ' Cities ')).toBe(true)
     expect(sameFolderName('城市', '城市')).toBe(true)

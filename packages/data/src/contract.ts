@@ -560,6 +560,151 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       ])
     })
 
+    it('keeps a blog in its blogrolls under the address it merged into, with its note (ADR 0050)', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['blog.example', 'mirror.example'])
+      await db.run(sql`
+        insert into user (id, name, email, email_verified, created_at, updated_at) values
+          ('u1', 'u', 'u@x.y', 1, 0, 0), ('u2', 'v', 'v@x.y', 1, 0, 0)
+      `)
+      await db.run(sql`
+        insert into blogrolls (id, user_id, name, created_at, updated_at, deleted_at) values
+          ('RollAliasOnly', 'u1', 'Alias only', 0, 0, null),
+          ('RollBothLive0', 'u2', 'Both live', 0, 0, null),
+          ('RollRevived00', 'u2', 'Target out', 0, 0, null),
+          ('RollDeleted00', 'u1', 'Deleted', 0, 0, 1),
+          ('RollAliasOut0', 'u1', 'Alias out', 0, 0, null)
+      `)
+      // Feed 1 is the blog's; feed 2, its mirror, merges into it.
+      await db.run(sql`
+        insert into blogroll_blogs (blogroll_id, feed_id, user_id, note, note_at, added_at,
+          updated_at, removed_at) values
+          ('RollAliasOnly', 2, 'u1', 'Read this', 5, 3, 4, null),
+          ('RollBothLive0', 1, 'u2', 'Mine', 2, 1, 2, null),
+          ('RollBothLive0', 2, 'u2', 'Theirs', 6, 5, 6, null),
+          ('RollRevived00', 1, 'u2', 'Old', 2, 1, 9, 9),
+          ('RollRevived00', 2, 'u2', 'New', 6, 7, 8, null),
+          ('RollDeleted00', 2, 'u1', null, 0, 1, 1, null),
+          ('RollAliasOut0', 2, 'u1', 'Gone', 1, 1, 3, 3)
+      `)
+      await db.batch([
+        bumpSeq(db),
+        ...mergeFeed(db, { alias: 2, target: 1, move: [], carry: [] }, T0),
+      ] as never)
+      expect(
+        await db.all(sql`
+          select blogroll_id as "blogrollId", feed_id as "feedId", user_id as "userId", note,
+            note_at as "noteAt", added_at as "addedAt", updated_at as "updatedAt",
+            removed_at as "removedAt", seq > 0 as stamped
+          from blogroll_blogs order by blogroll_id, feed_id`),
+      ).toEqual([
+        // Carried with its place and note; the alias's row taken out.
+        {
+          blogrollId: 'RollAliasOnly',
+          feedId: 1,
+          userId: 'u1',
+          note: 'Read this',
+          noteAt: 5,
+          addedAt: 3,
+          updatedAt: 4,
+          removedAt: null,
+          stamped: 1,
+        },
+        {
+          blogrollId: 'RollAliasOnly',
+          feedId: 2,
+          userId: 'u1',
+          note: 'Read this',
+          noteAt: 5,
+          addedAt: 3,
+          updatedAt: T0,
+          removedAt: T0,
+          stamped: 1,
+        },
+        // An alias row already taken out goes along, still out, with its note; it stays as it was.
+        {
+          blogrollId: 'RollAliasOut0',
+          feedId: 1,
+          userId: 'u1',
+          note: 'Gone',
+          noteAt: 1,
+          addedAt: 1,
+          updatedAt: 3,
+          removedAt: 3,
+          stamped: 1,
+        },
+        {
+          blogrollId: 'RollAliasOut0',
+          feedId: 2,
+          userId: 'u1',
+          note: 'Gone',
+          noteAt: 1,
+          addedAt: 1,
+          updatedAt: 3,
+          removedAt: 3,
+          stamped: 0,
+        },
+        // The target in already keeps its own.
+        {
+          blogrollId: 'RollBothLive0',
+          feedId: 1,
+          userId: 'u2',
+          note: 'Mine',
+          noteAt: 2,
+          addedAt: 1,
+          updatedAt: 2,
+          removedAt: null,
+          stamped: 0,
+        },
+        {
+          blogrollId: 'RollBothLive0',
+          feedId: 2,
+          userId: 'u2',
+          note: 'Theirs',
+          noteAt: 6,
+          addedAt: 5,
+          updatedAt: T0,
+          removedAt: T0,
+          stamped: 1,
+        },
+        // A deleted blogroll is left alone.
+        {
+          blogrollId: 'RollDeleted00',
+          feedId: 2,
+          userId: 'u1',
+          note: null,
+          noteAt: 0,
+          addedAt: 1,
+          updatedAt: 1,
+          removedAt: null,
+          stamped: 0,
+        },
+        // A target taken out comes back with the alias's place and note, its clock not moving back.
+        {
+          blogrollId: 'RollRevived00',
+          feedId: 1,
+          userId: 'u2',
+          note: 'New',
+          noteAt: 6,
+          addedAt: 7,
+          updatedAt: 9,
+          removedAt: null,
+          stamped: 1,
+        },
+        {
+          blogrollId: 'RollRevived00',
+          feedId: 2,
+          userId: 'u2',
+          note: 'New',
+          noteAt: 6,
+          addedAt: 7,
+          updatedAt: T0,
+          removedAt: T0,
+          stamped: 1,
+        },
+      ])
+    })
+
     it("carries a moved post's title, translation and read state to the target's readers", async () => {
       const db = await makeDb()
       await seedFeeds(db, ['blog.example', 'mirror.example'])

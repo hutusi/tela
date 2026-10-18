@@ -48,6 +48,10 @@ function shape(rows: Record<keyof SyncRows, RawRow[]>): SyncRows {
     claimed: bool(r.claimed),
     translationOptOut: bool(r.translationOptOut),
   }))
+  out.blogrolls = rows.blogrolls.map((r) => ({
+    ...(r as unknown as SyncRows['blogrolls'][number]),
+    isPublic: bool(r.isPublic),
+  }))
   out.translations = rows.translations.map((r) => ({
     ...(r as unknown as SyncRows['translations'][number]),
     chunkKeys: json<string[]>(r.chunkKeys, []),
@@ -65,6 +69,7 @@ function shape(rows: Record<keyof SyncRows, RawRow[]>): SyncRows {
     'follows',
     'folders',
     'feedFolders',
+    'blogrollBlogs',
   ] as const) {
     ;(out[name] as RawRow[]) = rows[name]
   }

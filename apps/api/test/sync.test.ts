@@ -1494,6 +1494,50 @@ describe('a feed merged into another (ADR 0028)', () => {
     expect(await following()).toEqual([])
   })
 
+  test('an exact change names its own feed only, and leaves what the member has under the other alone', async () => {
+    // Subscribe to all from a blogroll cached before the merge: it names feed 2, and the member
+    // already follows feed 1, filed in Mine.
+    await push([
+      { type: 'subscribe', feedId: 1 },
+      { type: 'putFolder', id: 'folder-mine', name: 'Mine' },
+      { type: 'putFolder', id: 'folder-roll', name: 'Roll' },
+      { type: 'fileFeed', feedId: 1, folderId: 'folder-mine' },
+    ])
+    await db.run(sql`update feeds set status = 'paused', merged_into = 1, site_id = 1 where id = 2`)
+    const state = () =>
+      db.all<{ feed_id: number; deleted_at: number | null; folder_id: string | null }>(sql`
+        select s.feed_id, s.deleted_at, ff.folder_id from subscriptions s
+        left join feed_folders ff on ff.user_id = s.user_id and ff.feed_id = s.feed_id
+        where s.user_id = ${reader.userId} order by s.feed_id
+      `)
+    const before = await state()
+    expect(before).toEqual([{ feed_id: 1, deleted_at: null, folder_id: 'folder-mine' }])
+    await push([
+      { type: 'subscribe', feedId: 2, exact: true },
+      { type: 'fileFeed', feedId: 2, folderId: 'folder-roll', exact: true },
+    ])
+    expect(await state()).toEqual(before)
+    // Its late Undo.
+    await push([
+      { type: 'unsubscribe', feedId: 2, exact: true },
+      { type: 'fileFeed', feedId: 2, folderId: null, exact: true },
+    ])
+    expect(await state()).toEqual(before)
+    // A feed nothing merged is subscribed, filed and unsubscribed as ever.
+    await addFeed(3)
+    await push([
+      { type: 'subscribe', feedId: 3, exact: true },
+      { type: 'fileFeed', feedId: 3, folderId: 'folder-roll', exact: true },
+    ])
+    expect((await state()).at(-1)).toEqual({
+      feed_id: 3,
+      deleted_at: null,
+      folder_id: 'folder-roll',
+    })
+    await push([{ type: 'unsubscribe', feedId: 3, exact: true }])
+    expect((await state()).at(-1)?.deleted_at).not.toBeNull()
+  })
+
   test("a post that moves across arrives with its title, its translation and the reader's state", async () => {
     // The reader followed feed 2 once, read X there, and left; now they follow feed 1.
     await push([{ type: 'subscribe', feedId: 2 }])

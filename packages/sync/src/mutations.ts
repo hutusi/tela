@@ -8,11 +8,16 @@
  * answer.
  */
 import {
+  BLOGROLL_DESCRIPTION_MAX,
+  BLOGROLL_ID,
+  BLOGROLL_NAME_MAX,
+  BLOGROLL_NOTE_MAX,
   FOLDER_NAME_MAX,
   HIGHLIGHT_CONTEXT,
   HIGHLIGHT_NOTE_MAX,
   HIGHLIGHT_QUOTE_MAX,
   READING_LANGUAGES,
+  textLength,
   UI_LOCALES,
 } from '@tela/shared'
 import { z } from 'zod'
@@ -34,6 +39,15 @@ const highlightId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
 /** Client-minted too (ADR 0048), so a replayed push cannot make a second folder. */
 const folderId = z.string().regex(/^[A-Za-z0-9-]{8,64}$/)
 
+/** Client-minted and short (ADR 0050): it is the blogroll's address, `/l/<id>`. */
+const blogrollId = z.string().regex(BLOGROLL_ID)
+
+/**
+ * Text no longer than `max` characters as a person counts them (code points, as SQLite's
+ * `length()` does), not as UTF-16 counts them: zod's `max` would take 140 emoji for 280.
+ */
+const upTo = (max: number) => z.string().refine((v) => textLength(v) <= max)
+
 export const mutationSchema = z.discriminatedUnion('type', [
   /**
    * Opening an article reads it. Set once: a later markRead keeps the first time, though it moves
@@ -53,8 +67,24 @@ export const mutationSchema = z.discriminatedUnion('type', [
    * arrived after the reader looked are not swept up. One feed, or every feed without `feedId`.
    */
   z.object({ ...base, type: z.literal('markAllRead'), feedId: id.optional(), upTo: id }),
-  z.object({ ...base, type: z.literal('subscribe'), feedId: id }),
-  z.object({ ...base, type: z.literal('unsubscribe'), feedId: id }),
+  /**
+   * Subscribe, or unsubscribe, through the feed a merged one became (ADR 0028). With `exact`, this
+   * feed only, never the one it merged into: a change made from a public copy that may predate
+   * the merge (Subscribe to all, ADR 0050) must not reach a subscription the member already had
+   * under the other address. A tela-api that predates the flag strips it and follows the merge.
+   */
+  z.object({
+    ...base,
+    type: z.literal('subscribe'),
+    feedId: id,
+    exact: z.literal(true).optional(),
+  }),
+  z.object({
+    ...base,
+    type: z.literal('unsubscribe'),
+    feedId: id,
+    exact: z.literal(true).optional(),
+  }),
   /**
    * A preference, to the later `at`. With `ifAbsent`, a value the account takes from this browser
    * rather than one the member chose (a visitor's theme, on joining, ADR 0037): written only
@@ -158,13 +188,61 @@ export const mutationSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('deleteFolder'), id: folderId }),
   /**
    * Put a blog in a folder, or in none (null). A blog is in one folder at most, and the later `at`
-   * wins. A folder deleted meanwhile takes nothing.
+   * wins. A folder deleted meanwhile takes nothing. `exact` as for `subscribe`.
    */
   z.object({
     ...base,
     type: z.literal('fileFeed'),
     feedId: id,
     folderId: folderId.nullable(),
+    exact: z.literal(true).optional(),
+  }),
+  /**
+   * Make a blogroll, or change its name and description (ADR 0050). The later `at` wins, and a
+   * deleted blogroll stays deleted. `isPublic` counts only when it makes the blogroll: after that,
+   * public or private is `setBlogrollPublic`'s alone. A member who already has `MAX_BLOGROLLS`
+   * makes no more: the push writes nothing. A name or description with a control character (a
+   * line break aside, in a description) is refused.
+   */
+  z.object({
+    ...base,
+    type: z.literal('putBlogroll'),
+    id: blogrollId,
+    name: z.string().trim().min(1).pipe(upTo(BLOGROLL_NAME_MAX)),
+    description: z.string().trim().pipe(upTo(BLOGROLL_DESCRIPTION_MAX)),
+    isPublic: z.boolean(),
+  }),
+  /**
+   * Make a blogroll public or private, as the profile's switches are (issue #16): a hide always
+   * applies; a show applies only while the blogroll's `publicVersion` is still `base`, the version
+   * the device's confirmed rows held.
+   */
+  z.object({
+    ...base,
+    type: z.literal('setBlogrollPublic'),
+    id: blogrollId,
+    isPublic: z.boolean(),
+    base: z.number().int().nonnegative(),
+  }),
+  /** Delete wins. */
+  z.object({ ...base, type: z.literal('deleteBlogroll'), id: blogrollId }),
+  /**
+   * Put a blog in a blogroll, or back in, to the later `at`; one put back goes to the end. A
+   * blogroll of `MAX_BLOGROLL_BLOGS` takes no more, and a deleted one takes nothing.
+   */
+  z.object({ ...base, type: z.literal('rollBlog'), blogrollId, feedId: id }),
+  /** Take a blog out, to the later `at`. Its note stays, for when it is put back. */
+  z.object({ ...base, type: z.literal('unrollBlog'), blogrollId, feedId: id }),
+  /**
+   * Write a blog's note, or clear it (null), to the later `at` on the note's own clock, so a note
+   * never puts back a blog that was taken out.
+   */
+  z.object({
+    ...base,
+    type: z.literal('noteBlog'),
+    blogrollId,
+    feedId: id,
+    note: z.string().trim().pipe(upTo(BLOGROLL_NOTE_MAX)).nullable(),
   }),
 ])
 

@@ -277,9 +277,11 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
 `LogoMark`, `SearchField`, `Swatch`, `SiteAvatar`, `SiteCard`, `SiteFooter`, `TypographyMenu`, the
 highlight toolbar, note and list (`highlights.tsx`), `Shortcuts`, and Discover's `DiscoverTabs`,
 `TopicChips` and `LanguageFilter` (`discover-filters.tsx`), `LeadPost`, `RankedPost` and `PostRow`
-(`discover-post.tsx`), `ReaderCard` and `FollowButton`. The front page, Discover's tabs, a
-blog's page and a profile are pure views in `apps/reader/src/views`, rendered by the SPA and by
-the edge alike. Anything
+(`discover-post.tsx`), `ReaderCard` and `FollowButton`, and for blogrolls `BlogrollCard`,
+`BlogrollDialog`, `AddBlogs`, `BlogrollNote`, the owner's tools (`blogroll-owner.tsx`),
+`SubscribeAll` and `ResponsiveDialog` (`modal.tsx`: a centred dialog from `md`, a `Sheet` below).
+The front page, Discover's tabs, a blog's page, a profile and a blogroll's page are pure views in
+`apps/reader/src/views`, rendered by the SPA and by the edge alike. Anything
 interactive in them must work without JavaScript or degrade to a link: Discover's language menu
 is a native `<details>`, its tabs, topic chips, sort and "More articles" are links, and a
 visitor's Subscribe and Follow are links to sign in. The store marks read,
@@ -378,8 +380,9 @@ rounded instead.
     bulk bar.
   - The footer says how a blog moves and that folders are private and travel with OPML.
 - **The toolbar** sticks above the rows.
-  - It has the place's serif name and its count ("3 of 7" while filtering), then *Rename* and
-    *Delete folder* for a folder (Rename is the same field, in place).
+  - It has the place's serif name and its count ("3 of 7" while filtering), then *Rename*,
+    *Delete folder* and *Make a blogroll…* for a folder (Rename is the same field, in place; the
+    manager has no folder menu to hold the last, ADR 0050).
   - Then a pill "Filter by name or address", the sort (A to Z, Recently posted, Quiet longest) and
     *Select* / *Done* (`aria-pressed`).
   - It wraps when it must, with the filter shrinking from 230 px to 140 px before anything else
@@ -400,8 +403,8 @@ rounded instead.
   A name the member already has (case aside, accents not) is refused under the field. Past
   `MAX_FOLDERS` the button is disabled, with a line saying why.
 - **A 44 px filter** sits above the sections. A section the filter empties is not shown.
-- **Each folder is a section, by name:** the serif name, its count, and a `···` for Rename and
-  Delete folder. "Not in a folder" comes last, headed only when there are folders. An empty section
+- **Each folder is a section, by name:** the serif name, its count, and a `···` for Rename,
+  Delete folder and *Make a blogroll…*. "Not in a folder" comes last, headed only when there are folders. An empty section
   says that a blog's folder button moves one in.
 - **A row** has the name, with host · language · latest post under it, and *Unsubscribe*. Its
   folder button ("Tech ▾", "No folder ▾") sits on a line under the name and opens a `Sheet`, "Move
@@ -503,9 +506,10 @@ the accent for the member's own, their colour for anyone else's), the serif name
 "@handle · Joined September 2026", the bio in 20 px serif, and counts ("**N** following · **N**
 followers · **N** recommendations"), then a "Writes" line of their claimed blogs. On the right:
 *Edit profile* on one's own, *Follow* / *Following* on another member's, and for a visitor a
-*Follow* that signs in first. Below, underlined tabs as addresses (`?tab=liked`,
-`?tab=subscriptions`), each with its count; Liked and Subscriptions exist only when the member
-shows them. Posts are a list with a 96 px date column ("Today", "Sep 27": the reader's local
+*Follow* that signs in first. Below, underlined tabs as addresses (`?tab=blogrolls`,
+`?tab=liked`, `?tab=subscriptions`), each with its count; Liked and Subscriptions exist only when
+the member shows them, and Blogrolls only when the member has a public blogroll, except on one's
+own profile, where it always shows (*Blogrolls*, below). Posts are a list with a 96 px date column ("Today", "Sep 27": the reader's local
 days; the edge, rendering one page for everyone, uses UTC's, so a post within the reader's offset
 of midnight can change day when the app takes over), the note in italic serif, then the blog's swatch, name and language badge ("JA → EN" when the page carries the
 title in the reader's language) and the title; the whole post is the link. Subscriptions are a
@@ -596,8 +600,9 @@ Dashboard (`/dashboard`, Tela v5 §9): a 960 px page, padded 44/48 (24/20 on a p
 Discover (`/discover`, Tela v5 §11, ADR 0044): a 1120 px page, 44 px above (32 px on a phone).
 Every tab opens with the serif "Discover" (40 px, 32 px on a phone), the 15 px `ink-2` intro
 ("Posts, blogs and readers from outside your subscriptions, in any language."), and the tabs This
-week · Articles · Blogs · Readers, underlined as Following's are, each an address (`/discover`,
-`/discover/articles`, `/discover/blogs`, `/discover/readers`) and the current one `aria-current`.
+week · Articles · Blogs · Blogrolls · Readers, underlined as Following's are, each an address
+(`/discover`, `/discover/articles`, `/discover/blogs`, `/discover/blogrolls`, `/discover/readers`)
+and the current one `aria-current`.
 On a phone the tab row runs to the screen's edges and scrolls sideways rather than wrapping; its
 rule is an inset shadow, since a scrolling row clips a border hung below it. Section labels are
 11 px uppercase `muted` with their "All articles →" link on the right, 64 px apart. Everything
@@ -623,6 +628,10 @@ Following, until they come back.
   outlined pill and a link to the next page; with a script it brings that page in place.
 - **Blogs:** the directory as it was: chips, the language menu, the site grid, the pager and the
   claim strip. It keeps the blogs the member reads, as "Subscribed".
+- **Blogrolls** (ADR 0050): a 14 px `muted` line on what a blogroll is, then the public blogrolls
+  of three blogs or more as cards (*Blogrolls*, below), newest public first, and *More blogrolls*,
+  an outlined pill and a link to the next page that brings it in place with a script. It keeps
+  the member's own, as the Blogs tab keeps their blogs, with "Yours" as the reason.
 - **Readers:** a 13 px `muted` note on where suggestions come from, then a group per reason, in
   the rule's order, each a row: a 48 px avatar, the name (15 px 600) and @handle, the bio in 18 px
   serif `body`, the reason line, and the note in a `surface` box with "Recommended **title** ·
@@ -638,6 +647,81 @@ claimed (named for a screen reader), host, language chip, serif tagline, "Latest
 grid of filled pills was louder than the blogs). Cadence is derived from posts in the last 30 days. Below three readers
 tela-api gives no count (ADR 0041), and the line is the cadence alone, in the blog page's words
 ("Posts weekly"); the blog page drops its "N readers on Tela" the same way.
+
+Blogrolls (Tela Lists, ADR 0050). A blogroll's name, description and notes are shown as written,
+never translated, and wrap anywhere (`[overflow-wrap:anywhere]`), so a 60-character name with no
+space, or one in Chinese, never widens a page; `blogrolls.e2e.ts` holds the page to 320 px.
+
+- **The page** (`/l/:id`, `views/blogroll.tsx`) is pure, so the edge renders it, and its layout
+  changes by CSS alone (`max-md:`). What only the app has (the owner's tools, a row's Remove and
+  note editor, Subscribe to all) comes in through slots.
+  - A 780 px column. The header is centred, over a `line` rule: the 11 px uppercase `muted`
+    eyebrow, the name in 54 px serif (balanced), the description in 20 px serif `ink-2` up to
+    540 px, and a 13 px `muted` line with the owner's 24 px avatar and name (a link to their
+    profile) and how many blogs it holds.
+  - Under it, quiet pills (`thumb` border). A member has *Subscribe to all N*, which counts what it
+    adds (*Subscribe to K* when they already read some, *Subscribed to all* with a CHECK when none
+    is left); a visitor has the same words as a link to `/login?next=/l/<id>`, as on a blog's page.
+    The owner has the Private or Public pill (a lock or a globe beside the state, disabled while
+    its change is unsettled), *Edit*, *Add blogs* and *Copy link*, whose toast warns while the
+    blogroll is private.
+  - A panel opened from the pills (Add blogs, Subscribe to all) takes the room under them: from
+    `md` an inline `surface` card up to 520 px, with a `line` border and 12 px corners; below
+    `md` a `Sheet`.
+- **A row**, ruled below, in the order added: the 48 px `SiteAvatar` (12 px corners), the text,
+  and the action.
+  - The name (15.5/600) and the language chip; then "{host} · {n} readers on Tela" in 12.5 px
+    `muted`, the count from three (ADR 0041), with "· Not in your subscriptions" on the owner's row
+    of a blog they do not follow; "Not updating" for a dead feed.
+  - The blog's description in 17 px serif `ink-2`, then the note in 18 px serif italic beside the
+    owner's 22 px avatar, in the locale's quotation marks (`common.quoted`).
+  - The name links to the blog's page on Tela when the blog is listed, and to the blog itself
+    otherwise.
+  - The action is Subscribe or Subscribed for a member, a sign-in link for a visitor, and *Remove*
+    for the owner, which the toast offers to Undo. On the owner's page only, a blog the operator
+    hid from others says that only they see it.
+  - 200 blogs is a long page, not a paged one.
+- **The note** is the owner's, on their own rows: *Add a note* on a row without one, and a click
+  on a note to change it. A serif textarea with a `{n}/280` counter, Cancel and *Save note*; an
+  empty note clears it. Saved at once, with no Undo.
+- **Add blogs**: "Add from your subscriptions", the filter Settings › Subscriptions has (name or
+  address, accents and case aside), then the member's subscriptions by name, each a checkbox with
+  the blog's avatar, ticked while the blog is in. A tick puts a blog in and an untick takes it
+  out, at once and with no Undo; at 200 the unticked boxes are disabled. A line at its foot says
+  that a blog stays in the blogroll when the member unsubscribes from it, and a filter that
+  empties the list says "No subscriptions match."
+- **Subscribe to all**: a 22 px serif title, "You already subscribe to X and Y." in 13 px
+  `ink-2`, then *Put them in* as a radio group of 38 px rows: *New folder* with its name field,
+  the blogroll's name to start with, refused as Settings refuses a name the member has, and
+  disabled at 100 folders with a line saying why; each of their folders, a list that scrolls past
+  about six; and *No folder*. Then a 12.5 px `muted` line, "This copies the blogs into your
+  subscriptions. Later changes to the blogroll don't change them.", and Cancel beside the filled
+  `ink` *Subscribe to K*. The design's "Follow it to hear about new additions" is left out with
+  Follow. One toast, with Undo for the whole group.
+- **The dialog** (New blogroll, Edit blogroll; `ResponsiveDialog`): from `md` a centred modal
+  `<dialog>`, 500 px on `surface`, 16 px corners, 28 px in; below `md` a `Sheet`. A 30 px serif
+  title; *Name* (a 15 px input); *Description (optional)* (a 17 px serif textarea); *Who can see
+  it*, two bordered radio cards, Private and Public, each with a muted hint. At its foot, when
+  editing, a muted *Delete blogroll* on the left, held with its Undo, which then takes the member to
+  their Blogrolls tab; then Cancel and the filled button. Opened by *Make a blogroll…* it starts
+  with the folder's name and blogs, private, and past 200 blogs says it keeps the first 200 by
+  name.
+- **The card** (`BlogrollCard`, on a profile and in Discover) is one link to the blogroll:
+  `surface`, a `line` border that darkens on hover, 12 px corners, 20 px in. The 11 px uppercase
+  eyebrow, with a *Private* marker and a lock on the owner's own private one; the name in 24 px
+  serif, two lines at most; the description in 16 px serif `ink-2`, two lines; its first blogs,
+  each a swatch and its name on one line; and "N blogs" in 12.5 px `muted`, with the reason line
+  in Discover.
+  - On a profile, a grid of `minmax(270px, 1fr)` with each card's first three blogs. One's own
+    tab opens with a 13.5 px `muted` line and *New blogroll*, and shows private blogrolls too.
+  - In Discover, a grid of `minmax(300px, 1fr)` with five blogs each and the owner's 22 px avatar
+    and name over the name.
+- **Empty states**, which the design did not draw, are muted lines in the page's own type: the
+  owner's empty blogroll points to *Add blogs*; a blogroll with no blog shown to others has no
+  Subscribe to all; one's own Blogrolls tab offers *New blogroll*; Discover with none says so.
+- **On a phone** (below `md`) the panels and the dialog are bottom sheets, a `ResponsiveDialog` or
+  a `Sheet`, and the page and the cards keep to the screen at 320 px. Settings' ··· per folder
+  holds *Make a blogroll…*, and Discover's five tabs scroll sideways as its four did.
 
 Front page (`views/landing.tsx`, from `Tela Landing.dc.html` Turn 2, 2A Night and 2B Day, ADR
 0035): a 1280 px page with 56 px sides (16 px on a phone), at the design's line height of 1.2

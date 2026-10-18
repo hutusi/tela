@@ -5,18 +5,18 @@
  */
 import { describe, expect, test } from 'bun:test'
 import type { UiLocale } from '@tela/shared'
-import type { AdminList, AdminSiteRow } from '@tela/shared/admin'
+import type { AdminBlogrollRow, AdminList, AdminSiteRow } from '@tela/shared/admin'
 import { renderToString } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
 import type { AnyAreaSpec } from '../src/admin/area'
-import { useDiscoverArea } from '../src/admin/areas/discover'
+import { type DiscoverRow, useDiscoverArea } from '../src/admin/areas/discover'
 import { ActionPrompt } from '../src/admin/components/prompt'
 import { AdminContext } from '../src/admin/context'
 import { AdminI18n } from '../src/admin/i18n'
 import { Ledger } from '../src/admin/ledger/ledger'
 import { OverviewView } from '../src/admin/overview'
 import { UiContext } from '../src/ui'
-import { BLOG_LIST, blogSpec, candidate, OVERVIEW, QUIET_ADMIN } from './admin-fixtures'
+import { BLOG_LIST, blogroll, blogSpec, candidate, OVERVIEW, QUIET_ADMIN } from './admin-fixtures'
 
 function render(node: React.ReactNode, path: string, locale: UiLocale = 'en'): string {
   return renderToString(
@@ -210,7 +210,7 @@ describe('Discover (ADR 0041)', () => {
     reviewedAt: 1_759_400_000_000,
   }
   const LIST: AdminList<AdminSiteRow, 'discover'> = {
-    counts: { candidates: 1, featured: 0, listed: 1, dismissed: 2, hidden: 0 },
+    counts: { candidates: 1, featured: 0, listed: 1, dismissed: 2, hidden: 0, blogrolls: 0 },
     rows: [candidate, listed],
     truncated: false,
   }
@@ -254,6 +254,105 @@ describe('Discover (ADR 0041)', () => {
   test('a listed blog with no topics is told so in its record', () => {
     const html = render(<Discover />, '/admin/discover?id=31')
     expect(html).toContain('No topics yet, so Discover shows this blog only under All.')
+  })
+})
+
+describe('Discover’s blogrolls (ADR 0050)', () => {
+  const hidden: AdminBlogrollRow = {
+    ...blogroll,
+    id: 'HiddenRoll01',
+    blogrollId: 'HiddenRoll01',
+    name: 'Kept out',
+    hiddenAt: 1_759_600_000_000,
+    inDiscover: false,
+    actions: ['blogroll.restore'],
+  }
+  const few: AdminBlogrollRow = {
+    ...blogroll,
+    id: 'FewBlogs0001',
+    blogrollId: 'FewBlogs0001',
+    name: 'Just started',
+    owner: { id: 'u-kim', handle: 'kim', name: null },
+    blogCount: 2,
+    totalCount: 2,
+    inDiscover: false,
+    blogs: [],
+  }
+  const ROLLS: AdminList<AdminBlogrollRow, 'discover'> = {
+    counts: { candidates: 1, featured: 0, listed: 1, dismissed: 2, hidden: 0, blogrolls: 3 },
+    rows: [blogroll, hidden, few],
+    truncated: false,
+  }
+  function Blogrolls({ rows }: { rows: AdminList<DiscoverRow, 'discover'> }) {
+    return <Ledger area="discover" spec={useDiscoverArea()} initial={rows} />
+  }
+  /** A status pill: its tone's dot, then its words. */
+  const pill = (tone: string, label: string) =>
+    new RegExp(
+      `data-tone="${tone}"><span aria-hidden="true"[^>]*></span><span class="truncate">${label}<`,
+    )
+
+  test('lists each blogroll with its owner, its blogs, when it went public and where it stands', () => {
+    const html = render(<Blogrolls rows={ROLLS} />, '/admin/discover?f=blogrolls')
+    expect(html).toMatch(/aria-pressed="true"[^>]*data-filter="blogrolls"/)
+    expect(html).toContain('Search blogrolls or owners')
+    for (const text of ['Blogroll', 'Includes', 'Blogs', 'Public since']) {
+      expect(html).toContain(`>${text}<`)
+    }
+    expect(html).not.toContain('>Latest post<')
+    // Its name and owner, its first blogs (a blog with no title by its address), and how many
+    // others see of the blogs put in.
+    expect(html).toContain('Essays I return to')
+    expect(html).toContain('Mara, @mara')
+    expect(html).toContain('Nordvest, hibi.example')
+    expect(html).toContain('3 of 4')
+    expect(html).toContain('@kim')
+    // In Discover is good news, Hidden the veto, and short of blogs simply waits.
+    expect(html).toMatch(pill('ok', 'In Discover'))
+    expect(html).toMatch(pill('bad', 'Hidden'))
+    expect(html).toMatch(pill('neutral', 'Fewer than 3 blogs'))
+    // Hide takes something away, as a blog's does; Restore does not.
+    expect(html).toMatch(
+      /text-danger[^"]*"[^>]*data-testid="admin-row-action" data-action="blogroll.hide"/,
+    )
+    expect(html).not.toMatch(
+      /text-danger[^"]*"[^>]*data-testid="admin-row-action" data-action="blogroll.restore"/,
+    )
+    expect(html).toContain('data-action="blogroll.restore"')
+    expect(html).toContain('>Hide<')
+    expect(html).toContain('>Restore<')
+  })
+
+  test('a record says what a Hide leaves, with its actions', () => {
+    const html = render(<Blogrolls rows={ROLLS} />, '/admin/discover?f=blogrolls&id=AbCdEf012345')
+    expect(html).toContain('data-testid="admin-blogroll-record"')
+    expect(html).toContain('Hidden blogrolls keep their page and their place on the profile.')
+    expect(html).toContain('Long reads, slowly.')
+    expect(html).toMatch(/data-action="blogroll.hide">Hide from Discover<kbd[^>]*>1</)
+    const zh = render(
+      <Blogrolls rows={ROLLS} />,
+      '/admin/discover?f=blogrolls&id=HiddenRoll01',
+      'zh-Hans',
+    )
+    expect(zh).toContain('博客链')
+    expect(zh).toContain('被隐藏的博客链仍保留自己的页面')
+    expect(zh).toMatch(/data-action="blogroll.restore">恢复到发现<kbd/)
+  })
+
+  test('rows of the other kind under a filter are drawn as what they are, never a crash', () => {
+    // A blogroll's row under a blog filter, and a blog's under Blogrolls: for a moment the
+    // address and the rows on screen can disagree.
+    const mixed: AdminList<DiscoverRow, 'discover'> = { ...ROLLS, rows: [candidate, blogroll] }
+    for (const path of [
+      '/admin/discover',
+      '/admin/discover?f=blogrolls',
+      '/admin/discover?id=AbCdEf012345',
+      '/admin/discover?f=blogrolls&id=30',
+    ]) {
+      const html = render(<Blogrolls rows={mixed} />, path)
+      expect(html).toContain('日々の海')
+      expect(html).toContain('Essays I return to')
+    }
   })
 })
 

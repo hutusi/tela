@@ -1,10 +1,18 @@
 /**
- * The SQL the public answers share (`public.ts`, `discover.ts`): which blogs are public, a reader
- * count as anyone may see it, a post's titles and excerpts in the launch languages, a blog as a
- * Discover card shows it, and the front page's edition. Each is written once, so two answers that
- * show the same post or blog cannot disagree about what it is or whether it may be shown.
+ * The SQL the public answers share (`public.ts`, `discover.ts`, `blogrolls.ts`): which blogs are
+ * public, a reader count as anyone may see it, a post's titles and excerpts in the launch
+ * languages, a blog as a Discover card shows it, a blogroll as a card shows it, and the front
+ * page's edition. Each is written once, so two answers that show the same post or blog cannot
+ * disagree about what it is or whether it may be shown.
  */
-import { ARTICLE_COLUMNS, avatarOf, publicReaderCount } from '@tela/data'
+import {
+  ARTICLE_COLUMNS,
+  avatarOf,
+  BLOG_NAME,
+  publicReaderCount,
+  visibleBlogCount,
+  visibleBlogsFrom,
+} from '@tela/data'
 import { type SQL, sql } from 'drizzle-orm'
 
 type Row = Record<string, unknown>
@@ -18,6 +26,20 @@ export const PUBLIC_CACHE = 'public, max-age=60, s-maxage=300, stale-while-reval
  * tabs carry recommendations and public subscriptions, so they are cached as a profile is.
  */
 export const PROFILE_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=240'
+/**
+ * A public answer that has nothing to show: a minute in the browser and at the edge, so a page made
+ * public (a blog listed, a blogroll shown) is found within minutes of a visit that missed it.
+ */
+export function publicNotFound(): Response {
+  return new Response(JSON.stringify({ error: 'not_found' }), {
+    status: 404,
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': 'public, max-age=60, s-maxage=60',
+    },
+  })
+}
+
 /** A language filter as a query string may give one: a tag, never a pattern or a list. */
 export const LANG = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/
 export const DAY = 24 * 60 * 60 * 1000
@@ -164,3 +186,89 @@ export const editionStatement = (now: number, extras?: SQL): SQL => sql`
   order by a.sort_at desc, a.id desc
   limit 60
 `
+
+/** A member as a public answer names them (`Person` in the reader's `views/types.ts`). */
+export type Person = {
+  id: string
+  handle: string
+  displayName: string | null
+  avatar: string | null
+}
+
+/**
+ * When others last saw a blogroll change, over `blogrolls r` (ADR 0050): the latest of its own
+ * clock (name and description) and what its blog rows show them: a blog put in or taken out, a
+ * note written on a blog still in. A blog the operator hid is none of theirs, nor a note on one
+ * taken out: counted, "Updated today" would tell of a change nobody else can see. Public or
+ * private keeps a version, not a clock, and changes nothing others read on the page.
+ */
+export const BLOGROLL_UPDATED_AT = sql.raw(`max(r.updated_at, coalesce((
+    select max(case when b.removed_at is null then max(b.updated_at, b.note_at) else b.updated_at end)
+    from blogroll_blogs b join feeds bf on bf.id = b.feed_id join sites bs on bs.id = bf.site_id
+    where b.blogroll_id = r.id and bs.listing <> 'rejected'
+  ), 0))`)
+
+/** A blog on a blogroll's card: enough to draw its swatch and name it. */
+export type BlogrollChip = { feedId: number; siteId: number; name: string | null; homeUrl: string }
+
+/** A blogroll on a profile or Discover (`BlogrollCard` in the reader's `views/types.ts`). */
+export type BlogrollCard = {
+  id: string
+  name: string
+  description: string
+  owner: Person
+  blogCount: number
+  blogs: BlogrollChip[]
+  publicSince: number | null
+  updatedAt: number
+}
+
+/**
+ * A blogroll as a card shows it, over `blogrolls r` joined to its owner's `profiles p`: how many
+ * blogs others see, and the first `chips` of them in the blogroll's order, as one JSON array. The
+ * chips are ordered in a subquery and limited before they are aggregated, which keeps that order
+ * on libSQL and D1 alike; `json_group_array(… order by …)` needs a newer SQLite than D1 promises.
+ */
+export const blogrollCard = (chips: number): SQL => sql`
+  r.id, r.name, r.description, r.public_since as "publicSince",
+  ${BLOGROLL_UPDATED_AT} as "updatedAt", ${visibleBlogCount('r')} as "blogCount",
+  (select json_group_array(json_object('feedId', x.feed_id, 'siteId', x.site_id, 'name', x.name,
+      'homeUrl', x.home_url))
+    from (
+      select bb.feed_id, s.id as site_id, ${BLOG_NAME} as name, s.home_url
+      from ${visibleBlogsFrom('r')}
+      order by bb.added_at, bb.feed_id
+      limit ${sql.raw(String(Math.trunc(chips)))}
+    ) x) as blogs,
+  p.user_id as "ownerId", p.handle as "ownerHandle", p.display_name as "ownerName",
+  ${avatarOf('p')} as "ownerAvatar"`
+
+/** A row of `blogrollCard` as the card. */
+export function blogrollCardOf(row: Row): BlogrollCard {
+  let chips: unknown = []
+  try {
+    chips = JSON.parse(String(row.blogs ?? '[]'))
+  } catch {}
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    description: String(row.description ?? ''),
+    owner: {
+      id: String(row.ownerId),
+      handle: String(row.ownerHandle),
+      displayName: (row.ownerName as string | null) ?? null,
+      avatar: (row.ownerAvatar as string | null) ?? null,
+    },
+    blogCount: Number(row.blogCount ?? 0),
+    blogs: Array.isArray(chips)
+      ? chips.map((c: Row) => ({
+          feedId: Number(c.feedId),
+          siteId: Number(c.siteId),
+          name: (c.name as string | null) ?? null,
+          homeUrl: String(c.homeUrl),
+        }))
+      : [],
+    publicSince: row.publicSince == null ? null : Number(row.publicSince),
+    updatedAt: Number(row.updatedAt),
+  }
+}

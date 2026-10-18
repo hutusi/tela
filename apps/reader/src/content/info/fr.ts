@@ -107,8 +107,8 @@ export const fr = {
     short: [
       'Tela garde ce dont il a besoin pour faire fonctionner votre liste de lecture, et rien pour la publicité.',
       'Nous ne vendons pas vos données, n’affichons pas de publicité et n’utilisons aucun outil de mesure d’audience.',
-      'Ce que vous lisez, aimez et surlignez reste privé, sauf si vous choisissez de le montrer. Votre profil, vos recommandations et les blogs que vous revendiquez sont publics.',
-      'Vous pouvez exporter vos abonnements, avec leurs dossiers, en OPML, et télécharger votre profil, vos paramètres, abonnements, coups de cœur, recommandations, surlignages et suivis en un seul fichier, quand vous voulez.',
+      'Ce que vous lisez, aimez et surlignez reste privé, sauf si vous choisissez de le montrer. Votre profil, vos recommandations, les blogrolls que vous rendez publiques et les blogs que vous revendiquez sont publics.',
+      'Vous pouvez exporter vos abonnements, avec leurs dossiers, en OPML, et télécharger votre profil, vos paramètres, abonnements, coups de cœur, recommandations, surlignages, blogrolls et suivis en un seul fichier, quand vous voulez.',
     ],
     sections: {
       collect: {
@@ -132,6 +132,7 @@ export const fr = {
               'Les articles que vous avez lus, aimés et recommandés, et les mots joints à vos recommandations.',
               'Vos surlignages et les notes qui les accompagnent.',
               'Les personnes que vous suivez.',
+              'Vos blogrolls, avec leur nom et leur description, les blogs qu’elles contiennent, vos notes sur ces blogs, et si elles sont publiques ou non.',
               'Vos paramètres : langues, thème, taille du texte, etc.',
               'Les traductions que vous demandez et ce que chacune a coûté, pour que tout le monde reste dans un quota quotidien.',
             ],
@@ -157,12 +158,13 @@ export const fr = {
         heading: 'Ce qui est public',
         blocks: [
           {
-            p: 'Tout le monde peut voir votre profil à l’adresse telaread.com/@votreidentifiant. Il montre votre identifiant, votre nom affiché, votre bio et votre photo, le mois de votre arrivée, combien de personnes vous suivez et combien vous suivent, combien d’articles vous avez recommandés, les blogs que vous avez revendiqués, et les articles que vous recommandez avec vos mots. Il porte aussi le numéro de compte aléatoire que Tela utilise pour les suivis.',
+            p: 'Tout le monde peut voir votre profil à l’adresse telaread.com/@votreidentifiant. Il montre votre identifiant, votre nom affiché, votre bio et votre photo, le mois de votre arrivée, combien de personnes vous suivez et combien vous suivent, combien d’articles vous avez recommandés, les blogs que vous avez revendiqués, les articles que vous recommandez avec vos mots, et vos blogrolls publiques. Il porte aussi le numéro de compte aléatoire que Tela utilise pour les suivis.',
           },
           {
             list: [
               'Vos recommandations parviennent aussi aux personnes qui vous suivent, et apparaissent dans Découvrir à côté des articles recommandés, avec leur mot. Une recommandation accompagnée d’un mot apparaît également sur la page du blog dans Tela et dans le tableau de bord de son auteur, avec votre nom et votre identifiant.',
               'Dès que vous recommandez des articles, ou que vous montrez les blogs que vous lisez, Découvrir peut vous suggérer comme lecteur à suivre, à quiconque le parcourt, en disant pourquoi : un article que vous avez recommandé, ou un blog que vous montrez. Tela rapproche ces suggestions de ce que chaque membre aime et lit sur son propre appareil ; rien de privé ne sert à vous suggérer.',
+              'Une blogroll reste privée tant que vous ne la rendez pas publique. Une blogroll publique, avec son nom, sa description, ses blogs et vos notes sur eux, est visible de tous, sur sa propre page, sur votre profil, et dans Découvrir dès que trois de ses blogs sont visibles des autres. Une blogroll privée n’est visible que de vous. La personne qui gère Tela peut retirer une blogroll publique de Découvrir. Elle garde alors sa page et sa place sur votre profil.',
               'Les articles que vous aimez et les blogs que vous lisez ne sont montrés que si vous l’activez dans Paramètres → Confidentialité. Ils apparaissent alors sur votre profil et aux personnes qui vous suivent, y compris sur la page d’un blog, parmi les lecteurs qu’elles suivent.',
               'Votre photo est celle que vous envoyez. Sans elle, c’est votre Gravatar, actif jusqu’à ce que vous le désactiviez dans Paramètres → Profil. Sans l’une ni l’autre, c’est votre initiale.',
               'Une photo que vous supprimez ou désactivez peut rester jusqu’à 30 jours dans les caches des navigateurs et du réseau, à une adresse vers laquelle plus rien ne pointe.',
@@ -281,7 +283,7 @@ export const fr = {
               'Quand une session prend fin, son enregistrement, avec l’adresse IP et le navigateur, est supprimé dans la journée. Une session prend fin quand vous vous déconnectez, ou après 60 jours sans utilisation.',
               'Les compteurs qui empêchent les abus, qui contiennent une adresse IP, une adresse e-mail ou un numéro de compte, sont supprimés au bout d’un jour.',
               'Cloudflare garde ses journaux de requêtes 7 jours.',
-              'Une recommandation ou un surlignage que vous retirez reste dans la base de données, marqué comme retiré et avec son texte, pour que vos autres appareils se mettent à jour.',
+              'Une recommandation, un surlignage ou une blogroll que vous retirez, ou un blog que vous enlevez d’une blogroll, reste dans la base de données, marqué comme retiré et avec son texte, pour que vos autres appareils se mettent à jour.',
               'Cloudflare conserve un point de restauration de toute la base de données sur 30 jours, et Tela copie la base chaque nuit en gardant chaque copie 30 jours. Ce que vous modifiez ou retirez peut subsister aussi longtemps dans l’un ou l’autre. La copie nocturne exclut les sessions, les codes de connexion et les compteurs d’abus.',
             ],
           },
@@ -293,12 +295,12 @@ export const fr = {
           {
             list: [
               'Exportez vos abonnements, avec leurs dossiers, en OPML dans Paramètres → Abonnements.',
-              'Téléchargez votre profil, vos paramètres, abonnements, coups de cœur, recommandations, surlignages et les personnes que vous suivez en un seul fichier dans Paramètres → Confidentialité → Vos données.',
+              'Téléchargez votre profil, vos paramètres, abonnements, coups de cœur, recommandations, surlignages, blogrolls et les personnes que vous suivez en un seul fichier dans Paramètres → Confidentialité → Vos données.',
               'Choisissez ce que les autres voient dans Paramètres → Confidentialité. Votre photo et votre Gravatar sont dans Paramètres → Profil ; une photo envoyée que vous retirez est supprimée.',
               'Définissez ou changez un mot de passe, associez ou dissociez Google et GitHub, et déconnectez-vous partout dans Paramètres → Compte.',
               'Retrouvez les codes d’invitation que vous avez créés et les personnes qui s’en sont servies dans Paramètres → Invitations, et révoquez-en un que personne n’a utilisé.',
               'Changez votre identifiant, votre nom et votre bio quand vous voulez.',
-              'Retirez une recommandation, un surlignage, un coup de cœur ou un suivi à tout moment. Il disparaît aussitôt de Tela, et des pages publiques en quelques minutes.',
+              'Retirez une recommandation, un surlignage, un coup de cœur, un suivi ou une blogroll à tout moment. Chacun disparaît aussitôt de Tela, et des pages publiques en quelques minutes. Rendre une blogroll privée la retire des pages publiques de la même façon.',
               'Pour toute autre question sur vos données, [contactez-nous](#contact).',
             ],
           },
@@ -395,7 +397,7 @@ export const fr = {
         heading: 'Ce que vous publiez',
         blocks: [
           {
-            p: 'Votre bio, vos mots et vos surlignages vous appartiennent. En ajoutant une bio, ou un mot à une recommandation, vous permettez à Tela de les afficher sur Tela, aux endroits qu’indique la [page Confidentialité](/privacy#public). Les surlignages et leurs notes restent privés.',
+            p: 'Votre bio, vos mots, vos blogrolls et vos surlignages vous appartiennent. En ajoutant une bio, un mot à une recommandation, ou une blogroll publique avec son nom, sa description et ses notes, vous permettez à Tela de les afficher sur Tela, aux endroits qu’indique la [page Confidentialité](/privacy#public). Les surlignages et leurs notes, comme les blogrolls privées, restent privés.',
           },
         ],
       },

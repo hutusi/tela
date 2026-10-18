@@ -1,10 +1,15 @@
 /**
  * What each member has done: subscriptions and the folders they are in, read and liked state,
- * highlights, recommendations, the members they follow.
+ * highlights, recommendations, the members they follow, the blogrolls they keep.
  * All of it syncs to the reader's device, so every row carries `seq`, and removals are soft
  * (`deleted_at`) so a pull can see them.
  */
-import { FOLDER_NAME_MAX } from '@tela/shared'
+import {
+  BLOGROLL_DESCRIPTION_MAX,
+  BLOGROLL_NAME_MAX,
+  BLOGROLL_NOTE_MAX,
+  FOLDER_NAME_MAX,
+} from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import {
   check,
@@ -17,7 +22,7 @@ import {
 } from 'drizzle-orm/sqlite-core'
 import { articles } from './articles'
 import { user } from './auth'
-import { ms, oneOf, seq } from './columns'
+import { flag, ms, oneOf, seq } from './columns'
 import { feeds } from './sources'
 import { HIGHLIGHT_SIDES } from './values'
 
@@ -189,6 +194,90 @@ export const feedFolders = sqliteTable(
     primaryKey({ columns: [t.userId, t.feedId] }),
     index('feed_folders_user_seq_idx').on(t.userId, t.seq),
     index('feed_folders_folder_idx').on(t.folderId),
+  ],
+)
+
+/**
+ * A member's blogroll (ADR 0050): a list of blogs to share, private until its member makes it
+ * public. `id` is minted by the client and is the blogroll's address (`/l/<id>`). The row syncs to
+ * its member only; others read a public one through tela-api.
+ *
+ * `updated_at` is the clock of the name and description. Public or private has a version of its
+ * own (`public_version`), as the profile's privacy switches do (issue #16), so a stale device's
+ * rename never makes public again what another device made private. `public_since` is when it
+ * first went public, set by tela-api and never cleared: Discover pages by it. `hidden_at` is the
+ * operator's Hide from Discover; it never syncs and never moves `seq` or `updated_at`.
+ */
+export const blogrolls = sqliteTable(
+  'blogrolls',
+  {
+    id: text().primaryKey(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    description: text().notNull().default(''),
+    isPublic: flag(),
+    publicVersion: integer().notNull().default(0),
+    publicSince: ms(),
+    hiddenAt: ms(),
+    createdAt: ms().notNull(),
+    updatedAt: ms().notNull(),
+    deletedAt: ms(),
+    seq: seq(),
+  },
+  (t) => [
+    check(
+      'blogrolls_name_check',
+      sql`length(${t.name}) between 1 and ${sql.raw(String(BLOGROLL_NAME_MAX))}`,
+    ),
+    check(
+      'blogrolls_description_check',
+      sql`length(${t.description}) <= ${sql.raw(String(BLOGROLL_DESCRIPTION_MAX))}`,
+    ),
+    index('blogrolls_user_seq_idx').on(t.userId, t.seq),
+    index('blogrolls_discover_idx').on(t.isPublic, t.publicSince, t.id),
+  ],
+)
+
+/**
+ * A blog in a blogroll, with its member's note (ADR 0050). Keyed by feed, as a subscription and a
+ * filing are, so a merged address resolves through `feeds.merged_into`. A removal is soft, so a
+ * pull sees it, and a blog put back goes to the end (`added_at`). The note keeps its own clock
+ * (`note_at`) and outlives a removal, so a note written on one device never brings back a blog
+ * another device removed. Unsubscribing never touches this row: a blogroll recommends blogs, it
+ * does not mirror subscriptions.
+ */
+export const blogrollBlogs = sqliteTable(
+  'blogroll_blogs',
+  {
+    blogrollId: text()
+      .notNull()
+      .references(() => blogrolls.id, { onDelete: 'cascade' }),
+    feedId: integer()
+      .notNull()
+      .references(() => feeds.id, { onDelete: 'cascade' }),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    note: text(),
+    /** When the note last changed; the later `at` wins. 0 for never written. */
+    noteAt: ms().notNull().default(0),
+    /** When the blog was put in (again): the blogroll's order. */
+    addedAt: ms().notNull(),
+    /** When the blog was last put in or taken out; the later `at` wins. */
+    updatedAt: ms().notNull(),
+    removedAt: ms(),
+    seq: seq(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.blogrollId, t.feedId] }),
+    check(
+      'blogroll_blogs_note_check',
+      sql`${t.note} is null or length(${t.note}) between 1 and ${sql.raw(String(BLOGROLL_NOTE_MAX))}`,
+    ),
+    index('blogroll_blogs_user_seq_idx').on(t.userId, t.seq),
+    index('blogroll_blogs_feed_idx').on(t.feedId),
   ],
 )
 

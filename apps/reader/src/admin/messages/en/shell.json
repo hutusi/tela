@@ -74,6 +74,10 @@
       },
       "global": { "label": "Fetch directly", "short": "Direct", "done": "Fetching directly" }
     },
+    "blogroll": {
+      "hide": { "label": "Hide from Discover", "short": "Hide", "done": "Hidden from Discover" },
+      "restore": { "label": "Restore to Discover", "short": "Restore", "done": "Restored" }
+    },
     "dead": {
       "retry": { "label": "Retry now", "short": "Retry", "done": "Queued again" },
       "dismiss": { "label": "Dismiss", "short": "Dismiss", "done": "Dismissed" }

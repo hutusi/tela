@@ -139,7 +139,55 @@ export type ProfileData = {
       }[]
     | null
   liked: (ProfilePost & { likedAt: number })[] | null
+  /** The member's public blogrolls, newest first (ADR 0050); empty from a tela-api before them. */
+  blogrolls: BlogrollCard[]
 }
+
+/**
+ * A blog in a public blogroll (ADR 0050), as others see it: blogs the operator hid are left out.
+ * `listed` says whether the blog has a page of its own on Tela (`/s/<siteId>`); one that has not
+ * links to the blog itself. `name` follows the device's naming rule (the blog's title, or its
+ * feed's when the blogroll holds two feeds of one blog); null when neither has one.
+ */
+export type BlogrollBlog = {
+  feedId: number
+  siteId: number
+  name: string | null
+  homeUrl: string
+  faviconKey: string | null
+  primaryLang: string | null
+  description: string | null
+  listed: boolean
+  /** Null below three readers (ADR 0041). */
+  readerCount: number | null
+  /** The feed has stopped answering: shown as "Not updating". */
+  dead: boolean
+  note: string | null
+  addedAt: number
+}
+
+/** A public blogroll's page (`/api/v1/public/blogrolls/:id`): its blogs in the order added. */
+export type BlogrollData = {
+  blogroll: { id: string; name: string; description: string; updatedAt: number }
+  owner: Person
+  blogs: BlogrollBlog[]
+}
+
+/** A blogroll on a card, on a profile or Discover: its first few blogs and how many it has. */
+export type BlogrollCard = {
+  id: string
+  name: string
+  description: string
+  owner: Person
+  /** The blogs others see. */
+  blogCount: number
+  blogs: { feedId: number; siteId: number; name: string | null; homeUrl: string }[]
+  publicSince: number | null
+  updatedAt: number
+}
+
+/** A page of Discover's Blogrolls (`/api/v1/public/discover/blogrolls`), newest public first. */
+export type BlogrollsData = { blogrolls: BlogrollCard[]; next: string | null }
 
 /** What a member adds to a public page: their own subscription state, and ways to act on it. */
 export type MemberControls = {

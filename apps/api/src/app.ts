@@ -19,6 +19,7 @@ import { accountRoutes } from './routes/account'
 import { adminRoutes } from './routes/admin'
 import { runBatch } from './routes/admin/framework'
 import { avatarRoutes } from './routes/avatars'
+import { blogrollRoutes } from './routes/blogrolls'
 import { claimRoutes } from './routes/claims'
 import { curate } from './routes/curate'
 import { discoverRoutes } from './routes/discover'
@@ -242,6 +243,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   // Discover's This week, Articles and Readers (ADR 0044), under the Blogs answer's own path:
   // that one is `/discover` exactly, in `publicRoutes`, and these are only below it.
   app.route('/api/v1/public/discover', discoverRoutes(deps))
+  // A public blogroll's page (ADR 0050); its owner reads their own from the device.
+  app.route('/api/v1/public/blogrolls', blogrollRoutes(deps))
   app.route('/api/v1/public', publicRoutes(deps, auth))
   // Hubs, not members, call this; the signature is the authorization.
   app.route('/api/websub', websubRoutes(deps))

@@ -103,12 +103,12 @@ test.beforeAll(async () => {
 test.describe('without JavaScript', () => {
   test.use({ ...VISITOR, javaScriptEnabled: false })
 
-  test('the four tabs are whole pages, This week first', async ({ page }) => {
+  test('the five tabs are whole pages, This week first', async ({ page }) => {
     const res = await page.goto('/discover')
     expect(res?.status()).toBe(200)
     expect(res?.headers()['x-robots-tag']).toBe('noindex, nofollow')
     const tabs = page.getByTestId('discover-tabs')
-    await expect(tabs.getByRole('link')).toHaveCount(4)
+    await expect(tabs.getByRole('link')).toHaveCount(5)
     await expect(page.getByTestId('discover-tab-week')).toHaveAttribute('aria-current', 'page')
     await expect(page.getByTestId('discover-tab-articles')).toHaveAttribute(
       'href',

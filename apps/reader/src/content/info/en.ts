@@ -105,8 +105,8 @@ export const en = {
     short: [
       'Tela keeps what it needs to run your reading list, and nothing for advertising.',
       "We don't sell your data, show ads or use analytics.",
-      'What you read, like and highlight stays private unless you choose to show it. Your profile, your recommendations and the blogs you claim are public.',
-      'You can export your subscriptions, with their folders, as OPML, and download your profile, settings, subscriptions, likes, recommendations, highlights and follows as one file, whenever you like.',
+      'What you read, like and highlight stays private unless you choose to show it. Your profile, your recommendations, the blogrolls you make public and the blogs you claim are public.',
+      'You can export your subscriptions, with their folders, as OPML, and download your profile, settings, subscriptions, likes, recommendations, highlights, blogrolls and follows as one file, whenever you like.',
     ],
     sections: {
       collect: {
@@ -130,6 +130,7 @@ export const en = {
               "Which posts you've read, liked and recommended, and the notes on your recommendations.",
               'Your highlights and the notes on them.',
               'The people you follow.',
+              'Your blogrolls: their names and descriptions, the blogs in them, your notes on those blogs, and whether each is public.',
               'Your settings: languages, theme, text size and the like.',
               'The translations you ask for and what each cost, to keep everyone within a daily allowance.',
             ],
@@ -151,12 +152,13 @@ export const en = {
         heading: "What's public",
         blocks: [
           {
-            p: "Anyone can see your profile at telaread.com/@yourhandle. It shows your handle, display name, bio and picture, the month you joined, how many people you follow and how many follow you, how many posts you've recommended, the blogs you've claimed, and the posts you recommend with your notes. It also carries the random account number Tela uses for follows.",
+            p: "Anyone can see your profile at telaread.com/@yourhandle. It shows your handle, display name, bio and picture, the month you joined, how many people you follow and how many follow you, how many posts you've recommended, the blogs you've claimed, the posts you recommend with your notes, and your public blogrolls. It also carries the random account number Tela uses for follows.",
           },
           {
             list: [
               "Your recommendations also reach the people who follow you, and appear in Discover beside the posts you recommend, notes included. A recommendation with a note also appears on the blog's page on Tela and in its writer's Dashboard, with your name and handle.",
               'Once you recommend posts, or show the blogs you read, Discover may suggest you as a reader to follow, to anyone browsing it, saying why: a post you recommended, or a blog you show. Tela matches suggestions to what each member likes and reads on their own device; nothing private of yours is used to suggest you.',
+              'A blogroll is private until you make it public. A public blogroll, with its name, description, blogs and your notes on them, is open to anyone: on its own page, on your profile, and in Discover once it has three blogs others can see. A private blogroll only you see. The person who runs Tela can hide a public blogroll from Discover; it keeps its page and its place on your profile.',
               "The posts you like and the blogs you read are shown only if you turn them on in Settings → Privacy. Then they appear on your profile and to the people who follow you, including on a blog's page as a reader they follow.",
               "Your picture is the one you upload. Without one, it's your Gravatar, which stays on until you turn it off in Settings → Profile. Without either, it's your initial.",
               'A picture you remove or turn off can stay in browser and network caches for up to 30 days, at an address nothing links to any more.',
@@ -275,7 +277,7 @@ export const en = {
               'When a session ends, its record, with its IP address and browser, is deleted within a day. A session ends when you sign out, or after 60 days without use.',
               'The counters that stop abuse, which hold an IP address, an email address or an account number, are deleted after a day.',
               'Cloudflare keeps its request logs for 7 days.',
-              'A recommendation or highlight you remove stays in the database marked as removed, with its text, so your other devices catch up.',
+              'A recommendation, highlight or blogroll you remove, or a blog you take out of a blogroll, stays in the database marked as removed, with its text, so your other devices catch up.',
               'Cloudflare keeps a 30-day restore point of the whole database, and Tela copies the database every night, keeping each copy 30 days. Something you change or remove can stay in either that long. The nightly copy leaves out sessions, sign-in codes and abuse counters.',
             ],
           },
@@ -287,12 +289,12 @@ export const en = {
           {
             list: [
               'Export your subscriptions, with their folders, as OPML in Settings → Subscriptions.',
-              'Download your profile, settings, subscriptions, likes, recommendations, highlights and the people you follow as one file in Settings → Privacy → Your data.',
+              'Download your profile, settings, subscriptions, likes, recommendations, highlights, blogrolls and the people you follow as one file in Settings → Privacy → Your data.',
               'Choose what others see in Settings → Privacy. Your picture and Gravatar are in Settings → Profile; an uploaded picture you remove is deleted.',
               'Set or change a password, link or unlink Google and GitHub, and sign out everywhere in Settings → Account.',
               'See the invite codes you made and who joined with them in Settings → Invites, and revoke one nobody has used.',
               'Change your handle, name and bio whenever you like.',
-              'Remove a recommendation, highlight, like or follow at any time. It disappears from Tela at once, and from public pages within a few minutes.',
+              'Remove a recommendation, highlight, like, follow or blogroll at any time. It disappears from Tela at once, and from public pages within a few minutes. Making a blogroll private takes it off public pages the same way.',
               'For anything else about your data, [get in touch](#contact).',
             ],
           },
@@ -389,7 +391,7 @@ export const en = {
         heading: 'What you post',
         blocks: [
           {
-            p: 'Your bio, notes and highlights are yours. By adding a bio, or a note to a recommendation, you let Tela show it on Tela, where the [Privacy page](/privacy#public) says it appears. Highlights and their notes stay private.',
+            p: 'Your bio, notes, blogrolls and highlights are yours. By adding a bio, a note to a recommendation, or a public blogroll with its name, description and notes, you let Tela show it on Tela, where the [Privacy page](/privacy#public) says it appears. Highlights and their notes, and private blogrolls, stay private.',
           },
         ],
       },

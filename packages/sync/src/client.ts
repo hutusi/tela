@@ -11,11 +11,13 @@
  *
  * No I/O here, so the rules can be tested on their own and shared with anything that syncs.
  */
-import { MAX_FOLDERS } from '@tela/shared'
+import { MAX_BLOGROLL_BLOGS, MAX_BLOGROLLS, MAX_FOLDERS } from '@tela/shared'
 import type { Mutation } from './mutations'
 import { completePull, type PullResponse } from './protocol'
 import type {
   ArticleRow,
+  BlogrollBlogRow,
+  BlogrollRow,
   ClaimRow,
   FeedFolderRow,
   FeedRow,
@@ -57,6 +59,13 @@ export type Tables = {
   folders: Map<string, FolderRow>
   /** By feed id: which folder each blog is in, `folderId` null for none. */
   feedFolders: Map<number, FeedFolderRow>
+  /** By id: the member's live blogrolls (a deleted one is not held, ADR 0050). */
+  blogrolls: Map<string, BlogrollRow>
+  /**
+   * By `${blogrollId}:${feedId}` (`blogrollBlogKey`): the blogs in the member's blogrolls, removed
+   * ones included, so a blog put back gets its note back.
+   */
+  blogrollBlogs: Map<string, BlogrollBlogRow>
 }
 
 export type Confirmed = { cursor: number; tables: Tables }
@@ -84,10 +93,13 @@ export const emptyTables = (): Tables => ({
   follows: new Map(),
   folders: new Map(),
   feedFolders: new Map(),
+  blogrolls: new Map(),
+  blogrollBlogs: new Map(),
 })
 
 export const titleKey = (articleId: number, lang: string) => `${articleId}:${lang}`
 export const translationKey = (contentKey: string, lang: string) => `${contentKey}:${lang}`
+export const blogrollBlogKey = (blogrollId: string, feedId: number) => `${blogrollId}:${feedId}`
 
 /** A shallow copy whose maps can be changed without touching the original. */
 function copy(tables: Tables): Tables {
@@ -107,6 +119,8 @@ function copy(tables: Tables): Tables {
     follows: new Map(tables.follows),
     folders: new Map(tables.folders),
     feedFolders: new Map(tables.feedFolders),
+    blogrolls: new Map(tables.blogrolls),
+    blogrollBlogs: new Map(tables.blogrollBlogs),
   }
 }
 
@@ -165,6 +179,19 @@ export function applyPull(confirmed: Confirmed, given: PullResponse): Confirmed 
     else t.folders.delete(row.id)
   }
   for (const row of r.feedFolders) t.feedFolders.set(row.feedId, row)
+  // Blogrolls (ADR 0050): blogs first, so a blogroll deleted in this page takes the ones that came
+  // with it. A blog of a blogroll not held yet is kept: a page can end before the blogroll's own
+  // row, when that changed after its blogs did. A removed blog is kept too, with its note.
+  for (const row of r.blogrollBlogs) {
+    t.blogrollBlogs.set(blogrollBlogKey(row.blogrollId, row.feedId), row)
+  }
+  for (const row of r.blogrolls) {
+    if (row.deletedAt === null) t.blogrolls.set(row.id, row)
+    else {
+      t.blogrolls.delete(row.id)
+      dropBlogsOf(t, row.id)
+    }
+  }
   for (const stone of pull.tombstones) {
     if (stone.entity === 'article') t.articles.delete(Number(stone.key))
   }
@@ -253,14 +280,78 @@ export function privacyChange(
   return { type: 'setPrivacy', [flag]: true, base: { [flag]: held } }
 }
 
+type SetBlogrollPublic = Extract<Mutation, { type: 'setBlogrollPublic' }>
+
+/**
+ * Whether a blogroll cannot be made public yet (ADR 0050), as `privacyUnsettled` says of a
+ * privacy switch: a change this device made to it is not in the confirmed rows yet, or the
+ * confirmed rows do not hold the blogroll at all (made on this device and not pulled back). A show
+ * names the version the server held, and until then the device cannot know it.
+ */
+export function blogrollPublicUnsettled(
+  confirmed: Confirmed,
+  pending: readonly Pending[],
+  id: string,
+): boolean {
+  if (!confirmed.tables.blogrolls.has(id)) return true
+  return settle(confirmed, pending).some(
+    (p) => p.mutation.type === 'setBlogrollPublic' && p.mutation.id === id,
+  )
+}
+
+/**
+ * A blogroll made public or private now, as the mutation to make, or null for a show that has to
+ * wait (`blogrollPublicUnsettled`). A hide always applies; a show names in `base` the version in
+ * the **confirmed** rows, never the view's, for the reason `privacyChange` gives.
+ */
+export function blogrollPublicChange(
+  confirmed: Confirmed,
+  pending: readonly Pending[],
+  id: string,
+  on: boolean,
+): Omit<SetBlogrollPublic, 'mid' | 'at'> | null {
+  const held = confirmed.tables.blogrolls.get(id)?.publicVersion ?? 0
+  if (!on) return { type: 'setBlogrollPublic', id, isPublic: false, base: held }
+  if (blogrollPublicUnsettled(confirmed, pending, id)) return null
+  return { type: 'setBlogrollPublic', id, isPublic: true, base: held }
+}
+
 /**
  * Predict one mutation, as the server will apply it (`apps/api/src/sync/push.ts`). Same rules:
  * read is set once, unless the member marks the post unread, and then read and unread go to the
  * later `at`; likes, recommendations and prefs go to the later `at`; a watermark never moves
  * backwards. Counts move with the member's own change, which is all a device can know.
+ *
+ * `tables` is left as it was: the answer is a copy.
  */
 export function applyMutation(tables: Tables, m: Mutation): Tables {
   const t = copy(tables)
+  applyInPlace(t, m)
+  return t
+}
+
+/** How many blogs a blogroll holds that are not taken out. */
+function liveBlogCount(t: Tables, blogrollId: string): number {
+  let n = 0
+  for (const row of t.blogrollBlogs.values()) {
+    if (row.blogrollId === blogrollId && row.removedAt === null) n++
+  }
+  return n
+}
+
+/** Let a blogroll's blogs go with it: a deleted blogroll is not held, nor what was in it. */
+function dropBlogsOf(t: Tables, blogrollId: string) {
+  const prefix = `${blogrollId}:`
+  for (const key of t.blogrollBlogs.keys()) if (key.startsWith(prefix)) t.blogrollBlogs.delete(key)
+}
+
+/**
+ * `applyMutation` on tables already copied, changed where they are: what `view` replays every
+ * pending mutation with, so a long queue (a held subscribe-all is hundreds) copies the tables once
+ * rather than once per mutation. Only the maps of `t` change. A row is never changed in place but
+ * replaced, since the maps of a copy hold the same row objects as the confirmed tables.
+ */
+function applyInPlace(t: Tables, m: Mutation): void {
   switch (m.type) {
     case 'markRead': {
       // As the server decides: a first read is clock-less, unless it reads a post marked unread,
@@ -269,7 +360,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       const s = t.states.get(m.articleId) ?? blankState(m.articleId)
       const clock = s.readUpdatedAt ?? null
       if (s.readAt === null) {
-        if (clock !== null && m.at < clock) return t
+        if (clock !== null && m.at < clock) return
         t.states.set(m.articleId, {
           ...s,
           readAt: m.at,
@@ -278,19 +369,19 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       } else if (m.at > Math.max(s.readAt, clock ?? 0)) {
         t.states.set(m.articleId, { ...s, readUpdatedAt: m.at })
       }
-      return t
+      return
     }
     case 'markUnread': {
       // To the later `at` against any read or unread already made, the first read's own time
       // included.
       const s = t.states.get(m.articleId) ?? blankState(m.articleId)
-      if (m.at < Math.max(s.readUpdatedAt ?? 0, s.readAt ?? 0)) return t
+      if (m.at < Math.max(s.readUpdatedAt ?? 0, s.readAt ?? 0)) return
       t.states.set(m.articleId, { ...s, readAt: null, readUpdatedAt: m.at })
-      return t
+      return
     }
     case 'setLiked': {
       const s = t.states.get(m.articleId) ?? blankState(m.articleId)
-      if (s.likedUpdatedAt !== null && m.at <= s.likedUpdatedAt) return t
+      if (s.likedUpdatedAt !== null && m.at <= s.likedUpdatedAt) return
       const wasLiked = s.likedAt !== null
       t.states.set(m.articleId, {
         ...s,
@@ -306,7 +397,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
           likeCount: Math.max(0, article.likeCount + (m.liked ? 1 : -1)),
         })
       }
-      return t
+      return
     }
     case 'markAllRead': {
       for (const [feedId, sub] of t.subscriptions) {
@@ -328,7 +419,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         if (m.feedId !== undefined && a.feedId !== m.feedId) continue
         t.states.set(id, { ...s, readAt: s.readAt ?? m.at, readUpdatedAt: m.at })
       }
-      return t
+      return
     }
     case 'subscribe': {
       const sub = t.subscriptions.get(m.feedId)
@@ -343,7 +434,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       } else if (sub.deletedAt !== null) {
         t.subscriptions.set(m.feedId, { ...sub, deletedAt: null })
       }
-      return t
+      return
     }
     case 'unsubscribe': {
       const sub = t.subscriptions.get(m.feedId)
@@ -351,7 +442,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         t.subscriptions.set(m.feedId, { ...sub, deletedAt: m.at })
         prune(t, m.feedId)
       }
-      return t
+      return
     }
     case 'setPref': {
       // One the account takes from this browser fills only a pref no row is held for, with no
@@ -360,12 +451,12 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       const held = t.prefs.get(m.key)
       if (m.ifAbsent) {
         if (!held) t.prefs.set(m.key, { key: m.key, value: m.value, updatedAt: 0, seq: 0 })
-        return t
+        return
       }
       if (!held || m.at >= held.updatedAt) {
         t.prefs.set(m.key, { key: m.key, value: m.value, updatedAt: m.at, seq: held?.seq ?? 0 })
       }
-      return t
+      return
     }
     case 'setProfile': {
       // Each language to the later `at`, as the server decides (ADR 0040), so a choice that loses
@@ -387,7 +478,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         }
         t.profile = next
       }
-      return t
+      return
     }
     case 'setPrivacy': {
       // As the server decides (issue #16): a hide always applies, and a show with a base only
@@ -410,7 +501,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         }
         t.profile = next
       }
-      return t
+      return
     }
     case 'setAvatar': {
       // Off takes a Gravatar away at once, though not an upload, which comes first. On, or
@@ -420,7 +511,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         const keeps = m.gravatar || t.profile.avatarUploaded
         t.profile = { ...t.profile, gravatar: m.gravatar, ...(keeps ? {} : { avatar: null }) }
       }
-      return t
+      return
     }
     case 'recommend': {
       // The server also decides by the later `at`, which this row does not carry; a concurrent
@@ -435,18 +526,18 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         seq: held?.seq ?? 0,
       })
       bumpRecommend(t, m.articleId, was ? 0 : 1)
-      return t
+      return
     }
     case 'unrecommend': {
       const held = t.recommendations.get(m.articleId)
-      if (!held || held.deletedAt !== null) return t
+      if (!held || held.deletedAt !== null) return
       t.recommendations.set(m.articleId, { ...held, deletedAt: m.at })
       bumpRecommend(t, m.articleId, -1)
-      return t
+      return
     }
     case 'putHighlight': {
       const held = t.highlights.get(m.id)
-      if (held && m.at < held.updatedAt) return t
+      if (held && m.at < held.updatedAt) return
       t.highlights.set(m.id, {
         id: m.id,
         articleId: held?.articleId ?? m.articleId,
@@ -465,16 +556,16 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         deletedAt: null,
         seq: held?.seq ?? 0,
       })
-      return t
+      return
     }
     case 'deleteHighlight': {
       t.highlights.delete(m.id)
-      return t
+      return
     }
     case 'follow': {
       // Who they are arrives with the pull; until then the row has only their id, and the page
       // that followed them knows the rest. (The server ignores a self-follow; no page offers one.)
-      if (t.follows.has(m.userId)) return t
+      if (t.follows.has(m.userId)) return
       t.follows.set(m.userId, {
         userId: m.userId,
         handle: null,
@@ -484,19 +575,19 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         deletedAt: null,
         seq: 0,
       })
-      return t
+      return
     }
     case 'unfollow': {
       t.follows.delete(m.userId)
-      return t
+      return
     }
     case 'putFolder': {
       // As the server decides: the later `at` wins, and a new folder past the limit is not made.
       // A folder deleted elsewhere is not held, so a rename of it shows until the pull that says
       // it was refused; the server never brings it back.
       const held = t.folders.get(m.id)
-      if (held && m.at < held.updatedAt) return t
-      if (!held && t.folders.size >= MAX_FOLDERS) return t
+      if (held && m.at < held.updatedAt) return
+      if (!held && t.folders.size >= MAX_FOLDERS) return
       t.folders.set(m.id, {
         id: m.id,
         name: m.name.trim(),
@@ -505,29 +596,116 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         deletedAt: null,
         seq: held?.seq ?? 0,
       })
-      return t
+      return
     }
     case 'deleteFolder': {
       // Delete wins, and its blogs are in no folder, each keeping its move's clock.
-      if (!t.folders.delete(m.id)) return t
+      if (!t.folders.delete(m.id)) return
       for (const [feedId, row] of t.feedFolders) {
         if (row.folderId === m.id) t.feedFolders.set(feedId, { ...row, folderId: null })
       }
-      return t
+      return
     }
     case 'fileFeed': {
       // Into a folder this device holds, or none; the later `at` wins. A feed merged into another
       // is filed under the one it became by the server, and the pull says so.
-      if (m.folderId !== null && !t.folders.has(m.folderId)) return t
+      if (m.folderId !== null && !t.folders.has(m.folderId)) return
       const held = t.feedFolders.get(m.feedId)
-      if (held && m.at < held.updatedAt) return t
+      if (held && m.at < held.updatedAt) return
       t.feedFolders.set(m.feedId, {
         feedId: m.feedId,
         folderId: m.folderId,
         updatedAt: m.at,
         seq: held?.seq ?? 0,
       })
-      return t
+      return
+    }
+    case 'putBlogroll': {
+      // As the server decides (ADR 0050): the later `at` wins, a new blogroll past the limit is
+      // not made, and public or private counts only when it is made; after that it is
+      // `setBlogrollPublic`'s alone. A blogroll deleted elsewhere is not held, so an edit of it
+      // shows until the pull that says it was refused, as a folder's does.
+      const held = t.blogrolls.get(m.id)
+      if (held && m.at < held.updatedAt) return
+      if (!held && t.blogrolls.size >= MAX_BLOGROLLS) return
+      t.blogrolls.set(m.id, {
+        id: m.id,
+        name: m.name.trim(),
+        description: m.description.trim(),
+        isPublic: held ? held.isPublic : m.isPublic,
+        publicVersion: held?.publicVersion ?? 0,
+        createdAt: held?.createdAt ?? m.at,
+        updatedAt: m.at,
+        deletedAt: null,
+        seq: held?.seq ?? 0,
+      })
+      return
+    }
+    case 'setBlogrollPublic': {
+      // As a privacy switch is predicted (issue #16): a hide always applies, a show only while it
+      // names the version held, and nothing here counts versions, so the version held is the
+      // confirmed one. `blogrollPublicChange` makes no show while this device's own change to the
+      // blogroll is unsettled, so no change ahead of it moves the version it names.
+      const held = t.blogrolls.get(m.id)
+      if (!held) return
+      if (m.isPublic && m.base !== held.publicVersion) return
+      t.blogrolls.set(m.id, { ...held, isPublic: m.isPublic })
+      return
+    }
+    case 'deleteBlogroll': {
+      // Delete wins, and the blogroll's blogs go with it. The server keeps their rows; a deleted
+      // blogroll's are never sent again.
+      if (!t.blogrolls.delete(m.id)) return
+      dropBlogsOf(t, m.id)
+      return
+    }
+    case 'rollBlog': {
+      // Into a blogroll this device holds, to the later `at`; past the limit only a blog already
+      // in it. One put back goes to the end, one already in keeps its place, and the note stays
+      // as it was. A feed merged into another is put in as the one it became by the server, and
+      // the pull says so.
+      if (!t.blogrolls.has(m.blogrollId)) return
+      const key = blogrollBlogKey(m.blogrollId, m.feedId)
+      const held = t.blogrollBlogs.get(key)
+      const live = held !== undefined && held.removedAt === null
+      if (!live && liveBlogCount(t, m.blogrollId) >= MAX_BLOGROLL_BLOGS) return
+      if (held && m.at < held.updatedAt) return
+      t.blogrollBlogs.set(key, {
+        blogrollId: m.blogrollId,
+        feedId: m.feedId,
+        note: held?.note ?? null,
+        noteAt: held?.noteAt ?? 0,
+        addedAt: live ? held.addedAt : m.at,
+        updatedAt: m.at,
+        removedAt: null,
+        seq: held?.seq ?? 0,
+      })
+      return
+    }
+    case 'unrollBlog': {
+      // To the later `at`, and the clock moves forward even on a blog already taken out, so an
+      // older put-back arriving after this one loses (the `unfollow` lesson). No row, no change.
+      if (!t.blogrolls.has(m.blogrollId)) return
+      const key = blogrollBlogKey(m.blogrollId, m.feedId)
+      const held = t.blogrollBlogs.get(key)
+      if (!held) return
+      if (held.removedAt === null && m.at < held.updatedAt) return
+      t.blogrollBlogs.set(key, {
+        ...held,
+        removedAt: held.removedAt ?? m.at,
+        updatedAt: Math.max(held.updatedAt, m.at),
+      })
+      return
+    }
+    case 'noteBlog': {
+      // On the note's own clock, to the later `at`: it is written on a blog taken out too, for
+      // when it is put back, and never puts one back.
+      if (!t.blogrolls.has(m.blogrollId)) return
+      const key = blogrollBlogKey(m.blogrollId, m.feedId)
+      const held = t.blogrollBlogs.get(key)
+      if (!held || m.at < held.noteAt) return
+      t.blogrollBlogs.set(key, { ...held, note: m.note?.trim() || null, noteAt: m.at })
+      return
     }
     default: {
       // Exhaustive for every type this build knows; a change from a later build that a rollback
@@ -535,7 +713,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       // makes of it. Without this, an older build's view threw on a follow and booted blank.
       const unknown: never = m
       void unknown
-      return t
+      return
     }
   }
 }
@@ -550,10 +728,16 @@ function bumpRecommend(t: Tables, articleId: number, delta: number) {
   }
 }
 
-/** What the device shows: the confirmed tables with every pending mutation replayed on top. */
+/**
+ * What the device shows: the confirmed tables with every pending mutation replayed on top. The
+ * tables are copied once and every mutation replayed on the copy, so a queue of hundreds (a held
+ * subscribe-all) costs one copy, not one per mutation (ADR 0050). With nothing pending it is the
+ * confirmed tables themselves, so what is cached by their identity stays.
+ */
 export function view(confirmed: Confirmed, pending: readonly Pending[]): Tables {
-  let t = confirmed.tables
-  for (const p of pending) t = applyMutation(t, p.mutation)
+  if (pending.length === 0) return confirmed.tables
+  const t = copy(confirmed.tables)
+  for (const p of pending) applyInPlace(t, p.mutation)
   return t
 }
 
@@ -584,11 +768,15 @@ export function rowsOf(tables: Tables) {
     follows: [...tables.follows.values()],
     folders: [...tables.folders.values()],
     feedFolders: [...tables.feedFolders.values()],
+    blogrolls: [...tables.blogrolls.values()],
+    blogrollBlogs: [...tables.blogrollBlogs.values()],
   }
 }
 
 export type {
   ArticleRow,
+  BlogrollBlogRow,
+  BlogrollRow,
   ClaimRow,
   FeedFolderRow,
   FeedRow,
@@ -621,5 +809,9 @@ export function tablesFromRows(rows: TableRows): Tables {
     follows: new Map(rows.follows.map((r) => [r.userId, r])),
     folders: new Map(rows.folders.map((r) => [r.id, r])),
     feedFolders: new Map(rows.feedFolders.map((r) => [r.feedId, r])),
+    blogrolls: new Map(rows.blogrolls.map((r) => [r.id, r])),
+    blogrollBlogs: new Map(
+      rows.blogrollBlogs.map((r) => [blogrollBlogKey(r.blogrollId, r.feedId), r]),
+    ),
   }
 }

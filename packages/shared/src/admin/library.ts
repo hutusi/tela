@@ -117,3 +117,44 @@ export type AdminFeedDetail = {
   relay: boolean
   history: AdminHistoryEntry[]
 }
+
+/** A blog in a blogroll, as the console names it. */
+export type AdminBlogrollBlog = {
+  feedId: number
+  siteId: number
+  /** What others see it called (`BLOG_NAME`); null when it has no title, and the host stands in. */
+  name: string | null
+  homeUrl: string
+  faviconKey: string | null
+}
+
+/**
+ * A member's public blogroll in Discover's ledger (ADR 0050). Only public, live blogrolls are
+ * listed or opened: a private one is its member's alone, and the console never names it. The
+ * owner is shown, since the blogroll is published under their handle.
+ */
+export type AdminBlogrollRow = AdminRowBase & {
+  blogrollId: string
+  name: string
+  description: string
+  owner: AdminPerson | null
+  /** The blogs others see: put in, not taken out, and not a blog the operator hid. */
+  blogCount: number
+  /** Every blog put in and not taken out, those the operator hid included. */
+  totalCount: number
+  /** When it first went public; Discover pages by it. */
+  publicSince: number | null
+  /** When an operator hid it from Discover; null while it may be listed. */
+  hiddenAt: number | null
+  /** Whether Discover lists it now: not hidden, with enough blogs others see. */
+  inDiscover: boolean
+  /** Its first few blogs others see, in its own order. */
+  blogs: AdminBlogrollBlog[]
+}
+
+export type AdminBlogrollDetail = {
+  blogroll: AdminBlogrollRow
+  /** Every blog in it, in its order; `shown` is false for a blog the operator hid. */
+  blogs: (AdminBlogrollBlog & { shown: boolean })[]
+  history: AdminHistoryEntry[]
+}

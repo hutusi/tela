@@ -12,6 +12,7 @@ import { bumpSeq, currentSeq } from '@tela/data'
 import { READING_LANGUAGES, UI_LOCALES } from '@tela/shared'
 import {
   applyPull,
+  blogrollPublicChange,
   type Confirmed,
   emptyTables,
   type Mutation,
@@ -49,6 +50,11 @@ const SKEWS = [0, 3]
 /** What a snapshot and a synced device must agree on, independent of how they got there. */
 function live(t: Tables) {
   const subs = [...t.subscriptions.values()].filter((s) => s.deletedAt === null)
+  // The blogs in live blogrolls (ADR 0050): a device may still hold a removed one, or one of a
+  // blogroll a page ended before, which nothing shows.
+  const rolled = [...t.blogrollBlogs.values()]
+    .filter((b) => b.removedAt === null && t.blogrolls.has(b.blogrollId))
+    .sort((a, b) => a.blogrollId.localeCompare(b.blogrollId) || a.feedId - b.feedId)
   const articles = [...t.articles.values()].sort((a, b) => a.id - b.id)
   const ids = new Set(articles.map((a) => a.id))
   return {
@@ -94,6 +100,14 @@ function live(t: Tables) {
       .filter((f) => f.folderId !== null)
       .map((f) => ({ feedId: f.feedId, folderId: f.folderId }))
       .sort((a, b) => a.feedId - b.feedId),
+    blogrolls: [...t.blogrolls.values()]
+      .map((r) => ({ id: r.id, name: r.name, description: r.description, isPublic: r.isPublic }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+    rolled: rolled.map((b) => ({ blogrollId: b.blogrollId, feedId: b.feedId, note: b.note })),
+    // Each blog's feed is held, subscribed or not, so the owner's page can name it.
+    rolledFeeds: [...new Set(rolled.map((b) => b.feedId))]
+      .filter((id) => t.feeds.has(id))
+      .sort((a, b) => a - b),
     flags: {
       publicSubscriptions: t.profile?.publicSubscriptions,
       publicLikes: t.profile?.publicLikes,
@@ -241,7 +255,7 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
     const at = api.clock.now() - d.skew
     api.clock.advance(1 + Math.floor(random() * 5))
     const mid = `seed${seed}-m${++mids}-pad`
-    const choice = only ? (pick(only) as number) : Math.floor(random() * 21)
+    const choice = only ? (pick(only) as number) : Math.floor(random() * 27)
     const article = pick(articleIds)
     const feed = pick(FEEDS) as number
     let m: Mutation | null = null
@@ -352,6 +366,39 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
         feedId: feed,
         folderId: folder && random() < 0.8 ? folder : null,
       }
+    // Blogrolls (ADR 0050): a new one or an edit of one held, a switch made as the owner's page
+    // makes it, a deletion, and a blog put in, taken out or noted.
+    const blogroll = pick([...shown.blogrolls.keys()])
+    if (choice === 21)
+      m = {
+        mid,
+        at,
+        type: 'putBlogroll',
+        id:
+          blogroll && random() < 0.5
+            ? blogroll
+            : `R${String(seed).padStart(3, '0')}${String(mids).padStart(8, '0')}`,
+        name: pick(['Friends', 'Craft', 'Far away']) as string,
+        description: pick(['', 'Blogs I read.', 'Two\nlines']) as string,
+        isPublic: random() < 0.5,
+      }
+    if (choice === 22 && blogroll) {
+      const change = blogrollPublicChange(d.confirmed, d.pending, blogroll, random() < 0.6)
+      if (change) m = { mid, at, ...change }
+    }
+    if (choice === 23 && blogroll && random() < 0.5) {
+      m = { mid, at, type: 'deleteBlogroll', id: blogroll }
+    }
+    if (choice === 24 && blogroll) {
+      m = { mid, at, type: 'rollBlog', blogrollId: blogroll, feedId: feed }
+    }
+    if (choice === 25 && blogroll) {
+      m = { mid, at, type: 'unrollBlog', blogrollId: blogroll, feedId: feed }
+    }
+    if (choice === 26 && blogroll) {
+      const note = random() < 0.7 ? (pick(['Read this.', 'Quiet, good.']) as string) : null
+      m = { mid, at, type: 'noteBlog', blogrollId: blogroll, feedId: feed, note }
+    }
     if (m) d.pending.push({ mutation: m })
   }
 
@@ -397,6 +444,17 @@ describe('folders converge (ADR 0048)', () => {
   for (const seed of [1, 2, 3, 4, 5, 6]) {
     test(`seed ${seed}: two devices making, renaming, deleting and filling folders`, async () => {
       await scenario(seed, 160, [18, 18, 19, 20, 20, 20])
+    })
+  }
+})
+
+describe('blogrolls converge (ADR 0050)', () => {
+  // Blogrolls alone, so an edit, a switch, a deletion, and a blog put in, taken out and noted meet
+  // each other, and the other device's, often; now and then a subscription, so a blog in a
+  // blogroll is sometimes followed and sometimes not.
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    test(`seed ${seed}: two devices keeping blogrolls, their blogs and notes`, async () => {
+      await scenario(seed, 200, [21, 21, 22, 22, 23, 24, 24, 24, 25, 25, 26, 26, 3, 5])
     })
   }
 })

@@ -12,6 +12,8 @@
 import {
   type ArticleRow,
   applyPull,
+  blogrollPublicChange,
+  blogrollPublicUnsettled,
   type Confirmed,
   completePull,
   emptyTables,
@@ -149,11 +151,19 @@ export class LocalStore {
    * but here, whether the server has it or it was made on this device and is still on its way:
    * its name and its place under the limit are not free until the deletion goes (ADR 0048).
    */
-  foldersBeforeHolds = (): ReadonlyMap<string, FolderRow> =>
+  foldersBeforeHolds = (): ReadonlyMap<string, FolderRow> => this.tablesBeforeHolds().folders
+
+  /**
+   * The tables as they would be were every held change taken back (ADR 0046). What a limit counts
+   * against: a folder or blogroll whose deletion is held, or a blog whose removal is, keeps its
+   * place under the limit until the change goes, or an Undo after something new took that place
+   * would push past it, and the server would drop it (ADRs 0048, 0050).
+   */
+  tablesBeforeHolds = (): Tables =>
     view(
       this.confirmed,
       this.pending.filter((p) => !this.holds.has(p.mutation.mid)),
-    ).folders
+    )
 
   remember(articles: ArticleRow[], source?: string | null): void {
     for (const a of articles) {
@@ -375,6 +385,19 @@ export class LocalStore {
    */
   setPrivacy(flag: PrivacyFlag, on: boolean): void {
     const change = privacyChange(this.confirmed, this.pending, flag, on)
+    if (change) this.mutate(change)
+  }
+
+  /** Whether a blogroll has to wait before it can be made public (`blogrollPublicUnsettled`). */
+  blogrollPublicUnsettled = (id: string): boolean =>
+    blogrollPublicUnsettled(this.confirmed, this.pending, id)
+
+  /**
+   * Make a blogroll public or private now (ADR 0050). A show names the version in the confirmed
+   * rows, and one that has to wait changes nothing, as a privacy switch's does.
+   */
+  setBlogrollPublic(id: string, on: boolean): void {
+    const change = blogrollPublicChange(this.confirmed, this.pending, id, on)
     if (change) this.mutate(change)
   }
 

@@ -249,6 +249,42 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
      alone. An older tela-api sends no date, and the column falls back to the posts the device
      holds: a blog quiet past the 30-day horizon then reads "No posts yet". An older tela-web shows
      0048's sections and ignores the field.
+   - Blogrolls (ADR 0050, migration 0012) are additive and keep protocol 3, with no `MIN_CLIENT`
+     bump. The migration adds `blogrolls` and `blogroll_blogs`. Apply it, then deploy tela-jobs,
+     tela-api, tela-web, the usual order:
+     - The migration first, because the new tela-jobs's `mergeFeed` writes `blogroll_blogs` in the
+       batch that merges a feed. Without the table that batch fails, and the alias goes on being
+       fetched beside its target until the migration lands.
+     - tela-jobs before tela-api, so that a merge after the first blogroll exists carries it. An
+       older tela-jobs leaves the alias's row in the blogroll, which mostly still works: the
+       public answers keep it, and its row's Subscribe subscribes to the target. Subscribe to all
+       leaves such a blog alone (its changes are `exact`, so they never reach a subscription
+       through a merge).
+     - tela-api before tela-web, because the new shell sends `putBlogroll`, `setBlogrollPublic`,
+       `deleteBlogroll`, `rollBlog`, `unrollBlog` and `noteBlog`, and reads
+       `/api/v1/public/blogrolls/:id` and `/api/v1/public/discover/blogrolls`. With tela-web out
+       first, whatever a member makes is refused as invalid and visibly goes back, `/l/<id>` is
+       Not found, and Discover's Blogrolls tab is empty (the edge treats that path as one that
+       always exists, so visitors get the plain shell, never a cached 404).
+     - Each device starts over from a snapshot once, at its first boot on the new shell: its copy
+       has no blogroll tables (`kept`, as for folders).
+     - **Each Worker may go back alone**, and the migration can stay:
+       - An older tela-jobs only stops carrying blogroll rows through a merge.
+       - An older tela-api refuses the six mutations as invalid, so a blogroll made, edited,
+         filled or deleted in that window goes back and is lost; `/l/<id>` answers 404 and
+         profiles carry no blogrolls (the shell reads none). Its pulls carry no blogroll tables, so
+         each device asks for a snapshot once tela-api is forward again. It also strips `exact`
+         from `subscribe`, `unsubscribe` and `fileFeed`, so a Subscribe to all from a public copy
+         naming a merged address follows the merge again. Keep it short.
+       - An older tela-web ignores the blogroll rows a pull sends and has no `/l/` page, and still
+         sends any blogroll change left queued, which the newer tela-api applies.
+     - After deploy, check that:
+       - a blogroll made from a profile's Blogrolls tab opens at `/l/<id>`, takes blogs from Add
+         blogs, and shows on a second device after its pull;
+       - once public with three blogs, `curl -s https://telaread.com/l/<id>` (no cookie) holds its
+         name and `tela-data`, `/discover/blogrolls` lists it within five minutes, and a private
+         one answers 404;
+       - the admin console's Discover area has a Blogrolls filter that lists it.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way
@@ -444,10 +480,17 @@ is tela-api.
 - **Images:** `/img/<contentKey>/<i>` fetches only what a content object names, over
   `global_fetch_strictly_public`. A broken image is the origin's answer, which the Worker logs
   show; nothing is signed, so there is no secret to rotate.
-- **Public pages** (the front page `/`, Discover's four tabs, `/s/:id`, `/@handle`) are rendered here and
-  kept in each colo's cache for five minutes, keyed by locale and by the build. So a deploy never
-  serves a page that names scripts it removed, and a blog's change shows within five minutes.
-  There is nothing to purge. `/` is rendered only for a request without `tela.session_token`; a
+- **Public pages** (the front page `/`, Discover's five tabs, `/s/:id`, `/@handle`, a blogroll's
+  `/l/:id`) are rendered here and kept in each colo's cache for five minutes, keyed by locale and
+  by the build. So a deploy never serves a page that names scripts it removed, and a blog's change
+  shows within five minutes. There is nothing to purge. A 404 is kept as long (ADR 0050): if
+  someone opened a blogroll's link while it was private, the colo answers that link with its Not
+  found page for up to five minutes after the blogroll is made public. The app replaces it as soon
+  as its own request finds the blogroll; without a script, the page stays Not found until the copy
+  expires. The other way, a blogroll made private is a 404 to a fresh visit within minutes (the
+  colo's five, then the browser's one), while a page already open keeps what it shows. The owner's
+  own blogroll renders from their device over the 404 page, so a private one opens for them on any
+  device that has pulled it. `/` is rendered only for a request without `tela.session_token`; a
   member's is the plain shell. If `/` shows the plain shell to signed-out visitors, tela-api's
   `/api/v1/public/front` is not answering 200 within three seconds (deploy tela-api before
   tela-web when it is new): tela-web logs `public page data late` or `public page data failed`
@@ -730,8 +773,9 @@ says who holds it:
   where id = …`. The nightly upkeep does this itself after seven days.
 - **Merged feeds** (ADR 0028): `select id, feed_url, merged_into from feeds where merged_into is
   not null`. An alias merges at the tick after its first fetch; one that has not yet (a blog a
-  member follows twice) merges at once on the admin console's Fetch now. A merge moves readers
-  and the posts only the alias had (with their titles,
+  member follows twice) merges at once on the admin console's Fetch now. A merge moves readers,
+  their filings, the alias's places in blogrolls (with their notes; ADR 0050) and the posts only
+  the alias had (with their titles,
   translations and read states), and deletes nothing. To undo
   a wrong one (a category feed taken for the blog's), reactivate the alias with
   `update feeds set status = 'active', merged_into = null, next_fetch_at = 0 where id = …`.
@@ -784,6 +828,25 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
 - **Discover** opens on To review, the blogs members added that wait for a decision (ADR 0041),
   and badges how many there are; see *Curation*. A listing change reaches the public pages within
   about five minutes: the edge caches them per colo, and nothing purges that cache.
+- **Blogrolls in Discover** (ADR 0050). A public blogroll reaches Discover's Blogrolls tab by
+  itself once three of its blogs are shown to others (a blog the operator rejected is not shown).
+  The Discover area's *Blogrolls* filter lists every public one, with its owner's handle, how many
+  of its blogs others see and how many it has, and a status: *In Discover*, *Hidden* or *Fewer
+  than three blogs*. Private blogrolls never appear.
+  - **Hide from Discover** takes one out of the tab, and **Restore** puts it back; both are
+    audited and undone like any other change. A hidden blogroll keeps its page (`/l/<id>`) and its
+    place on its owner's profile. The owner is not told: `hidden_at` never syncs.
+  - **Taking a page down** is not in the console yet. Until it is, hide the blogroll from Discover
+    first (the console acts only on a public one, and a hidden blogroll stays hidden if its owner
+    makes it public again), then make it private as its owner's own switch would, so their devices
+    hear of it and a show from a stale device is refused (the id is the end of its address):
+
+    ```sh
+    wrangler d1 execute tela --remote --command "insert into counters (k, v) values ('seq', 1) on conflict (k) do update set v = v + 1; update blogrolls set is_public = 0, public_version = public_version + 1, seq = (select v from counters where k = 'seq') where id = '<id>'"
+    ```
+
+    The page is a 404 within minutes (the colo's five, then the browser's one). The owner can
+    make it public again; only Discover stays closed to it.
 - **Sign out everywhere** deletes the member's sessions; a device's signed copy of one still
   answers for up to five minutes wherever only that copy is read.
 - **Retry** on a dead letter makes its row due again for the next tick, with fresh attempts. A body
@@ -796,8 +859,8 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   assets bucket are configured), `health` (every fifth minute, what the dead-man's switch heard),
   `daily` (upkeep and the export) and `digest` (once sent). The console reads the budget and the
   relay from the tick's, so after a deploy they show as unknown until the first tick.
-- **What it never shows:** a member's subscriptions, reading, likes, highlights or follows, or
-  who added a blog: the review queue shows how many read each blog, never who. An audit row never
+- **What it never shows:** a member's subscriptions, reading, likes, highlights, follows or
+  private blogrolls, or who added a blog: the review queue shows how many read each blog, never who. An audit row never
   holds an email address.
 
 ## Backups

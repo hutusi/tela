@@ -266,6 +266,7 @@
       "week": "本周",
       "articles": "文章",
       "blogs": "博客",
+      "blogrolls": "博客链",
       "readers": "读者"
     },
     "minutes": "{n} 分钟",
@@ -298,6 +299,16 @@
       },
       "more": "更多文章",
       "empty": "没有符合的文章。换个话题或语言试试。"
+    },
+    "blogrolls": {
+      "intro": "读者成组推荐的博客，一键就能订阅整组。",
+      "more": "更多博客链",
+      "empty": "还没有公开的博客链。",
+      "by": "{name} 的博客链",
+      "reasons": {
+        "follows": "你关注的人",
+        "yours": "你的"
+      }
     },
     "reason": {
       "followed": "你关注的 {name} 推荐了它",
@@ -375,6 +386,98 @@
       "title": "你有博客吗？",
       "intro": "认领你的博客，看看有多少人在读你、你的文章反响如何，以及读者推荐时说了什么。",
       "cta": "认领你的博客"
+    }
+  },
+  "blogroll": {
+    "eyebrow": "博客链",
+    "blogs": "{n} 个博客",
+    "updatedDay": "{when}更新",
+    "updatedOn": "更新于 {when}",
+    "subscribeAll": "全部订阅（{n} 个）",
+    "count": "{n}/{max}",
+    "emptyVisitor": "这里还没有博客。",
+    "emptyOwner": "还没有博客",
+    "emptyOwnerHint": "从你的订阅里添加博客，愿意的话，每个都可以附上一句话。",
+    "notInSubscriptions": "不在你的订阅中",
+    "hiddenFromOthers": "只有你能在这里看到它",
+    "remove": "移除",
+    "removeLabel": "从这个博客链移除{name}",
+    "removed": "已从这个博客链移除{name}。",
+    "owner": {
+      "switchTitle": "更改谁能看到",
+      "whoIs": "谁能看到：{state}",
+      "edit": "编辑",
+      "addBlogs": "添加博客",
+      "copyLink": "复制链接",
+      "copied": "链接已复制。",
+      "copiedPrivate": "链接已复制。设为私密期间，只有你能打开。",
+      "copyFailed": "无法复制链接。",
+      "madePublic": "已公开。任何人都能打开这个博客链。",
+      "madePrivate": "已设为私密。只有你能打开这个博客链。",
+      "footerPublic": "已公开。它会显示在你的个人主页上，也可能出现在发现页。",
+      "footerPrivate": "只有你能看到这个博客链。设为公开后即可分享。"
+    },
+    "dialog": {
+      "new": "新建博客链",
+      "edit": "编辑博客链",
+      "name": "名称",
+      "namePlaceholder": "我最先读的慢博客",
+      "description": "简介",
+      "optional": "（可选）",
+      "descriptionPlaceholder": "用一两句话说说里面有什么",
+      "who": "谁能看到",
+      "private": "私密",
+      "privateHint": "只有你能看到。",
+      "public": "公开",
+      "publicHint": "显示在你的个人主页和发现页。其他人可以一次订阅其中的每个博客。",
+      "publicWait": "等你上一次的更改保存后，才能设为公开。",
+      "fromFolder": "它会先收入这个文件夹里的 {n} 个博客。",
+      "capped": "这个文件夹有 {n} 个博客。一个博客链最多收 {max} 个，所以先按名称收入前 {max} 个。",
+      "limit": "你已有 {max} 个博客链，不能再多了。",
+      "cancel": "取消",
+      "create": "创建",
+      "save": "保存",
+      "delete": "删除博客链",
+      "deleted": "已删除“{name}”。"
+    },
+    "add": {
+      "title": "从你的订阅中添加",
+      "filter": "按名称或网址筛选",
+      "filterLabel": "筛选你的订阅",
+      "noMatch": "没有匹配的订阅。",
+      "none": "你还没有订阅任何博客。",
+      "limit": "这个博客链已有 {max} 个博客，不能再多了。",
+      "hint": "之后取消订阅某个博客，它也不会从这个博客链里移除。",
+      "done": "完成"
+    },
+    "note": {
+      "add": "添加一句话",
+      "addTo": "为{name}添加一句话",
+      "edit": "编辑关于{name}的话",
+      "editTitle": "编辑这句话",
+      "label": "关于{name}的话",
+      "placeholder": "你为什么推荐它",
+      "cancel": "取消",
+      "save": "保存"
+    },
+    "subscribe": {
+      "all": "已全部订阅",
+      "some": "订阅其余 {n} 个",
+      "waiting": "你的订阅还在加载。",
+      "title": "订阅 {n} 个博客",
+      "already": {
+        "one": "你已经订阅了{a}。",
+        "two": "你已经订阅了{a}和{b}。",
+        "more": "你已经订阅了{a}、{b}和另外 {n} 个博客。"
+      },
+      "putIn": "放到",
+      "newFolder": "新文件夹",
+      "folderName": "新文件夹名称",
+      "hint": "这会把这些博客复制到你的订阅里。之后博客链有变化，你的订阅不会跟着变。",
+      "cancel": "取消",
+      "submit": "订阅 {n} 个",
+      "done": "已订阅{n, plural, =1 {{blog}} other {# 个博客}}。",
+      "doneIn": "已订阅{n, plural, =1 {{blog}} other {# 个博客}}，放在“{folder}”里。"
     }
   },
   "site": {
@@ -571,8 +674,19 @@
     "writes": "写作",
     "tabs": {
       "recommendations": "推荐",
+      "blogrolls": "博客链",
       "liked": "喜欢",
       "subscriptions": "订阅"
+    },
+    "blogrolls": {
+      "intro": "别人可以一键订阅一条博客链里的所有博客。",
+      "new": "新建博客链",
+      "empty": "还没有博客链。建一条，分享你在读的博客。",
+      "card": {
+        "kind": "博客链",
+        "private": "私密",
+        "blogs": "{n, plural, other {# 个博客}}"
+      }
     },
     "nothing": "这里还什么都没有。"
   },
@@ -778,7 +892,8 @@
       "noPosts": "还没有文章",
       "movedTo": "已把{n, plural, =1 {{blog}} other {# 个博客}}移到“{folder}”。",
       "movedOut": "已把{n, plural, =1 {{blog}} other {# 个博客}}移出文件夹。",
-      "unsubscribed": "已取消订阅{n, plural, =1 {{blog}} other {# 个博客}}。"
+      "unsubscribed": "已取消订阅{n, plural, =1 {{blog}} other {# 个博客}}。",
+      "makeBlogroll": "创建博客链…"
     },
     "privacyIntro": "选择别人在你的个人页上能看到什么。",
     "showLikes": "展示喜欢的文章",

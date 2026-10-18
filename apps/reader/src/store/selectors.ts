@@ -155,7 +155,7 @@ export type SubscriptionItem = {
 
 const memo = new WeakMap<Tables, Map<string, unknown>>()
 /** One answer per tables object and key: the tables change identity whenever they change. */
-function cached<T>(t: Tables, key: string, compute: () => T): T {
+export function cached<T>(t: Tables, key: string, compute: () => T): T {
   let entries = memo.get(t)
   if (!entries) {
     entries = new Map()

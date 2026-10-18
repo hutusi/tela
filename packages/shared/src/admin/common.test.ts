@@ -20,8 +20,9 @@ describe("the console's areas", () => {
     expect(isAdminFilter('feeds', 'review')).toBe(false)
   })
 
-  test('Discover opens on its review queue (ADR 0041)', () => {
+  test('Discover opens on its review queue (ADR 0041), and lists blogrolls last (ADR 0050)', () => {
     expect(ADMIN_FILTERS.discover[0]).toBe('candidates')
+    expect(ADMIN_FILTERS.discover.at(-1)).toBe('blogrolls')
   })
 })
 
@@ -51,5 +52,15 @@ describe('what actions write', () => {
     ])
     expect(actionsCrossing('site.list')).toContain('site.dismiss')
     expect(actionsCrossing('site.restore')).not.toContain('site.dismiss')
+  })
+
+  test('a blogroll’s Hide and Restore stand in each other’s way, and nothing else does', () => {
+    expect(UNDOABLE_ACTIONS).toContain('blogroll.hide')
+    expect(UNDOABLE_ACTIONS).toContain('blogroll.restore')
+    expect(actionsCrossing('blogroll.hide').sort()).toEqual(['blogroll.hide', 'blogroll.restore'])
+    expect(actionsCrossing('blogroll.restore').sort()).toEqual([
+      'blogroll.hide',
+      'blogroll.restore',
+    ])
   })
 })

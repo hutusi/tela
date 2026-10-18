@@ -228,6 +228,40 @@ export type FeedFolderRow = {
   seq: number
 }
 
+/**
+ * A member's blogroll (ADR 0050), synced to its member only. `deletedAt` set means deleted, and
+ * the device lets the row go, with its blogs. `updatedAt` is the clock of the name and
+ * description; public or private moves `publicVersion` instead, so a show names the version it
+ * was made against (issue #16).
+ */
+export type BlogrollRow = {
+  id: string
+  name: string
+  description: string
+  isPublic: boolean
+  publicVersion: number
+  createdAt: number
+  updatedAt: number
+  deletedAt: number | null
+  seq: number
+}
+
+/**
+ * A blog in a blogroll (ADR 0050), by feed id. A removed one keeps its row (`removedAt`) and its
+ * note, so putting it back brings the note back; selectors show only the live ones, by `addedAt`.
+ * `updatedAt` is the clock of putting in and taking out, `noteAt` the note's own.
+ */
+export type BlogrollBlogRow = {
+  blogrollId: string
+  feedId: number
+  note: string | null
+  noteAt: number
+  addedAt: number
+  updatedAt: number
+  removedAt: number | null
+  seq: number
+}
+
 export type Tombstone = { entity: string; key: string; seq: number }
 
 export type SyncRows = {
@@ -246,6 +280,8 @@ export type SyncRows = {
   follows: FollowRow[]
   folders: FolderRow[]
   feedFolders: FeedFolderRow[]
+  blogrolls: BlogrollRow[]
+  blogrollBlogs: BlogrollBlogRow[]
 }
 
 export type SyncTable = keyof SyncRows

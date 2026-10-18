@@ -9,8 +9,12 @@ import { detectLocale } from '../src/i18n'
 import { type PublicRoute, publicRoute, renderPublicPage } from '../src/ssr'
 import type {
   ArticlesData,
+  BlogrollCard,
+  BlogrollData,
+  BlogrollsData,
   DiscoverPost,
   FrontData,
+  ProfileData,
   ReaderCandidate,
   ReadersData,
   WeekData,
@@ -578,7 +582,7 @@ describe('public pages', () => {
     expect(privacy).toMatch(/<meta name="description" content="Tela keeps what it needs/)
     expect(privacy).toContain('id="cookies"')
     expect(privacy).toContain('href="#cookies"')
-    expect(privacy).toContain('Last updated 10 October 2026')
+    expect(privacy).toContain('Last updated 18 October 2026')
     expect(apiCalls).toEqual([])
     // Three pages, once each: the second visit to Privacy came from the cache.
     expect(cache.size).toBe(3)
@@ -651,7 +655,7 @@ describe('public pages', () => {
     expect(zh).toContain('<html lang="zh-Hans"')
     expect(zh).toContain('<title>条款 · Tela</title>')
     expect(zh).toContain('id="writers"')
-    expect(zh).toContain('最后更新：2026年10月10日')
+    expect(zh).toContain('最后更新：2026年10月18日')
     const en = await (await page('/terms')).text()
     expect(en).toContain('<html lang="en"')
     expect(en).toContain('<title>Terms · Tela</title>')
@@ -663,11 +667,11 @@ describe('public pages', () => {
     const hant = await (await page('/privacy', { 'accept-language': 'zh-TW,zh;q=0.8' })).text()
     expect(hant).toContain('<html lang="zh-Hant"')
     expect(hant).toContain('<title>隱私 · Tela</title>')
-    expect(hant).toContain('最後更新：2026年10月10日')
+    expect(hant).toContain('最後更新：2026年10月18日')
     const fr = await (await page('/privacy', { cookie: 'tela_locale=fr' })).text()
     expect(fr).toContain('<html lang="fr"')
     expect(fr).toContain('<title>Confidentialité · Tela</title>')
-    expect(fr).toContain('Dernière mise à jour : 10 octobre 2026')
+    expect(fr).toContain('Dernière mise à jour : 18 octobre 2026')
     expect(fr).toContain('id="cookies"')
   })
 
@@ -1122,6 +1126,213 @@ describe("Discover's tabs (ADR 0044)", () => {
     // In the pool handed over, and nowhere on the page.
     expect(html.split('<script id="tela-data"')[0]).not.toContain('blogs_only')
     expect(html).toContain(`href="/login?next=${encodeURIComponent('/discover/readers')}"`)
+  })
+})
+
+describe('blogrolls (ADR 0050)', () => {
+  let asked: string[]
+  /** tela-web with tela-api answering `answers` by path, as its blogroll endpoints will. */
+  function rollsEdge(answers: Record<string, () => Response>) {
+    asked = []
+    return createEdge({
+      blobs,
+      api: {
+        fetch: async (req) => {
+          const url = new URL(req.url)
+          apiCalls.push(url.pathname)
+          asked.push(url.pathname + url.search)
+          const answer = answers[url.pathname]
+          return answer ? answer() : new Response('not found', { status: 404 })
+        },
+      },
+      assets: {
+        fetch: async () => new Response(TEMPLATE, { headers: { 'content-type': 'text/html' } }),
+      },
+      pages: pages as unknown as PublicPages,
+      cache,
+      fetchImage: async () => new Response('nope', { status: 404 }),
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+    })
+  }
+  const visit = (e: ReturnType<typeof createEdge>, path: string) =>
+    e.fetch(new Request(`${ORIGIN}${path}`))
+  const handover = (html: string) =>
+    JSON.parse(
+      html.match(/<script id="tela-data" type="application\/json">(.*?)<\/script>/s)?.[1] ?? '',
+    )
+  const cardsOf = (html: string) =>
+    [...html.matchAll(/data-testid="blogroll-card" data-blogroll-id="(\w+)"/g)].map((m) => m[1])
+
+  const ann = { id: 'id-ann-0000', handle: 'ann', displayName: 'Ann K', avatar: null }
+  const blog = (id: number, name: string | null) => ({
+    feedId: id,
+    siteId: id,
+    name,
+    homeUrl: `https://blog${id}.example`,
+  })
+  const card = (id: string, name: string): BlogrollCard => ({
+    id,
+    name,
+    description: 'Blogs by people who walk their cities.',
+    owner: ann,
+    blogCount: 6,
+    blogs: [
+      blog(1, 'Calle Toledo'),
+      blog(2, null),
+      blog(3, 'Kerbs'),
+      blog(4, 'Ferry'),
+      blog(5, 'Stairs'),
+    ],
+    publicSince: 1000,
+    updatedAt: 2000,
+  })
+  const profile = (blogrolls: BlogrollCard[]): ProfileData => ({
+    profile: { id: ann.id, handle: 'ann', displayName: 'Ann K', bio: null, memberSince: 0 },
+    counts: { following: 0, followers: 0, recommendations: 0, liked: null, subscriptions: null },
+    blogs: [],
+    recommendations: [],
+    subscriptions: null,
+    liked: null,
+    blogrolls,
+  })
+
+  test("Discover's Blogrolls renders for a visitor with its answer handed over, and the cache after", async () => {
+    const answer: BlogrollsData = {
+      blogrolls: [card('abcdefABCDEF', 'Cities, on foot'), card('0123456789ab', 'Software')],
+      next: '900:0123456789ab',
+    }
+    const edge = rollsEdge({ '/api/v1/public/discover/blogrolls': () => Response.json(answer) })
+    const res = await visit(edge, '/discover/blogrolls')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('<title>Blogrolls · Discover · Tela</title>')
+    expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*data-testid="discover-tab-blogrolls"/)
+    expect(html).toContain('Blogs that readers recommend as a set.')
+    expect(cardsOf(html)).toEqual(['abcdefABCDEF', '0123456789ab'])
+    expect(html).toContain('href="/l/abcdefABCDEF"')
+    // Whose it is, five blogs as chips (a nameless one by its host), and how many it has.
+    expect(html).toContain('Ann K')
+    expect(html.split('Software')[0]).toContain('title="blog2.example"')
+    expect(html.match(/<li title="/g)).toHaveLength(10)
+    expect(html).toContain('6 blogs')
+    // Why a member sees one is their device's: a visitor's page says nothing of it.
+    expect(html).not.toContain('data-testid="blogroll-reason"')
+    // More is a link, so the next page is reachable before any script.
+    const more = html.match(/<a [^>]*data-testid="blogrolls-more"[^>]*>/)?.[0] ?? ''
+    expect(more).toContain('href="/discover/blogrolls?cursor=900%3A0123456789ab"')
+    expect(handover(html)).toEqual({ path: '/api/v1/public/discover/blogrolls', body: answer })
+
+    // A campaign's query string, or a cursor tela-api never wrote, is the same page, cached.
+    await visit(edge, '/discover/blogrolls?utm_source=x')
+    await visit(edge, '/discover/blogrolls?cursor=nope')
+    expect(asked).toEqual(['/api/v1/public/discover/blogrolls'])
+    // A page reached by cursor is a page of its own.
+    await visit(edge, '/discover/blogrolls?cursor=900:0123456789ab')
+    expect(asked.at(-1)).toBe('/api/v1/public/discover/blogrolls?cursor=900%3A0123456789ab')
+  })
+
+  test("Discover's Blogrolls with none says so, and a tela-api without it is the plain shell", async () => {
+    const empty = rollsEdge({
+      '/api/v1/public/discover/blogrolls': () => Response.json({ blogrolls: [], next: null }),
+    })
+    const html = await (await visit(empty, '/discover/blogrolls')).text()
+    expect(html).toContain('data-testid="blogrolls-empty"')
+    expect(html).toContain('No public blogrolls yet.')
+    expect(html).not.toContain('data-testid="blogrolls-more"')
+
+    cache = memoryCache()
+    const older = rollsEdge({})
+    const res = await visit(older, '/discover/blogrolls')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe(TEMPLATE)
+    expect(cache.size).toBe(0)
+  })
+
+  test("a profile's Blogrolls tab shows a visitor the public ones, cached apart from its other tabs", async () => {
+    const edge = rollsEdge({
+      '/api/v1/public/profiles/ann': () =>
+        Response.json(profile([card('abcdefABCDEF', 'Cities, on foot')])),
+    })
+    const html = await (await visit(edge, '/@ann?tab=blogrolls')).text()
+    expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*data-testid="profile-tab-blogrolls"/)
+    expect(html).toMatch(/data-testid="profile-tab-blogrolls"[^>]*>Blogrolls<span[^>]*>1<\/span>/)
+    expect(html).toContain('data-testid="profile-blogrolls"')
+    expect(cardsOf(html)).toEqual(['abcdefABCDEF'])
+    expect(html).toContain('href="/l/abcdefABCDEF"')
+    // Three of its blogs by name, a nameless one by its host, then how many it has.
+    const shown = html.split('<script id="tela-data"')[0] ?? ''
+    expect(shown).toContain('Calle Toledo')
+    expect(shown).toContain('blog2.example')
+    expect(shown).toContain('Kerbs')
+    expect(shown).not.toContain('Ferry')
+    expect(shown).toContain('6 blogs')
+    // The owner's parts are theirs alone: no intro, no New blogroll, nothing private.
+    expect(html).not.toContain('data-testid="new-blogroll"')
+    expect(html).not.toContain('data-testid="blogroll-private"')
+    expect(html).not.toContain('Others can subscribe')
+
+    const recs = await (await visit(edge, '/@ann')).text()
+    expect(recs).toContain('data-testid="profile-recommendations"')
+    expect(recs).toContain('data-testid="profile-tab-blogrolls"')
+    expect(asked).toEqual(['/api/v1/public/profiles/ann', '/api/v1/public/profiles/ann'])
+  })
+
+  test('a profile with no public blogroll has no such tab, and asking for it is the first', async () => {
+    const edge = rollsEdge({ '/api/v1/public/profiles/ann': () => Response.json(profile([])) })
+    const html = await (await visit(edge, '/@ann?tab=blogrolls')).text()
+    expect(html).toContain('data-testid="profile-recommendations"')
+    expect(html).not.toContain('data-testid="profile-tab-blogrolls"')
+    // An answer from a tela-api before blogrolls has none either.
+    cache = memoryCache()
+    const { blogrolls: _, ...older } = profile([])
+    const old = rollsEdge({ '/api/v1/public/profiles/ann': () => Response.json(older) })
+    const page = await (await visit(old, '/@ann?tab=blogrolls')).text()
+    expect(page).toContain('data-testid="profile-recommendations"')
+    expect(page).not.toContain('data-testid="profile-tab-blogrolls"')
+  })
+
+  test('a public blogroll is titled by its name, its answer handed over; any other is a 404 page', async () => {
+    const answer: BlogrollData = {
+      blogroll: {
+        id: 'abcdefABCDEF',
+        name: 'Cities, on foot',
+        description: 'Blogs by people who walk their cities.',
+        updatedAt: 2000,
+      },
+      owner: ann,
+      blogs: [],
+    }
+    const edge = rollsEdge({
+      '/api/v1/public/blogrolls/abcdefABCDEF': () => Response.json(answer),
+      '/api/v1/public/blogrolls/0123456789ab': () =>
+        Response.json({ ...answer, blogroll: { ...answer.blogroll, description: '' } }),
+    })
+    const res = await visit(edge, '/l/abcdefABCDEF?utm_source=x')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('<title>Cities, on foot · Tela</title>')
+    expect(html).toContain(
+      '<meta name="description" content="Blogs by people who walk their cities." />',
+    )
+    expect(handover(html)).toEqual({ path: '/api/v1/public/blogrolls/abcdefABCDEF', body: answer })
+    // With no description, it says whose it is.
+    const bare = await (await visit(edge, '/l/0123456789ab')).text()
+    expect(bare).toContain('<meta name="description" content="A blogroll by Ann K" />')
+
+    // Private, deleted or unknown: tela-api's 404 is the page's answer, and no data goes over.
+    const missing = await visit(edge, '/l/ZZZZZZZZZZZZ')
+    expect(missing.status).toBe(404)
+    const notFound = await missing.text()
+    expect(notFound).toContain('data-testid="not-found"')
+    expect(notFound).not.toContain('id="tela-data"')
+    // Anything else under `/l/` is no page: the plain shell, asking tela-api nothing.
+    const before = asked.length
+    for (const path of ['/l/short', '/l/abcdefABCDEF/x', '/l/']) {
+      const shell = await visit(edge, path)
+      expect(shell.status).toBe(200)
+      expect(await shell.text()).toBe(TEMPLATE)
+    }
+    expect(asked).toHaveLength(before)
   })
 })
 

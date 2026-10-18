@@ -158,6 +158,42 @@ export function mergeFeed(
         folder_id = excluded.folder_id, updated_at = excluded.updated_at, seq = excluded.seq
       where feed_folders.folder_id is null and excluded.updated_at > feed_folders.updated_at
     `),
+    // A blog in a blogroll stays in it under its other address (ADR 0050), with its place and its
+    // note: the owner's page would otherwise list a paused feed, and subscribing to all of it
+    // would subscribe through the alias. A target already in keeps its own; one taken out comes
+    // back with the alias's, its clock only moving forward. The alias's rows are then taken out,
+    // so the blog is listed once. Blogrolls deleted are left as they were: nothing reads them.
+    db.run(sql`
+      insert into blogroll_blogs (blogroll_id, feed_id, user_id, note, note_at, added_at,
+        updated_at, seq)
+      select bb.blogroll_id, ${target}, bb.user_id, bb.note, bb.note_at, bb.added_at,
+        bb.updated_at, ${currentSeq}
+      from blogroll_blogs bb join blogrolls r on r.id = bb.blogroll_id
+      where bb.feed_id = ${alias} and bb.removed_at is null and r.deleted_at is null
+      on conflict (blogroll_id, feed_id) do update set
+        note = excluded.note, note_at = excluded.note_at, added_at = excluded.added_at,
+        removed_at = null, updated_at = max(blogroll_blogs.updated_at, excluded.updated_at),
+        seq = excluded.seq
+      where blogroll_blogs.removed_at is not null
+    `),
+    // One taken out goes along too, still out, where the target has no row: its note outlives the
+    // take-out (ADR 0050), so putting the blog back under the address the member now reads
+    // brings it back, as putting it back under the alias would have.
+    db.run(sql`
+      insert into blogroll_blogs (blogroll_id, feed_id, user_id, note, note_at, added_at,
+        updated_at, removed_at, seq)
+      select bb.blogroll_id, ${target}, bb.user_id, bb.note, bb.note_at, bb.added_at,
+        bb.updated_at, bb.removed_at, ${currentSeq}
+      from blogroll_blogs bb join blogrolls r on r.id = bb.blogroll_id
+      where bb.feed_id = ${alias} and bb.removed_at is not null and r.deleted_at is null
+      on conflict (blogroll_id, feed_id) do nothing
+    `),
+    db.run(sql`
+      update blogroll_blogs set removed_at = ${now}, updated_at = max(updated_at, ${now}),
+        seq = ${currentSeq}
+      where feed_id = ${alias} and removed_at is null
+        and blogroll_id in (select id from blogrolls where deleted_at is null)
+    `),
     db.run(sql`
       update subscriptions set deleted_at = ${now}, updated_at = ${now}, seq = ${currentSeq}
       where feed_id = ${alias} and deleted_at is null

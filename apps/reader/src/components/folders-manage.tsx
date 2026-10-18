@@ -79,6 +79,11 @@ export type Manage = {
   openSheet: (row: ManagedRow, from: HTMLButtonElement) => void
   rename: (folder: Folder, name: string) => void
   remove: (folder: Folder) => void
+  /**
+   * Open New blogroll with this folder's name and blogs in it (ADR 0050), focus going back to
+   * `from` (its ···) when it closes.
+   */
+  makeBlogroll: (folder: Folder, from: HTMLElement | null) => void
   unsubscribe: (row: ManagedRow) => void
   /** Each row's second line: its address, language and latest post (`useActivity`). */
   activity: (row: ManagedRow) => string
@@ -348,6 +353,7 @@ function FolderHeading({
         button={back}
         onRename={() => setRenaming(true)}
         onDelete={() => manage.remove(folder)}
+        onMakeBlogroll={() => manage.makeBlogroll(folder, back.current)}
       />
     </div>
   )
@@ -436,18 +442,23 @@ export function RenameForm({
   )
 }
 
-/** The ··· beside a folder's name: Rename and Delete folder (screen 27). */
+/**
+ * The ··· beside a folder's name: Rename and Delete folder (screen 27), and Make a blogroll from
+ * it (ADR 0050).
+ */
 function FolderOptions({
   folder,
   button,
   onRename,
   onDelete,
+  onMakeBlogroll,
 }: {
   folder: Folder
   /** The ··· itself, which focus goes back to. */
   button: RefObject<HTMLButtonElement | null>
   onRename: () => void
   onDelete: () => void
+  onMakeBlogroll: () => void
 }) {
   const t = useTranslations('settings.folders')
   const [open, setOpen] = useState(false)
@@ -492,6 +503,17 @@ function FolderOptions({
             data-testid="folder-rename"
           >
             {t('rename')}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              onMakeBlogroll()
+            }}
+            className={item}
+            data-testid="folder-make-blogroll"
+          >
+            {t('makeBlogroll')}
           </button>
           <button
             type="button"

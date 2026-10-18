@@ -458,13 +458,16 @@ describe('the ledgers', () => {
       'listed',
       'dismissed',
       'hidden',
+      'blogrolls',
     ])
+    // Members' public blogrolls are counted beside the blogs (ADR 0050); there are none here.
     expect(opened.counts).toEqual({
       candidates: 2,
       featured: 1,
       listed: 1,
       dismissed: 1,
       hidden: 1,
+      blogrolls: 0,
     })
     expect(ids(opened.rows)).toEqual([String(many.site), String(few.site)])
     expect(opened.rows[0]).toMatchObject({

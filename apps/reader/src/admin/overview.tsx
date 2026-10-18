@@ -373,7 +373,10 @@ function Activity({ activity, now }: { activity: AdminOverview['activity']; now:
           return target ? (
             <Link
               key={entry.id}
-              to={ledgerHref(target.area, { id: target.id })}
+              to={ledgerHref(target.area, {
+                id: target.id,
+                ...(target.filter ? { filter: target.filter } : {}),
+              })}
               className={`${row} hover:text-accent hover:no-underline`}
               data-testid="admin-activity"
             >

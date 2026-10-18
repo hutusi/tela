@@ -19,6 +19,7 @@ export const RESERVED_HANDLES: ReadonlySet<string> = new Set([
   'claim',
   'sites',
   's',
+  'l',
   'o',
   'img',
   'avatar',
