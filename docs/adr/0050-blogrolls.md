@@ -249,7 +249,8 @@ It then takes the alias out.
   - A removed blog is put back after the removal (`after: held.at`), so it comes back with its
     note, at the end of the list.
   - A deleted blogroll comes back as a new one (`blogrollAgain`): a new id, its blogs, their notes,
-    and Public restored once that has settled. Its link changes, and the old one is a 404.
+    and Public as it was, set by the `putBlogroll` that makes it. Its link changes, and the old one
+    is a 404.
 - **A held removal or deletion keeps its place under the limits** until it goes
   (`tablesBeforeHolds`, which `foldersBeforeHolds` now reads). Counted from the view instead, an
   Undo after something new took the place would push past the limit, and the server would drop
@@ -261,3 +262,11 @@ It then takes the alias out.
   under it, and 0039 keeps out only what members read.
 - **Letting a big group go.** Subscribe to all of 200 blogs is about 400 mutations. Unsent changes
   stop at the hold (`unsent(50)`), so letting it go sends them in batches of 50, each idempotent.
+- **`rollBlog` takes any feed, as `subscribe` does.** Add blogs offers only the member's
+  subscriptions, but a push may name any feed id, and the owner's pull then brings that feed's row
+  and its blog's. That is no reach `subscribe` lacks, which brings the same rows and more; holding
+  `rollBlog` to feeds once subscribed would also refuse a late Undo of a delete for a blog left
+  since. Left as is (review).
+- **Blogroll ids reach Workers Logs.** `/l/*` runs tela-web, so each address opened is logged,
+  private ones too. An id grants nothing: a private blogroll is a 404 to anyone but its owner,
+  whose device renders it from its own rows.
