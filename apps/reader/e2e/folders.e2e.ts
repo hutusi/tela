@@ -406,6 +406,16 @@ test.describe('Settings › Subscriptions, the manager from lg up', () => {
     await toast.getByTestId('toast-action').click()
     await expect(placeCount(page, 'Reading pile')).toHaveText('0')
 
+    // One row moved by its own folder button leaves the others ticked.
+    await settingsRow(page, JNITO).click()
+    await settingsRow(page, HUTUSI).click()
+    await settingsRow(page, JVNS).getByTestId('move-to').click()
+    await page.getByTestId('move-to-option').filter({ hasText: 'Reading pile' }).click()
+    await expect(placeCount(page, 'Reading pile')).toHaveText('1')
+    await expect(page.getByTestId('bulk-count')).toHaveText('2 selected')
+    await page.getByTestId('bulk-clear').click()
+    await expect(page.getByTestId('bulk-bar')).toHaveCount(0)
+
     // A new folder with the blog ticked in it, opened.
     await settingsRow(page, JVNS).click()
     await page.getByTestId('bulk-move').click()

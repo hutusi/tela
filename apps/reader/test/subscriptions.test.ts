@@ -14,6 +14,7 @@ import {
   standing,
   tickedState,
   toggleAll,
+  untick,
 } from '../src/lib/subscriptions'
 import { article, DAY, NOW } from './rows'
 
@@ -178,8 +179,16 @@ describe('ticks', () => {
     expect(toggleAll(new Set([10]), shown).picked.size).toBe(0)
   })
 
-  test('a blog no longer followed is no longer ticked, and hidden ticks are counted', () => {
+  test('a blog no longer in the place is no longer ticked, and hidden ticks are counted', () => {
     expect(standing(new Set([10, 20, 99]), new Set([10, 20, 30]))).toEqual([10, 20])
     expect(hiddenTicks([10, 99], shown)).toBe(1)
+  })
+
+  test('blogs moved away are unticked, and the rest stay', () => {
+    const ticks = { picked: new Set([10, 20, 30]), anchor: 20 }
+    const left = untick(ticks, [20])
+    expect([...left.picked]).toEqual([10, 30])
+    expect(left.anchor).toBeNull()
+    expect(untick(ticks, [10]).anchor).toBe(20)
   })
 })

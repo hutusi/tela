@@ -34,6 +34,7 @@ import {
   type Ticks,
   tickedState,
   toggleAll,
+  untick,
 } from '../lib/subscriptions'
 import { showToast } from '../lib/toasts'
 import { useDismiss } from '../lib/use-dismiss'
@@ -231,7 +232,7 @@ export function SubscriptionsManager({
     .filter((r) => matches([r.title, r.site ? displayHost(r.site.homeUrl) : null, r.feedUrl]))
     .sort(compareBy(sort))
   const shownIds = shown.map((r) => r.feedId)
-  const picked = standing(ticks.picked, new Set(rows.map((r) => r.feedId)))
+  const picked = standing(ticks.picked, new Set(pool.map((r) => r.feedId)))
   const hidden = hiddenTicks(picked, shownIds)
   const pickedLabel =
     hidden > 0
@@ -261,9 +262,11 @@ export function SubscriptionsManager({
     return () => document.removeEventListener('keydown', onKey)
   }, [selecting])
 
+  // What moved is unticked, and nothing else: one unticked row moved by its folder button, or
+  // dragged, leaves the others ticked; a bulk move or a dragged selection unticks them all.
   const move = (ids: readonly number[], folderId: string | null) => {
     actions.move(ids, folderId)
-    setTicks(NO_TICKS)
+    setTicks((k) => untick(k, ids))
   }
   const drag = useBlogDrag(folderOf, move)
   const nameOf = (ids: readonly number[]) =>

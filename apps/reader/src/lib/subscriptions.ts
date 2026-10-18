@@ -146,11 +146,21 @@ export function toggleAll(picked: ReadonlySet<number>, shown: readonly number[])
 }
 
 /**
- * The ticks still standing: only blogs still followed. A blog unsubscribed elsewhere meanwhile is
- * no longer here to move, and must not be counted or moved.
+ * The ticks still standing: only blogs still in the place being looked at. One unsubscribed, or
+ * moved out of the folder shown (here by an Undo, or on another device), is no longer there to act
+ * on, and must not be counted, or moved unseen.
  */
-export function standing(picked: ReadonlySet<number>, followed: ReadonlySet<number>): number[] {
-  return [...picked].filter((id) => followed.has(id))
+export function standing(picked: ReadonlySet<number>, here: ReadonlySet<number>): number[] {
+  return [...picked].filter((id) => here.has(id))
+}
+
+/** The ticks once these blogs have gone somewhere else: the rest stay ticked. */
+export function untick(ticks: Ticks, ids: readonly number[]): Ticks {
+  const gone = new Set(ids)
+  return {
+    picked: new Set([...ticks.picked].filter((id) => !gone.has(id))),
+    anchor: ticks.anchor !== null && gone.has(ticks.anchor) ? null : ticks.anchor,
+  }
 }
 
 /** How many ticked blogs the filter hides: an action takes them too, so the bar says so. */
