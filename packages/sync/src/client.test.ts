@@ -1,13 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 import { MAX_FOLDERS } from '@tela/shared'
 import {
+  applyMutation,
   applyPull,
   type Confirmed,
   emptyTables,
   type Pending,
   privacyChange,
   privacyUnsettled,
+  rowsOf,
   settle,
+  type Tables,
   view,
 } from './client'
 import type { Mutation } from './mutations'
@@ -698,5 +701,179 @@ describe('a pull from a tela-api of an earlier release', () => {
     const held = applyPull(start, pull(3, { subscriptions: [sub(1)], articles: [article(7)] }))
     const later = { mid: 'from-a-later-build', at: 5, type: 'somethingNew' } as unknown as Mutation
     expect(view(held, [{ mutation: later }])).toEqual(held.tables)
+  })
+})
+
+describe('the view replays a queue on one copy (ADR 0050)', () => {
+  function rng(seed: number) {
+    let a = seed >>> 0
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0
+      let t = a
+      t = Math.imul(t ^ (t >>> 15), t | 1)
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+  }
+  const profile: ProfileRow = {
+    handle: 'me',
+    displayName: null,
+    bio: null,
+    uiLocale: 'en',
+    readingLang: null,
+    uiLocaleAt: 5,
+    readingLangAt: 5,
+    publicSubscriptions: false,
+    publicLikes: true,
+    publicSubscriptionsVersion: 1,
+    publicLikesVersion: 2,
+    gravatar: true,
+    gravatarFound: null,
+    avatarUploaded: false,
+    avatar: '/avatar/me?v=1',
+    seq: 1,
+  }
+  const FEEDS = [1, 2, 3, 4]
+  const ARTICLES = [1, 2, 3, 4, 5, 6, 7, 8]
+  const FOLDERS = ['folder-aaaa', 'folder-bbbb', 'folder-cccc']
+  const BLOGROLLS = ['RollAAAAAAAA', 'RollBBBBBBBB', 'RollCCCCCCCC']
+  const PEOPLE = ['member-anna-0000001', 'member-bo-000000002']
+  const confirmed = applyPull(
+    start,
+    pull(9, {
+      profile: [profile],
+      subscriptions: [sub(1), sub(2), sub(3, 4)],
+      articles: ARTICLES.map((id) => article(id, (id % 4) + 1)),
+      states: [
+        { ...readState(1, 3), readUpdatedAt: 3 },
+        { ...readState(2, 4), likedAt: 4, likedUpdatedAt: 4 },
+      ],
+      recommendations: [{ articleId: 3, note: null, createdAt: 2, deletedAt: null, seq: 2 }],
+      folders: [
+        { id: 'folder-aaaa', name: 'A', createdAt: 1, updatedAt: 4, deletedAt: null, seq: 2 },
+      ],
+      feedFolders: [{ feedId: 1, folderId: 'folder-aaaa', updatedAt: 4, seq: 2 }],
+      blogrolls: [
+        {
+          id: 'RollAAAAAAAA',
+          name: 'A',
+          description: '',
+          isPublic: true,
+          publicVersion: 1,
+          createdAt: 1,
+          updatedAt: 4,
+          deletedAt: null,
+          seq: 2,
+        },
+      ],
+      blogrollBlogs: [
+        {
+          blogrollId: 'RollAAAAAAAA',
+          feedId: 1,
+          note: 'n',
+          noteAt: 4,
+          addedAt: 1,
+          updatedAt: 4,
+          removedAt: null,
+          seq: 2,
+        },
+      ],
+      prefs: [{ key: 'reader.mode', value: 'side', updatedAt: 4, seq: 2 }],
+    }),
+  )
+
+  /** Any mutation, over a few ids each, so they meet each other often. */
+  function randomMutation(random: () => number, i: number): Mutation {
+    const pick = <T>(xs: readonly T[]): T => xs[Math.floor(random() * xs.length)] as T
+    const mid = `eq-${i}-padding`
+    const at = Math.floor(random() * 12)
+    const articleId = pick(ARTICLES)
+    const feedId = pick(FEEDS)
+    const folderId = pick(FOLDERS)
+    const blogrollId = pick(BLOGROLLS)
+    const userId = pick(PEOPLE)
+    const highlight = pick(['hl-000001', 'hl-000002'])
+    const options: Mutation[] = [
+      { mid, at, type: 'markRead', articleId },
+      { mid, at, type: 'markUnread', articleId },
+      { mid, at, type: 'setLiked', articleId, liked: random() < 0.5 },
+      { mid, at, type: 'markAllRead', upTo: articleId },
+      { mid, at, type: 'markAllRead', upTo: articleId, feedId },
+      { mid, at, type: 'subscribe', feedId },
+      { mid, at, type: 'unsubscribe', feedId },
+      { mid, at, type: 'setPref', key: 'reader.mode', value: pick(['side', 'orig']) },
+      { mid, at, type: 'setProfile', uiLocale: pick(['en', 'fr']), readingLang: null },
+      { mid, at, type: 'setPrivacy', publicLikes: random() < 0.5, base: { publicLikes: 2 } },
+      { mid, at, type: 'setAvatar', gravatar: random() < 0.5 },
+      { mid, at, type: 'recommend', articleId, note: random() < 0.5 ? ' a note ' : null },
+      { mid, at, type: 'unrecommend', articleId },
+      { mid, at, type: 'follow', userId },
+      { mid, at, type: 'unfollow', userId },
+      { mid, at, type: 'putFolder', id: folderId, name: pick(['X', 'Y']) },
+      { mid, at, type: 'deleteFolder', id: folderId },
+      { mid, at, type: 'fileFeed', feedId, folderId: random() < 0.7 ? folderId : null },
+      {
+        mid,
+        at,
+        type: 'putBlogroll',
+        id: blogrollId,
+        name: pick(['R', 'S']),
+        description: '',
+        isPublic: random() < 0.5,
+      },
+      {
+        mid,
+        at,
+        type: 'setBlogrollPublic',
+        id: blogrollId,
+        isPublic: random() < 0.5,
+        base: pick([0, 1]),
+      },
+      { mid, at, type: 'deleteBlogroll', id: blogrollId },
+      { mid, at, type: 'rollBlog', blogrollId, feedId },
+      { mid, at, type: 'unrollBlog', blogrollId, feedId },
+      { mid, at, type: 'noteBlog', blogrollId, feedId, note: random() < 0.6 ? 'note' : null },
+      {
+        mid,
+        at,
+        type: 'putHighlight',
+        id: highlight,
+        articleId,
+        contentKey: 'a'.repeat(32),
+        side: 'original',
+        lang: null,
+        leafId: 'leaf000001',
+        start: 0,
+        end: 4,
+        quote: 'Post',
+        prefix: '',
+        suffix: '',
+        note: null,
+      },
+      { mid, at, type: 'deleteHighlight', id: highlight },
+    ]
+    return pick(options)
+  }
+
+  test('equals applying each mutation to a copy in turn, and leaves the confirmed tables alone', () => {
+    const before = structuredClone(rowsOf(confirmed.tables))
+    for (let seed = 1; seed <= 300; seed++) {
+      const random = rng(seed)
+      const pending: Pending[] = Array.from({ length: Math.floor(random() * 40) }, (_, i) => ({
+        mutation: randomMutation(random, i),
+      }))
+      const folded = pending.reduce((t, p) => applyMutation(t, p.mutation), confirmed.tables)
+      expect(rowsOf(view(confirmed, pending))).toEqual(rowsOf(folded))
+      expect(rowsOf(confirmed.tables)).toEqual(before)
+    }
+  })
+
+  test('with nothing pending it is the confirmed tables themselves; with anything, a copy', () => {
+    expect(view(confirmed, [])).toBe(confirmed.tables)
+    const later = { mid: 'from-a-later-build', at: 5, type: 'somethingNew' } as unknown as Mutation
+    const shown = view(confirmed, [{ mutation: later }])
+    expect(shown).not.toBe(confirmed.tables)
+    expect(shown.articles).not.toBe(confirmed.tables.articles)
+    expect(rowsOf(shown)).toEqual(rowsOf(confirmed.tables))
   })
 })

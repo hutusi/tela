@@ -308,9 +308,22 @@ export function blogrollPublicChange(
  * read is set once, unless the member marks the post unread, and then read and unread go to the
  * later `at`; likes, recommendations and prefs go to the later `at`; a watermark never moves
  * backwards. Counts move with the member's own change, which is all a device can know.
+ *
+ * `tables` is left as it was: the answer is a copy.
  */
 export function applyMutation(tables: Tables, m: Mutation): Tables {
   const t = copy(tables)
+  applyInPlace(t, m)
+  return t
+}
+
+/**
+ * `applyMutation` on tables already copied, changed where they are: what `view` replays every
+ * pending mutation with, so a long queue (a held subscribe-all is hundreds) copies the tables once
+ * rather than once per mutation. Only the maps of `t` change. A row is never changed in place but
+ * replaced, since the maps of a copy hold the same row objects as the confirmed tables.
+ */
+function applyInPlace(t: Tables, m: Mutation): void {
   switch (m.type) {
     case 'markRead': {
       // As the server decides: a first read is clock-less, unless it reads a post marked unread,
@@ -319,7 +332,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       const s = t.states.get(m.articleId) ?? blankState(m.articleId)
       const clock = s.readUpdatedAt ?? null
       if (s.readAt === null) {
-        if (clock !== null && m.at < clock) return t
+        if (clock !== null && m.at < clock) return
         t.states.set(m.articleId, {
           ...s,
           readAt: m.at,
@@ -328,19 +341,19 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       } else if (m.at > Math.max(s.readAt, clock ?? 0)) {
         t.states.set(m.articleId, { ...s, readUpdatedAt: m.at })
       }
-      return t
+      return
     }
     case 'markUnread': {
       // To the later `at` against any read or unread already made, the first read's own time
       // included.
       const s = t.states.get(m.articleId) ?? blankState(m.articleId)
-      if (m.at < Math.max(s.readUpdatedAt ?? 0, s.readAt ?? 0)) return t
+      if (m.at < Math.max(s.readUpdatedAt ?? 0, s.readAt ?? 0)) return
       t.states.set(m.articleId, { ...s, readAt: null, readUpdatedAt: m.at })
-      return t
+      return
     }
     case 'setLiked': {
       const s = t.states.get(m.articleId) ?? blankState(m.articleId)
-      if (s.likedUpdatedAt !== null && m.at <= s.likedUpdatedAt) return t
+      if (s.likedUpdatedAt !== null && m.at <= s.likedUpdatedAt) return
       const wasLiked = s.likedAt !== null
       t.states.set(m.articleId, {
         ...s,
@@ -356,7 +369,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
           likeCount: Math.max(0, article.likeCount + (m.liked ? 1 : -1)),
         })
       }
-      return t
+      return
     }
     case 'markAllRead': {
       for (const [feedId, sub] of t.subscriptions) {
@@ -378,7 +391,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         if (m.feedId !== undefined && a.feedId !== m.feedId) continue
         t.states.set(id, { ...s, readAt: s.readAt ?? m.at, readUpdatedAt: m.at })
       }
-      return t
+      return
     }
     case 'subscribe': {
       const sub = t.subscriptions.get(m.feedId)
@@ -393,7 +406,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       } else if (sub.deletedAt !== null) {
         t.subscriptions.set(m.feedId, { ...sub, deletedAt: null })
       }
-      return t
+      return
     }
     case 'unsubscribe': {
       const sub = t.subscriptions.get(m.feedId)
@@ -401,7 +414,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         t.subscriptions.set(m.feedId, { ...sub, deletedAt: m.at })
         prune(t, m.feedId)
       }
-      return t
+      return
     }
     case 'setPref': {
       // One the account takes from this browser fills only a pref no row is held for, with no
@@ -410,12 +423,12 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
       const held = t.prefs.get(m.key)
       if (m.ifAbsent) {
         if (!held) t.prefs.set(m.key, { key: m.key, value: m.value, updatedAt: 0, seq: 0 })
-        return t
+        return
       }
       if (!held || m.at >= held.updatedAt) {
         t.prefs.set(m.key, { key: m.key, value: m.value, updatedAt: m.at, seq: held?.seq ?? 0 })
       }
-      return t
+      return
     }
     case 'setProfile': {
       // Each language to the later `at`, as the server decides (ADR 0040), so a choice that loses
@@ -437,7 +450,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         }
         t.profile = next
       }
-      return t
+      return
     }
     case 'setPrivacy': {
       // As the server decides (issue #16): a hide always applies, and a show with a base only
@@ -460,7 +473,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         }
         t.profile = next
       }
-      return t
+      return
     }
     case 'setAvatar': {
       // Off takes a Gravatar away at once, though not an upload, which comes first. On, or
@@ -470,7 +483,7 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         const keeps = m.gravatar || t.profile.avatarUploaded
         t.profile = { ...t.profile, gravatar: m.gravatar, ...(keeps ? {} : { avatar: null }) }
       }
-      return t
+      return
     }
     case 'recommend': {
       // The server also decides by the later `at`, which this row does not carry; a concurrent
@@ -485,18 +498,18 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         seq: held?.seq ?? 0,
       })
       bumpRecommend(t, m.articleId, was ? 0 : 1)
-      return t
+      return
     }
     case 'unrecommend': {
       const held = t.recommendations.get(m.articleId)
-      if (!held || held.deletedAt !== null) return t
+      if (!held || held.deletedAt !== null) return
       t.recommendations.set(m.articleId, { ...held, deletedAt: m.at })
       bumpRecommend(t, m.articleId, -1)
-      return t
+      return
     }
     case 'putHighlight': {
       const held = t.highlights.get(m.id)
-      if (held && m.at < held.updatedAt) return t
+      if (held && m.at < held.updatedAt) return
       t.highlights.set(m.id, {
         id: m.id,
         articleId: held?.articleId ?? m.articleId,
@@ -515,16 +528,16 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         deletedAt: null,
         seq: held?.seq ?? 0,
       })
-      return t
+      return
     }
     case 'deleteHighlight': {
       t.highlights.delete(m.id)
-      return t
+      return
     }
     case 'follow': {
       // Who they are arrives with the pull; until then the row has only their id, and the page
       // that followed them knows the rest. (The server ignores a self-follow; no page offers one.)
-      if (t.follows.has(m.userId)) return t
+      if (t.follows.has(m.userId)) return
       t.follows.set(m.userId, {
         userId: m.userId,
         handle: null,
@@ -534,19 +547,19 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         deletedAt: null,
         seq: 0,
       })
-      return t
+      return
     }
     case 'unfollow': {
       t.follows.delete(m.userId)
-      return t
+      return
     }
     case 'putFolder': {
       // As the server decides: the later `at` wins, and a new folder past the limit is not made.
       // A folder deleted elsewhere is not held, so a rename of it shows until the pull that says
       // it was refused; the server never brings it back.
       const held = t.folders.get(m.id)
-      if (held && m.at < held.updatedAt) return t
-      if (!held && t.folders.size >= MAX_FOLDERS) return t
+      if (held && m.at < held.updatedAt) return
+      if (!held && t.folders.size >= MAX_FOLDERS) return
       t.folders.set(m.id, {
         id: m.id,
         name: m.name.trim(),
@@ -555,29 +568,29 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
         deletedAt: null,
         seq: held?.seq ?? 0,
       })
-      return t
+      return
     }
     case 'deleteFolder': {
       // Delete wins, and its blogs are in no folder, each keeping its move's clock.
-      if (!t.folders.delete(m.id)) return t
+      if (!t.folders.delete(m.id)) return
       for (const [feedId, row] of t.feedFolders) {
         if (row.folderId === m.id) t.feedFolders.set(feedId, { ...row, folderId: null })
       }
-      return t
+      return
     }
     case 'fileFeed': {
       // Into a folder this device holds, or none; the later `at` wins. A feed merged into another
       // is filed under the one it became by the server, and the pull says so.
-      if (m.folderId !== null && !t.folders.has(m.folderId)) return t
+      if (m.folderId !== null && !t.folders.has(m.folderId)) return
       const held = t.feedFolders.get(m.feedId)
-      if (held && m.at < held.updatedAt) return t
+      if (held && m.at < held.updatedAt) return
       t.feedFolders.set(m.feedId, {
         feedId: m.feedId,
         folderId: m.folderId,
         updatedAt: m.at,
         seq: held?.seq ?? 0,
       })
-      return t
+      return
     }
     // Blogrolls (ADR 0050). PLACEHOLDER: slice 1 (sync core) writes their predictions.
     case 'putBlogroll':
@@ -586,14 +599,14 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
     case 'rollBlog':
     case 'unrollBlog':
     case 'noteBlog':
-      return t
+      return
     default: {
       // Exhaustive for every type this build knows; a change from a later build that a rollback
       // left in this device's queue changes nothing here, and its push says what the server
       // makes of it. Without this, an older build's view threw on a follow and booted blank.
       const unknown: never = m
       void unknown
-      return t
+      return
     }
   }
 }
@@ -608,10 +621,16 @@ function bumpRecommend(t: Tables, articleId: number, delta: number) {
   }
 }
 
-/** What the device shows: the confirmed tables with every pending mutation replayed on top. */
+/**
+ * What the device shows: the confirmed tables with every pending mutation replayed on top. The
+ * tables are copied once and every mutation replayed on the copy, so a queue of hundreds (a held
+ * subscribe-all) costs one copy, not one per mutation (ADR 0050). With nothing pending it is the
+ * confirmed tables themselves, so what is cached by their identity stays.
+ */
 export function view(confirmed: Confirmed, pending: readonly Pending[]): Tables {
-  let t = confirmed.tables
-  for (const p of pending) t = applyMutation(t, p.mutation)
+  if (pending.length === 0) return confirmed.tables
+  const t = copy(confirmed.tables)
+  for (const p of pending) applyInPlace(t, p.mutation)
   return t
 }
 
