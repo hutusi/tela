@@ -74,9 +74,12 @@ const keyOfFolder = (folderId: string | null) => folderId ?? ''
 /** Only a row of this page is dragged here: a file or a link from elsewhere is not a blog. */
 const DRAG_TYPE = 'application/x-tela-feeds'
 
-/** Every row's columns, the heads' too: picture, blog, folder, latest post. */
+/**
+ * Every row's columns, the heads' too: picture, blog, folder, latest post. The last is wide enough
+ * for French ("Ne se met plus à jour"), wider than the design's 92px, which had only English.
+ */
 const COLUMNS =
-  'grid min-w-0 flex-1 grid-cols-[28px_minmax(120px,1fr)_minmax(88px,136px)_minmax(0,92px)] items-center gap-3'
+  'grid min-w-0 flex-1 grid-cols-[28px_minmax(120px,1fr)_minmax(88px,136px)_minmax(0,132px)] items-center gap-3'
 
 /** A folder, in the pane. */
 const FOLDER_ICON = (
@@ -642,6 +645,7 @@ export function SubscriptionsManager({
                       }}
                     />
                     <span
+                      title={activity(row)}
                       className={`truncate text-[12.5px] whitespace-nowrap ${quiet ? 'text-muted' : 'text-ink-2'}`}
                       data-testid="latest-post"
                     >
