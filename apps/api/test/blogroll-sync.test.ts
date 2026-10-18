@@ -3,7 +3,7 @@
  * one device or two whose changes arrive in either order, and what the owner's device is sent.
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { bumpSeq, currentSeq, first, type TelaDb } from '@tela/data'
+import { bumpSeq, currentSeq, first, mergeFeed, type TelaDb } from '@tela/data'
 import { MAX_BLOGROLL_BLOGS, MAX_BLOGROLLS } from '@tela/shared'
 import type { PullResponse, PushResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
@@ -450,5 +450,22 @@ describe('blogrolls (ADR 0050)', () => {
     later(10)
     await push([unroll(2)])
     expect((await blog(1))?.removed_at).toBe(now)
+  })
+
+  test("a merge carries a blog to the target, and the owner's device hears both rows", async () => {
+    await push([put(ID, 'Friends'), roll(2), note(2, 'Read this')])
+    const head = (await pull(0)).cursor
+    later(10)
+    await write(...mergeFeed(db, { alias: 2, target: 1, move: [], carry: [] }, now))
+    const delta = await pull(head)
+    expect(
+      delta.rows.blogrollBlogs.map((b) => [b.feedId, b.note, b.removedAt === null]).sort(),
+    ).toEqual([
+      [1, 'Read this', true],
+      [2, 'Read this', false],
+    ])
+    // The target comes whole, as a blog newly put in; the alias, out of every blogroll now, is no
+    // longer sent, as it is not to a reader whose subscription moved.
+    expect(delta.rows.feeds.map((f) => f.id)).toEqual([1])
   })
 })
