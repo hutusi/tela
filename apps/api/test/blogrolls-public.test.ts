@@ -256,7 +256,7 @@ describe("a public blogroll's page", () => {
     expect(text).not.toContain('anna@x.test')
   })
 
-  test('names a blog by its feed when the blogroll holds another feed of that blog', async () => {
+  test('names a blog by its feed when the blog has another feed, whatever the blogroll holds', async () => {
     // As the e2e fixtures are: two feeds of one blog.
     await blog(1, { title: 'Fixture blog' })
     await feed(2, 1, { title: 'Fixture comments' })
@@ -270,11 +270,15 @@ describe("a public blogroll's page", () => {
       // No title of its own: its feed's.
       'Untitled blog feed',
     ])
-    // Its sibling taken out, a feed goes back to its blog's name.
+    // Its sibling taken out of the blogroll, a feed keeps its name: the blog still has two feeds,
+    // and a name that changed with its neighbours would rename a blog nobody touched.
     await write(
       db.run(sql`update blogroll_blogs set removed_at = 9 where feed_id = 2`),
       db.run(sql`delete from blogroll_blogs where feed_id = 4`),
     )
+    expect((await page('annasRoll001')).blogs.map((b) => b.name)).toEqual(['Fixture posts'])
+    // Once the other feed merged into it, the blog has one feed again, and its own name.
+    await write(db.run(sql`update feeds set merged_into = 1 where id = 2`))
     expect((await page('annasRoll001')).blogs.map((b) => b.name)).toEqual(['Fixture blog'])
   })
 

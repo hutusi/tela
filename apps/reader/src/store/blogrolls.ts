@@ -4,7 +4,7 @@
  */
 import type { BlogrollBlogRow, BlogrollRow, Tables } from '@tela/sync'
 import type { BlogrollBlog, BlogrollCard, BlogrollData, Person } from '../views/types'
-import { cached } from './selectors'
+import { cached, feedTitle } from './selectors'
 
 /** How many blogs a card names before "N blogs". */
 export const CARD_BLOGS = 3
@@ -27,32 +27,15 @@ export function liveBlogs(t: Tables, blogrollId: string): BlogrollBlogRow[] {
   })
 }
 
-const hostOf = (url: string) => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '')
-  } catch {
-    return url
-  }
-}
-
 /**
- * What a blog in a blogroll is called, as tela-api names it for others (`blogNameSql`): its
- * blog's title, or the feed's own when the blogroll holds another feed of the same blog, else the
- * blog's host. Null while the device holds no row for the feed (before the pull brings it).
+ * What a blog in a blogroll is called, as the reader names it everywhere (`feedTitle`) and as
+ * tela-api names it for others (`BLOG_NAME`): its blog's title, or the feed's own when the blog
+ * has another feed, else the blog's host. Null while the device holds no row for the feed (before
+ * the pull brings it). It never depends on what else is in the blogroll.
  */
-export function blogNameIn(
-  t: Tables,
-  blogs: readonly BlogrollBlogRow[],
-  feedId: number,
-): string | null {
-  const feed = t.feeds.get(feedId)
-  if (!feed) return null
-  const site = t.sites.get(feed.siteId)
-  const sibling = blogs.some(
-    (b) => b.feedId !== feedId && t.feeds.get(b.feedId)?.siteId === feed.siteId,
-  )
-  const name = sibling ? (feed.title ?? site?.title) : (site?.title ?? feed.title)
-  return name ?? (site ? hostOf(site.homeUrl) : null)
+export function blogNameIn(t: Tables, feedId: number): string | null {
+  if (!t.feeds.has(feedId)) return null
+  return feedTitle(t, feedId) || null
 }
 
 /**
@@ -72,7 +55,7 @@ export function ownCard(t: Tables, row: BlogrollRow, owner: Person): BlogrollCar
       return {
         feedId: b.feedId,
         siteId: site?.id ?? 0,
-        name: blogNameIn(t, blogs, b.feedId),
+        name: blogNameIn(t, b.feedId),
         homeUrl: site?.homeUrl ?? '',
       }
     }),
@@ -124,7 +107,7 @@ export function selectBlogrollPage(
       return {
         feedId: b.feedId,
         siteId: site?.id ?? 0,
-        name: blogNameIn(t, live, b.feedId),
+        name: blogNameIn(t, b.feedId),
         homeUrl: site?.homeUrl ?? feed?.feedUrl ?? '',
         faviconKey: site?.faviconKey ?? null,
         primaryLang: site?.primaryLang ?? null,

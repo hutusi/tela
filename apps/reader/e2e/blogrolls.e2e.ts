@@ -606,7 +606,11 @@ test.describe("someone else's blogroll", () => {
       for (const row of await rows.all()) {
         await expect(row.getByTestId('blogroll-row-subscribe')).toHaveAttribute('href', next)
       }
-      await expect(rows.filter({ hasText: HUTUSI })).toContainText(NOTE)
+      // By feed, not by name: the fixture feeds share one blog, whose description (胡涂说博客…) every
+      // row shows as its tagline.
+      await expect(
+        view.locator(`[data-testid="blogroll-row"][data-feed-id="${feeds.hutusi}"]`),
+      ).toContainText(NOTE)
       // A listed blog links to its page on Tela, any other to the blog itself.
       const answer = await publicBlogroll(id)
       expect(answer?.blogs).toHaveLength(3)
