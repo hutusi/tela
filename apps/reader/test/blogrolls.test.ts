@@ -31,6 +31,7 @@ import {
 import { myBlogrollCards, selectBlogrollPage } from '../src/store/blogrolls'
 import type { MutationInput } from '../src/store/local'
 import { folderIdOf } from '../src/store/selectors'
+import { updatedWhen } from '../src/views/blogroll'
 import type { Person } from '../src/views/types'
 import { sub } from './rows'
 
@@ -410,5 +411,22 @@ describe('Subscribe to all', () => {
   test('a blog is named as a sentence names it: its name, else its host', () => {
     expect(blogLabel({ name: 'Kerb', homeUrl: 'https://kerb.example/' })).toBe('Kerb')
     expect(blogLabel({ name: null, homeUrl: 'https://www.kerb.example/x' })).toBe('kerb.example')
+  })
+})
+
+describe('when a blogroll was updated', () => {
+  const at = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h).getTime()
+  const now = at(2026, 10, 18, 9)
+
+  test('today and yesterday in words, by the calendar here', () => {
+    expect(updatedWhen(at(2026, 10, 18, 1), 'en', now)).toEqual({ day: true, when: 'today' })
+    expect(updatedWhen(at(2026, 10, 17, 23), 'fr', now)).toEqual({ day: true, when: 'hier' })
+    // A clock ahead of this one is today.
+    expect(updatedWhen(now + 3_600_000, 'en', now).when).toBe('today')
+  })
+
+  test('else the date, with the year once it is not this one', () => {
+    expect(updatedWhen(at(2026, 9, 27), 'en', now)).toEqual({ day: false, when: 'Sep 27' })
+    expect(updatedWhen(at(2025, 9, 27), 'en', now).when).toBe('Sep 27, 2025')
   })
 })
