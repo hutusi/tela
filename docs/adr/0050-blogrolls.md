@@ -121,12 +121,13 @@ outside the directory.
 - A listed blog links to its page on Tela (`/s/<siteId>`), and any other to the blog itself.
 - A reader count shows from three readers (0041), as everywhere else.
 - Names, descriptions and notes show as written, never translated.
-- A blog is named as the reader names a feed (`feedTitle`): by its blog's title, or by its feed's
-  when the blog has another live feed, so the two stay apart (`BLOG_NAME` in
-  `packages/data/src/queries/blogrolls.ts`, and the device's `blogNameIn`). Whether the blog has
-  another feed, not whether the blogroll holds it: counted within the blogroll, as first built, a
-  blog was renamed when its neighbour was taken out, which the e2e fixtures (three feeds of one
-  blog) showed at once.
+- A blog is named by its blog's title, or by its feed's once the blogroll has held another feed of
+  the same blog, so the two stay apart (`BLOG_NAME` in `packages/data/src/queries/blogrolls.ts`,
+  and the device's `blogNameIn`). Rows taken out count, so taking a neighbour out renames nothing:
+  counted over live rows, as first built, a blog was renamed when its neighbour was taken out,
+  which the e2e fixtures (three feeds of one blog) showed at once. Counted across Tela instead,
+  as tried next, a second feed of an unlisted blog that another member added privately renamed it
+  on the public page, and in a beta of two that named their subscription (review).
 - The owner sees every row: a blog they do not subscribe to says "Not in your subscriptions", and
   one the operator rejected says that only they see it.
 

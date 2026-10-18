@@ -256,30 +256,42 @@ describe("a public blogroll's page", () => {
     expect(text).not.toContain('anna@x.test')
   })
 
-  test('names a blog by its feed when the blog has another feed, whatever the blogroll holds', async () => {
+  test('names a blog by its feed once the blogroll has held another feed of that blog', async () => {
     // As the e2e fixtures are: two feeds of one blog.
     await blog(1, { title: 'Fixture blog' })
     await feed(2, 1, { title: 'Fixture comments' })
     await write(db.run(sql`update feeds set title = 'Fixture posts' where id = 1`))
     await blog(3, { title: null })
     await feed(4, 3, { title: 'Untitled blog feed' })
+    // A third feed of the blog that only someone else added: no business of this blogroll's name.
+    await feed(5, 3, { title: 'Comments nobody shows' })
     await filled('annasRoll001', ANNA, [1, 2, 4])
     expect((await page('annasRoll001')).blogs.map((b) => b.name)).toEqual([
       'Fixture posts',
       'Fixture comments',
-      // No title of its own: its feed's.
+      // No title of its own: its feed's, though another member added a second feed of it.
       'Untitled blog feed',
     ])
-    // Its sibling taken out of the blogroll, a feed keeps its name: the blog still has two feeds,
-    // and a name that changed with its neighbours would rename a blog nobody touched.
+    // Its sibling taken out, a feed keeps its name: a name that changed with its neighbours would
+    // rename a blog nobody touched.
     await write(
       db.run(sql`update blogroll_blogs set removed_at = 9 where feed_id = 2`),
       db.run(sql`delete from blogroll_blogs where feed_id = 4`),
     )
     expect((await page('annasRoll001')).blogs.map((b) => b.name)).toEqual(['Fixture posts'])
-    // Once the other feed merged into it, the blog has one feed again, and its own name.
-    await write(db.run(sql`update feeds set merged_into = 1 where id = 2`))
-    expect((await page('annasRoll001')).blogs.map((b) => b.name)).toEqual(['Fixture blog'])
+  })
+
+  test('says it was updated only when something others see changed', async () => {
+    await blog(1)
+    await blog(2, { listing: 'rejected' })
+    await filled('annasRoll001', ANNA, [1])
+    const before = (await page('annasRoll001')).blogroll.updatedAt
+    // A blog the operator hid, put in and noted; a note on a blog taken out: none of it shows.
+    await write(
+      db.run(sql`insert into blogroll_blogs (blogroll_id, feed_id, user_id, note, note_at, added_at, updated_at)
+        values ('annasRoll001', 2, ${ANNA}, 'Hidden', 999999, 999999, 999999)`),
+    )
+    expect((await page('annasRoll001')).blogroll.updatedAt).toBe(before)
   })
 
   test("keeps a merged feed's row, not updating when the feed it became is not", async () => {

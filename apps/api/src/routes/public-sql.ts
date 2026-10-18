@@ -197,11 +197,15 @@ export type Person = {
 
 /**
  * When others last saw a blogroll change, over `blogrolls r` (ADR 0050): the latest of its own
- * clock (name and description) and its blog rows' (a blog put in or taken out, a note written).
- * Public or private keeps a version, not a clock, and changes nothing others read on the page.
+ * clock (name and description) and what its blog rows show them: a blog put in or taken out, a
+ * note written on a blog still in. A blog the operator hid is none of theirs, nor a note on one
+ * taken out: counted, "Updated today" would tell of a change nobody else can see. Public or
+ * private keeps a version, not a clock, and changes nothing others read on the page.
  */
 export const BLOGROLL_UPDATED_AT = sql.raw(`max(r.updated_at, coalesce((
-    select max(max(b.updated_at, b.note_at)) from blogroll_blogs b where b.blogroll_id = r.id
+    select max(case when b.removed_at is null then max(b.updated_at, b.note_at) else b.updated_at end)
+    from blogroll_blogs b join feeds bf on bf.id = b.feed_id join sites bs on bs.id = bf.site_id
+    where b.blogroll_id = r.id and bs.listing <> 'rejected'
   ), 0))`)
 
 /** A blog on a blogroll's card: enough to draw its swatch and name it. */
