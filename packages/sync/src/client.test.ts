@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { MAX_FOLDERS } from '@tela/shared'
+import { MAX_BLOGROLL_BLOGS, MAX_BLOGROLLS, MAX_FOLDERS } from '@tela/shared'
 import {
   applyMutation,
   applyPull,
+  blogrollPublicChange,
+  blogrollPublicUnsettled,
   type Confirmed,
   emptyTables,
   type Pending,
@@ -15,7 +17,15 @@ import {
 } from './client'
 import type { Mutation } from './mutations'
 import { emptyRows, type PullResponse } from './protocol'
-import type { ArticleRow, FollowRow, ProfileRow, StateRow, SubscriptionRow } from './rows'
+import type {
+  ArticleRow,
+  BlogrollBlogRow,
+  BlogrollRow,
+  FollowRow,
+  ProfileRow,
+  StateRow,
+  SubscriptionRow,
+} from './rows'
 
 const article = (id: number, feedId = 1): ArticleRow => ({
   id,
@@ -701,6 +711,288 @@ describe('a pull from a tela-api of an earlier release', () => {
     const held = applyPull(start, pull(3, { subscriptions: [sub(1)], articles: [article(7)] }))
     const later = { mid: 'from-a-later-build', at: 5, type: 'somethingNew' } as unknown as Mutation
     expect(view(held, [{ mutation: later }])).toEqual(held.tables)
+  })
+})
+
+describe('blogrolls on the device (ADR 0050)', () => {
+  const ID = 'RollAAAAAAAA'
+  const OTHER = 'RollBBBBBBBB'
+  let n = 0
+  const m = (at: number, change: Record<string, unknown>) =>
+    ({ mutation: { mid: `roll-${++n}-pad`, at, ...change } as Mutation }) satisfies Pending
+  const put = (at: number, id: string, name: string, isPublic = false, description = '') =>
+    m(at, { type: 'putBlogroll', id, name, description, isPublic })
+  const roll = (at: number, feedId: number, blogrollId = ID) =>
+    m(at, { type: 'rollBlog', blogrollId, feedId })
+  const unroll = (at: number, feedId: number, blogrollId = ID) =>
+    m(at, { type: 'unrollBlog', blogrollId, feedId })
+  const note = (at: number, feedId: number, text: string | null, blogrollId = ID) =>
+    m(at, { type: 'noteBlog', blogrollId, feedId, note: text })
+  const blogrollRow = (id: string, over: Partial<BlogrollRow> = {}): BlogrollRow => ({
+    id,
+    name: 'Friends',
+    description: '',
+    isPublic: false,
+    publicVersion: 0,
+    createdAt: 1,
+    updatedAt: 1,
+    deletedAt: null,
+    seq: 2,
+    ...over,
+  })
+  const blogRow = (
+    feedId: number,
+    over: Partial<BlogrollBlogRow> = {},
+    blogrollId = ID,
+  ): BlogrollBlogRow => ({
+    blogrollId,
+    feedId,
+    note: null,
+    noteAt: 0,
+    addedAt: 1,
+    updatedAt: 1,
+    removedAt: null,
+    seq: 2,
+    ...over,
+  })
+  const held = applyPull(
+    start,
+    pull(3, {
+      blogrolls: [blogrollRow(ID), blogrollRow(OTHER)],
+      blogrollBlogs: [
+        blogRow(1, { note: 'kept', noteAt: 1 }),
+        blogRow(2, { removedAt: 1, note: 'taken out', noteAt: 1 }),
+        blogRow(1, {}, OTHER),
+      ],
+    }),
+  )
+  const blog = (t: Tables, feedId: number, blogrollId = ID) =>
+    t.blogrollBlogs.get(`${blogrollId}:${feedId}`)
+
+  test('a blogroll shows at once; the later edit wins, and public or private counts only when made', () => {
+    const shown = view(start, [
+      put(10, 'RollNEWNEWNE', '  New  ', true, '  A line.\nAnother.  '),
+      put(12, ID, 'Renamed'),
+      put(11, 'RollNEWNEWNE', 'Older, from a slow device'),
+      put(13, 'RollNEWNEWNE', 'Later', false),
+    ])
+    expect(shown.blogrolls.get('RollNEWNEWNE')).toMatchObject({
+      name: 'Later',
+      description: '',
+      isPublic: true, // made public; a later edit's `isPublic` is not a switch
+      publicVersion: 0,
+      createdAt: 10,
+      updatedAt: 13,
+    })
+    expect(
+      view(start, [
+        put(10, 'RollNEWNEWNE', '  New  ', true, '  A line.\nAnother.  '),
+      ]).blogrolls.get('RollNEWNEWNE'),
+    ).toMatchObject({ name: 'New', description: 'A line.\nAnother.' })
+    expect(view(held, [put(0, ID, 'Older')]).blogrolls.get(ID)?.name).toBe('Friends')
+    expect(view(held, [put(5, ID, 'Newer', true)]).blogrolls.get(ID)).toMatchObject({
+      name: 'Newer',
+      isPublic: false,
+    })
+  })
+
+  test('past the limit a new blogroll is not shown, though an edit is', () => {
+    const blogrolls = Array.from({ length: MAX_BLOGROLLS }, (_, i) =>
+      blogrollRow(`Roll${String(i).padStart(8, '0')}`),
+    )
+    const full = applyPull(start, pull(3, { blogrolls }))
+    const shown = view(full, [put(5, 'RollOVEROVER', 'Over'), put(5, 'Roll00000000', 'Renamed')])
+    expect(shown.blogrolls.size).toBe(MAX_BLOGROLLS)
+    expect(shown.blogrolls.get('Roll00000000')?.name).toBe('Renamed')
+  })
+
+  test('deleting a blogroll lets it go with its blogs, and nothing goes into it after', () => {
+    const gone = view(held, [
+      m(10, { type: 'deleteBlogroll', id: ID }),
+      roll(11, 3),
+      note(11, 1, 'late'),
+      unroll(11, 1),
+    ])
+    expect(gone.blogrolls.has(ID)).toBe(false)
+    expect([...gone.blogrollBlogs.keys()]).toEqual([`${OTHER}:1`])
+    // A deletion held by another device's pull already: nothing to take.
+    const pulled = applyPull(
+      held,
+      pull(5, { blogrolls: [blogrollRow(ID, { deletedAt: 4, seq: 5 })] }),
+    )
+    expect(view(pulled, [m(10, { type: 'deleteBlogroll', id: ID })]).blogrolls.size).toBe(1)
+  })
+
+  test('a blog put in goes to the end; one in already keeps its place; one put back keeps its note', () => {
+    const shown = view(held, [roll(10, 3), roll(11, 1), roll(12, 2)])
+    expect(blog(shown, 3)).toMatchObject({
+      addedAt: 10,
+      updatedAt: 10,
+      removedAt: null,
+      note: null,
+      noteAt: 0,
+    })
+    expect(blog(shown, 1)).toMatchObject({ addedAt: 1, updatedAt: 11, note: 'kept' })
+    expect(blog(shown, 2)).toMatchObject({ addedAt: 12, removedAt: null, note: 'taken out' })
+    // Into a blogroll not held: nothing.
+    expect(blog(view(held, [roll(10, 3, 'RollNONENONE')]), 3, 'RollNONENONE')).toBeUndefined()
+  })
+
+  test('taking out goes to the later `at`, and a second one moves the clock so an older put-back loses', () => {
+    expect(blog(view(held, [unroll(0, 1)]), 1)?.removedAt).toBeNull() // older than the put-in
+    expect(blog(view(held, [unroll(10, 1)]), 1)).toMatchObject({
+      removedAt: 10,
+      updatedAt: 10,
+      note: 'kept',
+    })
+    // Taken out again at 20: the first time stays, the clock moves, and a put-back from 15 loses.
+    const twice = view(held, [unroll(10, 1), unroll(20, 1), roll(15, 1)])
+    expect(blog(twice, 1)).toMatchObject({ removedAt: 10, updatedAt: 20 })
+    // An older second one moves nothing.
+    expect(blog(view(held, [unroll(10, 1), unroll(5, 1)]), 1)?.updatedAt).toBe(10)
+    // No row, no change.
+    expect(blog(view(held, [unroll(10, 7)]), 7)).toBeUndefined()
+    // In either order, the later of a put-back and a take-out wins.
+    expect(blog(view(held, [roll(20, 2), unroll(15, 2)]), 2)?.removedAt).toBeNull()
+    const later = blog(view(held, [unroll(25, 2), roll(20, 2)]), 2)
+    expect(later).toMatchObject({ updatedAt: 25, removedAt: 1 })
+  })
+
+  test('a note goes to the later `at` on its own clock, and never puts a blog back', () => {
+    const shown = view(held, [note(10, 1, '  Read this.  '), note(9, 1, 'older')])
+    expect(blog(shown, 1)).toMatchObject({ note: 'Read this.', noteAt: 10 })
+    expect(blog(view(held, [note(10, 1, '   ')]), 1)).toMatchObject({ note: null, noteAt: 10 })
+    expect(blog(view(held, [note(10, 1, null)]), 1)?.note).toBeNull()
+    // On a blog taken out: written, and it stays out; put back, it comes with the note.
+    expect(blog(view(held, [note(10, 2, 'For later')]), 2)).toMatchObject({
+      note: 'For later',
+      removedAt: 1,
+    })
+    expect(blog(view(held, [note(10, 2, 'For later'), roll(11, 2)]), 2)).toMatchObject({
+      note: 'For later',
+      removedAt: null,
+    })
+    // A note survives a take-out and a put-back.
+    expect(blog(view(held, [unroll(10, 1), roll(11, 1)]), 1)?.note).toBe('kept')
+    // No row: no note, and no blog.
+    expect(blog(view(held, [note(10, 9, 'nowhere')]), 9)).toBeUndefined()
+  })
+
+  test('past the limit a new blog is not put in, though one already in can be', () => {
+    const blogrollBlogs = Array.from({ length: MAX_BLOGROLL_BLOGS }, (_, i) => blogRow(100 + i))
+    const full = applyPull(
+      start,
+      pull(3, {
+        blogrolls: [blogrollRow(ID)],
+        blogrollBlogs: [...blogrollBlogs, blogRow(1, { removedAt: 1 })],
+      }),
+    )
+    const shown = view(full, [roll(5, 1), roll(5, 9999), roll(6, 100)])
+    expect(blog(shown, 1)?.removedAt).not.toBeNull()
+    expect(blog(shown, 9999)).toBeUndefined()
+    expect(blog(shown, 100)?.updatedAt).toBe(6)
+    // One taken out opens a place.
+    expect(blog(view(full, [unroll(5, 100), roll(6, 1)]), 1)?.removedAt).toBeNull()
+  })
+
+  test('a hide always applies; a show only against the version held, and nothing counts versions', () => {
+    const versioned = applyPull(
+      start,
+      pull(3, { blogrolls: [blogrollRow(ID, { publicVersion: 4 })] }),
+    )
+    const show = (at: number, base: number) =>
+      m(at, { type: 'setBlogrollPublic', id: ID, isPublic: true, base })
+    const hide = (at: number) =>
+      m(at, { type: 'setBlogrollPublic', id: ID, isPublic: false, base: 0 })
+    expect(view(versioned, [show(10, 4)]).blogrolls.get(ID)).toMatchObject({
+      isPublic: true,
+      publicVersion: 4,
+      updatedAt: 1, // the clock of the name and description stays
+    })
+    expect(view(versioned, [show(10, 3)]).blogrolls.get(ID)?.isPublic).toBe(false)
+    expect(view(versioned, [show(10, 4), hide(5)]).blogrolls.get(ID)?.isPublic).toBe(false)
+    // Of a blogroll not held: nothing.
+    expect(view(start, [show(10, 0)]).blogrolls.size).toBe(0)
+  })
+
+  test('a show names the confirmed version, and waits while a change to the blogroll is on its way', () => {
+    let confirmed = applyPull(
+      start,
+      pull(4, { blogrolls: [blogrollRow(ID, { publicVersion: 3 })] }),
+    )
+    const pending: Pending[] = []
+    const press = (on: boolean, at: number) => {
+      const input = blogrollPublicChange(confirmed, pending, ID, on)
+      if (input) pending.push({ mutation: { ...input, mid: `pub-${at}-pad`, at } as Mutation })
+      return input
+    }
+    expect(blogrollPublicUnsettled(confirmed, pending, ID)).toBe(false)
+    expect(press(true, 10)).toEqual({ type: 'setBlogrollPublic', id: ID, isPublic: true, base: 3 })
+    // A hide never waits; the show after it does.
+    expect(press(false, 11)).toEqual({
+      type: 'setBlogrollPublic',
+      id: ID,
+      isPublic: false,
+      base: 3,
+    })
+    expect(press(true, 12)).toBeNull()
+    expect(blogrollPublicUnsettled(confirmed, pending, ID)).toBe(true)
+    // Acknowledged, not yet pulled: still waiting.
+    for (const p of pending) p.ackedAt = 6
+    expect(blogrollPublicUnsettled(confirmed, pending, ID)).toBe(true)
+    // The pull that reaches the acknowledgement brings the version the server counted.
+    confirmed = applyPull(
+      confirmed,
+      pull(6, { blogrolls: [blogrollRow(ID, { isPublic: false, publicVersion: 5, seq: 6 })] }),
+    )
+    expect(settle(confirmed, pending)).toEqual([])
+    pending.length = 0
+    expect(press(true, 13)).toMatchObject({ base: 5 })
+    // One made on this device and not pulled back has no version yet: a show waits, a hide goes.
+    const made = [put(20, 'RollMADEMADE', 'Made')]
+    expect(blogrollPublicUnsettled(confirmed, made, 'RollMADEMADE')).toBe(true)
+    expect(blogrollPublicChange(confirmed, made, 'RollMADEMADE', true)).toBeNull()
+    expect(blogrollPublicChange(confirmed, made, 'RollMADEMADE', false)).toMatchObject({
+      base: 0,
+    })
+  })
+
+  test('a pull folds blogs before blogrolls, keeps those of a blogroll not held yet, and a deletion takes its blogs', () => {
+    // A page can end before the blogroll's own row: its blogs are kept until it comes.
+    const early = applyPull(
+      start,
+      pull(3, { blogrollBlogs: [blogRow(1), blogRow(2, { removedAt: 2 })] }),
+    )
+    expect(early.tables.blogrolls.size).toBe(0)
+    expect([...early.tables.blogrollBlogs.keys()]).toEqual([`${ID}:1`, `${ID}:2`])
+    expect(early.tables.blogrollBlogs.get(`${ID}:2`)?.removedAt).toBe(2)
+    const whole = applyPull(early, pull(4, { blogrolls: [blogrollRow(ID)] }))
+    expect(whole.tables.blogrolls.get(ID)?.name).toBe('Friends')
+    expect(whole.tables.blogrollBlogs.size).toBe(2)
+    // A deletion, with a blog row changed in the same page: both go.
+    const deleted = applyPull(
+      held,
+      pull(5, {
+        blogrolls: [blogrollRow(ID, { deletedAt: 5, updatedAt: 5, seq: 5 })],
+        blogrollBlogs: [blogRow(3, { seq: 5 })],
+      }),
+    )
+    expect(deleted.tables.blogrolls.has(ID)).toBe(false)
+    expect([...deleted.tables.blogrollBlogs.keys()]).toEqual([`${OTHER}:1`])
+  })
+
+  test('a pull from a tela-api before blogrolls keeps what the device holds', () => {
+    const { blogrolls: _b, blogrollBlogs: _bb, ...rows } = emptyRows()
+    const old = {
+      cursor: 5,
+      more: false,
+      reset: false,
+      rows,
+      tombstones: [],
+    } as unknown as PullResponse
+    const next = applyPull(held, old)
+    expect(next.tables.blogrolls.size).toBe(2)
+    expect(next.tables.blogrollBlogs.size).toBe(3)
   })
 })
 

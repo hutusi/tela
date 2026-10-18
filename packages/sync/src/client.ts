@@ -11,7 +11,7 @@
  *
  * No I/O here, so the rules can be tested on their own and shared with anything that syncs.
  */
-import { MAX_FOLDERS } from '@tela/shared'
+import { MAX_BLOGROLL_BLOGS, MAX_BLOGROLLS, MAX_FOLDERS } from '@tela/shared'
 import type { Mutation } from './mutations'
 import { completePull, type PullResponse } from './protocol'
 import type {
@@ -179,6 +179,19 @@ export function applyPull(confirmed: Confirmed, given: PullResponse): Confirmed 
     else t.folders.delete(row.id)
   }
   for (const row of r.feedFolders) t.feedFolders.set(row.feedId, row)
+  // Blogrolls (ADR 0050): blogs first, so a blogroll deleted in this page takes the ones that came
+  // with it. A blog of a blogroll not held yet is kept: a page can end before the blogroll's own
+  // row, when that changed after its blogs did. A removed blog is kept too, with its note.
+  for (const row of r.blogrollBlogs) {
+    t.blogrollBlogs.set(blogrollBlogKey(row.blogrollId, row.feedId), row)
+  }
+  for (const row of r.blogrolls) {
+    if (row.deletedAt === null) t.blogrolls.set(row.id, row)
+    else {
+      t.blogrolls.delete(row.id)
+      dropBlogsOf(t, row.id)
+    }
+  }
   for (const stone of pull.tombstones) {
     if (stone.entity === 'article') t.articles.delete(Number(stone.key))
   }
@@ -315,6 +328,21 @@ export function applyMutation(tables: Tables, m: Mutation): Tables {
   const t = copy(tables)
   applyInPlace(t, m)
   return t
+}
+
+/** How many blogs a blogroll holds that are not taken out. */
+function liveBlogCount(t: Tables, blogrollId: string): number {
+  let n = 0
+  for (const row of t.blogrollBlogs.values()) {
+    if (row.blogrollId === blogrollId && row.removedAt === null) n++
+  }
+  return n
+}
+
+/** Let a blogroll's blogs go with it: a deleted blogroll is not held, nor what was in it. */
+function dropBlogsOf(t: Tables, blogrollId: string) {
+  const prefix = `${blogrollId}:`
+  for (const key of t.blogrollBlogs.keys()) if (key.startsWith(prefix)) t.blogrollBlogs.delete(key)
 }
 
 /**
@@ -592,14 +620,93 @@ function applyInPlace(t: Tables, m: Mutation): void {
       })
       return
     }
-    // Blogrolls (ADR 0050). PLACEHOLDER: slice 1 (sync core) writes their predictions.
-    case 'putBlogroll':
-    case 'setBlogrollPublic':
-    case 'deleteBlogroll':
-    case 'rollBlog':
-    case 'unrollBlog':
-    case 'noteBlog':
+    case 'putBlogroll': {
+      // As the server decides (ADR 0050): the later `at` wins, a new blogroll past the limit is
+      // not made, and public or private counts only when it is made; after that it is
+      // `setBlogrollPublic`'s alone. A blogroll deleted elsewhere is not held, so an edit of it
+      // shows until the pull that says it was refused, as a folder's does.
+      const held = t.blogrolls.get(m.id)
+      if (held && m.at < held.updatedAt) return
+      if (!held && t.blogrolls.size >= MAX_BLOGROLLS) return
+      t.blogrolls.set(m.id, {
+        id: m.id,
+        name: m.name.trim(),
+        description: m.description.trim(),
+        isPublic: held ? held.isPublic : m.isPublic,
+        publicVersion: held?.publicVersion ?? 0,
+        createdAt: held?.createdAt ?? m.at,
+        updatedAt: m.at,
+        deletedAt: null,
+        seq: held?.seq ?? 0,
+      })
       return
+    }
+    case 'setBlogrollPublic': {
+      // As a privacy switch is predicted (issue #16): a hide always applies, a show only while it
+      // names the version held, and nothing here counts versions, so the version held is the
+      // confirmed one. `blogrollPublicChange` makes no show while this device's own change to the
+      // blogroll is unsettled, so no change ahead of it moves the version it names.
+      const held = t.blogrolls.get(m.id)
+      if (!held) return
+      if (m.isPublic && m.base !== held.publicVersion) return
+      t.blogrolls.set(m.id, { ...held, isPublic: m.isPublic })
+      return
+    }
+    case 'deleteBlogroll': {
+      // Delete wins, and the blogroll's blogs go with it. The server keeps their rows; a deleted
+      // blogroll's are never sent again.
+      if (!t.blogrolls.delete(m.id)) return
+      dropBlogsOf(t, m.id)
+      return
+    }
+    case 'rollBlog': {
+      // Into a blogroll this device holds, to the later `at`; past the limit only a blog already
+      // in it. One put back goes to the end, one already in keeps its place, and the note stays
+      // as it was. A feed merged into another is put in as the one it became by the server, and
+      // the pull says so.
+      if (!t.blogrolls.has(m.blogrollId)) return
+      const key = blogrollBlogKey(m.blogrollId, m.feedId)
+      const held = t.blogrollBlogs.get(key)
+      const live = held !== undefined && held.removedAt === null
+      if (!live && liveBlogCount(t, m.blogrollId) >= MAX_BLOGROLL_BLOGS) return
+      if (held && m.at < held.updatedAt) return
+      t.blogrollBlogs.set(key, {
+        blogrollId: m.blogrollId,
+        feedId: m.feedId,
+        note: held?.note ?? null,
+        noteAt: held?.noteAt ?? 0,
+        addedAt: live ? held.addedAt : m.at,
+        updatedAt: m.at,
+        removedAt: null,
+        seq: held?.seq ?? 0,
+      })
+      return
+    }
+    case 'unrollBlog': {
+      // To the later `at`, and the clock moves forward even on a blog already taken out, so an
+      // older put-back arriving after this one loses (the `unfollow` lesson). No row, no change.
+      if (!t.blogrolls.has(m.blogrollId)) return
+      const key = blogrollBlogKey(m.blogrollId, m.feedId)
+      const held = t.blogrollBlogs.get(key)
+      if (!held) return
+      if (held.removedAt === null && m.at < held.updatedAt) return
+      t.blogrollBlogs.set(key, {
+        ...held,
+        removedAt: held.removedAt ?? m.at,
+        updatedAt: Math.max(held.updatedAt, m.at),
+      })
+      return
+    }
+    case 'noteBlog': {
+      // On the note's own clock, to the later `at`: it is written on a blog taken out too, for
+      // when it is put back, and never puts one back.
+      if (!t.blogrolls.has(m.blogrollId)) return
+      const key = blogrollBlogKey(m.blogrollId, m.feedId)
+      const held = t.blogrollBlogs.get(key)
+      if (!held || m.at < held.noteAt) return
+      t.blogrollBlogs.set(key, { ...held, note: m.note?.trim() || null, noteAt: m.at })
+      return
+    }
     default: {
       // Exhaustive for every type this build knows; a change from a later build that a rollback
       // left in this device's queue changes nothing here, and its push says what the server
