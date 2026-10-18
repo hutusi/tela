@@ -256,8 +256,10 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        batch that merges a feed. Without the table that batch fails, and the alias goes on being
        fetched beside its target until the migration lands.
      - tela-jobs before tela-api, so that a merge after the first blogroll exists carries it. An
-       older tela-jobs leaves the alias's row in the blogroll, which still works: the public
-       answers keep it, and subscribing to it subscribes to the target.
+       older tela-jobs leaves the alias's row in the blogroll, which mostly still works: the
+       public answers keep it, and its row's Subscribe subscribes to the target. Subscribe to all
+       leaves such a blog alone (its changes are `exact`, so they never reach a subscription
+       through a merge).
      - tela-api before tela-web, because the new shell sends `putBlogroll`, `setBlogrollPublic`,
        `deleteBlogroll`, `rollBlog`, `unrollBlog` and `noteBlog`, and reads
        `/api/v1/public/blogrolls/:id` and `/api/v1/public/discover/blogrolls`. With tela-web out
@@ -271,7 +273,9 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        - An older tela-api refuses the six mutations as invalid, so a blogroll made, edited,
          filled or deleted in that window goes back and is lost; `/l/<id>` answers 404 and
          profiles carry no blogrolls (the shell reads none). Its pulls carry no blogroll tables, so
-         each device asks for a snapshot once tela-api is forward again. Keep it short.
+         each device asks for a snapshot once tela-api is forward again. It also strips `exact`
+         from `subscribe`, `unsubscribe` and `fileFeed`, so a Subscribe to all from a public copy
+         naming a merged address follows the merge again. Keep it short.
        - An older tela-web ignores the blogroll rows a pull sends and has no `/l/` page, and still
          sends any blogroll change left queued, which the newer tela-api applies.
      - After deploy, check that:

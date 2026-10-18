@@ -11,8 +11,9 @@ import { type SQL, sql } from 'drizzle-orm'
 /**
  * The blog rows of the blogroll aliased `r` that others see, as `bb` joined to `f` (feeds) and
  * `s` (sites): put in and not taken out, of a blog the operator has not hidden. A merged feed's
- * row stays: subscribing to it subscribes to the feed it became, and a tela-jobs rolled back
- * before the carry-over leaves it the only row.
+ * row stays: its row's Subscribe subscribes to the feed it became (Subscribe to all, being
+ * `exact`, leaves it alone), and a tela-jobs rolled back before the carry-over leaves it the only
+ * row.
  */
 export const visibleBlogsFrom = (r: string): SQL =>
   sql.raw(`blogroll_blogs bb join feeds f on f.id = bb.feed_id join sites s on s.id = f.site_id
