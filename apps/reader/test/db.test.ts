@@ -81,6 +81,8 @@ describe('the device database', () => {
     ['follows', '0031'],
     ['folders', '0048'],
     ['feedFolders', '0048'],
+    ['blogrolls', '0050'],
+    ['blogrollBlogs', '0050'],
   ] as const) {
     test(`a copy written before a table existed starts over from a snapshot (${table}, ADR ${adr})`, async () => {
       const name = fresh()
@@ -122,6 +124,27 @@ describe('the device database', () => {
     // The snapshot it then takes is trusted again.
     expect(await now.commit('a', { tables, cursor: 21, covered: Object.keys(tables) })).toBe(true)
     expect((await now.load()).cursor).toBe(21)
+  })
+
+  test('a copy the build before blogrolls kept, every table it knew whole, starts over (ADR 0050)', async () => {
+    const name = fresh()
+    const now = await indexedDbPersistence(name)
+    await now.claim('a')
+    const tables = tablesOf(pull(5, { profile: [profile], subscriptions: [sub(1)] }, true))
+    expect(await now.commit('a', { tables, cursor: 5 })).toBe(true)
+    // What that build leaves: its tables and its cursor, a stamp naming those it kept, and no
+    // blogroll tables at all, though its cursor has passed blogroll rows a pull sent it.
+    const raw = await openDB(name)
+    await raw.delete('tables', 'blogrolls')
+    await raw.delete('tables', 'blogrollBlogs')
+    const before = Object.keys(tables).filter((t) => t !== 'blogrolls' && t !== 'blogrollBlogs')
+    await raw.put('meta', 9, 'cursor')
+    await raw.put('meta', { tables: before, cursor: 9 }, 'kept')
+    raw.close()
+    const loaded = await now.load()
+    expect(loaded.owner).toBe('a')
+    expect(loaded.cursor).toBe(0)
+    expect(loaded.rows).toBeNull()
   })
 
   test('a table the server left out loads as it is, and stays out until a write puts it whole', async () => {
