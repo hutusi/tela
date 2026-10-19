@@ -898,7 +898,9 @@ then an "On this page" list that sticks beside the text from `lg`, "The short ve
 
 ## States the reader adds
 
-- A skeleton pane while the first sync has not landed: the article is on its way, not gone.
+- A skeleton pane while the first sync has not landed: the article is on its way, not gone. The
+  sidebar (or the rail) and the list are placeholders too (`ListPanesSkeleton`), so a new device
+  never says "Nothing here yet." before it holds any rows.
 - A page that reads tela-api (a blog, a profile, a blogroll, Discover's tabs, a claim, the
   Dashboard, search beyond the device) and whose answer did not come says so in the skeleton's
   place, never a skeleton for ever: "Something went wrong loading this." and *Try again*

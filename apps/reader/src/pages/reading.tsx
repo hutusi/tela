@@ -16,7 +16,7 @@ import { Shortcuts } from '../components/shortcuts'
 import { Sidebar } from '../components/sidebar'
 import { SidebarRail } from '../components/sidebar-rail'
 import { toggleSidebarKeepingFocus } from '../components/sidebar-toggle'
-import { ReaderPaneSkeleton } from '../components/skeletons'
+import { ListPanesSkeleton, ReaderPaneSkeleton } from '../components/skeletons'
 import {
   canonicalReadingHref,
   listsFilter,
@@ -62,6 +62,9 @@ export function ReadingPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const params = parseReadingParams(search)
+  // Whether the device holds the member's rows: the profile always comes in the first snapshot.
+  // Before it lands (a new device) the panes are placeholders, never an empty list.
+  const synced = tables.profile !== null
 
   const subs = subscriptionItems(tables, now)
   // The sidebar's order (ADR 0048): the member's folders by name, then the blogs in none.
@@ -406,34 +409,48 @@ export function ReadingPage() {
       data-sidebar={panes.sidebar}
       data-focus={focused ? '1' : undefined}
     >
-      {/* Over the first run too: on a phone it is the only way to Liked, and a member who follows
-          nothing may still have kept posts there, as the sidebar beside it does on a desktop. */}
-      {open ? null : <MobileNav tree={tree} totals={counts} params={params} />}
-      {/* The sidebar, or the rail it collapses to (ADR 0030), and neither in focus. Not rendered
-          rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no defined
-          winner (AGENTS.md), and a column that is gone needs no element. The list is the
-          exception: in focus it stays mounted and styles.css takes it out of the grid, so its
-          page of rows and its scroll survive and Esc still finds the row it closed. */}
-      {focused ? null : panes.sidebar === 'shown' ? (
-        <Sidebar tree={tree} totals={counts} params={params} />
+      {synced ? (
+        <>
+          {/* Over the first run too: on a phone it is the only way to Liked, and a member who
+              follows nothing may still have kept posts there, as the sidebar beside it does on a
+              desktop. */}
+          {open ? null : <MobileNav tree={tree} totals={counts} params={params} />}
+          {/* The sidebar, or the rail it collapses to (ADR 0030), and neither in focus. Not
+              rendered rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no
+              defined winner (AGENTS.md), and a column that is gone needs no element. The list is
+              the exception: in focus it stays mounted and styles.css takes it out of the grid, so
+              its page of rows and its scroll survive and Esc still finds the row it closed. */}
+          {focused ? null : panes.sidebar === 'shown' ? (
+            <Sidebar tree={tree} totals={counts} params={params} />
+          ) : (
+            <SidebarRail tree={tree} params={params} />
+          )}
+          {firstRun ? null : (
+            <ArticleList
+              items={items}
+              params={params}
+              title={listTitle}
+              readingLang={readingLang}
+              locale={locale}
+              now={now}
+              pendingFetch={pendingFetch}
+              show={liked || folderGone ? null : unreadOnly ? 'unread' : 'all'}
+              onShow={onShow}
+              caughtUp={unreadOnly && all.length > 0}
+              onMarkAll={letSeenGo}
+              folder={folderGone ? 'gone' : folder}
+            />
+          )}
+        </>
+      ) : focused ? null : panes.sidebar === 'shown' ? (
+        // A device whose first sync has not landed holds no rows yet: placeholders, never a list
+        // that says there is nothing here.
+        <ListPanesSkeleton />
       ) : (
-        <SidebarRail tree={tree} params={params} />
-      )}
-      {firstRun ? null : (
-        <ArticleList
-          items={items}
-          params={params}
-          title={listTitle}
-          readingLang={readingLang}
-          locale={locale}
-          now={now}
-          pendingFetch={pendingFetch}
-          show={liked || folderGone ? null : unreadOnly ? 'unread' : 'all'}
-          onShow={onShow}
-          caughtUp={unreadOnly && all.length > 0}
-          onMarkAll={letSeenGo}
-          folder={folderGone ? 'gone' : folder}
-        />
+        <>
+          <SidebarRail tree={tree} params={params} />
+          <ListPanesSkeleton sidebar={false} />
+        </>
       )}
       {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}
       {firstRun ? (
@@ -455,9 +472,8 @@ export function ReadingPage() {
           next={next}
           listName={listName}
         />
-      ) : open && tables.profile === null ? (
-        // The first sync has not landed yet (the profile always comes in the first snapshot):
-        // the article is on its way, not gone.
+      ) : open && !synced ? (
+        // The first sync has not landed yet: the article is on its way, not gone.
         <ReaderPaneSkeleton />
       ) : open ? (
         <main
@@ -471,9 +487,9 @@ export function ReadingPage() {
             </button>
           </div>
         </main>
-      ) : (
+      ) : synced ? (
         <EmptyState unread={counts.all} hasSubscriptions={subs.length > 0} />
-      )}
+      ) : null}
     </div>
   )
 }
