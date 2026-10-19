@@ -52,8 +52,8 @@ add them.
   `'unsafe-inline'` (the views set `style` attributes the edge renders and the app mounts over
   without hydrating), images from `'self'`, `https://assets.telaread.com` and `blob:` (the
   picture crop), fonts, fetches, the manifest and the worker from `'self'`, no plugins, no
-  `<base>`, forms to `'self'`, no framing, and `upgrade-insecure-requests` (which browsers ignore
-  until the policy is enforced). The test recomputes the theme script's hash from `index.html`,
+  `<base>`, forms to `'self'` and no framing. `upgrade-insecure-requests` joins when the policy is
+  enforced: report-only, browsers ignore it and warn about it in the console on every page. The test recomputes the theme script's hash from `index.html`,
   so a change to that script cannot ship without the policy. The app reports each
   `securitypolicyviolation` it sees to `/api/client-errors`; once a week of real use reports
   none, the header becomes `Content-Security-Policy` (a follow-up, not this change).

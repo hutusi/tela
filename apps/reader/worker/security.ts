@@ -32,7 +32,8 @@ export const CONTENT_SECURITY_POLICY = [
   "base-uri 'none'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  'upgrade-insecure-requests',
+  // Not `upgrade-insecure-requests` yet: a report-only policy cannot upgrade anything, and
+  // browsers say so in the console on every page. It joins when the policy is enforced.
 ].join('; ')
 
 /**

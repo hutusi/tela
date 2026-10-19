@@ -6,7 +6,7 @@
 # set as SECURITY_HEADERS in worker/security.ts, which the edge sets on its own pages;
 # test/security.test.ts holds the two together.
 /*
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'sha256-iu96BVO3nRFhZTCHPNdC3hcRMXDyiUs6Q6h1Z9Lp6fA='; style-src 'self' 'unsafe-inline'; img-src 'self' https://assets.telaread.com blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'sha256-iu96BVO3nRFhZTCHPNdC3hcRMXDyiUs6Q6h1Z9Lp6fA='; style-src 'self' 'unsafe-inline'; img-src 'self' https://assets.telaread.com blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   Strict-Transport-Security: max-age=31536000
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
