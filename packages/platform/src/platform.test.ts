@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { sql } from 'drizzle-orm'
 import { checkD1Limits, D1LimitError } from './db'
-import { resendMail } from './mail'
+import { MailError, resendMail } from './mail'
 import { fakeClock, libsqlDb, memoryBlobs, memoryJobs, memoryMail, s3Blobs } from './portable'
 
 describe('D1 limits', () => {
@@ -179,6 +179,33 @@ describe('resendMail', () => {
       fetch: (async () => new Response('bad', { status: 422 })) as unknown as typeof fetch,
     })
     await expect(mail.send({ to: 'a@b.c', subject: 's', text: 't' })).rejects.toThrow(/422/)
+  })
+
+  it('gives up on a Resend that never answers, as a MailError', async () => {
+    const mail = resendMail({
+      apiKey: 'k',
+      from: 'f',
+      timeoutMs: 20,
+      fetch: ((_input: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+        })) as unknown as typeof fetch,
+    })
+    const sent = mail.send({ to: 'a@b.c', subject: 's', text: 't' })
+    await expect(sent).rejects.toBeInstanceOf(MailError)
+    await expect(sent).rejects.toThrow(/no answer in 20 ms/)
+  })
+
+  it('reports a network failure as a MailError too', async () => {
+    const mail = resendMail({
+      apiKey: 'k',
+      from: 'f',
+      fetch: (async () => {
+        throw new TypeError('fetch failed')
+      }) as unknown as typeof fetch,
+    })
+    const sent = mail.send({ to: 'a@b.c', subject: 's', text: 't' })
+    await expect(sent).rejects.toBeInstanceOf(MailError)
   })
 })
 

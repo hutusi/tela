@@ -638,7 +638,8 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   - `select key, count, last_request from rate_limit` shows better-auth's windows, and
     `select * from action_limits where key like 'otp%' or key like 'password%'` Tela's.
   - A code that never arrives: check Resend's log for the address first, then the Worker's logs
-    for the send error. An address with no account is mailed only while it holds an invitation
+    for the send error, a `MailError`: `Resend answered <status>` when it refused, and `Resend not
+    reached: no answer in 10000 ms` when it did not answer in ten seconds. An address with no account is mailed only while it holds an invitation
     (a hold from a join lasts a day); otherwise the request answers as usual and nothing is sent.
   - A member whose sign-in fails on one network only, and works on another, is behind a network
     that refuses telaread.com: the form says "We could not reach Tela from this network" when no
