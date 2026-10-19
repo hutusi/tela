@@ -402,6 +402,20 @@ describe('what the idle prefetch would fetch', () => {
     ).toBe(false)
     expect(prefetchCovers(running, { ...next, bodies: [...next.bodies, 'c9'] })).toBe(false)
   })
+
+  test("another list's plan starts over, even when the run holds every post of it", () => {
+    const running = { bodies: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], translations: [] }
+    // One feed's list: part of All's, but its own posts first, so the run in All's order restarts.
+    expect(prefetchCovers(running, { bodies: ['f', 'b'], translations: [] })).toBe(false)
+    expect(prefetchCovers(running, { bodies: ['b', 'd', 'f', 'h'], translations: [] })).toBe(false)
+    // Read on opening: one or a few gone, the rest in the order it was.
+    expect(
+      prefetchCovers(running, { bodies: ['a', 'c', 'd', 'e', 'f', 'g', 'h'], translations: [] }),
+    ).toBe(true)
+    expect(prefetchCovers(running, { bodies: ['b', 'c', 'e', 'g', 'h'], translations: [] })).toBe(
+      true,
+    )
+  })
 })
 
 describe('what a feed is called', () => {

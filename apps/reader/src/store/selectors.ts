@@ -418,16 +418,33 @@ export function prefetchPlan(
 }
 
 /**
- * Whether a prefetch run for `running` fetches everything `next` would: then it goes on rather
- * than starting over. Opening a post reads it, which takes it out of the plan, and a run cancelled
- * at every open never got past the first bundle while the member stepped through a list.
+ * Whether a prefetch run for `running` fetches everything `next` would, in the order `next` wants
+ * it: then it goes on rather than starting over. Opening a post reads it, which takes it out of the
+ * plan, and a run cancelled at every open never got past the first bundle while the member stepped
+ * through a list. Only that is covered: `next` is `running` with at most a few posts taken out and
+ * nothing moved. A plan that merely holds a subset, as one feed's list holds part of All's, wants
+ * its own posts first (the list on screen first), which a run in All's order does not do.
  */
 export function prefetchCovers(running: PrefetchPlan, next: PrefetchPlan): boolean {
-  const bodies = new Set(running.bodies)
-  const translations = new Set(running.translations)
   return (
-    next.bodies.every((k) => bodies.has(k)) && next.translations.every((k) => translations.has(k))
+    fewTakenOut(running.bodies, next.bodies) &&
+    next.translations.every((k) => running.translations.includes(k))
   )
+}
+
+/** The posts an open or two reads before a run has finished: more is another list. */
+const TAKEN_OUT = 3
+
+/** Whether `next` is `running` in its own order with at most `TAKEN_OUT` of it gone. */
+function fewTakenOut(running: readonly string[], next: readonly string[]): boolean {
+  if (running.length - next.length > TAKEN_OUT) return false
+  let at = 0
+  for (const key of next) {
+    while (at < running.length && running[at] !== key) at++
+    if (at === running.length) return false
+    at++
+  }
+  return true
 }
 
 /**
