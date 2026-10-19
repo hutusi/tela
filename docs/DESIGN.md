@@ -41,8 +41,16 @@ string as part of the words. Recommend is PASS everywhere, so the two never shar
 screen again. Arrows that are typography ("Read →", "EN → 中文") stay typed.
 
 Fonts: EB Garamond (headings, article body, excerpts; 400/500/600, italic) and Figtree (UI;
-400/500/600), both self-hosted from `@fontsource` (Latin and Latin Extended), so no page asks
-Google Fonts for anything. CJK fallbacks: Songti SC / Noto Serif CJK SC for
+400/500/600), both self-hosted from `@fontsource`, so no page asks Google Fonts for anything.
+`styles.css` imports each weight's file, which declares every subset (Latin, Latin Extended, and
+for EB Garamond Cyrillic, Greek and Vietnamese) with its `unicode-range`, so a page downloads only
+the subsets its text uses: Latin alone for English, French and the Latin in Chinese, 134 KB of
+woff2 for all seven faces where importing Latin and Latin Extended without ranges cost 383 KB.
+Never import the per-subset files (`latin-400.css`): they carry no range, and a face without one
+is downloaded whatever the text. Figtree 400 and EB Garamond 500, the faces every page sets first,
+are preloaded from index.html by a plugin in `vite.config.ts` that reads their hashed names from
+the bundle, and `sw.js` precaches them with the shell; `styles.e2e.ts` checks the ranges, the
+subsets a page fetches and the two preloads. CJK fallbacks: Songti SC / Noto Serif CJK SC for
 serif, PingFang SC / Noto Sans CJK SC for sans. Simplified and Traditional share most code points
 but not every glyph's shape, so text in Traditional (`:lang(zh-Hant)`: the interface in 繁體中文,
 or a post, title or option marked `lang="zh-Hant"`) takes Songti TC / Noto Serif CJK TC and

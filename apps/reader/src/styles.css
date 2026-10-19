@@ -1,19 +1,16 @@
-/* Self-hosted fonts, Latin and Latin Extended only (next/font chose the same subsets): no runtime
-   request to Google Fonts, which matters for readers in mainland China. */
-@import "@fontsource/eb-garamond/latin-400.css";
-@import "@fontsource/eb-garamond/latin-ext-400.css";
-@import "@fontsource/eb-garamond/latin-400-italic.css";
-@import "@fontsource/eb-garamond/latin-ext-400-italic.css";
-@import "@fontsource/eb-garamond/latin-500.css";
-@import "@fontsource/eb-garamond/latin-ext-500.css";
-@import "@fontsource/eb-garamond/latin-600.css";
-@import "@fontsource/eb-garamond/latin-ext-600.css";
-@import "@fontsource/figtree/latin-400.css";
-@import "@fontsource/figtree/latin-ext-400.css";
-@import "@fontsource/figtree/latin-500.css";
-@import "@fontsource/figtree/latin-ext-500.css";
-@import "@fontsource/figtree/latin-600.css";
-@import "@fontsource/figtree/latin-ext-600.css";
+/* Self-hosted fonts: no runtime request to Google Fonts, which matters for readers in mainland
+   China. A weight's file declares every subset with its `unicode-range`, so a page downloads only
+   the subsets its text uses: Latin for English, French and the Latin in Chinese, Latin Extended
+   or Cyrillic only for a post that has them. (The per-subset files carry no range, so a page that
+   imported Latin Extended downloaded it for every face whatever its text.) vite.config.ts
+   preloads the two faces every page uses first. */
+@import "@fontsource/eb-garamond/400.css";
+@import "@fontsource/eb-garamond/400-italic.css";
+@import "@fontsource/eb-garamond/500.css";
+@import "@fontsource/eb-garamond/600.css";
+@import "@fontsource/figtree/400.css";
+@import "@fontsource/figtree/500.css";
+@import "@fontsource/figtree/600.css";
 @import "tailwindcss";
 
 /* Tela design tokens, from the Claude Design file Tela.dc.html. See docs/DESIGN.md. */

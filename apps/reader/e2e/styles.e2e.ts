@@ -86,6 +86,41 @@ test.describe('stylesheet', () => {
     await expect(mark).toHaveAttribute('aria-hidden', 'true')
   })
 
+  test('a page downloads the font subsets its text uses, and preloads the first two', async ({
+    page,
+  }) => {
+    const fonts: string[] = []
+    page.on('request', (request) => {
+      if (request.resourceType() === 'font') fonts.push(new URL(request.url()).pathname)
+    })
+    await page.goto('/reading')
+    await synced(page)
+    await expect(page.getByTestId('article-row').first()).toBeVisible()
+    await page.evaluate(() => document.fonts.ready)
+    // Every face is declared for its own characters: one without a range is fetched for any text.
+    const ranges = await page.evaluate(() =>
+      [...document.styleSheets]
+        .flatMap((sheet) => [...sheet.cssRules])
+        .filter((rule) => rule instanceof CSSFontFaceRule)
+        .map((rule) => (rule as CSSFontFaceRule).style.getPropertyValue('unicode-range')),
+    )
+    expect(ranges.length).toBeGreaterThan(0)
+    expect(ranges.filter((range) => range === '')).toEqual([])
+    // English, French and the Latin in Chinese need the Latin subset alone. A post that writes
+    // ř or λ fetches its subset too, and only then (the fixtures have a few).
+    const extended = await page.evaluate(() => /[Ā-˿Ͱ-ԯḀ-῿Ⱡ-Ɀ꜠-ꟿ]/.test(document.body.innerText))
+    const needed = extended ? /\.woff2$/ : /-latin-\d{3}-(normal|italic)-[\w-]+\.woff2$/
+    expect(fonts.length).toBeGreaterThan(0)
+    expect(fonts.filter((path) => !needed.test(path))).toEqual([])
+    // The two faces every page sets first, linked from index.html with their hashed names.
+    const preloads = await page
+      .locator('link[rel="preload"][as="font"]')
+      .evaluateAll((links) => links.map((l) => new URL((l as HTMLLinkElement).href).pathname))
+    expect(preloads).toHaveLength(2)
+    expect(preloads[0]).toMatch(/^\/assets\/figtree-latin-400-normal-[\w-]+\.woff2$/)
+    expect(preloads[1]).toMatch(/^\/assets\/eb-garamond-latin-500-normal-[\w-]+\.woff2$/)
+  })
+
   test('a link inside a post keeps its underline', async ({ page }) => {
     await page.goto('/reading')
     await synced(page)

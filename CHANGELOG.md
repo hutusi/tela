@@ -9,6 +9,9 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **Pages download only the fonts their text needs.** Each face is declared for its own
+  characters, so English, French and Chinese pages fetch the Latin subset alone (134 KB instead of
+  383 KB), and the two faces every page uses first are preloaded.
 - **Unread or All, on the list itself.** A switch under each list's heading shows its unread posts
   or every post, and starts on Unread; *Hide read articles* left Settings for it. A list read to
   the end says "All caught up", with *Show all* beside it. Liked has no switch: it keeps every post
