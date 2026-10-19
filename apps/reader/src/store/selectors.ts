@@ -380,12 +380,16 @@ export function articlesFor(
   })
 }
 
+export type PrefetchPlan = { bodies: string[]; translations: string[] }
+
 /**
  * What the idle prefetch would fetch (ADR 0025): the unread bodies, the list on screen first, then
- * every other feed's; and, when translations open on their own, the finished ones in the reading
- * language, none in a language the member reads as written. The reading page keys its timer on
- * this, so a render that changes none of it (an empty pull, the minute's tick) neither puts a
- * prefetch off nor cancels one under way.
+ * every other feed's; and, when translations open on their own, the finished ones of unread posts
+ * in the reading language, none in a language the member reads as written. A read post's
+ * translation is rarely opened again, and on a device that keeps a month of posts it was most of
+ * what the prefetch downloaded. The reading page keys its timer on this, so a render that changes
+ * none of it (an empty pull, the minute's tick) neither puts a prefetch off nor cancels one under
+ * way.
  */
 export function prefetchPlan(
   t: Tables,
@@ -393,7 +397,7 @@ export function prefetchPlan(
   now: number,
   readingLang: string,
   prefs: { autoTranslate: boolean; never: readonly string[] },
-): { bodies: string[]; translations: string[] } {
+): PrefetchPlan {
   const everything = articlesFor(t, { filter: 'all', feedId: null }, now)
   const bodies = new Set<string>()
   for (const a of [...list, ...everything]) {
@@ -403,6 +407,7 @@ export function prefetchPlan(
   if (prefs.autoTranslate) {
     for (const a of everything) {
       if (!a.contentKey || (a.sourceLang !== null && prefs.never.includes(a.sourceLang))) continue
+      if (isRead(t, a, now)) continue
       const row = t.translations.get(translationKey(a.contentKey, readingLang))
       if (row?.objectKey && (row.state === 'done' || row.state === 'partial')) {
         translations.push(row.objectKey)
@@ -410,6 +415,19 @@ export function prefetchPlan(
     }
   }
   return { bodies: [...bodies], translations }
+}
+
+/**
+ * Whether a prefetch run for `running` fetches everything `next` would: then it goes on rather
+ * than starting over. Opening a post reads it, which takes it out of the plan, and a run cancelled
+ * at every open never got past the first bundle while the member stepped through a list.
+ */
+export function prefetchCovers(running: PrefetchPlan, next: PrefetchPlan): boolean {
+  const bodies = new Set(running.bodies)
+  const translations = new Set(running.translations)
+  return (
+    next.bodies.every((k) => bodies.has(k)) && next.translations.every((k) => translations.has(k))
+  )
 }
 
 /**

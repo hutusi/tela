@@ -3,8 +3,9 @@
  *
  * - A foreign article asks for one when it opens, unless one exists, or the member translates only
  *   when asked (`enabled` is false until they do). A language they never translate is not foreign.
- * - While it runs, the status is polled every 1.5 s (visible tabs only) and each new chunk object
- *   is fetched and laid over the original by block index: the first paragraphs show in seconds.
+ * - While it runs, the status is polled (visible tabs only) and each new chunk object is fetched
+ *   and laid over the original by block index: the first paragraphs show in seconds. Every 400 ms
+ *   while the first chunk is awaited, for 5 s at most, then every 1.5 s (`pollDelay`).
  * - Once done, the finished object replaces the chunks; the synced row says so on every device.
  * - A finished object that cannot be had, asked for twice, leaves the blocks no chunk brought with
  *   nothing on the way to them: the translation is then failed for this reader (`readerState`),
@@ -35,6 +36,22 @@ export type ArticleTranslation = {
 export type Live = Pick<TranslationRow, 'state' | 'chunkKeys' | 'objectKey' | 'failedLeaves'>
 
 const POLL_MS = 1500
+/** How often the status is asked for while the first chunk is awaited: it is what the reader sees. */
+const FIRST_CHUNK_POLL_MS = 400
+/**
+ * How long the fast poll lasts. A translation's first chunk lands within a few seconds or the model
+ * is slow today, and a slow run polled every 400 ms would ask four times as often for the whole of
+ * it: one article in production polled for 35 s and more.
+ */
+const FIRST_CHUNK_WAIT_MS = 5000
+
+/**
+ * The wait before the next status poll: short until the first chunk is named, within the first
+ * few seconds of polling, and the usual pace after either.
+ */
+export function pollDelay(sincePollStarted: number, chunked: boolean): number {
+  return !chunked && sincePollStarted < FIRST_CHUNK_WAIT_MS ? FIRST_CHUNK_POLL_MS : POLL_MS
+}
 const RANK: Record<string, number> = {
   requested: 1,
   running: 2,
@@ -179,23 +196,32 @@ export function useArticleTranslation(
   useEffect(() => {
     if (!running || !enabled || !contentKey) return
     let stopped = false
-    const tick = async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const started = Date.now()
+    // Whether a poll has named a chunk yet: the first one is what the reader is waiting for.
+    let chunked = false
+    const ask = async () => {
       if (document.visibilityState !== 'visible') return
       try {
         const res = await api(`/api/v1/translations/${contentKey}/${readingLang}`)
         if (!res.ok || stopped) return
         const next = (await res.json()) as Live
+        chunked ||= next.chunkKeys.length > 0
         setLive(next)
         if (next.state !== 'requested' && next.state !== 'running') void engine.pull()
       } catch {
         // The next tick tries again.
       }
     }
-    const id = setInterval(() => void tick(), POLL_MS)
+    // One poll at a time, each scheduled when the last has answered.
+    const tick = async () => {
+      await ask()
+      if (!stopped) timer = setTimeout(() => void tick(), pollDelay(Date.now() - started, chunked))
+    }
     void tick()
     return () => {
       stopped = true
-      clearInterval(id)
+      clearTimeout(timer)
     }
   }, [running, enabled, contentKey, readingLang, engine])
 

@@ -5,6 +5,7 @@ import {
   finishedObject,
   type Live,
   moreAdvanced,
+  pollDelay,
   readerState,
 } from '../src/lib/use-translation'
 import type { TranslationObject } from '../src/store/objects'
@@ -152,5 +153,17 @@ describe('a finished translation object that cannot be had', () => {
     expect(readerState(done, false, true)).toBe('none')
     expect(readerState(null, true, true)).toBe('none')
     expect(readerState({ ...done, state: 'skipped' }, true, false)).toBe('failed')
+  })
+})
+
+describe('polling a translation under way', () => {
+  test('quickly while the first chunk is awaited, for its first five seconds only', () => {
+    expect(pollDelay(0, false)).toBe(400)
+    expect(pollDelay(4_999, false)).toBe(400)
+    // A slow model: back to the usual pace, rather than four times as many asks for all of it.
+    expect(pollDelay(5_000, false)).toBe(1_500)
+    expect(pollDelay(40_000, false)).toBe(1_500)
+    // The first chunk is on screen: the rest comes at the usual pace.
+    expect(pollDelay(800, true)).toBe(1_500)
   })
 })

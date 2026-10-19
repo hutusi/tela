@@ -33,6 +33,8 @@ import {
   folderTree,
   isLiked,
   isRead,
+  type PrefetchPlan,
+  prefetchCovers,
   prefetchPlan,
   shownRead,
   shownTitle,
@@ -316,24 +318,39 @@ export function ReadingPage() {
     return () => clearInterval(id)
   }, [pendingFetch, engine])
 
+  // The post after the open one, which `j` and the card at the article's end open: fetched as this
+  // one opens, not when the idle prefetch reaches it (an open restarts that timer), so stepping
+  // through a list never waits on the network. Read or not: the list may show read posts.
+  const upNext = article ? (after?.contentKey ?? null) : null
+  useEffect(() => {
+    if (upNext) void objects.body(upNext).catch(() => undefined)
+  }, [upNext, objects])
+
   // Prefetch unread bodies and finished translations while idle: the list on screen first. Keyed on
-  // what it would fetch, not on the tables: every pull makes new ones, even an empty pull a minute,
-  // and a timer reset by each would put the prefetch off, and cancel one under way, for nothing.
-  // An open marks a post read, which changes the plan, so each open plans again.
+  // what it would fetch, not on the tables: every pull that brings anything makes new ones, and a
+  // timer reset by each would put the prefetch off, and cancel one under way, for nothing. An open
+  // marks a post read, which changes the plan, so each open plans again; a run under way that
+  // already covers the new plan goes on (`prefetchCovers`).
   const plan = useMemo(
     () => JSON.stringify(prefetchPlan(tables, items, now, readingLang, prefs)),
     [tables, items, now, readingLang, prefs],
   )
-  // On each pull, ask again when the device lacks part of the plan and no run is under way: a run
-  // fell short (the network went, a request failed), or bodies went since (eviction drops bodies
-  // not opened for a week, unread ones too, ten seconds after boot). The engine pulls when the
-  // browser is back online, on focus and every minute, and the plan is the same by then, so
-  // nothing else would ask. A pull while the device holds all of it changes nothing.
+  // On each pull that changes the tables, and each minute, ask again when the device lacks part of
+  // the plan and no run is under way: a run fell short (the network went, a request failed), or
+  // bodies went since (eviction drops bodies not opened for a week, unread ones too, ten seconds
+  // after boot). The plan is the same by then, so nothing else would ask. The minute is `now`: a
+  // pull that brings nothing leaves the tables as they were (`LocalStore.applyPull`), so it is no
+  // longer a reason to look. Asking while the device holds all of it changes nothing.
   const [retry, setRetry] = useState(0)
   /** A translation the last run could not fetch: the device keeps no list of those to check. */
   const fellShort = useRef(false)
-  const running = useRef<{ plan: string; controller: AbortController; done: boolean } | null>(null)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: on every pull, by its new tables
+  const running = useRef<{
+    plan: string
+    fetching: PrefetchPlan
+    controller: AbortController
+    done: boolean
+  } | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on every pull that changes the tables, and every minute
   useEffect(() => {
     const last = running.current
     if (last && !last.done) return
@@ -347,18 +364,20 @@ export function ReadingPage() {
     return () => {
       cancelled = true
     }
-  }, [tables, plan, objects])
+  }, [tables, plan, objects, now])
   // biome-ignore lint/correctness/useExhaustiveDependencies: `retry` asks again for the same plan
   useEffect(() => {
     const timer = setTimeout(() => {
       const last = running.current
-      // Still fetching this very plan: let it finish rather than start it over.
-      if (last && !last.done && last.plan === plan) return
+      const next = JSON.parse(plan) as PrefetchPlan
+      // Still fetching this plan, or one that holds all of it: let it finish rather than start
+      // over. Its own plan stays the one to compare with, since that is what it is fetching.
+      if (last && !last.done && (last.plan === plan || prefetchCovers(last.fetching, next))) return
       last?.controller.abort()
       const controller = new AbortController()
-      const mine = { plan, controller, done: false }
+      const mine = { plan, fetching: next, controller, done: false }
       running.current = mine
-      const { bodies, translations } = JSON.parse(plan) as ReturnType<typeof prefetchPlan>
+      const { bodies, translations } = next
       const run = async () => {
         await objects.prefetch(bodies, controller.signal)
         for (const key of translations) {

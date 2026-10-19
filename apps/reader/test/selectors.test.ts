@@ -18,6 +18,7 @@ import {
   isRead,
   markAllReadCovers,
   markAllReadPlan,
+  prefetchCovers,
   prefetchPlan,
   shownRead,
   shownTitle,
@@ -313,12 +314,18 @@ describe('what the idle prefetch would fetch', () => {
       article(4, { sortAt: NOW - 4 * DAY }),
       article(5, { contentKey: 'c5', feedId: 2, sourceLang: 'de', sortAt: NOW - 5 * DAY }),
       article(6, { contentKey: 'c6', feedId: 2, sourceLang: 'ja', sortAt: NOW - 6 * DAY }),
+      // Read already: neither its body nor its finished translation is fetched.
+      article(7, { contentKey: 'c7', feedId: 2, sourceLang: 'ja', sortAt: NOW - 7 * DAY }),
     ],
-    states: [{ articleId: 3, readAt: 1, likedAt: null, likedUpdatedAt: null, seq: 1 }],
+    states: [
+      { articleId: 3, readAt: 1, likedAt: null, likedUpdatedAt: null, seq: 1 },
+      { articleId: 7, readAt: 1, likedAt: null, likedUpdatedAt: null, seq: 1 },
+    ],
     translations: [
       translation('c2', 'done', 't/c2/en/a.json'),
       translation('c5', 'partial', 't/c5/en/b.json'),
       translation('c6', 'running', null),
+      translation('c7', 'done', 't/c7/en/d.json'),
     ],
   }
   const prefs = { autoTranslate: true, never: [] as string[] }
@@ -368,6 +375,32 @@ describe('what the idle prefetch would fetch', () => {
       [],
     )
     expect(plan(finished)).not.toBe(plan(before))
+  })
+
+  test('a run goes on while what is planned next is part of what it fetches', () => {
+    const t = tables(rows)
+    const list = articlesFor(t, { filter: 'all', feedId: null }, NOW)
+    const running = prefetchPlan(t, list, NOW, 'en', prefs)
+    // Opening post 2 reads it: its body and translation leave the plan, and nothing joins it.
+    const opened = view(
+      applyPull(
+        { cursor: 0, tables: t },
+        pull(2, {
+          states: [{ articleId: 2, readAt: 2, likedAt: null, likedUpdatedAt: null, seq: 2 }],
+        }),
+      ),
+      [],
+    )
+    const next = prefetchPlan(opened, list, NOW, 'en', prefs)
+    expect(next.bodies).not.toContain('c2')
+    expect(next.translations).not.toContain('t/c2/en/a.json')
+    expect(prefetchCovers(running, next)).toBe(true)
+    expect(prefetchCovers(running, running)).toBe(true)
+    // A translation that finished meanwhile is new to the plan: the run starts over for it.
+    expect(
+      prefetchCovers(running, { ...next, translations: [...next.translations, 't/c6/en/c.json'] }),
+    ).toBe(false)
+    expect(prefetchCovers(running, { ...next, bodies: [...next.bodies, 'c9'] })).toBe(false)
   })
 })
 
