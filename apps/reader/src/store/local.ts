@@ -386,7 +386,8 @@ export class LocalStore {
       tables: { titles: [...tables.titles.values()] },
       cursor,
       from: cursor,
-      whole: rowsOf(tables),
+      // Only if the stored copy is behind this tab (`placed`): not built for every page.
+      whole: () => rowsOf(tables),
       covered: [...this.covered],
       titles: { ...this.titles, folded: true },
     })

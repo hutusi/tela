@@ -105,8 +105,10 @@ export type Change = {
    * Every table as the writer holds it, consistent at `cursor`: written instead of `tables` when
    * the stored copy is behind where this pull started (another tab's late snapshot set it back),
    * so a tab ahead of the copy keeps it current rather than waiting for that tab to pull again.
+   * A function is called only then: a writer that would build it for nothing (a page of titles)
+   * passes one.
    */
-  whole?: TableRows
+  whole?: TableRows | (() => TableRows)
   /**
    * The tables the writer's copy holds whole up to `cursor` (`Persisted.covered`). A write that
    * moves the cursor without it covers none: the copy is not trusted until a snapshot.
@@ -432,7 +434,9 @@ function fits(change: Change, stored: number): boolean {
 function placed(change: Change, stored: number): Partial<TableRows> | null {
   if (fits(change, stored)) return change.tables ?? {}
   // Ahead of the copy: the writer's whole copy is a snapshot at its cursor, which always fits.
-  if (change.whole && change.cursor !== undefined && change.cursor >= stored) return change.whole
+  if (change.whole && change.cursor !== undefined && change.cursor >= stored) {
+    return typeof change.whole === 'function' ? change.whole() : change.whole
+  }
   return null
 }
 
