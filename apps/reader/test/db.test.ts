@@ -522,13 +522,20 @@ describe('the language of the titles a copy holds', () => {
       whole: false,
       cursor: 9,
     })
-    // Every language, from a build before the record, stays whole only under a pull of them all.
+    // Every language, from a build before the record: whole under a pull of them all, and under a
+    // pull in one language that language is whole too, since the copy held it whole before. The
+    // other languages' rows go when the copy is next loaded in that language.
     const every = { lang: null, whole: true }
     expect(titlesAfter(every, articles, { ...every, folded: true }, 9)).toEqual({
       ...every,
       cursor: 9,
     })
     expect(titlesAfter(every, articles, fr(true), 9)).toEqual({
+      lang: 'fr',
+      whole: true,
+      cursor: 9,
+    })
+    expect(titlesAfter(every, articles, fr(true, false), 9)).toEqual({
       lang: 'fr',
       whole: false,
       cursor: 9,

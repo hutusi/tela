@@ -380,7 +380,8 @@ function titlesAt(record: unknown, cursor: number): TitlesHeld | null {
  * (null: nothing to trust). A write that puts the titles table puts the writer's whole copy of
  * it, so the writer's record goes with it. One that leaves the table moves the cursor past
  * whatever the server wrote meanwhile: the stored titles stay whole only if they were, and the
- * pull brought their language (`folded`, and the same language, or every language); otherwise
+ * pull brought their language (`folded`, and the same language, or every language, on either
+ * side); otherwise
  * they are what they were and no longer whole, until a write puts them whole again.
  */
 export function titlesAfter(
@@ -391,7 +392,9 @@ export function titlesAfter(
 ): TitlesRecord {
   if ('titles' in rows) return { lang: writer.lang, whole: writer.whole, cursor }
   if (stored === null) return { lang: writer.lang, whole: false, cursor }
-  const brought = writer.folded && (writer.lang === null || writer.lang === stored.lang)
+  // A copy holding every language (one from before ADR 0052) holds the writer's whole too.
+  const brought =
+    writer.folded && (writer.lang === null || stored.lang === null || writer.lang === stored.lang)
   return { lang: stored.lang ?? writer.lang, whole: brought && stored.whole, cursor }
 }
 const UNVERIFIED = 'unverified'
