@@ -291,7 +291,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     })
   }
 
-  // Anyone may read these; tela-web caches them at the edge.
+  // Anyone may read these, and nothing in them depends on who asks: tela-web keeps each answer
+  // per colo for as long as its `s-maxage` says, and forwards no cookie (`publicApi` in edge.ts).
   app.route('/api/v1/public/avatars', avatarRoutes(deps))
   // Discover's This week, Articles and Readers (ADR 0044), under the Blogs answer's own path:
   // that one is `/discover` exactly, in `publicRoutes`, and these are only below it.
