@@ -54,6 +54,17 @@ const PARALLEL = 2
 export const REQUEST_TIMEOUT_MS = 30_000
 
 /**
+ * An object the edge would not give: anything but a 404, which says there is no such object and is
+ * null instead. A 502 or a 401 says nothing about the object, so the page can offer to try again.
+ */
+export class ObjectUnavailable extends Error {
+  override name = 'ObjectUnavailable'
+  constructor(readonly status: number) {
+    super(`object answered ${status}`)
+  }
+}
+
+/**
  * Wait for a download several callers may share, until this caller's signal says to stop: the
  * download goes on for the others, and is kept for the next time it is wanted.
  */
@@ -102,7 +113,7 @@ export class Objects {
     url: string,
     init: RequestInit,
     outer?: AbortSignal,
-  ): Promise<{ ok: boolean; text: string }> {
+  ): Promise<{ ok: boolean; status: number; text: string }> {
     const controller = new AbortController()
     const timer = setTimeout(
       () => controller.abort(new DOMException('The request timed out', 'TimeoutError')),
@@ -117,10 +128,31 @@ export class Objects {
         credentials: 'same-origin',
         signal: controller.signal,
       })
-      return { ok: res.ok, text: res.ok ? await res.text() : '' }
+      return { ok: res.ok, status: res.status, text: res.ok ? await res.text() : '' }
     } finally {
       clearTimeout(timer)
       outer?.removeEventListener('abort', stop)
+    }
+  }
+
+  /** An object's text; null for a 404, the one answer that says there is no such object. */
+  private async text(url: string, init: RequestInit): Promise<string | null> {
+    const { ok, status, text } = await this.request(url, init)
+    if (status === 404) return null
+    if (!ok) throw new ObjectUnavailable(status)
+    return text
+  }
+
+  /**
+   * Keep a copy on the device if it will take one. A full disk (QuotaExceededError) or a database
+   * the browser closed costs only the copy: the answer the network already gave is still shown,
+   * and asked for again next time.
+   */
+  private async keep(write: () => Promise<unknown>): Promise<void> {
+    try {
+      await write()
+    } catch (err) {
+      console.warn('not kept on this device', err)
     }
   }
 
@@ -143,17 +175,24 @@ export class Objects {
     return started
   }
 
+  /** The bodies held; none, and asked again next time, while the database cannot be read. */
   private async heldKeys(): Promise<Set<string>> {
-    if (!this.held) this.held = new Set(await this.persistence.bodyKeys())
+    if (this.held) return this.held
+    const keys = await this.persistence.bodyKeys().catch(() => null)
+    if (keys === null) return new Set()
+    this.held = new Set(keys)
     return this.held
   }
 
-  /** A content object, and mark it opened now. */
+  /**
+   * A content object, and mark it opened now. Null only when the edge says there is none (a 404);
+   * any other refusal rejects with `ObjectUnavailable`, and a network failure as fetch does.
+   */
   async body(key: string, signal?: AbortSignal): Promise<ContentObject | null> {
     const cacheKey = `c/${key}`
     const hit = this.recent.get(cacheKey) as ContentObject | undefined
     if (hit) {
-      void this.persistence.touchBody(key, this.now())
+      void this.keep(() => this.persistence.touchBody(key, this.now()))
       return hit
     }
     // Brought by a prefetch bundle and still being written (with this moment as its last open).
@@ -170,16 +209,17 @@ export class Objects {
 
   private async download(key: string): Promise<ContentObject | null> {
     const cacheKey = `c/${key}`
-    const stored = await this.persistence.getBody(key)
+    // A database that cannot be read holds nothing: the network still has it.
+    const stored = await this.persistence.getBody(key).catch(() => undefined)
     if (stored) {
-      void this.persistence.touchBody(key, this.now())
+      void this.keep(() => this.persistence.touchBody(key, this.now()))
       this.remember(cacheKey, stored.object)
       return stored.object as ContentObject
     }
-    const { ok, text } = await this.request(`/o/c/${key}.json`, {})
-    if (!ok) return null
+    const text = await this.text(`/o/c/${key}.json`, {})
+    if (text === null) return null
     const object = JSON.parse(text) as ContentObject
-    await this.store(key, object, text.length)
+    await this.keep(() => this.store(key, object, text.length))
     this.remember(cacheKey, object)
     return object
   }
@@ -190,27 +230,28 @@ export class Objects {
   }
 
   /**
-   * A translation or chunk object by its R2 key. `background` marks the request as a prefetch
-   * (`PREFETCH_HEADER`): nothing on screen is waiting for it. A download already on its way is
-   * waited for, whoever started it, so the request says what its first asker was.
+   * A translation or chunk object by its R2 key, null or rejecting as `body` does. `background`
+   * marks the request as a prefetch (`PREFETCH_HEADER`): nothing on screen is waiting for it. A
+   * download already on its way is waited for, whoever started it, so the request says what its
+   * first asker was.
    */
   async object<T>(key: string, signal?: AbortSignal, background = false): Promise<T | null> {
     const hit = this.recent.get(key) as T | undefined
     if (hit) return hit
     const shared = this.share(this.objectFlights, key, async (): Promise<unknown> => {
-      const stored = await this.persistence.getObject(key)
+      const stored = await this.persistence.getObject(key).catch(() => undefined)
       if (stored) {
         this.remember(key, stored.object)
         return stored.object
       }
-      const { ok, text } = await this.request(
+      const text = await this.text(
         `/o/${key}`,
         background ? { headers: { [PREFETCH_HEADER]: '1' } } : {},
       )
-      if (!ok) return null
+      if (text === null) return null
       const object: unknown = JSON.parse(text)
       // Waited for before anyone is answered: until it is written, a second ask would miss it.
-      await this.persistence.putObject({ key, object, at: this.now() })
+      await this.keep(() => this.persistence.putObject({ key, object, at: this.now() }))
       this.remember(key, object)
       return object
     })

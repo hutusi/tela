@@ -3,9 +3,9 @@
  * that counts a render's requests (e2e/local-first.e2e.ts) can leave it out; and each object is
  * downloaded once however many ask while it is on its way.
  */
-import { afterAll, describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect, spyOn, test } from 'bun:test'
 import { memoryPersistence } from '../src/store/db'
-import { Objects, PREFETCH_HEADER } from '../src/store/objects'
+import { Objects, ObjectUnavailable, PREFETCH_HEADER } from '../src/store/objects'
 
 const saved = globalThis.fetch
 afterAll(() => {
@@ -229,5 +229,71 @@ describe('one download per object, however many ask while it is on its way', () 
     const objects = new Objects(memoryPersistence(), Date.now, 20)
     expect(await within(objects.prefetch(['k1', 'k2']))).toBe(0)
     expect(await objects.missing(['k1', 'k2'])).toEqual(['k1', 'k2'])
+  })
+})
+
+describe('a device that will not keep what the network brought', () => {
+  const warned = spyOn(console, 'warn').mockImplementation(() => {})
+  afterAll(() => warned.mockRestore())
+
+  /** A persistence whose every IndexedDB request fails, as a full disk or a closed database does. */
+  function refusing() {
+    const base = memoryPersistence()
+    const quota = () => Promise.reject(new DOMException('full', 'QuotaExceededError'))
+    return {
+      ...base,
+      getBody: quota,
+      putBody: quota,
+      touchBody: quota,
+      getObject: quota,
+      putObject: quota,
+      bodyKeys: quota,
+    }
+  }
+
+  test('a body is shown though it could not be stored, and asked for again next time', async () => {
+    const net = network()
+    const objects = new Objects(refusing())
+    const opened = objects.body('k1')
+    await until(() => net.sent.length === 1)
+    net.answer('/o/c/k1.json', { blocks: [1] })
+    expect(await opened).toEqual({ blocks: [1] } as never)
+    // Held in memory for going back and forth, though not on the device.
+    expect(await objects.body('k1')).toEqual({ blocks: [1] } as never)
+    expect(await objects.missing(['k1'])).toEqual(['k1'])
+  })
+
+  test('so is a translation', async () => {
+    const net = network()
+    const objects = new Objects(refusing())
+    const opened = objects.object('t/c1/en/x.json')
+    await until(() => net.sent.length === 1)
+    net.answer('/o/t/c1/en/x.json', { blocks: ['a'] })
+    expect(await opened).toEqual({ blocks: ['a'] })
+  })
+})
+
+describe('what the edge answers', () => {
+  test('only a 404 says there is no such body; any other refusal is a failure to try again', async () => {
+    const net = network()
+    const objects = new Objects(memoryPersistence())
+    const failed = objects.body('k1')
+    await until(() => net.sent.length === 1)
+    net.answer('/o/c/k1.json', { error: 'upstream' }, 502)
+    await expect(failed).rejects.toBeInstanceOf(ObjectUnavailable)
+    await expect(failed).rejects.toMatchObject({ status: 502 })
+    const again = objects.body('k1')
+    await until(() => net.sent.length === 2)
+    net.answer('/o/c/k1.json', { error: 'not_found' }, 404)
+    expect(await again).toBeNull()
+  })
+
+  test('the same for a translation', async () => {
+    const net = network()
+    const objects = new Objects(memoryPersistence())
+    const failed = objects.object('t/c1/en/x.json')
+    await until(() => net.sent.length === 1)
+    net.answer('/o/t/c1/en/x.json', { error: 'sign in first' }, 401)
+    await expect(failed).rejects.toMatchObject({ name: 'ObjectUnavailable', status: 401 })
   })
 })
