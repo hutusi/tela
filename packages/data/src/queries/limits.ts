@@ -2,7 +2,7 @@
  * Tela's own limits: per member, for actions that create rows, fetch on a member's behalf, spend
  * model tokens or change how they sign in; per email address, on the codes better-auth mails and
  * checks and on password sign-ins; per IP, code and address, on joins with an invite code; per IP,
- * on handle checks. Fixed windows in D1 (`action_limits`), one upsert per check, because nothing in
+ * on handle checks and client error reports. Fixed windows in D1 (`action_limits`), one upsert per check, because nothing in
  * an isolate's memory survives to the next request. better-auth limits its own endpoints per IP,
  * separately (`rate_limit`).
  */
@@ -68,6 +68,11 @@ export const ACTION_LIMITS = {
    * debounced checks, so this is room for anyone choosing one, not for walking the namespace.
    */
   handleCheck: { limit: 300, windowSec: 3600 },
+  /**
+   * Error reports from a browser, per IP (`/api/client-errors`). The app sends five a page load at
+   * most; this is room for a few reloads of a broken page, not for filling the logs.
+   */
+  clientError: { limit: 30, windowSec: 3600 },
   /**
    * A member's ways in (ADR 0036), changed through tela-api's own calls to better-auth, which its
    * limiter never sees. A password set or changed costs a hash or two, and a change with the wrong

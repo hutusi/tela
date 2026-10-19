@@ -11,7 +11,9 @@
   // deploy takes every domain it lists from whichever Worker holds it.
   "workers_dev": false,
   "routes": [{ "pattern": "telaread.com", "custom_domain": true }],
-  "observability": { "enabled": true },
+  // Paths are logged, query strings never: `/join?code=…` and a sign-in link's `?email=…&otp=…`
+  // would put a code where anyone who reads Workers Logs could use it.
+  "observability": { "enabled": true, "redact_query_string": true },
   // The SPA's static assets answer every other path for free, without running the Worker; a
   // path with no asset is the app itself. The Worker runs first only where it has work to do:
   // "/" is the front page it renders for visitors (ADR 0035), and exactly "/", never "/*";

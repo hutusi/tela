@@ -23,6 +23,7 @@ import { runBatch } from './routes/admin/framework'
 import { avatarRoutes } from './routes/avatars'
 import { blogrollRoutes } from './routes/blogrolls'
 import { claimRoutes } from './routes/claims'
+import { clientErrorRoutes } from './routes/client-errors'
 import { curate } from './routes/curate'
 import { discoverRoutes } from './routes/discover'
 import { feedRoutes } from './routes/feeds'
@@ -110,12 +111,14 @@ export const PUSH_MAX_BYTES = 1024 * 1024
 /**
  * The most a request's body may hold: `null` for the routes that read their own body no further
  * than their own cap, through `readAtMost` or `readCapped` (a picture, a hub's notification, an
- * OPML file), so that a body which sends no length is never held whole here first.
+ * OPML file, a client's error report), so that a body which sends no length is never held whole
+ * here first.
  */
 export function bodyCap(method: string, path: string): number | null {
   if (method === 'PUT' && path === '/api/v1/avatar') return null
   if (method === 'POST' && path.startsWith('/api/websub/')) return null
   if (method === 'POST' && path === '/api/v1/feeds/opml') return null
+  if (method === 'POST' && path === '/api/client-errors') return null
   if (method === 'POST' && path === '/api/v1/mutations') return PUSH_MAX_BYTES
   return BODY_MAX_BYTES
 }
@@ -302,6 +305,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1/public', publicRoutes(deps, auth))
   // Hubs, not members, call this; the signature is the authorization.
   app.route('/api/websub', websubRoutes(deps))
+  // What breaks in a browser, a visitor's too: no session, counted per IP, logged and kept nowhere.
+  app.route('/api/client-errors', clientErrorRoutes(deps, auth))
 
   /**
    * Joining with an invite code is a visitor's: `/api/v1/join` needs no session (ADR 0034).
