@@ -3,6 +3,7 @@
  * (ADR 0017's rule, kept), and every pane is a function of it and the local store, so a click, a
  * filter change or Back is a render, not a request (ADR 0025).
  */
+import type { FeedStatus } from '@tela/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
@@ -26,6 +27,7 @@ import {
 import { effectiveSidebar, gridColumns, toggleFocus, useLayout, useWide } from '../lib/layout'
 import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
 import { currentToast, runToastAction } from '../lib/toasts'
+import { useQuickPull } from '../lib/use-quick-pull'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
@@ -44,9 +46,9 @@ import {
 } from '../store/selectors'
 import { useUi } from '../ui'
 
-/** While a new feed waits for its first fetch, pull this often so its posts appear. */
-const FIRST_FETCH_PULL_MS = 3000
 const PREFETCH_IDLE_MS = 1500
+/** The feed status tela-jobs fetches (`FEED_STATUSES`): a paused or dead feed brings no posts. */
+const FEED_ACTIVE: FeedStatus = 'active'
 
 export function ReadingPage() {
   const t = useTranslations('reader')
@@ -113,6 +115,13 @@ export function ReadingPage() {
         ? (folder?.name ?? ts('subscriptions'))
         : ts(params.filter)
   const pendingFetch = selected !== undefined && selected.lastFetchedAt === null
+  // Quickly, while it waits for its first fetch: only a feed tela-jobs fetches (not paused, not
+  // given up on), so its posts appear when they land.
+  const awaitingFirst =
+    pendingFetch && tables.feeds.get(selected.feedId)?.status === FEED_ACTIVE
+      ? `feed:${selected.feedId}`
+      : null
+  useQuickPull(awaitingFirst, () => void engine.pull())
   const article =
     params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
   const open = params.articleId !== null
@@ -310,13 +319,6 @@ export function ReadingPage() {
     const previous = closedFrom ?? lastOpen.current
     if (previous !== null) listRow(previous)?.focus()
   }, [params.articleId, focused])
-
-  // A feed that has never been fetched: pull quickly until its first posts arrive.
-  useEffect(() => {
-    if (!pendingFetch) return
-    const id = setInterval(() => void engine.pull(), FIRST_FETCH_PULL_MS)
-    return () => clearInterval(id)
-  }, [pendingFetch, engine])
 
   // The post after the open one, which `j` and the card at the article's end open: fetched as this
   // one opens, not when the idle prefetch reaches it (an open restarts that timer), so stepping

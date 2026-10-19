@@ -20,6 +20,7 @@ import { useReadingPrefs } from '../lib/prefs'
 import { readerStyle, typographyOf } from '../lib/typography'
 import { useHighlights } from '../lib/use-highlights'
 import { BELOW_LG, useMediaQuery } from '../lib/use-media'
+import { useQuickPull } from '../lib/use-quick-pull'
 import { useArticleTranslation } from '../lib/use-translation'
 import { useNow, useStore, useTables } from '../store/hooks'
 import type { ContentObject } from '../store/objects'
@@ -96,9 +97,6 @@ type Recommending = 'top' | 'end' | 'sheet' | null
 /** The end of the article is one column whatever the body above it: the measure, at most 680px. */
 const END = 'max-w-[min(680px,var(--reader-measure))]'
 
-/** While a summary-only post waits for its full text, pull quickly so it appears when it lands. */
-const EXTRACT_PULL_MS = 4000
-
 export function Reader({ article, readingLang, mode, onMode, onClose, next, listName }: Props) {
   const t = useTranslations('reader')
   const locale = useLocale()
@@ -138,12 +136,9 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
     return () => window.removeEventListener('online', retryBody)
   }, [bodyFailed, retryBody])
 
+  // While a summary-only post waits for its full text, pull quickly so it appears when it lands.
   const extracting = article.extractState === 'due'
-  useEffect(() => {
-    if (!extracting) return
-    const id = setInterval(() => void engine.pull(), EXTRACT_PULL_MS)
-    return () => clearInterval(id)
-  }, [extracting, engine])
+  useQuickPull(extracting ? `extract:${article.id}` : null, () => void engine.pull())
 
   const object = content?.key === key ? content.object : null
   const loaded = !key || content?.key === key

@@ -294,7 +294,10 @@ A Vite + React SPA that renders from the device.
 - `store/local.ts` holds confirmed rows and pending mutations, written through to IndexedDB, one
   record per pending mutation so that tabs sharing the database never erase each other's.
 - `store/engine.ts` pulls at boot, on focus, every minute and after a push. It pushes a
-  quarter-second after a change, and at once (`keepalive`) when the tab hides.
+  quarter-second after a change, and at once (`keepalive`) when the tab hides. While an open post
+  waits for its full text, or a new feed for its first fetch, the page pulls sooner
+  (`lib/use-quick-pull.ts`): from 4 s, doubling to a minute, for two minutes at most, never while
+  the tab is hidden, and for a feed only while its status is `active`.
 - `store/objects.ts` serves bodies and translations from memory, then IndexedDB, then `/o/*`,
   downloading each once however many ask while it is on its way. It prefetches unread bodies
   while idle, and evicts bodies not opened for seven days, and the oldest past 50 MB.
