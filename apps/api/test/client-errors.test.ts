@@ -1,7 +1,8 @@
 /** What a browser reports when something breaks (`POST /api/client-errors`): logged, kept nowhere. */
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { ACTION_LIMITS } from '@tela/data'
-import { CLIENT_ERROR_MAX_BYTES, STACK_MAX, withoutQueries } from '../src/routes/client-errors'
+import { withoutQueries } from '@tela/shared'
+import { CLIENT_ERROR_MAX_BYTES, STACK_MAX } from '../src/routes/client-errors'
 import { createTestApi, type TestApi } from './helpers'
 
 let api: TestApi
@@ -11,8 +12,8 @@ beforeEach(async () => {
 })
 afterEach(() => logged.mockClear())
 
-const report = (body: unknown, ip = '203.0.113.7') =>
-  api.request('/api/client-errors', { body, headers: { 'cf-connecting-ip': ip } })
+const report = (body: unknown, ip = '203.0.113.7', headers: Record<string, string> = {}) =>
+  api.request('/api/client-errors', { body, headers: { 'cf-connecting-ip': ip, ...headers } })
 
 const lines = () =>
   logged.mock.calls.filter(([message]) => message === 'client error').map(([, line]) => line)
@@ -77,6 +78,17 @@ describe('a client error report', () => {
     expect((await report('not even json')).status).toBe(429)
     // Another browser is not held to that one's hour.
     expect((await report({ kind: 'error', message: 'elsewhere' }, '198.51.100.2')).status).toBe(204)
+  })
+
+  test("counts policy violations apart, so they never use up an error's room", async () => {
+    const csp = { 'x-tela-report': 'csp' }
+    const { limit } = ACTION_LIMITS.clientCsp
+    for (let i = 0; i < limit; i++) {
+      const res = await report({ kind: 'csp', message: `script-src inline ${i}` }, undefined, csp)
+      expect(res.status).toBe(204)
+    }
+    expect((await report({ kind: 'csp', message: 'one more' }, undefined, csp)).status).toBe(429)
+    expect((await report({ kind: 'error', message: 'a real one' })).status).toBe(204)
   })
 
   test('needs no session, and no member is named', async () => {

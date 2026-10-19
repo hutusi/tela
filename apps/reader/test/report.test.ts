@@ -4,16 +4,17 @@
  * the app itself fails (`components/error-boundary.tsx`).
  */
 import { describe, expect, test } from 'bun:test'
+import { withoutQueries } from '@tela/shared'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AppFailed } from '../src/components/error-boundary'
 import {
   type ClientReport,
+  CSP_REPORTS_PER_LOAD,
   ours,
   REPORTS_PER_LOAD,
   reporter,
   watchErrors,
-  withoutQueries,
 } from '../src/lib/report'
 
 const ORIGIN = 'https://telaread.com'
@@ -45,6 +46,14 @@ describe('a page load reports', () => {
     expect(sent).toHaveLength(REPORTS_PER_LOAD)
     expect(sent[0]).toMatchObject({ kind: 'boundary', message: 'TypeError: a', path: '/reading' })
     expect(sent[0]?.stack).toContain('/assets/index-abc.js')
+  })
+
+  test("violations from their own budget, so they never use up an error's", () => {
+    const { sent, report } = collect()
+    for (let i = 0; i < 10; i++) report('csp', `script-src inline ${i}`)
+    for (let i = 0; i < 10; i++) report('error', appError(`m${i}`))
+    expect(sent.filter((r) => r.kind === 'csp')).toHaveLength(CSP_REPORTS_PER_LOAD)
+    expect(sent.filter((r) => r.kind === 'error')).toHaveLength(REPORTS_PER_LOAD)
   })
 
   test('no query string, in the message or the stack', () => {
@@ -98,6 +107,21 @@ describe('the page-wide listeners', () => {
       blockedURI: 'https://tracker.example/p.gif?id=SECRET',
     })
     expect(told).toEqual([['csp', 'img-src https://tracker.example/p.gif']])
+  })
+
+  test("not a violation an extension's own script set off", () => {
+    const { target, told, fire } = page()
+    fire(target.document, 'securitypolicyviolation', {
+      effectiveDirective: 'script-src-elem',
+      blockedURI: 'inline',
+      sourceFile: 'chrome-extension://abcdef/content.js',
+    })
+    fire(target.document, 'securitypolicyviolation', {
+      effectiveDirective: 'script-src-elem',
+      blockedURI: 'moz-extension://abcdef/inject.js',
+      sourceFile: '',
+    })
+    expect(told).toEqual([])
   })
 })
 

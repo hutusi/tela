@@ -10,6 +10,7 @@
  * reaches the logs, and the logs' own query strings are redacted too (`redact_query_string`).
  */
 import { consumeLimit } from '@tela/data'
+import { withoutQueries } from '@tela/shared'
 import { getIP } from 'better-auth/api'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
@@ -29,11 +30,6 @@ type Kind = (typeof CLIENT_ERROR_KINDS)[number]
 /** better-auth's bucket for a request whose IP it cannot tell, which all such requests share. */
 const NO_IP = 'no-trusted-ip'
 
-/** `text` with every query string cut from the addresses in it; over-cutting a stray `?` is fine. */
-export function withoutQueries(text: string): string {
-  return text.replace(/(?<=[\w/.%-])\?[^\s)'"`<>#]*/g, '')
-}
-
 const field = (value: unknown, max: number): string | null =>
   typeof value === 'string' ? withoutQueries(value).slice(0, max) : null
 
@@ -43,7 +39,10 @@ export function clientErrorRoutes(deps: ApiDeps, auth: Auth) {
   routes.post('/', async (c) => {
     // Counted before anything is read, so a flood costs one statement a request, then nothing.
     const ip = getIP(c.req.raw, auth.options) ?? NO_IP
-    const limited = await consumeLimit(deps.db, 'clientError', ip, deps.clock.now())
+    // A policy violation, as the app says in a header, is counted apart: an extension that sets
+    // them off on every page must not use up the room a real error needs.
+    const name = c.req.header('x-tela-report') === 'csp' ? 'clientCsp' : 'clientError'
+    const limited = await consumeLimit(deps.db, name, ip, deps.clock.now())
     if (!limited.allowed) return c.body(null, 429, { 'retry-after': String(limited.retryAfterSec) })
     if (Number(c.req.header('content-length') ?? '0') > CLIENT_ERROR_MAX_BYTES) {
       return c.json({ error: 'too_large' }, 413)

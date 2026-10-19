@@ -516,7 +516,8 @@ is tela-api.
   again), `error` or `rejection` (left unhandled, only from Tela's own scripts), `boot` (the app
   could not start; its device storage may have refused) or `csp` (a policy violation, ADR 0051),
   with the message, the stack (4 KB), the path without its query and the build. A page sends five
-  at most per load, and an IP thirty an hour. Query strings never reach either Worker's logs
+  errors and three violations at most per load, and an IP thirty of each an hour; a violation an
+  extension's script set off is never sent. Query strings never reach either Worker's logs
   (`redact_query_string` on tela-web and tela-api, as on tela-redirect): an invite code or a
   sign-in link's `?email=…&otp=…` would otherwise be readable there. After a deploy, a burst of
   one `boundary` message on one path is a bug in that view; `boot` lines from many paths at once

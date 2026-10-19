@@ -6,13 +6,21 @@
  *
  * Only Tela's own: an unhandled error or rejection is reported only when its stack runs through
  * the app's scripts (`/assets/…` once built, `/src/…` under Vite), so an extension's errors, a
- * cross-origin "Script error." and an aborted fetch's bare DOMException say nothing. At most five
- * reports a page load, each told once, and never a query string: `/join?code=…` is someone's.
+ * cross-origin "Script error." and an aborted fetch's bare DOMException say nothing; nor does a
+ * violation an extension's own script set off. At most five reports a page load and three
+ * violations, each told once, and never a query string: `/join?code=…` is someone's.
  */
+
+import { withoutQueries } from '@tela/shared'
 
 export type ReportKind = 'boundary' | 'error' | 'rejection' | 'boot' | 'csp'
 
 export const REPORTS_PER_LOAD = 5
+/**
+ * Policy violations have a budget of their own, here and at tela-api (`clientCsp`): an extension
+ * that injects scripts sets them off on every page, and must not use up what a real error needs.
+ */
+export const CSP_REPORTS_PER_LOAD = 3
 const ENDPOINT = '/api/client-errors'
 /** As tela-api keeps them: anything longer is cut there anyway. */
 const MESSAGE_MAX = 1000
@@ -27,10 +35,8 @@ const BUILD = (() => {
   }
 })()
 
-/** `text` with every query string cut from the addresses in it, as tela-api cuts them too. */
-export function withoutQueries(text: string): string {
-  return text.replace(/(?<=[\w/.%-])\?[^\s)'"`<>#]*/g, '')
-}
+/** An address of a browser extension's own: what it sets off is not Tela's to report. */
+const EXTENSION = /^(chrome|moz|safari-web|ms-browser)-extension:/
 
 /** Whether a stack runs through Tela's own scripts, built or under Vite's dev server. */
 export function ours(stack: string | undefined, origin: string): boolean {
@@ -52,19 +58,23 @@ export type Send = (body: ClientReport) => void
 
 const sendByFetch: Send = (body) => {
   // Keepalive: a report made as the page goes still arrives. Its failure is nobody's to handle.
+  // The kind rides in a header too, so tela-api counts a violation apart before reading the body.
   void fetch(ENDPOINT, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-tela-report': body.kind },
     body: JSON.stringify(body),
     keepalive: true,
     credentials: 'same-origin',
   }).catch(() => undefined)
 }
 
-/** One page load's reporter: deduplicated, and capped at `REPORTS_PER_LOAD`. */
+/**
+ * One page load's reporter: deduplicated, and capped at `REPORTS_PER_LOAD`, with violations
+ * counted apart (`CSP_REPORTS_PER_LOAD`).
+ */
 export function reporter(send: Send = sendByFetch, path: () => string = () => location.pathname) {
   const told = new Set<string>()
-  let sent = 0
+  const sent = { errors: 0, csp: 0 }
   return function report(kind: ReportKind, error: unknown): void {
     const err = error instanceof Error ? error : null
     const message = withoutQueries(
@@ -72,9 +82,11 @@ export function reporter(send: Send = sendByFetch, path: () => string = () => lo
     )
     const stack = err?.stack ? withoutQueries(err.stack).slice(0, STACK_MAX) : undefined
     const key = `${kind}\n${message}\n${stack?.split('\n')[1] ?? ''}`
-    if (told.has(key) || sent >= REPORTS_PER_LOAD) return
+    const budget = kind === 'csp' ? 'csp' : 'errors'
+    const cap = kind === 'csp' ? CSP_REPORTS_PER_LOAD : REPORTS_PER_LOAD
+    if (told.has(key) || sent[budget] >= cap) return
     told.add(key)
-    sent += 1
+    sent[budget] += 1
     send({ kind, message, ...(stack ? { stack } : {}), path: path(), build: BUILD })
   }
 }
@@ -97,6 +109,7 @@ export function watchErrors(target: Window = window, tell = report): void {
     if (reason instanceof Error && ours(reason.stack, origin)) tell('rejection', reason)
   })
   target.document.addEventListener('securitypolicyviolation', (event) => {
+    if (EXTENSION.test(event.sourceFile) || EXTENSION.test(event.blockedURI)) return
     const blocked = withoutQueries(event.blockedURI || 'inline')
     tell('csp', `${event.effectiveDirective} ${blocked}`)
   })

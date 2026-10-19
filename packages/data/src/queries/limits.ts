@@ -73,6 +73,8 @@ export const ACTION_LIMITS = {
    * most; this is room for a few reloads of a broken page, not for filling the logs.
    */
   clientError: { limit: 30, windowSec: 3600 },
+  /** Policy violations from a browser, per IP, counted apart from errors (three a page load). */
+  clientCsp: { limit: 30, windowSec: 3600 },
   /**
    * A member's ways in (ADR 0036), changed through tela-api's own calls to better-auth, which its
    * limiter never sees. A password set or changed costs a hash or two, and a change with the wrong
