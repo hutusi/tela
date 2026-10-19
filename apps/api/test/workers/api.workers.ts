@@ -397,6 +397,40 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     )
   ).json()) as { items: { kind: string }[] }
   expect(older.items.map((i) => i.kind)).toEqual(['recommended'])
+
+  // Titles in the device's language only (ADR 0052): the language a bound parameter in both the
+  // fresh and the changed title query, on D1.
+  const beforeTitles = (await (
+    await call(`/api/v1/sync?cursor=${oldUnread.cursor}`, member)
+  ).json()) as PullResponse
+  await db.batch([
+    bumpSeq(db),
+    db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status, source_hash,
+        updated_at, seq)
+      values (1, 'en', 1, 'Post', 'echo', 'h', ${now}, ${currentSeq}),
+        (1, 'fr', 1, 'Billet', 'done', 'h', ${now}, ${currentSeq}),
+        (2, 'fr', 1, 'Vieux billet', 'done', 'h', ${now}, ${currentSeq})`),
+  ])
+  const inFrench = (await (
+    await call('/api/v1/sync?cursor=0&titles=fr', member)
+  ).json()) as PullResponse
+  expect(inFrench.titlesLang).toBe('fr')
+  expect(inFrench.rows.titles.map((t) => [t.articleId, t.lang]).sort()).toEqual([
+    [1, 'fr'],
+    [2, 'fr'],
+  ])
+  const changedInFrench = (await (
+    await call(`/api/v1/sync?cursor=${beforeTitles.cursor}&titles=fr`, member)
+  ).json()) as PullResponse
+  expect(changedInFrench.rows.titles.map((t) => [t.articleId, t.lang]).sort()).toEqual([
+    [1, 'fr'],
+    [2, 'fr'],
+  ])
+  const everyLanguage = (await (
+    await call(`/api/v1/sync?cursor=${beforeTitles.cursor}`, member)
+  ).json()) as PullResponse
+  expect(everyLanguage.titlesLang).toBeUndefined()
+  expect(everyLanguage.rows.titles).toHaveLength(3)
 })
 
 it("reads the front page's edition and checks a handle, on D1", async () => {

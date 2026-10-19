@@ -3,6 +3,7 @@
  * protocol's. SQLite hands back booleans as 0/1 and JSON as text; the client gets neither.
  */
 import { type RawRow, readPull, type TelaDb } from '@tela/data'
+import type { ReadingLanguage } from '@tela/shared'
 import { emptyRows, HORIZON_DAYS, PAGE_ROWS, type PullResponse, type SyncRows } from '@tela/sync'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -76,24 +77,33 @@ function shape(rows: Record<keyof SyncRows, RawRow[]>): SyncRows {
   return out
 }
 
+/**
+ * A pull for one member. `titlesLang`, a reading language the route has checked, limits the title
+ * rows to it and is said back as `titlesLang` (ADR 0052); without it every language comes, and
+ * the answer names none, as protocol-3 shells expect.
+ */
 export async function answerPull(
   db: TelaDb,
   userId: string,
   cursor: number,
   now: number,
+  titlesLang?: ReadingLanguage,
 ): Promise<PullResponse> {
   const horizon = now - HORIZON_DAYS * DAY
-  let read = await readPull(db, { userId, cursor, horizon, limit: PAGE_ROWS })
+  const asked = { userId, horizon, limit: PAGE_ROWS, titlesLang }
+  let read = await readPull(db, { ...asked, cursor })
   let reset = cursor === 0
   if (cursor > read.head) {
-    // A cursor from the future: the database was restored behind this client. Start it over.
-    read = await readPull(db, { userId, cursor: 0, horizon, limit: PAGE_ROWS })
+    // A cursor from the future: the database was restored behind this client. Start it over, in
+    // the language it asked for.
+    read = await readPull(db, { ...asked, cursor: 0 })
     reset = true
   }
   return {
     cursor: read.pageEnd ?? read.head,
     more: read.pageEnd !== null,
     reset,
+    ...(titlesLang === undefined ? {} : { titlesLang }),
     rows: shape(read.rows),
     tombstones: read.tombstones.map((t) => ({
       entity: String(t.entity),

@@ -17,6 +17,9 @@
  * the member marked unread, which beat it (ADR 0009). A delta sends rows whose seq is above the
  * cursor, plus a horizon snapshot of any feed subscribed since: its articles were written before
  * the subscription, so their seqs are below the cursor.
+ *
+ * Titles come in every launch language unless the device names one (`titlesLang`, ADR 0052): it
+ * shows only its reading language, and the others were most of a snapshot.
  */
 import type { SQL } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
@@ -169,12 +172,22 @@ function scope(userId: string, horizon: number, cursor: number) {
 /**
  * Read everything a member's device should receive after `cursor` (0 for a snapshot), cutting
  * each delta table at `limit` rows. One batch, one snapshot.
+ *
+ * `titlesLang` limits the title rows, fresh and changed, to that one language (ADR 0052); left
+ * out, every language comes, as a shell from before it expects. The caller checks it is a reading
+ * language. Each title query gains one bound parameter, nothing else.
  */
 export async function readPull(
   db: TelaDb,
-  options: { userId: string; cursor: number; horizon: number; limit: number },
+  options: {
+    userId: string
+    cursor: number
+    horizon: number
+    limit: number
+    titlesLang?: string | undefined
+  },
 ): Promise<PullRead> {
-  const { userId, cursor, horizon, limit } = options
+  const { userId, cursor, horizon, limit, titlesLang } = options
   const { activeFeeds, newFeeds, kept, newlyKept, horizonOf, rolledFeeds, newlyRolled } = scope(
     userId,
     horizon,
@@ -198,6 +211,7 @@ export async function readPull(
   const freshArticles = snapshot
     ? sql`select id from articles where id in (${horizonOf(activeFeeds)}) or id in (${kept})`
     : sql`select id from articles where id in (${horizonOf(newFeeds)}) or id in (${newlyKept})`
+  const inTitlesLang = titlesLang === undefined ? sql`` : sql`and t.lang = ${titlesLang}`
 
   const queries = {
     head: sql`select coalesce((select v from counters where k = 'seq'), 0) as head`,
@@ -273,7 +287,8 @@ export async function readPull(
     newlyKept: snapshot
       ? sql`select 1 where false`
       : sql`select article_id as id from (${newlyKept})`,
-    freshTitles: sql`select ${TITLE} from article_titles t where t.article_id in (${freshArticles})`,
+    freshTitles: sql`select ${TITLE} from article_titles t where t.article_id in (${freshArticles})
+      ${inTitlesLang}`,
     // The member's own states for a fresh feed's articles, whatever their seq: a device drops a
     // feed's articles and their states when it unsubscribes, and a resubscription must bring
     // back what was read, not only what was written since.
@@ -285,7 +300,7 @@ export async function readPull(
     // the member keeps from anywhere, or a kept post never hears of its later translations.
     titles: snapshot
       ? sql`select 1 where false`
-      : sql`select ${TITLE} from article_titles t where t.seq > ${cursor}
+      : sql`select ${TITLE} from article_titles t where t.seq > ${cursor} ${inTitlesLang}
           and (t.feed_id in (${activeFeeds}) or t.article_id in (${kept}))
           order by t.seq limit ${over}`,
     freshTranslations: sql`select ${TRANSLATION} from body_translations b
@@ -352,7 +367,7 @@ export async function readPull(
   if (pageEnd !== null && pageEnd <= cursor) {
     // One batch wrote more rows than a page holds, so no page can end inside it: send everything
     // after the cursor unpaged. No writer does this today (the largest is a feed's 200-item cap);
-    // this keeps the pull correct if one ever does.
+    // this keeps the pull correct if one ever does. The language of the titles stays as asked.
     return readPull(db, { ...options, limit: Number.MAX_SAFE_INTEGER })
   }
   const within = (rows: RawRow[]) =>

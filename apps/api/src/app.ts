@@ -3,6 +3,7 @@
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
 import { audit, bumpSeq, currentSeq, first, newGroupId, schema } from '@tela/data'
+import { isReadingLanguage } from '@tela/shared'
 import {
   CLIENT_HEADER,
   MEMBER_HEADER,
@@ -348,10 +349,18 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     return c.json({ id: member.id, email: member.email, profile: profile ?? null })
   })
 
+  /**
+   * The pull (ADR 0025). `?titles=<lang>` names the device's reading language, and only its title
+   * rows come (ADR 0052); without it, every language's, for shells from before that.
+   */
   app.get('/api/v1/sync', async (c) => {
     const cursor = Number(c.req.query('cursor') ?? '0')
     if (!Number.isInteger(cursor) || cursor < 0) return c.json({ error: 'invalid_cursor' }, 400)
-    const pull = await answerPull(deps.db, c.get('member').id, cursor, deps.clock.now())
+    const titles = c.req.query('titles')
+    if (titles !== undefined && !isReadingLanguage(titles)) {
+      return c.json({ error: 'invalid_titles' }, 400)
+    }
+    const pull = await answerPull(deps.db, c.get('member').id, cursor, deps.clock.now(), titles)
     return c.json(pull, 200, { 'cache-control': 'no-store' })
   })
 

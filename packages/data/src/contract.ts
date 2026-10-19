@@ -394,6 +394,37 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       expect(ids(read)).toEqual([1, 2, 3])
       expect(read.pageEnd).toBe(null)
     })
+
+    it('sends only the titles of the language asked, paged by them, unpaged too (ADR 0052)', async () => {
+      const db = await makeDb()
+      n = 0
+      await setup(db)
+      await articlesInOneBatch(db, 3)
+      const afterArticles = await headSeq(db)
+      const title = (article: number, lang: string) =>
+        db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status,
+            source_hash, updated_at, seq)
+          values (${article}, ${lang}, 1, ${`${lang} ${article}`}, 'done', 'h', 0, ${currentSeq})`)
+      await db.batch([bumpSeq(db), title(1, 'en'), title(1, 'fr')] as never)
+      await db.batch([bumpSeq(db), title(2, 'fr'), title(3, 'fr'), title(2, 'en')] as never)
+      await db.batch([bumpSeq(db), title(3, 'en')] as never)
+      const inLang = (cursor: number, limit: number, titlesLang?: string) =>
+        readPull(db, { userId: member, cursor, horizon: T0 - 1, limit, titlesLang })
+      const titles = (read: Awaited<ReturnType<typeof page>>) =>
+        read.rows.titles.map((t) => `${t.articleId}:${t.lang}`).sort()
+
+      expect(titles(await inLang(0, 1, 'fr'))).toEqual(['1:fr', '2:fr', '3:fr'])
+      expect(titles(await inLang(0, 1))).toEqual(['1:en', '1:fr', '2:en', '2:fr', '3:en', '3:fr'])
+      // One row a page: the first French title, then the two one batch wrote, which no page can
+      // split, so they come unpaged, and still only in French.
+      const first1 = await inLang(afterArticles, 1, 'fr')
+      expect(titles(first1)).toEqual(['1:fr'])
+      expect(first1.pageEnd).toBe(afterArticles + 1)
+      const second = await inLang(first1.pageEnd as number, 1, 'fr')
+      expect(titles(second)).toEqual(['2:fr', '3:fr'])
+      expect(second.pageEnd).toBe(null)
+      expect(second.head).toBe(afterArticles + 3)
+    })
   })
 
   describe('ingest statements', () => {
