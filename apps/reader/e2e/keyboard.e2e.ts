@@ -255,3 +255,36 @@ test('o, l and m typed in a field are typing, not shortcuts', async ({ page, con
   await expect(page.getByTestId('reader')).toBeVisible()
   expect(context.pages()).toHaveLength(1)
 })
+
+test('u undoes from any page that shows the toast, and is a letter in a field', async ({
+  page,
+}) => {
+  await page.goto('/settings/subscriptions')
+  const rows = page.getByTestId('settings-subscription')
+  await expect(rows.first()).toBeVisible()
+  const row = rows.filter({ hasText: 'Julia Evans' })
+  const toast = page.getByTestId('toast')
+  const leave = async () => {
+    await row.getByTestId('move-to').click()
+    await page.getByTestId('row-unsubscribe').click()
+    await expect(row).toHaveCount(0)
+    await expect(toast).toContainText('Unsubscribed from Julia Evans.')
+  }
+
+  // Not the reading page: the key is the toast's own.
+  await leave()
+  await page.keyboard.press('u')
+  await expect(row).toHaveCount(1)
+  await expect(toast).toHaveCount(0)
+
+  // Typed into the filter, it is a letter, and the toast stays.
+  await leave()
+  const filter = page.getByTestId('subscriptions-filter')
+  await filter.focus()
+  await page.keyboard.press('u')
+  await expect(filter).toHaveValue('u')
+  await expect(toast).toContainText('Unsubscribed from Julia Evans.')
+  await filter.fill('')
+  await toast.getByTestId('toast-action').click()
+  await expect(row).toHaveCount(1)
+})

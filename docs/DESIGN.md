@@ -306,8 +306,10 @@ in the toast's own colour, with a `U` key cap on a fine pointer, and a hit area 
 text). One at a time; a newer message replaces the one showing and takes its own time. Its time
 stops while a pointer is over it or focus is in it, and starts again with what it had left, so it
 never vanishes, taking focus with it, while it is being used. Its live region is always in the
-page, so a screen reader hears each message, and `u` presses Undo on the reading page (listed
-under `?`). A change that offers Undo is held on the device for as long as its toast shows, and
+page, so a screen reader hears each message, and `u` presses Undo on any page that shows it
+(listed under `?` on the reading page): the key is the toast's own, so a blog left in Settings is
+taken back by it as a mark-all is. It is a letter in a field, quiet while a modal dialog is open,
+and left to the console on `/admin`, which has its own. A change that offers Undo is held on the device for as long as its toast shows, and
 let go when the toast goes without it (ADR 0046), so an Undo pressed while it shows always finds
 the change unsent. The reading page's keys stay quiet while a modal dialog (the phone's Recommend
 sheet) is open.
@@ -1107,7 +1109,8 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
     overlapping until one is removed (a known gap, ADR 0046).
 - **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `o`, `l`, `m`, `h`, `[`, `f`, `u` and `?` in
   `kbd` chips. `o` opens the original in a new tab, `l` likes or unlikes, and `m` marks read or
-  unread, as the action row's button would, all on the open article; `u` presses the toast's Undo.
+  unread, as the action row's button would, all on the open article; `u` presses the toast's Undo,
+  here and on every other page.
   `[` needs AltGr or Option on some non-US layouts, as `?` does on others; neither is worked
   around.
 

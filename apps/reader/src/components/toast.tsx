@@ -1,4 +1,9 @@
-import { pauseToast, resumeToast, runToastAction, useToast } from '../lib/toasts'
+import { useEffect } from 'react'
+import { currentToast, pauseToast, resumeToast, runToastAction, useToast } from '../lib/toasts'
+
+/** A field typing goes into: U there is a letter. A check box or a radio is not one. */
+const FIELD =
+  'input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable]:not([contenteditable="false"])'
 
 /**
  * The reader's toast (`lib/toasts.ts`), fixed at the foot of the page, centred, on ink. The live
@@ -6,10 +11,32 @@ import { pauseToast, resumeToast, runToastAction, useToast } from '../lib/toasts
  * above the phone reader's bottom bar while that shows (`--bottom-bar`).
  *
  * Its time stops while a pointer is over it or focus is in it, so an Undo being reached for is
- * never taken away, nor focus dropped to the page as it goes; and `u` presses it on /reading.
+ * never taken away, nor focus dropped to the page as it goes; and `u` presses it on any page that
+ * shows it, as the key cap in it says.
  */
 export function Toast() {
   const toast = useToast()
+  // U presses Undo wherever the toast offers it (a blog left in Settings as much as a mark-all on
+  // /reading), so the key lives with the toast, not with one page. Read when it is pressed: the
+  // toast showing then, and the page then. Never typed into a field, never under a modal dialog,
+  // which owns the keys while it is open, and never on /admin, whose console has its own toast
+  // and its own U (`admin/keys.ts`).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'u' || e.repeat) return
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
+      const { pathname } = window.location
+      if (pathname === '/admin' || pathname.startsWith('/admin/')) return
+      if (e.target instanceof Element && e.target.closest(FIELD)) return
+      if (document.querySelector('dialog:modal')) return
+      const shown = currentToast()
+      if (!shown?.action) return
+      e.preventDefault()
+      runToastAction(shown.id)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   return (
     <div
       role="status"
