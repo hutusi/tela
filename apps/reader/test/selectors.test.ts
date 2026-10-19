@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test'
-import { applyMutation, applyPull, emptyTables, type Tables, titleKey, view } from '@tela/sync'
+import {
+  applyMutation,
+  applyPull,
+  emptyTables,
+  HORIZON_DAYS,
+  type Tables,
+  titleKey,
+  view,
+} from '@tela/sync'
 import {
   articlesFor,
   feedsInFolder,
@@ -483,5 +491,70 @@ describe('folders (ADR 0048)', () => {
     })
     expect(ids(moved, 'f-cities')).toEqual([5, 1])
     expect(ids(moved, 'f-craft')).toEqual([2])
+  })
+})
+
+describe('lists across the clock', () => {
+  const MINUTE = 60_000
+  const HORIZON = HORIZON_DAYS * DAY
+  const feed = (id: number) => ({
+    id,
+    siteId: id,
+    feedUrl: `https://blog${id}.example/feed`,
+    title: `Blog ${id}`,
+    status: 'active',
+    lastFetchedAt: null,
+    lastError: null,
+    seq: 1,
+  })
+  const t = tables({
+    subscriptions: [sub(1)],
+    feeds: [feed(1)],
+    folders: [{ id: 'f', name: 'F', createdAt: 1, updatedAt: 1, deletedAt: null, seq: 1 }],
+    feedFolders: [{ feedId: 1, folderId: 'f', updatedAt: 1, seq: 1 }],
+    articles: [
+      // Leaves Today five minutes from now.
+      article(1, { sortAt: NOW - DAY + 5 * MINUTE }),
+      // Turns read by its age three minutes from now.
+      article(2, { fetchedAt: NOW - HORIZON + 3 * MINUTE, sortAt: NOW - MINUTE }),
+      article(3, { sortAt: NOW }),
+    ],
+  })
+
+  test('a minute that crosses nothing hands back the same lists, not new ones', () => {
+    const today = articlesFor(t, { filter: 'today', feedId: null }, NOW)
+    const all = articlesFor(t, { filter: 'all', feedId: null }, NOW)
+    const subs = subscriptionItems(t, NOW)
+    const tree = folderTree(t, NOW)
+    const counts = totals(t, NOW)
+    const later = NOW + MINUTE
+    expect(articlesFor(t, { filter: 'today', feedId: null }, later)).toBe(today)
+    expect(articlesFor(t, { filter: 'all', feedId: null }, later)).toBe(all)
+    expect(subscriptionItems(t, later)).toBe(subs)
+    expect(folderTree(t, later)).toBe(tree)
+    expect(totals(t, later)).toBe(counts)
+    // A post's date alone never changes what All lists, however long the tab stays open.
+    expect(articlesFor(t, { filter: 'all', feedId: null }, NOW + 90 * DAY)).toBe(all)
+  })
+
+  test('the minute a post crosses a boundary, the lists that asked about it change', () => {
+    expect(totals(t, NOW)).toEqual({ all: 3, today: 3, liked: 0 })
+    expect(subscriptionItems(t, NOW)[0]?.unread).toBe(3)
+    // Past its horizon, post 2 is read: the unread counts drop, the folder's with them.
+    const aged = NOW + 3 * MINUTE + 1
+    expect(totals(t, aged)).toEqual({ all: 2, today: 2, liked: 0 })
+    expect(subscriptionItems(t, aged)[0]?.unread).toBe(2)
+    expect(folderTree(t, aged).folders[0]?.unread).toBe(2)
+    const ids = (now: number) =>
+      articlesFor(t, { filter: 'today', feedId: null }, now).map((a) => a.id)
+    expect(ids(aged)).toEqual([3, 2, 1])
+    // A day after it, post 1 leaves Today; up to that instant it is still there.
+    const edge = NOW + 5 * MINUTE
+    expect(ids(edge)).toEqual([3, 2, 1])
+    expect(ids(edge + 1)).toEqual([3, 2])
+    expect(totals(t, edge + 1)).toEqual({ all: 2, today: 1, liked: 0 })
+    // A clock that went back reads as it did then, not as the last answer did.
+    expect(totals(t, NOW)).toEqual({ all: 3, today: 3, liked: 0 })
+    expect(ids(NOW)).toEqual([3, 2, 1])
   })
 })

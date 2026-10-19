@@ -22,11 +22,53 @@ export function isMarkedUnread(t: Tables, articleId: number): boolean {
 }
 
 export function isRead(t: Tables, a: ArticleRow, now: number): boolean {
+  return readIn(t, a, now)
+}
+
+/** `isRead`, recording in `span` the age it asked about, if it asked. */
+function readIn(t: Tables, a: ArticleRow, now: number, span?: Span): boolean {
   if (t.states.get(a.id)?.readAt != null) return true
   if (isMarkedUnread(t, a.id)) return false
   const sub = t.subscriptions.get(a.feedId)
   if (sub && a.id <= sub.watermarkId) return true
-  return a.fetchedAt < now - HORIZON_DAYS * DAY
+  const horizon = a.fetchedAt + HORIZON_DAYS * DAY
+  return span ? span.past(horizon) : now > horizon
+}
+
+/**
+ * The stretch of time around the instant a list was computed at in which every question it asked
+ * of the clock gets the same answer, so the list does too. The clock enters a list only as "is it
+ * past this instant?": a post turns read by its age at its horizon, and leaves Today a day after
+ * it was posted. Each answer stands until the clock crosses that instant, usually hours away,
+ * where keying the lists on the minute recomputed every one of them over every post each minute,
+ * idle or not (about 80 ms a minute on a device holding 2,700 posts).
+ */
+class Span {
+  /** The answers hold for an instant after `from` and up to `until`, both instants asked about. */
+  private from = Number.NEGATIVE_INFINITY
+  private until = Number.POSITIVE_INFINITY
+  constructor(readonly now: number) {}
+
+  /** Whether `now` is past `instant`, and so whether a later or earlier clock answers alike. */
+  past(instant: number): boolean {
+    if (this.now > instant) {
+      this.from = Math.max(this.from, instant)
+      return true
+    }
+    this.until = Math.min(this.until, instant)
+    return false
+  }
+
+  /** Whether every answer recorded is the same at `now`. */
+  holds(now: number): boolean {
+    return now > this.from && now <= this.until
+  }
+
+  /** Hold no longer than `other`: an answer computed from `other`'s answers. */
+  within(other: Span): void {
+    this.from = Math.max(this.from, other.from)
+    this.until = Math.min(this.until, other.until)
+  }
 }
 
 /**
@@ -178,28 +220,61 @@ export function cached<T>(t: Tables, key: string, compute: () => T): T {
   return entries.get(key) as T
 }
 
+/**
+ * `cached` for an answer that also depends on the clock: kept while the clock stays within the
+ * span its computation recorded, computed again once it leaves it. A computation that reads
+ * another such answer passes its own span as `outer`, which then holds no longer than that one.
+ */
+function cachedSpan<T>(
+  t: Tables,
+  key: string,
+  now: number,
+  compute: (span: Span) => T,
+  outer?: Span,
+): T {
+  const entries = cached(t, 'spans', () => new Map<string, { value: unknown; span: Span }>())
+  let entry = entries.get(key)
+  if (!entry?.span.holds(now)) {
+    const span = new Span(now)
+    entry = { value: compute(span), span }
+    entries.set(key, entry)
+  }
+  outer?.within(entry.span)
+  return entry.value as T
+}
+
 /** The member's subscriptions, by title, each with its unread count. */
 export function subscriptionItems(t: Tables, now: number): SubscriptionItem[] {
-  return cached(t, `subs:${Math.floor(now / 60_000)}`, () => {
-    const unread = new Map<number, number>()
-    for (const a of t.articles.values()) {
-      if (!isRead(t, a, now)) unread.set(a.feedId, (unread.get(a.feedId) ?? 0) + 1)
-    }
-    const items: SubscriptionItem[] = []
-    for (const sub of t.subscriptions.values()) {
-      if (sub.deletedAt !== null) continue
-      const feed = t.feeds.get(sub.feedId)
-      items.push({
-        feedId: sub.feedId,
-        siteId: feed?.siteId ?? null,
-        title: feedTitle(t, sub.feedId) || '…',
-        unread: unread.get(sub.feedId) ?? 0,
-        lastFetchedAt: feed?.lastFetchedAt ?? null,
-        lastError: feed?.lastError ?? null,
-      })
-    }
-    return items.sort((a, b) => byName(a.title, b.title))
-  })
+  return subscriptionItemsIn(t, now)
+}
+
+function subscriptionItemsIn(t: Tables, now: number, outer?: Span): SubscriptionItem[] {
+  return cachedSpan(
+    t,
+    'subs',
+    now,
+    (span) => {
+      const unread = new Map<number, number>()
+      for (const a of t.articles.values()) {
+        if (!readIn(t, a, now, span)) unread.set(a.feedId, (unread.get(a.feedId) ?? 0) + 1)
+      }
+      const items: SubscriptionItem[] = []
+      for (const sub of t.subscriptions.values()) {
+        if (sub.deletedAt !== null) continue
+        const feed = t.feeds.get(sub.feedId)
+        items.push({
+          feedId: sub.feedId,
+          siteId: feed?.siteId ?? null,
+          title: feedTitle(t, sub.feedId) || '…',
+          unread: unread.get(sub.feedId) ?? 0,
+          lastFetchedAt: feed?.lastFetchedAt ?? null,
+          lastError: feed?.lastError ?? null,
+        })
+      }
+      return items.sort((a, b) => byName(a.title, b.title))
+    },
+    outer,
+  )
 }
 
 const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
@@ -216,13 +291,13 @@ export function folderTree(
   t: Tables,
   now: number,
 ): { folders: FolderItem[]; unfiled: SubscriptionItem[] } {
-  return cached(t, `folders:${Math.floor(now / 60_000)}`, () => {
+  return cachedSpan(t, 'folders', now, (span) => {
     const folders = new Map<string, FolderItem>()
     for (const f of t.folders.values()) {
       folders.set(f.id, { id: f.id, name: f.name, unread: 0, blogs: [] })
     }
     const unfiled: SubscriptionItem[] = []
-    for (const item of subscriptionItems(t, now)) {
+    for (const item of subscriptionItemsIn(t, now, span)) {
       const folder = folders.get(folderIdOf(t, item.feedId) ?? '')
       if (!folder) {
         unfiled.push(item)
@@ -253,16 +328,16 @@ export function feedsInFolder(t: Tables, folderId: string): number[] {
 export type Totals = { all: number; today: number; liked: number }
 
 export function totals(t: Tables, now: number): Totals {
-  return cached(t, `totals:${Math.floor(now / 60_000)}`, () => {
+  return cachedSpan(t, 'totals', now, (span) => {
     let all = 0
     let today = 0
     let liked = 0
     for (const a of t.articles.values()) {
       if (isLiked(t, a.id)) liked++
       if (t.subscriptions.get(a.feedId)?.deletedAt !== null) continue
-      if (isRead(t, a, now)) continue
+      if (readIn(t, a, now, span)) continue
       all++
-      if (a.sortAt >= now - DAY) today++
+      if (!span.past(a.sortAt + DAY)) today++
     }
     return { all, today, liked }
   })
@@ -280,8 +355,8 @@ export function articlesFor(
   now: number,
 ): ArticleRow[] {
   const folderId = where.folderId ?? null
-  const key = `list:${where.filter}:${where.feedId}:${folderId}:${Math.floor(now / 60_000)}`
-  return cached(t, key, () => {
+  const key = `list:${where.filter}:${where.feedId}:${folderId}`
+  return cachedSpan(t, key, now, (span) => {
     const out: ArticleRow[] = []
     const inFolder = folderId === null ? null : new Set(feedsInFolder(t, folderId))
     for (const a of t.articles.values()) {
@@ -298,7 +373,7 @@ export function articlesFor(
         continue
       }
       if (t.subscriptions.get(a.feedId)?.deletedAt !== null) continue
-      if (where.filter === 'today' && a.sortAt < now - DAY) continue
+      if (where.filter === 'today' && span.past(a.sortAt + DAY)) continue
       out.push(a)
     }
     return out.sort(newestFirst)
