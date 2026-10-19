@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { backUp, heartbeats, latestBackup } from '@tela/data'
+import { backUp, heartbeat, heartbeats, latestBackup } from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
 import { memoryBlobs, memoryMail } from '@tela/platform/portable'
 import { sql } from 'drizzle-orm'
@@ -42,6 +42,27 @@ describe('the scheduled health check', () => {
         info: { ok: false, problems: ['4 feeds are more than two hours past due'] },
       },
     })
+  })
+
+  test('a kind the last tick could not run is a /fail, though the tick itself ran', async () => {
+    const { db, blobs } = await world()
+    await heartbeat(db, 'tick', NOW, {
+      'feed.fetch': 0,
+      errors: { 'article.extract': 'Error: D1_ERROR: overloaded' },
+    })
+    const calls: { url: string; body: string }[] = []
+    const fake = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, body: String(init?.body) })
+      return new Response('OK')
+    }) as unknown as typeof fetch
+    const h = await checkHealth(db, blobs, NOW, 'https://hc-ping.com/abc', fake)
+    expect(h.ok).toBe(false)
+    expect(calls).toEqual([
+      {
+        url: 'https://hc-ping.com/abc/fail',
+        body: 'the last tick could not run article.extract (Error: D1_ERROR: overloaded)',
+      },
+    ])
   })
 })
 

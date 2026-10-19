@@ -122,6 +122,29 @@ describe('the health check', () => {
     expect(after.ok).toBe(true)
     expect(after.checks[1]).toEqual({ name: 'deadLetters', value: 20, limit: 20, ok: true })
   })
+
+  test('speaks up for each kind the last tick could not run, until a tick runs them all', async () => {
+    const { db, blobs } = await world()
+    // A tick from before it said which kinds failed.
+    await heartbeat(db, 'tick', NOW, { 'feed.fetch': 1 })
+    expect((await health(db, blobs, NOW)).ok).toBe(true)
+    await heartbeat(db, 'tick', NOW, {
+      'feed.fetch': 1,
+      errors: { 'article.extract': 'Error: boom', 'site.claim': 'Error: bang' },
+    })
+    const h = await health(db, blobs, NOW)
+    expect(h.problems).toEqual([
+      'the last tick could not run article.extract (Error: boom), site.claim (Error: bang)',
+    ])
+    expect(h.checks.find((c) => c.name === 'tickErrors')).toEqual({
+      name: 'tickErrors',
+      value: 2,
+      limit: 0,
+      ok: false,
+    })
+    await heartbeat(db, 'tick', NOW, { 'feed.fetch': 1, errors: {} })
+    expect((await health(db, blobs, NOW)).ok).toBe(true)
+  })
 })
 
 describe('heartbeats', () => {

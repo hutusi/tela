@@ -800,6 +800,11 @@ Nothing here needs watching; three things speak up when something is wrong (ADR 
     key gone.
   - *articles waiting over six hours for their full text* (more than twenty): extraction is
     failing on some host; the dead letters name it.
+  - *the last tick could not run <kind> (<error>)*: one kind's due query, claim or send failed,
+    and the tick went on with the others, so the switch hears `/fail` rather than silence. The
+    error is cut to 200 characters; `wrangler tail tela-jobs` shows it whole (`tick: a kind
+    failed`). A schema the code does not match (a migration not applied) looks like this; so does
+    a queue that refuses sends. It clears at the first tick that runs every kind.
   - *the last backup is from …* or *failed its check*: see *Backups*.
 - **The Monday digest** to `DIGEST_TO`: new posts and members, how many blogs members added wait
   for review in Discover (with the link to `/admin/discover`, from `PUBLIC_URL`), failing and dead
@@ -855,8 +860,8 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   `LLM_MAX_ARTICLE_TOKENS` for the post, and once the day's budget is spent the console refuses
   one until tomorrow. The health check counts only unresolved dead letters, and
   the digest says how many of the week's were resolved.
-- **Heartbeats** (`ops_heartbeats`): `tick` (each kind dispatched, and the switches tela-jobs runs
-  with: the background budget, the article cap, whether a translator, the relay, WebSub and the
+- **Heartbeats** (`ops_heartbeats`): `tick` (each kind dispatched, `errors` for each kind it
+  could not run, and the switches tela-jobs runs with: the background budget, the article cap, whether a translator, the relay, WebSub and the
   assets bucket are configured), `health` (every fifth minute, what the dead-man's switch heard),
   `daily` (upkeep and the export) and `digest` (once sent). The console reads the budget and the
   relay from the tick's, so after a deploy they show as unknown until the first tick.

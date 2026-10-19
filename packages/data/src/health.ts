@@ -1,8 +1,9 @@
 /**
  * Is Tela getting its work done (ADR 0027)? Feeds long past due, a body translation stuck,
- * extraction piling up, a burst of dead letters nobody has dealt with, or a backup that is stale
- * or failed its check. tela-jobs asks every few minutes and tells the dead-man's switch; the admin
- * console asks live (ADR 0039), which is why the check lives here rather than in tela-jobs.
+ * extraction piling up, a burst of dead letters nobody has dealt with, a kind of work the last
+ * tick could not claim, or a backup that is stale or failed its check. tela-jobs asks every few
+ * minutes and tells the dead-man's switch; the admin console asks live (ADR 0039), which is why
+ * the check lives here rather than in tela-jobs.
  *
  * And what each periodic run last reported about itself (`ops_heartbeats`): the tick, the daily
  * sweep, the digest and the health check each leave a line, so the console can say when each
@@ -37,7 +38,7 @@ export const THRESHOLDS = {
 const count = (rows: unknown) => Number((rows as { n: number }[])[0]?.n ?? 0)
 
 export async function health(db: TelaDb, blobs: Blobs, now: number): Promise<Health> {
-  const [overdue, dead, stuck, extraction] = (await db.batch([
+  const [overdue, dead, stuck, extraction, tick] = (await db.batch([
     // Due for two hours and nobody working on it: the sweeps are not keeping up, or not running.
     db.all(sql`
       select count(*) as n from feeds f
@@ -62,6 +63,10 @@ export async function health(db: TelaDb, blobs: Blobs, now: number): Promise<Hea
       where a.extract_state = 'due' and a.url is not null and f.status = 'active'
         and a.fetched_at < ${now - 6 * HOUR}
     `),
+    // The kinds the last tick could not claim or send, and why: it passes them and goes on.
+    db.all(
+      sql`select json_extract(info, '$.errors') as errors from ops_heartbeats where name = 'tick'`,
+    ),
   ] as never)) as unknown as unknown[][]
   const backup = await latestBackup(blobs).catch(() => null)
   const problems: string[] = []
@@ -89,6 +94,14 @@ export async function health(db: TelaDb, blobs: Blobs, now: number): Promise<Hea
   if (!extractionOk)
     problems.push(`${extractionN} articles have waited over six hours for their full text`)
 
+  const failedKinds = tickErrors(tick)
+  check('tickErrors', failedKinds.length, 0, failedKinds.length === 0)
+  if (failedKinds.length > 0) {
+    problems.push(
+      `the last tick could not run ${failedKinds.map(([kind, error]) => `${kind} (${error})`).join(', ')}`,
+    )
+  }
+
   // No backup yet is a new deployment, not a failure; the first nightly run writes one.
   const ageMs = backup ? now - backup.finishedAt : null
   const fresh = ageMs === null || ageMs <= THRESHOLDS.backupAgeHours * HOUR
@@ -108,6 +121,19 @@ export async function health(db: TelaDb, blobs: Blobs, now: number): Promise<Hea
   if (backup && !backup.verified) problems.push(`the ${backup.date} backup failed its check`)
 
   return { ok: problems.length === 0, problems, checks }
+}
+
+/** The `[kind, error]` pairs the tick's heartbeat says failed; none from a tick before it said. */
+function tickErrors(rows: unknown): [string, string][] {
+  const raw = (rows as { errors: string | null }[])[0]?.errors
+  if (!raw) return []
+  try {
+    const errors = JSON.parse(raw) as unknown
+    if (!errors || typeof errors !== 'object') return []
+    return Object.entries(errors).map(([kind, error]) => [kind, String(error)])
+  } catch {
+    return []
+  }
 }
 
 /** The periodic runs that leave a heartbeat. */

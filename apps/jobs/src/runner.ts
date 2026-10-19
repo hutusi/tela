@@ -91,27 +91,45 @@ export function runningConfig(ctx: WorkContext): RunningConfig {
   }
 }
 
+/** What a kind's failure says in the tick's heartbeat: enough to find it, short enough to keep. */
+export const TICK_ERROR_CHARS = 200
+
 /**
  * Claim every kind's due work and send it on; record that the tick ran, what it sent per kind,
- * and the config it ran with.
+ * which kinds failed and why (`errors`), and the config it ran with. A kind that fails (its due
+ * query, a claim D1 refused, a queue that would not take the batch) is recorded and passed: the
+ * kinds after it still run, and the health check turns the failure into a `/fail` ping. Only the
+ * heartbeat's own write is left to throw, since a tick that cannot write one cannot do anything
+ * else either, and the dead-man's switch hearing nothing is the alarm for that.
  */
 export async function tick(ctx: JobsContext): Promise<TickReport> {
   const report: TickReport = {}
+  const errors: Partial<Record<LeaseKind, string>> = {}
   for (const [kind, spec] of Object.entries(KINDS) as [LeaseKind, KindSpec][]) {
-    if (spec.enabled && !spec.enabled(ctx)) continue
-    const now = ctx.clock.now()
-    const owner = ownerFor(kind, now)
-    const claimed = await claimDue(ctx.db, {
-      kind,
-      owner,
-      now,
-      ttlMs: spec.ttlMs,
-      limit: spec.limit,
-      due: spec.due(now, ctx),
-    })
-    report[kind] = await dispatch(ctx, kind, spec, owner, claimed, now)
+    try {
+      if (spec.enabled && !spec.enabled(ctx)) continue
+      const now = ctx.clock.now()
+      const owner = ownerFor(kind, now)
+      const claimed = await claimDue(ctx.db, {
+        kind,
+        owner,
+        now,
+        ttlMs: spec.ttlMs,
+        limit: spec.limit,
+        due: spec.due(now, ctx),
+      })
+      report[kind] = await dispatch(ctx, kind, spec, owner, claimed, now)
+    } catch (err) {
+      const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+      errors[kind] = message.slice(0, TICK_ERROR_CHARS)
+      console.error('tick: a kind failed', kind, err)
+    }
   }
-  await heartbeat(ctx.db, 'tick', ctx.clock.now(), { ...report, config: runningConfig(ctx) })
+  await heartbeat(ctx.db, 'tick', ctx.clock.now(), {
+    ...report,
+    errors,
+    config: runningConfig(ctx),
+  })
   return report
 }
 
