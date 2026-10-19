@@ -1,7 +1,6 @@
 {
   "app": {
-    "name": "Tela",
-    "tagline": "Independent blogs, in any language."
+    "name": "Tela"
   },
   "common": {
     "quoted": "“{text}”",
@@ -971,8 +970,7 @@
     "none": "Nothing matches “{query}”.",
     "sites": "Blogs",
     "articles": "Posts in your subscriptions",
-    "noArticles": "No posts in your subscriptions match.",
-    "signInForArticles": "Sign in to search the posts you subscribe to."
+    "noArticles": "No posts in your subscriptions match."
   },
   "notFound": {
     "title": "Nothing here",

@@ -1,7 +1,6 @@
 {
   "app": {
-    "name": "Tela",
-    "tagline": "独立博客，任何语言。"
+    "name": "Tela"
   },
   "common": {
     "quoted": "“{text}”",
@@ -971,8 +970,7 @@
     "none": "没有与“{query}”匹配的内容。",
     "sites": "博客",
     "articles": "你订阅的文章",
-    "noArticles": "你订阅的文章中没有匹配项。",
-    "signInForArticles": "登录后可搜索你订阅的文章。"
+    "noArticles": "你订阅的文章中没有匹配项。"
   },
   "notFound": {
     "title": "这里什么也没有",

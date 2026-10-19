@@ -39,7 +39,7 @@ import {
   NewFolderForm,
   useActivity,
 } from '../components/folders-manage'
-import { BACK, CHEVRON_RIGHT, CLOSE, Glyph } from '../components/glyph'
+import { BACK, CHEVRON_RIGHT, CLOSE, Glyph, SEARCH } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { Segmented } from '../components/segmented'
 import { SETTING_HINT, SettingRow } from '../components/setting-row'
@@ -1256,14 +1256,6 @@ function SubscriptionsSection() {
     </>
   )
 }
-
-/** A magnifier: the filter. */
-const SEARCH = (
-  <g strokeLinejoin="round">
-    <circle cx="7" cy="7" r="4.25" />
-    <path d="m10.25 10.25 3.25 3.25" />
-  </g>
-)
 
 /** A file picker that imports as soon as a file is chosen, and says what came of it. */
 function OpmlImport({ onImported }: { onImported: () => void }) {

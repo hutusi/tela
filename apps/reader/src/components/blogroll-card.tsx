@@ -13,17 +13,9 @@ import { useTranslations } from 'use-intl'
 import { blogrollHref } from '../lib/blogroll-href'
 import { displayHost, swatchColor } from '../lib/format'
 import type { BlogrollCard as BlogrollCardData } from '../views/types'
-import { Glyph } from './glyph'
+import { Glyph, LOCK } from './glyph'
 import { PersonAvatar } from './person-avatar'
 import { Swatch } from './swatch'
-
-/** A padlock: the blogroll is its owner's alone. */
-const LOCK = (
-  <>
-    <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
-    <path d="M5.5 7V5.25a2.5 2.5 0 0 1 5 0V7" />
-  </>
-)
 
 /** How many blogs each card shows: a profile's lists three, Discover's chips five. */
 const SHOWN = { profile: 3, discover: 5 } as const

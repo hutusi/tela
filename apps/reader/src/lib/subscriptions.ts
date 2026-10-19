@@ -4,6 +4,7 @@
  * page and its tests agree.
  */
 import type { Tables } from '@tela/sync'
+import { daysAgo } from './days'
 import { normalizeQuery } from './search'
 
 const DAY = 86_400_000
@@ -29,23 +30,14 @@ export function latestPosts(t: Pick<Tables, 'feeds' | 'articles'>): Map<number, 
 /** Past this, a blog's latest post is shown muted: it has gone quiet (Tela Lists). */
 export const QUIET_AFTER_MS = 60 * DAY
 
-/** Local midnight before `at`: where its calendar day begins, here. */
-function dayStart(at: number): number {
-  const d = new Date(at)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
-}
-
 /**
  * How long ago `at` was, as the Latest post column says it: today, yesterday and days by the
- * calendar here (a post at 20:00 yesterday is yesterday at 08:00), then weeks, months and years,
- * in the reader's language ("2 weeks ago", "上个月", "il y a 3 mois"), with a capital where the
- * language has one. A date ahead of `now` (a feed's clock) is today.
+ * calendar here (`daysAgo`), then weeks, months and years, in the reader's language ("2 weeks
+ * ago", "上个月", "il y a 3 mois"), with a capital where the language has one.
  */
 export function postedAgo(at: number, locale: string, now: number): string {
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
-  // Rounded, since a day across a change of clocks is 23 or 25 hours.
-  const days = Math.round((dayStart(now) - dayStart(Math.min(at, now))) / DAY)
+  const days = daysAgo(at, now)
   const said =
     days < 7
       ? rtf.format(-days, 'day')

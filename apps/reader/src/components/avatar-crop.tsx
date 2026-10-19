@@ -106,7 +106,7 @@ export function AvatarCrop({ file, onClose }: { file: File; onClose: (saved: boo
         if (!busy) onClose(false)
       }}
       aria-labelledby="avatar-crop-title"
-      className="m-auto w-[min(328px,calc(100vw-32px))] rounded-xl border border-line bg-surface p-5 text-ink shadow-[0_16px_40px_rgba(0,0,0,.16)] backdrop:bg-[rgba(0,0,0,.45)]"
+      className="m-auto w-[min(328px,calc(100vw-32px))] rounded-xl border border-line bg-surface p-5 text-ink shadow-dialog backdrop:bg-[rgba(0,0,0,.45)]"
       data-testid="avatar-crop"
     >
       <h2 id="avatar-crop-title" className="mb-1 font-serif text-[20px] font-medium">

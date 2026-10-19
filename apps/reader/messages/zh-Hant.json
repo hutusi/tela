@@ -1,7 +1,6 @@
 {
   "app": {
-    "name": "Tela",
-    "tagline": "獨立部落格，任何語言。"
+    "name": "Tela"
   },
   "common": {
     "quoted": "「{text}」",
@@ -971,8 +970,7 @@
     "none": "沒有與「{query}」相符的內容。",
     "sites": "部落格",
     "articles": "你訂閱的文章",
-    "noArticles": "你訂閱的文章中沒有相符的結果。",
-    "signInForArticles": "登入後可搜尋你訂閱的文章。"
+    "noArticles": "你訂閱的文章中沒有相符的結果。"
   },
   "notFound": {
     "title": "這裡什麼也沒有",

@@ -97,8 +97,16 @@ export const CHEVRON_RIGHT = <path d="m6 3.5 4.5 4.5L6 12.5" />
 /** A tick: done, chosen, claimed. Drawn at 12px. */
 export const CHECK = <path d="m3.5 8.5 3 3 6-7" />
 
-/** Three lines: All articles. */
+/** Three lines: All articles, and Settings' All blogs. */
 export const LIST = <path d="M3 4.5h10M3 8h10M3 11.5h10" />
+
+/** A padlock: a blogroll only its owner can open. */
+export const LOCK = (
+  <>
+    <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
+    <path d="M5.5 7V5.25a2.5 2.5 0 0 1 5 0V7" />
+  </>
+)
 
 /** A chevron pointing left: back. */
 export const BACK = <path d="M10 3.5 5.5 8l4.5 4.5" />

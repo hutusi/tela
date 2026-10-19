@@ -25,6 +25,7 @@ import { displayHost } from '../lib/format'
 import { postedAgo } from '../lib/subscriptions'
 import { useDismiss } from '../lib/use-dismiss'
 import { CHECK, CHEVRON_DOWN, Glyph } from './glyph'
+import { MENU_ITEM, menuPanel } from './header-control'
 import { Sheet } from './sheet'
 import { SiteAvatar } from './site-avatar'
 
@@ -489,10 +490,7 @@ function FolderOptions({
         <Glyph>{MORE}</Glyph>
       </button>
       {open ? (
-        <div
-          id={panel}
-          className="absolute top-[calc(100%+4px)] right-0 z-[7] flex min-w-[180px] animate-fade flex-col rounded-xl border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgba(0,0,0,.10)]"
-        >
+        <div id={panel} className={menuPanel({ minWidth: 'min-w-[180px]' })}>
           <button
             type="button"
             onClick={() => {
@@ -715,7 +713,7 @@ export function MenuItem({
       role="menuitem"
       tabIndex={-1}
       onClick={onClick}
-      className={`rounded-md px-2.5 py-[7px] text-left text-[13px] hover:bg-hover hover:text-ink ${muted ? 'text-muted' : 'text-ink'}`}
+      className={`${MENU_ITEM} hover:text-ink ${muted ? 'text-muted' : 'text-ink'}`}
       data-testid={testId}
     >
       {children}

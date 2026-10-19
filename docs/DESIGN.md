@@ -26,13 +26,23 @@ mark takes its green from, and what `primary` becomes in dark mode. Text in the 
 italic spans) lifts a step further, to `oklch(0.74 0.12 150)`, as the design's Night page draws it
 (below).
 
+Three lifts, by what floats: `shadow-menu` (`0 8px 24px` at 8%) under a menu's panel,
+`shadow-popover` (`0 12px 32px` at 10%) under a popover with a form in it (Recommend, Aa, a
+highlight's note, the account menu), and `shadow-dialog` (`0 24px 60px` at 18%) under a dialog
+over a dimmed page (`ResponsiveDialog`, the crop, the front door). A menu's panel is
+`menuPanel()` (`header-control.ts`: 6px under its control, `surface`, a `line` border, 10px
+corners, z 7, a minimum width and an optional scroll) and its items build on `MENU_ITEM`
+(`menuItem` for a header menu's), so the header's, Discover's and Settings' menus no longer differ
+by a radius, a layer or a shadow.
+
 ## Icons (`apps/reader/src/components/glyph.tsx`, Tela v5)
 
 Tela's icons are its own line drawings on a 16px grid, in one style: 1.5 stroke, round caps and
 joins, `currentColor`, drawn inside `Glyph`. They replaced the typed glyphs the reader printed
 (♡ ♥ ↗ ⌕ ✕ ▾ ✓), which each platform's fonts drew differently or not at all: ⌕ is missing from
 many, and ♥ turns into an emoji on some. HEART (filled when liked), PASS (Recommend), SEARCH,
-CLOSE, CHEVRON_DOWN and CHECK (both drawn at 12px), LIST (All articles), BACK, EXTERNAL, and GEAR
+CLOSE, CHEVRON_DOWN and CHECK (both drawn at 12px), LIST (All articles, and Settings' All blogs),
+LOCK (a private blogroll), BACK, EXTERNAL, and GEAR
 (Lucide's "settings", on its 24px grid at 2.1, credited in the file), beside the older SLIDERS,
 SUN, MOON and AUTO. An icon is decoration: the control's text or label carries its name.
 

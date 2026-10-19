@@ -610,7 +610,7 @@ function Sheet({
         close()
       }}
       aria-labelledby={titleId}
-      className="m-auto max-h-[calc(100dvh-32px)] w-[min(420px,calc(100vw-32px))] overflow-y-auto rounded-2xl border border-line bg-surface p-6 text-ink shadow-[0_30px_80px_rgba(0,0,0,.25)] backdrop:bg-[rgba(0,0,0,.45)] sm:p-8"
+      className="m-auto max-h-[calc(100dvh-32px)] w-[min(420px,calc(100vw-32px))] overflow-y-auto rounded-2xl border border-line bg-surface p-6 text-ink shadow-dialog backdrop:bg-[rgba(0,0,0,.45)] sm:p-8"
       data-testid="front-door"
     >
       <DoorForm

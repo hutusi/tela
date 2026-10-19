@@ -14,15 +14,7 @@ import { showToast } from '../lib/toasts'
 import { QUIET_PILL } from '../views/blogroll'
 import { AddBlogs } from './add-blogs'
 import { BlogrollDialog } from './blogroll-dialog'
-import { Glyph } from './glyph'
-
-/** A padlock: only the owner can open it. */
-const LOCK = (
-  <>
-    <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
-    <path d="M5.5 7V5.25a2.5 2.5 0 0 1 5 0V7" />
-  </>
-)
+import { Glyph, LOCK } from './glyph'
 
 export function BlogrollOwner({
   row,

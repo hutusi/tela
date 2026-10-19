@@ -50,7 +50,8 @@ import {
   RenameForm,
   rowMeta,
 } from './folders-manage'
-import { CHECK, CHEVRON_DOWN, Glyph } from './glyph'
+import { CHECK, CHEVRON_DOWN, Glyph, LIST, SEARCH } from './glyph'
+import { menuItem, menuPanel } from './header-control'
 import { SiteAvatar } from './site-avatar'
 
 /** What the manager changes, made by the page. */
@@ -90,19 +91,11 @@ const FOLDER_ICON = (
     strokeLinejoin="round"
   />
 )
-/** Lines: every blog. */
-const ALL_ICON = <path d="M3 4h10M3 8h10M3 12h10" />
 /** A tray: the blogs in no folder. */
 const TRAY_ICON = (
   <g strokeLinejoin="round">
     <path d="M2.5 9h3l1 1.75h3l1-1.75h3" />
     <path d="M4.25 3.5h7.5l1.75 5.5v3a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V9z" />
-  </g>
-)
-const SEARCH = (
-  <g strokeLinejoin="round">
-    <circle cx="7" cy="7" r="4.25" />
-    <path d="m10.25 10.25 3.25 3.25" />
   </g>
 )
 
@@ -373,7 +366,7 @@ export function SubscriptionsManager({
             aria-label={t('places')}
             className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-2.5"
           >
-            {placeButton(ALL, t('allBlogs'), ALL_ICON, rows.length, false)}
+            {placeButton(ALL, t('allBlogs'), LIST, rows.length, false)}
             {placeButton(
               NONE,
               t('unfiled'),
@@ -776,7 +769,7 @@ function BulkBar({
           <Glyph size={12}>{CHEVRON_DOWN}</Glyph>
         </button>
         {open ? (
-          <div className="absolute top-[calc(100%+6px)] left-0 z-[8] flex max-h-[min(360px,60vh)] min-w-[210px] animate-fade flex-col overflow-y-auto rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,.08)]">
+          <div className={menuPanel({ left: true, minWidth: 'min-w-[210px]', scroll: true })}>
             <MoveOptions
               folders={folders}
               current={undefined}
@@ -864,7 +857,7 @@ function SortMenu({ sort, onSort }: { sort: SortKey; onSort: (sort: SortKey) => 
           role="menu"
           aria-labelledby={buttonId}
           onKeyDown={menuKeys}
-          className="absolute top-[calc(100%+6px)] right-0 z-[8] flex min-w-[180px] animate-fade flex-col rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,.08)]"
+          className={menuPanel({ minWidth: 'min-w-[180px]' })}
         >
           {SORTS.map((s) => {
             const on = s === sort
@@ -880,7 +873,7 @@ function SortMenu({ sort, onSort }: { sort: SortKey; onSort: (sort: SortKey) => 
                   onSort(s)
                   button.current?.focus()
                 }}
-                className={`flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-[13px] text-ink hover:bg-hover ${on ? 'bg-hover' : ''}`}
+                className={menuItem(on)}
                 data-testid="sort-option"
                 data-sort={s}
               >
@@ -948,7 +941,7 @@ function FolderChip({
         </Glyph>
       </button>
       {open ? (
-        <div className="absolute top-[calc(100%+6px)] right-0 z-[7] flex max-h-[min(360px,60vh)] min-w-[200px] animate-fade flex-col overflow-y-auto rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,.08)]">
+        <div className={menuPanel({ minWidth: 'min-w-[200px]', scroll: true })}>
           <MoveOptions
             folders={folders}
             current={row.folderId}

@@ -16,6 +16,7 @@ import { GlyphCount } from '../components/glyph-count'
 import { PersonAvatar } from '../components/person-avatar'
 import { ReasonDot, useReasonText } from '../components/reader-card'
 import { SiteAvatar } from '../components/site-avatar'
+import { Swatch } from '../components/swatch'
 import { READERS_PATH } from '../lib/discover-href'
 import { appendPage, mergeFirstPage } from '../lib/following-feed'
 import { displayHost, relativeTime, swatchColor } from '../lib/format'
@@ -497,13 +498,7 @@ function PostCard({
       data-testid="following-card"
     >
       <div className="flex items-center gap-2 text-[12.5px] text-muted">
-        <span
-          aria-hidden="true"
-          className="flex size-4 items-center justify-center rounded text-[9px] font-semibold text-white"
-          style={{ background: swatchColor(post.article.feedId) }}
-        >
-          {source.charAt(0).toUpperCase()}
-        </span>
+        <Swatch id={post.article.feedId} title={source} size={16} />
         <span className="font-medium text-ink">{source}</span>
         {badge ? (
           <span className="rounded border border-line px-[5px] text-[10.5px]">{badge}</span>

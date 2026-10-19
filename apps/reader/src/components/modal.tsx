@@ -99,7 +99,7 @@ function CentredDialog({
           onClose()
         }
       }}
-      className={`m-auto max-h-[calc(100dvh-48px)] ${width} animate-fade overflow-y-auto rounded-2xl border border-line bg-surface p-7 text-left text-ink shadow-[0_24px_60px_rgba(0,0,0,.18)] backdrop:bg-[rgba(0,0,0,.45)]`}
+      className={`m-auto max-h-[calc(100dvh-48px)] ${width} animate-fade overflow-y-auto rounded-2xl border border-line bg-surface p-7 text-left text-ink shadow-dialog backdrop:bg-[rgba(0,0,0,.45)]`}
       data-testid={testId}
     >
       {children}

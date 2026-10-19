@@ -9,13 +9,38 @@ import { usePopover } from '../lib/use-popover'
  */
 export const CONTROL = 'h-[34px] rounded-full border border-line bg-surface hover:border-muted'
 
-/** The panel a header menu opens under its control: 160px of `surface`, right-aligned to it. */
-export const MENU_PANEL =
-  'absolute right-0 top-[calc(100%+6px)] z-[7] flex min-w-[160px] animate-fade flex-col rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,.08)]'
+/**
+ * The panel a menu opens 6px under its control: `surface` in a `line` border, 10px corners, the
+ * menu's lift, over everything but the header (z 7). Right-aligned to the control unless `left`,
+ * at least `minWidth` wide (a literal class, so Tailwind sees it), and with `scroll` a long list
+ * stops at 360px and scrolls. One class list per panel, so no two utilities set one property.
+ */
+export function menuPanel({
+  left = false,
+  minWidth = 'min-w-[160px]',
+  scroll = false,
+}: {
+  left?: boolean
+  minWidth?: string
+  scroll?: boolean
+} = {}): string {
+  return [
+    'absolute top-[calc(100%+6px)] z-[7] flex animate-fade flex-col rounded-[10px] border border-line bg-surface p-1.5 shadow-menu',
+    left ? 'left-0' : 'right-0',
+    minWidth,
+    scroll ? 'max-h-[min(360px,60vh)] overflow-y-auto' : '',
+  ].join(' ')
+}
+
+/** A header menu's panel: 160px, right-aligned to its control. */
+export const MENU_PANEL = menuPanel()
+
+/** What every menu's item shares; each adds its layout and its colour. */
+export const MENU_ITEM = 'rounded-md px-2.5 py-[7px] text-left text-[13px] hover:bg-hover'
 
 /** One choice in a header menu; the one the page holds is on the hover ground. */
 export const menuItem = (on: boolean) =>
-  `flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-[13px] text-ink hover:bg-hover ${on ? 'bg-hover font-medium' : ''}`
+  `flex items-center gap-2.5 ${MENU_ITEM} text-ink ${on ? 'bg-hover font-medium' : ''}`
 
 /**
  * A header menu is a native `<details>`, so it opens in the edge's page before any script runs;

@@ -15,7 +15,8 @@ import { useTranslations } from 'use-intl'
 import { CHECK, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { SiteAvatar } from '../components/site-avatar'
-import { displayHost } from '../lib/format'
+import { daysAgo } from '../lib/days'
+import { displayHost, shortDate } from '../lib/format'
 import type { BlogrollBlog, BlogrollData, MemberControls, Person } from './types'
 
 /** What the owner's page puts into a row: its action (Remove) and its note, or the note editor. */
@@ -44,38 +45,24 @@ export type BlogrollViewProps = {
   footer?: ReactNode
 }
 
-const DAY = 86_400_000
-
 /**
- * When a blogroll last changed, as its byline says it: today or yesterday in words ("today",
- * "hier", "今天"), else the date, with the year once it is not this one. Local days, as the
- * reader lives them; the edge renders in UTC, as the profile's date column does.
+ * When a blogroll last changed, as its byline says it: today or yesterday in words, as a sentence
+ * has them ("today", "hier", "今天"), else the date as a list's date column has it (`shortDate`),
+ * with the year once it is not this one. Local days (`daysAgo`), as the reader lives them.
  */
 export function updatedWhen(
   at: number,
   locale: string,
   now: number,
 ): { day: boolean; when: string } {
-  const start = (t: number) => {
-    const d = new Date(t)
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-  }
-  const days = Math.round((start(now) - start(Math.min(at, now))) / DAY)
+  const days = daysAgo(at, now)
   if (days <= 1) {
     return {
       day: true,
       when: new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-days, 'day'),
     }
   }
-  const sameYear = new Date(at).getFullYear() === new Date(now).getFullYear()
-  return {
-    day: false,
-    when: new Intl.DateTimeFormat(locale, {
-      month: 'short',
-      day: 'numeric',
-      ...(sameYear ? {} : { year: 'numeric' }),
-    }).format(new Date(at)),
-  }
+  return { day: false, when: shortDate(at, locale, now) }
 }
 
 /** The filled pill: Subscribe to all, and a guest's sign-in in its place. */

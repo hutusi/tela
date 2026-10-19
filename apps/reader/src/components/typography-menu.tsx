@@ -121,7 +121,7 @@ export function TypographyMenu() {
       </button>
       {open ? (
         <div
-          className="absolute right-0 top-[calc(100%+8px)] z-[6] w-72 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.10)] animate-fade"
+          className="absolute right-0 top-[calc(100%+8px)] z-[6] w-72 rounded-xl border border-line bg-surface p-3.5 shadow-popover animate-fade"
           data-testid="typography-menu"
         >
           <TypographyControls />
