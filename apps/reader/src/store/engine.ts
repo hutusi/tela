@@ -30,6 +30,9 @@ export type EngineEvents = {
 }
 
 const PULL_EVERY_MS = 60_000
+/** The first wait before asking for titles again after tela-api refused, and the longest. */
+const TITLES_RETRY_MS = 120_000
+const TITLES_RETRY_MAX_MS = 3_600_000
 const PUSH_DEBOUNCE_MS = 250
 const MAX_BACKOFF_MS = 60_000
 /**
@@ -61,6 +64,12 @@ export class SyncEngine {
    * is for, and the last article id asked (`fetchTitles`).
    */
   private titlesPass: { round: number; after: number } | null = null
+  /**
+   * When to ask for titles again after tela-api refused (a 404 from a rolled-back tela-api, a 400):
+   * not on every pull, which would send the same thousand ids once a minute from every tab for as
+   * long as it lasted. From two minutes, doubling to an hour; a new language or an answer ends it.
+   */
+  private titlesRetry = { at: 0, wait: 0, round: -1 }
 
   constructor(
     private readonly store: LocalStore,
@@ -167,8 +176,8 @@ export class SyncEngine {
   }
 
   /**
-   * Pull until caught up, then fetch a page of the titles the reading language is missing. Calls
-   * while one runs coalesce into one more pull after it.
+   * Pull until caught up, then fetch the titles the reading language is missing, a page at a time.
+   * Calls while one runs coalesce into one more pull after it.
    */
   pull(): Promise<void> {
     if (this.stopped) return Promise.resolve()
@@ -201,13 +210,19 @@ export class SyncEngine {
             if (!res.ok) throw new Error(`pull ${res.status}`)
             const body = (await res.json()) as PullResponse
             // Asked to start over, by a table the server sends again after leaving it out.
-            const again = await this.store.applyPull(body, epoch)
-            more = body.more || again
+            const restart = await this.store.applyPull(body, epoch)
+            more = body.more || restart
           }
-          // A page of missing titles per round, after the pull: so it is read after any pull in
-          // the language before, whose cursor passed rows of this one it did not bring.
-          const missing = this.store.epoch === epoch && (await this.fetchTitles(owner, epoch))
-          again = this.pullAgain || missing
+          // The pages of missing titles, after the pull: so they are read after any pull in the
+          // language before, whose cursor passed rows of this one it did not bring. All of them in
+          // this round, not one a round, which cost a pull a page; a pull asked for meanwhile goes
+          // first, and the pass carries on after it.
+          while (
+            this.store.epoch === epoch &&
+            !this.pullAgain &&
+            (await this.fetchTitles(owner, epoch))
+          ) {}
+          again = this.pullAgain
         } while (again && !this.stopped)
         for (const heard of this.pulled) heard()
       } catch (err) {
@@ -238,6 +253,17 @@ export class SyncEngine {
     const round = this.store.titlesRound
     if (this.titlesPass?.round !== round) this.titlesPass = { round, after: 0 }
     const pass = this.titlesPass
+    const retry = this.titlesRetry
+    if (retry.round === round && Date.now() < retry.at) return false
+    const refused = () => {
+      const wait = retry.round === round ? Math.min(retry.wait * 2, TITLES_RETRY_MAX_MS) : 0
+      this.titlesRetry = {
+        round,
+        wait: wait || TITLES_RETRY_MS,
+        at: Date.now() + (wait || TITLES_RETRY_MS),
+      }
+      return false
+    }
     const ids = this.store.missingTitles(pass.after)
     if (ids.length > 0) {
       let rows: TitleRow[]
@@ -247,10 +273,11 @@ export class SyncEngine {
           member: owner,
           signal: AbortSignal.timeout(this.timeoutMs),
         })
-        if (!res.ok) return false
+        if (!res.ok) return refused()
         const body = (await res.json()) as { rows?: unknown }
-        if (!Array.isArray(body.rows)) return false
+        if (!Array.isArray(body.rows)) return refused()
         rows = body.rows as TitleRow[]
+        this.titlesRetry = { at: 0, wait: 0, round: -1 }
       } catch (err) {
         // What ends syncing ends it here too; anything else waits for the next pull.
         if (err instanceof SignedOut || err instanceof UpgradeRequired) throw err

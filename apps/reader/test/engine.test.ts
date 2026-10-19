@@ -2,7 +2,7 @@
  * The sync engine and the device store across tabs: one browser, one session cookie, and a tab
  * that may still hold the account another tab has just signed out of.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, setSystemTime, test } from 'bun:test'
 import type { ArticleRow, TitleRow } from '@tela/sync'
 import { memoryPersistence } from '../src/store/db'
 import { type EngineEvents, SyncEngine } from '../src/store/engine'
@@ -504,7 +504,7 @@ describe('titles in the reading language', () => {
     expect(keys(store)).toEqual(['7:zh-Hant'])
   })
 
-  test('an old tela-api: every language filtered here, and no titles route, asked again next pull', async () => {
+  test('an old tela-api: every language filtered here, and no titles route, asked again after a wait', async () => {
     const store = await reading('en', [ja(7), ja(8)], [title(7, 'en'), title(8, 'en')])
     store.setReadingLang('fr')
     const calls = routes((path) =>
@@ -523,14 +523,28 @@ describe('titles in the reading language', () => {
     expect(keys(store)).toEqual(['7:fr'])
     expect(store.titlesWhole).toBe(false)
     expect(store.cursor).toBe(7)
-    // The next pull asks again, from where the pass was; nothing starts over.
+    // The next pull does not send the same ids to a route that is not there: it waits.
     await engine.pull()
     expect(calls.map((c) => c.path.split('?')[0])).toEqual([
       '/api/v1/sync',
       '/api/v1/sync/titles',
       '/api/v1/sync',
+    ])
+    // Two minutes on, it asks again, from where the pass was; nothing starts over.
+    try {
+      setSystemTime(new Date(Date.now() + 121_000))
+      await engine.pull()
+    } finally {
+      setSystemTime()
+    }
+    expect(calls.map((c) => c.path.split('?')[0])).toEqual([
+      '/api/v1/sync',
+      '/api/v1/sync/titles',
+      '/api/v1/sync',
+      '/api/v1/sync',
       '/api/v1/sync/titles',
     ])
+    expect(calls.at(-1)?.body).toEqual({ lang: 'fr', ids: [8] })
     expect(calls.some((c) => c.path.includes('cursor=0'))).toBe(false)
   })
 
@@ -550,14 +564,14 @@ describe('titles in the reading language', () => {
     )
     const engine = engineFor(store)
     await engine.pull()
+    // Both pages in one round, after the pull: no pull between them.
     expect(calls.map((c) => c.path.split('?')[0])).toEqual([
       '/api/v1/sync',
       '/api/v1/sync/titles',
-      '/api/v1/sync',
       '/api/v1/sync/titles',
     ])
     expect(calls[1]?.body.ids).toEqual(ids.slice(0, 1000))
-    expect(calls[3]?.body.ids).toEqual(ids.slice(1000))
+    expect(calls[2]?.body.ids).toEqual(ids.slice(1000))
     expect(store.getSnapshot().tables.titles.size).toBe(1049)
     expect(store.titlesWhole).toBe(true)
     // Whole, the next pull asks for nothing more; post 3's title comes with a pull once made.
@@ -583,7 +597,47 @@ describe('titles in the reading language', () => {
     expect(heard).toBe(1)
     expect(store.titlesWhole).toBe(false)
     titles = () => Response.json({ error: 'unauthorized' }, { status: 401 })
-    await engine.pull()
+    // Refused once, it waits before asking again; then the answer ends syncing as any call's does.
+    try {
+      setSystemTime(new Date(Date.now() + 121_000))
+      await engine.pull()
+    } finally {
+      setSystemTime()
+    }
     expect(signedOut).toBe(1)
+  })
+
+  test('refused again, it waits twice as long; a new language asks at once', async () => {
+    const store = await reading('en', [ja(7)], [title(7, 'en')])
+    store.setReadingLang('fr')
+    const calls = routes((path) =>
+      path === '/api/v1/sync/titles'
+        ? Response.json({ error: 'not_found' }, { status: 404 })
+        : inLang(pull(6, {}), store.titleLang ?? 'fr'),
+    )
+    const engine = engineFor(store)
+    const asked = () => calls.filter((c) => c.path === '/api/v1/sync/titles').length
+    const start = Date.now()
+    try {
+      await engine.pull()
+      expect(asked()).toBe(1)
+      setSystemTime(new Date(start + 121_000))
+      await engine.pull()
+      expect(asked()).toBe(2)
+      // The second refusal waits four minutes: three on, nothing; five on, asked.
+      setSystemTime(new Date(start + 121_000 + 180_000))
+      await engine.pull()
+      expect(asked()).toBe(2)
+      setSystemTime(new Date(start + 121_000 + 241_000))
+      await engine.pull()
+      expect(asked()).toBe(3)
+      // Another language is another pass: asked at once, whatever the last one was told.
+      store.setReadingLang('zh-Hant')
+      await engine.pull()
+      expect(asked()).toBe(4)
+      expect(calls.at(-1)?.body.lang).toBe('zh-Hant')
+    } finally {
+      setSystemTime()
+    }
   })
 })
