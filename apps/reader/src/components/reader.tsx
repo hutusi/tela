@@ -437,6 +437,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
               <PairedBody
                 pairs={prefix.rest ? pairs : prefix.pairs}
                 title={titles.title}
+                titleLang={titles.lang}
                 originalTitle={article.title}
                 targetLang={readingLang}
                 sourceLang={sourceLang}

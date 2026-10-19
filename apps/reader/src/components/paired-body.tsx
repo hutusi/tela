@@ -11,6 +11,8 @@ const LEAD = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
 type Props = {
   pairs: readonly BlockPair[]
   title: string
+  /** The language `title` is in: the reading language once translated, else the post's own. */
+  titleLang: string | undefined
   originalTitle: string
   targetLang: string
   sourceLang: string | undefined
@@ -32,7 +34,14 @@ type Props = {
  * `display: contents`, even `grid-template-rows: subgrid`) would put every translation before
  * every original, which is the layout this replaced.
  */
-export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang }: Props) {
+export function PairedBody({
+  pairs,
+  title,
+  titleLang,
+  originalTitle,
+  targetLang,
+  sourceLang,
+}: Props) {
   const tt = useTranslations('translation')
   const locale = useLocale()
   // It starts the column's label ("Anglais · traduction"), though French writes "anglais".
@@ -69,7 +78,9 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
         {/* The title sits on the source ground too, so that column reads as one surface from
             its heading down rather than as a title above an unrelated band. On a phone it is set
             small above the translated one, as the reference it is (Tela Mobile 03). */}
-        <h1
+        {/* Not a heading: the translated title is the page's one h1, and this is its original
+            beside it, which a screen reader would otherwise announce as a second title. */}
+        <p
           className="article-source mb-6 font-serif text-[18px] font-medium leading-[1.25] tracking-tight text-ink-2 lg:text-[32px] lg:leading-[1.12]"
           style={{ textWrap: 'pretty' }}
           lang={sourceLang}
@@ -78,11 +89,11 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
           data-testid="article-title-original"
         >
           {originalTitle}
-        </h1>
+        </p>
         <h1
           className="mb-6 font-serif text-[30px] font-medium leading-[1.12] tracking-tight lg:text-[32px]"
           style={{ textWrap: 'pretty' }}
-          lang={targetLang}
+          lang={titleLang}
           data-testid="article-title"
         >
           {title}
