@@ -14,14 +14,15 @@ import { useUi } from '../ui'
 import { LandingView } from '../views/landing'
 import type { FrontData } from '../views/types'
 
-export function LandingPage() {
+/** `title` names the tab when the page is under something else (`/join`); the front page is "Tela". */
+export function LandingPage({ title = null }: { title?: string | null }) {
   const [search] = useSearchParams()
   const loaded = usePublic<FrontData>(FRONT_PATH)
   const member = useMemberControls()
   const { locale } = useUi()
   const reading = useReadingLang(locale)
   const [now] = useState(() => Date.now())
-  useTitle(null)
+  useTitle(title)
   return (
     <LandingView
       data={loaded.status === 'ready' ? loaded.data : null}

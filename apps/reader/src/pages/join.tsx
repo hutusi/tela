@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
+import { useTranslations } from 'use-intl'
 import { ToReading, useFrontDoor } from '../components/front-door'
 import { providerError, takeInvite } from '../lib/use-sign-in'
 import { useSession } from '../session'
@@ -37,12 +38,13 @@ export function JoinPage() {
     })
   }, [search, door, member])
 
+  const title = useTranslations('nav')('join')
   // Already in: there is nothing to join. One who has just joined here is the sheet's to send on.
   if (member)
     return (
       <ToReading>
-        <LandingPage />
+        <LandingPage title={title} />
       </ToReading>
     )
-  return <LandingPage />
+  return <LandingPage title={title} />
 }

@@ -26,6 +26,7 @@ import {
 } from '../lib/href'
 import { effectiveSidebar, gridColumns, toggleFocus, useLayout, useWide } from '../lib/layout'
 import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
+import { useTitle } from '../lib/title'
 import { currentToast, runToastAction } from '../lib/toasts'
 import { useQuickPull } from '../lib/use-quick-pull'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
@@ -128,6 +129,11 @@ export function ReadingPage() {
   const article =
     params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
   const open = params.articleId !== null
+  // The tab says what is open: the post, by the title the reader shows first (its translation,
+  // when there is one), or the list. A post still on its way names nothing yet.
+  useTitle(
+    article ? shownTitle(tables, article, readingLang, prefs.never).title : open ? null : listName,
+  )
   // Which panes show beside the article: this device's choice, not the member's (ADR 0029), and
   // until it has chosen, the window's: an article opened below 1200px starts with the rail. In
   // focus an open article has the page to itself; a closed one shows the list as ever.

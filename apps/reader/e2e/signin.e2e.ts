@@ -153,6 +153,7 @@ test.describe('a network that blocks Tela', () => {
   test.use(visitor(23))
   test('says so, rather than to try again in a minute', async ({ page }) => {
     await page.goto('/login')
+    await expect(page).toHaveTitle('Log in · Tela')
     // A company's web filter that does not know the domain yet refuses every request outright,
     // while the shell's worker still draws the page from its cache.
     await page.route('**/api/auth/**', (route) => route.abort('connectionrefused'))

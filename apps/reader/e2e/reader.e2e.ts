@@ -953,6 +953,8 @@ test.describe('reader', () => {
     await synced(page)
     await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
     await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    // The tab names the list, and then the post that is open.
+    await expect(page).toHaveTitle('Julia Evans · Tela')
     const rows = page.getByTestId('article-row')
     await expect(rows.first()).toContainText('Julia Evans')
     const second = await rows.nth(1).getAttribute('data-article-id')
@@ -967,6 +969,7 @@ test.describe('reader', () => {
     await next.click()
     await expect(page).toHaveURL(new RegExp(`article=${second}$`))
     await expect(page.getByTestId('article-title')).toHaveText(secondTitle)
+    await expect(page).toHaveTitle(`${secondTitle} · Tela`)
 
     // The last post has nothing after it.
     await rows.last().click()

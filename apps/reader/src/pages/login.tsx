@@ -13,6 +13,7 @@ import { useTranslations } from 'use-intl'
 import { DoorForm } from '../components/front-door'
 import { VisitorLanguage } from '../components/language-menu'
 import { LogoMark } from '../components/logo'
+import { useTitle } from '../lib/title'
 import {
   loginPath,
   type MailLink,
@@ -41,6 +42,7 @@ function loginReturn(next: string, provider: Provider): string {
 export function LoginPage() {
   const t = useTranslations('login')
   const door = useTranslations('door')
+  const nav = useTranslations('nav')
   const [search] = useSearchParams()
   const [arrival, setArrival] = useState(() => arrivalOf(search))
   // A joiner has nothing to read yet: unless the link says otherwise, they start at Discover.
@@ -57,6 +59,7 @@ export function LoginPage() {
   }, [search])
 
   const link = arrival.link
+  useTitle(nav(link?.join ? 'join' : 'logIn'))
   return (
     <>
       <header className="flex h-14 items-center justify-between gap-2.5 border-b border-line px-4 lg:px-7">
