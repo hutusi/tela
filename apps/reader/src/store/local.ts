@@ -578,7 +578,7 @@ export class LocalStore {
       lang === null
         ? {
             pull: given,
-            folded: (given as PullResponse & { titlesLang?: string }).titlesLang === undefined,
+            folded: given.titlesLang === undefined,
           }
         : titlesIn(given, lang)
     if (!folded) this.titlesRound++

@@ -19,7 +19,7 @@ import {
   type ReadingLanguage,
 } from '@tela/shared'
 import type { Mutation } from './mutations'
-import { completePull, type PullResponse } from './protocol'
+import { completePull, type PullResponse, TITLE_IDS_MAX } from './protocol'
 import type {
   ArticleRow,
   BlogrollBlogRow,
@@ -776,12 +776,6 @@ export function readingLangOf(
 }
 
 /**
- * How many articles one request for titles may name (`POST /api/v1/sync/titles`): tela-api's
- * `TITLE_IDS_MAX` (apps/api/src/app.ts), which answers more with 400 `invalid_ids`.
- */
-const TITLE_IDS_PER_REQUEST = 1000
-
-/**
  * A pull as the device holding only `lang`'s titles takes it, and whether it brought that
  * language: whether the device still holds `lang` whole after folding it in, if it did before. A
  * tela-api asked for one language answers with it (`titlesLang`); one that predates the question
@@ -793,7 +787,7 @@ export function titlesIn(
   pull: PullResponse,
   lang: string,
 ): { pull: PullResponse; folded: boolean } {
-  const sent = (pull as PullResponse & { titlesLang?: string }).titlesLang
+  const sent = pull.titlesLang
   const folded = sent === undefined || sent === lang
   const titles = pull.rows.titles as TitleRow[] | undefined
   if (titles === undefined) return { pull, folded }
@@ -832,7 +826,7 @@ export function mergeTitles(tables: Tables, rows: readonly TitleRow[], lang: str
 export function nextTitleIds(
   tables: Tables,
   lang: string,
-  limit = TITLE_IDS_PER_REQUEST,
+  limit = TITLE_IDS_MAX,
   after = 0,
 ): number[] {
   const ids: number[] = []

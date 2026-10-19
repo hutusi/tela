@@ -51,8 +51,7 @@ export const title = (articleId: number, lang: string, seq = 1): TitleRow => ({
 })
 
 /** A pull as a tela-api asked for one language's titles answers it (`?titles=`). */
-export const inLang = (p: PullResponse, titlesLang: string): PullResponse =>
-  ({ ...p, titlesLang }) as PullResponse
+export const inLang = (p: PullResponse, titlesLang: string): PullResponse => ({ ...p, titlesLang })
 
 export const pull = (
   cursor: number,
