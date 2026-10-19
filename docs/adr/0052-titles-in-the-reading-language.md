@@ -37,9 +37,11 @@ horizon, since it prunes by subscription, not by age.
 
 **No `titles` means every language**, and the answer names none. That is what a protocol-3
 shell sends and expects, so `MIN_CLIENT` stays at 3, no tab is made to reload, and tela-api and
-tela-web deploy in the usual order. A tela-api from before this decision ignores `titles`. The
-device therefore reads a pull without `titlesLang`, or with another language, as not in its
-language: it drops that pull's title rows and fetches its own.
+tela-web deploy in the usual order. A tela-api from before this decision ignores `titles` and sends
+every language: the device reads a pull without `titlesLang` as every language, keeps its own
+language's rows and counts them as brought (`titlesIn`). A pull that names another language (one
+asked for before the member switched, landing after) brings none of its own: the device drops
+that pull's title rows and fetches its language again.
 
 **A new language comes by id, not by starting over.** `POST /api/v1/sync/titles`, body
 `{lang, ids}`, answers `{rows}`, in the pull's title row shape:
@@ -59,8 +61,10 @@ language: it drops that pull's title rows and fetches its own.
 **The device's titles are only ever in its language.** When the reading language changes, the
 device drops the old language's rows at once. It records the new language as not yet whole, and
 lists and the reader show original titles until the rows arrive. It then fetches them for the
-posts it holds, 1,000 ids a request, inside its single pull loop, so a page never lands before an
-old-language pull still in flight. The language, and whether the device holds it whole, are stored
+posts it holds that lack one, 1,000 ids a request in id order, one request per round of its single
+pull loop, so a page never lands before an old-language pull still in flight. A pass walks the ids
+once: a post tela-api has no title for (not yet translated, or in its own language) is asked for
+once a pass, not for ever, and the pass ending is what makes the language whole. The language, and whether the device holds it whole, are stored
 beside the cursor and stamped with it, like the record of tables held whole: tabs share one copy,
 and a tab still on the old language can move the cursor past rows of the new one.
 
@@ -82,7 +86,7 @@ itself.
 - Search on the device matches the reading language's titles and the originals, as before.
 - A shell from before this decision keeps pulling every language until it reloads.
 - After a rollback of tela-api, the backfill route is a 404. The device keeps showing originals
-  and tries again on a later pull, and a pull that answers without `titlesLang` is treated as not
-  in its language.
+  for what it lacks and tries again on a later pull; the rolled-back pulls send every language, of
+  which the device keeps its own.
 - Body translations (`translations`) have the same four-language shape, and are left alone until
   they are measured.
