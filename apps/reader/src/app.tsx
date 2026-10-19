@@ -88,14 +88,19 @@ function AdminUnavailable() {
 
 /**
  * A page that throws as it renders shows its failure with Try again below a header that still
- * works, rather than blanking the app. A change of path clears a failure shown, so opening another
- * page starts afresh, while a page that stays mounted across its paths keeps its state; Try again
+ * works, rather than blanking the app. A change of address, its query included, clears a failure
+ * shown: what a page shows lives in its query as often as its path (`/reading?article=`), and Back
+ * to the list, or the header's link to it, keeps the path. A page that stays mounted across its
+ * addresses keeps its state, since the boundary resets only while it shows a failure; Try again
  * renders the same page again.
  */
 function PageBoundary({ children }: { children: React.ReactNode }) {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   return (
-    <ErrorBoundary resetKey={pathname} fallback={(retry) => <RouteFailed onRetry={retry} />}>
+    <ErrorBoundary
+      resetKey={`${pathname}${search}`}
+      fallback={(retry) => <RouteFailed onRetry={retry} />}
+    >
       {children}
     </ErrorBoundary>
   )

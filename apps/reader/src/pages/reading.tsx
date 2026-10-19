@@ -9,6 +9,7 @@ import { useLocation, useNavigate, useNavigationType, useSearchParams } from 're
 import { useTranslations } from 'use-intl'
 import { ArticleList, type ListShow, listRow } from '../components/article-list'
 import { EmptyState } from '../components/empty-state'
+import { ErrorBoundary, RouteFailed } from '../components/error-boundary'
 import { FirstRun, showsFirstRun } from '../components/first-run'
 import { MobileNav } from '../components/mobile-nav'
 import { Reader } from '../components/reader'
@@ -472,16 +473,19 @@ export function ReadingPage() {
           onStart={startReading}
         />
       ) : article ? (
-        <Reader
-          key={article.id}
-          article={article}
-          readingLang={readingLang}
-          mode={mode}
-          onMode={onMode}
-          onClose={close}
-          next={next}
-          listName={listName}
-        />
+        // One article that throws as it renders fails in its own pane: the list beside it, j and
+        // k, Esc, Back and the header all still work, and the next article is a new boundary.
+        <ErrorBoundary key={article.id} fallback={(retry) => <RouteFailed onRetry={retry} />}>
+          <Reader
+            article={article}
+            readingLang={readingLang}
+            mode={mode}
+            onMode={onMode}
+            onClose={close}
+            next={next}
+            listName={listName}
+          />
+        </ErrorBoundary>
       ) : open && !synced ? (
         // The first sync has not landed yet: the article is on its way, not gone.
         <ReaderPaneSkeleton />
