@@ -1,4 +1,4 @@
-import { type SyntheticEvent, useRef, useState } from 'react'
+import { type SyntheticEvent, useEffect, useRef, useState } from 'react'
 import { usePopover } from '../lib/use-popover'
 
 /**
@@ -61,6 +61,22 @@ export function useHeaderMenu() {
     shut()
     if (by === 'escape') summary()?.focus()
   }
+  // React hears that it opened from the toggle event, which comes a task later, and `usePopover`
+  // listens only once that render is in: an Esc pressed in between found nothing listening and
+  // left the menu open. Until React knows, Esc reads the element itself as it is pressed.
+  const known = useRef(open)
+  known.current = open
+  useEffect(() => {
+    const onEscape = (e: KeyboardEvent) => {
+      const el = box.current
+      if (e.key !== 'Escape' || known.current || !el?.open) return
+      e.preventDefault()
+      el.open = false
+      el.querySelector('summary')?.focus()
+    }
+    document.addEventListener('keydown', onEscape, true)
+    return () => document.removeEventListener('keydown', onEscape, true)
+  }, [])
   const onToggle = (e: SyntheticEvent<HTMLDetailsElement>) => setOpen(e.currentTarget.open)
   return { box, onToggle, close }
 }
