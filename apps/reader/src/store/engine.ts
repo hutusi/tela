@@ -10,6 +10,7 @@
  *   (pending mutations are stored). A change held back for an Undo (the store's `holdMs`) goes
  *   when its toast goes, or with the rest when the tab is hidden or closed or the member signs out
  *   (`flush`), whichever is first.
+ * - A call that has not answered in 30 s, body included, is given up like a failed one.
  * - A 401 means the session is gone; a 409 means this app is older than the protocol, or that
  *   another tab signed in as someone else. Each call names the account the tab holds, and its
  *   answer is taken only while the tab still holds it (the store's epoch).
@@ -28,6 +29,14 @@ export type EngineEvents = {
 const PULL_EVERY_MS = 60_000
 const PUSH_DEBOUNCE_MS = 250
 const MAX_BACKOFF_MS = 60_000
+/**
+ * A sync call not answered by then, its body included, is given up and tried again later. One
+ * that stalls (a captive portal, a connection the network dropped without saying) would otherwise
+ * hold `pulling` or `pushing` until a reload, and every later pull and push would wait behind it.
+ * Giving up a push is safe: each change is guarded by its id, so one that did arrive is not
+ * applied twice when it is sent again.
+ */
+export const SYNC_TIMEOUT_MS = 30_000
 
 export class SyncEngine {
   private pulling: Promise<void> | null = null
@@ -44,6 +53,7 @@ export class SyncEngine {
   constructor(
     private readonly store: LocalStore,
     private readonly events: EngineEvents,
+    private readonly timeoutMs = SYNC_TIMEOUT_MS,
   ) {
     store.onMutation = () => this.schedulePush()
     // The device database refused a write: another tab holds its copy now.
@@ -145,7 +155,11 @@ export class SyncEngine {
           if (owner === null) break
           let more = true
           while (more && this.store.epoch === epoch) {
-            const res = await api(`/api/v1/sync?cursor=${this.store.cursor}`, { member: owner })
+            // One signal for the request and its body: a page can stall after its headers too.
+            const res = await api(`/api/v1/sync?cursor=${this.store.cursor}`, {
+              member: owner,
+              signal: AbortSignal.timeout(this.timeoutMs),
+            })
             if (!res.ok) throw new Error(`pull ${res.status}`)
             const body = (await res.json()) as PullResponse
             // Asked to start over, by a table the server sends again after leaving it out.
@@ -195,6 +209,7 @@ export class SyncEngine {
       const res = await api('/api/v1/mutations', {
         body: { mutations: batch },
         member: owner,
+        signal: AbortSignal.timeout(this.timeoutMs),
         ...(options.keepalive ? { keepalive: true } : {}),
       })
       if (!res.ok) throw new Error(`push ${res.status}`)
