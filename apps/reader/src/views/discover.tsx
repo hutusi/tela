@@ -76,6 +76,7 @@ export function DiscoverView({
       {pages > 1 && (
         <nav
           className="mt-8 flex items-center justify-center gap-5 text-[13px]"
+          aria-label={t('pager.page', { page: params.page, pages })}
           data-testid="discover-pager"
         >
           {params.page > 1 ? (

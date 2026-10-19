@@ -288,3 +288,24 @@ test('u undoes from any page that shows the toast, and is a letter in a field', 
   await toast.getByTestId('toast-action').click()
   await expect(row).toHaveCount(1)
 })
+
+test('the first Tab offers to skip the header, which says which page is current', async ({
+  page,
+}) => {
+  await page.goto('/discover')
+  await expect(page.getByRole('navigation', { name: 'Tela' })).toBeVisible()
+  await expect(page.getByTestId('nav-discover')).toHaveAttribute('aria-current', 'page')
+  expect(await page.getByTestId('nav-reading').getAttribute('aria-current')).toBeNull()
+  await page.keyboard.press('Tab')
+  const skip = page.getByTestId('skip-link')
+  await expect(skip).toBeFocused()
+  await expect(skip).toHaveText('Skip to content')
+  await page.keyboard.press('Enter')
+  await expect(skip).not.toBeFocused()
+  // The next Tab is on the page, past the header's pills and controls.
+  await page.keyboard.press('Tab')
+  expect(await page.evaluate(() => document.activeElement?.closest('header') ?? null)).toBeNull()
+  expect(await page.evaluate(() => (document.activeElement?.closest('main') ? 'main' : null))).toBe(
+    'main',
+  )
+})

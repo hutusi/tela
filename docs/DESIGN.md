@@ -108,7 +108,11 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
   visitor's theme and language are in the footer), and the member's avatar (30px: their
   picture, or their initial on the accent). The circle sets a member's interface language, and the translation
   follows it, until Settings → Language sets the two apart (ADR 0040). Pills are ink in every
-  state: the active one is distinguished by its `hover` background alone, never by colour.
+  state: the active one is distinguished by its `hover` background alone, never by colour, and
+  says so with `aria-current="page"`. The nav is labelled "Tela" (`app.name`). Before the lockup,
+  a *Skip to content* button (`nav.skip`, `SkipLink`) is the first Tab stop: out of sight until it
+  has focus, then an `ink` pill over the header's left end, never in its row; it focuses whatever
+  follows the header, so the next Tab lands on the page.
 - A visitor's header (ADR 0035) is its own, shown as soon as the device is known to hold no
   member (a guest, or a session still `unknown` with no stored account), so it never waits for
   `/me`. From `sm` up: the lockup, the Discover and *For writers* pills, then the theme menu, the

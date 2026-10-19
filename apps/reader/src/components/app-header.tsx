@@ -30,6 +30,41 @@ const NAV =
   'flex min-w-0 gap-0.5 overflow-x-auto whitespace-nowrap text-sm sm:gap-1 lg:shrink-0 [scrollbar-width:none]'
 const CONTROLS = 'flex shrink-0 items-center gap-2'
 
+/**
+ * The header's first stop for a keyboard: past the header to the page under it. Shown only while
+ * it has focus, and then over the header rather than in its row, which has no width to spare.
+ * The page is whatever follows the header (the routes, or the edge's view), so it needs no id
+ * of its own: focusing it puts the next Tab on the page's first control. A button, since it
+ * moves focus rather than going anywhere.
+ */
+function SkipLink() {
+  const t = useTranslations('nav')
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        const page = e.currentTarget.closest('header')?.nextElementSibling
+        if (!(page instanceof HTMLElement)) return
+        if (!page.hasAttribute('tabindex')) page.setAttribute('tabindex', '-1')
+        // The page itself takes no ring (styles.css): the next Tab is what shows.
+        page.setAttribute('data-skip-target', '')
+        page.focus()
+      }}
+      // Styled in styles.css: `sr-only focus:not-sr-only focus:absolute` sets `position` twice
+      // under one variant, and which wins would be Tailwind's emission order (AGENTS.md).
+      className="skip-link"
+      data-testid="skip-link"
+    >
+      {t('skip')}
+    </button>
+  )
+}
+
+/** The header's pills, named for a screen reader's list of landmarks. */
+function useNavLabel(): string {
+  return useTranslations('app')('name')
+}
+
 function Lockup() {
   return (
     <Link
@@ -72,6 +107,8 @@ function usePill() {
   return (key: NavKey, href: string) => (
     <Link
       to={href}
+      // Said as well as shown: the `hover` ground alone tells nothing to a screen reader.
+      aria-current={active === key ? 'page' : undefined}
       data-testid={`nav-${key}`}
       className={`rounded-full px-2.5 py-1.5 font-medium text-ink hover:bg-hover hover:no-underline sm:px-3 ${active === key ? 'bg-hover' : ''}`}
     >
@@ -99,10 +136,12 @@ function VisitorHeader() {
     e.preventDefault()
     door(request)
   }
+  const label = useNavLabel()
   return (
     <header className={HEADER}>
+      <SkipLink />
       <Lockup />
-      <nav className={NAV}>
+      <nav className={NAV} aria-label={label}>
         {pill('discover', '/discover')}
         {pill('writers', '/writers')}
       </nav>
@@ -143,12 +182,14 @@ function MemberHeader() {
   const pill = usePill()
   const t = useTranslations('nav')
   const member = status === 'member'
+  const label = useNavLabel()
   const query =
     location.pathname === '/search' ? (new URLSearchParams(location.search).get('q') ?? '') : ''
   return (
     <header className={HEADER}>
+      <SkipLink />
       <Lockup />
-      <nav className={NAV}>
+      <nav className={NAV} aria-label={label}>
         {pill('reading', '/reading')}
         {pill('discover', '/discover')}
         {member ? pill('following', '/following') : null}

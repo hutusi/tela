@@ -28,7 +28,8 @@
     "subscriptions": "Abonnements",
     "invites": "Inviter des proches",
     "writers": "Pour les auteurs",
-    "themeIs": "Thème : {theme}"
+    "themeIs": "Thème : {theme}",
+    "skip": "Aller au contenu"
   },
   "menu": {
     "language": "Langue",
