@@ -242,6 +242,11 @@ Every `/api/v1/*` route but the public ones and `/api/v1/join` needs a session, 
 signed five-minute cookie cache; `/api/v1/account/*` reads it from D1 again, so a session ended
 elsewhere changes nothing there. Reader actions are rate-limited per member (`action_limits`).
 
+No request body is read past 64 KB, a push past 1 MB (`bodyCap` in `src/app.ts`), a 413
+`too_large` before any route sees it; the picture, an OPML file (1 MB) and a hub's notification
+(5 MB) read their own no further than their own caps. A route nobody serves is a JSON 404, and a
+failure a JSON 500 `internal`, logged with its path, `cf-ray` and member.
+
 ## The edge (`apps/reader/worker`, tela-web)
 
 The only public Worker, unpinned, with no D1.
