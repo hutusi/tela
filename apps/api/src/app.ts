@@ -10,6 +10,7 @@ import {
   MIN_CLIENT,
   NAMES_MEMBER_SINCE,
   pushSchema,
+  TITLE_IDS_MAX,
 } from '@tela/sync'
 import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -100,9 +101,6 @@ function protocolOf(header: string | undefined): number {
 
 /** A client older than the protocol is told to reload, not left misreading rows. */
 const tooOld = (header: string | undefined) => protocolOf(header) < MIN_CLIENT
-
-/** The most posts one request for titles may name (`POST /api/v1/sync/titles`, ADR 0052). */
-export const TITLE_IDS_MAX = 1000
 
 /** The most any request body may hold unless its route says otherwise: every JSON call is small. */
 export const BODY_MAX_BYTES = 64 * 1024

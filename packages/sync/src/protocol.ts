@@ -21,6 +21,12 @@ export const HORIZON_DAYS = 30
 export const PAGE_ROWS = 1000
 
 /**
+ * The most posts one request for titles may name (`POST /api/v1/sync/titles`, ADR 0052): tela-api
+ * refuses more, and the device asks for this many at a time.
+ */
+export const TITLE_IDS_MAX = 1000
+
+/**
  * Oldest client the API still speaks to. A member call from an older one is answered 409
  * `upgrade`, so a stale cached app shell reloads instead of misreading rows or acting for the
  * wrong account (the shell is cached, ADR 0025).
