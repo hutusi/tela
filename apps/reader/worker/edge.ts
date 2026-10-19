@@ -29,6 +29,7 @@ import { isBlockedHost } from '@tela/ingest/net'
 import type { Blobs } from '@tela/platform'
 import { getCookieCache } from 'better-auth/cookies'
 import { safeDecode } from '../src/lib/safe-decode'
+import { withSecurityHeaders } from './security'
 
 export type EdgeCache = {
   match(key: Request): Promise<Response | undefined>
@@ -599,6 +600,11 @@ export function createEdge(deps: EdgeDeps) {
       if (config.privateBeta && !response.headers.has('x-robots-tag')) {
         response = new Response(response.body, response)
         response.headers.set('x-robots-tag', 'noindex, nofollow')
+      }
+      // Every page this Worker answers, rendered, cached, the plain shell or a member's `/`,
+      // carries what `_headers` gives the pages it never sees (ADR 0051).
+      if ((response.headers.get('content-type') ?? '').includes('text/html')) {
+        response = withSecurityHeaders(response)
       }
       return response
     },

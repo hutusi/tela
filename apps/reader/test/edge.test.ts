@@ -20,6 +20,7 @@ import type {
   WeekData,
 } from '../src/views/types'
 import { createEdge, type EdgeCache, type PublicPages } from '../worker/edge'
+import { SECURITY_HEADERS } from '../worker/security'
 
 const KEY = 'a'.repeat(32)
 const OTHER = 'b'.repeat(32)
@@ -405,6 +406,41 @@ describe('everything else', () => {
   test('in private beta nothing is indexed', async () => {
     expect(await (await get('/robots.txt', null)).text()).toBe('User-agent: *\nDisallow: /\n')
     expect((await get('/api/health', null)).headers.get('x-robots-tag')).toBe('noindex, nofollow')
+  })
+})
+
+describe('security headers (ADR 0051)', () => {
+  const has = (res: Response) =>
+    Object.entries(SECURITY_HEADERS).every(([name, value]) => res.headers.get(name) === value)
+
+  test('every page the Worker answers carries them, from the cache too', async () => {
+    await listedBlog(1, 'Garden Notes')
+    const visit = (path: string, headers: Record<string, string> = {}) =>
+      edge.fetch(new Request(`${ORIGIN}${path}`, { headers }))
+    expect(has(await visit('/discover/blogs'))).toBe(true) // rendered
+    expect(has(await visit('/discover/blogs'))).toBe(true) // the colo's copy
+    expect(has(await visit('/about'))).toBe(true) // no data at all
+    expect(has(await visit('/', { cookie }))).toBe(true) // a member's plain shell
+    expect(has(await visit('/s/999'))).toBe(true) // a 404 page
+    // tela-api down: the plain shell.
+    const down = createEdge({
+      blobs,
+      api: { fetch: async () => new Response('down', { status: 503 }) },
+      assets: {
+        fetch: async () => new Response(TEMPLATE, { headers: { 'content-type': 'text/html' } }),
+      },
+      pages: pages as unknown as PublicPages,
+      cache: memoryCache(),
+      fetchImage: async () => new Response('nope', { status: 404 }),
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+    })
+    expect(has(await down.fetch(new Request(`${ORIGIN}/discover/blogs`)))).toBe(true)
+  })
+
+  test('what is no page does without them', async () => {
+    const json = await get('/api/health', null)
+    expect(json.headers.get('content-security-policy-report-only')).toBeNull()
+    expect((await get(`/o/c/${KEY}.json`)).headers.get('x-frame-options')).toBeNull()
   })
 })
 

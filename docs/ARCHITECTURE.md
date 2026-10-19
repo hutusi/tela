@@ -299,6 +299,10 @@ The only public Worker, unpinned, with no D1.
   (`apps/reader/test/routes.test.ts`) holds every public page to `run_worker_first`.
 - `/about`, `/privacy` and `/terms` are rendered the same way from the bundle alone: their route
   has `api: null`, so the edge asks tela-api nothing and hands nothing over (ADR 0035).
+- Every HTML answer carries the security headers (ADR 0051, `worker/security.ts`): the Worker
+  sets them on what it builds, and `public/_headers` gives the same set to what the asset router
+  serves. The CSP is report-only; HSTS, `nosniff`, Referrer-Policy, Permissions-Policy and
+  `X-Frame-Options: DENY` are enforced. Hashed assets are kept a day in the browser.
 - Everything else is the SPA's static assets, which answer without running the Worker. A path
   with no file is answered 200 with `index.html`, a missing `/assets/*` script included:
   `run_worker_first` is a list, and then the fallback applies to every request, not only
@@ -410,6 +414,9 @@ A Vite + React SPA that renders from the device.
   Gravatar and GitHub's API, are asked with a plain `fetch`, and the GitHub token goes to that
   host only, on no redirect.
 - **Model output is never trusted as HTML:** placeholders must match, text is re-escaped.
+- **Every page carries security headers** (ADR 0051): a content security policy that names the
+  one inline script by its hash (report-only while it proves itself), HSTS, `nosniff`, a referrer
+  policy, a permissions policy and no framing.
 - **Every new account claims an invitation:** better-auth's `user.create.before` admits a user only
   by claiming, in one statement, an invitation its address holds, or on a provider's return the
   invite code its start carried and nothing else, refuses by throwing, and treats a missing endpoint

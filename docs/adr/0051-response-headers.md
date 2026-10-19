@@ -1,4 +1,4 @@
-# 0051 — Response headers: a day of asset caching
+# 0051 — Response headers: a day of asset caching, and security headers
 
 Status: accepted (2026-10-19).
 
@@ -18,8 +18,13 @@ rollback, or in the minutes when a cached shell names files the new deploy remov
 be handed the app's HTML under a script's name; with a year and `immutable` it would keep that
 answer for a year, and boot blank whenever it asked the HTTP cache for that script. The service
 worker already refuses to keep such an answer (`fits` in `sw.js`), but it fetched through the
-browser's cache, so it would have been refused the same answer for as long as the browser kept
+browser's cache, so it would have been handed the same answer for as long as the browser kept
 it.
+
+Nor did any page carry a security header: no Content-Security-Policy, HSTS, `nosniff`,
+Referrer-Policy or anything that stops another site framing Tela. The shell is served by the asset
+router, which the Worker never sees, and the public pages by the Worker, so neither alone could
+add them.
 
 ## Decision
 
@@ -32,10 +37,34 @@ it.
   therefore never waits out the day, and a page asking for the file through the worker gets the
   real one as soon as the network has it. `SHELL` is not bumped: no released worker cached
   anything wrong.
+- **One set of security headers, given two ways** (`SECURITY_HEADERS` in
+  `apps/reader/worker/security.ts`): `public/_headers` gives it to everything the asset router
+  serves (`/*`, the shell at any path), and the edge sets it on every HTML answer it builds (a
+  rendered page, from the colo's cache too, the plain shell when tela-api fails, a member's `/`).
+  `apps/reader/test/security.test.ts` holds `_headers` to the constant.
+- **Enforced from the start:** `Strict-Transport-Security: max-age=31536000` (no
+  `includeSubDomains` until every subdomain is known to serve HTTPS), `X-Content-Type-Options:
+  nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, and a
+  `Permissions-Policy` that turns off the camera, microphone, geolocation, payment, USB and the
+  Topics API.
+- **The CSP is report-only for a week first:** `default-src 'self'`, scripts from `'self'` and the
+  theme script by its hash (never `'unsafe-inline'` for scripts), styles from `'self'` and
+  `'unsafe-inline'` (the views set `style` attributes the edge renders and the app mounts over
+  without hydrating), images from `'self'`, `https://assets.telaread.com` and `blob:` (the
+  picture crop), fonts, fetches, the manifest and the worker from `'self'`, no plugins, no
+  `<base>`, forms to `'self'`, no framing, and `upgrade-insecure-requests` (which browsers ignore
+  until the policy is enforced). The test recomputes the theme script's hash from `index.html`,
+  so a change to that script cannot ship without the policy. The app reports each
+  `securitypolicyviolation` it sees to `/api/client-errors`; once a week of real use reports
+  none, the header becomes `Content-Security-Policy` (a follow-up, not this change).
 
 ## Consequences
 
 - Repeat visits without the worker skip a revalidation per file for a day.
+- A new inline script, an image host or a third-party fetch needs the policy changed in
+  `security.ts` and `_headers` together; until the CSP is enforced it only shows as reports.
+- The HSTS year is cached by every browser that visits: going back to plain HTTP on
+  `telaread.com` is not possible for a year after.
 - A rollback can leave a browser with no worker holding the app's HTML under a script's name for
   up to a day. Such a browser boots blank on that build until the day runs out, or until a
   hard reload. `max-age` is the knob: shorten it before a risky rollback if that is a concern.

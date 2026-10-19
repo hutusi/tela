@@ -501,6 +501,15 @@ is tela-api.
   that HTML for a script boots blank on that build until the day is out or a hard reload; the
   worker asks past the browser's cache itself (`cache: 'reload'`) and is not held up. `curl -I
   https://telaread.com/assets/<a file>` shows `cache-control: public, max-age=86400`.
+- **Security headers** (ADR 0051): every page carries `Content-Security-Policy-Report-Only`,
+  `Strict-Transport-Security`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`
+  and `X-Frame-Options`, from `public/_headers` for the shell and from the Worker for the pages it
+  renders; `curl -I https://telaread.com/` and `curl -I https://telaread.com/reading` both show
+  them. The CSP only reports for now. **Enforcing it is the owner's call**, after a week in which
+  the client-error log shows no `securitypolicyviolation`: rename the header to
+  `Content-Security-Policy` in `worker/security.ts` and `_headers` together, and deploy tela-web.
+  A violation that does show names the directive and the address it blocked: allow the address in
+  both places, or remove what asked for it.
 - **Writes to `/api/*` without this origin get 403** `cross-origin write refused`. Hubs
   (`/api/websub/*`) and the admin script (`/api/admin/*`) are exempt. A browser always sends
   `Origin` on a POST, so seeing this from the app means something is proxying it.
