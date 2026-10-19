@@ -79,7 +79,7 @@ type Props = {
   onMode: (mode: ReadingMode) => void
   onClose: () => void
   /** The post after this one in the list as shown, if any: offered at the end of the article. */
-  next: { href: string; title: string; blog: string } | null
+  next: { href: string; title: string; lang?: string | undefined; blog: string } | null
   /** What the list it was opened from is called: a phone's back bar goes back to it by name. */
   listName: string
 }
@@ -416,6 +416,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
                 <h1
                   className="mb-6 font-serif text-[30px] font-medium leading-[1.12] tracking-tight lg:text-[40px]"
                   style={{ textWrap: 'pretty' }}
+                  lang={showTrans ? titles.lang : sourceLang}
                   data-testid="article-title"
                 >
                   {title}
@@ -532,6 +533,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
               <span
                 className="font-serif text-[19px] font-medium leading-[1.2] tracking-tight"
                 style={{ textWrap: 'pretty' }}
+                lang={next.lang}
               >
                 {next.title}
               </span>

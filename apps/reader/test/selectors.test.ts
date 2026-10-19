@@ -145,6 +145,35 @@ describe('what the reading view shows', () => {
       badge: false,
     })
   })
+
+  test('says which language the title and the excerpt it shows are in', () => {
+    const t = tables({
+      subscriptions: [sub(1)],
+      articles: [article(1, { sourceLang: 'zh-Hant', excerpt: '原文' })],
+      titles: [
+        { articleId: 1, lang: 'en', title: 'One', excerpt: 'Its excerpt', status: 'done', seq: 1 },
+        { articleId: 1, lang: 'fr', title: 'Un', excerpt: null, status: 'done', seq: 1 },
+      ],
+    })
+    const a = article(1, { sourceLang: 'zh-Hant', excerpt: '原文' })
+    expect(shownTitle(t, a, 'en')).toMatchObject({ lang: 'en', excerptLang: 'en' })
+    // A title translated before its excerpt was: the excerpt shows, and is marked, as written.
+    expect(shownTitle(t, a, 'fr')).toMatchObject({
+      title: 'Un',
+      lang: 'fr',
+      excerpt: '原文',
+      excerptLang: 'zh-Hant',
+    })
+    // No translation in the reading language, or one the member never has made: as written.
+    expect(shownTitle(t, a, 'zh-Hans')).toMatchObject({ lang: 'zh-Hant', excerptLang: 'zh-Hant' })
+    expect(shownTitle(t, a, 'en', ['zh-Hant'])).toMatchObject({ title: 'Post 1', lang: 'zh-Hant' })
+    // A post whose language is unknown has none to say.
+    expect(shownTitle(t, article(2, { sourceLang: null }), 'en').lang).toBeUndefined()
+    // One held from a public page says what the link said, in the reading language.
+    expect(
+      shownTitle(t, { ...article(3, { sourceLang: 'ja' }), titles: { en: 'Three' } }, 'en'),
+    ).toMatchObject({ title: 'Three', lang: 'en' })
+  })
 })
 
 describe('what a mark-all-read reads', () => {

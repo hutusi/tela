@@ -433,25 +433,38 @@ export function withoutRead(
 /**
  * A post's title and excerpt as the member reads them: the translation whenever one exists,
  * except in a language the member never has translated (`never`, a pref), which reads as written.
+ * Each comes with the language it is in, for its element's `lang`: without one, Traditional
+ * Chinese takes the page's Simplified glyph forms (or the other way round), and a screen reader
+ * reads Chinese in an English voice. Undefined where the post's language is not known.
  */
 export function shownTitle(
   t: Tables,
   a: ArticleRow & { titles?: Partial<Record<string, string>> },
   readingLang: string,
   never: readonly string[] = [],
-) {
-  if (a.sourceLang !== null && never.includes(a.sourceLang)) {
-    return { title: a.title, excerpt: a.excerpt, badge: false }
+): {
+  title: string
+  excerpt: string | null
+  badge: boolean
+  lang: string | undefined
+  excerptLang: string | undefined
+} {
+  const source = a.sourceLang ?? undefined
+  if (source !== undefined && never.includes(source)) {
+    return { title: a.title, excerpt: a.excerpt, badge: false, lang: source, excerptLang: source }
   }
   const translated = t.titles.get(titleKey(a.id, readingLang))
   // A post held from a public page, whose feed the device does not sync, brings the titles that
   // page showed: the reader opening it says what the link said.
   const title = translated?.title ?? a.titles?.[readingLang] ?? null
+  const excerpt = translated?.excerpt ?? null
   return {
     title: title ?? a.title,
-    excerpt: translated?.excerpt ?? a.excerpt,
+    excerpt: excerpt ?? a.excerpt,
     /** Badge it only when the languages differ and a translation is shown (AGENTS.md). */
-    badge: title !== null && a.sourceLang !== null && a.sourceLang !== readingLang,
+    badge: title !== null && source !== undefined && source !== readingLang,
+    lang: title !== null ? readingLang : source,
+    excerptLang: excerpt !== null ? readingLang : source,
   }
 }
 

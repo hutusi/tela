@@ -257,7 +257,7 @@ export function ArticleList({
           // once the member marks it unread while it is open: opening read it, and that later
           // choice stands until the next open reads it again.
           const read = shownRead(tables, a, now, active, markOnOpen)
-          const { title: rowTitle, excerpt, badge } = shownTitle(tables, a, readingLang, never)
+          const shown = shownTitle(tables, a, readingLang, never)
           return (
             <Row
               key={a.id}
@@ -268,9 +268,11 @@ export function ArticleList({
               read={read}
               name={feedTitle(tables, a.feedId)}
               when={relativeTime(a.publishedAt ?? a.fetchedAt, locale, now)}
-              title={rowTitle}
-              excerpt={excerpt}
-              target={badge ? target : null}
+              title={shown.title}
+              titleLang={shown.lang}
+              excerpt={shown.excerpt}
+              excerptLang={shown.excerptLang}
+              target={shown.badge ? target : null}
             />
           )
         })}
@@ -299,7 +301,10 @@ type RowProps = {
   /** When it was posted, as the list says it ("2h ago"). */
   when: string
   title: string
+  /** The languages the title and excerpt are in (`shownTitle`), for their `lang`. */
+  titleLang: string | undefined
   excerpt: string | null
+  excerptLang: string | undefined
   /** The reading language's badge when the title shown is a translation, else null. */
   target: string | null
 }
@@ -318,7 +323,9 @@ const Row = memo(function Row({
   name,
   when,
   title,
+  titleLang,
   excerpt,
+  excerptLang,
   target,
 }: RowProps) {
   const t = useTranslations('list')
@@ -371,13 +378,17 @@ const Row = memo(function Row({
       </div>
       <h2
         data-row-title
+        lang={titleLang}
         className="m-0 font-serif font-medium leading-[1.2] tracking-tight text-[19px] group-data-[open=1]:text-[15.5px]"
         style={{ textWrap: 'pretty' }}
       >
         {title}
       </h2>
       {excerpt ? (
-        <p className="m-0 line-clamp-2 font-serif text-base leading-[1.4] text-ink-2 group-data-[open=1]:hidden">
+        <p
+          lang={excerptLang}
+          className="m-0 line-clamp-2 font-serif text-base leading-[1.4] text-ink-2 group-data-[open=1]:hidden"
+        >
           {excerpt}
         </p>
       ) : null}

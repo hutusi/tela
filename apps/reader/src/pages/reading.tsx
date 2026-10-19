@@ -150,10 +150,12 @@ export function ReadingPage() {
   // the article offers it, so a pointer reader flows on without going back up to the list.
   const at = article ? items.findIndex((a) => a.id === article.id) : -1
   const after = at === -1 ? undefined : items[at + 1]
+  const nextTitle = after ? shownTitle(tables, after, readingLang, prefs.never) : null
   const next = after
     ? {
         href: readingHref({ ...params, articleId: after.id, mode: null }),
-        title: shownTitle(tables, after, readingLang, prefs.never).title,
+        title: nextTitle?.title ?? after.title,
+        lang: nextTitle?.lang,
         blog: feedTitle(tables, after.feedId) || store.sourceName(after.feedId),
       }
     : null
