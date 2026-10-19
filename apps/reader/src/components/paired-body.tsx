@@ -1,7 +1,8 @@
 import { asLabel, LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
-import { Fragment } from 'react'
+import { Fragment, useMemo } from 'react'
 import { useLocale, useTranslations } from 'use-intl'
 import type { BlockPair } from '../lib/block-pairs'
+import { lazyImages } from '../lib/lazy-images'
 import { Untranslated } from './untranslated'
 
 /** Headings carry their own lead, which `.article-block` zeroes; the row puts it back. */
@@ -38,6 +39,15 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
   const targetName = asLabel(
     (LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en)[targetLang] ?? targetLang,
     locale,
+  )
+  // Both sides' images load as they near the screen, not all as the post opens.
+  const cells = useMemo(
+    () =>
+      pairs.map((pair) => ({
+        original: lazyImages(pair.original),
+        translated: lazyImages(pair.translated),
+      })),
+    [pairs],
   )
 
   return (
@@ -90,7 +100,7 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
               lang={pair.untranslated ? sourceLang : targetLang}
               data-testid="body-translated"
               // biome-ignore lint/security/noDangerouslySetInnerHtml: allowlist-sanitized by @tela/content; model output re-escaped on rehydration (ADR 0005)
-              dangerouslySetInnerHTML={{ __html: pair.translated }}
+              dangerouslySetInnerHTML={{ __html: cells[i]?.translated ?? '' }}
             />
           )
           return (
@@ -105,7 +115,7 @@ export function PairedBody({ pairs, title, originalTitle, targetLang, sourceLang
                 // end is the title above.
                 data-edge-last={i === pairs.length - 1 ? '' : undefined}
                 // biome-ignore lint/security/noDangerouslySetInnerHtml: allowlist-sanitized by @tela/content; model output re-escaped on rehydration (ADR 0005)
-                dangerouslySetInnerHTML={{ __html: pair.original }}
+                dangerouslySetInnerHTML={{ __html: cells[i]?.original ?? '' }}
               />
               {pair.untranslated ? (
                 <Untranslated pending={pair.pending} sourceLang={sourceLang}>

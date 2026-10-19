@@ -30,6 +30,9 @@ export function SiteAvatar({
         alt=""
         width={size}
         height={size}
+        // Lists of blogs run to a hundred favicons (Discover, a blogroll): only those on screen.
+        loading="lazy"
+        decoding="async"
         className={`shrink-0 bg-surface object-cover ${className}`}
         style={{ width: size, height: size, borderRadius: round ? '50%' : radius }}
       />

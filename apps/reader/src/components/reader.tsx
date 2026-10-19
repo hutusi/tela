@@ -15,6 +15,7 @@ import { relativeTime } from '../lib/format'
 import { pointAt, renderedLeaves, type Side } from '../lib/highlight-dom'
 import type { ReadingMode } from '../lib/href'
 import { newId } from '../lib/id'
+import { lazyImages } from '../lib/lazy-images'
 import { useReadingPrefs } from '../lib/prefs'
 import { readerStyle, typographyOf } from '../lib/typography'
 import { useHighlights } from '../lib/use-highlights'
@@ -60,6 +61,8 @@ function Body({
   dir?: 'auto' | undefined
   testId: string
 }) {
+  // Its images load as they near the screen, not all as the post opens.
+  const lazy = useMemo(() => lazyImages(html), [html])
   return (
     <div
       className="article-body"
@@ -67,7 +70,7 @@ function Body({
       dir={dir}
       data-testid={testId}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: allowlist-sanitized by @tela/content; model output re-escaped on rehydration (ADR 0005)
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={{ __html: lazy }}
     />
   )
 }
