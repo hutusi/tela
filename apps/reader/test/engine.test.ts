@@ -394,3 +394,35 @@ describe('a call that never answers', () => {
     expect(calls.slice(0, 2)).toEqual(['/api/v1/mutations', '/api/v1/mutations'])
   })
 })
+
+describe('a pull that brings nothing', () => {
+  test('keeps the tables, and still tells who listens that it answered', async () => {
+    const store = await member()
+    const before = store.getSnapshot()
+    server(() => Response.json(pull(9, {})))
+    const engine = engineFor(store)
+    let heard = 0
+    const stop = engine.onPulled(() => {
+      heard++
+    })
+    await engine.pull()
+    expect(store.cursor).toBe(9)
+    expect(store.getSnapshot()).toBe(before)
+    expect(heard).toBe(1)
+    stop()
+    await engine.pull()
+    expect(heard).toBe(1)
+  })
+
+  test('a pull that failed tells nobody', async () => {
+    const store = await member()
+    server(() => new Response('down', { status: 503 }))
+    const engine = engineFor(store)
+    let heard = 0
+    engine.onPulled(() => {
+      heard++
+    })
+    await engine.pull()
+    expect(heard).toBe(0)
+  })
+})

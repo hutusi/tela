@@ -49,6 +49,8 @@ export class SyncEngine {
   private stopped = false
   /** An event has been told since `start`: any later one is the same news again. */
   private ended = false
+  /** Who hears of each pull that answered (`onPulled`). */
+  private readonly pulled = new Set<() => void>()
 
   constructor(
     private readonly store: LocalStore,
@@ -136,6 +138,18 @@ export class SyncEngine {
     return false
   }
 
+  /**
+   * Hear of each pull that answered, rows or none. A pull that brings nothing leaves the tables
+   * as they were (`LocalStore.applyPull`), so a screen that only watches them never sees it: yet
+   * it is news of its own, that the network is back or the tab is. Returns the unsubscribe.
+   */
+  onPulled(listener: () => void): () => void {
+    this.pulled.add(listener)
+    return () => {
+      this.pulled.delete(listener)
+    }
+  }
+
   /** Pull until caught up. Calls while one runs coalesce into one more pull after it. */
   pull(): Promise<void> {
     if (this.stopped) return Promise.resolve()
@@ -167,6 +181,7 @@ export class SyncEngine {
             more = body.more || again
           }
         } while (this.pullAgain && !this.stopped)
+        for (const heard of this.pulled) heard()
       } catch (err) {
         // Offline or a server hiccup: the next trigger pulls again. Nothing is lost.
         this.fail(err, epoch)

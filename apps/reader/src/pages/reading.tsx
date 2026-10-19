@@ -343,12 +343,13 @@ export function ReadingPage() {
     () => JSON.stringify(prefetchPlan(tables, items, now, readingLang, prefs)),
     [tables, items, now, readingLang, prefs],
   )
-  // On each pull that changes the tables, and each minute, ask again when the device lacks part of
-  // the plan and no run is under way: a run fell short (the network went, a request failed), or
+  // After each pull, and each change to the tables, ask again when the device lacks part of the
+  // plan and no run is under way: a run fell short (the network went, a request failed), or
   // bodies went since (eviction drops bodies not opened for a week, unread ones too, ten seconds
-  // after boot). The plan is the same by then, so nothing else would ask. The minute is `now`: a
-  // pull that brings nothing leaves the tables as they were (`LocalStore.applyPull`), so it is no
-  // longer a reason to look. Asking while the device holds all of it changes nothing.
+  // after boot). The plan is the same by then, so nothing else would ask. A pull that brings
+  // nothing leaves the tables as they were (`LocalStore.applyPull`), so the engine says it pulled
+  // (`onPulled`): that pull is the network coming back. Asking while the device holds all of the
+  // plan changes nothing.
   const [retry, setRetry] = useState(0)
   /** A translation the last run could not fetch: the device keeps no list of those to check. */
   const fellShort = useRef(false)
@@ -358,21 +359,27 @@ export function ReadingPage() {
     controller: AbortController
     done: boolean
   } | null>(null)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: on every pull that changes the tables, and every minute
-  useEffect(() => {
+  /** The look itself, current with this render's plan, for the effect and the engine alike. */
+  const lookAgain = useRef((_cancelled: () => boolean) => {})
+  lookAgain.current = (cancelled) => {
     const last = running.current
     if (last && !last.done) return
-    let cancelled = false
     const { bodies } = JSON.parse(plan) as ReturnType<typeof prefetchPlan>
     void objects.missing(bodies).then((missing) => {
-      if (cancelled || (missing.length === 0 && !fellShort.current)) return
+      if (cancelled() || (missing.length === 0 && !fellShort.current)) return
       fellShort.current = false
       setRetry((n) => n + 1)
     })
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on every change to the tables or the plan
+  useEffect(() => {
+    let cancelled = false
+    lookAgain.current(() => cancelled)
     return () => {
       cancelled = true
     }
-  }, [tables, plan, objects, now])
+  }, [tables, plan, objects])
+  useEffect(() => engine.onPulled(() => lookAgain.current(() => false)), [engine])
   // biome-ignore lint/correctness/useExhaustiveDependencies: `retry` asks again for the same plan
   useEffect(() => {
     const timer = setTimeout(() => {
