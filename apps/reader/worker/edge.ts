@@ -95,6 +95,10 @@ const AVATAR_VERSION = /^\d{1,16}$/
 const AVATAR_MAX_BYTES = 512 * 1024
 const OBJECT_CACHE = 'private, max-age=31536000, immutable'
 const IMAGE_CACHE = 'private, max-age=604800, immutable'
+const IMAGE_EDGE_CACHE = 'public, max-age=604800, immutable'
+/** An image that could not be had, asked for again after ten minutes. */
+const IMAGE_FAILURE_CACHE = 'private, max-age=600'
+const IMAGE_FAILURE_EDGE_CACHE = 'public, max-age=600'
 /** The cache's own namespace: keys are never a URL a reader can request directly. */
 const CACHE_ORIGIN = 'https://tela-edge.cache'
 /** A page that moved (an address from before Discover's tabs): kept a day, by whoever keeps it. */
@@ -216,25 +220,26 @@ export function createEdge(deps: EdgeDeps) {
     )
   }
 
-  async function serveImage(request: Request, contentKey: string, index: number, waiter?: Waiter) {
-    const member = await session(request)
-    if (!member) return text('sign in first', 401)
-    const cacheKey = new Request(`${CACHE_ORIGIN}/img/${contentKey}/${index}`)
-    const hit = await cache.match(cacheKey)
-    if (hit) return withCookies(new Response(hit.body, hit), member.setCookies)
+  /** The image an object names, fetched and checked; or why not, as the status and text to say. */
+  async function fetchImage(
+    contentKey: string,
+    index: number,
+    waiter?: Waiter,
+  ): Promise<{ bytes: Uint8Array<ArrayBuffer>; type: string } | { status: number; why: string }> {
     const stored = await object(`c/${contentKey}.json`, waiter)
-    if (stored === null) return text('not found', 404)
+    if (stored === null) return { status: 404, why: 'not found' }
     const source = (JSON.parse(stored) as { images?: string[] }).images?.[index]
-    if (!source) return text('not found', 404)
+    if (!source) return { status: 404, why: 'not found' }
     let url: URL
     try {
       url = new URL(source)
     } catch {
-      return text('not found', 404)
+      return { status: 404, why: 'not found' }
     }
     if ((url.protocol !== 'http:' && url.protocol !== 'https:') || isBlockedHost(url.hostname)) {
-      return text('forbidden', 403)
+      return { status: 403, why: 'forbidden' }
     }
+    const failed = { status: 502, why: 'upstream failed' }
     let upstream: Response
     try {
       upstream = await deps.fetchImage(url.toString(), {
@@ -243,34 +248,67 @@ export function createEdge(deps: EdgeDeps) {
         redirect: 'follow',
       })
     } catch {
-      return text('upstream failed', 502)
+      return failed
     }
-    if (!upstream.ok || !upstream.body) return text('upstream failed', 502)
+    if (!upstream.ok || !upstream.body) return failed
     const type =
       (upstream.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? ''
     // SVG can carry script; only raster types a browser renders in an <img>.
-    if (!type.startsWith('image/') || type === 'image/svg+xml') return text('not an image', 415)
+    if (!type.startsWith('image/') || type === 'image/svg+xml') {
+      return { status: 415, why: 'not an image' }
+    }
     const declared = Number(upstream.headers.get('content-length') ?? '0')
-    if (declared > IMAGE_MAX_BYTES) return text('too large', 413)
-    // The headers can arrive and the body still break off: a failure, answered and never kept.
+    if (declared > IMAGE_MAX_BYTES) return { status: 413, why: 'too large' }
+    // The headers can arrive and the body still break off: a failure, never kept as an image.
     let bytes: Uint8Array<ArrayBuffer> | null
     try {
       bytes = await readAtMost(upstream.body, IMAGE_MAX_BYTES)
     } catch {
-      return text('upstream failed', 502)
+      return failed
     }
-    if (!bytes) return text('too large', 413)
-    const headers = {
-      'content-type': type,
-      'cache-control': IMAGE_CACHE,
-      'x-content-type-options': 'nosniff',
-      'content-security-policy': "default-src 'none'; sandbox",
-      'x-robots-tag': 'noindex',
+    if (!bytes) return { status: 413, why: 'too large' }
+    return { bytes, type }
+  }
+
+  /**
+   * An image through the colo's cache, failures included: a broken image on a post is asked for
+   * on every view of it, by every reader, and each ask could wait out the ten-second upstream
+   * timeout and press a host that is already failing. A failure is kept ten minutes, at the colo
+   * and in the browser, and then asked again.
+   */
+  async function serveImage(request: Request, contentKey: string, index: number, waiter?: Waiter) {
+    const member = await session(request)
+    if (!member) return text('sign in first', 401)
+    const cacheKey = new Request(`${CACHE_ORIGIN}/img/${contentKey}/${index}`)
+    const hit = await cache.match(cacheKey)
+    if (hit) {
+      const response = new Response(hit.body, hit)
+      response.headers.set('cache-control', hit.ok ? IMAGE_CACHE : IMAGE_FAILURE_CACHE)
+      return withCookies(response, member.setCookies)
     }
-    const put = cache.put(cacheKey, new Response(bytes, { headers }))
+    const image = await fetchImage(contentKey, index, waiter)
+    // The colo's copy says public: Cloudflare's cache does not keep a response marked private.
+    let kept: Response
+    let answer: Response
+    if ('bytes' in image) {
+      const headers = {
+        'content-type': image.type,
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; sandbox",
+        'x-robots-tag': 'noindex',
+      }
+      kept = new Response(image.bytes, {
+        headers: { ...headers, 'cache-control': IMAGE_EDGE_CACHE },
+      })
+      answer = new Response(image.bytes, { headers: { ...headers, 'cache-control': IMAGE_CACHE } })
+    } else {
+      kept = text(image.why, image.status, { 'cache-control': IMAGE_FAILURE_EDGE_CACHE })
+      answer = text(image.why, image.status, { 'cache-control': IMAGE_FAILURE_CACHE })
+    }
+    const put = cache.put(cacheKey, kept)
     if (waiter) waiter.waitUntil(put)
     else await put
-    return withCookies(new Response(bytes, { headers }), member.setCookies)
+    return withCookies(answer, member.setCookies)
   }
 
   /**

@@ -256,7 +256,9 @@ The only public Worker, unpinned, with no D1.
 - `/o/c|t|tc/…` and `/o/bundle` serve immutable objects from R2 to members, cached per colo after
   the session check; raw HTML (`r/`) and backups are never served.
 - `/img/<contentKey>/<i>` proxies the image the content object names: the object is the
-  allowlist. Raster types only, no SVG, 10 MB, cached for seven days.
+  allowlist. Raster types only, no SVG, 10 MB, cached for seven days; a failure (the host's
+  error or timeout, a private host, no such image) is cached ten minutes, at the colo and in the
+  browser, so a broken image is not asked for on every view.
 - `/avatar/<userId>?v=<n>` is a member's picture (ADR 0032), from tela-api's
   `/api/v1/public/avatars/:userId`, cached per colo for as long as tela-api says (30 days for a
   picture, since the version is in the address). Public, and it asks tela-api nothing for an

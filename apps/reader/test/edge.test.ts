@@ -238,10 +238,55 @@ describe('the image proxy', () => {
           { headers: { 'content-type': 'image/png' } },
         ),
     })
-    expect((await get(`/img/${KEY}/0`)).status).toBe(502)
-    // Not kept: the next request asks the image's host again.
-    expect((await get(`/img/${KEY}/0`)).status).toBe(502)
-    expect(fetched).toEqual(['https://img.example/a.png', 'https://img.example/a.png'])
+    const first = await get(`/img/${KEY}/0`)
+    expect(first.status).toBe(502)
+    // Kept as a failure for ten minutes, never as an image: the host is not asked again meanwhile.
+    expect(first.headers.get('cache-control')).toBe('private, max-age=600')
+    const again = await get(`/img/${KEY}/0`)
+    expect(again.status).toBe(502)
+    expect(again.headers.get('cache-control')).toBe('private, max-age=600')
+    expect(fetched).toEqual(['https://img.example/a.png'])
+  })
+
+  test('every failure is kept ten minutes at the colo, and an image a week, both public there', async () => {
+    images.push({
+      url: 'https://img.example/a.png',
+      response: () => new Response('gone', { status: 404 }),
+    })
+    const stored: Record<string, string | null> = {}
+    const put = cache.put.bind(cache)
+    cache.put = async (key, response) => {
+      stored[new URL(key.url).pathname] = response.headers.get('cache-control')
+      return put(key, response)
+    }
+    expect((await get(`/img/${KEY}/0`)).status).toBe(502) // the host's 404
+    expect((await get(`/img/${KEY}/2`)).status).toBe(403) // a private host
+    expect((await get(`/img/${KEY}/9`)).status).toBe(404) // no such image
+    expect(stored).toMatchObject({
+      [`/img/${KEY}/0`]: 'public, max-age=600',
+      [`/img/${KEY}/2`]: 'public, max-age=600',
+      [`/img/${KEY}/9`]: 'public, max-age=600',
+    })
+    for (const i of [0, 2, 9]) await get(`/img/${KEY}/${i}`)
+    expect(fetched).toEqual(['https://img.example/a.png'])
+
+    images.length = 0
+    images.push({
+      url: 'https://img.example/c.png',
+      response: () =>
+        new Response(new Uint8Array([1]), { headers: { 'content-type': 'image/png' } }),
+    })
+    await blobs.put(
+      `c/${OTHER}.json`,
+      JSON.stringify({ key: OTHER, blocks: [], images: ['https://img.example/c.png'] }),
+    )
+    const image = await get(`/img/${OTHER}/0`)
+    expect(image.headers.get('cache-control')).toBe('private, max-age=604800, immutable')
+    expect(stored[`/img/${OTHER}/0`]).toBe('public, max-age=604800, immutable')
+    // From the colo, the browser is told what it always was.
+    const hit = await get(`/img/${OTHER}/0`)
+    expect(hit.headers.get('cache-control')).toBe('private, max-age=604800, immutable')
+    expect(fetched.filter((u) => u.endsWith('c.png'))).toHaveLength(1)
   })
 })
 
