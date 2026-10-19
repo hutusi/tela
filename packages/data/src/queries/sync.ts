@@ -19,7 +19,8 @@
  * the subscription, so their seqs are below the cursor.
  *
  * Titles come in every launch language unless the device names one (`titlesLang`, ADR 0052): it
- * shows only its reading language, and the others were most of a snapshot.
+ * shows only its reading language, and the others were most of a snapshot. When that language
+ * changes, the device asks for the new one's titles of the posts it holds (`readTitles`).
  */
 import type { SQL } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
@@ -122,16 +123,25 @@ function siteColumns(userId: string): SQL {
     s.translation_opt_out as "translationOptOut", s.seq`
 }
 
-/** The subqueries a pull is built from, for one member. */
-function scope(userId: string, horizon: number, cursor: number) {
+/**
+ * The shared rows a member reads, whatever the cursor: the feeds they follow (one bound
+ * parameter) and the articles they keep (three, in a three-term union).
+ */
+function held(userId: string) {
   const activeFeeds = sql`select feed_id from subscriptions where user_id = ${userId} and deleted_at is null`
-  /** Feeds subscribed (or resubscribed) since the cursor: their horizon comes whole. */
-  const newFeeds = sql`select feed_id from subscriptions
-    where user_id = ${userId} and deleted_at is null and seq > ${cursor}`
   /** Articles kept whatever their feed: liked, recommended or highlighted by the member. */
   const kept = sql`select article_id from user_article_states where user_id = ${userId} and liked_at is not null
     union select article_id from recommendations where user_id = ${userId} and deleted_at is null
     union select article_id from highlights where user_id = ${userId} and deleted_at is null`
+  return { activeFeeds, kept }
+}
+
+/** The subqueries a pull is built from, for one member. */
+function scope(userId: string, horizon: number, cursor: number) {
+  const { activeFeeds, kept } = held(userId)
+  /** Feeds subscribed (or resubscribed) since the cursor: their horizon comes whole. */
+  const newFeeds = sql`select feed_id from subscriptions
+    where user_id = ${userId} and deleted_at is null and seq > ${cursor}`
   /**
    * Posts the member marked unread by hand (ADR 0009). Unread beats the horizon, so a device must
    * hold them while it holds their feed, or each device counts what it happened to keep.
@@ -441,4 +451,28 @@ export async function readPull(
       sites: got.sites,
     },
   }
+}
+
+/**
+ * The title rows of named articles in one language (ADR 0052), as a pull sends them: what a device
+ * asks for when its reading language changes, for the posts it holds, instead of starting over.
+ * Only rows the member's pull would send: of a feed they follow, or of a post they keep, as the
+ * delta's titles are scoped. The caller checks the language and holds `ids` to a request's worth.
+ *
+ * One statement, within D1's limits (AGENTS.md, invariant 4): six bound parameters (the language,
+ * the ids as one JSON array through `json_each`, the member once for the feeds followed and three
+ * times for the posts kept) and one compound, the kept posts' three-term union. Each id is a
+ * lookup of the primary key, (article_id, lang).
+ */
+export async function readTitles(
+  db: TelaDb,
+  options: { userId: string; lang: string; ids: readonly number[] },
+): Promise<RawRow[]> {
+  const { userId, lang, ids } = options
+  if (ids.length === 0) return []
+  const { activeFeeds, kept } = held(userId)
+  return db.all<RawRow>(sql`select ${TITLE} from article_titles t
+    where t.lang = ${lang}
+      and t.article_id in (select value from json_each(${JSON.stringify(ids)}))
+      and (t.feed_id in (${activeFeeds}) or t.article_id in (${kept}))`)
 }

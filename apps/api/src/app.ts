@@ -2,7 +2,7 @@
  * tela-api's routes (ADR 0024). Portable: built from `ApiDeps`, so the Cloudflare entry and the
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
-import { audit, bumpSeq, currentSeq, first, newGroupId, schema } from '@tela/data'
+import { audit, bumpSeq, currentSeq, first, newGroupId, readTitles, schema } from '@tela/data'
 import { isReadingLanguage } from '@tela/shared'
 import {
   CLIENT_HEADER,
@@ -100,6 +100,9 @@ function protocolOf(header: string | undefined): number {
 
 /** A client older than the protocol is told to reload, not left misreading rows. */
 const tooOld = (header: string | undefined) => protocolOf(header) < MIN_CLIENT
+
+/** The most posts one request for titles may name (`POST /api/v1/sync/titles`, ADR 0052). */
+export const TITLE_IDS_MAX = 1000
 
 /** The most any request body may hold unless its route says otherwise: every JSON call is small. */
 export const BODY_MAX_BYTES = 64 * 1024
@@ -362,6 +365,29 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     }
     const pull = await answerPull(deps.db, c.get('member').id, cursor, deps.clock.now(), titles)
     return c.json(pull, 200, { 'cache-control': 'no-store' })
+  })
+
+  /**
+   * The titles of named posts in one language (ADR 0052): what a device asks for when its reading
+   * language changes, for the posts it holds, instead of starting over. `{lang, ids}` answers
+   * `{rows}`, title rows as the pull sends them, only of feeds the member follows or posts they
+   * keep. Behind the same checks as the pull, and the app-wide body limit: 1,000 ids of seven
+   * digits are about 8 KB.
+   */
+  app.post('/api/v1/sync/titles', async (c) => {
+    const body = await c.req.json<{ lang?: unknown; ids?: unknown }>().catch(() => null)
+    const lang = body?.lang
+    if (!isReadingLanguage(lang)) return c.json({ error: 'invalid_titles' }, 400)
+    const ids: unknown = body?.ids
+    if (
+      !Array.isArray(ids) ||
+      ids.length > TITLE_IDS_MAX ||
+      !ids.every((id) => Number.isSafeInteger(id) && id > 0)
+    ) {
+      return c.json({ error: 'invalid_ids' }, 400)
+    }
+    const rows = await readTitles(deps.db, { userId: c.get('member').id, lang, ids })
+    return c.json({ rows }, 200, { 'cache-control': 'no-store' })
   })
 
   app.post('/api/v1/mutations', async (c) => {

@@ -47,7 +47,7 @@ import {
 import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates, fileImportedFeeds, writeImportFiling } from './queries/reader'
 import { DISCOVER_REVIEW, publicReaderCount, recountReaders } from './queries/sites'
-import { readPull } from './queries/sync'
+import { readPull, readTitles } from './queries/sync'
 import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
 import { feeds, sites } from './schema'
 import { bumpSeq, currentSeq, headSeq } from './seq'
@@ -424,6 +424,39 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       expect(titles(second)).toEqual(['2:fr', '3:fr'])
       expect(second.pageEnd).toBe(null)
       expect(second.head).toBe(afterArticles + 3)
+    })
+
+    it('reads the titles of named posts in one language, of those the member holds (ADR 0052)', async () => {
+      const db = await makeDb()
+      n = 0
+      await setup(db)
+      await articlesInOneBatch(db, 2)
+      // Feed 2 is not followed: post 3 is not the member's, post 4 is, liked.
+      await db.batch([
+        bumpSeq(db),
+        db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+            updated_at, seq)
+          values (2, 1, 'https://h2/feed.xml', 'h2', 0, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into articles (id, feed_id, dedup_key, fetched_at, sort_at, seq)
+          values (3, 2, 'k3', ${T0}, ${T0}, ${currentSeq}), (4, 2, 'k4', ${T0}, ${T0}, ${currentSeq})`),
+        db.run(sql`insert into user_article_states (user_id, article_id, liked_at, liked_updated_at,
+            seq)
+          values (${member}, 4, ${T0}, ${T0}, ${currentSeq})`),
+        db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status,
+            source_hash, updated_at, seq)
+          select a.id, l.value, a.feed_id, l.value || ' ' || a.id, 'done', 'h', 0, ${currentSeq}
+          from articles a, json_each('["en","fr"]') l where true`),
+      ] as never)
+      const keys = async (lang: string, ids: number[]) =>
+        (await readTitles(db, { userId: member, lang, ids }))
+          .map((t) => `${t.articleId}:${t.lang}`)
+          .sort()
+
+      expect(await keys('fr', [1, 2, 3, 4, 5])).toEqual(['1:fr', '2:fr', '4:fr'])
+      expect(await keys('fr', [])).toEqual([])
+      // A thousand ids are one bound parameter.
+      const many = Array.from({ length: 1000 }, (_, i) => i + 1)
+      expect(await keys('en', many)).toEqual(['1:en', '2:en', '4:en'])
     })
   })
 

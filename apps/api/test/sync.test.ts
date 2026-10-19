@@ -23,6 +23,7 @@ import {
   privacyChange,
   privacyUnsettled,
   settle,
+  type TitleRow,
   view,
 } from '@tela/sync'
 import { sql } from 'drizzle-orm'
@@ -393,6 +394,96 @@ describe('pull', () => {
       expect(res.reset).toBe(true)
       expect(res.titlesLang).toBe('zh-Hans')
       expect(titlesOf(res)).toEqual([`${a}:zh-Hans`])
+    })
+
+    describe('of named posts, when the reading language changes', () => {
+      const fetchTitles = (body: unknown, as: SignedIn | null = reader) =>
+        api.request('/api/v1/sync/titles', as ? { body, as } : { body, cookie: reader.cookie })
+      const titlesFor = async (lang: string, ids: number[]) => {
+        const res = await fetchTitles({ lang, ids })
+        expect(res.status).toBe(200)
+        return (await res.json()) as { rows: TitleRow[] }
+      }
+      const keysOf = (rows: TitleRow[]) => rows.map((t) => `${t.articleId}:${t.lang}`).sort()
+
+      test("only what the member's pull would send: a feed followed, a post kept", async () => {
+        const other = await signedIn(api, 'other@x.test')
+        await push([{ type: 'subscribe', feedId: 1 }])
+        await push([{ type: 'subscribe', feedId: 2 }], other)
+        const followed = await addArticle(1)
+        const untranslated = await addArticle(1)
+        const othersOnly = await addArticle(2)
+        const liked = await addArticle(2)
+        await addTitles(followed, 1, ALL)
+        await addTitles(untranslated, 1, ['en'])
+        await addTitles(othersOnly, 2, ALL)
+        await addTitles(liked, 2, ALL)
+        await push([{ type: 'setLiked', articleId: liked, liked: true }])
+
+        const asked = [followed, untranslated, othersOnly, liked, 9999]
+        const { rows } = await titlesFor('fr', asked)
+        expect(keysOf(rows)).toEqual([`${followed}:fr`, `${liked}:fr`])
+        // In the pull's shape, row for row: what a snapshot in that language would have sent.
+        const sort = (r: TitleRow[]) => [...r].sort((x, y) => x.articleId - y.articleId)
+        expect(sort(rows)).toEqual(sort((await pullIn(0, 'fr')).rows.titles))
+        expect(rows.find((t) => t.articleId === followed)).toEqual({
+          articleId: followed,
+          lang: 'fr',
+          title: `fr: Post ${followed}`,
+          excerpt: null,
+          status: 'done',
+          seq: expect.any(Number),
+        })
+        // The other member asks for the same posts and gets their own.
+        const theirs = await fetchTitles({ lang: 'fr', ids: asked }, other)
+        expect(keysOf(((await theirs.json()) as { rows: TitleRow[] }).rows)).toEqual([
+          `${othersOnly}:fr`,
+          `${liked}:fr`,
+        ])
+      })
+
+      test('no posts named, no rows', async () => {
+        expect(await titlesFor('en', [])).toEqual({ rows: [] })
+      })
+
+      test('a language outside the launch set is refused', async () => {
+        for (const body of [
+          { lang: 'de', ids: [1] },
+          { lang: 'zh', ids: [1] },
+          { ids: [1] },
+          null,
+        ]) {
+          const res = await fetchTitles(body)
+          expect(res.status).toBe(400)
+          expect(await res.json()).toEqual({ error: 'invalid_titles' })
+        }
+      })
+
+      test('more than 1,000 posts, or anything but post ids, is refused', async () => {
+        const ids = (n: number) => Array.from({ length: n }, (_, i) => 1_000_000 + i)
+        expect((await titlesFor('en', ids(1000))).rows).toEqual([])
+        for (const bad of [ids(1001), [0], [-1], [1.5], ['1'], [null], 'x', null, undefined]) {
+          const res = await fetchTitles({ lang: 'en', ids: bad })
+          expect(res.status).toBe(400)
+          expect(await res.json()).toEqual({ error: 'invalid_ids' })
+        }
+      })
+
+      test('behind the same checks as the pull', async () => {
+        const body = { lang: 'en', ids: [1] }
+        const anonymous = await api.request('/api/v1/sync/titles', { body })
+        expect(anonymous.status).toBe(401)
+        const old = await fetchTitles(body, null)
+        expect(old.status).toBe(409)
+        expect(await old.json()).toEqual({ error: 'upgrade' })
+        const someoneElse = await api.request('/api/v1/sync/titles', {
+          body,
+          as: reader,
+          headers: { [MEMBER_HEADER]: 'u_someone_else' },
+        })
+        expect(someoneElse.status).toBe(409)
+        expect(await someoneElse.json()).toEqual({ error: 'account_changed' })
+      })
     })
   })
 })

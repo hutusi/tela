@@ -223,6 +223,13 @@ const OPML = `<?xml version="1.0"?><opml version="2.0"><head><title>s</title></h
 /** Every authenticated /api/v1 route but /me, each as a request that does something for b. */
 const MEMBER_ROUTES: MemberRoute[] = [
   { route: 'GET /api/v1/sync', path: '/api/v1/sync?cursor=0', effect: 'reads' },
+  // A new reading language's titles, by post (ADR 0052).
+  {
+    route: 'POST /api/v1/sync/titles',
+    path: '/api/v1/sync/titles',
+    body: () => ({ lang: 'fr', ids: [1] }),
+    effect: 'reads',
+  },
   // The admin console (ADR 0039): b is an admin.
   {
     route: 'POST /api/v1/admin/act',
