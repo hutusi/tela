@@ -1,4 +1,6 @@
+import { type RefObject, useId } from 'react'
 import { useTranslations } from 'use-intl'
+import { ResponsiveDialog } from './modal'
 
 type What =
   | 'next'
@@ -27,17 +29,32 @@ const KEYS: [string, What][] = [
   ['?', 'help'],
 ]
 
-/** What the keys do on /reading (`?` shows it; Esc or the button hides it). */
-export function Shortcuts({ onClose }: { onClose: () => void }) {
+/**
+ * What the keys do on /reading (`?` shows it; Esc or the button hides it). A dialog like any
+ * other (`ResponsiveDialog`): focus goes into it, and back to where `?` was pressed as it closes;
+ * a floating card had left focus behind it, and Esc to the page.
+ */
+export function Shortcuts({
+  opener,
+  onClose,
+}: {
+  /** What had focus as `?` was pressed. */
+  opener: RefObject<HTMLElement | null>
+  onClose: () => void
+}) {
   const t = useTranslations('keys')
+  const titleId = useId()
   return (
-    <div
-      role="dialog"
-      aria-label={t('title')}
-      data-testid="shortcuts"
-      className="fixed left-1/2 top-24 z-30 w-72 -translate-x-1/2 rounded-xl border border-line bg-surface p-5 shadow-[0_16px_40px_rgba(0,0,0,.16)] animate-fade"
+    <ResponsiveDialog
+      labelledBy={titleId}
+      opener={opener}
+      onClose={onClose}
+      testId="shortcuts"
+      width="w-[min(320px,calc(100vw-32px))]"
     >
-      <h2 className="mb-3 font-serif text-[20px] font-medium">{t('title')}</h2>
+      <h2 id={titleId} className="mt-0 mb-3 font-serif text-[20px] font-medium">
+        {t('title')}
+      </h2>
       <dl className="m-0 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-[13.5px]">
         {KEYS.map(([key, what]) => (
           <div key={key} className="contents">
@@ -50,13 +67,15 @@ export function Shortcuts({ onClose }: { onClose: () => void }) {
           </div>
         ))}
       </dl>
-      <button
-        type="button"
-        onClick={onClose}
-        className="mt-4 rounded-full border border-line px-3.5 py-1.5 text-[13px] hover:border-ink"
-      >
-        {t('dismiss')}
-      </button>
-    </div>
+      <div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-4 rounded-full border border-line px-3.5 py-1.5 text-[13px] hover:border-ink"
+        >
+          {t('dismiss')}
+        </button>
+      </div>
+    </ResponsiveDialog>
   )
 }

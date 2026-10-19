@@ -74,6 +74,7 @@
       "deadLetters": "過去一天未處理的死信",
       "stuckBodies": "等待翻譯超過 30 分鐘的成員",
       "extractionBacklog": "等待全文超過 6 小時的文章",
+      "tickErrors": "上一次排程未能認領的任務類別",
       "backupAge": "距上次備份",
       "backupVerified": "上次備份已校驗"
     },

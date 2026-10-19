@@ -119,7 +119,7 @@ function AccountPanel({ id, done, chosen }: { id: string; done: () => void; chos
   return (
     <div
       id={id}
-      className="fixed top-16 right-2 left-2 z-[7] flex max-h-[calc(100dvh-72px)] animate-fade flex-col overflow-y-auto rounded-[14px] border border-line bg-surface p-1.5 text-[15px] text-ink shadow-[0_12px_32px_rgba(0,0,0,.10)] sm:absolute sm:top-[calc(100%+10px)] sm:right-0 sm:left-auto sm:max-h-[calc(100dvh-61px)] sm:min-w-[220px] sm:rounded-xl sm:text-[13.5px]"
+      className="fixed top-16 right-2 left-2 z-[7] flex max-h-[calc(100dvh-72px)] animate-fade flex-col overflow-y-auto rounded-[14px] border border-line bg-surface p-1.5 text-[15px] text-ink shadow-popover sm:absolute sm:top-[calc(100%+10px)] sm:right-0 sm:left-auto sm:max-h-[calc(100dvh-61px)] sm:min-w-[220px] sm:rounded-xl sm:text-[13.5px]"
       data-testid="account-panel"
       data-view={view}
     >

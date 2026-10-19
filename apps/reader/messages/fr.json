@@ -1,7 +1,6 @@
 {
   "app": {
-    "name": "Tela",
-    "tagline": "Des blogs indépendants, dans toutes les langues."
+    "name": "Tela"
   },
   "common": {
     "quoted": "« {text} »",
@@ -28,7 +27,8 @@
     "subscriptions": "Abonnements",
     "invites": "Inviter des proches",
     "writers": "Pour les auteurs",
-    "themeIs": "Thème : {theme}"
+    "themeIs": "Thème : {theme}",
+    "skip": "Aller au contenu"
   },
   "menu": {
     "language": "Langue",
@@ -970,8 +970,7 @@
     "none": "Aucun résultat pour « {query} ».",
     "sites": "Blogs",
     "articles": "Articles de vos abonnements",
-    "noArticles": "Aucun article de vos abonnements ne correspond.",
-    "signInForArticles": "Connectez-vous pour chercher dans les articles de vos abonnements."
+    "noArticles": "Aucun article de vos abonnements ne correspond."
   },
   "notFound": {
     "title": "Rien ici",

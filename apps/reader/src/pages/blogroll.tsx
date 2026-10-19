@@ -15,6 +15,7 @@ import { useTranslations } from 'use-intl'
 import type { BlogrollPageState } from '../components/blogroll-dialog'
 import { BlogrollNote } from '../components/blogroll-note'
 import { BlogrollOwner } from '../components/blogroll-owner'
+import { LoadFailedPage } from '../components/load-failed'
 import { SubscribeAll } from '../components/subscribe-all'
 import { blogrollPath, isBlogrollId } from '../lib/blogroll-href'
 import { blogLabel } from '../lib/blogrolls'
@@ -54,6 +55,7 @@ export function BlogrollPage() {
   if (heldGone) return <HeldBlogroll id={id} />
   if (own) return <OwnBlogroll id={id} />
   if (loaded.status === 'missing') return <NotFoundPage />
+  if (loaded.status === 'loading' && loaded.failed) return <LoadFailedPage onRetry={loaded.retry} />
   if (!data) return <main className="flex-1" aria-busy="true" />
   return <OthersBlogroll data={data} />
 }

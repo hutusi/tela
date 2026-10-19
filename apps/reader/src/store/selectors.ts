@@ -22,11 +22,53 @@ export function isMarkedUnread(t: Tables, articleId: number): boolean {
 }
 
 export function isRead(t: Tables, a: ArticleRow, now: number): boolean {
+  return readIn(t, a, now)
+}
+
+/** `isRead`, recording in `span` the age it asked about, if it asked. */
+function readIn(t: Tables, a: ArticleRow, now: number, span?: Span): boolean {
   if (t.states.get(a.id)?.readAt != null) return true
   if (isMarkedUnread(t, a.id)) return false
   const sub = t.subscriptions.get(a.feedId)
   if (sub && a.id <= sub.watermarkId) return true
-  return a.fetchedAt < now - HORIZON_DAYS * DAY
+  const horizon = a.fetchedAt + HORIZON_DAYS * DAY
+  return span ? span.past(horizon) : now > horizon
+}
+
+/**
+ * The stretch of time around the instant a list was computed at in which every question it asked
+ * of the clock gets the same answer, so the list does too. The clock enters a list only as "is it
+ * past this instant?": a post turns read by its age at its horizon, and leaves Today a day after
+ * it was posted. Each answer stands until the clock crosses that instant, usually hours away,
+ * where keying the lists on the minute recomputed every one of them over every post each minute,
+ * idle or not (about 80 ms a minute on a device holding 2,700 posts).
+ */
+class Span {
+  /** The answers hold for an instant after `from` and up to `until`, both instants asked about. */
+  private from = Number.NEGATIVE_INFINITY
+  private until = Number.POSITIVE_INFINITY
+  constructor(readonly now: number) {}
+
+  /** Whether `now` is past `instant`, and so whether a later or earlier clock answers alike. */
+  past(instant: number): boolean {
+    if (this.now > instant) {
+      this.from = Math.max(this.from, instant)
+      return true
+    }
+    this.until = Math.min(this.until, instant)
+    return false
+  }
+
+  /** Whether every answer recorded is the same at `now`. */
+  holds(now: number): boolean {
+    return now > this.from && now <= this.until
+  }
+
+  /** Hold no longer than `other`: an answer computed from `other`'s answers. */
+  within(other: Span): void {
+    this.from = Math.max(this.from, other.from)
+    this.until = Math.min(this.until, other.until)
+  }
 }
 
 /**
@@ -136,12 +178,25 @@ export function siteOfFeed(t: Tables, feedId: number): SiteRow | undefined {
 export function feedTitle(t: Tables, feedId: number): string {
   const feed = t.feeds.get(feedId)
   const site = feed ? t.sites.get(feed.siteId) : undefined
-  let sibling = false
-  if (feed)
-    for (const f of t.feeds.values())
-      if (f.siteId === feed.siteId && f.id !== feed.id) sibling = true
+  const sibling = feed !== undefined && (feedsOfSite(t.feeds).get(feed.siteId) ?? 0) > 1
   const name = sibling ? (feed?.title ?? site?.title) : (site?.title ?? feed?.title)
   return name ?? (site ? host(site.homeUrl) : '')
+}
+
+const siteCounts = new WeakMap<Tables['feeds'], Map<number, number>>()
+/**
+ * How many feeds the device holds of each blog, counted once per feeds table: a table is never
+ * changed once a snapshot holds it (a change makes a new one), and every row of a list names its
+ * feed, so scanning every feed per name made a list render quadratic.
+ */
+function feedsOfSite(feeds: Tables['feeds']): Map<number, number> {
+  let counts = siteCounts.get(feeds)
+  if (!counts) {
+    counts = new Map()
+    for (const f of feeds.values()) counts.set(f.siteId, (counts.get(f.siteId) ?? 0) + 1)
+    siteCounts.set(feeds, counts)
+  }
+  return counts
 }
 
 export type SubscriptionItem = {
@@ -165,28 +220,61 @@ export function cached<T>(t: Tables, key: string, compute: () => T): T {
   return entries.get(key) as T
 }
 
+/**
+ * `cached` for an answer that also depends on the clock: kept while the clock stays within the
+ * span its computation recorded, computed again once it leaves it. A computation that reads
+ * another such answer passes its own span as `outer`, which then holds no longer than that one.
+ */
+function cachedSpan<T>(
+  t: Tables,
+  key: string,
+  now: number,
+  compute: (span: Span) => T,
+  outer?: Span,
+): T {
+  const entries = cached(t, 'spans', () => new Map<string, { value: unknown; span: Span }>())
+  let entry = entries.get(key)
+  if (!entry?.span.holds(now)) {
+    const span = new Span(now)
+    entry = { value: compute(span), span }
+    entries.set(key, entry)
+  }
+  outer?.within(entry.span)
+  return entry.value as T
+}
+
 /** The member's subscriptions, by title, each with its unread count. */
 export function subscriptionItems(t: Tables, now: number): SubscriptionItem[] {
-  return cached(t, `subs:${Math.floor(now / 60_000)}`, () => {
-    const unread = new Map<number, number>()
-    for (const a of t.articles.values()) {
-      if (!isRead(t, a, now)) unread.set(a.feedId, (unread.get(a.feedId) ?? 0) + 1)
-    }
-    const items: SubscriptionItem[] = []
-    for (const sub of t.subscriptions.values()) {
-      if (sub.deletedAt !== null) continue
-      const feed = t.feeds.get(sub.feedId)
-      items.push({
-        feedId: sub.feedId,
-        siteId: feed?.siteId ?? null,
-        title: feedTitle(t, sub.feedId) || '…',
-        unread: unread.get(sub.feedId) ?? 0,
-        lastFetchedAt: feed?.lastFetchedAt ?? null,
-        lastError: feed?.lastError ?? null,
-      })
-    }
-    return items.sort((a, b) => byName(a.title, b.title))
-  })
+  return subscriptionItemsIn(t, now)
+}
+
+function subscriptionItemsIn(t: Tables, now: number, outer?: Span): SubscriptionItem[] {
+  return cachedSpan(
+    t,
+    'subs',
+    now,
+    (span) => {
+      const unread = new Map<number, number>()
+      for (const a of t.articles.values()) {
+        if (!readIn(t, a, now, span)) unread.set(a.feedId, (unread.get(a.feedId) ?? 0) + 1)
+      }
+      const items: SubscriptionItem[] = []
+      for (const sub of t.subscriptions.values()) {
+        if (sub.deletedAt !== null) continue
+        const feed = t.feeds.get(sub.feedId)
+        items.push({
+          feedId: sub.feedId,
+          siteId: feed?.siteId ?? null,
+          title: feedTitle(t, sub.feedId) || '…',
+          unread: unread.get(sub.feedId) ?? 0,
+          lastFetchedAt: feed?.lastFetchedAt ?? null,
+          lastError: feed?.lastError ?? null,
+        })
+      }
+      return items.sort((a, b) => byName(a.title, b.title))
+    },
+    outer,
+  )
 }
 
 const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
@@ -203,13 +291,13 @@ export function folderTree(
   t: Tables,
   now: number,
 ): { folders: FolderItem[]; unfiled: SubscriptionItem[] } {
-  return cached(t, `folders:${Math.floor(now / 60_000)}`, () => {
+  return cachedSpan(t, 'folders', now, (span) => {
     const folders = new Map<string, FolderItem>()
     for (const f of t.folders.values()) {
       folders.set(f.id, { id: f.id, name: f.name, unread: 0, blogs: [] })
     }
     const unfiled: SubscriptionItem[] = []
-    for (const item of subscriptionItems(t, now)) {
+    for (const item of subscriptionItemsIn(t, now, span)) {
       const folder = folders.get(folderIdOf(t, item.feedId) ?? '')
       if (!folder) {
         unfiled.push(item)
@@ -240,16 +328,16 @@ export function feedsInFolder(t: Tables, folderId: string): number[] {
 export type Totals = { all: number; today: number; liked: number }
 
 export function totals(t: Tables, now: number): Totals {
-  return cached(t, `totals:${Math.floor(now / 60_000)}`, () => {
+  return cachedSpan(t, 'totals', now, (span) => {
     let all = 0
     let today = 0
     let liked = 0
     for (const a of t.articles.values()) {
       if (isLiked(t, a.id)) liked++
       if (t.subscriptions.get(a.feedId)?.deletedAt !== null) continue
-      if (isRead(t, a, now)) continue
+      if (readIn(t, a, now, span)) continue
       all++
-      if (a.sortAt >= now - DAY) today++
+      if (!span.past(a.sortAt + DAY)) today++
     }
     return { all, today, liked }
   })
@@ -267,8 +355,8 @@ export function articlesFor(
   now: number,
 ): ArticleRow[] {
   const folderId = where.folderId ?? null
-  const key = `list:${where.filter}:${where.feedId}:${folderId}:${Math.floor(now / 60_000)}`
-  return cached(t, key, () => {
+  const key = `list:${where.filter}:${where.feedId}:${folderId}`
+  return cachedSpan(t, key, now, (span) => {
     const out: ArticleRow[] = []
     const inFolder = folderId === null ? null : new Set(feedsInFolder(t, folderId))
     for (const a of t.articles.values()) {
@@ -285,19 +373,23 @@ export function articlesFor(
         continue
       }
       if (t.subscriptions.get(a.feedId)?.deletedAt !== null) continue
-      if (where.filter === 'today' && a.sortAt < now - DAY) continue
+      if (where.filter === 'today' && span.past(a.sortAt + DAY)) continue
       out.push(a)
     }
     return out.sort(newestFirst)
   })
 }
 
+export type PrefetchPlan = { bodies: string[]; translations: string[] }
+
 /**
  * What the idle prefetch would fetch (ADR 0025): the unread bodies, the list on screen first, then
- * every other feed's; and, when translations open on their own, the finished ones in the reading
- * language, none in a language the member reads as written. The reading page keys its timer on
- * this, so a render that changes none of it (an empty pull, the minute's tick) neither puts a
- * prefetch off nor cancels one under way.
+ * every other feed's; and, when translations open on their own, the finished ones of unread posts
+ * in the reading language, none in a language the member reads as written. A read post's
+ * translation is rarely opened again, and on a device that keeps a month of posts it was most of
+ * what the prefetch downloaded. The reading page keys its timer on this, so a render that changes
+ * none of it (an empty pull, the minute's tick) neither puts a prefetch off nor cancels one under
+ * way.
  */
 export function prefetchPlan(
   t: Tables,
@@ -305,7 +397,7 @@ export function prefetchPlan(
   now: number,
   readingLang: string,
   prefs: { autoTranslate: boolean; never: readonly string[] },
-): { bodies: string[]; translations: string[] } {
+): PrefetchPlan {
   const everything = articlesFor(t, { filter: 'all', feedId: null }, now)
   const bodies = new Set<string>()
   for (const a of [...list, ...everything]) {
@@ -315,6 +407,7 @@ export function prefetchPlan(
   if (prefs.autoTranslate) {
     for (const a of everything) {
       if (!a.contentKey || (a.sourceLang !== null && prefs.never.includes(a.sourceLang))) continue
+      if (isRead(t, a, now)) continue
       const row = t.translations.get(translationKey(a.contentKey, readingLang))
       if (row?.objectKey && (row.state === 'done' || row.state === 'partial')) {
         translations.push(row.objectKey)
@@ -322,6 +415,36 @@ export function prefetchPlan(
     }
   }
   return { bodies: [...bodies], translations }
+}
+
+/**
+ * Whether a prefetch run for `running` fetches everything `next` would, in the order `next` wants
+ * it: then it goes on rather than starting over. Opening a post reads it, which takes it out of the
+ * plan, and a run cancelled at every open never got past the first bundle while the member stepped
+ * through a list. Only that is covered: `next` is `running` with at most a few posts taken out and
+ * nothing moved. A plan that merely holds a subset, as one feed's list holds part of All's, wants
+ * its own posts first (the list on screen first), which a run in All's order does not do.
+ */
+export function prefetchCovers(running: PrefetchPlan, next: PrefetchPlan): boolean {
+  return (
+    fewTakenOut(running.bodies, next.bodies) &&
+    next.translations.every((k) => running.translations.includes(k))
+  )
+}
+
+/** The posts an open or two reads before a run has finished: more is another list. */
+const TAKEN_OUT = 3
+
+/** Whether `next` is `running` in its own order with at most `TAKEN_OUT` of it gone. */
+function fewTakenOut(running: readonly string[], next: readonly string[]): boolean {
+  if (running.length - next.length > TAKEN_OUT) return false
+  let at = 0
+  for (const key of next) {
+    while (at < running.length && running[at] !== key) at++
+    if (at === running.length) return false
+    at++
+  }
+  return true
 }
 
 /**
@@ -345,25 +468,38 @@ export function withoutRead(
 /**
  * A post's title and excerpt as the member reads them: the translation whenever one exists,
  * except in a language the member never has translated (`never`, a pref), which reads as written.
+ * Each comes with the language it is in, for its element's `lang`: without one, Traditional
+ * Chinese takes the page's Simplified glyph forms (or the other way round), and a screen reader
+ * reads Chinese in an English voice. Undefined where the post's language is not known.
  */
 export function shownTitle(
   t: Tables,
   a: ArticleRow & { titles?: Partial<Record<string, string>> },
   readingLang: string,
   never: readonly string[] = [],
-) {
-  if (a.sourceLang !== null && never.includes(a.sourceLang)) {
-    return { title: a.title, excerpt: a.excerpt, badge: false }
+): {
+  title: string
+  excerpt: string | null
+  badge: boolean
+  lang: string | undefined
+  excerptLang: string | undefined
+} {
+  const source = a.sourceLang ?? undefined
+  if (source !== undefined && never.includes(source)) {
+    return { title: a.title, excerpt: a.excerpt, badge: false, lang: source, excerptLang: source }
   }
   const translated = t.titles.get(titleKey(a.id, readingLang))
   // A post held from a public page, whose feed the device does not sync, brings the titles that
   // page showed: the reader opening it says what the link said.
   const title = translated?.title ?? a.titles?.[readingLang] ?? null
+  const excerpt = translated?.excerpt ?? null
   return {
     title: title ?? a.title,
-    excerpt: translated?.excerpt ?? a.excerpt,
+    excerpt: excerpt ?? a.excerpt,
     /** Badge it only when the languages differ and a translation is shown (AGENTS.md). */
-    badge: title !== null && a.sourceLang !== null && a.sourceLang !== readingLang,
+    badge: title !== null && source !== undefined && source !== readingLang,
+    lang: title !== null ? readingLang : source,
+    excerptLang: excerpt !== null ? readingLang : source,
   }
 }
 

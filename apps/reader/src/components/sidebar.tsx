@@ -24,6 +24,14 @@ const BLOG_ROW = {
   flat: 'px-3 py-[7px]',
 } as const
 
+/**
+ * A row's unread count. `muted` is 4.05:1 on the `hover` ground, under AA at 12px, so on the open
+ * row, and on one under the pointer, the count steps up to `ink-2`. The row is `group/row` by
+ * name: the reading layout is a bare `group` of its own, hovered wherever the pointer is.
+ */
+export const rowCount = (active: boolean) =>
+  `text-xs ${active ? 'text-ink-2' : 'text-muted group-hover/row:text-ink-2'}`
+
 export function Sidebar({ tree, totals, params }: Props) {
   const t = useTranslations('sidebar')
   const tn = useTranslations('nav')
@@ -33,11 +41,11 @@ export function Sidebar({ tree, totals, params }: Props) {
     return (
       <Link
         to={readingHref({ filter })}
-        className={`flex items-center justify-between rounded-lg px-3 py-2 font-medium text-ink hover:bg-hover hover:no-underline ${active ? 'bg-hover' : ''}`}
+        className={`group/row flex items-center justify-between rounded-lg px-3 py-2 font-medium text-ink hover:bg-hover hover:no-underline ${active ? 'bg-hover' : ''}`}
         aria-current={active ? 'page' : undefined}
       >
         <span>{label}</span>
-        <span className="text-xs text-muted">{count || ''}</span>
+        <span className={rowCount(active)}>{count || ''}</span>
       </Link>
     )
   }
@@ -47,13 +55,13 @@ export function Sidebar({ tree, totals, params }: Props) {
       <Link
         key={s.feedId}
         to={readingHref({ feedId: s.feedId })}
-        className={`flex w-full items-center gap-2.5 rounded-lg text-left text-ink hover:bg-hover hover:no-underline ${BLOG_ROW[place]} ${active ? 'bg-hover' : ''}`}
+        className={`group/row flex w-full items-center gap-2.5 rounded-lg text-left text-ink hover:bg-hover hover:no-underline ${BLOG_ROW[place]} ${active ? 'bg-hover' : ''}`}
         aria-current={active ? 'page' : undefined}
         data-testid="subscription"
       >
         <Swatch id={s.feedId} title={s.title} size={18} />
         <span className="flex-1 truncate">{s.title}</span>
-        <span className="text-xs text-muted">{s.unread || ''}</span>
+        <span className={rowCount(active)}>{s.unread || ''}</span>
       </Link>
     )
   }
@@ -100,7 +108,7 @@ export function Sidebar({ tree, totals, params }: Props) {
             return (
               <div key={f.id} className="flex flex-col gap-0.5">
                 <div
-                  className={`flex items-center rounded-lg hover:bg-hover ${active ? 'bg-hover' : ''}`}
+                  className={`group/row flex items-center rounded-lg hover:bg-hover ${active ? 'bg-hover' : ''}`}
                   data-testid="folder"
                   data-folder-id={f.id}
                 >
@@ -117,7 +125,7 @@ export function Sidebar({ tree, totals, params }: Props) {
                     data-testid="folder-link"
                   >
                     <span className="truncate">{f.name}</span>
-                    <span className="text-xs font-normal text-muted">{f.unread || ''}</span>
+                    <span className={`font-normal ${rowCount(active)}`}>{f.unread || ''}</span>
                   </Link>
                 </div>
                 {open ? f.blogs.map((s) => blogRow(s, 'nested')) : null}

@@ -317,7 +317,8 @@ function Posts({
                     </span>
                   ) : null}
                 </div>
-                <h3 className="m-0 font-serif text-[21px] leading-[1.2] font-medium tracking-[-0.005em] md:text-[24px]">
+                {/* Under the page's h1 with no section heading between: an h3 skipped a level. */}
+                <h2 className="m-0 font-serif text-[21px] leading-[1.2] font-medium tracking-[-0.005em] md:text-[24px]">
                   <PostLink
                     article={item.article}
                     source={source}
@@ -326,7 +327,7 @@ function Posts({
                   >
                     {title}
                   </PostLink>
-                </h3>
+                </h2>
               </div>
             </div>
           </article>

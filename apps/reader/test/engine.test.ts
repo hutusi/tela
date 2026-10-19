@@ -350,3 +350,79 @@ describe('a change held back for an Undo', () => {
     expect((await storage.load()).pending.map((p) => p.mutation.mid)).toEqual([held.mid])
   })
 })
+
+describe('a call that never answers', () => {
+  /** A tela-api whose first `stalls` answers send headers and then a body that never ends. */
+  function stalling(stalls: number, answer: () => Response) {
+    const calls: string[] = []
+    globalThis.fetch = (async (input: string, init?: RequestInit) => {
+      calls.push(String(input).split('?')[0] ?? '')
+      if (calls.length > stalls) return answer()
+      const signal = init?.signal
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          signal?.addEventListener('abort', () => controller.error(signal.reason))
+        },
+      })
+      return new Response(body, { headers: { 'content-type': 'application/json' } })
+    }) as typeof fetch
+    return calls
+  }
+
+  test('a pull whose body stalls is given up, and the next pull goes out', async () => {
+    const store = await member()
+    const calls = stalling(1, () => Response.json(pull(7, {})))
+    const engine = new SyncEngine(store, quiet, 30)
+    engines.push(engine)
+    await engine.pull()
+    expect(store.cursor).toBe(5)
+    await engine.pull()
+    expect(calls).toEqual(['/api/v1/sync', '/api/v1/sync'])
+    expect(store.cursor).toBe(7)
+  })
+
+  test('a push that stalls is given up and sent again, and the change is kept until then', async () => {
+    const store = await member()
+    const calls = stalling(1, () => Response.json({ applied: [], rejected: [], seq: 5 }))
+    const engine = new SyncEngine(store, quiet, 30)
+    engines.push(engine)
+    store.mutate({ type: 'markRead', articleId: 1 })
+    await engine.push()
+    expect(store.unsent()).toHaveLength(1)
+    // Sent again once the backoff's first second has passed.
+    await new Promise((r) => setTimeout(r, 1100))
+    expect(calls.slice(0, 2)).toEqual(['/api/v1/mutations', '/api/v1/mutations'])
+  })
+})
+
+describe('a pull that brings nothing', () => {
+  test('keeps the tables, and still tells who listens that it answered', async () => {
+    const store = await member()
+    const before = store.getSnapshot()
+    server(() => Response.json(pull(9, {})))
+    const engine = engineFor(store)
+    let heard = 0
+    const stop = engine.onPulled(() => {
+      heard++
+    })
+    await engine.pull()
+    expect(store.cursor).toBe(9)
+    expect(store.getSnapshot()).toBe(before)
+    expect(heard).toBe(1)
+    stop()
+    await engine.pull()
+    expect(heard).toBe(1)
+  })
+
+  test('a pull that failed tells nobody', async () => {
+    const store = await member()
+    server(() => new Response('down', { status: 503 }))
+    const engine = engineFor(store)
+    let heard = 0
+    engine.onPulled(() => {
+      heard++
+    })
+    await engine.pull()
+    expect(heard).toBe(0)
+  })
+})

@@ -149,7 +149,8 @@ and hashes as the `NORM_VERSION` contract.
 
 - `src/kinds.ts` is the one table of background work: for each kind, the due query over a domain
   row, the lease length, backoff, queue, handler, what exhaustion writes, and whether it is enabled.
-- `tick` (every minute) claims each kind's due work under a lease and sends it to its queue;
+- `tick` (every minute) claims each kind's due work under a lease and sends it to its queue (a kind
+  that fails is recorded in its heartbeat and passed, and the health check reports it);
   `runJob` takes the claim over under its own owner (counting the attempt before any work, and
   leaving nothing for a second delivery of the message to start), does the item, and never
   throws: a failure backs the lease off, and exhaustion dead-letters it. After a success it claims
@@ -225,7 +226,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest; which of them read a blog. Only as far as each shows it (ADR 0031). Readers to follow come from Discover's pool, matched on the device (ADR 0044): `suggested` is always empty, kept for shells cached before that, which read it |
 | `GET /api/v1/export` | "Your data": the member's own rows as one JSON file, their live blogrolls included, private ones too, with their blogs and notes |
 | `GET /api/v1/public/auth` | Which providers the sign-in sheet may offer, `{google, github}`: each once its app is configured (ADR 0036) |
-| `/api/v1/public/*` | Discover's Blogs at `/discover`, which the page `/discover/blogs` reads (60 blogs a page, `?page=`, with the `total` its filters match), a blog's page (with its claimant and readers' notes), a profile (with follow counts, its public blogrolls newest first, each with its first three blogs and its count, hidden from Discover or not, and liked posts only if shown): listed and featured blogs only, edge-cacheable. A blog's reader count is given from three readers and is null below, in Discover's order as well as its value (`publicReaderCount`, ADR 0041); member search gives it the same way |
+| `/api/v1/public/*` | Discover's Blogs at `/discover`, which the page `/discover/blogs` reads (60 blogs a page, `?page=`, with the `total` its filters match), a blog's page (with its claimant and readers' notes), a profile (with follow counts, its public blogrolls newest first, each with its first three blogs and its count, hidden from Discover or not, and liked posts only if shown): listed and featured blogs only; a page tela-web renders from them keeps its copy per colo for their `s-maxage`. A blog's reader count is given from three readers and is null below, in Discover's order as well as its value (`publicReaderCount`, ADR 0041); member search gives it the same way |
 | `GET /api/v1/public/avatars/:userId?v=` | A member's picture, only at the version it is at (ADR 0032, 0033): the one they uploaded, from R2, else their Gravatar while they show it and the check found one, fetched here by the hash of their email, which never leaves tela-api; raster types only, 512 KB, immutable for 30 days; none is a 404 the letter stands in for |
 | `GET /api/v1/public/front` | The front page's edition (ADR 0035): each public blog's newest post, newest first, from the last seven days, or the latest ones when nobody wrote that week, eleven at most, with its titles and translated excerpts, its blog and its claimant; and the counts the copy states, public blogs and the week's distinct blogs, languages and posts. Each blog's newest post is one seek per live feed down `articles_feed_sort_idx`; future-dated posts wait. Cached as a profile is |
 | `GET /api/v1/public/discover/week`, `/articles`, `/readers` | Discover's other tabs (ADR 0044), in `apps/api/src/routes/discover.ts`: one answer for everyone, which the device personalizes from its own rows, so nothing about the viewer is asked. This week: the rolling seven days' recommended posts, the most recommended first, then the newest; the front page's edition beside them (`editionStatement`, shared with `/front`), for the device to fall back on; twelve blogs new in the directory, every listed blog alike, by when it arrived or was claimed and never by an operator's review; and readers to suggest. Articles (`?topic&lang&cursor`): every public post newest first, thirty a page behind a `sortAt:id` cursor cut by key down `articles_sort_idx`, never by offset; the week's recommended, whole, on the first page only; the languages of the last 90 days within the topic. Readers: `readersPool`, the people who recommend or show what they read, in two round trips, each with their newest recommendations as `[articleId, siteId]`, the public blogs they show (null unless they do), their earliest find (by recommendation id, never the device's `at`, from two others after) and their newest note, of posts whose date has come. A post carries its week's recommendations, up to twenty recommender ids and its newest note. Listed and featured blogs, live feeds and posts whose date has come only; no answer says how a blog was listed. Cached as a profile is |
@@ -236,21 +237,37 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `POST /api/admin/admins` | Bearer `ADMIN_TOKEN`: open or close the admin console to a member (`profiles.is_admin`, ADR 0039); only the token grants it |
 | `/api/v1/admin/*` | The admin console (ADR 0039), for a member with `is_admin`, read from D1 on every call past the signed session copy: `counts` and `overview`; `claims`, `sites`, `feeds`, `discover`, `people`, `invites`, `translation` and `system` as filtered, searched lists (500 rows at most; People and Invitations take a search as a POST body, since it is often an email address and a URL reaches the Workers' logs) and their records; `translation/report` and `system/report`; `POST act` (an action on up to 50 targets, each its own audited batch) and `POST undo` (a group restored only while every target still holds what the action wrote). Discover's `blogrolls` filter and `blogrolls/:id` list public, live blogrolls only, never a private one, with the owner's handle and their visible and total counts; `blogroll.hide` and `blogroll.restore` write `hidden_at` with no `seq` and no `updated_at`, so nothing syncs and the owner is not told (ADR 0050). Under `/api/v1`, never `/api/admin`, so its writes are held to the same origin |
 | `/api/websub/:feedId` | The hub callback: intent checks, and signed pings that make the feed due |
+| `POST /api/client-errors` | What breaks in a reader's browser (`routes/client-errors.ts`): a render an error boundary caught, an error or rejection left unhandled, a failed boot, a CSP violation. No session, so a visitor's page reports too; 8 KB, counted per IP (`clientError`, 30 an hour, and CSP violations apart as `clientCsp`, named in the `x-tela-report` header) before it is read; one log line each (kind, message, stack cut to 4 KB, path, build), with every query string cut first, and nothing stored |
 | `/api/health` | Liveness and D1 latency |
 
 Every `/api/v1/*` route but the public ones and `/api/v1/join` needs a session, read from the
 signed five-minute cookie cache; `/api/v1/account/*` reads it from D1 again, so a session ended
 elsewhere changes nothing there. Reader actions are rate-limited per member (`action_limits`).
 
+No request body is read past 64 KB, a push past 1 MB (`bodyCap` in `src/app.ts`), a 413
+`too_large` before any route sees it; the picture, an OPML file (1 MB) and a hub's notification
+(5 MB) read their own no further than their own caps. A route nobody serves is a JSON 404, and a
+failure a JSON 500 `internal`, logged with its path, `cf-ray` and member.
+
 ## The edge (`apps/reader/worker`, tela-web)
 
 The only public Worker, unpinned, with no D1.
 
 - `/api/*` goes to tela-api; a write must carry this origin (hubs and the admin script exempt).
+- The app's own GET of `/api/v1/public/*` goes to tela-api every time, as every `/api/*` does. The
+  public pages rendered here read the same JSON through a copy per colo instead (`pageJson`), keyed
+  by its path and query alone (the answers carry every language): a 200 or 404 is kept when it sets
+  no cookie and says `s-maxage` with none of `no-store`, `private` or `no-cache`, for as long as
+  `s-maxage` says, so a page's four languages cost one D1 read a colo, and a page is kept only for
+  what its data's five minutes had left, so the two caches never add up to ten. The app does not
+  read that copy: served from it, a member's own claim, hide or follow stayed out of the lists for
+  up to five minutes, since nothing they did could tell every list it touched to ask again.
 - `/o/c|t|tc/…` and `/o/bundle` serve immutable objects from R2 to members, cached per colo after
   the session check; raw HTML (`r/`) and backups are never served.
 - `/img/<contentKey>/<i>` proxies the image the content object names: the object is the
-  allowlist. Raster types only, no SVG, 10 MB, cached for seven days.
+  allowlist. Raster types only, no SVG, 10 MB, cached for seven days; a failure (the host's
+  error or timeout, a private host, no such image) is cached ten minutes, at the colo and in the
+  browser, so a broken image is not asked for on every view.
 - `/avatar/<userId>?v=<n>` is a member's picture (ADR 0032), from tela-api's
   `/api/v1/public/avatars/:userId`, cached per colo for as long as tela-api says (30 days for a
   picture, since the version is in the address). Public, and it asks tela-api nothing for an
@@ -282,6 +299,10 @@ The only public Worker, unpinned, with no D1.
   (`apps/reader/test/routes.test.ts`) holds every public page to `run_worker_first`.
 - `/about`, `/privacy` and `/terms` are rendered the same way from the bundle alone: their route
   has `api: null`, so the edge asks tela-api nothing and hands nothing over (ADR 0035).
+- Every HTML answer carries the security headers (ADR 0051, `worker/security.ts`): the Worker
+  sets them on what it builds, and `public/_headers` gives the same set to what the asset router
+  serves. The CSP is report-only; HSTS, `nosniff`, Referrer-Policy, Permissions-Policy and
+  `X-Frame-Options: DENY` are enforced. Hashed assets are kept a day in the browser.
 - Everything else is the SPA's static assets, which answer without running the Worker. A path
   with no file is answered 200 with `index.html`, a missing `/assets/*` script included:
   `run_worker_first` is a list, and then the fallback applies to every request, not only
@@ -291,13 +312,31 @@ The only public Worker, unpinned, with no D1.
 
 A Vite + React SPA that renders from the device.
 
+- Nothing leaves the page blank (`main.tsx`, `components/error-boundary.tsx`). A device store
+  that opens and then fails is replaced by one in memory. A page that throws as it renders shows
+  "Something went wrong" with Try again below a header that still works (its boundary clears when
+  the address changes, query included, without remounting the page), and an article that throws
+  fails in the reader's pane alone, beside a list that still works; the root boundary, outside every provider, words the app's own failure from the
+  catalogues, as a boot that fails does on an empty shell (an edge-rendered page stays as it is).
+  `lib/report.ts` sends what broke to `/api/client-errors`: what a boundary caught, an unhandled
+  error or rejection whose stack runs through Tela's own scripts, a failed boot and each CSP
+  violation not set off by an extension, each once, five errors and three violations a page load at
+  most, never a query string (`withoutQueries`, in `@tela/shared` for both ends).
 - `store/local.ts` holds confirmed rows and pending mutations, written through to IndexedDB, one
   record per pending mutation so that tabs sharing the database never erase each other's.
 - `store/engine.ts` pulls at boot, on focus, every minute and after a push. It pushes a
-  quarter-second after a change, and at once (`keepalive`) when the tab hides.
+  quarter-second after a change, and at once (`keepalive`) when the tab hides. A call not
+  answered in 30 s, body included, is given up and tried again. While an open post waits for its
+  full text, or a new feed for its first fetch, the page pulls sooner (`lib/use-quick-pull.ts`):
+  from 4 s, doubling to a minute, for two minutes at most, never while the tab is hidden, and for
+  a feed only while its status is `active`.
 - `store/objects.ts` serves bodies and translations from memory, then IndexedDB, then `/o/*`,
-  downloading each once however many ask while it is on its way. It prefetches unread bodies
-  while idle, and evicts bodies not opened for seven days, and the oldest past 50 MB.
+  downloading each once however many ask while it is on its way. Only a 404 is "no such
+  object"; any other refusal rejects (`ObjectUnavailable`), and a copy the device will not keep
+  (a full disk) is still shown. It prefetches unread bodies while idle, and ten seconds after
+  boot evicts bodies not opened for seven days (found by key on the `lastOpened` index, never
+  read), then the oldest past 50 MB, and the translation and chunk objects of every body no
+  longer held, by key range.
 - `store/selectors.ts` answers the reading view: unread, lists, counts, the title to show.
 - The URL alone says which article is open (ADR 0017's rule, kept): a click, a filter change or
   Back is a render, not a request.
@@ -385,6 +424,9 @@ A Vite + React SPA that renders from the device.
   Gravatar and GitHub's API, are asked with a plain `fetch`, and the GitHub token goes to that
   host only, on no redirect.
 - **Model output is never trusted as HTML:** placeholders must match, text is re-escaped.
+- **Every page carries security headers** (ADR 0051): a content security policy that names the
+  one inline script by its hash (report-only while it proves itself), HSTS, `nosniff`, a referrer
+  policy, a permissions policy and no framing.
 - **Every new account claims an invitation:** better-auth's `user.create.before` admits a user only
   by claiming, in one statement, an invitation its address holds, or on a provider's return the
   invite code its start carried and nothing else, refuses by throwing, and treats a missing endpoint

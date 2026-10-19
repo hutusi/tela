@@ -1,0 +1,21 @@
+# Headers on what tela-web's asset router answers (ADR 0051). They land on whatever the router
+# serves for a matching path: the single-page fallback's index.html, for a path with no file,
+# included. The Worker sets its own on what it answers (worker/edge.ts).
+
+# The security headers, on every page the asset router serves: the shell at any path. The same
+# set as SECURITY_HEADERS in worker/security.ts, which the edge sets on its own pages;
+# test/security.test.ts holds the two together.
+/*
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'sha256-iu96BVO3nRFhZTCHPNdC3hcRMXDyiUs6Q6h1Z9Lp6fA='; style-src 'self' 'unsafe-inline'; img-src 'self' https://assets.telaread.com blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  Strict-Transport-Security: max-age=31536000
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()
+  X-Frame-Options: DENY
+
+# Content-hashed, so a day in the browser without asking again. Not immutable and not a year: a
+# name a deploy lacks is answered 200 with index.html under these same headers, and after a
+# rollback a browser could keep that HTML under a script's name. A day caps the damage, and
+# sw.js asks past the browser's cache once when an answer is not what its name says.
+/assets/*
+  Cache-Control: public, max-age=86400

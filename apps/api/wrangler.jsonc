@@ -8,7 +8,8 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": false,
   "placement": { "region": "aws:ap-southeast-1" },
-  "observability": { "enabled": true },
+  // Query strings never reach Workers Logs: a forwarded `?code=` or `?email=` is someone's.
+  "observability": { "enabled": true, "redact_query_string": true },
   "d1_databases": [
     {
       "binding": "DB",

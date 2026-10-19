@@ -20,6 +20,7 @@ import type {
   WeekData,
 } from '../src/views/types'
 import { createEdge, type EdgeCache, type PublicPages } from '../worker/edge'
+import { SECURITY_HEADERS } from '../worker/security'
 
 const KEY = 'a'.repeat(32)
 const OTHER = 'b'.repeat(32)
@@ -57,6 +58,10 @@ let cache: ReturnType<typeof memoryCache>
 let edge: ReturnType<typeof createEdge>
 /** What reached tela-api, by path. */
 let apiCalls: string[]
+/** The cookie each call to tela-api carried, if any. */
+let apiCookies: (string | null)[]
+/** The edge's clock, for the age of a colo copy. */
+let edgeNow: number
 
 /** The SPA's index.html as Vite builds it, and as the edge fills it. */
 const TEMPLATE = `<!doctype html>
@@ -97,15 +102,19 @@ beforeEach(async () => {
   images = []
   fetched = []
   apiCalls = []
+  apiCookies = []
+  edgeNow = Date.UTC(2026, 9, 19, 12)
   cache = memoryCache()
   edge = createEdge({
     blobs: counted,
     api: {
       fetch: async (req) => {
         apiCalls.push(new URL(req.url).pathname)
+        apiCookies.push(req.headers.get('cookie'))
         return api.app.fetch(req)
       },
     },
+    now: () => edgeNow,
     assets: {
       fetch: async () => new Response(TEMPLATE, { headers: { 'content-type': 'text/html' } }),
     },
@@ -238,10 +247,55 @@ describe('the image proxy', () => {
           { headers: { 'content-type': 'image/png' } },
         ),
     })
-    expect((await get(`/img/${KEY}/0`)).status).toBe(502)
-    // Not kept: the next request asks the image's host again.
-    expect((await get(`/img/${KEY}/0`)).status).toBe(502)
-    expect(fetched).toEqual(['https://img.example/a.png', 'https://img.example/a.png'])
+    const first = await get(`/img/${KEY}/0`)
+    expect(first.status).toBe(502)
+    // Kept as a failure for ten minutes, never as an image: the host is not asked again meanwhile.
+    expect(first.headers.get('cache-control')).toBe('private, max-age=600')
+    const again = await get(`/img/${KEY}/0`)
+    expect(again.status).toBe(502)
+    expect(again.headers.get('cache-control')).toBe('private, max-age=600')
+    expect(fetched).toEqual(['https://img.example/a.png'])
+  })
+
+  test('every failure is kept ten minutes at the colo, and an image a week, both public there', async () => {
+    images.push({
+      url: 'https://img.example/a.png',
+      response: () => new Response('gone', { status: 404 }),
+    })
+    const stored: Record<string, string | null> = {}
+    const put = cache.put.bind(cache)
+    cache.put = async (key, response) => {
+      stored[new URL(key.url).pathname] = response.headers.get('cache-control')
+      return put(key, response)
+    }
+    expect((await get(`/img/${KEY}/0`)).status).toBe(502) // the host's 404
+    expect((await get(`/img/${KEY}/2`)).status).toBe(403) // a private host
+    expect((await get(`/img/${KEY}/9`)).status).toBe(404) // no such image
+    expect(stored).toMatchObject({
+      [`/img/${KEY}/0`]: 'public, max-age=600',
+      [`/img/${KEY}/2`]: 'public, max-age=600',
+      [`/img/${KEY}/9`]: 'public, max-age=600',
+    })
+    for (const i of [0, 2, 9]) await get(`/img/${KEY}/${i}`)
+    expect(fetched).toEqual(['https://img.example/a.png'])
+
+    images.length = 0
+    images.push({
+      url: 'https://img.example/c.png',
+      response: () =>
+        new Response(new Uint8Array([1]), { headers: { 'content-type': 'image/png' } }),
+    })
+    await blobs.put(
+      `c/${OTHER}.json`,
+      JSON.stringify({ key: OTHER, blocks: [], images: ['https://img.example/c.png'] }),
+    )
+    const image = await get(`/img/${OTHER}/0`)
+    expect(image.headers.get('cache-control')).toBe('private, max-age=604800, immutable')
+    expect(stored[`/img/${OTHER}/0`]).toBe('public, max-age=604800, immutable')
+    // From the colo, the browser is told what it always was.
+    const hit = await get(`/img/${OTHER}/0`)
+    expect(hit.headers.get('cache-control')).toBe('private, max-age=604800, immutable')
+    expect(fetched.filter((u) => u.endsWith('c.png'))).toHaveLength(1)
   })
 })
 
@@ -355,6 +409,98 @@ describe('everything else', () => {
   })
 })
 
+describe('security headers (ADR 0051)', () => {
+  const has = (res: Response) =>
+    Object.entries(SECURITY_HEADERS).every(([name, value]) => res.headers.get(name) === value)
+
+  test('every page the Worker answers carries them, from the cache too', async () => {
+    await listedBlog(1, 'Garden Notes')
+    const visit = (path: string, headers: Record<string, string> = {}) =>
+      edge.fetch(new Request(`${ORIGIN}${path}`, { headers }))
+    expect(has(await visit('/discover/blogs'))).toBe(true) // rendered
+    expect(has(await visit('/discover/blogs'))).toBe(true) // the colo's copy
+    expect(has(await visit('/about'))).toBe(true) // no data at all
+    expect(has(await visit('/', { cookie }))).toBe(true) // a member's plain shell
+    expect(has(await visit('/s/999'))).toBe(true) // a 404 page
+    // tela-api down: the plain shell.
+    const down = createEdge({
+      blobs,
+      api: { fetch: async () => new Response('down', { status: 503 }) },
+      assets: {
+        fetch: async () => new Response(TEMPLATE, { headers: { 'content-type': 'text/html' } }),
+      },
+      pages: pages as unknown as PublicPages,
+      cache: memoryCache(),
+      fetchImage: async () => new Response('nope', { status: 404 }),
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: true },
+    })
+    expect(has(await down.fetch(new Request(`${ORIGIN}/discover/blogs`)))).toBe(true)
+  })
+
+  test('what is no page does without them', async () => {
+    const json = await get('/api/health', null)
+    expect(json.headers.get('content-security-policy-report-only')).toBeNull()
+    expect((await get(`/o/c/${KEY}.json`)).headers.get('x-frame-options')).toBeNull()
+  })
+})
+
+describe('public JSON at the colo', () => {
+  const ask = (path: string, headers: Record<string, string> = {}) =>
+    edge.fetch(new Request(`${ORIGIN}${path}`, { headers: { cookie, ...headers } }))
+  const titles = async (res: Response) =>
+    ((await res.json()) as { sites: { title: string }[] }).sites.map((s) => s.title)
+
+  test("the app's own request goes to tela-api every time, cookie and all", async () => {
+    await listedBlog(1, 'Garden Notes')
+    expect(await titles(await ask('/api/v1/public/discover'))).toEqual(['Garden Notes'])
+    await listedBlog(2, 'Harbour Log')
+    // A member who just claimed or hid something sees it at once, not five minutes on.
+    expect((await titles(await ask('/api/v1/public/discover'))).sort()).toEqual([
+      'Garden Notes',
+      'Harbour Log',
+    ])
+    expect(apiCalls).toEqual(['/api/v1/public/discover', '/api/v1/public/discover'])
+    expect(apiCookies).toEqual([cookie, cookie])
+  })
+
+  test("a rendered page's four languages read tela-api once", async () => {
+    await listedBlog(1, 'Garden Notes')
+    const page = (headers: Record<string, string> = {}) =>
+      edge.fetch(new Request(`${ORIGIN}/discover/blogs`, { headers }))
+    expect((await page()).status).toBe(200)
+    expect((await page({ cookie: 'tela_locale=fr' })).status).toBe(200)
+    expect((await page({ cookie: 'tela_locale=zh-Hans' })).status).toBe(200)
+    expect(apiCalls).toEqual(['/api/v1/public/discover'])
+  })
+
+  test('a page made from an older copy is kept only as long as the copy had left', async () => {
+    await listedBlog(1, 'Garden Notes')
+    const kept: Record<string, string | null> = {}
+    const put = cache.put.bind(cache)
+    cache.put = async (key, response) => {
+      kept[new URL(key.url).pathname] = response.headers.get('cache-control')
+      return put(key, response)
+    }
+    const page = (headers: Record<string, string> = {}) =>
+      edge.fetch(new Request(`${ORIGIN}/discover/blogs`, { headers }))
+    await page()
+    expect(Object.entries(kept).find(([k]) => k.includes('/en/'))?.[1]).toBe('public, s-maxage=300')
+    edgeNow += 240_000
+    await page({ cookie: 'tela_locale=zh-Hans' })
+    expect(Object.entries(kept).find(([k]) => k.includes('/zh-Hans/'))?.[1]).toBe(
+      'public, s-maxage=60',
+    )
+    expect(apiCalls).toEqual(['/api/v1/public/discover'])
+  })
+
+  test('a member call is never kept, and keeps its cookie', async () => {
+    await get('/api/v1/me')
+    await get('/api/v1/me')
+    expect(apiCalls).toEqual(['/api/v1/me', '/api/v1/me'])
+    expect(apiCookies.every((c) => c === cookie)).toBe(true)
+  })
+})
+
 async function listedBlog(id: number, title: string, listing = 'listed') {
   const db = api.db
   await db.batch([
@@ -422,7 +568,8 @@ describe('public pages', () => {
     expect(zh).toContain('<title>博客 · 发现 · Tela</title>')
     const en = await (await page('/discover/blogs')).text()
     expect(en).toContain('<html lang="en"')
-    expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/'))).toHaveLength(2)
+    // Two pages, one answer: the JSON carries every language, and the colo keeps it once.
+    expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/'))).toHaveLength(1)
   })
 
   test("a profile's picture renders as Tela's address, never Gravatar's (ADR 0032)", async () => {
@@ -461,10 +608,10 @@ describe('public pages', () => {
     expect(recs).toContain('data-testid="profile-recommendations"')
     const subs = await (await page('/@shown?tab=subscriptions')).text()
     expect(subs).toContain('data-testid="profile-subscriptions"')
-    // A second visit to each is the cache's.
+    // A second visit to each is the cache's, and both tabs render from one answer.
     await page('/@shown')
     await page('/@shown?tab=subscriptions')
-    expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/profiles/'))).toHaveLength(2)
+    expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/profiles/'))).toHaveLength(1)
   })
 
   test("the previous release's public JSON still renders, without what it never said", () => {

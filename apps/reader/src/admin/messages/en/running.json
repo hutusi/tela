@@ -74,6 +74,7 @@
       "deadLetters": "Dead letters in the last day, unresolved",
       "stuckBodies": "Members waiting on a translation over 30 min",
       "extractionBacklog": "Articles waiting over 6 hours for full text",
+      "tickErrors": "Kinds of work the last tick could not claim",
       "backupAge": "Since the last backup",
       "backupVerified": "Last backup verified"
     },

@@ -3,6 +3,7 @@ import { LANGUAGE_NAMES, TOPICS, type UiLocale } from '@tela/shared'
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { LoadFailed } from '../components/load-failed'
 import { PersonAvatar } from '../components/person-avatar'
 import { SettingRow } from '../components/setting-row'
 import { SiteAvatar } from '../components/site-avatar'
@@ -153,17 +154,25 @@ export function DashboardPage() {
   const td = useTranslations('discover')
   const { locale } = useUi()
   const [dash, setDash] = useState<Dashboard | null>(null)
+  // The answer did not come (offline, an error): Try again asks once more.
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   useTitle(t('title'))
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` is Try again
   useEffect(() => {
     const controller = new AbortController()
+    setFailed(false)
     api('/api/v1/dashboard', { signal: controller.signal })
       .then(async (res) => {
-        if (res.ok) setDash((await res.json()) as Dashboard)
+        if (!res.ok) throw new Error(`dashboard: ${res.status}`)
+        setDash((await res.json()) as Dashboard)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!controller.signal.aborted) setFailed(true)
+      })
     return () => controller.abort()
-  }, [])
+  }, [attempt])
 
   return (
     <main
@@ -178,6 +187,8 @@ export function DashboardPage() {
           {t('intro')}
         </p>
       </div>
+
+      {!dash && failed ? <LoadFailed onRetry={() => setAttempt((n) => n + 1)} /> : null}
 
       {dash && dash.sites.length === 0 ? (
         <div className="rounded-xl border border-line bg-surface p-6">

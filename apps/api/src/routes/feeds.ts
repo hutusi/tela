@@ -25,6 +25,7 @@ import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
+import { readAtMost } from '../read-at-most'
 
 const ERROR_STATUS = { invalid_url: 400, unreachable: 422, not_a_feed: 422 } as const
 
@@ -92,10 +93,18 @@ export function feedRoutes(deps: ApiDeps) {
 
   routes.post('/opml', async (c) => {
     const member = c.get('member')
-    const text = await c.req.text()
-    if (new TextEncoder().encode(text).length > MAX_OPML_BYTES) {
+    // Read no further than the cap: a file sent without a length is cut off there, not held.
+    if (Number(c.req.header('content-length') ?? '0') > MAX_OPML_BYTES) {
       return c.json({ error: 'opml_too_large' }, 413)
     }
+    let bytes: Uint8Array<ArrayBuffer> | null
+    try {
+      bytes = await readAtMost(c.req.raw.body, MAX_OPML_BYTES)
+    } catch {
+      return c.json({ error: 'unreadable' }, 400)
+    }
+    if (!bytes) return c.json({ error: 'opml_too_large' }, 413)
+    const text = new TextDecoder().decode(bytes)
     const now = deps.clock.now()
     if (!(await consumeLimit(db, 'opmlImport', member.id, now)).allowed) {
       return c.json({ error: 'rate_limited' }, 429)

@@ -70,6 +70,15 @@ export function useHighlights({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `rendered` stands for the body's DOM
   useLayoutEffect(() => {
+    // Most posts have none: nothing to find, so no walk of the body's leaves and their text, which
+    // this runs after every render of the body (each translation chunk, each mode). What a post
+    // that had some painted is cleared.
+    if (rows.length === 0) {
+      unpaint()
+      current.current = []
+      setItems((held) => (held.length === 0 ? held : []))
+      return
+    }
     const el = root.current
     if (!el) return
     const leavesOf = new Map<Side, Map<string, HTMLElement>>([

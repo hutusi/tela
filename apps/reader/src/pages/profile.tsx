@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 import { BlogrollDialog } from '../components/blogroll-dialog'
+import { LoadFailedPage } from '../components/load-failed'
 import { useMemberControls } from '../lib/member'
 import { readingPrefsOf } from '../lib/prefs'
 import { safeDecode } from '../lib/safe-decode'
@@ -89,6 +90,7 @@ export function ProfilePage() {
   }, [mine, shown, tables, onNew])
 
   if (!handle || loaded.status === 'missing') return <NotFoundPage />
+  if (loaded.status === 'loading' && loaded.failed) return <LoadFailedPage onRetry={loaded.retry} />
   if (!data) return <main className="flex-1" aria-busy="true" />
   const base = countedFollowing.get(data)
   const shift = owner && base?.owner === owner ? (following ? 1 : 0) - (base.counted ? 1 : 0) : 0

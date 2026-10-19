@@ -495,7 +495,33 @@ is tela-api.
   `/api/v1/public/front` is not answering 200 within three seconds (deploy tela-api before
   tela-web when it is new): tela-web logs `public page data late` or `public page data failed`
   with the endpoint, which says which.
-- **Writes to `/api/*` without this origin get 403** `cross-origin write refused`. Hubs
+- **Hashed assets** (`/assets/*`) are kept a day by the browser (`public/_headers`, ADR 0051),
+  not a year: the single-page fallback answers a name a deploy lacks 200 with `index.html` under
+  the same rule. After a tela-web rollback, a browser without the service worker that was handed
+  that HTML for a script boots blank on that build until the day is out or a hard reload; the
+  worker asks past the browser's cache itself (`cache: 'reload'`) and is not held up. `curl -I
+  https://telaread.com/assets/<a file>` shows `cache-control: public, max-age=86400`.
+- **Security headers** (ADR 0051): every page carries `Content-Security-Policy-Report-Only`,
+  `Strict-Transport-Security`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`
+  and `X-Frame-Options`, from `public/_headers` for the shell and from the Worker for the pages it
+  renders; `curl -I https://telaread.com/` and `curl -I https://telaread.com/reading` both show
+  them. The CSP only reports for now. **Enforcing it is the owner's call**, after a week in which
+  the client-error log shows no `securitypolicyviolation`: rename the header to
+  `Content-Security-Policy` in `worker/security.ts` and `_headers` together, and deploy tela-web.
+  A violation that does show names the directive and the address it blocked: allow the address in
+  both places, or remove what asked for it.
+- **Writes to `/api/*` without this origin get 403** `cross-origin write refused`.
+- **Errors in readers' browsers** reach tela-api's Workers Logs as `client error` lines (`POST
+  /api/client-errors`): `kind` is `boundary` (a view threw and its error boundary showed Try
+  again), `error` or `rejection` (left unhandled, only from Tela's own scripts), `boot` (the app
+  could not start; its device storage may have refused) or `csp` (a policy violation, ADR 0051),
+  with the message, the stack (4 KB), the path without its query and the build. A page sends five
+  errors and three violations at most per load, and an IP thirty of each an hour; a violation an
+  extension's script set off is never sent. Query strings never reach either Worker's logs
+  (`redact_query_string` on tela-web and tela-api, as on tela-redirect): an invite code or a
+  sign-in link's `?email=…&otp=…` would otherwise be readable there. After a deploy, a burst of
+  one `boundary` message on one path is a bug in that view; `boot` lines from many paths at once
+  are the device store or a cached shell. Hubs
   (`/api/websub/*`) and the admin script (`/api/admin/*`) are exempt. A browser always sends
   `Origin` on a POST, so seeing this from the app means something is proxying it.
 - **The app shell** is cached by a service worker (`public/sw.js`), for fast repeat visits. It
@@ -638,7 +664,8 @@ D1 database and `tela-content` with tela-jobs, and only produces to the jobs que
   - `select key, count, last_request from rate_limit` shows better-auth's windows, and
     `select * from action_limits where key like 'otp%' or key like 'password%'` Tela's.
   - A code that never arrives: check Resend's log for the address first, then the Worker's logs
-    for the send error. An address with no account is mailed only while it holds an invitation
+    for the send error, a `MailError`: `Resend answered <status>` when it refused, and `Resend not
+    reached: no answer in 10000 ms` when it did not answer in ten seconds. An address with no account is mailed only while it holds an invitation
     (a hold from a join lasts a day); otherwise the request answers as usual and nothing is sent.
   - A member whose sign-in fails on one network only, and works on another, is behind a network
     that refuses telaread.com: the form says "We could not reach Tela from this network" when no
@@ -799,6 +826,11 @@ Nothing here needs watching; three things speak up when something is wrong (ADR 
     key gone.
   - *articles waiting over six hours for their full text* (more than twenty): extraction is
     failing on some host; the dead letters name it.
+  - *the last tick could not run <kind> (<error>)*: one kind's due query, claim or send failed,
+    and the tick went on with the others, so the switch hears `/fail` rather than silence. The
+    error is cut to 200 characters; `wrangler tail tela-jobs` shows it whole (`tick: a kind
+    failed`). A schema the code does not match (a migration not applied) looks like this; so does
+    a queue that refuses sends. It clears at the first tick that runs every kind.
   - *the last backup is from …* or *failed its check*: see *Backups*.
 - **The Monday digest** to `DIGEST_TO`: new posts and members, how many blogs members added wait
   for review in Discover (with the link to `/admin/discover`, from `PUBLIC_URL`), failing and dead
@@ -854,9 +886,9 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   `LLM_MAX_ARTICLE_TOKENS` for the post, and once the day's budget is spent the console refuses
   one until tomorrow. The health check counts only unresolved dead letters, and
   the digest says how many of the week's were resolved.
-- **Heartbeats** (`ops_heartbeats`): `tick` (each kind dispatched, and the switches tela-jobs runs
-  with: the background budget, the article cap, whether a translator, the relay, WebSub and the
-  assets bucket are configured), `health` (every fifth minute, what the dead-man's switch heard),
+- **Heartbeats** (`ops_heartbeats`): `tick` (each kind dispatched, `errors` for each kind it
+  could not run, and the switches tela-jobs runs with: the background budget, the article cap,
+  whether a translator, the relay, WebSub and the assets bucket are configured), `health` (every fifth minute, what the dead-man's switch heard),
   `daily` (upkeep and the export) and `digest` (once sent). The console reads the budget and the
   relay from the tick's, so after a deploy they show as unknown until the first tick.
 - **What it never shows:** a member's subscriptions, reading, likes, highlights, follows or
@@ -951,7 +983,12 @@ A public reader count is shown only from three readers.
 - **Spend:** `select * from usage_daily order by day desc limit 14` (subject `'*'` is background
   titles, anything else a member), and per call `select job, model, count(*), sum(input_tokens),
   sum(output_tokens) from llm_calls where created_at > … group by job, model`. The digest has the
-  week's totals.
+  week's totals. A call whose reply could not be read (no JSON, or not the schema) was still
+  billed, so it is logged and charged like any other: a title job's to the background budget, a
+  body's to what that translation has spent (`used_tokens`). A provider that keeps answering
+  that way shows as `llm_calls` rows growing while `article_titles` does not, with the job
+  retrying `reply contains no JSON object`. A call that timed out or never connected bills
+  nothing Tela can see and is not logged.
 - **Budget:** `LLM_DAILY_BUDGET_TOKENS` stops the title sweep for the rest of the UTC day once
   spent. Reader requests still run, metered per member (30 requests an hour, a daily token
   allowance). A body converted between the Chinese scripts costs nothing and has its own limit

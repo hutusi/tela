@@ -14,9 +14,6 @@ export type ReaderGroup = 'shared' | 'blogs' | 'early' | 'notes' | 'active'
 /** The groups in the order they are tried and shown. */
 export const READER_GROUPS: readonly ReaderGroup[] = ['shared', 'blogs', 'early', 'notes', 'active']
 
-/** The groups a visitor can be shown: the rest need a member's own likes and blogs. */
-export const PUBLIC_GROUPS: readonly ReaderGroup[] = ['early', 'notes', 'active']
-
 export type ReaderReason =
   /** They recommended posts the member liked or recommended; the post's title when it is one. */
   | { kind: 'shared'; count: number; title: string | null }

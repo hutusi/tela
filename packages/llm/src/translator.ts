@@ -1,7 +1,13 @@
-import { generateText, type LanguageModel, Output } from 'ai'
+import { generateText, type LanguageModel, NoObjectGeneratedError, Output } from 'ai'
 import { z } from 'zod'
 import { buildSystemPrompt, buildUserPayload } from './prompt'
-import type { TranslationRequest, TranslationResponse, Translator } from './types'
+import {
+  TranslationFailed,
+  type TranslationRequest,
+  type TranslationResponse,
+  type TranslationUsage,
+  type Translator,
+} from './types'
 
 const responseSchema = z.object({
   translations: z.array(z.object({ id: z.string(), text: z.string() })),
@@ -103,32 +109,45 @@ export function createSdkTranslator(
         abortSignal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_CALL_TIMEOUT_MS),
         ...(options.providerOptions ? { providerOptions: options.providerOptions } : {}),
       }
-      let translations: Array<{ id: string; text: string }>
-      let usage: { inputTokens?: number | undefined; outputTokens?: number | undefined }
-      if (jsonMode === 'schema') {
-        const result = await generateText({
-          ...common,
-          output: Output.object({ schema: responseSchema }),
+      type Usage = { inputTokens?: number | undefined; outputTokens?: number | undefined }
+      const billed = (usage: Usage): TranslationUsage => ({
+        model: options.modelName,
+        inputTokens: usage.inputTokens ?? 0,
+        outputTokens: usage.outputTokens ?? 0,
+        latencyMs: Date.now() - started,
+      })
+      // The provider answered, and billed, but not with what was asked for.
+      const unusable = (err: unknown, usage: Usage) =>
+        new TranslationFailed(err instanceof Error ? err.message : String(err), [billed(usage)], {
+          cause: err,
         })
-        translations = result.output.translations
-        usage = result.usage
+      let translations: Array<{ id: string; text: string }>
+      let usage: Usage
+      if (jsonMode === 'schema') {
+        try {
+          const result = await generateText({
+            ...common,
+            output: Output.object({ schema: responseSchema }),
+          })
+          translations = result.output.translations
+          usage = result.usage
+        } catch (err) {
+          if (NoObjectGeneratedError.isInstance(err) && err.usage) throw unusable(err, err.usage)
+          throw err
+        }
       } else {
         const result = await generateText(common)
-        translations = parseTranslations(
-          result.text,
-          request.blocks.map((b) => b.id),
-        )
+        try {
+          translations = parseTranslations(
+            result.text,
+            request.blocks.map((b) => b.id),
+          )
+        } catch (err) {
+          throw unusable(err, result.usage)
+        }
         usage = result.usage
       }
-      return {
-        translations,
-        usage: {
-          model: options.modelName,
-          inputTokens: usage.inputTokens ?? 0,
-          outputTokens: usage.outputTokens ?? 0,
-          latencyMs: Date.now() - started,
-        },
-      }
+      return { translations, usage: billed(usage) }
     },
   }
 }

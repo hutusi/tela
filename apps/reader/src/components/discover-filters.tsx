@@ -6,14 +6,16 @@ import { asLabel, LANGUAGE_NAMES, TOPICS, type UiLocale } from '@tela/shared'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { CHEVRON_DOWN, Glyph } from './glyph'
+import { MENU_ITEM, menuPanel, useHeaderMenu } from './header-control'
 
 export const chip = (on: boolean) =>
   `rounded-full border px-3.5 py-1.5 text-[13px] hover:no-underline ${
     on ? 'border-ink bg-ink text-paper' : 'border-line text-ink-2 hover:border-ink'
   }`
 
-const menuItem = (on: boolean) =>
-  `flex justify-between gap-3 rounded-md px-2.5 py-[7px] text-[13px] text-ink hover:bg-hover hover:no-underline ${on ? 'bg-hover' : ''}`
+/** A language and its count at the far side: a link, so it says no to the base underline. */
+const languageItem = (on: boolean) =>
+  `flex justify-between gap-3 ${MENU_ITEM} text-ink hover:no-underline ${on ? 'bg-hover' : ''}`
 
 /** "All" and each topic; the chosen one again goes back to all. */
 export function TopicChips({
@@ -53,9 +55,13 @@ export function LanguageFilter({
   const names = LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en
   // The menu's value and items are labels: "Japonais", where a French sentence says "japonais".
   const label = (tag: string) => asLabel(names[tag] ?? tag, locale)
+  // A header menu's closing (`useHeaderMenu`): it stayed open after a choice, since the page
+  // under it changes without a load, and nothing but its own summary closed it.
+  const { box, onToggle, close } = useHeaderMenu()
+  const chosen = () => close('outside')
   return (
     // A <details>, so the menu works in the edge-rendered page before any script runs.
-    <details className="relative" data-testid="discover-language">
+    <details ref={box} onToggle={onToggle} className="relative" data-testid="discover-language">
       <summary
         className={`flex cursor-pointer list-none items-center gap-1.5 whitespace-nowrap rounded-full border bg-surface px-3 py-1.5 text-[13px] font-medium hover:border-muted ${
           lang ? 'border-ink' : 'border-line'
@@ -67,13 +73,18 @@ export function LanguageFilter({
           {CHEVRON_DOWN}
         </Glyph>
       </summary>
-      <div className="absolute right-0 top-[calc(100%+6px)] z-[4] flex min-w-[180px] flex-col rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_8px_24px_rgba(0,0,0,.08)] animate-fade">
-        <Link to={hrefOf(null)} className={menuItem(lang === null)}>
+      <div className={menuPanel({ minWidth: 'min-w-[180px]' })}>
+        <Link to={hrefOf(null)} onClick={chosen} className={languageItem(lang === null)}>
           <span>{t('allLanguages')}</span>
           <span className="text-xs text-muted">{languages.reduce((n, l) => n + l.count, 0)}</span>
         </Link>
         {languages.map((l) => (
-          <Link key={l.lang} to={hrefOf(l.lang)} className={menuItem(lang === l.lang)}>
+          <Link
+            key={l.lang}
+            to={hrefOf(l.lang)}
+            onClick={chosen}
+            className={languageItem(lang === l.lang)}
+          >
             <span>{label(l.lang)}</span>
             <span className="text-xs text-muted">{l.count}</span>
           </Link>

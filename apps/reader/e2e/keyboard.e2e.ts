@@ -255,3 +255,112 @@ test('o, l and m typed in a field are typing, not shortcuts', async ({ page, con
   await expect(page.getByTestId('reader')).toBeVisible()
   expect(context.pages()).toHaveLength(1)
 })
+
+test('u undoes from any page that shows the toast, and is a letter in a field', async ({
+  page,
+}) => {
+  await page.goto('/settings/subscriptions')
+  const rows = page.getByTestId('settings-subscription')
+  await expect(rows.first()).toBeVisible()
+  const row = rows.filter({ hasText: 'Julia Evans' })
+  const toast = page.getByTestId('toast')
+  const leave = async () => {
+    await row.getByTestId('move-to').click()
+    await page.getByTestId('row-unsubscribe').click()
+    await expect(row).toHaveCount(0)
+    await expect(toast).toContainText('Unsubscribed from Julia Evans.')
+  }
+
+  // Not the reading page: the key is the toast's own.
+  await leave()
+  await page.keyboard.press('u')
+  await expect(row).toHaveCount(1)
+  await expect(toast).toHaveCount(0)
+
+  // Typed into the filter, it is a letter, and the toast stays.
+  await leave()
+  const filter = page.getByTestId('subscriptions-filter')
+  await filter.focus()
+  await page.keyboard.press('u')
+  await expect(filter).toHaveValue('u')
+  await expect(toast).toContainText('Unsubscribed from Julia Evans.')
+  await filter.fill('')
+  await toast.getByTestId('toast-action').click()
+  await expect(row).toHaveCount(1)
+})
+
+test('the first Tab offers to skip the header, which says which page is current', async ({
+  page,
+}) => {
+  await page.goto('/discover')
+  await expect(page.getByRole('navigation', { name: 'Tela' })).toBeVisible()
+  await expect(page.getByTestId('nav-discover')).toHaveAttribute('aria-current', 'page')
+  expect(await page.getByTestId('nav-reading').getAttribute('aria-current')).toBeNull()
+  await page.keyboard.press('Tab')
+  const skip = page.getByTestId('skip-link')
+  await expect(skip).toBeFocused()
+  await expect(skip).toHaveText('Skip to content')
+  await page.keyboard.press('Enter')
+  await expect(skip).not.toBeFocused()
+  // The next Tab is on the page, past the header's pills and controls.
+  await page.keyboard.press('Tab')
+  const where = () =>
+    page.evaluate(() => ({
+      header: !!document.activeElement?.closest('header'),
+      main: !!document.activeElement?.closest('main'),
+    }))
+  expect(await where()).toEqual({ header: false, main: true })
+})
+
+test('Esc closes a popover and gives focus back to what opened it; a click elsewhere too', async ({
+  page,
+}) => {
+  await openFirst(page)
+  // The Aa menu.
+  const aa = page.getByTestId('typography-button')
+  await aa.click()
+  await expect(page.getByTestId('typography-menu')).toBeVisible()
+  await page.getByTestId('typography-menu').locator('button').first().focus()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('typography-menu')).toHaveCount(0)
+  await expect(aa).toBeFocused()
+  await expect(page.getByTestId('reader')).toBeVisible()
+
+  // Recommend's popover closes on a click elsewhere, as the others do.
+  await page.getByTestId('recommend-button').click()
+  await expect(page.getByTestId('recommend-popover')).toBeVisible()
+  await page.getByTestId('article-title').click()
+  await expect(page.getByTestId('recommend-popover')).toHaveCount(0)
+  // And its own button closes it again, rather than the click elsewhere reopening it.
+  await page.getByTestId('recommend-button').click()
+  await expect(page.getByTestId('recommend-popover')).toBeVisible()
+  await page.getByTestId('recommend-button').click()
+  await expect(page.getByTestId('recommend-popover')).toHaveCount(0)
+
+  // The list of keys is a dialog: focus goes in, and comes back to the article as it closes.
+  await page.getByTestId('reader').focus()
+  await page.keyboard.press('?')
+  const keys = page.getByTestId('shortcuts')
+  await expect(keys).toBeVisible()
+  expect(await keys.evaluate((el) => el.contains(document.activeElement))).toBe(true)
+  await page.keyboard.press('Escape')
+  await expect(keys).toHaveCount(0)
+  await expect(page.getByTestId('reader')).toBeFocused()
+  await expect(page).toHaveURL(/article=\d+/)
+})
+
+test("Discover's language menu closes on a choice and on Esc, which gives its summary focus", async ({
+  page,
+}) => {
+  await page.goto('/discover/articles')
+  const menu = page.getByTestId('discover-language')
+  const summary = menu.locator('summary')
+  await summary.click()
+  await expect(menu).toHaveAttribute('open', '')
+  await page.keyboard.press('Escape')
+  await expect(menu).not.toHaveAttribute('open', '')
+  await expect(summary).toBeFocused()
+  await summary.click()
+  await menu.getByRole('link').first().click()
+  await expect(menu).not.toHaveAttribute('open', '')
+})

@@ -2,7 +2,9 @@
  * tela-web's Worker (ADR 0020, 0024): the one public Worker, running at the reader's edge,
  * unpinned. It never queries D1.
  *
- * - `/api/*` goes to tela-api, pinned beside D1, over a service binding.
+ * - `/api/*` goes to tela-api, pinned beside D1, over a service binding, every time. The public
+ *   pages rendered here read tela-api's public JSON through a copy per colo instead (`pageJson`),
+ *   so a page's four languages cost one D1 read.
  * - `/o/*` serves immutable content, translation and chunk objects from R2 to members, cached per
  *   colo after the session check; `/o/bundle` serves up to 25 content objects in one response.
  * - `/img/<contentKey>/<index>` proxies the image a content object names (ADR 0007's rules),
@@ -27,6 +29,7 @@ import { isBlockedHost } from '@tela/ingest/net'
 import type { Blobs } from '@tela/platform'
 import { getCookieCache } from 'better-auth/cookies'
 import { safeDecode } from '../src/lib/safe-decode'
+import { withSecurityHeaders } from './security'
 
 export type EdgeCache = {
   match(key: Request): Promise<Response | undefined>
@@ -45,6 +48,8 @@ export type EdgeDeps = {
   assets: { fetch(request: Request): Promise<Response> }
   /** Public pages: which URLs are one, and how to render one (`src/ssr.tsx`). */
   pages: PublicPages
+  /** The clock a cached copy's age is told by; `Date.now` unless a test says. */
+  now?: () => number
   config: {
     /** The secret tela-api signs sessions with; the same value on both Workers. */
     authSecret: string
@@ -95,12 +100,16 @@ const AVATAR_VERSION = /^\d{1,16}$/
 const AVATAR_MAX_BYTES = 512 * 1024
 const OBJECT_CACHE = 'private, max-age=31536000, immutable'
 const IMAGE_CACHE = 'private, max-age=604800, immutable'
+const IMAGE_EDGE_CACHE = 'public, max-age=604800, immutable'
+/** An image that could not be had, asked for again after ten minutes. */
+const IMAGE_FAILURE_CACHE = 'private, max-age=600'
+const IMAGE_FAILURE_EDGE_CACHE = 'public, max-age=600'
 /** The cache's own namespace: keys are never a URL a reader can request directly. */
 const CACHE_ORIGIN = 'https://tela-edge.cache'
 /** A page that moved (an address from before Discover's tabs): kept a day, by whoever keeps it. */
 const MOVED_CACHE = 'public, max-age=86400'
 /** A rendered public page, at the edge. The browser always asks again: the page is the shell too. */
-const PAGE_EDGE_CACHE = 'public, s-maxage=300'
+const PAGE_EDGE_SECONDS = 300
 const PAGE_CACHE = 'public, max-age=0, must-revalidate'
 /**
  * How long a public page waits on tela-api before it is the plain shell instead, which asks again
@@ -108,7 +117,17 @@ const PAGE_CACHE = 'public, max-age=0, must-revalidate'
  * it: a slow D1 must not keep the front page blank.
  */
 const PAGE_DEADLINE_MS = 3_000
+/** When the colo's copy of a public answer was made, so a hit can say its `age`. Never sent on. */
+const STORED_AT = 'x-tela-stored-at'
 const WRITES = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+/** A public answer the colo may keep for everyone: one tela-api says a shared cache may. */
+function keepsAtTheColo(res: Response): boolean {
+  if (res.status !== 200 && res.status !== 404) return false
+  if (res.headers.has('set-cookie')) return false
+  const control = (res.headers.get('cache-control') ?? '').toLowerCase()
+  return /\bs-maxage=\d+/.test(control) && !/\b(no-store|private|no-cache)\b/.test(control)
+}
 /** Called by hubs and by the admin script, with their own authorization and no browser. */
 const CROSS_ORIGIN_WRITERS = /^\/api\/(websub|admin)\//
 
@@ -120,6 +139,7 @@ const text = (body: string, status: number, headers: Record<string, string> = {}
 
 export function createEdge(deps: EdgeDeps) {
   const { blobs, api, cache, config, assets, pages } = deps
+  const now = deps.now ?? Date.now
 
   /** A member's session: from the signed cookie cache, else from tela-api (one D1 read). */
   async function session(request: Request): Promise<{ setCookies: string[] } | null> {
@@ -216,25 +236,26 @@ export function createEdge(deps: EdgeDeps) {
     )
   }
 
-  async function serveImage(request: Request, contentKey: string, index: number, waiter?: Waiter) {
-    const member = await session(request)
-    if (!member) return text('sign in first', 401)
-    const cacheKey = new Request(`${CACHE_ORIGIN}/img/${contentKey}/${index}`)
-    const hit = await cache.match(cacheKey)
-    if (hit) return withCookies(new Response(hit.body, hit), member.setCookies)
+  /** The image an object names, fetched and checked; or why not, as the status and text to say. */
+  async function fetchImage(
+    contentKey: string,
+    index: number,
+    waiter?: Waiter,
+  ): Promise<{ bytes: Uint8Array<ArrayBuffer>; type: string } | { status: number; why: string }> {
     const stored = await object(`c/${contentKey}.json`, waiter)
-    if (stored === null) return text('not found', 404)
+    if (stored === null) return { status: 404, why: 'not found' }
     const source = (JSON.parse(stored) as { images?: string[] }).images?.[index]
-    if (!source) return text('not found', 404)
+    if (!source) return { status: 404, why: 'not found' }
     let url: URL
     try {
       url = new URL(source)
     } catch {
-      return text('not found', 404)
+      return { status: 404, why: 'not found' }
     }
     if ((url.protocol !== 'http:' && url.protocol !== 'https:') || isBlockedHost(url.hostname)) {
-      return text('forbidden', 403)
+      return { status: 403, why: 'forbidden' }
     }
+    const failed = { status: 502, why: 'upstream failed' }
     let upstream: Response
     try {
       upstream = await deps.fetchImage(url.toString(), {
@@ -243,34 +264,67 @@ export function createEdge(deps: EdgeDeps) {
         redirect: 'follow',
       })
     } catch {
-      return text('upstream failed', 502)
+      return failed
     }
-    if (!upstream.ok || !upstream.body) return text('upstream failed', 502)
+    if (!upstream.ok || !upstream.body) return failed
     const type =
       (upstream.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? ''
     // SVG can carry script; only raster types a browser renders in an <img>.
-    if (!type.startsWith('image/') || type === 'image/svg+xml') return text('not an image', 415)
+    if (!type.startsWith('image/') || type === 'image/svg+xml') {
+      return { status: 415, why: 'not an image' }
+    }
     const declared = Number(upstream.headers.get('content-length') ?? '0')
-    if (declared > IMAGE_MAX_BYTES) return text('too large', 413)
-    // The headers can arrive and the body still break off: a failure, answered and never kept.
+    if (declared > IMAGE_MAX_BYTES) return { status: 413, why: 'too large' }
+    // The headers can arrive and the body still break off: a failure, never kept as an image.
     let bytes: Uint8Array<ArrayBuffer> | null
     try {
       bytes = await readAtMost(upstream.body, IMAGE_MAX_BYTES)
     } catch {
-      return text('upstream failed', 502)
+      return failed
     }
-    if (!bytes) return text('too large', 413)
-    const headers = {
-      'content-type': type,
-      'cache-control': IMAGE_CACHE,
-      'x-content-type-options': 'nosniff',
-      'content-security-policy': "default-src 'none'; sandbox",
-      'x-robots-tag': 'noindex',
+    if (!bytes) return { status: 413, why: 'too large' }
+    return { bytes, type }
+  }
+
+  /**
+   * An image through the colo's cache, failures included: a broken image on a post is asked for
+   * on every view of it, by every reader, and each ask could wait out the ten-second upstream
+   * timeout and press a host that is already failing. A failure is kept ten minutes, at the colo
+   * and in the browser, and then asked again.
+   */
+  async function serveImage(request: Request, contentKey: string, index: number, waiter?: Waiter) {
+    const member = await session(request)
+    if (!member) return text('sign in first', 401)
+    const cacheKey = new Request(`${CACHE_ORIGIN}/img/${contentKey}/${index}`)
+    const hit = await cache.match(cacheKey)
+    if (hit) {
+      const response = new Response(hit.body, hit)
+      response.headers.set('cache-control', hit.ok ? IMAGE_CACHE : IMAGE_FAILURE_CACHE)
+      return withCookies(response, member.setCookies)
     }
-    const put = cache.put(cacheKey, new Response(bytes, { headers }))
+    const image = await fetchImage(contentKey, index, waiter)
+    // The colo's copy says public: Cloudflare's cache does not keep a response marked private.
+    let kept: Response
+    let answer: Response
+    if ('bytes' in image) {
+      const headers = {
+        'content-type': image.type,
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; sandbox",
+        'x-robots-tag': 'noindex',
+      }
+      kept = new Response(image.bytes, {
+        headers: { ...headers, 'cache-control': IMAGE_EDGE_CACHE },
+      })
+      answer = new Response(image.bytes, { headers: { ...headers, 'cache-control': IMAGE_CACHE } })
+    } else {
+      kept = text(image.why, image.status, { 'cache-control': IMAGE_FAILURE_EDGE_CACHE })
+      answer = text(image.why, image.status, { 'cache-control': IMAGE_FAILURE_CACHE })
+    }
+    const put = cache.put(cacheKey, kept)
     if (waiter) waiter.waitUntil(put)
     else await put
-    return withCookies(new Response(bytes, { headers }), member.setCookies)
+    return withCookies(answer, member.setCookies)
   }
 
   /**
@@ -301,6 +355,41 @@ export function createEdge(deps: EdgeDeps) {
     if (waiter) waiter.waitUntil(put)
     else await put
     return new Response(bytes, { status: res.status, headers })
+  }
+
+  /**
+   * tela-api's public JSON (`/api/v1/public/*`) for a page rendered here, through a copy per colo:
+   * a blog, a profile or Discover rendered in four languages asks D1 in Singapore once a colo for
+   * as long as tela-api says (`s-maxage`), since the answers carry every language and read no
+   * cookie. Only a 200 or 404 that sets no cookie and says `s-maxage`, and none of `no-store`,
+   * `private` or `no-cache`, is kept. A copy says its `age`, so the page made from it is kept only
+   * for what the copy had left.
+   *
+   * The app's own requests never come here: they go to tela-api each time. Serving them from this
+   * copy kept a change from the member who made it (a claim, a hide, a follow) for up to five
+   * minutes, since nothing they did could tell every list it touched to ask again.
+   */
+  async function pageJson(url: URL, waiter?: Waiter): Promise<Response> {
+    const cacheKey = new Request(`${CACHE_ORIGIN}${url.pathname}${url.search}`)
+    const hit = await cache.match(cacheKey)
+    if (hit) {
+      const response = new Response(hit.body, hit)
+      const at = Number(response.headers.get(STORED_AT))
+      response.headers.delete(STORED_AT)
+      if (Number.isFinite(at) && at > 0) {
+        response.headers.set('age', String(Math.max(0, Math.floor((now() - at) / 1000))))
+      }
+      return response
+    }
+    const res = await api.fetch(new Request(url.toString()))
+    if (!keepsAtTheColo(res)) return res
+    const body = await res.arrayBuffer()
+    const kept = new Response(body, res)
+    kept.headers.set(STORED_AT, String(now()))
+    const put = cache.put(cacheKey, kept)
+    if (waiter) waiter.waitUntil(put)
+    else await put
+    return new Response(body, res)
   }
 
   async function servePublic(request: Request, waiter?: Waiter): Promise<Response> {
@@ -346,12 +435,15 @@ export function createEdge(deps: EdgeDeps) {
     path: string,
     url: URL,
     alwaysExists: boolean,
-  ): Promise<{ data: unknown } | null> {
+    waiter?: Waiter,
+  ): Promise<{ data: unknown; age: number } | null> {
     const ask = async () => {
-      const res = await api.fetch(new Request(new URL(path, url).toString()))
-      if (res.status === 404 && !alwaysExists) return { data: null }
+      // Through the colo's copy: the page's four languages share one D1 read.
+      const res = await pageJson(new URL(path, url), waiter)
+      const age = Number(res.headers.get('age') ?? '0') || 0
+      if (res.status === 404 && !alwaysExists) return { data: null, age }
       if (res.status !== 200) return null
-      return { data: (await res.json()) as unknown }
+      return { data: (await res.json()) as unknown, age }
     }
     const deadline = config.pageDeadlineMs ?? PAGE_DEADLINE_MS
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -396,8 +488,11 @@ export function createEdge(deps: EdgeDeps) {
     }
     // A page with no endpoint (About, Privacy, Terms) renders from the bundle alone.
     let data: unknown = {}
+    // How old the data already is: the page is kept only as long as its data had left, so a page
+    // made from the colo's four-minute-old copy is not kept five minutes more.
+    let age = 0
     if (route.api !== null) {
-      const answer = await pageData(route.api, url, route.alwaysExists === true)
+      const answer = await pageData(route.api, url, route.alwaysExists === true, waiter)
       // tela-api is down, slow or failing, or (for a page that always exists) has no such endpoint
       // yet: the plain shell, uncached, which asks again from the browser. A cached 404 at `/`
       // would be the front page for five minutes.
@@ -407,6 +502,7 @@ export function createEdge(deps: EdgeDeps) {
         })
       }
       data = answer.data
+      age = answer.age
     }
     let html: string
     try {
@@ -422,12 +518,18 @@ export function createEdge(deps: EdgeDeps) {
     }
     const headers = { 'content-type': 'text/html; charset=utf-8', 'content-language': locale }
     const status = data === null ? 404 : 200
-    const put = cache.put(
-      cacheKey,
-      new Response(html, { status, headers: { ...headers, 'cache-control': PAGE_EDGE_CACHE } }),
-    )
-    if (waiter) waiter.waitUntil(put)
-    else await put
+    const keep = PAGE_EDGE_SECONDS - age
+    if (keep > 0) {
+      const put = cache.put(
+        cacheKey,
+        new Response(html, {
+          status,
+          headers: { ...headers, 'cache-control': `public, s-maxage=${keep}` },
+        }),
+      )
+      if (waiter) waiter.waitUntil(put)
+      else await put
+    }
     return new Response(html, { status, headers: { ...headers, 'cache-control': PAGE_CACHE } })
   }
 
@@ -478,6 +580,11 @@ export function createEdge(deps: EdgeDeps) {
       if (config.privateBeta && !response.headers.has('x-robots-tag')) {
         response = new Response(response.body, response)
         response.headers.set('x-robots-tag', 'noindex, nofollow')
+      }
+      // Every page this Worker answers, rendered, cached, the plain shell or a member's `/`,
+      // carries what `_headers` gives the pages it never sees (ADR 0051).
+      if ((response.headers.get('content-type') ?? '').includes('text/html')) {
+        response = withSecurityHeaders(response)
       }
       return response
     },

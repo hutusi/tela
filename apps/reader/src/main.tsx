@@ -1,26 +1,58 @@
 /**
  * Boot: open the device's store, render from it straight away, then sync behind it. Nothing here
  * waits on the network before the first paint (ADR 0025).
+ *
+ * Nothing here may leave the page blank either. A device store that opens and then fails (a full
+ * disk, a copy IndexedDB will not read) is replaced by one in memory: the app runs, and only
+ * forgets between visits. A render that throws is caught by the root boundary, which needs no
+ * provider, and a boot that fails all the same says so in the page's language, unless the edge
+ * already rendered the page, which then stays as it reads without JavaScript. Each failure is
+ * reported (`lib/report.ts`).
  */
 import './styles.css'
 import { createRoot } from 'react-dom/client'
 import { App } from './app'
+import { AppFailed, bareLocale, ErrorBoundary } from './components/error-boundary'
 import { leaver } from './leave'
+import { report, watchErrors } from './lib/report'
 import { pageTheme, paintChrome } from './lib/typography'
 import { openStore, sessionEvents } from './session'
 import { registerShell } from './shell'
 import { bindApi } from './store/api'
-import { indexedDbPersistence, memoryPersistence } from './store/db'
+import {
+  type EarlierBuild,
+  indexedDbPersistence,
+  memoryPersistence,
+  type Persistence,
+} from './store/db'
 import { SyncEngine } from './store/engine'
 import { Objects } from './store/objects'
 
-async function boot() {
+/** An earlier build's database is IndexedDB's to look at, and a memory store has none. */
+const NO_EARLIER: EarlierBuild = {
+  wrote: async () => false,
+  empty: async () => null,
+  seen: async () => undefined,
+}
+
+/** The store on the device, or, when the device refuses it, one in memory. */
+async function deviceStore() {
+  // A browser that refuses IndexedDB (some private modes) still reads, just without a memory.
+  const persistence: Persistence = await indexedDbPersistence().catch(() => memoryPersistence())
+  try {
+    return { persistence, store: await openStore(persistence) }
+  } catch (err) {
+    report('boot', err)
+    const memory = memoryPersistence()
+    return { persistence: memory, store: await openStore(memory, NO_EARLIER) }
+  }
+}
+
+async function boot(root: HTMLElement) {
   // The browser's bar follows a theme this device chose, which the inline script has put on the
   // page; a member's synced one applies again once their rows are in.
   paintChrome(pageTheme())
-  // A browser that refuses IndexedDB (some private modes) still reads, just without a memory.
-  const persistence = await indexedDbPersistence().catch(() => memoryPersistence())
-  const store = await openStore(persistence)
+  const { persistence, store } = await deviceStore()
   const objects = new Objects(persistence)
 
   const leave = leaver({
@@ -40,12 +72,29 @@ async function boot() {
   // Every call names the account the tab holds, and any call can find out it is out of date.
   bindApi({ member: () => store.userId, accountChanged: leave, upgrade })
 
-  const root = document.getElementById('root')
-  if (!root) throw new Error('no #root')
-  createRoot(root).render(<App store={store} engine={engine} objects={objects} />)
+  // A page's boundary showed Try again, or the root's showed the app's failure: told to tela-api,
+  // and to the console as React would have.
+  const caught = (error: unknown) => {
+    console.error(error)
+    report('boundary', error)
+  }
+  createRoot(root, { onCaughtError: caught, onUncaughtError: caught }).render(
+    <ErrorBoundary fallback={() => <AppFailed locale={bareLocale()} />}>
+      <App store={store} engine={engine} objects={objects} />
+    </ErrorBoundary>,
+  )
   registerShell.register()
   // Old bodies go once the page has settled; nothing waits on it.
   setTimeout(() => void objects.evict(), 10_000)
 }
 
-void boot()
+watchErrors()
+const root = document.getElementById('root')
+if (root) {
+  boot(root).catch((err: unknown) => {
+    report('boot', err)
+    // A page the edge rendered reads as it is; an empty shell says what went wrong.
+    if (root.childElementCount > 0) return
+    createRoot(root).render(<AppFailed locale={bareLocale()} />)
+  })
+}

@@ -8,7 +8,9 @@
  *   kept, its root empty and with no `#tela-data` handover;
  * - `/assets/*` are content-hashed, so a cached copy is served forever. Only a copy that is what
  *   its name says is kept: the edge answers a hashed file its deploy lacks 200 with the app's
- *   HTML (ARCHITECTURE.md), which kept under a script's name would be served forever too;
+ *   HTML (ARCHITECTURE.md), which kept under a script's name would be served forever too. One
+ *   that is not is asked for once more past the browser's own cache, which keeps `/assets/*` a day
+ *   (`_headers`) and may hold the app's HTML under that name from a deploy rolled back;
  * - the cached index.html is replaced only once every file the new one loads is cached, and the
  *   files of the one it replaces are kept, so whichever shell a navigation gets boots offline and
  *   after the deploy that removed its files from the network;
@@ -64,6 +66,19 @@ function fits(path, res) {
   if (!res.ok || type.includes('text/html')) return false
   const want = TYPES[path.slice(path.lastIndexOf('.') + 1)]
   return !want || type.includes(want)
+}
+
+/**
+ * A hashed file from the network. An answer that is not what its name says is asked for once more
+ * past the browser's HTTP cache (`cache: 'reload'`): `_headers` lets the browser keep `/assets/*`
+ * a day, and the single-page fallback's HTML for a name a deploy lacked, which `_headers` covers
+ * too, may be what it kept (AGENTS.md). The network's own answer replaces it there. Whatever the
+ * second answer is, it is the one returned; a network that fails the second time leaves the first.
+ */
+async function fetchAsset(path, request = path) {
+  const res = await fetch(request)
+  if (fits(path, res)) return res
+  return fetch(request, { cache: 'reload' }).catch(() => res)
 }
 
 /**
@@ -142,7 +157,7 @@ async function swapShell() {
   const ready = await Promise.all(
     [...loads(html)].map(async (path) => {
       if (await cache.match(path)) return true
-      const asset = await fetch(path).catch(() => null)
+      const asset = await fetchAsset(path).catch(() => null)
       if (!asset || !fits(path, asset)) return false
       await cache.put(path, asset)
       return true
@@ -193,7 +208,7 @@ self.addEventListener('fetch', (event) => {
         const cache = await caches.open(SHELL)
         const cached = await cache.match(url.pathname)
         if (cached) return cached
-        const res = await fetch(request)
+        const res = await fetchAsset(url.pathname, request)
         // Passed on whatever it is, but kept only if it is what the name says.
         if (fits(url.pathname, res)) await cache.put(url.pathname, res.clone())
         return res

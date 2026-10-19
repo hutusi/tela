@@ -235,6 +235,7 @@
     "deadLetters": "過去一天有 {value} 個任務成了死信且尚未處理，超過上限 {limit}。",
     "stuckBodies": "{value} 篇正文翻譯已等待超過 30 分鐘。",
     "extractionBacklog": "{value} 篇文章等待全文已超過六小時，超過上限 {limit}。",
+    "tickErrors": "上一次排程有 {value} 類任務未能認領。",
     "backupAge": "最近一次備份已是 {value} 小時前，超過上限 {limit} 小時。",
     "backupVerified": "最近一次備份校驗失敗。"
   }

@@ -19,7 +19,7 @@ import {
 } from '../lib/blogroll-pages'
 import { useTitle } from '../lib/title'
 import { useOpenedWith, useTopOnArrival } from '../lib/use-discover'
-import { usePublic } from '../lib/use-public'
+import { retryOf, usePublic } from '../lib/use-public'
 import { type BlogrollReason, DiscoverBlogrollsView } from '../views/discover-blogrolls'
 import type { BlogrollCard, BlogrollsData } from '../views/types'
 
@@ -83,6 +83,7 @@ export function BlogrollsPage() {
       next={next}
       reasonOf={reasonOf}
       loadingMore={busy}
+      onRetry={retryOf(loaded)}
       onMore={(e) => {
         // A link without a script, more of this page with one: the address stays as it is. A
         // click meant for a new tab or window stays the link's.

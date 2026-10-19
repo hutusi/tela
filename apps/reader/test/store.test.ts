@@ -171,6 +171,45 @@ describe('the device store', () => {
     expect(store.getSnapshot().tables.states.get(7)?.readAt).toBe(NOW)
   })
 
+  test('a pull that brings nothing moves the cursor and keeps the snapshot', async () => {
+    const storage = recording()
+    const store = await member(storage)
+    let heard = 0
+    store.subscribe(() => heard++)
+    const before = store.getSnapshot()
+    expect(await store.applyPull(pull(6, {}), store.epoch)).toBe(false)
+    // Other accounts' writes move the sequence too: the next pull starts past them.
+    expect(store.cursor).toBe(6)
+    const saved = await storage.load()
+    expect(saved.cursor).toBe(6)
+    expect(saved.covered).toEqual([...TABLES])
+    expect(storage.saved.at(-1)).toEqual([])
+    // Nothing on screen changed, so nothing re-renders.
+    expect(store.getSnapshot()).toBe(before)
+    expect(heard).toBe(0)
+  })
+
+  test('a pull that brings nothing still settles the changes it reaches', async () => {
+    const storage = memoryPersistence()
+    const store = await member(storage)
+    store.mutate({ type: 'markRead', articleId: 7 })
+    const [m] = store.unsent()
+    await store.acknowledge({ applied: [m?.mid ?? ''], rejected: [], seq: 9 }, store.epoch)
+    // A pull short of the change's seq keeps it, and the snapshot with it.
+    const held = store.getSnapshot()
+    await store.applyPull(pull(8, {}), store.epoch)
+    expect(store.getSnapshot()).toBe(held)
+    expect(store.getSnapshot().pendingCount).toBe(1)
+    // One that reaches it drops it: the screen loses a pending count, so it renders again.
+    await store.applyPull(pull(9, {}), store.epoch)
+    expect(store.getSnapshot()).not.toBe(held)
+    expect(store.getSnapshot().pendingCount).toBe(0)
+    expect(store.cursor).toBe(9)
+    const saved = await storage.load()
+    expect(saved.cursor).toBe(9)
+    expect(saved.pending).toEqual([])
+  })
+
   test('a refused change is undone', async () => {
     const store = await member()
     store.mutate({ type: 'setLiked', articleId: 7, liked: true })

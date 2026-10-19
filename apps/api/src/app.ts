@@ -12,6 +12,8 @@ import {
 } from '@tela/sync'
 import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
+import { HTTPException } from 'hono/http-exception'
 import { type Auth, createAuth } from './auth'
 import type { ApiDeps } from './deps'
 import { fromOperator } from './operator'
@@ -21,6 +23,7 @@ import { runBatch } from './routes/admin/framework'
 import { avatarRoutes } from './routes/avatars'
 import { blogrollRoutes } from './routes/blogrolls'
 import { claimRoutes } from './routes/claims'
+import { clientErrorRoutes } from './routes/client-errors'
 import { curate } from './routes/curate'
 import { discoverRoutes } from './routes/discover'
 import { feedRoutes } from './routes/feeds'
@@ -97,9 +100,62 @@ function protocolOf(header: string | undefined): number {
 /** A client older than the protocol is told to reload, not left misreading rows. */
 const tooOld = (header: string | undefined) => protocolOf(header) < MIN_CLIENT
 
+/** The most any request body may hold unless its route says otherwise: every JSON call is small. */
+export const BODY_MAX_BYTES = 64 * 1024
+/**
+ * A push: fifty changes, and a highlight's quote and note are 2,000 characters each, which in
+ * Chinese or emoji is up to 16 KB a change.
+ */
+export const PUSH_MAX_BYTES = 1024 * 1024
+
+/**
+ * The most a request's body may hold: `null` for the routes that read their own body no further
+ * than their own cap, through `readAtMost` or `readCapped` (a picture, a hub's notification, an
+ * OPML file, a client's error report), so that a body which sends no length is never held whole
+ * here first.
+ */
+export function bodyCap(method: string, path: string): number | null {
+  if (method === 'PUT' && path === '/api/v1/avatar') return null
+  if (method === 'POST' && path.startsWith('/api/websub/')) return null
+  if (method === 'POST' && path === '/api/v1/feeds/opml') return null
+  if (method === 'POST' && path === '/api/client-errors') return null
+  if (method === 'POST' && path === '/api/v1/mutations') return PUSH_MAX_BYTES
+  return BODY_MAX_BYTES
+}
+
 export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   const auth = createAuth(deps)
   const app = new Hono<ApiEnv>()
+
+  // Before every route, so it runs first. A Worker otherwise holds whatever a caller sends.
+  app.use('*', async (c, next) => {
+    const max = bodyCap(c.req.method, c.req.path)
+    if (max === null) return next()
+    return bodyLimit({ maxSize: max, onError: (c) => c.json({ error: 'too_large' }, 413) })(c, next)
+  })
+
+  // An error is answered as JSON, which every caller reads, and logged with what finds the
+  // request again: its path, Cloudflare's ray id, and the member it acted for.
+  app.onError((err, c) => {
+    if (err instanceof HTTPException) return err.getResponse()
+    console.error(
+      'request failed',
+      {
+        method: c.req.method,
+        path: c.req.path,
+        ray: c.req.header('cf-ray') ?? null,
+        member: (c.get('member') as Member | undefined)?.id ?? null,
+      },
+      err,
+    )
+    return c.json({ error: 'internal' }, 500)
+  })
+  // tela-web forwards every `/api/*`, so a route nobody serves is a client of another release,
+  // or a probe: said in JSON, and logged without the query, which may hold a code.
+  app.notFound((c) => {
+    console.warn('no such route', c.req.method, c.req.path)
+    return c.json({ error: 'not_found' }, 404)
+  })
 
   // Signing out names the member too, in the same request that ends the session: a tab still
   // holding the account another tab signed out of must not end the session that tab started. A
@@ -238,7 +294,9 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     })
   }
 
-  // Anyone may read these; tela-web caches them at the edge.
+  // Anyone may read these, and nothing in them depends on who asks: the pages tela-web renders
+  // from them keep each answer per colo for as long as its `s-maxage` says (`pageJson` in
+  // edge.ts); the app's own requests come here every time.
   app.route('/api/v1/public/avatars', avatarRoutes(deps))
   // Discover's This week, Articles and Readers (ADR 0044), under the Blogs answer's own path:
   // that one is `/discover` exactly, in `publicRoutes`, and these are only below it.
@@ -248,6 +306,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1/public', publicRoutes(deps, auth))
   // Hubs, not members, call this; the signature is the authorization.
   app.route('/api/websub', websubRoutes(deps))
+  // What breaks in a browser, a visitor's too: no session, counted per IP, logged and kept nowhere.
+  app.route('/api/client-errors', clientErrorRoutes(deps, auth))
 
   /**
    * Joining with an invite code is a visitor's: `/api/v1/join` needs no session (ADR 0034).

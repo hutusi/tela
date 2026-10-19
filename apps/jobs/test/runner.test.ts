@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { first, headSeq, startLease, type TelaDb } from '@tela/data'
 import { createTestDb } from '@tela/data/testing'
 import { createHttpClient } from '@tela/ingest/http'
@@ -101,6 +101,7 @@ describe('tick and runJob', () => {
       'article.extract': 0,
       'member.gravatar': 0,
       'site.claim': 0,
+      errors: {},
       config: {
         backgroundBudget: 2_000_000,
         maxArticleTokens: 40_000,
@@ -110,6 +111,39 @@ describe('tick and runJob', () => {
         assets: false,
       },
     })
+  })
+
+  test('a kind that fails is recorded and passed, and the kinds after it still run', async () => {
+    const spec = KINDS['feed.fetch']
+    if (!spec) throw new Error('no feed.fetch')
+    const due = spec.due
+    spec.due = () => {
+      throw new Error('D1_ERROR: no such column: f.oops')
+    }
+    const logged = spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const report = await tick(ctx)
+      expect(report['feed.fetch']).toBeUndefined()
+      expect(report['article.extract']).toBe(0)
+      expect(report['site.claim']).toBe(0)
+    } finally {
+      spec.due = due
+      logged.mockRestore()
+    }
+    const beat = await first<{ info: string }>(
+      db,
+      sql`select info from ops_heartbeats where name = 'tick'`,
+    )
+    expect(JSON.parse(beat?.info ?? '{}').errors).toEqual({
+      'feed.fetch': 'Error: D1_ERROR: no such column: f.oops',
+    })
+    // The next tick that runs it clears it.
+    await tick(ctx)
+    const after = await first<{ info: string }>(
+      db,
+      sql`select info from ops_heartbeats where name = 'tick'`,
+    )
+    expect(JSON.parse(after?.info ?? '{}').errors).toEqual({})
   })
 
   test("a host's summary articles are extracted one after another, a gap apart, not one a tick", async () => {

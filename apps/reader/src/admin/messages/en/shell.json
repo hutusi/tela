@@ -251,6 +251,7 @@
     "deadLetters": "{value, plural, one {# job was} other {# jobs were}} dead-lettered in the last day and not yet resolved, above the limit of {limit}.",
     "stuckBodies": "{value, plural, one {# body translation has} other {# body translations have}} waited over 30 minutes.",
     "extractionBacklog": "{value, plural, one {# article has} other {# articles have}} waited over six hours for the full text, above the limit of {limit}.",
+    "tickErrors": "The last tick could not claim {value, plural, one {# kind} other {# kinds}} of work.",
     "backupAge": "The last backup is {value} hours old, above the limit of {limit}.",
     "backupVerified": "The last backup failed its check."
   }

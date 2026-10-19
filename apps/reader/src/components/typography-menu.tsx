@@ -13,7 +13,7 @@ import {
   THEMES,
   typographyOf,
 } from '../lib/typography'
-import { useDismiss } from '../lib/use-dismiss'
+import { usePopover } from '../lib/use-popover'
 import { useStore, useTables } from '../store/hooks'
 
 function Choice<T extends string>({
@@ -96,11 +96,19 @@ export function TypographyMenu() {
   const t = useTranslations('typography')
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
-  // Esc closes the menu, and only the menu: the reader's own Esc closes the article.
-  useDismiss(open, () => setOpen(false), box)
+  const button = useRef<HTMLButtonElement>(null)
+  // Esc closes the menu, and only the menu (the reader's own Esc closes the article), and gives
+  // focus back to Aa.
+  usePopover(
+    open,
+    () => setOpen(false),
+    box,
+    () => button.current,
+  )
   return (
     <div ref={box} className="relative">
       <button
+        ref={button}
         type="button"
         aria-expanded={open}
         aria-label={t('label')}
@@ -113,7 +121,7 @@ export function TypographyMenu() {
       </button>
       {open ? (
         <div
-          className="absolute right-0 top-[calc(100%+8px)] z-[6] w-72 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.10)] animate-fade"
+          className="absolute right-0 top-[calc(100%+8px)] z-[6] w-72 rounded-xl border border-line bg-surface p-3.5 shadow-popover animate-fade"
           data-testid="typography-menu"
         >
           <TypographyControls />

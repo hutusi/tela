@@ -6,7 +6,7 @@ import { buildUserPayload } from './prompt'
 import { configFromEnv, isAccidentalMock } from './providers'
 import { type TranslateBlocksInput, translateBlocks } from './translate'
 import { createSdkTranslator, parseJsonReply, parseTranslations } from './translator'
-import type { TranslationRequest, Translator } from './types'
+import { billedUsage, TranslationFailed, type TranslationRequest, type Translator } from './types'
 import { validateTranslation } from './validate'
 
 describe('chunking', () => {
@@ -389,5 +389,81 @@ describe('createSdkTranslator', () => {
         strict: false,
       }),
     ).rejects.toThrow()
+  })
+
+  /** A model that answers `text`, billed at 120 tokens in and 30 out. */
+  const answering = (text: string) =>
+    new MockLanguageModelV4({
+      doGenerate: async () => ({
+        content: [{ type: 'text', text }],
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage: {
+          inputTokens: { total: 120, noCache: 120, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 30, text: 30, reasoning: 0 },
+        },
+        warnings: [],
+      }),
+    })
+  const request: TranslationRequest = {
+    sourceLang: 'en',
+    targetLang: 'zh-Hans',
+    blocks: [{ id: 'a', text: 'hello there, friend' }],
+    context: { previous: [] },
+    strict: false,
+  }
+
+  test('a reply that cannot be read still says what it cost', async () => {
+    const translator = createSdkTranslator(answering('Sorry, I cannot help with that.'), {
+      modelName: 'glm',
+    })
+    const failed = await translator.translate(request).catch((err: unknown) => err)
+    expect(failed).toBeInstanceOf(TranslationFailed)
+    expect(billedUsage(failed)).toEqual([
+      { model: 'glm', inputTokens: 120, outputTokens: 30, latencyMs: expect.any(Number) },
+    ])
+    // So does one whose schema the provider was held to.
+    const schema = createSdkTranslator(answering('not json'), {
+      modelName: 'glm',
+      jsonMode: 'schema',
+    })
+    const refused = await schema.translate(request).catch((err: unknown) => err)
+    expect(billedUsage(refused)).toMatchObject([{ inputTokens: 120, outputTokens: 30 }])
+  })
+
+  test('translateBlocks counts what unreadable replies cost, whether or not a later call succeeds', async () => {
+    const translator = createSdkTranslator(answering('no json here'), { modelName: 'glm' })
+    // Every call unreadable: the failure carries what they cost (a provider error is not retried).
+    const thrown = await translateBlocks(translator, {
+      blocks: [{ id: 'a', text: 'hello there, friend' }],
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+    }).catch((err: unknown) => err)
+    expect(thrown).toBeInstanceOf(TranslationFailed)
+    expect(billedUsage(thrown)).toHaveLength(1)
+    // One unreadable reply among good ones: its usage is in the outcome's.
+    let call = 0
+    const flaky: Translator = {
+      model: 'glm',
+      async translate(req) {
+        call += 1
+        if (call === 1) return translator.translate(req)
+        return createMockTranslator().translate(req)
+      },
+    }
+    const outcome = await translateBlocks(flaky, {
+      blocks: [
+        { id: 'a', text: 'x'.repeat(400) },
+        { id: 'b', text: 'y'.repeat(400) },
+      ],
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+      maxTokensPerChunk: 100,
+    })
+    expect(outcome.usage[0]).toMatchObject({ model: 'glm', inputTokens: 120, outputTokens: 30 })
+    expect(outcome.usage).toHaveLength(2)
+  })
+
+  test('a provider that never answered bills nothing', () => {
+    expect(billedUsage(new Error('fetch failed'))).toEqual([])
   })
 })

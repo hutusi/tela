@@ -410,6 +410,11 @@ export class LocalStore {
    * to before it, ADR 0048) is not folded in, since the rows of that table written meanwhile lie
    * behind the cursor, and only a snapshot brings them. The rows held stay on screen until it
    * comes.
+   *
+   * A delta that brings nothing (no row, no tombstone: what most of the minute's pulls bring)
+   * still moves the cursor, which every other account's writes move too, and still settles the
+   * changes it reaches, but it keeps the confirmed tables and, unless a change settled, the
+   * snapshot: a new one re-renders every screen for nothing.
    */
   async applyPull(given: PullResponse, epoch: number): Promise<boolean> {
     const owner = this.userId
@@ -429,17 +434,25 @@ export class LocalStore {
     const before = this.confirmed.tables
     const from = this.confirmed.cursor
     const queued = this.pending
-    this.confirmed = applyPull(this.confirmed, pull)
+    const quiet =
+      !pull.reset &&
+      pull.tombstones.length === 0 &&
+      Object.values(pull.rows).every((rows) => rows.length === 0)
+    this.confirmed = quiet
+      ? { cursor: pull.cursor, tables: before }
+      : applyPull(this.confirmed, pull)
     const after = this.confirmed.tables.follows
-    const changedFollows = [
-      ...[...after.values()].filter((f) => !before.follows.has(f.userId)),
-      ...[...before.follows.values()].filter((f) => !after.has(f.userId)),
-    ]
+    const changedFollows = quiet
+      ? []
+      : [
+          ...[...after.values()].filter((f) => !before.follows.has(f.userId)),
+          ...[...before.follows.values()].filter((f) => !after.has(f.userId)),
+        ]
     if (changedFollows.length > 0) this.onFollowsConfirmed?.(changedFollows)
     // A held change is unanswered, so it stays, and nothing of it is written here.
     this.pending = settle(this.confirmed, this.pending)
     this.pruneHolds()
-    this.recompute()
+    if (!quiet || this.pending.length !== queued.length) this.recompute()
     const rows = rowsOf(this.confirmed.tables)
     const changed: Partial<TableRows> = {}
     for (const name of Object.keys(rows) as (keyof TableRows)[]) {

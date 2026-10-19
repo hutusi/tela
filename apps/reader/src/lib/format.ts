@@ -1,4 +1,35 @@
 import { languageBadge } from '@tela/shared'
+import { daysAgo } from './days'
+
+/**
+ * Formatters by locale and options. Building one costs far more than formatting with it, and a
+ * list renders a date per row on every render: one per locale and use is enough.
+ */
+const formatters = new Map<string, Intl.RelativeTimeFormat | Intl.DateTimeFormat>()
+
+/**
+ * One `Intl.RelativeTimeFormat` per locale and style, made once: building one costs far more than
+ * using it, and a list words a time per row.
+ */
+export function relativeFormat(locale: string, style: 'long' | 'short' | 'narrow' = 'long') {
+  const key = `r|${style}|${locale}`
+  let f = formatters.get(key) as Intl.RelativeTimeFormat | undefined
+  if (!f) {
+    f = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style })
+    formatters.set(key, f)
+  }
+  return f
+}
+
+function dateFormat(locale: string, use: string, options: Intl.DateTimeFormatOptions) {
+  const key = `d|${use}|${locale}`
+  let f = formatters.get(key) as Intl.DateTimeFormat | undefined
+  if (!f) {
+    f = new Intl.DateTimeFormat(locale, options)
+    formatters.set(key, f)
+  }
+  return f
+}
 
 /**
  * Short relative time such as "2h ago" / "2 小时前" / "il y a 2 h", or a date beyond 30 days.
@@ -8,17 +39,15 @@ export function relativeTime(at: number | null, locale: string, now = Date.now()
   if (at === null) return ''
   const diffSec = Math.round((now - at) / 1000)
   const style = locale === 'fr' ? 'short' : 'narrow'
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style })
+  const rtf = relativeFormat(locale, style)
   const abs = Math.abs(diffSec)
   if (abs < 60) return rtf.format(0, 'minute').replace(/^in |^now$/, (m) => (m === 'now' ? m : ''))
   if (abs < 3600) return rtf.format(-Math.round(diffSec / 60), 'minute')
   if (abs < 86400) return rtf.format(-Math.round(diffSec / 3600), 'hour')
   if (abs < 30 * 86400) return rtf.format(-Math.round(diffSec / 86400), 'day')
-  return new Intl.DateTimeFormat(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(at))
+  return dateFormat(locale, 'ymd', { year: 'numeric', month: 'short', day: 'numeric' }).format(
+    new Date(at),
+  )
 }
 
 /** Deterministic accent color for a feed, from its id. */
@@ -112,24 +141,20 @@ export function personColor(handle: string): string {
  * within their offset of midnight, which is cheaper than an edge cache split by timezone.
  */
 export function shortDate(at: number, locale: string, now = Date.now()): string {
-  const day = (t: number) => {
-    const d = new Date(t)
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-  }
-  const days = Math.round((day(now) - day(at)) / 86_400_000)
+  // The calendar count every "today" in the app is worded from: a date ahead of `now` is today.
+  const days = daysAgo(at, now)
   if (days === 0 || days === 1) {
-    const word = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-days, 'day')
+    const word = relativeFormat(locale, 'long').format(-days, 'day')
     return word.charAt(0).toLocaleUpperCase(locale) + word.slice(1)
   }
   const sameYear = new Date(at).getFullYear() === new Date(now).getFullYear()
-  return new Intl.DateTimeFormat(locale, {
-    month: 'short',
-    day: 'numeric',
-    ...(sameYear ? {} : { year: 'numeric' }),
-  }).format(new Date(at))
+  const format = sameYear
+    ? dateFormat(locale, 'md', { month: 'short', day: 'numeric' })
+    : dateFormat(locale, 'ymd', { year: 'numeric', month: 'short', day: 'numeric' })
+  return format.format(new Date(at))
 }
 
 /** "September 2026", "2026年9月": when a member joined. */
 export function monthYear(at: number, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(new Date(at))
+  return dateFormat(locale, 'my', { month: 'long', year: 'numeric' }).format(new Date(at))
 }

@@ -808,6 +808,7 @@ test.describe('a member at /join', () => {
       await page.goto('/join?code=E2EMEMBERCODE')
       const sheet = page.getByTestId('front-door')
       await expect(sheet.getByTestId('join-code')).toHaveValue('E2EMEMBERCODE')
+      await expect(page).toHaveTitle('Join · Tela')
       release()
       await expect(page).toHaveURL(/\/reading$/)
       await expect(sheet).toHaveCount(0)

@@ -7,6 +7,7 @@
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { BLOGROLL_GRID, BlogrollCard } from '../components/blogroll-card'
+import { LoadFailed } from '../components/load-failed'
 import { blogrollsHref } from '../lib/blogroll-href'
 import { DiscoverFrame } from './discover-frame'
 import type { BlogrollCard as BlogrollCardData } from './types'
@@ -22,6 +23,7 @@ export function DiscoverBlogrollsView({
   reasonOf = noReason,
   onMore,
   loadingMore = false,
+  onRetry,
 }: {
   /** Null while the first page is on its way. */
   cards: readonly BlogrollCardData[] | null
@@ -31,6 +33,8 @@ export function DiscoverBlogrollsView({
   /** More of this page in place, once the app runs: the link's own click, to prevent. */
   onMore?: ((event: React.MouseEvent<HTMLAnchorElement>) => void) | undefined
   loadingMore?: boolean
+  /** Set once the first page failed to come: Try again, in the skeleton's place. */
+  onRetry?: (() => void) | undefined
 }) {
   const t = useTranslations('discover.blogrolls')
   return (
@@ -38,7 +42,9 @@ export function DiscoverBlogrollsView({
       <p className="m-0 mb-6 max-w-[620px] text-[14px] leading-normal text-muted md:-mt-3 md:mb-7">
         {t('intro')}
       </p>
-      {cards === null ? (
+      {cards === null && onRetry ? (
+        <LoadFailed onRetry={onRetry} />
+      ) : cards === null ? (
         <div className={BLOGROLL_GRID.discover} aria-busy="true">
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-[190px] animate-pulse rounded-xl bg-hover" />

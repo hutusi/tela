@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test'
-import { applyMutation, applyPull, emptyTables, type Tables, titleKey, view } from '@tela/sync'
+import {
+  applyMutation,
+  applyPull,
+  emptyTables,
+  HORIZON_DAYS,
+  type Tables,
+  titleKey,
+  view,
+} from '@tela/sync'
 import {
   articlesFor,
   feedsInFolder,
@@ -10,6 +18,7 @@ import {
   isRead,
   markAllReadCovers,
   markAllReadPlan,
+  prefetchCovers,
   prefetchPlan,
   shownRead,
   shownTitle,
@@ -136,6 +145,35 @@ describe('what the reading view shows', () => {
       title: 'Post 1',
       badge: false,
     })
+  })
+
+  test('says which language the title and the excerpt it shows are in', () => {
+    const t = tables({
+      subscriptions: [sub(1)],
+      articles: [article(1, { sourceLang: 'zh-Hant', excerpt: '原文' })],
+      titles: [
+        { articleId: 1, lang: 'en', title: 'One', excerpt: 'Its excerpt', status: 'done', seq: 1 },
+        { articleId: 1, lang: 'fr', title: 'Un', excerpt: null, status: 'done', seq: 1 },
+      ],
+    })
+    const a = article(1, { sourceLang: 'zh-Hant', excerpt: '原文' })
+    expect(shownTitle(t, a, 'en')).toMatchObject({ lang: 'en', excerptLang: 'en' })
+    // A title translated before its excerpt was: the excerpt shows, and is marked, as written.
+    expect(shownTitle(t, a, 'fr')).toMatchObject({
+      title: 'Un',
+      lang: 'fr',
+      excerpt: '原文',
+      excerptLang: 'zh-Hant',
+    })
+    // No translation in the reading language, or one the member never has made: as written.
+    expect(shownTitle(t, a, 'zh-Hans')).toMatchObject({ lang: 'zh-Hant', excerptLang: 'zh-Hant' })
+    expect(shownTitle(t, a, 'en', ['zh-Hant'])).toMatchObject({ title: 'Post 1', lang: 'zh-Hant' })
+    // A post whose language is unknown has none to say.
+    expect(shownTitle(t, article(2, { sourceLang: null }), 'en').lang).toBeUndefined()
+    // One held from a public page says what the link said, in the reading language.
+    expect(
+      shownTitle(t, { ...article(3, { sourceLang: 'ja' }), titles: { en: 'Three' } }, 'en'),
+    ).toMatchObject({ title: 'Three', lang: 'en' })
   })
 })
 
@@ -276,12 +314,18 @@ describe('what the idle prefetch would fetch', () => {
       article(4, { sortAt: NOW - 4 * DAY }),
       article(5, { contentKey: 'c5', feedId: 2, sourceLang: 'de', sortAt: NOW - 5 * DAY }),
       article(6, { contentKey: 'c6', feedId: 2, sourceLang: 'ja', sortAt: NOW - 6 * DAY }),
+      // Read already: neither its body nor its finished translation is fetched.
+      article(7, { contentKey: 'c7', feedId: 2, sourceLang: 'ja', sortAt: NOW - 7 * DAY }),
     ],
-    states: [{ articleId: 3, readAt: 1, likedAt: null, likedUpdatedAt: null, seq: 1 }],
+    states: [
+      { articleId: 3, readAt: 1, likedAt: null, likedUpdatedAt: null, seq: 1 },
+      { articleId: 7, readAt: 1, likedAt: null, likedUpdatedAt: null, seq: 1 },
+    ],
     translations: [
       translation('c2', 'done', 't/c2/en/a.json'),
       translation('c5', 'partial', 't/c5/en/b.json'),
       translation('c6', 'running', null),
+      translation('c7', 'done', 't/c7/en/d.json'),
     ],
   }
   const prefs = { autoTranslate: true, never: [] as string[] }
@@ -332,6 +376,46 @@ describe('what the idle prefetch would fetch', () => {
     )
     expect(plan(finished)).not.toBe(plan(before))
   })
+
+  test('a run goes on while what is planned next is part of what it fetches', () => {
+    const t = tables(rows)
+    const list = articlesFor(t, { filter: 'all', feedId: null }, NOW)
+    const running = prefetchPlan(t, list, NOW, 'en', prefs)
+    // Opening post 2 reads it: its body and translation leave the plan, and nothing joins it.
+    const opened = view(
+      applyPull(
+        { cursor: 0, tables: t },
+        pull(2, {
+          states: [{ articleId: 2, readAt: 2, likedAt: null, likedUpdatedAt: null, seq: 2 }],
+        }),
+      ),
+      [],
+    )
+    const next = prefetchPlan(opened, list, NOW, 'en', prefs)
+    expect(next.bodies).not.toContain('c2')
+    expect(next.translations).not.toContain('t/c2/en/a.json')
+    expect(prefetchCovers(running, next)).toBe(true)
+    expect(prefetchCovers(running, running)).toBe(true)
+    // A translation that finished meanwhile is new to the plan: the run starts over for it.
+    expect(
+      prefetchCovers(running, { ...next, translations: [...next.translations, 't/c6/en/c.json'] }),
+    ).toBe(false)
+    expect(prefetchCovers(running, { ...next, bodies: [...next.bodies, 'c9'] })).toBe(false)
+  })
+
+  test("another list's plan starts over, even when the run holds every post of it", () => {
+    const running = { bodies: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], translations: [] }
+    // One feed's list: part of All's, but its own posts first, so the run in All's order restarts.
+    expect(prefetchCovers(running, { bodies: ['f', 'b'], translations: [] })).toBe(false)
+    expect(prefetchCovers(running, { bodies: ['b', 'd', 'f', 'h'], translations: [] })).toBe(false)
+    // Read on opening: one or a few gone, the rest in the order it was.
+    expect(
+      prefetchCovers(running, { bodies: ['a', 'c', 'd', 'e', 'f', 'g', 'h'], translations: [] }),
+    ).toBe(true)
+    expect(prefetchCovers(running, { bodies: ['b', 'c', 'e', 'g', 'h'], translations: [] })).toBe(
+      true,
+    )
+  })
 })
 
 describe('what a feed is called', () => {
@@ -377,6 +461,16 @@ describe('what a feed is called', () => {
       sites: [site(1, 'One Blog')],
     })
     expect([feedTitle(t, 1), feedTitle(t, 2)]).toEqual(['Posts', 'Links'])
+  })
+
+  test('a second feed of a blog arriving in a pull renames the first, which was named already', () => {
+    const one = applyPull(
+      { cursor: 0, tables: emptyTables() },
+      pull(1, { feeds: [feed(1, 1, 'Posts')], sites: [site(1, 'One Blog')] }, true),
+    )
+    expect(feedTitle(view(one, []), 1)).toBe('One Blog')
+    const two = view(applyPull(one, pull(2, { feeds: [feed(2, 1, 'Links')] })), [])
+    expect([feedTitle(two, 1), feedTitle(two, 2)]).toEqual(['Posts', 'Links'])
   })
 })
 
@@ -473,5 +567,70 @@ describe('folders (ADR 0048)', () => {
     })
     expect(ids(moved, 'f-cities')).toEqual([5, 1])
     expect(ids(moved, 'f-craft')).toEqual([2])
+  })
+})
+
+describe('lists across the clock', () => {
+  const MINUTE = 60_000
+  const HORIZON = HORIZON_DAYS * DAY
+  const feed = (id: number) => ({
+    id,
+    siteId: id,
+    feedUrl: `https://blog${id}.example/feed`,
+    title: `Blog ${id}`,
+    status: 'active',
+    lastFetchedAt: null,
+    lastError: null,
+    seq: 1,
+  })
+  const t = tables({
+    subscriptions: [sub(1)],
+    feeds: [feed(1)],
+    folders: [{ id: 'f', name: 'F', createdAt: 1, updatedAt: 1, deletedAt: null, seq: 1 }],
+    feedFolders: [{ feedId: 1, folderId: 'f', updatedAt: 1, seq: 1 }],
+    articles: [
+      // Leaves Today five minutes from now.
+      article(1, { sortAt: NOW - DAY + 5 * MINUTE }),
+      // Turns read by its age three minutes from now.
+      article(2, { fetchedAt: NOW - HORIZON + 3 * MINUTE, sortAt: NOW - MINUTE }),
+      article(3, { sortAt: NOW }),
+    ],
+  })
+
+  test('a minute that crosses nothing hands back the same lists, not new ones', () => {
+    const today = articlesFor(t, { filter: 'today', feedId: null }, NOW)
+    const all = articlesFor(t, { filter: 'all', feedId: null }, NOW)
+    const subs = subscriptionItems(t, NOW)
+    const tree = folderTree(t, NOW)
+    const counts = totals(t, NOW)
+    const later = NOW + MINUTE
+    expect(articlesFor(t, { filter: 'today', feedId: null }, later)).toBe(today)
+    expect(articlesFor(t, { filter: 'all', feedId: null }, later)).toBe(all)
+    expect(subscriptionItems(t, later)).toBe(subs)
+    expect(folderTree(t, later)).toBe(tree)
+    expect(totals(t, later)).toBe(counts)
+    // A post's date alone never changes what All lists, however long the tab stays open.
+    expect(articlesFor(t, { filter: 'all', feedId: null }, NOW + 90 * DAY)).toBe(all)
+  })
+
+  test('the minute a post crosses a boundary, the lists that asked about it change', () => {
+    expect(totals(t, NOW)).toEqual({ all: 3, today: 3, liked: 0 })
+    expect(subscriptionItems(t, NOW)[0]?.unread).toBe(3)
+    // Past its horizon, post 2 is read: the unread counts drop, the folder's with them.
+    const aged = NOW + 3 * MINUTE + 1
+    expect(totals(t, aged)).toEqual({ all: 2, today: 2, liked: 0 })
+    expect(subscriptionItems(t, aged)[0]?.unread).toBe(2)
+    expect(folderTree(t, aged).folders[0]?.unread).toBe(2)
+    const ids = (now: number) =>
+      articlesFor(t, { filter: 'today', feedId: null }, now).map((a) => a.id)
+    expect(ids(aged)).toEqual([3, 2, 1])
+    // A day after it, post 1 leaves Today; up to that instant it is still there.
+    const edge = NOW + 5 * MINUTE
+    expect(ids(edge)).toEqual([3, 2, 1])
+    expect(ids(edge + 1)).toEqual([3, 2])
+    expect(totals(t, edge + 1)).toEqual({ all: 2, today: 1, liked: 0 })
+    // A clock that went back reads as it did then, not as the last answer did.
+    expect(totals(t, NOW)).toEqual({ all: 3, today: 3, liked: 0 })
+    expect(ids(NOW)).toEqual([3, 2, 1])
   })
 })

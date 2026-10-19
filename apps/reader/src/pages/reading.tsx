@@ -3,11 +3,13 @@
  * (ADR 0017's rule, kept), and every pane is a function of it and the local store, so a click, a
  * filter change or Back is a render, not a request (ADR 0025).
  */
+import type { FeedStatus } from '@tela/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { ArticleList, type ListShow, listRow } from '../components/article-list'
 import { EmptyState } from '../components/empty-state'
+import { ErrorBoundary, RouteFailed } from '../components/error-boundary'
 import { FirstRun, showsFirstRun } from '../components/first-run'
 import { MobileNav } from '../components/mobile-nav'
 import { Reader } from '../components/reader'
@@ -15,7 +17,7 @@ import { Shortcuts } from '../components/shortcuts'
 import { Sidebar } from '../components/sidebar'
 import { SidebarRail } from '../components/sidebar-rail'
 import { toggleSidebarKeepingFocus } from '../components/sidebar-toggle'
-import { ReaderPaneSkeleton } from '../components/skeletons'
+import { ListPanesSkeleton, ReaderPaneSkeleton } from '../components/skeletons'
 import {
   canonicalReadingHref,
   listsFilter,
@@ -25,7 +27,8 @@ import {
 } from '../lib/href'
 import { effectiveSidebar, gridColumns, toggleFocus, useLayout, useWide } from '../lib/layout'
 import { PREF_KEYS, readingPrefsOf, useReadingPrefs } from '../lib/prefs'
-import { currentToast, runToastAction } from '../lib/toasts'
+import { useTitle } from '../lib/title'
+import { useQuickPull } from '../lib/use-quick-pull'
 import { useNow, useReadingLang, useStore, useTables } from '../store/hooks'
 import {
   articlesFor,
@@ -33,6 +36,8 @@ import {
   folderTree,
   isLiked,
   isRead,
+  type PrefetchPlan,
+  prefetchCovers,
   prefetchPlan,
   shownRead,
   shownTitle,
@@ -42,9 +47,9 @@ import {
 } from '../store/selectors'
 import { useUi } from '../ui'
 
-/** While a new feed waits for its first fetch, pull this often so its posts appear. */
-const FIRST_FETCH_PULL_MS = 3000
 const PREFETCH_IDLE_MS = 1500
+/** The feed status tela-jobs fetches (`FEED_STATUSES`): a paused or dead feed brings no posts. */
+const FEED_ACTIVE: FeedStatus = 'active'
 
 export function ReadingPage() {
   const t = useTranslations('reader')
@@ -58,6 +63,9 @@ export function ReadingPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const params = parseReadingParams(search)
+  // Whether the device holds the member's rows: the profile always comes in the first snapshot.
+  // Before it lands (a new device) the panes are placeholders, never an empty list.
+  const synced = tables.profile !== null
 
   const subs = subscriptionItems(tables, now)
   // The sidebar's order (ADR 0048): the member's folders by name, then the blogs in none.
@@ -111,9 +119,21 @@ export function ReadingPage() {
         ? (folder?.name ?? ts('subscriptions'))
         : ts(params.filter)
   const pendingFetch = selected !== undefined && selected.lastFetchedAt === null
+  // Quickly, while it waits for its first fetch: only a feed tela-jobs fetches (not paused, not
+  // given up on), so its posts appear when they land.
+  const awaitingFirst =
+    pendingFetch && tables.feeds.get(selected.feedId)?.status === FEED_ACTIVE
+      ? `feed:${selected.feedId}`
+      : null
+  useQuickPull(awaitingFirst, () => void engine.pull())
   const article =
     params.articleId !== null ? (store.article(tables, params.articleId) ?? null) : null
   const open = params.articleId !== null
+  // The tab says what is open: the post, by the title the reader shows first (its translation,
+  // when there is one), or the list. A post still on its way names nothing yet.
+  useTitle(
+    article ? shownTitle(tables, article, readingLang, prefs.never).title : open ? null : listName,
+  )
   // Which panes show beside the article: this device's choice, not the member's (ADR 0029), and
   // until it has chosen, the window's: an article opened below 1200px starts with the rail. In
   // focus an open article has the page to itself; a closed one shows the list as ever.
@@ -150,10 +170,12 @@ export function ReadingPage() {
   // the article offers it, so a pointer reader flows on without going back up to the list.
   const at = article ? items.findIndex((a) => a.id === article.id) : -1
   const after = at === -1 ? undefined : items[at + 1]
+  const nextTitle = after ? shownTitle(tables, after, readingLang, prefs.never) : null
   const next = after
     ? {
         href: readingHref({ ...params, articleId: after.id, mode: null }),
-        title: shownTitle(tables, after, readingLang, prefs.never).title,
+        title: nextTitle?.title ?? after.title,
+        lang: nextTitle?.lang,
         blog: feedTitle(tables, after.feedId) || store.sourceName(after.feedId),
       }
     : null
@@ -201,30 +223,27 @@ export function ReadingPage() {
 
   // The keyboard layer (ADR 0026): j and k step through the list as it is shown, Esc closes the
   // article, [ shows or hides the sidebar, f the list too while one is open, o opens its original,
-  // l likes or unlikes it and m marks it read or unread, u presses the toast's Undo while it shows,
-  // ? lists the keys. Typing in a field is never a shortcut, nor is a key pressed in a modal
-  // dialog (the phone's Recommend sheet), which the page under it does not own; and a popover that
-  // handles Esc itself marks the event so the article stays open.
+  // l likes or unlikes it and m marks it read or unread, ? lists the keys (u, the toast's Undo, is
+  // the toast's own, on every page). Typing in a field is never a shortcut, nor is a key pressed in
+  // a modal dialog (the phone's Recommend sheet), which the page under it does not own; and a
+  // popover that handles Esc itself marks the event so the article stays open.
+  // The list of keys is a modal dialog, which takes Esc and the keys while it is open, and gives
+  // focus back to what had it as `?` was pressed.
   const [help, setHelp] = useState(false)
+  const helpOpener = useRef<HTMLElement | null>(null)
   // Read when a key is pressed, not when the listener was bound: a second `j` can come before
   // React has rendered the first one's navigation, and the URL is already right by then.
-  const keys = useRef({ items, close, help })
-  keys.current = { items, close, help }
+  const keys = useRef({ items, close })
+  keys.current = { items, close }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
       const target = e.target as HTMLElement | null
       if (target?.closest('input, textarea, select, [contenteditable]')) return
       if (document.querySelector('dialog:modal')) return
-      const { items, close, help } = keys.current
+      const { items, close } = keys.current
       const now = parseReadingParams(new URLSearchParams(window.location.search))
-      if (e.key === 'u') {
-        // The toast showing when the key is pressed, not when the listener was bound.
-        const toast = currentToast()
-        if (!toast?.action || e.repeat) return
-        e.preventDefault()
-        runToastAction(toast.id)
-      } else if (e.key === 'j' || e.key === 'k') {
+      if (e.key === 'j' || e.key === 'k') {
         const at = items.findIndex((a) => a.id === now.articleId)
         const step = e.key === 'j' ? 1 : -1
         const next = items[at === -1 ? (step === 1 ? 0 : items.length - 1) : at + step]
@@ -234,9 +253,8 @@ export function ReadingPage() {
         // applies (as a click does).
         navigate(canonicalReadingHref(window.location.search, { articleId: next.id, mode: null }))
       } else if (e.key === 'Escape') {
-        if (help) setHelp(false)
-        else if (now.articleId !== null) close()
-        else return
+        if (now.articleId === null) return
+        close()
         e.preventDefault()
       } else if (e.key === '[') {
         e.preventDefault()
@@ -276,7 +294,9 @@ export function ReadingPage() {
         }
       } else if (e.key === '?') {
         e.preventDefault()
-        setHelp((shown) => !shown)
+        helpOpener.current =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null
+        setHelp(true)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -307,56 +327,73 @@ export function ReadingPage() {
     if (previous !== null) listRow(previous)?.focus()
   }, [params.articleId, focused])
 
-  // A feed that has never been fetched: pull quickly until its first posts arrive.
+  // The post after the open one, which `j` and the card at the article's end open: fetched as this
+  // one opens, not when the idle prefetch reaches it (an open restarts that timer), so stepping
+  // through a list never waits on the network. Read or not: the list may show read posts.
+  const upNext = article ? (after?.contentKey ?? null) : null
   useEffect(() => {
-    if (!pendingFetch) return
-    const id = setInterval(() => void engine.pull(), FIRST_FETCH_PULL_MS)
-    return () => clearInterval(id)
-  }, [pendingFetch, engine])
+    if (upNext) void objects.body(upNext).catch(() => undefined)
+  }, [upNext, objects])
 
   // Prefetch unread bodies and finished translations while idle: the list on screen first. Keyed on
-  // what it would fetch, not on the tables: every pull makes new ones, even an empty pull a minute,
-  // and a timer reset by each would put the prefetch off, and cancel one under way, for nothing.
-  // An open marks a post read, which changes the plan, so each open plans again.
+  // what it would fetch, not on the tables: every pull that brings anything makes new ones, and a
+  // timer reset by each would put the prefetch off, and cancel one under way, for nothing. An open
+  // marks a post read, which changes the plan, so each open plans again; a run under way that
+  // already covers the new plan goes on (`prefetchCovers`).
   const plan = useMemo(
     () => JSON.stringify(prefetchPlan(tables, items, now, readingLang, prefs)),
     [tables, items, now, readingLang, prefs],
   )
-  // On each pull, ask again when the device lacks part of the plan and no run is under way: a run
-  // fell short (the network went, a request failed), or bodies went since (eviction drops bodies
-  // not opened for a week, unread ones too, ten seconds after boot). The engine pulls when the
-  // browser is back online, on focus and every minute, and the plan is the same by then, so
-  // nothing else would ask. A pull while the device holds all of it changes nothing.
+  // After each pull, and each change to the tables, ask again when the device lacks part of the
+  // plan and no run is under way: a run fell short (the network went, a request failed), or
+  // bodies went since (eviction drops bodies not opened for a week, unread ones too, ten seconds
+  // after boot). The plan is the same by then, so nothing else would ask. A pull that brings
+  // nothing leaves the tables as they were (`LocalStore.applyPull`), so the engine says it pulled
+  // (`onPulled`): that pull is the network coming back. Asking while the device holds all of the
+  // plan changes nothing.
   const [retry, setRetry] = useState(0)
   /** A translation the last run could not fetch: the device keeps no list of those to check. */
   const fellShort = useRef(false)
-  const running = useRef<{ plan: string; controller: AbortController; done: boolean } | null>(null)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: on every pull, by its new tables
-  useEffect(() => {
+  const running = useRef<{
+    plan: string
+    fetching: PrefetchPlan
+    controller: AbortController
+    done: boolean
+  } | null>(null)
+  /** The look itself, current with this render's plan, for the effect and the engine alike. */
+  const lookAgain = useRef((_cancelled: () => boolean) => {})
+  lookAgain.current = (cancelled) => {
     const last = running.current
     if (last && !last.done) return
-    let cancelled = false
     const { bodies } = JSON.parse(plan) as ReturnType<typeof prefetchPlan>
     void objects.missing(bodies).then((missing) => {
-      if (cancelled || (missing.length === 0 && !fellShort.current)) return
+      if (cancelled() || (missing.length === 0 && !fellShort.current)) return
       fellShort.current = false
       setRetry((n) => n + 1)
     })
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on every change to the tables or the plan
+  useEffect(() => {
+    let cancelled = false
+    lookAgain.current(() => cancelled)
     return () => {
       cancelled = true
     }
   }, [tables, plan, objects])
+  useEffect(() => engine.onPulled(() => lookAgain.current(() => false)), [engine])
   // biome-ignore lint/correctness/useExhaustiveDependencies: `retry` asks again for the same plan
   useEffect(() => {
     const timer = setTimeout(() => {
       const last = running.current
-      // Still fetching this very plan: let it finish rather than start it over.
-      if (last && !last.done && last.plan === plan) return
+      const next = JSON.parse(plan) as PrefetchPlan
+      // Still fetching this plan, or one that holds all of it: let it finish rather than start
+      // over. Its own plan stays the one to compare with, since that is what it is fetching.
+      if (last && !last.done && (last.plan === plan || prefetchCovers(last.fetching, next))) return
       last?.controller.abort()
       const controller = new AbortController()
-      const mine = { plan, controller, done: false }
+      const mine = { plan, fetching: next, controller, done: false }
       running.current = mine
-      const { bodies, translations } = JSON.parse(plan) as ReturnType<typeof prefetchPlan>
+      const { bodies, translations } = next
       const run = async () => {
         await objects.prefetch(bodies, controller.signal)
         for (const key of translations) {
@@ -383,36 +420,50 @@ export function ReadingPage() {
       data-sidebar={panes.sidebar}
       data-focus={focused ? '1' : undefined}
     >
-      {/* Over the first run too: on a phone it is the only way to Liked, and a member who follows
-          nothing may still have kept posts there, as the sidebar beside it does on a desktop. */}
-      {open ? null : <MobileNav tree={tree} totals={counts} params={params} />}
-      {/* The sidebar, or the rail it collapses to (ADR 0030), and neither in focus. Not rendered
-          rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no defined
-          winner (AGENTS.md), and a column that is gone needs no element. The list is the
-          exception: in focus it stays mounted and styles.css takes it out of the grid, so its
-          page of rows and its scroll survive and Esc still finds the row it closed. */}
-      {focused ? null : panes.sidebar === 'shown' ? (
-        <Sidebar tree={tree} totals={counts} params={params} />
+      {synced ? (
+        <>
+          {/* Over the first run too: on a phone it is the only way to Liked, and a member who
+              follows nothing may still have kept posts there, as the sidebar beside it does on a
+              desktop. */}
+          {open ? null : <MobileNav tree={tree} totals={counts} params={params} />}
+          {/* The sidebar, or the rail it collapses to (ADR 0030), and neither in focus. Not
+              rendered rather than hidden: a `lg:hidden` against the aside's own `lg:flex` has no
+              defined winner (AGENTS.md), and a column that is gone needs no element. The list is
+              the exception: in focus it stays mounted and styles.css takes it out of the grid, so
+              its page of rows and its scroll survive and Esc still finds the row it closed. */}
+          {focused ? null : panes.sidebar === 'shown' ? (
+            <Sidebar tree={tree} totals={counts} params={params} />
+          ) : (
+            <SidebarRail tree={tree} params={params} />
+          )}
+          {firstRun ? null : (
+            <ArticleList
+              items={items}
+              params={params}
+              title={listTitle}
+              readingLang={readingLang}
+              locale={locale}
+              now={now}
+              pendingFetch={pendingFetch}
+              show={liked || folderGone ? null : unreadOnly ? 'unread' : 'all'}
+              onShow={onShow}
+              caughtUp={unreadOnly && all.length > 0}
+              onMarkAll={letSeenGo}
+              folder={folderGone ? 'gone' : folder}
+            />
+          )}
+        </>
+      ) : focused ? null : panes.sidebar === 'shown' ? (
+        // A device whose first sync has not landed holds no rows yet: placeholders, never a list
+        // that says there is nothing here.
+        <ListPanesSkeleton />
       ) : (
-        <SidebarRail tree={tree} params={params} />
+        <>
+          <SidebarRail tree={tree} params={params} />
+          <ListPanesSkeleton sidebar={false} />
+        </>
       )}
-      {firstRun ? null : (
-        <ArticleList
-          items={items}
-          params={params}
-          title={listTitle}
-          readingLang={readingLang}
-          locale={locale}
-          now={now}
-          pendingFetch={pendingFetch}
-          show={liked || folderGone ? null : unreadOnly ? 'unread' : 'all'}
-          onShow={onShow}
-          caughtUp={unreadOnly && all.length > 0}
-          onMarkAll={letSeenGo}
-          folder={folderGone ? 'gone' : folder}
-        />
-      )}
-      {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}
+      {help ? <Shortcuts opener={helpOpener} onClose={() => setHelp(false)} /> : null}
       {firstRun ? (
         // In place of the list and the empty pane, at every width.
         <FirstRun
@@ -422,19 +473,21 @@ export function ReadingPage() {
           onStart={startReading}
         />
       ) : article ? (
-        <Reader
-          key={article.id}
-          article={article}
-          readingLang={readingLang}
-          mode={mode}
-          onMode={onMode}
-          onClose={close}
-          next={next}
-          listName={listName}
-        />
-      ) : open && tables.profile === null ? (
-        // The first sync has not landed yet (the profile always comes in the first snapshot):
-        // the article is on its way, not gone.
+        // One article that throws as it renders fails in its own pane: the list beside it, j and
+        // k, Esc, Back and the header all still work, and the next article is a new boundary.
+        <ErrorBoundary key={article.id} fallback={(retry) => <RouteFailed onRetry={retry} />}>
+          <Reader
+            article={article}
+            readingLang={readingLang}
+            mode={mode}
+            onMode={onMode}
+            onClose={close}
+            next={next}
+            listName={listName}
+          />
+        </ErrorBoundary>
+      ) : open && !synced ? (
+        // The first sync has not landed yet: the article is on its way, not gone.
         <ReaderPaneSkeleton />
       ) : open ? (
         <main
@@ -448,9 +501,9 @@ export function ReadingPage() {
             </button>
           </div>
         </main>
-      ) : (
+      ) : synced ? (
         <EmptyState unread={counts.all} hasSubscriptions={subs.length > 0} />
-      )}
+      ) : null}
     </div>
   )
 }

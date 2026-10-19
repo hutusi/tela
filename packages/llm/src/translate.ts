@@ -1,5 +1,12 @@
 import { chunkBlocks, DEFAULT_CHUNK_TOKENS, estimateTokens } from './chunk'
-import type { TranslationBlock, TranslationContext, TranslationUsage, Translator } from './types'
+import {
+  billedUsage,
+  type TranslationBlock,
+  type TranslationContext,
+  TranslationFailed,
+  type TranslationUsage,
+  type Translator,
+} from './types'
 import { validateTranslation } from './validate'
 
 /** What one successful provider call produced, handed to `onChunk` as it lands. */
@@ -51,6 +58,7 @@ export type TranslateBlocksOutcome = {
    * translation cache — for a title it is not, see translateArticleTitle.
    */
   echoed: Set<string>
+  /** Every call the provider billed: those whose reply could not be read as well. */
   usage: TranslationUsage[]
   /** The deadline passed with blocks still unattempted. */
   stopped: boolean
@@ -60,7 +68,8 @@ export type TranslateBlocksOutcome = {
  * Translate blocks in chunks, validate every block, retry the failures once in strict mode,
  * and carry the last two translations of a chunk into the next as context. Provider errors
  * on one chunk mark its blocks failed and the run continues; if no chunk succeeds at all the
- * error is thrown so the job can retry later.
+ * error is thrown so the job can retry later, as a `TranslationFailed` carrying the usage when any
+ * reply was billed and could not be read.
  */
 export async function translateBlocks(
   translator: Translator,
@@ -109,6 +118,8 @@ export async function translateBlocks(
       })
     } catch (err) {
       lastError = err
+      // A reply that could not be read was still paid for.
+      usage.push(...billedUsage(err))
       for (const b of blocks)
         failed.set(b.id, `provider error: ${err instanceof Error ? err.message : String(err)}`)
       return
@@ -163,7 +174,12 @@ export async function translateBlocks(
     }
   }
 
-  if (successes === 0 && lastError && accepted.length > 0) throw lastError
+  if (successes === 0 && lastError && accepted.length > 0) {
+    // Nothing usable, but replies that could not be read were paid for: the failure says so.
+    if (usage.length === 0) throw lastError
+    const message = lastError instanceof Error ? lastError.message : String(lastError)
+    throw new TranslationFailed(message, usage, { cause: lastError })
+  }
   return {
     translated,
     failed: [...failed.entries()].map(([id, reason]) => ({ id, reason })),

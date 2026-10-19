@@ -7,6 +7,7 @@
 import { useTranslations } from 'use-intl'
 import { SectionHead } from '../components/discover-filters'
 import { LeadPost, RankedPost } from '../components/discover-post'
+import { LoadFailed } from '../components/load-failed'
 import { ReaderCard } from '../components/reader-card'
 import { SiteCard } from '../components/site-card'
 import { tabHref } from '../lib/discover-href'
@@ -30,6 +31,7 @@ export function DiscoverWeekView({
   locale,
   now,
   followed = nobody,
+  onRetry,
 }: {
   /** Null while the week is on its way. */
   week: ComposedWeek | null
@@ -41,15 +43,21 @@ export function DiscoverWeekView({
   now: number
   /** Whom the member follows among a post's recommenders. */
   followed?: (post: DiscoverPost) => readonly Person[]
+  /** Set once the week failed to come: Try again, in the skeleton's place. */
+  onRetry?: (() => void) | undefined
 }) {
   const t = useTranslations('discover')
   if (week === null) {
     return (
       <DiscoverFrame tab="week">
-        <div
-          className="h-[340px] animate-pulse rounded-[14px] border border-line bg-surface"
-          aria-busy="true"
-        />
+        {onRetry ? (
+          <LoadFailed onRetry={onRetry} />
+        ) : (
+          <div
+            className="h-[340px] animate-pulse rounded-[14px] border border-line bg-surface"
+            aria-busy="true"
+          />
+        )}
       </DiscoverFrame>
     )
   }

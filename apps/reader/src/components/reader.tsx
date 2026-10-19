@@ -13,12 +13,14 @@ import { mergeAnchors } from '../lib/anchor'
 import { pairBlocks, readerBlocks, runsOf, translatedPrefix } from '../lib/block-pairs'
 import { relativeTime } from '../lib/format'
 import { pointAt, renderedLeaves, type Side } from '../lib/highlight-dom'
-import type { ReadingMode } from '../lib/href'
+import { type ReadingMode, readingHref } from '../lib/href'
 import { newId } from '../lib/id'
+import { lazyImages } from '../lib/lazy-images'
 import { useReadingPrefs } from '../lib/prefs'
 import { readerStyle, typographyOf } from '../lib/typography'
 import { useHighlights } from '../lib/use-highlights'
 import { BELOW_LG, useMediaQuery } from '../lib/use-media'
+import { useQuickPull } from '../lib/use-quick-pull'
 import { useArticleTranslation } from '../lib/use-translation'
 import { useNow, useStore, useTables } from '../store/hooks'
 import type { ContentObject } from '../store/objects'
@@ -60,6 +62,8 @@ function Body({
   dir?: 'auto' | undefined
   testId: string
 }) {
+  // Its images load as they near the screen, not all as the post opens.
+  const lazy = useMemo(() => lazyImages(html), [html])
   return (
     <div
       className="article-body"
@@ -67,7 +71,7 @@ function Body({
       dir={dir}
       data-testid={testId}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: allowlist-sanitized by @tela/content; model output re-escaped on rehydration (ADR 0005)
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={{ __html: lazy }}
     />
   )
 }
@@ -79,7 +83,7 @@ type Props = {
   onMode: (mode: ReadingMode) => void
   onClose: () => void
   /** The post after this one in the list as shown, if any: offered at the end of the article. */
-  next: { href: string; title: string; blog: string } | null
+  next: { href: string; title: string; lang?: string | undefined; blog: string } | null
   /** What the list it was opened from is called: a phone's back bar goes back to it by name. */
   listName: string
 }
@@ -93,34 +97,48 @@ type Recommending = 'top' | 'end' | 'sheet' | null
 /** The end of the article is one column whatever the body above it: the measure, at most 680px. */
 const END = 'max-w-[min(680px,var(--reader-measure))]'
 
-/** While a summary-only post waits for its full text, pull quickly so it appears when it lands. */
-const EXTRACT_PULL_MS = 4000
-
 export function Reader({ article, readingLang, mode, onMode, onClose, next, listName }: Props) {
   const t = useTranslations('reader')
   const locale = useLocale()
   const now = useNow()
   const tables = useTables()
   const { objects, engine, store } = useStore()
-  const [content, setContent] = useState<{ key: string; object: ContentObject | null } | null>(null)
+  // `failed` when the body could not be fetched (offline, an error), as opposed to a post that has
+  // none: the one is worth trying again, the other is not.
+  const [content, setContent] = useState<{
+    key: string
+    object: ContentObject | null
+    failed?: true
+  } | null>(null)
   const key = article.contentKey
+  const [attempt, setAttempt] = useState(0)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` is Try again
   useEffect(() => {
     if (!key) return
     const controller = new AbortController()
     objects
       .body(key, controller.signal)
       .then((object) => setContent({ key, object }))
-      .catch(() => !controller.signal.aborted && setContent({ key, object: null }))
+      .catch(() => !controller.signal.aborted && setContent({ key, object: null, failed: true }))
     return () => controller.abort()
-  }, [key, objects])
-
-  const extracting = article.extractState === 'due'
+  }, [key, objects, attempt])
+  const bodyFailed = content?.key === key && content.failed === true
+  // Try again: the skeleton while it asks, as on opening.
+  const retryBody = useCallback(() => {
+    setContent(null)
+    setAttempt((n) => n + 1)
+  }, [])
+  // Back online, a body that failed is asked for again by itself.
   useEffect(() => {
-    if (!extracting) return
-    const id = setInterval(() => void engine.pull(), EXTRACT_PULL_MS)
-    return () => clearInterval(id)
-  }, [extracting, engine])
+    if (!bodyFailed) return
+    window.addEventListener('online', retryBody)
+    return () => window.removeEventListener('online', retryBody)
+  }, [bodyFailed, retryBody])
+
+  // While a summary-only post waits for its full text, pull quickly so it appears when it lands.
+  const extracting = article.extractState === 'due'
+  useQuickPull(extracting ? `extract:${article.id}` : null, () => void engine.pull())
 
   const object = content?.key === key ? content.object : null
   const loaded = !key || content?.key === key
@@ -264,6 +282,12 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
   const sourceLang = article.sourceLang ?? undefined
   const name = feedTitle(tables, article.feedId) || store.sourceName(article.feedId)
   const site = siteOfFeed(tables, article.feedId)
+  // The blog's name leads to its posts, as the sidebar's row does: only for a blog the member
+  // follows, since another's (a post opened from search or Discover) has no list here.
+  const blogHref =
+    tables.subscriptions.get(article.feedId)?.deletedAt === null
+      ? readingHref({ feedId: article.feedId })
+      : null
   const titles = shownTitle(tables, article, readingLang, prefs.never)
   const read = shownRead(tables, article, now, true, prefs.markOnOpen)
   const title = showTrans ? titles.title : article.title
@@ -356,7 +380,13 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
         >
           <div className="mb-3.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] text-muted">
             <Swatch id={article.feedId} title={name} size={22} />
-            <span className="font-medium text-ink">{name}</span>
+            {blogHref ? (
+              <Link to={blogHref} className="font-medium text-ink" data-testid="article-blog">
+                {name}
+              </Link>
+            ) : (
+              <span className="font-medium text-ink">{name}</span>
+            )}
             {article.author ? (
               <>
                 <span>·</span>
@@ -407,6 +437,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
               <PairedBody
                 pairs={prefix.rest ? pairs : prefix.pairs}
                 title={titles.title}
+                titleLang={titles.lang}
                 originalTitle={article.title}
                 targetLang={readingLang}
                 sourceLang={sourceLang}
@@ -416,6 +447,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
                 <h1
                   className="mb-6 font-serif text-[30px] font-medium leading-[1.12] tracking-tight lg:text-[40px]"
                   style={{ textWrap: 'pretty' }}
+                  lang={showTrans ? titles.lang : sourceLang}
                   data-testid="article-title"
                 >
                   {title}
@@ -444,6 +476,26 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
                     )}
                     {showTrans && prefix.rest ? <TranslatingRest /> : null}
                   </>
+                ) : bodyFailed ? (
+                  // Not "no readable content": the post has some, and it did not come.
+                  <div className="text-[15px] text-muted" data-testid="body-failed">
+                    <p className="m-0">{t('loadFailed')}</p>
+                    <p className="mt-2.5 mb-0 flex flex-wrap items-center gap-x-5 gap-y-2">
+                      <button
+                        type="button"
+                        onClick={retryBody}
+                        className="underline hover:text-ink"
+                        data-testid="body-retry"
+                      >
+                        {t('retry')}
+                      </button>
+                      {article.url ? (
+                        <a href={article.url} target="_blank" rel="noopener noreferrer">
+                          {t('readOriginal')} ↗
+                        </a>
+                      ) : null}
+                    </p>
+                  </div>
                 ) : (
                   <p className="text-muted">{t('noContent')}</p>
                 )}
@@ -514,7 +566,15 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
             <div className="min-w-[200px] flex-1">
               {/* The name the list and the meta line use (`feedTitle`): a blog's, or its feed's
                   own where the device holds two feeds of one blog. */}
-              <div className="font-medium">{name}</div>
+              <div className="font-medium">
+                {blogHref ? (
+                  <Link to={blogHref} className="text-ink" data-testid="end-blog-link">
+                    {name}
+                  </Link>
+                ) : (
+                  name
+                )}
+              </div>
               {about ? <div className="text-[13px] text-muted">{about}</div> : null}
             </div>
           </div>
@@ -532,6 +592,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
               <span
                 className="font-serif text-[19px] font-medium leading-[1.2] tracking-tight"
                 style={{ textWrap: 'pretty' }}
+                lang={next.lang}
               >
                 {next.title}
               </span>

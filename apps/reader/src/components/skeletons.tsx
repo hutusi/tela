@@ -7,27 +7,35 @@ function Line({ w, h = 12 }: { w: string; h?: number }) {
   return <div className="rounded bg-hover" style={{ width: w, height: h }} />
 }
 
-export function ListPanesSkeleton() {
+/**
+ * The sidebar and the list before the first sync has landed, so a new device never says it has
+ * nothing. `sidebar={false}` leaves the sidebar's column to the page (the rail, which needs no
+ * rows), or to nothing in focus.
+ */
+export function ListPanesSkeleton({ sidebar = true }: { sidebar?: boolean }) {
   return (
     <>
-      <aside
-        aria-hidden
-        className="hidden flex-col gap-6 border-r border-line px-3.5 py-5 lg:sticky lg:top-14 lg:flex lg:h-[calc(100vh-56px)]"
-      >
-        <div className="flex flex-col gap-3">
-          {['92px', '76px', '68px'].map((w) => (
-            <Line key={w} w={w} />
-          ))}
-        </div>
-        <div className="flex flex-col gap-3 pt-4">
-          {['120px', '104px', '132px', '88px'].map((w) => (
-            <Line key={w} w={w} />
-          ))}
-        </div>
-      </aside>
+      {sidebar ? (
+        <aside
+          aria-hidden
+          className="hidden flex-col gap-6 border-r border-line px-3.5 py-5 lg:sticky lg:top-14 lg:flex lg:h-[calc(100vh-56px)]"
+        >
+          <div className="flex flex-col gap-3">
+            {['92px', '76px', '68px'].map((w) => (
+              <Line key={w} w={w} />
+            ))}
+          </div>
+          <div className="flex flex-col gap-3 pt-4">
+            {['120px', '104px', '132px', '88px'].map((w) => (
+              <Line key={w} w={w} />
+            ))}
+          </div>
+        </aside>
+      ) : null}
       <div
         aria-hidden
-        className="flex flex-col gap-6 px-3 py-5 group-data-[open=1]:hidden lg:group-data-[open=1]:flex"
+        className="flex min-w-0 flex-col gap-6 border-r border-line px-3 py-5 group-data-[open=1]:hidden lg:group-data-[open=1]:flex"
+        data-testid="list-skeleton"
       >
         {['a', 'b', 'c', 'd', 'e', 'f'].map((row) => (
           <div key={row} className="flex flex-col gap-2 border-t border-line pt-3.5">

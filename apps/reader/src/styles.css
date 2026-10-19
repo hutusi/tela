@@ -1,19 +1,16 @@
-/* Self-hosted fonts, Latin and Latin Extended only (next/font chose the same subsets): no runtime
-   request to Google Fonts, which matters for readers in mainland China. */
-@import "@fontsource/eb-garamond/latin-400.css";
-@import "@fontsource/eb-garamond/latin-ext-400.css";
-@import "@fontsource/eb-garamond/latin-400-italic.css";
-@import "@fontsource/eb-garamond/latin-ext-400-italic.css";
-@import "@fontsource/eb-garamond/latin-500.css";
-@import "@fontsource/eb-garamond/latin-ext-500.css";
-@import "@fontsource/eb-garamond/latin-600.css";
-@import "@fontsource/eb-garamond/latin-ext-600.css";
-@import "@fontsource/figtree/latin-400.css";
-@import "@fontsource/figtree/latin-ext-400.css";
-@import "@fontsource/figtree/latin-500.css";
-@import "@fontsource/figtree/latin-ext-500.css";
-@import "@fontsource/figtree/latin-600.css";
-@import "@fontsource/figtree/latin-ext-600.css";
+/* Self-hosted fonts: no runtime request to Google Fonts, which matters for readers in mainland
+   China. A weight's file declares every subset with its `unicode-range`, so a page downloads only
+   the subsets its text uses: Latin for English, French and the Latin in Chinese, Latin Extended
+   or Cyrillic only for a post that has them. (The per-subset files carry no range, so a page that
+   imported Latin Extended downloaded it for every face whatever its text.) vite.config.ts
+   preloads the two faces every page uses first. */
+@import "@fontsource/eb-garamond/400.css";
+@import "@fontsource/eb-garamond/400-italic.css";
+@import "@fontsource/eb-garamond/500.css";
+@import "@fontsource/eb-garamond/600.css";
+@import "@fontsource/figtree/400.css";
+@import "@fontsource/figtree/500.css";
+@import "@fontsource/figtree/600.css";
 @import "tailwindcss";
 
 /* Tela design tokens, from the Claude Design file Tela.dc.html. See docs/DESIGN.md. */
@@ -53,6 +50,12 @@
 
   --font-serif: "EB Garamond", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
   --font-sans: "Figtree", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+
+  /* Three lifts, by what floats (`shadow-menu`, `shadow-popover`, `shadow-dialog`): a menu's panel
+     just off its control, a popover with a form in it, and a dialog over a dimmed page. */
+  --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.1);
+  --shadow-dialog: 0 24px 60px rgba(0, 0, 0, 0.18);
 
   --animate-fade: fade 0.25s ease;
   @keyframes fade {
@@ -148,6 +151,36 @@
   --font-serif: "EB Garamond", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
   --font-sans: "Figtree", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
 }
+/*
+ * Japanese and Korean, which Tela does not translate into but readers follow blogs in: the same
+ * code points as Chinese would be drawn in Chinese forms by the SC stacks (a Japanese 直 or 骨 is
+ * not a Chinese one), and Hangul would fall to whatever the system picks. Each takes its own
+ * families, by the same tokens and for the same reasons as Traditional above.
+ */
+:lang(ja) {
+  --font-serif:
+    "EB Garamond", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP", Georgia, serif;
+  --font-sans:
+    "Figtree", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans CJK JP",
+    system-ui, sans-serif;
+}
+:lang(ko) {
+  --font-serif:
+    "EB Garamond", "AppleMyungjo", "Nanum Myeongjo", "Noto Serif CJK KR", Georgia, serif;
+  --font-sans:
+    "Figtree", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", system-ui, sans-serif;
+}
+
+/*
+ * `tracking-tight` draws Latin display type closer, and crams CJK, whose characters are set on a
+ * full square and need the space between them. Text in Chinese, Japanese or Korean, by its own
+ * `lang` or the page's, keeps its normal spacing. Unlayered on purpose: it must beat the utility.
+ */
+.tracking-tight:lang(zh),
+.tracking-tight:lang(ja),
+.tracking-tight:lang(ko) {
+  letter-spacing: normal;
+}
 
 /*
  * The paper scope: an element that stays a light card on either ground, as the design draws the
@@ -221,12 +254,15 @@
 
 /*
  * Motion is opt-out at the token, which is where every use of it resolves: Tailwind compiles
- * `animate-fade` to `animation: var(--animate-fade)`, so one override covers all of them.
- * `styles.e2e.ts` checks the computed value, because nothing in the JSX shows this.
+ * `animate-fade` to `animation: var(--animate-fade)`, so one override covers all of them, and
+ * the skeletons' `animate-pulse` the same way (a placeholder that throbs is motion too). Smooth
+ * scrolling is the script's to skip (`scrollMotion`). `styles.e2e.ts` checks the computed values,
+ * because nothing in the JSX shows this.
  */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --animate-fade: none;
+    --animate-pulse: none;
   }
 }
 
@@ -302,6 +338,42 @@
   }
   :root[data-theme="dark"] .admin-side {
     background: color-mix(in oklab, var(--color-paper) 50%, var(--color-field));
+  }
+}
+
+/*
+ * The skip link (`SkipLink` in app-header.tsx): out of sight, and out of the header's row, until
+ * it has focus; then a pill over the header's left end, so the row's width budget never changes.
+ * Written here rather than as `sr-only focus:not-sr-only focus:absolute`, which sets `position`
+ * twice under one variant, leaving the winner to Tailwind's emission order. Layered, so a utility
+ * on it would still win. The page it focuses takes no ring: the next Tab is what shows.
+ */
+@layer components {
+  .skip-link {
+    position: absolute;
+    top: 10px;
+    left: 16px;
+    z-index: 20;
+    border: 0;
+    border-radius: 9999px;
+    background: var(--color-ink);
+    color: var(--color-paper);
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .skip-link:not(:focus) {
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  [data-skip-target]:focus {
+    outline: none;
   }
 }
 

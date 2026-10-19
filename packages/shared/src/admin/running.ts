@@ -9,6 +9,7 @@ export const HEALTH_CHECKS = [
   'deadLetters',
   'stuckBodies',
   'extractionBacklog',
+  'tickErrors',
   'backupAge',
   'backupVerified',
 ] as const

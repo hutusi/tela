@@ -74,6 +74,7 @@
       "deadLetters": "过去一天未处理的死信",
       "stuckBodies": "等待翻译超过 30 分钟的成员",
       "extractionBacklog": "等待全文超过 6 小时的文章",
+      "tickErrors": "上一次调度未能认领的任务类别",
       "backupAge": "距上次备份",
       "backupVerified": "上次备份已校验"
     },

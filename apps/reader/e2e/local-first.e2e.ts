@@ -4,7 +4,7 @@
  * cost no request to tela-api or the object store.
  */
 import { expect, test } from '@playwright/test'
-import { heldOnDevice, synced } from './helpers'
+import { heldOnDevice, STATE_FILE, synced } from './helpers'
 
 test('after sync, five opens, a filter change and Back make no request to /api or /o', async ({
   page,
@@ -60,6 +60,34 @@ test('a reload renders the list from the device before any sync answers', async 
   await page.reload()
   await expect(page.getByTestId('article-row').first()).toBeVisible()
   await expect(page.getByTestId('subscription')).toHaveCount(subscriptions)
+})
+
+test('a new device shows placeholders until its first sync, never an empty list', async ({
+  browser,
+}) => {
+  // The member's cookie and nothing on the device: a new browser, or storage cleared.
+  const context = await browser.newContext({ storageState: STATE_FILE })
+  try {
+    const page = await context.newPage()
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await page.route('**/api/v1/sync**', async (route) => {
+      await held
+      await route.continue()
+    })
+    await page.goto('/reading')
+    await expect(page.getByTestId('list-skeleton')).toBeVisible()
+    await expect(page.getByText('Nothing here yet.')).toHaveCount(0)
+    await expect(page.getByTestId('empty-state')).toHaveCount(0)
+    await expect(page.getByTestId('article-list')).toHaveCount(0)
+    release()
+    await expect(page.getByTestId('article-row').first()).toBeVisible()
+    await expect(page.getByTestId('list-skeleton')).toHaveCount(0)
+  } finally {
+    await context.close()
+  }
 })
 
 test('a prefetch that failed is asked for again once the network is back', async ({ page }) => {

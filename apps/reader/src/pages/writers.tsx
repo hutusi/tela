@@ -17,6 +17,7 @@ import { SiteFooter } from '../components/site-footer'
 import { Swatch } from '../components/swatch'
 import { WriterCard } from '../components/writer-card'
 import { relativeTime } from '../lib/format'
+import { scrollMotion } from '../lib/motion'
 import { SAMPLE, type SampleActivity } from '../lib/sample-card'
 import { blogHost, blogUrl, suggestHandle } from '../lib/suggest-handle'
 import { useTitle } from '../lib/title'
@@ -136,8 +137,7 @@ export function WritersPage() {
     door?.({ mode: 'claim', handle: handle ?? '', name: name.trim(), blog: blogUrl(blog) })
   }
   const toForm = () => {
-    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    form.current?.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'center' })
+    form.current?.scrollIntoView({ behavior: scrollMotion(), block: 'center' })
     nameField.current?.focus({ preventScroll: true })
   }
 

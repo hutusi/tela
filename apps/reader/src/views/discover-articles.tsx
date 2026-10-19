@@ -8,6 +8,7 @@ import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { LanguageFilter, TopicChips } from '../components/discover-filters'
 import { PostRow } from '../components/discover-post'
+import { LoadFailed } from '../components/load-failed'
 import { type ArticlesParams, type ArticlesSort, articlesHref } from '../lib/discover-href'
 import type { Hidden } from '../lib/discover-overlay'
 import { DiscoverFrame } from './discover-frame'
@@ -57,6 +58,7 @@ export function DiscoverArticlesView({
   followed = nobody,
   onMore,
   loadingMore = false,
+  onRetry,
 }: {
   /** Null while the first page is on its way. */
   posts: readonly DiscoverPost[] | null
@@ -72,6 +74,8 @@ export function DiscoverArticlesView({
   /** More of this page in place, once the app runs: the link's own click, to prevent. */
   onMore?: ((event: React.MouseEvent<HTMLAnchorElement>) => void) | undefined
   loadingMore?: boolean
+  /** Set once the first page failed to come: Try again, in the skeleton's place. */
+  onRetry?: (() => void) | undefined
 }) {
   const t = useTranslations('discover')
   // A filter or a sort starts again from the newest; a cursor is for the order it was cut in.
@@ -106,7 +110,9 @@ export function DiscoverArticlesView({
         />
       </div>
 
-      {posts === null ? (
+      {posts === null && onRetry ? (
+        <LoadFailed onRetry={onRetry} />
+      ) : posts === null ? (
         <div aria-busy="true">
           {[0, 1, 2].map((i) => (
             <div key={i} className="border-b border-line py-[26px]">

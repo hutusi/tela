@@ -122,9 +122,25 @@ let hanging: boolean
 let moved: Map<string, string>
 /** Every path the network was asked for, and when the worker claimed its clients. */
 let log: string[]
+/**
+ * The browser's own HTTP cache, by path: what it answers before the network, unless a request
+ * asks past it. `_headers` lets it keep `/assets/*` a day, whatever the answer was.
+ */
+let httpCache: Map<string, File>
 
-async function network(input: string | { url: string }): Promise<Response> {
+async function network(
+  input: string | { url: string },
+  init?: { cache?: string },
+): Promise<Response> {
   const url = new URL(typeof input === 'string' ? input : input.url, ORIGIN)
+  const pastCache = init?.cache === 'reload' || init?.cache === 'no-cache'
+  const held = httpCache.get(url.pathname)
+  if (held && !pastCache) {
+    log.push(`http-cache ${url.pathname}`)
+    return new Response(held.body, { headers: { 'content-type': held.type } })
+  }
+  // The network's answer replaces what the browser held.
+  httpCache.delete(url.pathname)
   const deploy = live
   const down = offline
   log.push(url.pathname)
@@ -237,6 +253,7 @@ beforeEach(() => {
   offline = false
   moved = new Map()
   log = []
+  httpCache = new Map()
 })
 
 describe('the app-shell service worker', () => {
@@ -296,6 +313,31 @@ describe('the app-shell service worker', () => {
     await visit(sw)
     expect(await caches.file('/')).toEqual(shellOf(B))
     expect(await caches.file(B.js)).toEqual(asBuilt(B, B.js))
+  })
+
+  test("a browser cache holding the app under a script's name is asked past once, and the shell swaps", async () => {
+    // A deploy rolled back: while B was gone, the fallback answered B's script with the app, 200,
+    // and `_headers` let the browser keep that a day. B is back, and the network has the script.
+    const A = build('A')
+    const B = build('B')
+    live = A
+    const sw = await start()
+    await visit(sw)
+
+    live = B
+    httpCache.set(B.js, shellOf(A))
+    await visit(sw)
+    expect(log).toContain(`http-cache ${B.js}`)
+    expect(log).toContain(B.js)
+    expect(await caches.file('/')).toEqual(shellOf(B))
+    expect(await caches.file(B.js)).toEqual(asBuilt(B, B.js))
+
+    // A page asking for the file itself gets the script, not what the browser held.
+    caches.forget(B.css)
+    httpCache.set(B.css, shellOf(A))
+    const res = await dispatch(sw, request(B.css)).response
+    expect(await res.text()).toBe(B.files.get(B.css)?.body ?? '')
+    expect(await caches.file(B.css)).toEqual(asBuilt(B, B.css))
   })
 
   test('a script or stylesheet answered as another type is not kept, and the shell stays', async () => {

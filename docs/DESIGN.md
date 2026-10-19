@@ -26,13 +26,23 @@ mark takes its green from, and what `primary` becomes in dark mode. Text in the 
 italic spans) lifts a step further, to `oklch(0.74 0.12 150)`, as the design's Night page draws it
 (below).
 
+Three lifts, by what floats: `shadow-menu` (`0 8px 24px` at 8%) under a menu's panel,
+`shadow-popover` (`0 12px 32px` at 10%) under a popover with a form in it (Recommend, Aa, a
+highlight's note, the account menu), and `shadow-dialog` (`0 24px 60px` at 18%) under a dialog
+over a dimmed page (`ResponsiveDialog`, the crop, the front door). A menu's panel is
+`menuPanel()` (`header-control.ts`: 6px under its control, `surface`, a `line` border, 10px
+corners, z 7, a minimum width and an optional scroll) and its items build on `MENU_ITEM`
+(`menuItem` for a header menu's), so the header's, Discover's and Settings' menus no longer differ
+by a radius, a layer or a shadow.
+
 ## Icons (`apps/reader/src/components/glyph.tsx`, Tela v5)
 
 Tela's icons are its own line drawings on a 16px grid, in one style: 1.5 stroke, round caps and
 joins, `currentColor`, drawn inside `Glyph`. They replaced the typed glyphs the reader printed
 (♡ ♥ ↗ ⌕ ✕ ▾ ✓), which each platform's fonts drew differently or not at all: ⌕ is missing from
 many, and ♥ turns into an emoji on some. HEART (filled when liked), PASS (Recommend), SEARCH,
-CLOSE, CHEVRON_DOWN and CHECK (both drawn at 12px), LIST (All articles), BACK, EXTERNAL, and GEAR
+CLOSE, CHEVRON_DOWN and CHECK (both drawn at 12px), LIST (All articles, and Settings' All blogs),
+LOCK (a private blogroll), BACK, EXTERNAL, and GEAR
 (Lucide's "settings", on its 24px grid at 2.1, credited in the file), beside the older SLIDERS,
 SUN, MOON and AUTO. An icon is decoration: the control's text or label carries its name.
 
@@ -41,8 +51,16 @@ string as part of the words. Recommend is PASS everywhere, so the two never shar
 screen again. Arrows that are typography ("Read →", "EN → 中文") stay typed.
 
 Fonts: EB Garamond (headings, article body, excerpts; 400/500/600, italic) and Figtree (UI;
-400/500/600), both self-hosted from `@fontsource` (Latin and Latin Extended), so no page asks
-Google Fonts for anything. CJK fallbacks: Songti SC / Noto Serif CJK SC for
+400/500/600), both self-hosted from `@fontsource`, so no page asks Google Fonts for anything.
+`styles.css` imports each weight's file, which declares every subset (Latin, Latin Extended, and
+for EB Garamond Cyrillic, Greek and Vietnamese) with its `unicode-range`, so a page downloads only
+the subsets its text uses: Latin alone for English, French and the Latin in Chinese, 134 KB of
+woff2 for all seven faces where importing Latin and Latin Extended without ranges cost 383 KB.
+Never import the per-subset files (`latin-400.css`): they carry no range, and a face without one
+is downloaded whatever the text. Figtree 400 and EB Garamond 500, the faces every page sets first,
+are preloaded from index.html by a plugin in `vite.config.ts` that reads their hashed names from
+the bundle, and `sw.js` precaches them with the shell; `styles.e2e.ts` checks the ranges, the
+subsets a page fetches and the two preloads. CJK fallbacks: Songti SC / Noto Serif CJK SC for
 serif, PingFang SC / Noto Sans CJK SC for sans. Simplified and Traditional share most code points
 but not every glyph's shape, so text in Traditional (`:lang(zh-Hant)`: the interface in 繁體中文,
 or a post, title or option marked `lang="zh-Hant"`) takes Songti TC / Noto Serif CJK TC and
@@ -50,12 +68,24 @@ PingFang TC / Noto Sans CJK TC, and Simplified inside it goes back to SC. The ru
 `--font-serif` and `--font-sans` tokens, not `font-family`, so it reaches whatever resolves a
 token at or under the element; an element with a `lang` and no family of its own keeps the stack
 its parent resolved, so give it `font-serif` (or a class that sets a family). `styles.e2e.ts`
-checks the computed families. Base UI size 14px; article body 19.5px/1.55 (CJK 18px/1.8).
+checks the computed families. Japanese (`:lang(ja)`: Hiragino Mincho ProN / Yu Mincho / Noto
+Serif CJK JP, Hiragino Sans / Yu Gothic / Noto Sans CJK JP) and Korean (`:lang(ko)`: AppleMyungjo
+/ Nanum Myeongjo / Noto Serif CJK KR, Apple SD Gothic Neo / Malgun Gothic / Noto Sans CJK KR) take
+their own families by the same tokens, so a Japanese post's kanji are not drawn in Chinese forms.
+`tracking-tight` is reset to normal spacing for text in Chinese, Japanese or Korean (by its own
+`lang` or the page's): it draws Latin display type closer and crams CJK, which is set on a full
+square. Base UI size 14px; article body 19.5px/1.55 (CJK 18px/1.8).
 
 Motion: `animate-fade` (250 ms fade + 4px rise) on view changes and popovers. Under
-`prefers-reduced-motion: reduce` the token itself becomes `none`, which covers every use at once;
-`styles.e2e.ts` checks the computed `animation-name`, since that relies on Tailwind compiling
-`animate-*` to `animation: var(--animate-fade)`.
+`prefers-reduced-motion: reduce` the token itself becomes `none`, which covers every use at once,
+and so does `--animate-pulse`, the skeletons' throb; a scroll the script makes is smooth only
+without it (`scrollMotion`). `styles.e2e.ts` checks the computed `animation-name`, since that
+relies on Tailwind compiling `animate-*` to `animation: var(--animate-*)`.
+
+Contrast: `muted` is 4.5:1 on paper but 4.05:1 on `hover`, so a count on the open sidebar row (and
+on one under the pointer) is `ink-2` (`rowCount`; the row is `group/row` by name, since the reading
+layout is a bare `group`). A control's edge needs 3:1, which the off switch's `thumb` track is not
+on `surface`: it has an inset `muted` ring. `styles.e2e.ts` checks both on both grounds.
 
 ## Links
 
@@ -100,7 +130,11 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
   visitor's theme and language are in the footer), and the member's avatar (30px: their
   picture, or their initial on the accent). The circle sets a member's interface language, and the translation
   follows it, until Settings → Language sets the two apart (ADR 0040). Pills are ink in every
-  state: the active one is distinguished by its `hover` background alone, never by colour.
+  state: the active one is distinguished by its `hover` background alone, never by colour, and
+  says so with `aria-current="page"`. The nav is labelled "Tela" (`app.name`). Before the lockup,
+  a *Skip to content* button (`nav.skip`, `SkipLink`) is the first Tab stop: out of sight until it
+  has focus, then an `ink` pill over the header's left end, never in its row; it focuses whatever
+  follows the header, so the next Tab lands on the page.
 - A visitor's header (ADR 0035) is its own, shown as soon as the device is known to hold no
   member (a guest, or a session still `unknown` with no stored account), so it never waits for
   `/me`. From `sm` up: the lockup, the Discover and *For writers* pills, then the theme menu, the
@@ -242,7 +276,9 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
   the popover's form (`RecommendForm`), and only one of the two is open at a time, each giving
   focus back to the button that opened it on Cancel, Esc or Recommend; then the blog,
   a 44px round `SiteAvatar` with its name and "{description} · {n} readers on Tela" under ADR
-  0041's rule. The column is the
+  0041's rule. The blog's name, in the meta line and here, is a link in `ink` to the blog's posts
+  (`readingHref({ feedId })`, the sidebar row's address) while the member follows it; a post
+  from a blog they do not follow names it as text. The column is the
   member's measure (640px by default) while the body is one column, and 1240px once two paired
   columns fit, so the chrome above and below the text is as wide as the text. Serif title
   40px/1.12 alone and 32px when paired. The column is a `@container` wrapper of its own, never
@@ -292,14 +328,23 @@ opens a 320 px popover with a three-line serif textarea, a hint ("shown on your 
 author"), Cancel and a filled Recommend button. Success says so in the toast. A recommended post
 renders the pill filled (`bg-ink`), and clicking it again removes the recommendation.
 
+Popovers close alike (`usePopover`, over `useDismiss`): a click elsewhere, focus leaving them, or
+Esc, which is theirs before the page's, so it never closes the article under them. Esc gives
+focus back to what opened them (the Recommend button, Aa, a header menu's or Discover's language
+menu's summary, or whatever had focus as a highlight's note opened), and a click elsewhere leaves
+focus where it landed. A popover's box holds the control that opens it, so pressing that control
+again closes it by its own click.
+
 The toast (`Toast`, `lib/toasts.ts`, Tela v5) is the reader's one: an `ink` box at the foot of the
 page, centred, 13.5px, for 2.6 s, and 5 s when it carries an action (Undo: 600 weight, underlined,
 in the toast's own colour, with a `U` key cap on a fine pointer, and a hit area taller than its
 text). One at a time; a newer message replaces the one showing and takes its own time. Its time
 stops while a pointer is over it or focus is in it, and starts again with what it had left, so it
 never vanishes, taking focus with it, while it is being used. Its live region is always in the
-page, so a screen reader hears each message, and `u` presses Undo on the reading page (listed
-under `?`). A change that offers Undo is held on the device for as long as its toast shows, and
+page, so a screen reader hears each message, and `u` presses Undo on any page that shows it
+(listed under `?` on the reading page): the key is the toast's own, so a blog left in Settings is
+taken back by it as a mark-all is. It is a letter in a field, quiet while a modal dialog is open,
+and left to the console on `/admin`, which has its own. A change that offers Undo is held on the device for as long as its toast shows, and
 let go when the toast goes without it (ADR 0046), so an Undo pressed while it shows always finds
 the change unsent. The reading page's keys stay quiet while a modal dialog (the phone's Recommend
 sheet) is open.
@@ -352,7 +397,7 @@ edge, and is all a visitor has, and an account that has none takes the cookie's 
 sync lands. A section opens with a 30 px serif heading and a
 muted intro; below, rows (`SettingRow`) separated by `line` rules: the label and a muted hint on the
 left, the control on the right. Controls are `Segmented` (the choices on the `hover` ground, the
-chosen one lifted on `surface`, and a 13px `large` size for the phone menu and footer), `Switch` (40 × 24, `accent` on / `thumb` off, `knob`), a native
+chosen one lifted on `surface`, and a 13px `large` size for the phone menu and footer), `Switch` (40 × 24, `accent` on / `thumb` off with an inset `muted` edge, `knob`), a native
 select, or a quiet pill button. Settings that change what others see say so, and that the public
 profile can take a few minutes to catch up. Profile opens with the member's avatar at 64 px beside
 *Upload a picture* (*Change picture* once there is one) and *Remove*, quiet pills. One picture at
@@ -890,7 +935,18 @@ then an "On this page" list that sticks beside the text from `lg`, "The short ve
 
 ## States the reader adds
 
-- A skeleton pane while the first sync has not landed: the article is on its way, not gone.
+- A skeleton pane while the first sync has not landed: the article is on its way, not gone. The
+  sidebar (or the rail) and the list are placeholders too (`ListPanesSkeleton`), so a new device
+  never says "Nothing here yet." before it holds any rows.
+- A page that reads tela-api (a blog, a profile, a blogroll, Discover's tabs, a claim, the
+  Dashboard, search beyond the device) and whose answer did not come says so in the skeleton's
+  place, never a skeleton for ever: "Something went wrong loading this." and *Try again*
+  (`LoadFailed`, from `reader.loadFailed` and `reader.retry`), which shows the skeleton again
+  while it asks. A public page also asks again by itself once the browser is back online
+  (`usePublic`'s `retry`).
+- A body that could not be fetched says so where the text would be, with *Try again* and *Open
+  the original ↗*, and asks again by itself once back online; only a post whose feed carries no
+  text says it "has no readable content".
 - "Older articles" under a list longer than 200.
 - A not-found page (`notFound.*`).
 - A sign-in message for too many tries (`door.errors.rate_limited`), which is not a wrong code.
@@ -1086,9 +1142,11 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
     highlight only opens its note. Undo is the exception: a removed highlight it brings back
     after an overlapping one was made meanwhile comes back beside it, unmerged, the two
     overlapping until one is removed (a known gap, ADR 0046).
-- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `o`, `l`, `m`, `h`, `[`, `f`, `u` and `?` in
-  `kbd` chips. `o` opens the original in a new tab, `l` likes or unlikes, and `m` marks read or
-  unread, as the action row's button would, all on the open article; `u` presses the toast's Undo.
+- **Keys:** `?` opens a dialog (`ResponsiveDialog`, 320px from `md`, a sheet below) listing `j`,
+  `k`, `Esc`, `o`, `l`, `m`, `h`, `[`, `f`, `u` and `?` in `kbd` chips; focus goes into it, and Esc
+  or its button gives focus back to where `?` was pressed. `o` opens the original in a new tab, `l` likes or unlikes, and `m` marks read or
+  unread, as the action row's button would, all on the open article; `u` presses the toast's Undo,
+  here and on every other page.
   `[` needs AltGr or Option on some non-US layouts, as `?` does on others; neither is worked
   around.
 

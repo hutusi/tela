@@ -5,6 +5,7 @@
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { chip, LanguageFilter, TopicChips } from '../components/discover-filters'
+import { LoadFailed } from '../components/load-failed'
 import { SiteCard } from '../components/site-card'
 import { type BlogsParams, blogsHref } from '../lib/discover-href'
 import { DiscoverFrame } from './discover-frame'
@@ -15,11 +16,14 @@ export function DiscoverView({
   params,
   member,
   locale,
+  onRetry,
 }: {
   data: DiscoverData | null
   params: BlogsParams
   member?: MemberControls | undefined
   locale: string
+  /** Set once the page failed to come: Try again, in the skeleton's place. */
+  onRetry?: (() => void) | undefined
 }) {
   const t = useTranslations('discover')
   const here = blogsHref(params)
@@ -42,7 +46,9 @@ export function DiscoverView({
         />
       </div>
 
-      {data === null ? (
+      {data === null && onRetry ? (
+        <LoadFailed onRetry={onRetry} />
+      ) : data === null ? (
         <div
           className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4"
           aria-busy="true"
@@ -70,6 +76,7 @@ export function DiscoverView({
       {pages > 1 && (
         <nav
           className="mt-8 flex items-center justify-center gap-5 text-[13px]"
+          aria-label={t('pager.page', { page: params.page, pages })}
           data-testid="discover-pager"
         >
           {params.page > 1 ? (

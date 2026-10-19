@@ -9,7 +9,8 @@
  *   save erase another tab's unsent changes.
  * - `tables`: one record per synced table (a few thousand rows at most; written whole).
  * - `bodies`: content objects by content key, with when each was last opened, for eviction.
- * - `objects`: translation and chunk objects by their R2 key. Immutable, like bodies.
+ * - `objects`: translation and chunk objects by their R2 key. Immutable, like bodies, and evicted
+ *   with the body they translate.
  *
  * One copy, one owner. Tabs share the copy, and a tab may still hold an account another tab has
  * signed out of, so no write of a member's rows trusts what its tab remembers: each is one
@@ -135,10 +136,12 @@ export interface Persistence {
   touchBody(key: string, at: number): Promise<void>
   getObject(key: string): Promise<StoredObject | undefined>
   putObject(object: StoredObject): Promise<void>
-  /** Bodies opened before `before`, oldest first, for eviction. */
-  staleBodies(before: number): Promise<StoredBody[]>
-  deleteBodies(keys: string[]): Promise<void>
-  bodyBytes(): Promise<number>
+  /**
+   * Evict: drop the bodies last opened at or before `before`, then the oldest of the rest until
+   * they come to `capBytes` at most, and every translation and chunk object of a body no longer
+   * held. Says which bodies went.
+   */
+  evictBodies(before: number, capBytes: number): Promise<string[]>
   /** Every body held, by key: what prefetch need not fetch again. */
   bodyKeys(): Promise<string[]>
 }
@@ -356,6 +359,35 @@ function placed(change: Change, stored: number): Partial<TableRows> | null {
   return null
 }
 
+/** The content key a translation (`t/<key>/…`) or chunk (`tc/<key>/…`) object belongs to. */
+function bodyOf(objectKey: string): string | null {
+  return /^tc?\/([^/]+)\//.exec(objectKey)?.[1] ?? null
+}
+
+/**
+ * Which bodies eviction drops, from `newestFirst`: those past the cap once every newer one is
+ * counted (the stale ones the caller found by key are not among them).
+ */
+function pastCap(newestFirst: Iterable<{ key: string; bytes: number }>, capBytes: number) {
+  const drop: string[] = []
+  let bytes = 0
+  for (const body of newestFirst) {
+    bytes += body.bytes
+    if (bytes > capBytes) drop.push(body.key)
+  }
+  return drop
+}
+
+/** The content keys of the objects whose body is not among `kept`. */
+function orphans(objectKeys: Iterable<string>, kept: ReadonlySet<string>): Set<string> {
+  const out = new Set<string>()
+  for (const key of objectKeys) {
+    const body = bodyOf(key)
+    if (body !== null && !kept.has(body)) out.add(body)
+  }
+  return out
+}
+
 const STORES = ['meta', 'tables', 'bodies', 'objects'] as const
 type Store = StoreNames<TelaDB>
 type Tx = IDBPTransaction<TelaDB, Store[], 'readwrite'>
@@ -510,24 +542,42 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
     async putObject(object) {
       await db.put('objects', object)
     },
-    async staleBodies(before) {
-      return db.getAllFromIndex('bodies', 'lastOpened', IDBKeyRange.upperBound(before))
-    },
-    async deleteBodies(keys) {
-      const tx = db.transaction('bodies', 'readwrite')
-      for (const k of keys) await tx.store.delete(k)
-      await tx.done
-    },
-    bodyKeys: () => db.getAllKeys('bodies'),
-    async bodyBytes() {
-      let total = 0
-      let cursor = await db.transaction('bodies').store.openCursor()
+    async evictBodies(before, capBytes) {
+      // Planned in a read-only transaction, so an open is not held up while bodies are counted.
+      // The stale ones are found by key on the index, never read: a week of prefetched bodies
+      // nobody opened is most of what goes. Only the rest are read, newest first, for their size.
+      const plan = db.transaction(['bodies', 'objects'])
+      const index = plan.objectStore('bodies').index('lastOpened')
+      const stale = await index.getAllKeys(IDBKeyRange.upperBound(before))
+      const fresh: { key: string; bytes: number }[] = []
+      let cursor = await index.openCursor(IDBKeyRange.lowerBound(before, true), 'prev')
       while (cursor) {
-        total += cursor.value.bytes
+        fresh.push({ key: cursor.primaryKey, bytes: cursor.value.bytes })
         cursor = await cursor.continue()
       }
-      return total
+      const objectKeys = await plan.objectStore('objects').getAllKeys()
+      await plan.done
+      const drop = [...stale, ...pastCap(fresh, capBytes)]
+      const gone = new Set(drop)
+      const orphaned = orphans(
+        objectKeys,
+        new Set(fresh.map((b) => b.key).filter((k) => !gone.has(k))),
+      )
+      if (drop.length === 0 && orphaned.size === 0) return []
+      // Each body's translations and chunks go by key range: a streamed one is many objects.
+      const tx = db.transaction(['bodies', 'objects'], 'readwrite')
+      const objects = tx.objectStore('objects')
+      await Promise.all([
+        ...drop.map((key) => tx.objectStore('bodies').delete(key)),
+        ...[...orphaned].flatMap((key) => [
+          objects.delete(IDBKeyRange.bound(`t/${key}/`, `t/${key}/\uffff`)),
+          objects.delete(IDBKeyRange.bound(`tc/${key}/`, `tc/${key}/\uffff`)),
+        ]),
+        tx.done,
+      ])
+      return drop
     },
+    bodyKeys: () => db.getAllKeys('bodies'),
   }
 }
 
@@ -615,14 +665,21 @@ export function memoryPersistence(): Persistence {
     },
     getObject: async (key) => objects.get(key),
     putObject: async (o) => void objects.set(o.key, o),
-    staleBodies: async (before) =>
-      [...bodies.values()]
-        .filter((b) => b.lastOpened <= before)
-        .sort((a, b) => a.lastOpened - b.lastOpened),
-    deleteBodies: async (keys) => {
-      for (const k of keys) bodies.delete(k)
+    async evictBodies(before, capBytes) {
+      const all = [...bodies.values()]
+      const stale = all.filter((b) => b.lastOpened <= before).map((b) => b.key)
+      const newestFirst = all
+        .filter((b) => b.lastOpened > before)
+        .sort((a, b) => b.lastOpened - a.lastOpened || (a.key < b.key ? 1 : -1))
+      const drop = [...stale, ...pastCap(newestFirst, capBytes)]
+      for (const key of drop) bodies.delete(key)
+      const orphaned = orphans(objects.keys(), new Set(bodies.keys()))
+      for (const key of [...objects.keys()]) {
+        const body = bodyOf(key)
+        if (body !== null && orphaned.has(body)) objects.delete(key)
+      }
+      return drop
     },
-    bodyBytes: async () => [...bodies.values()].reduce((n, b) => n + b.bytes, 0),
     bodyKeys: async () => [...bodies.keys()],
   }
 }
