@@ -136,12 +136,25 @@ export function siteOfFeed(t: Tables, feedId: number): SiteRow | undefined {
 export function feedTitle(t: Tables, feedId: number): string {
   const feed = t.feeds.get(feedId)
   const site = feed ? t.sites.get(feed.siteId) : undefined
-  let sibling = false
-  if (feed)
-    for (const f of t.feeds.values())
-      if (f.siteId === feed.siteId && f.id !== feed.id) sibling = true
+  const sibling = feed !== undefined && (feedsOfSite(t.feeds).get(feed.siteId) ?? 0) > 1
   const name = sibling ? (feed?.title ?? site?.title) : (site?.title ?? feed?.title)
   return name ?? (site ? host(site.homeUrl) : '')
+}
+
+const siteCounts = new WeakMap<Tables['feeds'], Map<number, number>>()
+/**
+ * How many feeds the device holds of each blog, counted once per feeds table: a table is never
+ * changed once a snapshot holds it (a change makes a new one), and every row of a list names its
+ * feed, so scanning every feed per name made a list render quadratic.
+ */
+function feedsOfSite(feeds: Tables['feeds']): Map<number, number> {
+  let counts = siteCounts.get(feeds)
+  if (!counts) {
+    counts = new Map()
+    for (const f of feeds.values()) counts.set(f.siteId, (counts.get(f.siteId) ?? 0) + 1)
+    siteCounts.set(feeds, counts)
+  }
+  return counts
 }
 
 export type SubscriptionItem = {

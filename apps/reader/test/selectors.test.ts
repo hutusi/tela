@@ -378,6 +378,16 @@ describe('what a feed is called', () => {
     })
     expect([feedTitle(t, 1), feedTitle(t, 2)]).toEqual(['Posts', 'Links'])
   })
+
+  test('a second feed of a blog arriving in a pull renames the first, which was named already', () => {
+    const one = applyPull(
+      { cursor: 0, tables: emptyTables() },
+      pull(1, { feeds: [feed(1, 1, 'Posts')], sites: [site(1, 'One Blog')] }, true),
+    )
+    expect(feedTitle(view(one, []), 1)).toBe('One Blog')
+    const two = view(applyPull(one, pull(2, { feeds: [feed(2, 1, 'Links')] })), [])
+    expect([feedTitle(two, 1), feedTitle(two, 2)]).toEqual(['Posts', 'Links'])
+  })
 })
 
 describe('folders (ADR 0048)', () => {
