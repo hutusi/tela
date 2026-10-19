@@ -475,6 +475,28 @@ describe('asking /me who is signed in', () => {
     expect(none.titleLang).toBe('zh-Hans')
   })
 
+  test('an answer overtaken while it signed the device in names no language', async () => {
+    // A sign-in's question took over while this one's setUser ran: that answer says the language.
+    const store = await reopened(memoryPersistence())
+    let asking = true
+    const setUser = store.setUser.bind(store)
+    store.setUser = async (...args: Parameters<typeof store.setUser>) => {
+      const set = await setUser(...args)
+      asking = false
+      return set
+    }
+    me(() => Response.json({ id: 'a', profile: { readingLang: 'fr', uiLocale: 'fr' } }))
+    expect(
+      await learnWho(
+        store,
+        () => asking,
+        whoAmI,
+        () => 'en',
+      ),
+    ).toBeNull()
+    expect(store.titleLang).toBeNull()
+  })
+
   test("a device that holds the member's rows keeps its own word on the language", async () => {
     const { store } = await doubted()
     me(() => Response.json({ id: 'a', profile: { readingLang: 'fr', uiLocale: 'fr' } }))

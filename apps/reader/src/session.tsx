@@ -214,6 +214,8 @@ export async function learnWho(
   } catch {
     return 'unreachable'
   }
+  // Asked again while setUser ran (a sign-in's question took over): that answer names the language.
+  if (!current()) return null
   if (!store.hasData) store.setReadingLang(readingLangOf(me.profile, locale()))
   return 'member'
 }
