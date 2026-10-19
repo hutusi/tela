@@ -1,4 +1,5 @@
 import { languageBadge } from '@tela/shared'
+import { daysAgo } from './days'
 
 /**
  * Formatters by locale and options. Building one costs far more than formatting with it, and a
@@ -6,7 +7,11 @@ import { languageBadge } from '@tela/shared'
  */
 const formatters = new Map<string, Intl.RelativeTimeFormat | Intl.DateTimeFormat>()
 
-function relativeFormat(locale: string, style: 'long' | 'short' | 'narrow') {
+/**
+ * One `Intl.RelativeTimeFormat` per locale and style, made once: building one costs far more than
+ * using it, and a list words a time per row.
+ */
+export function relativeFormat(locale: string, style: 'long' | 'short' | 'narrow' = 'long') {
   const key = `r|${style}|${locale}`
   let f = formatters.get(key) as Intl.RelativeTimeFormat | undefined
   if (!f) {
@@ -136,11 +141,8 @@ export function personColor(handle: string): string {
  * within their offset of midnight, which is cheaper than an edge cache split by timezone.
  */
 export function shortDate(at: number, locale: string, now = Date.now()): string {
-  const day = (t: number) => {
-    const d = new Date(t)
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-  }
-  const days = Math.round((day(now) - day(at)) / 86_400_000)
+  // The calendar count every "today" in the app is worded from: a date ahead of `now` is today.
+  const days = daysAgo(at, now)
   if (days === 0 || days === 1) {
     const word = relativeFormat(locale, 'long').format(-days, 'day')
     return word.charAt(0).toLocaleUpperCase(locale) + word.slice(1)

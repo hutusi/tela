@@ -16,7 +16,7 @@ import { CHECK, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { SiteAvatar } from '../components/site-avatar'
 import { daysAgo } from '../lib/days'
-import { displayHost, shortDate } from '../lib/format'
+import { displayHost, relativeFormat, shortDate } from '../lib/format'
 import type { BlogrollBlog, BlogrollData, MemberControls, Person } from './types'
 
 /** What the owner's page puts into a row: its action (Remove) and its note, or the note editor. */
@@ -59,7 +59,7 @@ export function updatedWhen(
   if (days <= 1) {
     return {
       day: true,
-      when: new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-days, 'day'),
+      when: relativeFormat(locale).format(-days, 'day'),
     }
   }
   return { day: false, when: shortDate(at, locale, now) }

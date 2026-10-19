@@ -5,6 +5,7 @@
  */
 import type { Tables } from '@tela/sync'
 import { daysAgo } from './days'
+import { relativeFormat } from './format'
 import { normalizeQuery } from './search'
 
 const DAY = 86_400_000
@@ -36,7 +37,7 @@ export const QUIET_AFTER_MS = 60 * DAY
  * ago", "上个月", "il y a 3 mois"), with a capital where the language has one.
  */
 export function postedAgo(at: number, locale: string, now: number): string {
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+  const rtf = relativeFormat(locale)
   const days = daysAgo(at, now)
   const said =
     days < 7

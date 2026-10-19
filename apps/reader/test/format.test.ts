@@ -23,6 +23,8 @@ describe('dates as lists show them', () => {
     expect(shortDate(NOW - DAY, 'fr', NOW)).toBe('Hier')
     expect(shortDate(NOW - 5 * DAY, 'en', NOW)).toBe('Sep 22')
     expect(shortDate(new Date(2025, 0, 3, 12).getTime(), 'en', NOW)).toBe('Jan 3, 2025')
+    // A feed whose clock runs ahead: today, as every other "today" in the app words it.
+    expect(shortDate(NOW + DAY, 'en', NOW)).toBe('Today')
     expect(monthYear(NOW, 'en')).toBe('September 2026')
   })
 })
