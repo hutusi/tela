@@ -3,7 +3,7 @@
  * back to Discover is a render, not a request; a page the edge rendered hands its data over in
  * `#tela-data`, so the first render needs no request either.
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 const held = new Map<string, unknown>()
 /**
@@ -30,11 +30,13 @@ function handedOver(path: string): unknown {
 }
 
 /**
- * Still loading, and `failed` once the request has (offline, an error): most pages keep their
- * skeleton and wait for the next visit, and one with something better to show can show it.
+ * Still loading, and `failed` once the request has (offline, an error), with `retry` to ask again:
+ * a page says so with Try again (`LoadFailed`) in its skeleton's place, and one with something
+ * better to show can show it. Coming back online asks again by itself.
  */
 export type Loaded<T> =
-  | { status: 'loading'; failed?: true }
+  | { status: 'loading'; failed?: undefined }
+  | { status: 'loading'; failed: true; retry: () => void }
   | { status: 'missing' }
   | { status: 'ready'; data: T }
 
@@ -42,8 +44,11 @@ const LOADING = { status: 'loading' } as const
 const FAILED = { status: 'loading', failed: true } as const
 const MISSING = { status: 'missing' } as const
 
+/** What the hook keeps: a failure without its `retry`, which is the hook's own. */
+type Held<T> = Exclude<Loaded<T>, { failed: true }> | typeof FAILED
+
 /** What a path shows before its own answer: what is held this visit, else loading. */
-function initial<T>(path: string | null, handover: boolean): Loaded<T> {
+function initial<T>(path: string | null, handover: boolean): Held<T> {
   if (path === null) return MISSING
   const data = held.get(path) ?? (handover ? handedOver(path) : undefined)
   return data === undefined ? LOADING : { status: 'ready', data: data as T }
@@ -55,22 +60,26 @@ export function usePublic<T>(path: string | null): Loaded<T> {
   // paths (one profile, then another) renders the new path before any effect runs, and the router
   // commits that render in a transition: checked in an effect, the last path's data would paint
   // under the new address.
-  const [state, setState] = useState<{ path: string | null; loaded: Loaded<T> }>(() => ({
+  const [state, setState] = useState<{ path: string | null; loaded: Held<T> }>(() => ({
     path,
     loaded: initial<T>(path, true),
   }))
-  // How often this path was forgotten while shown. Counted per path: a page that stays mounted
-  // across paths (one profile, then another) starts each at 0, so the next shows loading rather
-  // than the last one's data until its own answer comes.
+  // How often this path was forgotten or retried while shown. Counted per path: a page that stays
+  // mounted across paths (one profile, then another) starts each at 0, so the next shows loading
+  // rather than the last one's data until its own answer comes.
   const [bump, setBump] = useState<{ path: string | null; n: number }>({ path, n: 0 })
   const version = bump.path === path ? bump.n : 0
+  const again = useCallback(
+    () => setBump((b) => ({ path, n: (b.path === path ? b.n : 0) + 1 })),
+    [path],
+  )
   useEffect(() => {
     const listener = (prefix: string) => {
-      if (path?.startsWith(prefix)) setBump((b) => ({ path, n: (b.path === path ? b.n : 0) + 1 }))
+      if (path?.startsWith(prefix)) again()
     }
     listeners.add(listener)
     return () => void listeners.delete(listener)
-  }, [path])
+  }, [path, again])
   // A bumped `version` asks for a fresh copy.
   useEffect(() => {
     if (path === null) {
@@ -79,9 +88,12 @@ export function usePublic<T>(path: string | null): Loaded<T> {
     }
     let cancelled = false
     const known = initial<T>(path, version === 0)
-    // A refetch of the path on screen keeps showing it until the answer comes.
+    // A refetch of the path on screen keeps showing it until the answer comes; one that had
+    // failed shows its skeleton again while it asks, so Try again is seen to do something.
     setState((s) =>
-      known === LOADING && version !== 0 && s.path === path ? s : { path, loaded: known },
+      known === LOADING && version !== 0 && s.path === path && s.loaded !== FAILED
+        ? s
+        : { path, loaded: known },
     )
     const stale = [...changed].some((prefix) => path.startsWith(prefix))
     // The edge's handover is at most five minutes old, and the browser's own copy can be older:
@@ -116,7 +128,23 @@ export function usePublic<T>(path: string | null): Loaded<T> {
       cancelled = true
     }
   }, [path, version])
-  return state.path === path ? state.loaded : initial<T>(path, false)
+  const shown = state.path === path ? state.loaded : initial<T>(path, false)
+  const failed = shown.status === 'loading' && shown.failed === true
+  // Back online, a page that failed asks again by itself, as the sync does.
+  useEffect(() => {
+    if (!failed) return
+    window.addEventListener('online', again)
+    return () => window.removeEventListener('online', again)
+  }, [failed, again])
+  // One object per path, so what depends on the answer changes only when the answer does.
+  const withRetry = useMemo(() => ({ ...FAILED, retry: again }), [again])
+  if (shown.status === 'loading' && shown.failed === true) return withRetry
+  return shown
+}
+
+/** Try again, for a page whose answer failed to come; nothing while it is on its way or here. */
+export function retryOf<T>(loaded: Loaded<T>): (() => void) | undefined {
+  return loaded.status === 'loading' && loaded.failed ? loaded.retry : undefined
 }
 
 /** Forget pages' data after changing them: what shows them now fetches again, and so does a visit. */

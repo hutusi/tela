@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { CHECK, Glyph } from '../components/glyph'
+import { LoadFailedPage } from '../components/load-failed'
 import { useTitle } from '../lib/title'
 import { apiJson } from '../store/api'
 import { NotFoundPage } from './not-found'
@@ -160,16 +161,25 @@ export function ClaimSitePage() {
   // Asked for long enough with no answer: the check may be waiting to retry, so the member may
   // ask for a fresh one rather than watch "Checking" for ever.
   const [stalled, setStalled] = useState(false)
+  // The first answer did not come (offline, an error): Try again asks once more.
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   useTitle(t('verifyTitle'))
 
+  // Any other answer throws, and leaves what the page shows: a poll that fails keeps the standing.
   const load = useCallback(async () => {
     const { status, body } = await apiJson<Standing>(`/api/v1/claims/${siteId}`)
-    setStanding(status === 200 ? body : status === 404 ? 'missing' : null)
+    if (status === 200) setStanding(body)
+    else if (status === 404) setStanding('missing')
+    else throw new Error(`claim standing: ${status}`)
   }, [siteId])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` is Try again
   useEffect(() => {
-    if (valid) load().catch(() => undefined)
-  }, [valid, load])
+    if (!valid) return
+    setFailed(false)
+    load().catch(() => setFailed(true))
+  }, [valid, load, attempt])
 
   const pending = standing !== null && standing !== 'missing' && standing.status === 'pending'
   useEffect(() => {
@@ -197,6 +207,7 @@ export function ClaimSitePage() {
   }
 
   if (!valid || standing === 'missing') return <NotFoundPage />
+  if (!standing && failed) return <LoadFailedPage onRetry={() => setAttempt((n) => n + 1)} />
   if (!standing) return <main className="flex-1" aria-busy="true" />
 
   return (

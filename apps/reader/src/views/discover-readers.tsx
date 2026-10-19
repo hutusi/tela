@@ -4,6 +4,7 @@
  * recommendations and blogs (`suggestReaders`), and the edge, for a visitor, against nothing.
  */
 import { useTranslations } from 'use-intl'
+import { LoadFailed } from '../components/load-failed'
 import { ReaderCard } from '../components/reader-card'
 import { tabHref } from '../lib/discover-href'
 import { READER_GROUPS, type Suggestion } from '../lib/suggest-readers'
@@ -16,11 +17,14 @@ export function DiscoverReadersView({
   suggestions,
   member,
   reading,
+  onRetry,
 }: {
   /** Null while the pool is on its way. */
   suggestions: readonly Suggestion[] | null
   member?: MemberControls | undefined
   reading: Reading
+  /** Set once the pool failed to come: Try again, in the skeleton's place. */
+  onRetry?: (() => void) | undefined
 }) {
   const t = useTranslations('discover.people')
   const groups = READER_GROUPS.map((group) => ({
@@ -30,7 +34,9 @@ export function DiscoverReadersView({
   return (
     <DiscoverFrame tab="readers">
       <p className="m-0 max-w-[620px] text-[13px] leading-normal text-muted">{t('intro')}</p>
-      {suggestions === null ? (
+      {suggestions === null && onRetry ? (
+        <LoadFailed onRetry={onRetry} />
+      ) : suggestions === null ? (
         <div className="mt-10" aria-busy="true">
           {[0, 1, 2].map((i) => (
             <div key={i} className="border-b border-line py-6">

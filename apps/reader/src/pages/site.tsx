@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { CHECK, Glyph } from '../components/glyph'
+import { LoadFailedPage } from '../components/load-failed'
 import { displayHost } from '../lib/format'
 import { useMemberControls } from '../lib/member'
 import { readingPrefsOf } from '../lib/prefs'
@@ -34,6 +35,7 @@ export function SitePage() {
   useTitle(data ? (data.site.title ?? displayHost(data.site.homeUrl)) : null)
 
   if (!valid || loaded.status === 'missing') return <NotFoundPage />
+  if (loaded.status === 'loading' && loaded.failed) return <LoadFailedPage onRetry={loaded.retry} />
   if (!data) return <main className="flex-1" aria-busy="true" />
   const owner = member?.handle != null && data.site.claimedBy === member.handle
   return (

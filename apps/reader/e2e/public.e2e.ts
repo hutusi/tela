@@ -196,6 +196,27 @@ test.describe('discover and claim', () => {
     await expect(page.getByTestId('article-title')).toHaveText(title)
   })
 
+  test('a public page that did not load says so, and asks again once back online', async ({
+    page,
+  }) => {
+    await page.goto('/discover/blogs')
+    const link = page.getByTestId('site-card').first().locator('a[href^="/s/"]').first()
+    await expect(link).toBeVisible()
+    // The blog's data never comes, as when the network went: a page in the app asks for it.
+    const sites = '**/api/v1/public/sites/**'
+    await page.route(sites, (route) => route.abort('internetdisconnected'))
+    await link.click()
+    await expect(page.getByTestId('load-failed')).toBeVisible()
+    // Try again asks again, and says so again while the network is still gone.
+    await page.getByTestId('load-failed-retry').click()
+    await expect(page.getByTestId('load-failed')).toBeVisible()
+    await page.unroute(sites)
+    // Back online, the page asks by itself.
+    await page.evaluate(() => window.dispatchEvent(new Event('online')))
+    await expect(page.getByTestId('site-articles')).toBeVisible()
+    await expect(page.getByTestId('load-failed')).toHaveCount(0)
+  })
+
   test('a check that runs long says so, and the member may ask for another', async ({ page }) => {
     // tela-jobs never answers: the check is waiting to retry, as after a failed attempt.
     const pending = {

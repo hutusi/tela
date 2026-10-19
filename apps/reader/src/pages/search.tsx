@@ -3,6 +3,7 @@ import type { ArticleRow } from '@tela/sync'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { LoadFailed } from '../components/load-failed'
 import { SearchField } from '../components/search-field'
 import { SiteAvatar } from '../components/site-avatar'
 import { SiteCard, type SiteCardData } from '../components/site-card'
@@ -33,16 +34,22 @@ export function SearchPage() {
   const member = useMemberControls()
   const never = readingPrefsOf(tables).never
   const [remote, setRemote] = useState<Remote | null>(null)
+  // The query whose search of Tela did not come back (offline, an error): the device's own hits
+  // still show, and Try again asks once more.
+  const [failed, setFailed] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
   const phone = useMediaQuery(BELOW_MD)
   useTitle(t('title'))
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` is Try again
   useEffect(() => {
     if (!query) return
     const controller = new AbortController()
     const q = new URLSearchParams({ q: query, lang: readingLang })
+    setFailed(null)
     api(`/api/v1/search?${q}`, { signal: controller.signal })
       .then(async (res) => {
-        if (!res.ok) return
+        if (!res.ok) throw new Error(`search: ${res.status}`)
         const body = (await res.json()) as {
           sites: SiteCardData[]
           articles: (ArticleRow & { translatedTitle: string | null })[]
@@ -55,9 +62,11 @@ export function SearchPage() {
         store.remember(articles.map((h) => h.article))
         setRemote({ query, sites: body.sites, articles })
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!controller.signal.aborted) setFailed(query)
+      })
     return () => controller.abort()
-  }, [query, readingLang, store])
+  }, [query, readingLang, store, attempt])
 
   const local = useMemo(() => searchLocal(tables, query, readingLang), [tables, query, readingLang])
   const answered = remote?.query === query ? remote : null
@@ -91,6 +100,10 @@ export function SearchPage() {
         <p className="text-muted" data-testid="search-empty">
           {t('none', { query })}
         </p>
+      ) : null}
+
+      {query !== '' && answered === null && failed === query ? (
+        <LoadFailed onRetry={() => setAttempt((n) => n + 1)} className="mb-10 py-6" />
       ) : null}
 
       {sites.length > 0 ? (

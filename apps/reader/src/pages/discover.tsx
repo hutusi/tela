@@ -29,7 +29,7 @@ import { useMemberControls } from '../lib/member'
 import { suggestReaders } from '../lib/suggest-readers'
 import { useTitle } from '../lib/title'
 import { useFollowed, useHidden, useMine, useReading, useTopOnArrival } from '../lib/use-discover'
-import { usePublic } from '../lib/use-public'
+import { retryOf, usePublic } from '../lib/use-public'
 import { useNow, useStore } from '../store/hooks'
 import { useUi } from '../ui'
 import { DiscoverView } from '../views/discover'
@@ -93,6 +93,7 @@ function WeekPage() {
       locale={locale}
       now={now}
       followed={followed}
+      onRetry={retryOf(loaded)}
     />
   )
 }
@@ -164,6 +165,7 @@ export function ArticlesPage() {
       now={now}
       followed={followed}
       loadingMore={busy}
+      onRetry={retryOf(loaded)}
       onMore={(e) => {
         // A link without a script, more of this page with one: the address stays as it is. A
         // click meant for a new tab or window stays the link's.
@@ -197,6 +199,7 @@ export function BlogsPage() {
       params={params}
       member={member}
       locale={locale}
+      onRetry={retryOf(loaded)}
     />
   )
 }
@@ -219,5 +222,12 @@ export function ReadersPage() {
   useEffect(() => {
     if (suggestions) store.rememberPeople(suggestions.map((s) => s.person))
   }, [suggestions, store])
-  return <DiscoverReadersView suggestions={suggestions} member={member} reading={reading} />
+  return (
+    <DiscoverReadersView
+      suggestions={suggestions}
+      member={member}
+      reading={reading}
+      onRetry={retryOf(loaded)}
+    />
+  )
 }

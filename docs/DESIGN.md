@@ -899,6 +899,12 @@ then an "On this page" list that sticks beside the text from `lg`, "The short ve
 ## States the reader adds
 
 - A skeleton pane while the first sync has not landed: the article is on its way, not gone.
+- A page that reads tela-api (a blog, a profile, a blogroll, Discover's tabs, a claim, the
+  Dashboard, search beyond the device) and whose answer did not come says so in the skeleton's
+  place, never a skeleton for ever: "Something went wrong loading this." and *Try again*
+  (`LoadFailed`, from `reader.loadFailed` and `reader.retry`), which shows the skeleton again
+  while it asks. A public page also asks again by itself once the browser is back online
+  (`usePublic`'s `retry`).
 - "Older articles" under a list longer than 200.
 - A not-found page (`notFound.*`).
 - A sign-in message for too many tries (`door.errors.rate_limited`), which is not a wrong code.
