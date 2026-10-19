@@ -7,12 +7,17 @@ import {
   blogrollPublicUnsettled,
   type Confirmed,
   emptyTables,
+  mergeTitles,
+  nextTitleIds,
   type Pending,
   privacyChange,
   privacyUnsettled,
+  pruneTitlesTo,
+  readingLangOf,
   rowsOf,
   settle,
   type Tables,
+  titlesIn,
   view,
 } from './client'
 import type { Mutation } from './mutations'
@@ -25,6 +30,7 @@ import type {
   ProfileRow,
   StateRow,
   SubscriptionRow,
+  TitleRow,
 } from './rows'
 
 const article = (id: number, feedId = 1): ArticleRow => ({
@@ -1167,5 +1173,103 @@ describe('the view replays a queue on one copy (ADR 0050)', () => {
     expect(shown).not.toBe(confirmed.tables)
     expect(shown.articles).not.toBe(confirmed.tables.articles)
     expect(rowsOf(shown)).toEqual(rowsOf(confirmed.tables))
+  })
+})
+
+describe('titles in the reading language only', () => {
+  const title = (articleId: number, lang: string, seq = 1): TitleRow => ({
+    articleId,
+    lang,
+    title: `${lang}:Post ${articleId}`,
+    excerpt: null,
+    status: 'done',
+    seq,
+  })
+  const titled = (p: PullResponse, titlesLang?: string) =>
+    (titlesLang === undefined ? p : { ...p, titlesLang }) as PullResponse
+  const held = applyPull(
+    start,
+    pull(3, {
+      subscriptions: [sub(1)],
+      articles: [article(7), article(8), { ...article(9), sourceLang: 'fr' }],
+    }),
+  )
+
+  test("the reading language is the member's choice, else the account's interface, else the page's", () => {
+    const profile = (readingLang: string | null, uiLocale: string | null) => ({
+      readingLang,
+      uiLocale,
+    })
+    expect(readingLangOf(profile('fr', 'zh-Hans'), 'en')).toBe('fr')
+    expect(readingLangOf(profile(null, 'zh-Hant'), 'en')).toBe('zh-Hant')
+    expect(readingLangOf(profile(null, null), 'zh-Hans')).toBe('zh-Hans')
+    expect(readingLangOf(null, 'fr')).toBe('fr')
+    // Anything outside the launch set is no choice at all.
+    expect(readingLangOf(profile('ja', 'de'), 'es')).toBe('en')
+  })
+
+  test("a pull in the language asked for keeps that language's titles, and says so", () => {
+    const p = titled(pull(5, { titles: [title(7, 'fr'), title(8, 'fr')] }), 'fr')
+    const { pull: kept, folded } = titlesIn(p, 'fr')
+    expect(folded).toBe(true)
+    expect(kept).toBe(p)
+  })
+
+  test('a tela-api that names no language sends them all: the device keeps its own', () => {
+    const p = pull(5, { titles: [title(7, 'fr'), title(7, 'en'), title(8, 'zh-Hans')] })
+    const { pull: kept, folded } = titlesIn(p, 'fr')
+    expect(folded).toBe(true)
+    expect(kept.rows.titles).toEqual([title(7, 'fr')])
+    // The pull it came from is left as it was.
+    expect(p.rows.titles).toHaveLength(3)
+  })
+
+  test("a pull in another language brings none of this one's: its titles go, and it says so", () => {
+    const p = titled(pull(5, { titles: [title(7, 'en')], articles: [article(10)] }), 'en')
+    const { pull: kept, folded } = titlesIn(p, 'fr')
+    expect(folded).toBe(false)
+    expect(kept.rows.titles).toEqual([])
+    expect(kept.rows.articles.map((a) => a.id)).toEqual([10])
+  })
+
+  test('fetched titles fold in by seq, for held articles, in the language asked for only', () => {
+    const before = applyPull(held, pull(4, { titles: [title(7, 'fr', 4)] }))
+    const merged = mergeTitles(
+      before.tables,
+      [
+        // Older than the one a pull already brought: never put back.
+        { ...title(7, 'fr', 2), title: 'older' },
+        title(8, 'fr', 3),
+        // Another language, and an article the device let go.
+        title(8, 'en', 3),
+        title(70, 'fr', 3),
+      ],
+      'fr',
+    )
+    expect([...merged.titles.keys()].sort()).toEqual(['7:fr', '8:fr'])
+    expect(merged.titles.get('7:fr')?.title).toBe('fr:Post 7')
+    expect(before.tables.titles.size).toBe(1) // what it was given is untouched
+    expect(mergeTitles(before.tables, [title(7, 'fr', 4)], 'fr')).toBe(before.tables)
+  })
+
+  test('asks only for held posts missing the language, never one written in it, a page at a time', () => {
+    const withOne = mergeTitles(held.tables, [title(7, 'fr')], 'fr')
+    // 9 is written in French: no French title is ever made for it.
+    expect(nextTitleIds(withOne, 'fr')).toEqual([8])
+    expect(nextTitleIds(held.tables, 'en')).toEqual([9])
+    expect(nextTitleIds(held.tables, 'zh-Hans')).toEqual([7, 8, 9])
+    expect(nextTitleIds(held.tables, 'zh-Hans', 2)).toEqual([7, 8])
+    // A pass goes on past the last one asked, whether or not the server had a title for it, so
+    // one it never has cannot keep the pass going.
+    expect(nextTitleIds(held.tables, 'zh-Hans', 2, 8)).toEqual([9])
+    expect(nextTitleIds(held.tables, 'zh-Hans', 2, 9)).toEqual([])
+  })
+
+  test('switching lets every other language go', () => {
+    const both = applyPull(held, pull(4, { titles: [title(7, 'fr'), title(7, 'en')] }))
+    const pruned = pruneTitlesTo(both.tables, 'fr')
+    expect([...pruned.titles.keys()]).toEqual(['7:fr'])
+    expect(pruned.articles).toBe(both.tables.articles)
+    expect(pruneTitlesTo(pruned, 'fr')).toBe(pruned)
   })
 })

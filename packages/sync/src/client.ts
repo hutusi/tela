@@ -11,7 +11,13 @@
  *
  * No I/O here, so the rules can be tested on their own and shared with anything that syncs.
  */
-import { MAX_BLOGROLL_BLOGS, MAX_BLOGROLLS, MAX_FOLDERS } from '@tela/shared'
+import {
+  isReadingLanguage,
+  MAX_BLOGROLL_BLOGS,
+  MAX_BLOGROLLS,
+  MAX_FOLDERS,
+  type ReadingLanguage,
+} from '@tela/shared'
 import type { Mutation } from './mutations'
 import { completePull, type PullResponse } from './protocol'
 import type {
@@ -748,6 +754,101 @@ export function view(confirmed: Confirmed, pending: readonly Pending[]): Tables 
  */
 export function settle(confirmed: Confirmed, pending: readonly Pending[]): Pending[] {
   return pending.filter((p) => p.ackedAt === undefined || p.ackedAt > confirmed.cursor)
+}
+
+/**
+ * The language a member reads posts in (ADR 0040): their own choice, else their interface
+ * language, the account's before the page's, else English. A reader always passes the tables it
+ * renders (the view), so a choice still on its way to the server already counts, and the page
+ * never asks for one language's titles while it shows another's. The account's interface language
+ * comes before `uiLocale`, the page's, which takes it from the account only after a render: asked
+ * in between, the page's would name the cookie's language for a moment, and the device would
+ * fetch that language's titles for nothing.
+ */
+export function readingLangOf(
+  profile: Pick<ProfileRow, 'readingLang' | 'uiLocale'> | null | undefined,
+  uiLocale: string,
+): ReadingLanguage {
+  for (const lang of [profile?.readingLang, profile?.uiLocale, uiLocale]) {
+    if (isReadingLanguage(lang)) return lang
+  }
+  return 'en'
+}
+
+/** How many articles one request for titles may name (`POST /api/v1/sync/titles`). */
+export const TITLE_IDS_PER_REQUEST = 1000
+
+/**
+ * A pull as the device holding only `lang`'s titles takes it, and whether it brought that
+ * language: whether the device still holds `lang` whole after folding it in, if it did before. A
+ * tela-api asked for one language answers with it (`titlesLang`); one that predates the question
+ * (a rollback) sends every language and says none, and filtered here that is `lang`'s as well. A
+ * pull in another language (asked for before the member switched) brings none of `lang`'s, though
+ * its cursor passes theirs: its titles are dropped, and the device must fetch `lang`'s again.
+ */
+export function titlesIn(
+  pull: PullResponse,
+  lang: string,
+): { pull: PullResponse; folded: boolean } {
+  const sent = (pull as PullResponse & { titlesLang?: string }).titlesLang
+  const folded = sent === undefined || sent === lang
+  const titles = pull.rows.titles as TitleRow[] | undefined
+  if (titles === undefined) return { pull, folded }
+  const kept = folded ? titles.filter((row) => row.lang === lang) : []
+  if (kept.length === titles.length) return { pull, folded }
+  return { pull: { ...pull, rows: { ...pull.rows, titles: kept } }, folded }
+}
+
+/**
+ * Title rows fetched by id, folded into `tables`: only `lang`'s, only for articles the device
+ * holds (one let go meanwhile stays gone), and the later write of each, by seq, so a page read
+ * before a pull that brought a newer title never puts the older one back. The same tables when
+ * nothing changed.
+ */
+export function mergeTitles(tables: Tables, rows: readonly TitleRow[], lang: string): Tables {
+  let titles: Map<string, TitleRow> | null = null
+  for (const row of rows) {
+    if (row.lang !== lang || !tables.articles.has(row.articleId)) continue
+    const key = titleKey(row.articleId, lang)
+    const held = (titles ?? tables.titles).get(key)
+    if (held && held.seq >= row.seq) continue
+    titles ??= new Map(tables.titles)
+    titles.set(key, row)
+  }
+  return titles ? { ...tables, titles } : tables
+}
+
+/**
+ * The next articles to ask `lang`'s titles for: those the device holds with an id past `after`
+ * and no title in `lang`, lowest first, up to `limit`. A post written in `lang` is never asked
+ * for: no title is ever made in a post's own language. A pass goes by id, each page `after` the
+ * last one asked, because a post the server has no title for (not translated yet, or its blog
+ * opted out) stays missing, and a pass that went by what is missing alone would ask for it for
+ * ever. The ids are the device's, not the server's horizon: it keeps posts older than that.
+ */
+export function nextTitleIds(
+  tables: Tables,
+  lang: string,
+  limit = TITLE_IDS_PER_REQUEST,
+  after = 0,
+): number[] {
+  const ids: number[] = []
+  for (const article of tables.articles.values()) {
+    if (article.id <= after || article.sourceLang === lang) continue
+    if (!tables.titles.has(titleKey(article.id, lang))) ids.push(article.id)
+  }
+  return ids.sort((a, b) => a - b).slice(0, limit)
+}
+
+/** The tables with every title not in `lang` let go; the same tables when there was none. */
+export function pruneTitlesTo(tables: Tables, lang: string): Tables {
+  let titles: Map<string, TitleRow> | null = null
+  for (const [key, row] of tables.titles) {
+    if (row.lang === lang) continue
+    titles ??= new Map(tables.titles)
+    titles.delete(key)
+  }
+  return titles ? { ...tables, titles } : tables
 }
 
 /** The tables as plain arrays, to persist or compare. */

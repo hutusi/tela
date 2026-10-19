@@ -1,6 +1,6 @@
 /** React's way into the local store: one context, and `useSyncExternalStore` over it. */
-import { READING_LANGUAGES, type ReadingLanguage } from '@tela/shared'
-import type { PrivacyFlag, Tables } from '@tela/sync'
+import type { ReadingLanguage } from '@tela/shared'
+import { type PrivacyFlag, readingLangOf, type Tables } from '@tela/sync'
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react'
 import type { SyncEngine } from './engine'
 import type { LocalStore } from './local'
@@ -61,14 +61,11 @@ export function useNow(): number {
   return now
 }
 
-/** The language posts are translated into: the member's choice, else the UI's. */
+/**
+ * The language posts are translated into: the member's choice, else the UI's (`readingLangOf`),
+ * read from the view, so a choice still on its way to the server counts. The device holds titles
+ * in this language only, by the same rule (`LocalStore.setReadingLang`).
+ */
 export function useReadingLang(uiLocale: string): ReadingLanguage {
-  const tables = useTables()
-  const chosen = tables.profile?.readingLang
-  if (chosen && (READING_LANGUAGES as readonly string[]).includes(chosen)) {
-    return chosen as ReadingLanguage
-  }
-  return (READING_LANGUAGES as readonly string[]).includes(uiLocale)
-    ? (uiLocale as ReadingLanguage)
-    : 'en'
+  return readingLangOf(useTables().profile, uiLocale)
 }
