@@ -946,6 +946,33 @@ test.describe('reader', () => {
     }
   })
 
+  test("the blog's name, above the article and at its end, opens the blog's posts", async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    await synced(page)
+    const sidebarRow = page.getByTestId('subscription').filter({ hasText: 'Julia Evans' })
+    const feedHref = (await sidebarRow.getAttribute('href')) ?? ''
+    expect(feedHref).toMatch(/^\/reading\?feed=\d+$/)
+    const row = page.getByTestId('article-row').filter({ hasText: 'Julia Evans' }).first()
+
+    await row.click()
+    await expect(page).toHaveURL(/article=\d+/)
+    const blog = page.getByTestId('article-blog')
+    await expect(blog).toHaveText('Julia Evans')
+    await expect(blog).toHaveAttribute('href', feedHref)
+    await blog.click()
+    await expect(page).toHaveURL(new RegExp(`${feedHref.replace('?', '\\?')}$`))
+    await expect(page.getByTestId('reader')).toHaveCount(0)
+
+    await page.getByTestId('article-row').first().click()
+    await expect(page).toHaveURL(/article=\d+/)
+    const end = page.getByTestId('end-blog-link')
+    await expect(end).toHaveText('Julia Evans')
+    await end.click()
+    await expect(page).toHaveURL(new RegExp(`${feedHref.replace('?', '\\?')}$`))
+  })
+
   test('the end of an article offers the next post in the list, the one j would open', async ({
     page,
   }) => {

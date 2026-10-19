@@ -250,7 +250,9 @@ Chromium Playwright installs. Regenerate and commit them whenever the geometry c
   the popover's form (`RecommendForm`), and only one of the two is open at a time, each giving
   focus back to the button that opened it on Cancel, Esc or Recommend; then the blog,
   a 44px round `SiteAvatar` with its name and "{description} · {n} readers on Tela" under ADR
-  0041's rule. The column is the
+  0041's rule. The blog's name, in the meta line and here, is a link in `ink` to the blog's posts
+  (`readingHref({ feedId })`, the sidebar row's address) while the member follows it; a post
+  from a blog they do not follow names it as text. The column is the
   member's measure (640px by default) while the body is one column, and 1240px once two paired
   columns fit, so the chrome above and below the text is as wide as the text. Serif title
   40px/1.12 alone and 32px when paired. The column is a `@container` wrapper of its own, never

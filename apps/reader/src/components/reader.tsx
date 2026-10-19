@@ -13,7 +13,7 @@ import { mergeAnchors } from '../lib/anchor'
 import { pairBlocks, readerBlocks, runsOf, translatedPrefix } from '../lib/block-pairs'
 import { relativeTime } from '../lib/format'
 import { pointAt, renderedLeaves, type Side } from '../lib/highlight-dom'
-import type { ReadingMode } from '../lib/href'
+import { type ReadingMode, readingHref } from '../lib/href'
 import { newId } from '../lib/id'
 import { lazyImages } from '../lib/lazy-images'
 import { useReadingPrefs } from '../lib/prefs'
@@ -282,6 +282,12 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
   const sourceLang = article.sourceLang ?? undefined
   const name = feedTitle(tables, article.feedId) || store.sourceName(article.feedId)
   const site = siteOfFeed(tables, article.feedId)
+  // The blog's name leads to its posts, as the sidebar's row does: only for a blog the member
+  // follows, since another's (a post opened from search or Discover) has no list here.
+  const blogHref =
+    tables.subscriptions.get(article.feedId)?.deletedAt === null
+      ? readingHref({ feedId: article.feedId })
+      : null
   const titles = shownTitle(tables, article, readingLang, prefs.never)
   const read = shownRead(tables, article, now, true, prefs.markOnOpen)
   const title = showTrans ? titles.title : article.title
@@ -374,7 +380,13 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
         >
           <div className="mb-3.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] text-muted">
             <Swatch id={article.feedId} title={name} size={22} />
-            <span className="font-medium text-ink">{name}</span>
+            {blogHref ? (
+              <Link to={blogHref} className="font-medium text-ink" data-testid="article-blog">
+                {name}
+              </Link>
+            ) : (
+              <span className="font-medium text-ink">{name}</span>
+            )}
             {article.author ? (
               <>
                 <span>·</span>
@@ -553,7 +565,15 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
             <div className="min-w-[200px] flex-1">
               {/* The name the list and the meta line use (`feedTitle`): a blog's, or its feed's
                   own where the device holds two feeds of one blog. */}
-              <div className="font-medium">{name}</div>
+              <div className="font-medium">
+                {blogHref ? (
+                  <Link to={blogHref} className="text-ink" data-testid="end-blog-link">
+                    {name}
+                  </Link>
+                ) : (
+                  name
+                )}
+              </div>
               {about ? <div className="text-[13px] text-muted">{about}</div> : null}
             </div>
           </div>
