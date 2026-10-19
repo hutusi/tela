@@ -105,18 +105,38 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
   const now = useNow()
   const tables = useTables()
   const { objects, engine, store } = useStore()
-  const [content, setContent] = useState<{ key: string; object: ContentObject | null } | null>(null)
+  // `failed` when the body could not be fetched (offline, an error), as opposed to a post that has
+  // none: the one is worth trying again, the other is not.
+  const [content, setContent] = useState<{
+    key: string
+    object: ContentObject | null
+    failed?: true
+  } | null>(null)
   const key = article.contentKey
+  const [attempt, setAttempt] = useState(0)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` is Try again
   useEffect(() => {
     if (!key) return
     const controller = new AbortController()
     objects
       .body(key, controller.signal)
       .then((object) => setContent({ key, object }))
-      .catch(() => !controller.signal.aborted && setContent({ key, object: null }))
+      .catch(() => !controller.signal.aborted && setContent({ key, object: null, failed: true }))
     return () => controller.abort()
-  }, [key, objects])
+  }, [key, objects, attempt])
+  const bodyFailed = content?.key === key && content.failed === true
+  // Try again: the skeleton while it asks, as on opening.
+  const retryBody = useCallback(() => {
+    setContent(null)
+    setAttempt((n) => n + 1)
+  }, [])
+  // Back online, a body that failed is asked for again by itself.
+  useEffect(() => {
+    if (!bodyFailed) return
+    window.addEventListener('online', retryBody)
+    return () => window.removeEventListener('online', retryBody)
+  }, [bodyFailed, retryBody])
 
   const extracting = article.extractState === 'due'
   useEffect(() => {
@@ -448,6 +468,26 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
                     )}
                     {showTrans && prefix.rest ? <TranslatingRest /> : null}
                   </>
+                ) : bodyFailed ? (
+                  // Not "no readable content": the post has some, and it did not come.
+                  <div className="text-[15px] text-muted" data-testid="body-failed">
+                    <p className="m-0">{t('loadFailed')}</p>
+                    <p className="mt-2.5 mb-0 flex flex-wrap items-center gap-x-5 gap-y-2">
+                      <button
+                        type="button"
+                        onClick={retryBody}
+                        className="underline hover:text-ink"
+                        data-testid="body-retry"
+                      >
+                        {t('retry')}
+                      </button>
+                      {article.url ? (
+                        <a href={article.url} target="_blank" rel="noopener noreferrer">
+                          {t('readOriginal')} ↗
+                        </a>
+                      ) : null}
+                    </p>
+                  </div>
                 ) : (
                   <p className="text-muted">{t('noContent')}</p>
                 )}

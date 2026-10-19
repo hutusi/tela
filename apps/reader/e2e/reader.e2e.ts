@@ -425,6 +425,57 @@ test.describe('reader', () => {
     await expect(page.getByTestId('article-list')).toBeVisible()
   })
 
+  test('a body that could not be fetched says so, with Try again and the original', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('subscription').filter({ hasText: 'Julia Evans' }).click()
+    const row = page.getByTestId('article-row').first()
+    await expect(row).toContainText('Julia Evans')
+    const id = Number(await row.getAttribute('data-article-id'))
+    // Bodies fail as though the network went, and this one is not on the device.
+    const bodies = /\/o\/(c\/|bundle)/
+    await page.route(bodies, (route) => route.abort('internetdisconnected'))
+    await page.evaluate(
+      (articleId) =>
+        new Promise<void>((resolve, reject) => {
+          const open = indexedDB.open('tela-2')
+          open.onerror = () => reject(open.error)
+          open.onsuccess = () => {
+            const db = open.result
+            const tx = db.transaction(['tables', 'bodies'], 'readwrite')
+            const articles = tx.objectStore('tables').get('articles')
+            articles.onsuccess = () => {
+              const rows = articles.result as { id: number; contentKey: string }[]
+              const key = rows.find((a) => a.id === articleId)?.contentKey ?? ''
+              tx.objectStore('bodies').delete(key)
+            }
+            tx.onerror = () => reject(tx.error)
+            tx.oncomplete = () => {
+              db.close()
+              resolve()
+            }
+          }
+        }),
+      id,
+    )
+    // A load of its own, so the copy the page held in memory goes too.
+    await page.goto(`/reading?article=${id}`)
+    const failed = page.getByTestId('body-failed')
+    await expect(failed).toBeVisible()
+    await expect(failed).toContainText('Something went wrong loading this.')
+    await expect(page.getByText('This post has no readable content in its feed.')).toHaveCount(0)
+    await expect(failed.getByRole('link', { name: /Open the original/ })).toHaveAttribute(
+      'href',
+      /^https?:\/\//,
+    )
+    await page.unroute(bodies)
+    await failed.getByRole('button', { name: 'Try again' }).click()
+    await expect(page.locator('.article-body').first()).toBeVisible()
+    await expect(page.getByTestId('body-failed')).toHaveCount(0)
+  })
+
   test('unliking in the Liked view takes the article out of the list', async ({ page }) => {
     await page.goto('/reading')
     await synced(page)

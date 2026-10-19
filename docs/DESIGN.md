@@ -905,6 +905,9 @@ then an "On this page" list that sticks beside the text from `lg`, "The short ve
   (`LoadFailed`, from `reader.loadFailed` and `reader.retry`), which shows the skeleton again
   while it asks. A public page also asks again by itself once the browser is back online
   (`usePublic`'s `retry`).
+- A body that could not be fetched says so where the text would be, with *Try again* and *Open
+  the original ↗*, and asks again by itself once back online; only a post whose feed carries no
+  text says it "has no readable content".
 - "Older articles" under a list longer than 200.
 - A not-found page (`notFound.*`).
 - A sign-in message for too many tries (`door.errors.rate_limited`), which is not a wrong code.
