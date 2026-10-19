@@ -357,10 +357,11 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.get('/api/v1/sync', async (c) => {
     const cursor = Number(c.req.query('cursor') ?? '0')
     if (!Number.isInteger(cursor) || cursor < 0) return c.json({ error: 'invalid_cursor' }, 400)
-    const titles = c.req.query('titles')
-    if (titles !== undefined && !isReadingLanguage(titles)) {
-      return c.json({ error: 'invalid_titles' }, 400)
-    }
+    // A language this tela-api does not read in (one a newer tela-web added before this was
+    // deployed, or after this was rolled back) is no reason to stop a device's sync: it gets every
+    // language, as a shell that names none does, and keeps what it wants of them (ADR 0052).
+    const asked = c.req.query('titles')
+    const titles = isReadingLanguage(asked) ? asked : undefined
     const pull = await answerPull(deps.db, c.get('member').id, cursor, deps.clock.now(), titles)
     return c.json(pull, 200, { 'cache-control': 'no-store' })
   })

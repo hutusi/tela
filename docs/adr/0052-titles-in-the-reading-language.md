@@ -29,7 +29,12 @@ horizon, since it prunes by subscription, not by age.
 - tela-api adds `t.lang = ?` to the fresh title query and the changed one. That is one more bound
   parameter each, and no new compound.
 - The answer says the language back as `titlesLang`.
-- A value outside `READING_LANGUAGES`, compared exactly, is a 400 `invalid_titles`.
+- A value outside `READING_LANGUAGES`, compared exactly, is answered as no value: every
+  language, no `titlesLang`. Refusing it would stop the whole sync of a device whose tela-web
+  learnt a language before its tela-api did (a new launch language deployed in the usual order
+  but the other way round, or a tela-api rolled back past it); every language, which the device
+  filters, keeps it syncing. The titles route, whose failure only puts off the fetch, still
+  answers such a language 400 `invalid_titles`.
 - The re-read for a cursor from the future, and the unpaged re-read of a batch larger than a page,
   keep the language.
 - Pages end by the title rows of that language. Rows in other languages neither fill a page nor

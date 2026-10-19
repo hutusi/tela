@@ -333,15 +333,22 @@ describe('pull', () => {
       expect(titlesOf(delta)).toEqual([`${a}:zh-Hans`, `${a}:zh-Hant`])
     })
 
-    test('a language outside the launch set is refused', async () => {
+    test('a language outside the launch set gets every language, as naming none does', async () => {
       // Tags are compared exactly: `zh-Hans` and `zh-Hant` are different languages here, and a
-      // stored tag is never regional, so `zh` or `zh-hant` would match no row.
+      // stored tag is never regional, so `zh` or `zh-hant` names none of them. Refusing it would
+      // stop the device's whole sync over a language a newer tela-web added before this tela-api
+      // had it; every language, which the device filters, keeps it syncing.
+      await push([{ type: 'subscribe', feedId: 1 }])
+      const a = await addArticle(1)
+      await addTitles(a, 1, ['fr', 'zh-Hans'])
       for (const lang of ['de', '', 'zh', 'zh-hant', 'EN', 'en-US', 'en,fr']) {
         const res = await api.request(`/api/v1/sync?cursor=0&titles=${encodeURIComponent(lang)}`, {
           as: reader,
         })
-        expect(res.status).toBe(400)
-        expect(await res.json()).toEqual({ error: 'invalid_titles' })
+        expect(res.status).toBe(200)
+        const body = (await res.json()) as PullResponse
+        expect('titlesLang' in body).toBe(false)
+        expect(titlesOf(body)).toEqual([`${a}:fr`, `${a}:zh-Hans`])
       }
     })
 

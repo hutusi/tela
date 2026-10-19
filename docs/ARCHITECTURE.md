@@ -391,7 +391,8 @@ A Vite + React SPA that renders from the device.
   snapshot, `newlyRolled` in a delta), and the device keeps them when it prunes, so a blogroll
   still names a blog its owner left (ADR 0050).
 - Titles come in the device's reading language only (ADR 0052). The pull names it
-  (`&titles=<lang>`, a launch language, else `400 invalid_titles`), tela-api adds it to the
+  (`&titles=<lang>`; a value outside the launch set gets every language, as naming none does,
+  so a newer tela-web's new language never stops a sync), tela-api adds it to the
   fresh and the changed title query, pages end by that language's rows, and the answer says it
   back as `titlesLang`. A pull that names none gets every language and no `titlesLang`, as a
   protocol-3 shell expects, so the protocol stays at 3. When the reading language changes, the
