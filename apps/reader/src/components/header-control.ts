@@ -1,5 +1,5 @@
 import { type SyntheticEvent, useRef, useState } from 'react'
-import { useDismiss } from '../lib/use-dismiss'
+import { usePopover } from '../lib/use-popover'
 
 /**
  * The controls on the header's right are one family (DESIGN.md): 34px tall and round, on
@@ -20,20 +20,22 @@ export const menuItem = (on: boolean) =>
 /**
  * A header menu is a native `<details>`, so it opens in the edge's page before any script runs;
  * choosing needs the script, and closes it. A click elsewhere, focus leaving it or Esc closes it
- * too, and Esc hands focus back to its summary (`useDismiss`).
+ * too, and Esc hands focus back to its summary (`usePopover`). Discover's language menu is one.
  */
 export function useHeaderMenu() {
   const box = useRef<HTMLDetailsElement>(null)
   // Whether it is open, as the element says: it opens without React, from its summary.
   const [open, setOpen] = useState(false)
-  const close = (by: 'escape' | 'outside') => {
-    const details = box.current
-    if (!details) return
-    details.open = false
-    if (by === 'escape') details.querySelector('summary')?.focus()
+  const summary = () => box.current?.querySelector('summary')
+  const shut = () => {
+    if (box.current) box.current.open = false
   }
   // Only while open: its Esc is taken before anything else's, a dialog's included.
-  useDismiss(open, close, box)
+  usePopover(open, shut, box, summary)
+  const close = (by: 'escape' | 'outside') => {
+    shut()
+    if (by === 'escape') summary()?.focus()
+  }
   const onToggle = (e: SyntheticEvent<HTMLDetailsElement>) => setOpen(e.currentTarget.open)
   return { box, onToggle, close }
 }

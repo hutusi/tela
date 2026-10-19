@@ -20,6 +20,7 @@ import { type Side, selectedAnchor } from '../lib/highlight-dom'
 import { UNDO_HOLD_MS } from '../lib/toasts'
 import { highlightAgain, offerUndo } from '../lib/undo'
 import type { HighlightItem } from '../lib/use-highlights'
+import { usePopover } from '../lib/use-popover'
 import { useStore } from '../store/hooks'
 
 export type Selected = { side: Side; anchor: Anchor; rect: DOMRect }
@@ -212,14 +213,12 @@ export function HighlightNote({
   const removeHighlight = useRemoveHighlight()
   const [note, setNote] = useState(row.note ?? '')
   const box = useRef<HTMLDivElement>(null)
+  // As every popover closes, and Esc gives focus back to what opened it: the list's button, or
+  // the pane a click on the text focused. Before the field takes focus, so it knows which.
+  usePopover(true, onClose, box)
   useEffect(() => {
     box.current?.querySelector('textarea')?.focus()
-    const outside = (e: MouseEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) onClose()
-    }
-    document.addEventListener('mousedown', outside)
-    return () => document.removeEventListener('mousedown', outside)
-  }, [onClose])
+  }, [])
 
   const save = () => {
     const { id, articleId, contentKey, side, lang, leafId, start, end, quote, prefix, suffix } = row
@@ -258,12 +257,6 @@ export function HighlightNote({
       className="fixed z-30 flex w-80 flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.12)] animate-fade"
       style={{ top, left }}
       data-testid="highlight-note"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          onClose()
-        }
-      }}
     >
       <div className="line-clamp-3 font-serif text-[15px] leading-[1.45] text-ink-2">
         <span className="bg-highlight box-decoration-clone">{row.quote}</span>

@@ -226,18 +226,21 @@ export function ReadingPage() {
   // the toast's own, on every page). Typing in a field is never a shortcut, nor is a key pressed in
   // a modal dialog (the phone's Recommend sheet), which the page under it does not own; and a
   // popover that handles Esc itself marks the event so the article stays open.
+  // The list of keys is a modal dialog, which takes Esc and the keys while it is open, and gives
+  // focus back to what had it as `?` was pressed.
   const [help, setHelp] = useState(false)
+  const helpOpener = useRef<HTMLElement | null>(null)
   // Read when a key is pressed, not when the listener was bound: a second `j` can come before
   // React has rendered the first one's navigation, and the URL is already right by then.
-  const keys = useRef({ items, close, help })
-  keys.current = { items, close, help }
+  const keys = useRef({ items, close })
+  keys.current = { items, close }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
       const target = e.target as HTMLElement | null
       if (target?.closest('input, textarea, select, [contenteditable]')) return
       if (document.querySelector('dialog:modal')) return
-      const { items, close, help } = keys.current
+      const { items, close } = keys.current
       const now = parseReadingParams(new URLSearchParams(window.location.search))
       if (e.key === 'j' || e.key === 'k') {
         const at = items.findIndex((a) => a.id === now.articleId)
@@ -249,9 +252,8 @@ export function ReadingPage() {
         // applies (as a click does).
         navigate(canonicalReadingHref(window.location.search, { articleId: next.id, mode: null }))
       } else if (e.key === 'Escape') {
-        if (help) setHelp(false)
-        else if (now.articleId !== null) close()
-        else return
+        if (now.articleId === null) return
+        close()
         e.preventDefault()
       } else if (e.key === '[') {
         e.preventDefault()
@@ -291,7 +293,9 @@ export function ReadingPage() {
         }
       } else if (e.key === '?') {
         e.preventDefault()
-        setHelp((shown) => !shown)
+        helpOpener.current =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null
+        setHelp(true)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -451,7 +455,7 @@ export function ReadingPage() {
           <ListPanesSkeleton sidebar={false} />
         </>
       )}
-      {help ? <Shortcuts onClose={() => setHelp(false)} /> : null}
+      {help ? <Shortcuts opener={helpOpener} onClose={() => setHelp(false)} /> : null}
       {firstRun ? (
         // In place of the list and the empty pane, at every width.
         <FirstRun

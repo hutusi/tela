@@ -306,6 +306,13 @@ opens a 320 px popover with a three-line serif textarea, a hint ("shown on your 
 author"), Cancel and a filled Recommend button. Success says so in the toast. A recommended post
 renders the pill filled (`bg-ink`), and clicking it again removes the recommendation.
 
+Popovers close alike (`usePopover`, over `useDismiss`): a click elsewhere, focus leaving them, or
+Esc, which is theirs before the page's, so it never closes the article under them. Esc gives
+focus back to what opened them (the Recommend button, Aa, a header menu's or Discover's language
+menu's summary, or whatever had focus as a highlight's note opened), and a click elsewhere leaves
+focus where it landed. A popover's box holds the control that opens it, so pressing that control
+again closes it by its own click.
+
 The toast (`Toast`, `lib/toasts.ts`, Tela v5) is the reader's one: an `ink` box at the foot of the
 page, centred, 13.5px, for 2.6 s, and 5 s when it carries an action (Undo: 600 weight, underlined,
 in the toast's own colour, with a `U` key cap on a fine pointer, and a hit area taller than its
@@ -1113,8 +1120,9 @@ literal colour in a class list (`bg-white`, `text-[oklch(…)]`) is a bug on the
     highlight only opens its note. Undo is the exception: a removed highlight it brings back
     after an overlapping one was made meanwhile comes back beside it, unmerged, the two
     overlapping until one is removed (a known gap, ADR 0046).
-- **Keys:** `?` opens a small card listing `j`, `k`, `Esc`, `o`, `l`, `m`, `h`, `[`, `f`, `u` and `?` in
-  `kbd` chips. `o` opens the original in a new tab, `l` likes or unlikes, and `m` marks read or
+- **Keys:** `?` opens a dialog (`ResponsiveDialog`, 320px from `md`, a sheet below) listing `j`,
+  `k`, `Esc`, `o`, `l`, `m`, `h`, `[`, `f`, `u` and `?` in `kbd` chips; focus goes into it, and Esc
+  or its button gives focus back to where `?` was pressed. `o` opens the original in a new tab, `l` likes or unlikes, and `m` marks read or
   unread, as the action row's button would, all on the open article; `u` presses the toast's Undo,
   here and on every other page.
   `[` needs AltGr or Option on some non-US layouts, as `?` does on others; neither is worked

@@ -2,6 +2,7 @@ import { RECOMMENDATION_NOTE_MAX } from '@tela/shared'
 import { type Ref, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'use-intl'
 import { showToast } from '../lib/toasts'
+import { usePopover } from '../lib/use-popover'
 import { useStore } from '../store/hooks'
 import { Glyph, PASS } from './glyph'
 
@@ -92,8 +93,9 @@ export function RecommendForm({
     showToast(kept ? t('recommendedWithNote') : t('recommended'))
   }
 
+  // Where no popover has taken the Esc already (the end of the article's box, the phone's sheet).
   const onEscape = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && !e.defaultPrevented) {
       e.preventDefault()
       onClose()
     }
@@ -188,8 +190,17 @@ export function RecommendPopover({
   const t = useTranslations('reader')
   const unrecommend = useUnrecommend()
   const button = useRef<HTMLButtonElement>(null)
+  const box = useRef<HTMLDivElement>(null)
+  // As every popover closes: a click elsewhere too, which left this one open behind the page. The
+  // box holds the button, so pressing it again closes the form by its own click.
+  usePopover(
+    open && !recommended,
+    () => onOpenChange(false),
+    box,
+    () => button.current,
+  )
   return (
-    <div className="relative">
+    <div ref={box} className="relative">
       <RecommendButton
         ref={button}
         recommended={recommended}

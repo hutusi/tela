@@ -10,11 +10,14 @@ import { type ReactNode, type RefObject, useEffect, useRef } from 'react'
 import { BELOW_MD, useMediaQuery } from '../lib/use-media'
 import { Sheet } from './sheet'
 
+const WIDTH = 'w-[min(500px,calc(100vw-32px))]'
+
 export function ResponsiveDialog({
   labelledBy,
   opener,
   onClose,
   testId,
+  width = WIDTH,
   children,
 }: {
   /** The id of the title, which names the dialog. */
@@ -23,6 +26,8 @@ export function ResponsiveDialog({
   opener: RefObject<HTMLElement | null>
   onClose: () => void
   testId: string
+  /** The centred dialog's width utility, in place of the 500px one (never beside it). */
+  width?: string
   children: ReactNode
 }) {
   const phone = useMediaQuery(BELOW_MD)
@@ -40,7 +45,13 @@ export function ResponsiveDialog({
     )
   }
   return (
-    <CentredDialog labelledBy={labelledBy} opener={opener} onClose={onClose} testId={testId}>
+    <CentredDialog
+      labelledBy={labelledBy}
+      opener={opener}
+      onClose={onClose}
+      testId={testId}
+      width={width}
+    >
       {children}
     </CentredDialog>
   )
@@ -51,12 +62,14 @@ function CentredDialog({
   opener,
   onClose,
   testId,
+  width,
   children,
 }: {
   labelledBy: string
   opener: RefObject<HTMLElement | null>
   onClose: () => void
   testId: string
+  width: string
   children: ReactNode
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -86,7 +99,7 @@ function CentredDialog({
           onClose()
         }
       }}
-      className="m-auto max-h-[calc(100dvh-48px)] w-[min(500px,calc(100vw-32px))] animate-fade overflow-y-auto rounded-2xl border border-line bg-surface p-7 text-left text-ink shadow-[0_24px_60px_rgba(0,0,0,.18)] backdrop:bg-[rgba(0,0,0,.45)]"
+      className={`m-auto max-h-[calc(100dvh-48px)] ${width} animate-fade overflow-y-auto rounded-2xl border border-line bg-surface p-7 text-left text-ink shadow-[0_24px_60px_rgba(0,0,0,.18)] backdrop:bg-[rgba(0,0,0,.45)]`}
       data-testid={testId}
     >
       {children}
