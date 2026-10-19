@@ -1,5 +1,6 @@
 /** The reader app: providers, and one route per page. Every page renders from the local store. */
 import { isUiLocale, type UiLocale } from '@tela/shared'
+import { readingLangOf } from '@tela/sync'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { useTranslations } from 'use-intl'
@@ -229,6 +230,16 @@ function Routed() {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
+  // The device keeps titles in the language the member reads in, and only once the profile is
+  // here to say which: before that, the store holds the one /me named (`learnWho`), and the
+  // cookie's guess must not override it. Read when this runs, as the view has it, so a choice
+  // still on its way counts.
+  const readingLang = tables.profile ? readingLangOf(tables.profile, locale) : null
+  useEffect(() => {
+    if (readingLang === null) return
+    const profile = store.getSnapshot().tables.profile
+    if (profile) store.setReadingLang(readingLangOf(profile, locale))
+  }, [readingLang, locale, store])
   // A member's theme is a synced pref; a visitor keeps whatever this browser last had. An account
   // that has never chosen one takes the visitor's, once. Written as the pref, never only put on
   // the page, or the page would be dark while Settings said Auto; and `ifAbsent`, since the rows

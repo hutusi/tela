@@ -3,7 +3,10 @@
  * renders from the local store, and this keeps the store current behind it.
  *
  * - Pull: at start, when the tab becomes visible, every 60 s while it is, after each push, and on
- *   demand (an open article waiting for its full text).
+ *   demand (an open article waiting for its full text). Each pull asks for titles in the reading
+ *   language only, and while the device does not hold that language's whole (a switch, a copy
+ *   another tab moved on in another language), each round of it fetches a page of what is
+ *   missing, by article id (`fetchTitles`).
  * - Push: a quarter-second after the last local change, so a burst of reads goes as one push, and
  *   at once when the tab is hidden or closed, so the last change before leaving is not left
  *   waiting for the next visit; offline, it keeps retrying with backoff and loses nothing
@@ -15,7 +18,7 @@
  *   another tab signed in as someone else. Each call names the account the tab holds, and its
  *   answer is taken only while the tab still holds it (the store's epoch).
  */
-import type { PullResponse, PushResponse } from '@tela/sync'
+import type { PullResponse, PushResponse, TitleRow } from '@tela/sync'
 import { AccountChanged, api, SignedOut, UpgradeRequired } from './api'
 import type { LocalStore } from './local'
 
@@ -51,6 +54,13 @@ export class SyncEngine {
   private ended = false
   /** Who hears of each pull that answered (`onPulled`). */
   private readonly pulled = new Set<() => void>()
+  /** Between `start` and `stop`: what only a running engine does on its own. */
+  private running = false
+  /**
+   * How far the fetching of the reading language's missing titles has got: the store's round it
+   * is for, and the last article id asked (`fetchTitles`).
+   */
+  private titlesPass: { round: number; after: number } | null = null
 
   constructor(
     private readonly store: LocalStore,
@@ -60,6 +70,10 @@ export class SyncEngine {
     store.onMutation = () => this.schedulePush()
     // The device database refused a write: another tab holds its copy now.
     store.onLost = () => this.end(() => this.events.onAccountChanged())
+    // A new reading language: its titles are fetched in the pull, whatever started it.
+    store.onLanguage = () => {
+      if (this.running) void this.pull()
+    }
   }
 
   start(): void {
@@ -67,6 +81,7 @@ export class SyncEngine {
     if (this.store.userId === null) return
     this.stopped = false
     this.ended = false
+    this.running = true
     void this.pull()
     if (this.store.unsent().length > 0) this.schedulePush()
     document.addEventListener('visibilitychange', this.onVisibility)
@@ -79,6 +94,7 @@ export class SyncEngine {
 
   stop(): void {
     this.stopped = true
+    this.running = false
     document.removeEventListener('visibilitychange', this.onVisibility)
     window.removeEventListener('pagehide', this.onLeave)
     window.removeEventListener('online', this.onOnline)
@@ -150,7 +166,10 @@ export class SyncEngine {
     }
   }
 
-  /** Pull until caught up. Calls while one runs coalesce into one more pull after it. */
+  /**
+   * Pull until caught up, then fetch a page of the titles the reading language is missing. Calls
+   * while one runs coalesce into one more pull after it.
+   */
   pull(): Promise<void> {
     if (this.stopped) return Promise.resolve()
     if (this.pulling) {
@@ -160,6 +179,7 @@ export class SyncEngine {
     this.pulling = (async () => {
       let epoch = this.store.epoch
       try {
+        let again = false
         do {
           this.pullAgain = false
           // Whose rows these pages are for. Once the tab holds anything else, the pages still to
@@ -169,8 +189,12 @@ export class SyncEngine {
           if (owner === null) break
           let more = true
           while (more && this.store.epoch === epoch) {
+            // Titles in the language the device holds, as it is when the page is asked for: a
+            // page asked for before a switch lands without the new one's (`LocalStore.applyPull`).
+            const lang = this.store.titleLang
+            const titles = lang === null ? '' : `&titles=${encodeURIComponent(lang)}`
             // One signal for the request and its body: a page can stall after its headers too.
-            const res = await api(`/api/v1/sync?cursor=${this.store.cursor}`, {
+            const res = await api(`/api/v1/sync?cursor=${this.store.cursor}${titles}`, {
               member: owner,
               signal: AbortSignal.timeout(this.timeoutMs),
             })
@@ -180,7 +204,11 @@ export class SyncEngine {
             const again = await this.store.applyPull(body, epoch)
             more = body.more || again
           }
-        } while (this.pullAgain && !this.stopped)
+          // A page of missing titles per round, after the pull: so it is read after any pull in
+          // the language before, whose cursor passed rows of this one it did not bring.
+          const missing = this.store.epoch === epoch && (await this.fetchTitles(owner, epoch))
+          again = this.pullAgain || missing
+        } while (again && !this.stopped)
         for (const heard of this.pulled) heard()
       } catch (err) {
         // Offline or a server hiccup: the next trigger pulls again. Nothing is lost.
@@ -190,6 +218,52 @@ export class SyncEngine {
       }
     })()
     return this.pulling
+  }
+
+  /**
+   * Fetch one page of the titles the device's reading language is missing (`POST
+   * /api/v1/sync/titles`), by article id; says whether there is another page to fetch. A pass
+   * goes through the ids once per round of the store's (`LocalStore.titlesRound`), each page
+   * after the last one asked, so a post the server has no title for is asked for once, and once
+   * the pass is through, the titles are whole. A tela-api from before this (a rollback answers
+   * 404), a failure, or no network leaves the pass where it was, for the next pull: the device
+   * shows posts as written meanwhile, and never starts over for it.
+   */
+  private async fetchTitles(owner: string, epoch: number): Promise<boolean> {
+    const lang = this.store.titleLang
+    if (lang === null || this.store.titlesWhole) {
+      this.titlesPass = null
+      return false
+    }
+    const round = this.store.titlesRound
+    if (this.titlesPass?.round !== round) this.titlesPass = { round, after: 0 }
+    const pass = this.titlesPass
+    const ids = this.store.missingTitles(pass.after)
+    if (ids.length > 0) {
+      let rows: TitleRow[]
+      try {
+        const res = await api('/api/v1/sync/titles', {
+          body: { lang, ids },
+          member: owner,
+          signal: AbortSignal.timeout(this.timeoutMs),
+        })
+        if (!res.ok) return false
+        const body = (await res.json()) as { rows?: unknown }
+        if (!Array.isArray(body.rows)) return false
+        rows = body.rows as TitleRow[]
+      } catch (err) {
+        // What ends syncing ends it here too; anything else waits for the next pull.
+        if (err instanceof SignedOut || err instanceof UpgradeRequired) throw err
+        if (err instanceof AccountChanged) throw err
+        return false
+      }
+      await this.store.applyTitles(rows, lang, epoch)
+      pass.after = ids.at(-1) ?? pass.after
+      if (this.store.missingTitles(pass.after).length > 0) return true
+    }
+    await this.store.titlesFetched(lang, epoch, round)
+    if (this.titlesPass === pass) this.titlesPass = null
+    return false
   }
 
   schedulePush(): void {

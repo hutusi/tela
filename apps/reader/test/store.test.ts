@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, test } from 'bun:test'
+import { applyPull, emptyTables, rowsOf } from '@tela/sync'
 import {
   type Change,
   indexedDbPersistence,
@@ -9,7 +10,7 @@ import {
 } from '../src/store/db'
 import { LocalStore, type Stamp, type Timers } from '../src/store/local'
 import { seedEarlierBuild } from './earlier-build'
-import { article, NOW, profile, pull, sub } from './rows'
+import { article, inLang, NOW, profile, pull, sub, title } from './rows'
 
 /** Memory storage that records which tables each write wrote. */
 function recording(): Persistence & { saved: string[][] } {
@@ -647,5 +648,162 @@ describe('a change held back for an Undo', () => {
     store.release(...third.map((s) => s.mid))
     expect(timers.size()).toBe(0)
     expect(store.retract(...third.map((s) => s.mid))).toBe(false)
+  })
+})
+
+describe('titles in the reading language only', () => {
+  const ja = (id: number) => article(id, { sourceLang: 'ja' })
+  /** A snapshot from a tela-api that sends every language, as one before `?titles=` does. */
+  const everything = pull(
+    5,
+    {
+      profile: [profile],
+      subscriptions: [sub(1)],
+      articles: [ja(7), ja(8)],
+      titles: [title(7, 'en'), title(7, 'fr'), title(8, 'en'), title(8, 'fr')],
+    },
+    true,
+  )
+  const keys = (store: LocalStore) => [...store.getSnapshot().tables.titles.keys()].sort()
+  const storedKeys = async (storage: Persistence) =>
+    ((await storage.load()).rows?.titles ?? []).map((t) => `${t.articleId}:${t.lang}`).sort()
+
+  async function reading(lang: string, storage: Persistence = memoryPersistence()) {
+    const store = new LocalStore(storage, () => NOW)
+    await store.open()
+    await store.setUser('a')
+    await store.applyPull(everything, store.epoch)
+    store.setReadingLang(lang)
+    await tick()
+    return store
+  }
+
+  test('a copy that held every language keeps its reader’s, whole', async () => {
+    const storage = memoryPersistence()
+    const store = await reading('fr', storage)
+    expect(keys(store)).toEqual(['7:fr', '8:fr'])
+    expect(store.titlesWhole).toBe(true)
+    expect(await storedKeys(storage)).toEqual(['7:fr', '8:fr'])
+    expect((await storage.load()).titles).toEqual({ lang: 'fr', whole: true })
+  })
+
+  test('a switch lets the old language go at once, and the new one is fetched, never pulled again', async () => {
+    const storage = memoryPersistence()
+    const store = await reading('fr', storage)
+    let told = 0
+    store.onLanguage = () => void told++
+    const round = store.titlesRound
+    store.setReadingLang('en')
+    // Shown as written until the new language's titles come.
+    expect(keys(store)).toEqual([])
+    expect(store.titlesWhole).toBe(false)
+    expect(store.titlesRound).toBe(round + 1)
+    expect(store.missingTitles(0)).toEqual([7, 8])
+    expect(store.cursor).toBe(5)
+    expect(told).toBe(1)
+    await tick()
+    expect((await storage.load()).titles).toEqual({ lang: 'en', whole: false })
+    expect(await storedKeys(storage)).toEqual([])
+    // The same language again changes nothing.
+    store.setReadingLang('en')
+    expect(told).toBe(1)
+  })
+
+  test('fetched titles land in the tables as they are then, and not once the language moved', async () => {
+    const storage = memoryPersistence()
+    const store = await reading('fr', storage)
+    store.setReadingLang('en')
+    // A pull lands while the page is on its way.
+    await store.applyPull(inLang(pull(6, { articles: [ja(9)] }), 'en'), store.epoch)
+    await store.applyTitles([title(7, 'en', 3), title(8, 'fr', 3)], 'en', store.epoch)
+    expect(keys(store)).toEqual(['7:en'])
+    expect(store.getSnapshot().tables.articles.has(9)).toBe(true)
+    expect(await storedKeys(storage)).toEqual(['7:en'])
+    // A page asked for in French, landing after a switch to English, is dropped.
+    await store.applyTitles([title(9, 'fr', 4)], 'fr', store.epoch)
+    expect(keys(store)).toEqual(['7:en'])
+    // Every page of the round asked for: whole, and stored so.
+    await store.titlesFetched('en', store.epoch, store.titlesRound)
+    expect(store.titlesWhole).toBe(true)
+    expect((await storage.load()).titles).toEqual({ lang: 'en', whole: true })
+  })
+
+  test('a round that moved on is not whole when its pass ends', async () => {
+    const store = await reading('fr')
+    store.setReadingLang('en')
+    const round = store.titlesRound
+    // A pull asked for in French lands: it passed English rows it never brought.
+    await store.applyPull(inLang(pull(6, { titles: [title(7, 'fr', 6)] }), 'fr'), store.epoch)
+    expect(keys(store)).toEqual([])
+    expect(store.titlesRound).toBe(round + 1)
+    await store.titlesFetched('en', store.epoch, round)
+    expect(store.titlesWhole).toBe(false)
+  })
+
+  test('a pull in the language held keeps it whole; one in another leaves it not', async () => {
+    const storage = memoryPersistence()
+    const store = await reading('fr', storage)
+    await store.applyPull(inLang(pull(6, { titles: [title(7, 'fr', 6)] }), 'fr'), store.epoch)
+    expect(store.titlesWhole).toBe(true)
+    // A tela-api rolled back to before `?titles=`: every language, filtered here.
+    await store.applyPull(pull(7, { titles: [title(8, 'fr', 7), title(8, 'en', 7)] }), store.epoch)
+    expect(keys(store)).toEqual(['7:fr', '8:fr'])
+    expect(store.titlesWhole).toBe(true)
+    expect((await storage.load()).titles).toEqual({ lang: 'fr', whole: true })
+    // Asked for before a switch elsewhere and answered in English: none of it is kept.
+    await store.applyPull(inLang(pull(8, { titles: [title(7, 'en', 8)] }), 'en'), store.epoch)
+    expect(keys(store)).toEqual(['7:fr', '8:fr'])
+    expect(store.titlesWhole).toBe(false)
+    expect((await storage.load()).titles).toEqual({ lang: 'fr', whole: false })
+  })
+
+  test('titles another tab’s cursor left out go with the next pull, and what they are with them', async () => {
+    const storage = recording()
+    const store = await reading('fr', storage)
+    store.setReadingLang('en')
+    await tick()
+    // Another tab of the account pulls on, past this one.
+    const other = new LocalStore(storage, () => NOW)
+    await other.open()
+    await other.applyPull(inLang(pull(9, {}), 'en'), other.epoch)
+    // This tab's page of English titles cannot land at its own cursor, 5.
+    await store.applyTitles([title(7, 'en', 2), title(8, 'en', 2)], 'en', store.epoch)
+    expect(await storedKeys(storage)).toEqual([])
+    // Its next pull, from 5 past 9, carries them, though it brought none.
+    await store.applyPull(inLang(pull(10, {}), 'en'), store.epoch)
+    expect(storage.saved.at(-1)).toEqual(['titles'])
+    expect(await storedKeys(storage)).toEqual(['7:en', '8:en'])
+    expect((await storage.load()).titles).toEqual({ lang: 'en', whole: false })
+    // And the one after does not.
+    await store.applyPull(inLang(pull(11, {}), 'en'), store.epoch)
+    expect(storage.saved.at(-1)).toEqual([])
+  })
+
+  test('a copy stored before this build loads every language, and narrows to the reader’s, whole', async () => {
+    const storage = memoryPersistence()
+    await storage.claim('a')
+    // As the build before it wrote it: every table, every language, and no word of titles.
+    const tables = rowsOf(applyPull({ cursor: 0, tables: emptyTables() }, everything).tables)
+    await storage.commit('a', { tables, cursor: 5, covered: TABLES })
+    const booted = new LocalStore(storage, () => NOW)
+    await booted.open()
+    expect(booted.titleLang).toBeNull()
+    expect(booted.titlesWhole).toBe(true)
+    expect(keys(booted)).toEqual(['7:en', '7:fr', '8:en', '8:fr'])
+    const round = booted.titlesRound
+    booted.setReadingLang('en')
+    expect(keys(booted)).toEqual(['7:en', '8:en'])
+    expect(booted.titlesWhole).toBe(true)
+    expect(booted.titlesRound).toBe(round)
+    await tick()
+    expect((await storage.load()).titles).toEqual({ lang: 'en', whole: true })
+    expect(await storedKeys(storage)).toEqual(['7:en', '8:en'])
+  })
+
+  test('another account starts with no language until it is told', async () => {
+    const store = await reading('fr')
+    await store.setUser('b')
+    expect(store.titleLang).toBeNull()
+    expect(store.titlesWhole).toBe(false)
   })
 })

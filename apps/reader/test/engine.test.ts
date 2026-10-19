@@ -3,10 +3,11 @@
  * that may still hold the account another tab has just signed out of.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import type { ArticleRow, TitleRow } from '@tela/sync'
 import { memoryPersistence } from '../src/store/db'
 import { type EngineEvents, SyncEngine } from '../src/store/engine'
 import { LocalStore, type Stamp, type Timers } from '../src/store/local'
-import { NOW, profile, pull, sub } from './rows'
+import { article, inLang, NOW, profile, pull, sub, title } from './rows'
 
 const saved = { fetch: globalThis.fetch, document: globalThis.document, window: globalThis.window }
 const listeners = { addEventListener() {}, removeEventListener() {} }
@@ -424,5 +425,165 @@ describe('a pull that brings nothing', () => {
     })
     await engine.pull()
     expect(heard).toBe(0)
+  })
+})
+
+describe('titles in the reading language', () => {
+  /** A fake tela-api that answers by path, and records each call with its body. */
+  function routes(answer: (path: string, body: { lang: string; ids: number[] }) => unknown) {
+    const calls: { path: string; body: { lang: string; ids: number[] } }[] = []
+    globalThis.fetch = (async (input: string, init?: RequestInit) => {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null
+      calls.push({ path: String(input), body })
+      const res = await answer(String(input), body)
+      return res instanceof Response ? res : Response.json(res)
+    }) as typeof fetch
+    return calls
+  }
+  const ja = (id: number) => article(id, { sourceLang: 'ja' })
+  const keys = (store: LocalStore) => [...store.getSnapshot().tables.titles.keys()].sort()
+
+  /** A member's device reading in `lang`, its snapshot taken in it: whole. */
+  async function reading(lang: string, articles: ArticleRow[], titles: TitleRow[] = []) {
+    const store = new LocalStore(memoryPersistence(), () => NOW)
+    await store.open()
+    await store.setUser('a')
+    store.setReadingLang(lang)
+    const rows = { profile: [profile], subscriptions: [sub(1)], articles, titles }
+    await store.applyPull(inLang(pull(5, rows, true), lang), store.epoch)
+    expect(store.titlesWhole).toBe(true)
+    return store
+  }
+
+  test('a switch while a pull in the old language is out: its titles go, and a page of the new follows', async () => {
+    const store = await reading('en', [ja(7), ja(8)], [title(7, 'en'), title(8, 'en')])
+    let answer: (res: Response) => void = () => {}
+    const calls = routes((path, body) =>
+      path === '/api/v1/sync/titles'
+        ? { rows: body.ids.map((id) => title(id, body.lang, 7)) }
+        : new Promise<Response>((r) => {
+            answer = r
+          }),
+    )
+    const pulling = engineFor(store).pull()
+    await tick()
+    store.setReadingLang('fr')
+    expect(keys(store)).toEqual([])
+    // The pull asked for in English lands after the switch, with an English title it moved past.
+    answer(Response.json(inLang(pull(7, { titles: [title(7, 'en', 7)] }), 'en')))
+    await pulling
+    expect(calls.map((c) => c.path)).toEqual([
+      '/api/v1/sync?cursor=5&titles=en',
+      '/api/v1/sync/titles',
+    ])
+    expect(calls[1]?.body).toEqual({ lang: 'fr', ids: [7, 8] })
+    expect(keys(store)).toEqual(['7:fr', '8:fr'])
+    expect(store.titlesWhole).toBe(true)
+    expect(store.cursor).toBe(7)
+  })
+
+  test('the pull after a switch names the new language; a running engine pulls at once for it', async () => {
+    const store = await reading('en', [ja(7)], [title(7, 'en')])
+    const calls = routes((path, body) =>
+      path === '/api/v1/sync/titles'
+        ? { rows: body.ids.map((id) => title(id, body.lang, 6)) }
+        : inLang(pull(6, {}), 'zh-Hant'),
+    )
+    const engine = engineFor(store)
+    engine.start()
+    await tick()
+    await engine.pull()
+    calls.length = 0
+    store.setReadingLang('zh-Hant')
+    // Nothing else pulls: the switch itself does.
+    for (let i = 0; i < 50 && !store.titlesWhole; i++) await tick()
+    expect(calls.map((c) => c.path)).toEqual([
+      '/api/v1/sync?cursor=6&titles=zh-Hant',
+      '/api/v1/sync/titles',
+    ])
+    expect(keys(store)).toEqual(['7:zh-Hant'])
+  })
+
+  test('an old tela-api: every language filtered here, and no titles route, asked again next pull', async () => {
+    const store = await reading('en', [ja(7), ja(8)], [title(7, 'en'), title(8, 'en')])
+    store.setReadingLang('fr')
+    const calls = routes((path) =>
+      path === '/api/v1/sync/titles'
+        ? Response.json({ error: 'not_found' }, { status: 404 })
+        : // No `titlesLang`: it read no `?titles=`, and sent every language.
+          pull(7, { titles: [title(7, 'fr', 7), title(7, 'en', 7)] }),
+    )
+    const engine = engineFor(store)
+    await engine.pull()
+    expect(calls.map((c) => c.path)).toEqual([
+      '/api/v1/sync?cursor=5&titles=fr',
+      '/api/v1/sync/titles',
+    ])
+    expect(calls[1]?.body).toEqual({ lang: 'fr', ids: [8] })
+    expect(keys(store)).toEqual(['7:fr'])
+    expect(store.titlesWhole).toBe(false)
+    expect(store.cursor).toBe(7)
+    // The next pull asks again, from where the pass was; nothing starts over.
+    await engine.pull()
+    expect(calls.map((c) => c.path.split('?')[0])).toEqual([
+      '/api/v1/sync',
+      '/api/v1/sync/titles',
+      '/api/v1/sync',
+      '/api/v1/sync/titles',
+    ])
+    expect(calls.some((c) => c.path.includes('cursor=0'))).toBe(false)
+  })
+
+  test('a backfill across two pages, where a post the server has no title for is asked once', async () => {
+    const ids = Array.from({ length: 1050 }, (_, i) => i + 1)
+    const store = await reading(
+      'en',
+      ids.map(ja),
+      ids.map((id) => title(id, 'en')),
+    )
+    store.setReadingLang('fr')
+    const calls = routes((path, body) =>
+      path === '/api/v1/sync/titles'
+        ? // Post 3 has no French title yet.
+          { rows: body.ids.filter((id) => id !== 3).map((id) => title(id, 'fr', 6)) }
+        : inLang(pull(6, {}), 'fr'),
+    )
+    const engine = engineFor(store)
+    await engine.pull()
+    expect(calls.map((c) => c.path.split('?')[0])).toEqual([
+      '/api/v1/sync',
+      '/api/v1/sync/titles',
+      '/api/v1/sync',
+      '/api/v1/sync/titles',
+    ])
+    expect(calls[1]?.body.ids).toEqual(ids.slice(0, 1000))
+    expect(calls[3]?.body.ids).toEqual(ids.slice(1000))
+    expect(store.getSnapshot().tables.titles.size).toBe(1049)
+    expect(store.titlesWhole).toBe(true)
+    // Whole, the next pull asks for nothing more; post 3's title comes with a pull once made.
+    calls.length = 0
+    await engine.pull()
+    expect(calls.map((c) => c.path)).toEqual(['/api/v1/sync?cursor=6&titles=fr'])
+  })
+
+  test('a failed page waits for the next pull, and a signed-out answer ends syncing', async () => {
+    const store = await reading('en', [ja(7)], [title(7, 'en')])
+    store.setReadingLang('fr')
+    let titles: () => Response = () => new Response('down', { status: 503 })
+    const calls = routes((path) =>
+      path === '/api/v1/sync/titles' ? titles() : inLang(pull(6, {}), 'fr'),
+    )
+    let heard = 0
+    let signedOut = 0
+    const engine = engineFor(store, { onSignedOut: () => void signedOut++ })
+    engine.onPulled(() => void heard++)
+    await engine.pull()
+    expect(calls).toHaveLength(2)
+    // The pull itself answered.
+    expect(heard).toBe(1)
+    expect(store.titlesWhole).toBe(false)
+    titles = () => Response.json({ error: 'unauthorized' }, { status: 401 })
+    await engine.pull()
+    expect(signedOut).toBe(1)
   })
 })

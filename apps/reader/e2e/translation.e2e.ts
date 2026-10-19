@@ -328,6 +328,67 @@ test.describe('translation', () => {
     }
   })
 
+  /**
+   * The device holds titles in the language the member reads in only. A new one is fetched behind
+   * the list, by the posts the device holds (`POST /api/v1/sync/titles`), and the list shows each
+   * post as written until its title comes: the device never starts over from a snapshot for it.
+   * Holding the titles' answer back holds the in-between still.
+   */
+  test('a new reading language fetches its titles behind the list, never a snapshot', async ({
+    page,
+  }) => {
+    const held: Route[] = []
+    let released = false
+    await page.route('**/api/v1/sync/titles', (route) => {
+      if (released) void route.continue()
+      else held.push(route)
+    })
+    const release = async () => {
+      released = true
+      for (const route of held.splice(0)) await route.continue().catch(() => undefined)
+    }
+    try {
+      await page.goto('/reading')
+      await synced(page)
+      const foreign = page.getByTestId('article-row').filter({ hasText: 'JA → EN' }).first()
+      await expect(foreign.locator('h2')).toContainText('en:')
+      const href = (await foreign.getAttribute('href')) ?? ''
+      expect(href).toContain('article=')
+      // From here on, any snapshot would be the device starting over.
+      const snapshots: string[] = []
+      page.on('request', (r) => {
+        if (/\/api\/v1\/sync\?cursor=0(&|$)/.test(r.url())) snapshots.push(r.url())
+      })
+
+      const menu = page.getByTestId('language-menu')
+      await menu.locator('summary').click()
+      await menu.getByTestId('language-menu-settings').click()
+      await expect(page).toHaveURL(/\/settings\/translation$/)
+      const push = pushed(page, '"readingLang":"fr"')
+      await page.getByTestId('settings-reading-lang').selectOption('fr')
+      await push
+      await expect.poll(() => held.length, { timeout: 15_000 }).toBeGreaterThan(0)
+
+      await page.getByTestId('nav-reading').click()
+      await synced(page)
+      const row = page.locator(`[data-testid="article-row"][href="${href}"]`)
+      const heading = row.locator('h2')
+      // As written: no English title any more, and no French one yet.
+      await expect(heading).toBeVisible()
+      await expect(heading).not.toContainText('en:')
+      await expect(heading).not.toContainText('fr:')
+      await expect(row).not.toContainText('JA → EN')
+
+      await release()
+      await expect(heading).toContainText('fr:', { timeout: 30_000 })
+      await expect(row).toContainText('JA → FR')
+      expect(snapshots).toEqual([])
+    } finally {
+      await release()
+      await resetReading(page.request)
+    }
+  })
+
   test('a paragraph that failed to translate says so, in both layouts', async ({ page }) => {
     await page.goto('/add')
     await page.getByTestId('feed-url').fill(`${FIXTURES}/partial.xml`)

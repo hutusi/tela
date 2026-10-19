@@ -442,6 +442,54 @@ describe('asking /me who is signed in', () => {
     expect(await learnWho(store, () => true)).toBe('unreachable')
   })
 
+  test("a device that holds nothing yet reads in the language /me's profile names, before its first snapshot", async () => {
+    const store = await reopened(memoryPersistence())
+    me(() => Response.json({ id: 'a', profile: { readingLang: null, uiLocale: 'zh-Hant' } }))
+    expect(
+      await learnWho(
+        store,
+        () => true,
+        whoAmI,
+        () => 'en',
+      ),
+    ).toBe('member')
+    expect(store.titleLang).toBe('zh-Hant')
+    // A choice of its own beats the interface; a profile that names neither, the page's.
+    const chose = await reopened(memoryPersistence())
+    me(() => Response.json({ id: 'a', profile: { readingLang: 'fr', uiLocale: 'zh-Hant' } }))
+    await learnWho(
+      chose,
+      () => true,
+      whoAmI,
+      () => 'en',
+    )
+    expect(chose.titleLang).toBe('fr')
+    const none = await reopened(memoryPersistence())
+    me(() => Response.json({ id: 'a', profile: null }))
+    await learnWho(
+      none,
+      () => true,
+      whoAmI,
+      () => 'zh-Hans',
+    )
+    expect(none.titleLang).toBe('zh-Hans')
+  })
+
+  test("a device that holds the member's rows keeps its own word on the language", async () => {
+    const { store } = await doubted()
+    me(() => Response.json({ id: 'a', profile: { readingLang: 'fr', uiLocale: 'fr' } }))
+    expect(
+      await learnWho(
+        store,
+        () => true,
+        whoAmI,
+        () => 'en',
+      ),
+    ).toBe('member')
+    // Its profile row (and any choice still on its way) is the app's to hand over.
+    expect(store.titleLang).toBeNull()
+  })
+
   test('an answer a later question has overtaken changes nothing', async () => {
     const { storage, store } = await doubted()
     me(() => Response.json({ error: 'unauthorized' }, { status: 401 }))

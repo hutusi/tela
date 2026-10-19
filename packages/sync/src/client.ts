@@ -775,8 +775,11 @@ export function readingLangOf(
   return 'en'
 }
 
-/** How many articles one request for titles may name (`POST /api/v1/sync/titles`). */
-export const TITLE_IDS_PER_REQUEST = 1000
+/**
+ * How many articles one request for titles may name (`POST /api/v1/sync/titles`): tela-api's
+ * `TITLE_IDS_MAX` (apps/api/src/app.ts), which answers more with 400 `invalid_ids`.
+ */
+const TITLE_IDS_PER_REQUEST = 1000
 
 /**
  * A pull as the device holding only `lang`'s titles takes it, and whether it brought that
