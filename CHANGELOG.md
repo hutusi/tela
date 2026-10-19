@@ -12,6 +12,26 @@ everything so far sits under `[Unreleased]`.
 - **Pages download only the fonts their text needs.** Each face is declared for its own
   characters, so English, French and Chinese pages fetch the Latin subset alone (134 KB instead of
   383 KB), and the two faces every page uses first are preloaded.
+- **The reader says what went wrong, and gets out of the way.**
+  - **Pages that could not load say so.** A blog, a profile, a blogroll, Discover's tabs, a
+    claim, the Dashboard and search show "Something went wrong loading this." with *Try again*,
+    never a skeleton for ever, and a public page asks again once the browser is back online. A
+    post whose text could not be fetched says that, with *Try again* and the original, instead of
+    claiming it has no readable content.
+  - **A new device shows placeholders until its first sync**, never "Nothing here yet.", and
+    the quick pulls while a post's full text or a new feed's first posts are on their way back off
+    to a minute, stop after two, and wait while the tab is hidden.
+  - **The tab names what is open**: the post or the list on `/reading`, and *Log in* or *Join*.
+    *U* undoes from any page that shows the toast. The blog's name above and below an article
+    opens that blog's posts.
+  - **Popovers close alike**: a click elsewhere closes Recommend's too, Esc gives focus back to
+    what opened each, Discover's language menu closes on a choice, and the list of keys is a
+    dialog.
+  - **Accessibility and type.** *Skip to content* is the first Tab stop, the current header pill
+    is announced, every nav is named, and a profile's post titles are h2s. Asking for less motion
+    also stops the skeletons' pulse and smooth scrolling. The open sidebar row's count and the off
+    switch meet contrast in both themes. Japanese and Korean posts take their own fonts, and
+    Chinese, Japanese and Korean titles are no longer tracked tight.
 - **Unread or All, on the list itself.** A switch under each list's heading shows its unread posts
   or every post, and starts on Unread; *Hide read articles* left Settings for it. A list read to
   the end says "All caught up", with *Show all* beside it. Liked has no switch: it keeps every post
