@@ -394,9 +394,104 @@ test.describe('stylesheet', () => {
     await expect(reader).toBeVisible()
     expect(await reader.evaluate((el) => getComputedStyle(el).animationName)).toBe('none')
 
+    // The skeletons' pulse goes the same way, by its token.
+    const pulse = () =>
+      page.evaluate(() => {
+        const el = document.createElement('div')
+        el.className = 'animate-pulse'
+        document.body.append(el)
+        const name = getComputedStyle(el).animationName
+        el.remove()
+        return name
+      })
+    expect(await pulse()).toBe('none')
+
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await page.reload()
     expect(await reader.evaluate((el) => getComputedStyle(el).animationName)).toBe('fade')
+    expect(await pulse()).toBe('pulse')
+  })
+
+  /**
+   * Contrast as computed, on both grounds: the open row's count is `ink-2` (`muted` on `hover` is
+   * 4.05:1), and the off switch has a `muted` edge (its `thumb` track is 1.5:1 on `surface`).
+   */
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`the open row's count and the off switch hold their contrast (${scheme})`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme })
+      await page.goto('/reading')
+      await synced(page)
+      const token = (name: string) =>
+        page.evaluate((n) => {
+          const el = document.createElement('div')
+          el.style.color = `var(--color-${n})`
+          document.body.append(el)
+          const color = getComputedStyle(el).color
+          el.remove()
+          return color
+        }, name)
+      const ink2 = await token('ink-2')
+      const muted = await token('muted')
+      const open = page.getByTestId('sidebar').locator('a[aria-current="page"]').first()
+      await expect(open.locator('span').last()).toHaveCSS('color', ink2)
+      const other = page.getByTestId('subscription').first()
+      expect(await other.getAttribute('aria-current')).toBeNull()
+      await expect(other.locator('span').last()).toHaveCSS('color', muted)
+
+      const off = await page.evaluate(() => {
+        const el = document.createElement('button')
+        el.setAttribute('role', 'switch')
+        el.className = 'bg-thumb inset-ring inset-ring-muted'
+        document.body.append(el)
+        const shadow = getComputedStyle(el).boxShadow
+        el.remove()
+        return shadow
+      })
+      expect(off).toContain(`${muted} 0px 0px 0px 1px inset`)
+    })
+  }
+
+  /**
+   * Japanese and Korean take families of their own, as Traditional does, and CJK text keeps its
+   * spacing where `tracking-tight` would cram it; Latin keeps the tight setting.
+   */
+  test('Japanese and Korean have their own faces, and CJK is never tracked tight', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    await expect(page.getByTestId('nav-reading')).toBeVisible()
+    const probed = await page.evaluate(() => {
+      const probe = (lang: string, className: string) => {
+        const el = document.createElement('h1')
+        el.lang = lang
+        el.className = className
+        el.style.fontSize = '40px'
+        document.body.append(el)
+        const style = getComputedStyle(el)
+        const out = { family: style.fontFamily, spacing: style.letterSpacing }
+        el.remove()
+        return out
+      }
+      return {
+        jaSerif: probe('ja', 'font-serif'),
+        koSans: probe('ko', 'font-sans'),
+        zhTight: probe('zh-Hans', 'font-serif tracking-tight'),
+        jaTight: probe('ja', 'font-serif tracking-tight'),
+        enTight: probe('en', 'font-serif tracking-tight'),
+      }
+    })
+    const first = (family: string) =>
+      family
+        .split(',')
+        .map((f) => f.trim().replace(/"/g, ''))
+        .find((f) => f !== 'EB Garamond' && f !== 'Figtree')
+    expect(first(probed.jaSerif.family)).toBe('Hiragino Mincho ProN')
+    expect(first(probed.koSans.family)).toBe('Apple SD Gothic Neo')
+    expect(probed.zhTight.spacing).toBe('normal')
+    expect(probed.jaTight.spacing).toBe('normal')
+    expect(probed.enTight.spacing).toBe('-1px')
   })
 
   test('pairing the blocks keeps the single-column vertical rhythm', async ({ page }) => {

@@ -17,6 +17,7 @@ import { createPortal } from 'react-dom'
 import { useTranslations } from 'use-intl'
 import type { Anchor } from '../lib/anchor'
 import { type Side, selectedAnchor } from '../lib/highlight-dom'
+import { scrollMotion } from '../lib/motion'
 import { UNDO_HOLD_MS } from '../lib/toasts'
 import { highlightAgain, offerUndo } from '../lib/undo'
 import type { HighlightItem } from '../lib/use-highlights'
@@ -332,7 +333,7 @@ export function HighlightList({
               type="button"
               disabled={item.status !== 'shown'}
               onClick={(e) => {
-                item.leaf?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                item.leaf?.scrollIntoView({ block: 'center', behavior: scrollMotion() })
                 // From the keyboard there is no pointer: the note opens by the row instead.
                 const row = e.currentTarget.getBoundingClientRect()
                 onOpen(item, { x: e.clientX || row.left + 40, y: e.clientY || row.bottom })

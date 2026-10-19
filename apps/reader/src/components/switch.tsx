@@ -30,7 +30,9 @@ export function Switch({
         if (!disabled) onChange(!checked)
       }}
       data-testid={testId}
-      className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-thumb'} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+      // Off, the `thumb` track is 1.5:1 on `surface`, under the 3:1 a control's edge needs to be
+      // seen: an inset `muted` ring draws its edge without moving the knob.
+      className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-thumb inset-ring inset-ring-muted'} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
     >
       <span
         className={`absolute top-[3px] left-[3px] size-[18px] rounded-full bg-knob shadow-[0_1px_2px_rgba(0,0,0,.2)] transition-transform ${checked ? 'translate-x-4' : ''}`}

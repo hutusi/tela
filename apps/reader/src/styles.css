@@ -145,6 +145,36 @@
   --font-serif: "EB Garamond", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
   --font-sans: "Figtree", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
 }
+/*
+ * Japanese and Korean, which Tela does not translate into but readers follow blogs in: the same
+ * code points as Chinese would be drawn in Chinese forms by the SC stacks (a Japanese 直 or 骨 is
+ * not a Chinese one), and Hangul would fall to whatever the system picks. Each takes its own
+ * families, by the same tokens and for the same reasons as Traditional above.
+ */
+:lang(ja) {
+  --font-serif:
+    "EB Garamond", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP", Georgia, serif;
+  --font-sans:
+    "Figtree", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans CJK JP",
+    system-ui, sans-serif;
+}
+:lang(ko) {
+  --font-serif:
+    "EB Garamond", "AppleMyungjo", "Nanum Myeongjo", "Noto Serif CJK KR", Georgia, serif;
+  --font-sans:
+    "Figtree", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", system-ui, sans-serif;
+}
+
+/*
+ * `tracking-tight` draws Latin display type closer, and crams CJK, whose characters are set on a
+ * full square and need the space between them. Text in Chinese, Japanese or Korean, by its own
+ * `lang` or the page's, keeps its normal spacing. Unlayered on purpose: it must beat the utility.
+ */
+.tracking-tight:lang(zh),
+.tracking-tight:lang(ja),
+.tracking-tight:lang(ko) {
+  letter-spacing: normal;
+}
 
 /*
  * The paper scope: an element that stays a light card on either ground, as the design draws the
@@ -218,12 +248,15 @@
 
 /*
  * Motion is opt-out at the token, which is where every use of it resolves: Tailwind compiles
- * `animate-fade` to `animation: var(--animate-fade)`, so one override covers all of them.
- * `styles.e2e.ts` checks the computed value, because nothing in the JSX shows this.
+ * `animate-fade` to `animation: var(--animate-fade)`, so one override covers all of them, and
+ * the skeletons' `animate-pulse` the same way (a placeholder that throbs is motion too). Smooth
+ * scrolling is the script's to skip (`scrollMotion`). `styles.e2e.ts` checks the computed values,
+ * because nothing in the JSX shows this.
  */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --animate-fade: none;
+    --animate-pulse: none;
   }
 }
 

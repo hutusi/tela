@@ -58,12 +58,24 @@ PingFang TC / Noto Sans CJK TC, and Simplified inside it goes back to SC. The ru
 `--font-serif` and `--font-sans` tokens, not `font-family`, so it reaches whatever resolves a
 token at or under the element; an element with a `lang` and no family of its own keeps the stack
 its parent resolved, so give it `font-serif` (or a class that sets a family). `styles.e2e.ts`
-checks the computed families. Base UI size 14px; article body 19.5px/1.55 (CJK 18px/1.8).
+checks the computed families. Japanese (`:lang(ja)`: Hiragino Mincho ProN / Yu Mincho / Noto
+Serif CJK JP, Hiragino Sans / Yu Gothic / Noto Sans CJK JP) and Korean (`:lang(ko)`: AppleMyungjo
+/ Nanum Myeongjo / Noto Serif CJK KR, Apple SD Gothic Neo / Malgun Gothic / Noto Sans CJK KR) take
+their own families by the same tokens, so a Japanese post's kanji are not drawn in Chinese forms.
+`tracking-tight` is reset to normal spacing for text in Chinese, Japanese or Korean (by its own
+`lang` or the page's): it draws Latin display type closer and crams CJK, which is set on a full
+square. Base UI size 14px; article body 19.5px/1.55 (CJK 18px/1.8).
 
 Motion: `animate-fade` (250 ms fade + 4px rise) on view changes and popovers. Under
-`prefers-reduced-motion: reduce` the token itself becomes `none`, which covers every use at once;
-`styles.e2e.ts` checks the computed `animation-name`, since that relies on Tailwind compiling
-`animate-*` to `animation: var(--animate-fade)`.
+`prefers-reduced-motion: reduce` the token itself becomes `none`, which covers every use at once,
+and so does `--animate-pulse`, the skeletons' throb; a scroll the script makes is smooth only
+without it (`scrollMotion`). `styles.e2e.ts` checks the computed `animation-name`, since that
+relies on Tailwind compiling `animate-*` to `animation: var(--animate-*)`.
+
+Contrast: `muted` is 4.5:1 on paper but 4.05:1 on `hover`, so a count on the open sidebar row (and
+on one under the pointer) is `ink-2` (`rowCount`; the row is `group/row` by name, since the reading
+layout is a bare `group`). A control's edge needs 3:1, which the off switch's `thumb` track is not
+on `surface`: it has an inset `muted` ring. `styles.e2e.ts` checks both on both grounds.
 
 ## Links
 
@@ -375,7 +387,7 @@ edge, and is all a visitor has, and an account that has none takes the cookie's 
 sync lands. A section opens with a 30 px serif heading and a
 muted intro; below, rows (`SettingRow`) separated by `line` rules: the label and a muted hint on the
 left, the control on the right. Controls are `Segmented` (the choices on the `hover` ground, the
-chosen one lifted on `surface`, and a 13px `large` size for the phone menu and footer), `Switch` (40 × 24, `accent` on / `thumb` off, `knob`), a native
+chosen one lifted on `surface`, and a 13px `large` size for the phone menu and footer), `Switch` (40 × 24, `accent` on / `thumb` off with an inset `muted` edge, `knob`), a native
 select, or a quiet pill button. Settings that change what others see say so, and that the public
 profile can take a few minutes to catch up. Profile opens with the member's avatar at 64 px beside
 *Upload a picture* (*Change picture* once there is one) and *Remove*, quiet pills. One picture at
