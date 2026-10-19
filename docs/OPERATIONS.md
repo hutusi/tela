@@ -495,6 +495,12 @@ is tela-api.
   `/api/v1/public/front` is not answering 200 within three seconds (deploy tela-api before
   tela-web when it is new): tela-web logs `public page data late` or `public page data failed`
   with the endpoint, which says which.
+- **Hashed assets** (`/assets/*`) are kept a day by the browser (`public/_headers`, ADR 0051),
+  not a year: the single-page fallback answers a name a deploy lacks 200 with `index.html` under
+  the same rule. After a tela-web rollback, a browser without the service worker that was handed
+  that HTML for a script boots blank on that build until the day is out or a hard reload; the
+  worker asks past the browser's cache itself (`cache: 'reload'`) and is not held up. `curl -I
+  https://telaread.com/assets/<a file>` shows `cache-control: public, max-age=86400`.
 - **Writes to `/api/*` without this origin get 403** `cross-origin write refused`. Hubs
   (`/api/websub/*`) and the admin script (`/api/admin/*`) are exempt. A browser always sends
   `Origin` on a POST, so seeing this from the app means something is proxying it.

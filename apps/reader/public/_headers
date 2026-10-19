@@ -1,0 +1,10 @@
+# Headers on what tela-web's asset router answers (ADR 0051). They land on whatever the router
+# serves for a matching path: the single-page fallback's index.html, for a path with no file,
+# included. The Worker sets its own on what it answers (worker/edge.ts).
+
+# Content-hashed, so a day in the browser without asking again. Not immutable and not a year: a
+# name a deploy lacks is answered 200 with index.html under these same headers, and after a
+# rollback a browser could keep that HTML under a script's name. A day caps the damage, and
+# sw.js asks past the browser's cache once when an answer is not what its name says.
+/assets/*
+  Cache-Control: public, max-age=86400
