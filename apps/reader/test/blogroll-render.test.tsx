@@ -254,6 +254,7 @@ async function storeWith(rows: Partial<TableRows>): Promise<LocalStore> {
       cursor: 5,
       rows: full,
       covered: [...TABLES],
+      titles: { lang: null, whole: true },
       pending: [],
     }),
   }
