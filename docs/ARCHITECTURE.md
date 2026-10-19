@@ -313,6 +313,14 @@ The only public Worker, unpinned, with no D1.
 
 A Vite + React SPA that renders from the device.
 
+- Nothing leaves the page blank (`main.tsx`, `components/error-boundary.tsx`). A device store
+  that opens and then fails is replaced by one in memory. A page that throws as it renders shows
+  "Something went wrong" with Try again below a header that still works (a boundary keyed by the
+  path); the root boundary, outside every provider, words the app's own failure from the
+  catalogues, as a boot that fails does on an empty shell (an edge-rendered page stays as it is).
+  `lib/report.ts` sends what broke to `/api/client-errors`: what a boundary caught, an unhandled
+  error or rejection whose stack runs through Tela's own scripts, a failed boot and each CSP
+  violation, each once, five a page load at most, never a query string.
 - `store/local.ts` holds confirmed rows and pending mutations, written through to IndexedDB, one
   record per pending mutation so that tabs sharing the database never erase each other's.
 - `store/engine.ts` pulls at boot, on focus, every minute and after a push. It pushes a

@@ -4,6 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { AppHeader } from './components/app-header'
+import { ErrorBoundary, PageFailed, RouteFailed } from './components/error-boundary'
 import { FrontDoorProvider, ToReading } from './components/front-door'
 import { Toast } from './components/toast'
 import { chooseLocale, detectLocale, I18n, localeCookie, localeToAdopt } from './i18n'
@@ -77,21 +78,25 @@ const AdminApp = lazy(() =>
 function AdminUnavailable() {
   const t = useTranslations('reader')
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-6 py-20 animate-fade">
-      <p className="text-[15px] text-ink-2">{t('loadFailed')}</p>
-      <div>
-        <a
-          href={window.location.href}
-          onClick={(e) => {
-            e.preventDefault()
-            window.location.reload()
-          }}
-          className="inline-block rounded-full border border-ink px-4 py-2 text-[13px] font-medium text-ink hover:bg-ink hover:text-paper hover:no-underline"
-        >
-          {t('retry')}
-        </a>
-      </div>
-    </main>
+    <PageFailed
+      message={t('loadFailed')}
+      retry={t('retry')}
+      onRetry={() => window.location.reload()}
+    />
+  )
+}
+
+/**
+ * A page that throws as it renders shows its failure with Try again below a header that still
+ * works, rather than blanking the app. Keyed by the path, so opening another page starts it
+ * afresh; Try again renders the same page again.
+ */
+function PageBoundary({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation()
+  return (
+    <ErrorBoundary key={pathname} fallback={(retry) => <RouteFailed onRetry={retry} />}>
+      {children}
+    </ErrorBoundary>
   )
 }
 
@@ -273,94 +278,96 @@ function Routed() {
                 element={
                   <>
                     <AppHeader />
-                    <Routes>
-                      <Route path="/" element={<Home />} />
-                      <Route path="/join" element={<JoinPage />} />
-                      <Route
-                        path="/reading"
-                        element={
-                          <Members>
-                            <ReadingPage />
-                          </Members>
-                        }
-                      />
-                      <Route path="/discover" element={<DiscoverHome />} />
-                      <Route path="/discover/articles" element={<ArticlesPage />} />
-                      <Route path="/discover/blogs" element={<BlogsPage />} />
-                      <Route path="/discover/blogrolls" element={<BlogrollsPage />} />
-                      <Route path="/discover/readers" element={<ReadersPage />} />
-                      <Route path="/writers" element={<WritersPage />} />
-                      <Route
-                        path="/following"
-                        element={
-                          <Members>
-                            <FollowingPage />
-                          </Members>
-                        }
-                      />
-                      <Route path="/s/:siteId" element={<SitePage />} />
-                      <Route path="/l/:id" element={<BlogrollPage />} />
-                      <Route path="/about" element={<InfoPage page="about" />} />
-                      <Route path="/privacy" element={<InfoPage page="privacy" />} />
-                      <Route path="/terms" element={<InfoPage page="terms" />} />
-                      <Route
-                        path="/search"
-                        element={
-                          <Members>
-                            <SearchPage />
-                          </Members>
-                        }
-                      />
-                      <Route
-                        path="/add"
-                        element={
-                          <Members>
-                            <AddPage />
-                          </Members>
-                        }
-                      />
-                      <Route
-                        path="/settings"
-                        element={
-                          <Members>
-                            <SettingsPage />
-                          </Members>
-                        }
-                      />
-                      <Route
-                        path="/settings/:section"
-                        element={
-                          <Members>
-                            <SettingsPage />
-                          </Members>
-                        }
-                      />
-                      <Route
-                        path="/dashboard"
-                        element={
-                          <Members>
-                            <DashboardPage />
-                          </Members>
-                        }
-                      />
-                      <Route
-                        path="/claim"
-                        element={
-                          <Members>
-                            <ClaimPage />
-                          </Members>
-                        }
-                      />
-                      <Route
-                        path="/sites/:siteId/claim"
-                        element={
-                          <Members>
-                            <ClaimSitePage />
-                          </Members>
-                        }
-                      />
-                      <Route path="*" element={<HandleOrMissing />} />
-                    </Routes>
+                    <PageBoundary>
+                      <Routes>
+                        <Route path="/" element={<Home />} />
+                        <Route path="/join" element={<JoinPage />} />
+                        <Route
+                          path="/reading"
+                          element={
+                            <Members>
+                              <ReadingPage />
+                            </Members>
+                          }
+                        />
+                        <Route path="/discover" element={<DiscoverHome />} />
+                        <Route path="/discover/articles" element={<ArticlesPage />} />
+                        <Route path="/discover/blogs" element={<BlogsPage />} />
+                        <Route path="/discover/blogrolls" element={<BlogrollsPage />} />
+                        <Route path="/discover/readers" element={<ReadersPage />} />
+                        <Route path="/writers" element={<WritersPage />} />
+                        <Route
+                          path="/following"
+                          element={
+                            <Members>
+                              <FollowingPage />
+                            </Members>
+                          }
+                        />
+                        <Route path="/s/:siteId" element={<SitePage />} />
+                        <Route path="/l/:id" element={<BlogrollPage />} />
+                        <Route path="/about" element={<InfoPage page="about" />} />
+                        <Route path="/privacy" element={<InfoPage page="privacy" />} />
+                        <Route path="/terms" element={<InfoPage page="terms" />} />
+                        <Route
+                          path="/search"
+                          element={
+                            <Members>
+                              <SearchPage />
+                            </Members>
+                          }
+                        />
+                        <Route
+                          path="/add"
+                          element={
+                            <Members>
+                              <AddPage />
+                            </Members>
+                          }
+                        />
+                        <Route
+                          path="/settings"
+                          element={
+                            <Members>
+                              <SettingsPage />
+                            </Members>
+                          }
+                        />
+                        <Route
+                          path="/settings/:section"
+                          element={
+                            <Members>
+                              <SettingsPage />
+                            </Members>
+                          }
+                        />
+                        <Route
+                          path="/dashboard"
+                          element={
+                            <Members>
+                              <DashboardPage />
+                            </Members>
+                          }
+                        />
+                        <Route
+                          path="/claim"
+                          element={
+                            <Members>
+                              <ClaimPage />
+                            </Members>
+                          }
+                        />
+                        <Route
+                          path="/sites/:siteId/claim"
+                          element={
+                            <Members>
+                              <ClaimSitePage />
+                            </Members>
+                          }
+                        />
+                        <Route path="*" element={<HandleOrMissing />} />
+                      </Routes>
+                    </PageBoundary>
                   </>
                 }
               />
