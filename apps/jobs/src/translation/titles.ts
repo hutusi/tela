@@ -25,7 +25,13 @@ import {
   utcDay,
 } from '@tela/data'
 import { commit, type IngestContext, type Statement } from '@tela/ingest/pipeline'
-import { type TranslateBlocksOutcome, type Translator, translateBlocks } from '@tela/llm'
+import {
+  billedUsage,
+  type TranslateBlocksOutcome,
+  type TranslationUsage,
+  type Translator,
+  translateBlocks,
+} from '@tela/llm'
 import { NORM_VERSION, READING_LANGUAGES } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { escapeUTF8 } from 'entities'
@@ -207,6 +213,33 @@ export async function translateTitlesJob(
         else missing.push(b)
       }
     }
+    /** The statements that record each call the provider billed, and charge the budget for it. */
+    const usageRows = (usages: readonly TranslationUsage[], targetLang: string, now: number) => {
+      let tokens = 0
+      const rows: Statement[] = usages.map((usage) => {
+        tokens += usage.inputTokens + usage.outputTokens
+        return recordLlmCall(
+          db,
+          {
+            job: 'translate.title',
+            contentKey: null,
+            articleId: fresh.length === 1 ? (fresh[0] as Member).article.id : null,
+            // The lease is the feed: a call that carries several posts is still one blog's.
+            feedId,
+            // What the model wrote: Simplified, for Traditional readers as well.
+            targetLang,
+            userId: null,
+            model: usage.model,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            latencyMs: usage.latencyMs,
+          },
+          now,
+        )
+      })
+      if (tokens > 0) rows.push(chargeUsage(db, BACKGROUND, utcDay(now), tokens))
+      return rows
+    }
     let outcome: TranslateBlocksOutcome | null = null
     if (target !== null && missing.length > 0) {
       try {
@@ -232,8 +265,10 @@ export async function translateTitlesJob(
         // The provider is down or refusing: keep what other groups made, back off for the rest.
         // Of this group only the conversions of stored rows are written; a post that needed the
         // model keeps both Chinese titles due together.
+        // Replies that could not be read were paid for, and are recorded and charged like any.
         providerError = err instanceof Error ? err.message : String(err)
-        const kept = derivedRows(ctx.clock.now())
+        const now = ctx.clock.now()
+        const kept = [...derivedRows(now), ...usageRows(billedUsage(err), target, now)]
         if (kept.length > 0) {
           const committed = await commit(ctx, lease, kept, { hold: { ttlMs: TITLE_TTL_MS } })
           if (!committed.ok) return { status: 'lost' }
@@ -244,31 +279,8 @@ export async function translateTitlesJob(
     const now = ctx.clock.now()
     const statements: Statement[] = []
     const echoed = new Set<string>()
-    let spent = 0
     if (target !== null && outcome) {
-      for (const usage of outcome.usage) {
-        spent += usage.inputTokens + usage.outputTokens
-        statements.push(
-          recordLlmCall(
-            db,
-            {
-              job: 'translate.title',
-              contentKey: null,
-              articleId: fresh.length === 1 ? (fresh[0] as Member).article.id : null,
-              // The lease is the feed: a call that carries several posts is still one blog's.
-              feedId,
-              // What the model wrote: Simplified, for Traditional readers as well.
-              targetLang: target,
-              userId: null,
-              model: usage.model,
-              inputTokens: usage.inputTokens,
-              outputTokens: usage.outputTokens,
-              latencyMs: usage.latencyMs,
-            },
-            now,
-          ),
-        )
-      }
+      statements.push(...usageRows(outcome.usage, target, now))
       // An echo accepted only by the title exemption stays out of the shared cache: it is
       // content-addressed and first-write-wins, so a body <h1> repeating the headline would
       // inherit "this is its own translation" for ever (AGENTS.md).
@@ -321,7 +333,6 @@ export async function translateTitlesJob(
       }
     }
     statements.push(...derivedRows(now))
-    if (spent > 0) statements.push(chargeUsage(db, BACKGROUND, utcDay(now), spent))
     // Each group commits the moment it lands and holds the lease for the next, so a feed's calls
     // need not all fit in one lease, and a lease lost later keeps what was paid for here.
     const committed = await commit(ctx, lease, statements, { hold: { ttlMs: TITLE_TTL_MS } })

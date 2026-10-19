@@ -17,6 +17,7 @@ import { registerFeed } from '@tela/ingest/pipeline'
 import {
   createMockTranslator,
   estimateTokens,
+  TranslationFailed,
   type TranslationRequest,
   type Translator,
 } from '@tela/llm'
@@ -737,6 +738,61 @@ describe('the call log', () => {
       { job: 'translate.body', feed_id: 1 },
       { job: 'translate.title', feed_id: 1 },
     ])
+  })
+
+  /** A provider that answers and bills, but never with JSON: GLM's broken quotes, every time. */
+  function unreadable(when: (request: TranslationRequest) => boolean): Translator {
+    const mock = createMockTranslator({ calls })
+    return {
+      model: mock.model,
+      async translate(request) {
+        if (!when(request)) return mock.translate(request)
+        calls.push(request)
+        throw new TranslationFailed('reply contains no JSON object', [
+          { model: 'glm', inputTokens: 500, outputTokens: 50, latencyMs: 1 },
+        ])
+      },
+    }
+  }
+  const billed = (job: string) =>
+    first<{ calls: number; tokens: number }>(
+      db,
+      sql`select count(*) as calls, sum(input_tokens + output_tokens) as tokens
+        from llm_calls where job = ${job}`,
+    )
+
+  test('records and charges a title call whose reply could not be read, then backs off', async () => {
+    const ctx = context({ translator: unreadable(() => true) })
+    await ingest(ctx, feed(['A post']))
+    const { outcomes } = await cycle(ctx)
+    expect(outcomes.filter((o) => o.status === 'retrying')).toMatchObject([
+      { status: 'retrying', error: 'reply contains no JSON object' },
+    ])
+    expect(await billed('translate.title')).toEqual({
+      calls: calls.length,
+      tokens: 550 * calls.length,
+    })
+    const spent = await first<{ used: number }>(
+      db,
+      sql`select used from usage_daily where subject = ${BACKGROUND}`,
+    )
+    expect(spent?.used).toBe(550 * calls.length)
+  })
+
+  test('records a body call whose reply could not be read, and counts it in what the body spent', async () => {
+    const ctx = context({
+      translator: unreadable((r) => r.blocks.some((b) => b.text.includes('Paragraph'))),
+    })
+    await addReader()
+    await ingest(ctx, feed(['A post'], 4))
+    await cycle(ctx)
+    const key = await request(1, 'zh-Hans')
+    const { outcomes } = await cycle(ctx)
+    expect(outcomes.filter((o) => o.status === 'retrying')).toMatchObject([
+      { status: 'retrying', error: 'reply contains no JSON object' },
+    ])
+    expect(await billed('translate.body')).toEqual({ calls: 1, tokens: 550 })
+    expect((await bodyRow(key))?.used_tokens).toBe(550)
   })
 })
 

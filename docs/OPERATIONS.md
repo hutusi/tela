@@ -861,8 +861,8 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   one until tomorrow. The health check counts only unresolved dead letters, and
   the digest says how many of the week's were resolved.
 - **Heartbeats** (`ops_heartbeats`): `tick` (each kind dispatched, `errors` for each kind it
-  could not run, and the switches tela-jobs runs with: the background budget, the article cap, whether a translator, the relay, WebSub and the
-  assets bucket are configured), `health` (every fifth minute, what the dead-man's switch heard),
+  could not run, and the switches tela-jobs runs with: the background budget, the article cap,
+  whether a translator, the relay, WebSub and the assets bucket are configured), `health` (every fifth minute, what the dead-man's switch heard),
   `daily` (upkeep and the export) and `digest` (once sent). The console reads the budget and the
   relay from the tick's, so after a deploy they show as unknown until the first tick.
 - **What it never shows:** a member's subscriptions, reading, likes, highlights, follows or
@@ -957,7 +957,12 @@ A public reader count is shown only from three readers.
 - **Spend:** `select * from usage_daily order by day desc limit 14` (subject `'*'` is background
   titles, anything else a member), and per call `select job, model, count(*), sum(input_tokens),
   sum(output_tokens) from llm_calls where created_at > … group by job, model`. The digest has the
-  week's totals.
+  week's totals. A call whose reply could not be read (no JSON, or not the schema) was still
+  billed, so it is logged and charged like any other: a title job's to the background budget, a
+  body's to what that translation has spent (`used_tokens`). A provider that keeps answering
+  that way shows as `llm_calls` rows growing while `article_titles` does not, with the job
+  retrying `reply contains no JSON object`. A call that timed out or never connected bills
+  nothing Tela can see and is not logged.
 - **Budget:** `LLM_DAILY_BUDGET_TOKENS` stops the title sweep for the rest of the UTC day once
   spent. Reader requests still run, metered per member (30 requests an hour, a daily token
   allowance). A body converted between the Chinese scripts costs nothing and has its own limit

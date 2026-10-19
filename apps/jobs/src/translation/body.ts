@@ -35,7 +35,13 @@ import {
   storeBlockTranslations,
 } from '@tela/data'
 import { commit, type Statement } from '@tela/ingest/pipeline'
-import { estimateTokens, type TranslationBlock, translateBlocks } from '@tela/llm'
+import {
+  billedUsage,
+  estimateTokens,
+  type TranslationBlock,
+  type TranslationUsage,
+  translateBlocks,
+} from '@tela/llm'
 import { MAX_ARTICLE_TRANSLATION_TOKENS, NORM_VERSION } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { convertTagged, planFor } from './scripts'
@@ -203,6 +209,32 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
   let usedTokens = row.usedTokens
   const groups = chunkGroups(object, misses, { first: FIRST_CHUNK_TOKENS, rest: CHUNK_TOKENS })
   let stopped = false
+  /** Record each call the provider billed, and count it in what this translation has spent. */
+  const recordUsage = (
+    usages: readonly TranslationUsage[],
+    targetLang: string,
+    now: number,
+  ): Statement[] =>
+    usages.map((usage) => {
+      usedTokens += usage.inputTokens + usage.outputTokens
+      return recordLlmCall(
+        db,
+        {
+          job: 'translate.body',
+          contentKey,
+          articleId: null,
+          // Found from the content key as the row is written.
+          feedId: null,
+          targetLang,
+          userId: row.requestedBy,
+          model: usage.model,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          latencyMs: usage.latencyMs,
+        },
+        now,
+      )
+    })
   for (const group of groups) {
     const needsModel = target !== null && group.misses.some((m) => !translated.has(m.id))
     if (!needsModel && resuming) continue
@@ -223,7 +255,25 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
           maxTokensPerChunk: Number.MAX_SAFE_INTEGER,
         })
       } catch (err) {
-        return { status: 'retry', error: err instanceof Error ? err.message : String(err) }
+        const error = err instanceof Error ? err.message : String(err)
+        // Replies that could not be read were still paid for: recorded, and counted in what this
+        // translation has spent, before the retry, which would otherwise pay again unseen.
+        const billed = billedUsage(err)
+        if (billed.length === 0) return { status: 'retry', error }
+        const committed = await commit(
+          ctx,
+          lease,
+          [
+            ...recordUsage(billed, target, now),
+            db.run(sql`
+              update body_translations set used_tokens = ${usedTokens}, updated_at = ${now},
+                seq = ${currentSeq}
+              where content_key = ${contentKey} and lang = ${lang}
+            `),
+          ],
+          { hold: { ttlMs: CHUNK_HOLD_MS } },
+        )
+        return committed.ok ? { status: 'retry', error } : { status: 'lost' }
       }
       for (const [id, text] of outcome.translated) {
         const finished = convertTagged(finish, text)
@@ -246,28 +296,7 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
           ),
         )
       }
-      for (const usage of outcome.usage) {
-        usedTokens += usage.inputTokens + usage.outputTokens
-        statements.push(
-          recordLlmCall(
-            db,
-            {
-              job: 'translate.body',
-              contentKey,
-              articleId: null,
-              // Found from the content key as the row is written.
-              feedId: null,
-              targetLang: target,
-              userId: row.requestedBy,
-              model: usage.model,
-              inputTokens: usage.inputTokens,
-              outputTokens: usage.outputTokens,
-              latencyMs: usage.latencyMs,
-            },
-            now,
-          ),
-        )
-      }
+      statements.push(...recordUsage(outcome.usage, target, now))
     }
     const chunk: TranslationChunk = {
       format: 1,
