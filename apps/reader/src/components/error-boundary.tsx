@@ -39,17 +39,28 @@ export class ErrorBoundary extends Component<Props, { failed: boolean }> {
   }
 }
 
-/** The failure, in words already chosen: what the page and the root boundary both show. */
-export function PageFailed(props: { message: string; retry: string; onRetry: () => void }) {
+/**
+ * A whole page's failure, in words already chosen: what a page's boundary, the root boundary and a
+ * page whose answer never came (`LoadFailedPage`) all show, one look for one situation.
+ */
+export function PageFailed(props: {
+  message: string
+  retry: string
+  onRetry: () => void
+  /** Which failure it is, for tests: a render that threw, by default, or an answer that failed. */
+  testId?: string
+}) {
+  const testId = props.testId ?? 'page-failed'
   return (
     <main
       className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-6 py-20 animate-fade"
-      data-testid="page-failed"
+      data-testid={testId}
     >
       <p className="text-[15px] text-ink-2">{props.message}</p>
       <div>
         <button
           type="button"
+          data-testid={`${testId}-retry`}
           onClick={props.onRetry}
           className="inline-block rounded-full border border-ink px-4 py-2 text-[13px] font-medium text-ink hover:bg-ink hover:text-paper"
         >

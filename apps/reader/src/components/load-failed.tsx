@@ -4,6 +4,7 @@
  * also asks again by itself once the browser is back online (`usePublic`).
  */
 import { useTranslations } from 'use-intl'
+import { PageFailed } from './error-boundary'
 
 export function LoadFailed({
   onRetry,
@@ -29,11 +30,18 @@ export function LoadFailed({
   )
 }
 
-/** A page that has nothing to show until its answer comes: the whole page says it failed. */
+/**
+ * A page that has nothing to show until its answer comes: the whole page says it failed, as a page
+ * whose render threw does (`PageFailed`), since to the reader the two are one situation.
+ */
 export function LoadFailedPage({ onRetry }: { onRetry: () => void }) {
+  const t = useTranslations('reader')
   return (
-    <main className="flex flex-1 items-center justify-center px-6 py-20 animate-fade">
-      <LoadFailed onRetry={onRetry} className="" />
-    </main>
+    <PageFailed
+      message={t('loadFailed')}
+      retry={t('retry')}
+      onRetry={onRetry}
+      testId="load-failed"
+    />
   )
 }
