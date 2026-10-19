@@ -297,3 +297,21 @@ describe('what the edge answers', () => {
     await expect(failed).rejects.toMatchObject({ name: 'ObjectUnavailable', status: 401 })
   })
 })
+
+test('a body eviction drops is missing again, and its next open asks the network', async () => {
+  const net = network()
+  let now = 0
+  const objects = new Objects(memoryPersistence(), () => now)
+  const opened = objects.body('k1')
+  await until(() => net.sent.length === 1)
+  net.answer('/o/c/k1.json', { blocks: [] })
+  await opened
+  expect(await objects.missing(['k1'])).toEqual([])
+  now = 8 * 24 * 60 * 60 * 1000
+  await objects.evict()
+  expect(await objects.missing(['k1'])).toEqual(['k1'])
+  const again = objects.body('k1')
+  await until(() => net.sent.length === 2)
+  net.answer('/o/c/k1.json', { blocks: [] })
+  expect(await again).toEqual({ blocks: [] } as never)
+})

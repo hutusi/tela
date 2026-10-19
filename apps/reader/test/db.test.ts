@@ -533,3 +533,44 @@ describe('the mark an earlier build having run leaves', () => {
     })
   }
 })
+
+describe('eviction', () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const now = 30 * DAY
+  const engines: [string, () => Promise<Persistence>][] = [
+    ['IndexedDB', () => indexedDbPersistence(fresh())],
+    ['memory', async () => memoryPersistence()],
+  ]
+  for (const [kind, open] of engines) {
+    test(`drops the stale bodies, then the oldest past the cap, and their translations (${kind})`, async () => {
+      const p = await open()
+      const body = (key: string, daysAgo: number, bytes: number) =>
+        p.putBody({ key, object: { key }, bytes, lastOpened: now - daysAgo * DAY })
+      await body('a', 9, 10) // not opened for a week
+      await body('b', 1, 30)
+      await body('c', 2, 30)
+      await body('d', 3, 30) // d and e last opened together: the later key counts first
+      await body('e', 3, 30)
+      const objects = [
+        't/a/en/x.json',
+        'tc/a/en/r1/0.json',
+        'tc/a/en/r1/1.json',
+        't/b/en/y.json',
+        'tc/b/en/r2/0.json',
+        't/e/fr/z.json',
+        // A body an earlier build evicted without its translations.
+        't/gone/en/q.json',
+      ]
+      for (const key of objects) await p.putObject({ key, object: {}, at: now })
+
+      const dropped = await p.evictBodies(now - 7 * DAY, 70)
+      expect(dropped.sort()).toEqual(['a', 'd', 'e'])
+      expect((await p.bodyKeys()).sort()).toEqual(['b', 'c'])
+      const left: string[] = []
+      for (const key of objects) if (await p.getObject(key)) left.push(key)
+      expect(left).toEqual(['t/b/en/y.json', 'tc/b/en/r2/0.json'])
+      // Nothing more to do the second time.
+      expect(await p.evictBodies(now - 7 * DAY, 70)).toEqual([])
+    })
+  }
+})

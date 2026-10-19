@@ -299,13 +299,18 @@ A Vite + React SPA that renders from the device.
 - `store/local.ts` holds confirmed rows and pending mutations, written through to IndexedDB, one
   record per pending mutation so that tabs sharing the database never erase each other's.
 - `store/engine.ts` pulls at boot, on focus, every minute and after a push. It pushes a
-  quarter-second after a change, and at once (`keepalive`) when the tab hides. While an open post
-  waits for its full text, or a new feed for its first fetch, the page pulls sooner
-  (`lib/use-quick-pull.ts`): from 4 s, doubling to a minute, for two minutes at most, never while
-  the tab is hidden, and for a feed only while its status is `active`.
+  quarter-second after a change, and at once (`keepalive`) when the tab hides. A call not
+  answered in 30 s, body included, is given up and tried again. While an open post waits for its
+  full text, or a new feed for its first fetch, the page pulls sooner (`lib/use-quick-pull.ts`):
+  from 4 s, doubling to a minute, for two minutes at most, never while the tab is hidden, and for
+  a feed only while its status is `active`.
 - `store/objects.ts` serves bodies and translations from memory, then IndexedDB, then `/o/*`,
-  downloading each once however many ask while it is on its way. It prefetches unread bodies
-  while idle, and evicts bodies not opened for seven days, and the oldest past 50 MB.
+  downloading each once however many ask while it is on its way. Only a 404 is "no such
+  object"; any other refusal rejects (`ObjectUnavailable`), and a copy the device will not keep
+  (a full disk) is still shown. It prefetches unread bodies while idle, and ten seconds after
+  boot evicts bodies not opened for seven days (found by key on the `lastOpened` index, never
+  read), then the oldest past 50 MB, and the translation and chunk objects of every body no
+  longer held, by key range.
 - `store/selectors.ts` answers the reading view: unread, lists, counts, the title to show.
 - The URL alone says which article is open (ADR 0017's rule, kept): a click, a filter change or
   Back is a render, not a request.

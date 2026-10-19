@@ -321,25 +321,19 @@ export class Objects {
     return keys.filter((key) => !held.has(key))
   }
 
-  /** Drop bodies not opened for a week, then the oldest until under the cap. */
+  /**
+   * Drop bodies not opened for a week, then the oldest until under the cap, with their
+   * translations. Best effort: what a failure leaves is tried again at the next boot.
+   */
   async evict(): Promise<void> {
-    const stale = await this.persistence.staleBodies(this.now() - BODY_KEEP_MS)
-    let bytes = await this.persistence.bodyBytes()
-    const drop: string[] = []
-    for (const body of stale) {
-      drop.push(body.key)
-      bytes -= body.bytes
-    }
-    if (bytes > BODY_CAP_BYTES) {
-      for (const body of await this.persistence.staleBodies(this.now())) {
-        if (bytes <= BODY_CAP_BYTES) break
-        if (drop.includes(body.key)) continue
-        drop.push(body.key)
-        bytes -= body.bytes
-      }
+    let drop: string[]
+    try {
+      drop = await this.persistence.evictBodies(this.now() - BODY_KEEP_MS, BODY_CAP_BYTES)
+    } catch (err) {
+      console.warn('eviction failed', err)
+      return
     }
     if (drop.length === 0) return
-    await this.persistence.deleteBodies(drop)
     const held = await this.heldKeys()
     for (const key of drop) {
       held.delete(key)
