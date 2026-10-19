@@ -88,13 +88,14 @@ function AdminUnavailable() {
 
 /**
  * A page that throws as it renders shows its failure with Try again below a header that still
- * works, rather than blanking the app. Keyed by the path, so opening another page starts it
- * afresh; Try again renders the same page again.
+ * works, rather than blanking the app. A change of path clears a failure shown, so opening another
+ * page starts afresh, while a page that stays mounted across its paths keeps its state; Try again
+ * renders the same page again.
  */
 function PageBoundary({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation()
   return (
-    <ErrorBoundary key={pathname} fallback={(retry) => <RouteFailed onRetry={retry} />}>
+    <ErrorBoundary resetKey={pathname} fallback={(retry) => <RouteFailed onRetry={retry} />}>
       {children}
     </ErrorBoundary>
   )

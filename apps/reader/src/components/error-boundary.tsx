@@ -10,13 +10,26 @@ import { Component, type ReactNode } from 'react'
 import { useTranslations } from 'use-intl'
 import { detectLocale, MESSAGES } from '../i18n'
 
-type Props = { children: ReactNode; fallback: (retry: () => void) => ReactNode }
+type Props = {
+  children: ReactNode
+  fallback: (retry: () => void) => ReactNode
+  /**
+   * A failure shown is cleared when this changes (the page's path): opening another page starts
+   * afresh. Not a `key`, which would remount everything below on every change of path, failed or
+   * not, and so reset a page that stays mounted across its own paths (Settings' sections).
+   */
+  resetKey?: string
+}
 
 export class ErrorBoundary extends Component<Props, { failed: boolean }> {
   override state = { failed: false }
 
   static getDerivedStateFromError() {
     return { failed: true }
+  }
+
+  override componentDidUpdate(previous: Props) {
+    if (this.state.failed && previous.resetKey !== this.props.resetKey) this.retry()
   }
 
   retry = () => this.setState({ failed: false })
