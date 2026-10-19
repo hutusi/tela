@@ -6,6 +6,7 @@ import {
   type Live,
   moreAdvanced,
   pollDelay,
+  pullsAfterRequest,
   readerState,
 } from '../src/lib/use-translation'
 import type { TranslationObject } from '../src/store/objects'
@@ -165,5 +166,17 @@ describe('polling a translation under way', () => {
     expect(pollDelay(40_000, false)).toBe(1_500)
     // The first chunk is on screen: the rest comes at the usual pace.
     expect(pollDelay(800, true)).toBe(1_500)
+  })
+})
+
+describe('what a translation request pulls', () => {
+  test('only a translation already done, whose row the device may lack', () => {
+    expect(pullsAfterRequest('ready')).toBe(true)
+    // The poll follows these and pulls when they end; the pull after the push brings the row.
+    for (const status of ['requested', 'in_progress']) expect(pullsAfterRequest(status)).toBe(false)
+    // A refusal writes nothing.
+    for (const status of ['invalid', 'unavailable', 'rate_limited', 'budget_exhausted']) {
+      expect(pullsAfterRequest(status)).toBe(false)
+    }
   })
 })

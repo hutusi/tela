@@ -82,6 +82,18 @@ const NOTICE: Record<string, TranslationNotice> = {
   unavailable: 'unavailable',
 }
 
+/**
+ * Whether a translation request's answer is a reason to pull. Only `ready` is: the translation is
+ * done and its row may not be on the device yet. `requested` and `in_progress` are followed by the
+ * poll, which pulls when the translation ends, and the pull after the push that marked the post
+ * read already brings the new row; pulling here as well landed during that pull, and the engine's
+ * coalescing turned it into a second round that brought nothing, on every article opened. A
+ * refusal (`rate_limited`, `invalid`, …) writes nothing to pull.
+ */
+export function pullsAfterRequest(status: string): boolean {
+  return status === 'ready'
+}
+
 /** Between the two asks for a finished object: long enough for a dropped connection to return. */
 export const FINISHED_RETRY_MS = 1500
 
@@ -176,7 +188,7 @@ export function useArticleTranslation(
       const body = (await res.json()) as { status: string; translation: Live | null }
       if (NOTICE[body.status]) setNotice(NOTICE[body.status] as TranslationNotice)
       else if (body.translation) setLive(body.translation)
-      void engine.pull()
+      if (pullsAfterRequest(body.status)) void engine.pull()
     } catch {
       setNotice('unavailable')
     }
