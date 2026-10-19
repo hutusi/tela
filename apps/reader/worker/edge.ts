@@ -2,9 +2,9 @@
  * tela-web's Worker (ADR 0020, 0024): the one public Worker, running at the reader's edge,
  * unpinned. It never queries D1.
  *
- * - `/api/*` goes to tela-api, pinned beside D1, over a service binding. A GET of its public JSON
- *   (`/api/v1/public/*`) is kept per colo for as long as tela-api says (`publicApi`), and the
- *   public pages read it through the same copy.
+ * - `/api/*` goes to tela-api, pinned beside D1, over a service binding, every time. The public
+ *   pages rendered here read tela-api's public JSON through a copy per colo instead (`pageJson`),
+ *   so a page's four languages cost one D1 read.
  * - `/o/*` serves immutable content, translation and chunk objects from R2 to members, cached per
  *   colo after the session check; `/o/bundle` serves up to 25 content objects in one response.
  * - `/img/<contentKey>/<index>` proxies the image a content object names (ADR 0007's rules),
@@ -120,19 +120,6 @@ const PAGE_DEADLINE_MS = 3_000
 /** When the colo's copy of a public answer was made, so a hit can say its `age`. Never sent on. */
 const STORED_AT = 'x-tela-stored-at'
 const WRITES = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
-
-/**
- * A request that asks past every cache: `fetch(…, { cache: 'reload' })` sends `no-cache` and
- * `Pragma: no-cache`, `cache: 'no-cache'` sends `max-age=0`.
- */
-function asksPastCaches(headers: Headers): boolean {
-  const control = (headers.get('cache-control') ?? '').toLowerCase()
-  return (
-    /\bno-cache\b/.test(control) ||
-    /\bmax-age=0\b/.test(control) ||
-    /\bno-cache\b/i.test(headers.get('pragma') ?? '')
-  )
-}
 
 /** A public answer the colo may keep for everyone: one tela-api says a shared cache may. */
 function keepsAtTheColo(res: Response): boolean {
@@ -371,37 +358,30 @@ export function createEdge(deps: EdgeDeps) {
   }
 
   /**
-   * tela-api's public JSON (`/api/v1/public/*`) through the colo's cache: Discover, a blog, a
-   * profile or a blogroll, opened in the app or rendered here, asks D1 in Singapore once a colo
-   * for as long as tela-api says (`s-maxage`), whatever the reader's language, since the answers
-   * carry every language and read no cookie. The cookie is never forwarded, so no answer can
-   * depend on one. Only a 200 or 404 that sets no cookie and says `s-maxage`, and none of
-   * `no-store`, `private` or `no-cache`, is kept, which leaves out the per-IP handle check. A
-   * request that asks past caches (`cache: 'reload'` after a member's own change, or the
-   * handover's `no-cache`) goes to tela-api and refreshes the colo's copy with its answer. A copy
-   * says its `age`, so the browser's minute counts from when tela-api answered, not from now.
+   * tela-api's public JSON (`/api/v1/public/*`) for a page rendered here, through a copy per colo:
+   * a blog, a profile or Discover rendered in four languages asks D1 in Singapore once a colo for
+   * as long as tela-api says (`s-maxage`), since the answers carry every language and read no
+   * cookie. Only a 200 or 404 that sets no cookie and says `s-maxage`, and none of `no-store`,
+   * `private` or `no-cache`, is kept. A copy says its `age`, so the page made from it is kept only
+   * for what the copy had left.
+   *
+   * The app's own requests never come here: they go to tela-api each time. Serving them from this
+   * copy kept a change from the member who made it (a claim, a hide, a follow) for up to five
+   * minutes, since nothing they did could tell every list it touched to ask again.
    */
-  async function publicApi(request: Request, waiter?: Waiter): Promise<Response> {
-    const url = new URL(request.url)
-    if (request.method !== 'GET' || !url.pathname.startsWith('/api/v1/public/')) {
-      return api.fetch(request)
-    }
+  async function pageJson(url: URL, waiter?: Waiter): Promise<Response> {
     const cacheKey = new Request(`${CACHE_ORIGIN}${url.pathname}${url.search}`)
-    if (!asksPastCaches(request.headers)) {
-      const hit = await cache.match(cacheKey)
-      if (hit) {
-        const response = new Response(hit.body, hit)
-        const at = Number(response.headers.get(STORED_AT))
-        response.headers.delete(STORED_AT)
-        if (Number.isFinite(at) && at > 0) {
-          response.headers.set('age', String(Math.max(0, Math.floor((now() - at) / 1000))))
-        }
-        return response
+    const hit = await cache.match(cacheKey)
+    if (hit) {
+      const response = new Response(hit.body, hit)
+      const at = Number(response.headers.get(STORED_AT))
+      response.headers.delete(STORED_AT)
+      if (Number.isFinite(at) && at > 0) {
+        response.headers.set('age', String(Math.max(0, Math.floor((now() - at) / 1000))))
       }
+      return response
     }
-    const headers = new Headers(request.headers)
-    headers.delete('cookie')
-    const res = await api.fetch(new Request(request.url, { headers }))
+    const res = await api.fetch(new Request(url.toString()))
     if (!keepsAtTheColo(res)) return res
     const body = await res.arrayBuffer()
     const kept = new Response(body, res)
@@ -458,8 +438,8 @@ export function createEdge(deps: EdgeDeps) {
     waiter?: Waiter,
   ): Promise<{ data: unknown; age: number } | null> {
     const ask = async () => {
-      // Through the colo's copy the app reads too: the page's four languages share one D1 read.
-      const res = await publicApi(new Request(new URL(path, url).toString()), waiter)
+      // Through the colo's copy: the page's four languages share one D1 read.
+      const res = await pageJson(new URL(path, url), waiter)
       const age = Number(res.headers.get('age') ?? '0') || 0
       if (res.status === 404 && !alwaysExists) return { data: null, age }
       if (res.status !== 200) return null
@@ -572,7 +552,7 @@ export function createEdge(deps: EdgeDeps) {
         response =
           WRITES.has(request.method) && foreign && !CROSS_ORIGIN_WRITERS.test(path)
             ? text('cross-origin write refused', 403)
-            : await publicApi(request, waiter)
+            : await api.fetch(request)
       } else if (path === '/o/bundle') {
         response = await serveBundle(request, waiter)
       } else if (path.startsWith('/o/')) {

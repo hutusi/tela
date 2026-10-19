@@ -450,61 +450,27 @@ describe('public JSON at the colo', () => {
   const titles = async (res: Response) =>
     ((await res.json()) as { sites: { title: string }[] }).sites.map((s) => s.title)
 
-  test('is asked of tela-api once a colo, without the cookie, and then says its age', async () => {
-    await listedBlog(1, 'Garden Notes')
-    const first = await ask('/api/v1/public/discover?topic=tech')
-    expect(first.status).toBe(200)
-    expect(first.headers.get('age')).toBeNull()
-    edgeNow += 90_000
-    const again = await ask('/api/v1/public/discover?topic=tech')
-    expect(again.headers.get('age')).toBe('90')
-    expect(again.headers.get('x-tela-stored-at')).toBeNull()
-    expect(again.headers.get('cache-control')).toContain('s-maxage=300')
-    expect(await again.json()).toEqual(await first.json())
-    expect(apiCalls).toEqual(['/api/v1/public/discover'])
-    expect(apiCookies).toEqual([null])
-    // Another query is another answer.
-    await ask('/api/v1/public/discover')
-    expect(apiCalls).toHaveLength(2)
-  })
-
-  test("a request past caches, as after a member's own change, asks tela-api and refreshes the copy", async () => {
+  test("the app's own request goes to tela-api every time, cookie and all", async () => {
     await listedBlog(1, 'Garden Notes')
     expect(await titles(await ask('/api/v1/public/discover'))).toEqual(['Garden Notes'])
     await listedBlog(2, 'Harbour Log')
-    // Within five minutes, the colo's copy.
-    expect(await titles(await ask('/api/v1/public/discover'))).toEqual(['Garden Notes'])
-    for (const headers of [
-      { 'cache-control': 'no-cache', pragma: 'no-cache' }, // fetch's cache: 'reload'
-      { 'cache-control': 'max-age=0' }, // fetch's cache: 'no-cache'
-    ]) {
-      const fresh = await titles(await ask('/api/v1/public/discover', headers))
-      expect(fresh.sort()).toEqual(['Garden Notes', 'Harbour Log'])
-    }
-    // And the copy everyone else gets is the new one.
+    // A member who just claimed or hid something sees it at once, not five minutes on.
     expect((await titles(await ask('/api/v1/public/discover'))).sort()).toEqual([
       'Garden Notes',
       'Harbour Log',
     ])
-    expect(apiCalls).toHaveLength(3)
+    expect(apiCalls).toEqual(['/api/v1/public/discover', '/api/v1/public/discover'])
+    expect(apiCookies).toEqual([cookie, cookie])
   })
 
-  test('keeps a 404 that says how long, but nothing tela-api says not to share', async () => {
-    // A blogroll nobody has: a minute at the colo, as tela-api says.
-    expect((await ask('/api/v1/public/blogrolls/abcdefABCDEF')).status).toBe(404)
-    expect((await ask('/api/v1/public/blogrolls/abcdefABCDEF')).status).toBe(404)
-    // A handle check is per IP and no-store; a route nobody serves says nothing.
-    await ask('/api/v1/public/handles/someone')
-    await ask('/api/v1/public/handles/someone')
-    await ask('/api/v1/public/no-such-thing')
-    await ask('/api/v1/public/no-such-thing')
-    expect(apiCalls).toEqual([
-      '/api/v1/public/blogrolls/abcdefABCDEF',
-      '/api/v1/public/handles/someone',
-      '/api/v1/public/handles/someone',
-      '/api/v1/public/no-such-thing',
-      '/api/v1/public/no-such-thing',
-    ])
+  test("a rendered page's four languages read tela-api once", async () => {
+    await listedBlog(1, 'Garden Notes')
+    const page = (headers: Record<string, string> = {}) =>
+      edge.fetch(new Request(`${ORIGIN}/discover/blogs`, { headers }))
+    expect((await page()).status).toBe(200)
+    expect((await page({ cookie: 'tela_locale=fr' })).status).toBe(200)
+    expect((await page({ cookie: 'tela_locale=zh-Hans' })).status).toBe(200)
+    expect(apiCalls).toEqual(['/api/v1/public/discover'])
   })
 
   test('a page made from an older copy is kept only as long as the copy had left', async () => {
