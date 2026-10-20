@@ -13,6 +13,7 @@ import {
   type TableRows,
 } from '@tela/sync'
 import { openDB } from 'idb'
+import { BUILD } from '../src/lib/report'
 import {
   DATABASE,
   earlierBuild,
@@ -191,6 +192,35 @@ describe('the device database', () => {
     expect((await now.load()).cursor).toBe(9)
   })
 
+  test('a copy that does not load says why, naming the build that last moved its cursor', async () => {
+    const name = fresh()
+    const now = await indexedDbPersistence(name)
+    await now.claim('a')
+    // A new copy, with nothing to drop, is not a start-over.
+    expect((await now.load()).dropped).toBeNull()
+    const tables = tablesOf(pull(5, { profile: [profile], subscriptions: [sub(1)] }, true))
+    expect(await now.commit('a', { tables, cursor: 5, covered: Object.keys(tables) })).toBe(true)
+    const loaded = await now.load()
+    expect(loaded.dropped).toBeNull()
+    expect(loaded.keptBy).toBe(BUILD)
+    const raw = await openDB(name)
+    // A build from before `kept` moved the cursor on.
+    await raw.put('meta', 9, 'cursor')
+    expect((await now.load()).dropped).toBe(`load at 9: kept at 5 (kept by ${BUILD})`)
+    // No record at all, and a table the writer did not know.
+    await raw.delete('meta', 'kept')
+    await raw.delete('tables', 'blogrollBlogs')
+    raw.close()
+    expect((await now.load()).dropped).toBe(
+      'load at 9: no blogrollBlogs; no kept record (kept by an unnamed build)',
+    )
+    // Memory says the same of a table it was never given.
+    const memory = memoryPersistence()
+    await memory.claim('a')
+    await memory.commit('a', { tables: { profile }, cursor: 3, from: 0, covered: [] })
+    expect((await memory.load()).dropped).toStartWith(`load at 3: no prefs, subscriptions`)
+  })
+
   test('a copy an earlier build wrote starts over', async () => {
     const name = fresh()
     await seedEarlierBuild(name, pull(5, { profile: [profile], subscriptions: [sub(1)] }, true), {
@@ -208,6 +238,8 @@ describe('the device database', () => {
       covered: [],
       titles: { lang: null, whole: false },
       pending: [],
+      dropped: null,
+      keptBy: null,
     })
     // Nothing of it is left to be read back later, under anyone.
     expect(await metaKeys(name)).toEqual([])
@@ -227,6 +259,8 @@ describe('the device database', () => {
       covered: [],
       titles: { lang: null, whole: false },
       pending: [],
+      dropped: null,
+      keptBy: null,
     })
     expect(await metaKeys(name)).toEqual(['owner'])
     // Claiming it again as the same member keeps it.
@@ -308,6 +342,8 @@ describe('the device database', () => {
         covered: [],
         titles: { lang: null, whole: false },
         pending: [],
+        dropped: null,
+        keptBy: null,
       })
       expect(await metaKeys(name)).toEqual(['owner'])
     }
@@ -364,6 +400,8 @@ describe('the device database', () => {
       covered: [],
       titles: { lang: null, whole: false },
       pending: [],
+      dropped: null,
+      keptBy: null,
     })
     await now.claim('b')
 
@@ -700,6 +738,8 @@ describe('the mark an earlier build having run leaves', () => {
         covered: [],
         titles: { lang: null, whole: false },
         pending: [],
+        dropped: null,
+        keptBy: null,
       })
       expect(await one.claim('b', loaded)).toBe(true)
       expect((await one.load()).unverified).toBe(newer)

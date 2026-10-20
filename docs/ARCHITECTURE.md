@@ -320,9 +320,11 @@ A Vite + React SPA that renders from the device.
   fails in the reader's pane alone, beside a list that still works; the root boundary, outside every provider, words the app's own failure from the
   catalogues, as a boot that fails does on an empty shell (an edge-rendered page stays as it is).
   `lib/report.ts` sends what broke to `/api/client-errors`: what a boundary caught, an unhandled
-  error or rejection whose stack runs through Tela's own scripts, a failed boot and each CSP
-  violation not set off by an extension, each once, five errors and three violations a page load at
-  most, never a query string (`withoutQueries`, in `@tela/shared` for both ends).
+  error or rejection whose stack runs through Tela's own scripts, a failed boot, each CSP
+  violation not set off by an extension, and why the device started over from a snapshot
+  (`LocalStore.onRestart`, with the build that last wrote `kept`), each once, five errors and three
+  violations a page load at most, never a query string (`withoutQueries`, in `@tela/shared` for
+  both ends).
 - `store/local.ts` holds confirmed rows and pending mutations, written through to IndexedDB, one
   record per pending mutation so that tabs sharing the database never erase each other's.
 - `store/engine.ts` pulls at boot, on focus, every minute and after a push. It pushes a

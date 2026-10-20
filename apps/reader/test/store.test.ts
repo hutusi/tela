@@ -116,6 +116,8 @@ describe('the device store', () => {
   test('a copy taken from a tela-api before folders starts over when they come back (ADR 0048)', async () => {
     const storage = memoryPersistence()
     const store = await member(storage)
+    const told: string[] = []
+    store.onRestart = (why) => told.push(why)
     // A snapshot during a rollback of tela-api: no folder tables at all.
     const {
       folders: _f,
@@ -153,6 +155,56 @@ describe('the device store', () => {
     ).toBe(false)
     expect(store.getSnapshot().tables.folders.get('folder-back')?.name).toBe('Back')
     expect((await storage.load()).covered).toContain('folders')
+    // Each start-over said why, down to the answer that left the tables out; the snapshot that
+    // ended it did not, since it started from nothing.
+    expect(told).toEqual([
+      'tela-api started over a pull at 5',
+      'delta at 10 sent folders, feedFolders, not held whole (a snapshot at 9 without folders, feedFolders)',
+    ])
+  })
+
+  test('a start-over says why: a stored copy that does not load, and a copy another account took', async () => {
+    // Storage says why it did not load the copy (`Persisted.dropped`), and the store tells it.
+    const inner = memoryPersistence()
+    const dropping: Persistence = {
+      ...inner,
+      load: async () => ({ ...(await inner.load()), dropped: 'load at 5: no kept record' }),
+    }
+    const heard: string[] = []
+    const fresh = new LocalStore(dropping, () => NOW)
+    fresh.onRestart = (why) => heard.push(why)
+    await fresh.open()
+    expect(heard).toEqual(['load at 5: no kept record'])
+
+    const storage = memoryPersistence()
+    const store = await member(storage)
+    // A delta that brings everything it held, and the snapshot of a new device, say nothing.
+    const told: string[] = []
+    const later = new LocalStore(storage, () => NOW)
+    later.onRestart = (why) => told.push(why)
+    await later.open()
+    await later.applyPull(pull(6, { articles: [article(9)] }), later.epoch)
+    expect(told).toEqual([])
+    // A delta from a tela-api without folders leaves them out of what the copy holds whole, and
+    // a delta that brings them names that pull.
+    const { folders: _f, feedFolders: _ff, ...old } = pull(7, {}).rows
+    await later.applyPull({ ...pull(7, {}), rows: old as typeof snapshot.rows }, later.epoch)
+    expect(await later.applyPull(pull(8, {}), later.epoch)).toBe(true)
+    expect(told).toEqual([
+      'delta at 7 sent folders, feedFolders, not held whole (a pull at 6 without folders, feedFolders)',
+    ])
+    // Another tab signed in as someone else, while this tab's /me still says a: the copy it
+    // loaded is gone.
+    told.length = 0
+    await storage.claim('b')
+    await later.setUser('a')
+    expect(later.cursor).toBe(0)
+    expect(told).toEqual(['claim: another account held the stored copy'])
+    // Signing in as another account is not a start-over: the copy was someone else's.
+    told.length = 0
+    store.onRestart = (why) => told.push(why)
+    await store.setUser('c')
+    expect(told).toEqual([])
   })
 
   test('keeps an acknowledged change until a pull reaches it, then drops it', async () => {

@@ -552,6 +552,16 @@ is tela-api.
   sign-in link's `?email=…&otp=…` would otherwise be readable there. After a deploy, a burst of
   one `boundary` message on one path is a bug in that view; `boot` lines from many paths at once
   are the device store or a cached shell.
+- **A device that starts over** (lets go of its copy and downloads a whole snapshot) says why,
+  as a `client restart` warning on the same route (`kind: restart`, counted with the errors). The
+  message names the cause: `load at <cursor>: …` (a stored table missing, or `kept` not written
+  at that cursor), `delta at <cursor> sent <tables>, not held whole (…)` (with where the copy's
+  record came from: `kept by <build> at <cursor>`, a snapshot, or a pull that left those tables
+  out), `tela-api started over a pull at <cursor>` (the database is behind the device's cursor),
+  or `claim: another account held the stored copy`. The build is the shell's script
+  (`index-<hash>.js`), so a line naming a build that is not live is a cached shell. A table a
+  deploy adds makes each device start over once (AGENTS gotcha); any other cause, or a second
+  start-over on one device, is a bug to chase.
 - **The app shell** is cached by a service worker (`public/sw.js`), for fast repeat visits. It
   fetches the shell from `/__tela/shell`, which tela-web never runs for, so the single-page
   fallback answers it with `index.html`; it keeps it under `/`. Keep `/*` and `/__tela/*` out of

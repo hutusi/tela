@@ -1,8 +1,10 @@
 /**
  * What breaks in this browser, told to tela-api's logs (`POST /api/client-errors`): a render an
  * error boundary caught or none did (`createRoot`'s `onCaughtError` and `onUncaughtError`), an
- * error or rejection the page left unhandled, a boot that failed, and a content security policy
- * violation (ADR 0051).
+ * error or rejection the page left unhandled, a boot that failed, a content security policy
+ * violation (ADR 0051), and a device that dropped the copy it held and starts over from a snapshot
+ * (`LocalStore.onRestart`): not an error, but a full download nobody asked for, and its cause is
+ * gone with the copy unless it is told then.
  *
  * Only Tela's own: an unhandled error or rejection is reported only when its stack runs through
  * the app's scripts (`/assets/…` once built, `/src/…` under Vite), so an extension's errors, a
@@ -13,7 +15,7 @@
 
 import { withoutQueries } from '@tela/shared'
 
-export type ReportKind = 'boundary' | 'error' | 'rejection' | 'boot' | 'csp'
+export type ReportKind = 'boundary' | 'error' | 'rejection' | 'boot' | 'csp' | 'restart'
 
 export const REPORTS_PER_LOAD = 5
 /**
@@ -27,7 +29,7 @@ const MESSAGE_MAX = 1000
 const STACK_MAX = 4096
 
 /** The script this build was loaded from, which names the deploy (`index-<hash>.js`). */
-const BUILD = (() => {
+export const BUILD = (() => {
   try {
     return new URL(import.meta.url).pathname.split('/').pop() ?? ''
   } catch {

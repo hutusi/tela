@@ -84,10 +84,13 @@ export function initialStatus(
  * another tab makes meanwhile, on a /me asked before that sign-out, clears only the first mark.
  * Until that second mark is down, the emptied copy still reads as touched, so a tab that looks
  * in between marks the copy itself; and one that dies in between leaves it touched.
+ *
+ * `onRestart` hears every start-over from here on, a copy that does not load first among them.
  */
 export async function openStore(
   persistence: Persistence,
   earlier: EarlierBuild = earlierBuild,
+  onRestart: LocalStore['onRestart'] = null,
 ): Promise<LocalStore> {
   if (await earlier.wrote()) {
     await persistence.distrust()
@@ -98,6 +101,7 @@ export async function openStore(
     }
   }
   const store = new LocalStore(persistence)
+  store.onRestart = onRestart
   await store.open()
   return store
 }

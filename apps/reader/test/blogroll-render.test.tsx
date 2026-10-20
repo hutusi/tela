@@ -256,6 +256,8 @@ async function storeWith(rows: Partial<TableRows>): Promise<LocalStore> {
       covered: [...TABLES],
       titles: { lang: null, whole: true },
       pending: [],
+      dropped: null,
+      keptBy: null,
     }),
   }
   const store = new LocalStore(persistence, () => NOW)

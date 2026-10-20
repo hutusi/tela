@@ -3,10 +3,10 @@
  * standard, chosen so there is almost nothing between Tela and the browser to age):
  *
  * - `meta`: whose rows these are (`owner`), the cursor and which tables the build that moved it
- *   keeps (`kept`), which language's titles it holds (`titles`), and the pending mutations, one
- *   record each (`pending:<mid>`, tagged with the owner that queued it). Tabs share this database, and
- *   each holds only its own pending list in memory: one record for the whole list let a tab's
- *   save erase another tab's unsent changes.
+ *   keeps, with that build's name (`kept`), which language's titles it holds (`titles`), and the
+ *   pending mutations, one record each (`pending:<mid>`, tagged with the owner that queued it).
+ *   Tabs share this database, and each holds only its own pending list in memory: one record for
+ *   the whole list let a tab's save erase another tab's unsent changes.
  * - `tables`: one record per synced table (a few thousand rows at most; written whole).
  * - `bodies`: content objects by content key, with when each was last opened, for eviction.
  * - `objects`: translation and chunk objects by their R2 key. Immutable, like bodies, and evicted
@@ -40,6 +40,7 @@ import {
   type StoreNames,
 } from 'idb'
 import { newId } from '../lib/id'
+import { BUILD } from '../lib/report'
 
 export type StoredBody = { key: string; object: unknown; bytes: number; lastOpened: number }
 export type StoredObject = { key: string; object: unknown; at: number }
@@ -73,6 +74,15 @@ export type Persisted = {
   /** Which language's titles the copy holds, and whether whole up to `cursor` (`TitlesHeld`). */
   titles: TitlesHeld
   pending: Pending[]
+  /**
+   * Why a copy stored at a cursor did not load, so the device starts over from a snapshot (a
+   * table missing, or no `KEPT` at that cursor), with the build that last wrote `KEPT`; null when
+   * it loaded, or nothing was stored. Told to tela-api's logs (`LocalStore.onRestart`), since the
+   * snapshot overwrites whatever showed the cause.
+   */
+  dropped: string | null
+  /** The build that last moved the cursor (`KEPT`), when it said: what a later start-over names. */
+  keptBy: string | null
 }
 
 /**
@@ -321,7 +331,8 @@ const CURSOR = 'cursor'
  *   not wait on the network each time.
  */
 const KEPT = 'kept'
-type Kept = { tables: string[]; cursor: number }
+/** `by`: the script of the build that wrote it (`BUILD`); a build from before it wrote none. */
+type Kept = { tables: string[]; cursor: number; by?: string }
 
 /** What the copy holds whole up to its cursor, if a build that writes `KEPT` moved it last. */
 function keptAt(kept: unknown, cursor: number): string[] | null {
@@ -329,6 +340,28 @@ function keptAt(kept: unknown, cursor: number): string[] | null {
   const k = kept as Partial<Kept>
   if (k.cursor !== cursor || !Array.isArray(k.tables)) return null
   return k.tables.filter((t): t is string => typeof t === 'string')
+}
+
+/** The build that wrote `KEPT`, if it said. */
+function keptBy(kept: unknown): string | null {
+  const by = typeof kept === 'object' && kept !== null ? (kept as Partial<Kept>).by : undefined
+  return typeof by === 'string' ? by : null
+}
+
+/**
+ * Why a copy stored at `cursor` is dropped at load, or null when it is not: one written at a
+ * cursor and missing a table, or whose `KEPT` was not written at that cursor. A copy never moved
+ * from 0 is a new one, not a start-over.
+ */
+function droppedAt(cursor: number, missing: readonly string[], kept: unknown): string | null {
+  if (cursor === 0) return null
+  const why: string[] = []
+  if (missing.length > 0) why.push(`no ${missing.join(', ')}`)
+  const at = typeof kept === 'object' && kept !== null ? (kept as Partial<Kept>).cursor : undefined
+  if (kept === undefined) why.push('no kept record')
+  else if (keptAt(kept, cursor) === null) why.push(`kept at ${String(at)}`)
+  if (why.length === 0) return null
+  return `load at ${cursor}: ${why.join('; ')} (kept by ${keptBy(kept) ?? 'an unnamed build'})`
 }
 
 /**
@@ -522,6 +555,8 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
             covered: [],
             titles: NO_TITLES,
             pending: [],
+            dropped: null,
+            keptBy: null,
           }
         }
         const meta = tx.objectStore('meta')
@@ -545,7 +580,8 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
         await Promise.all(stray)
         const at = Number(cursor ?? 0)
         const covered = keptAt(kept, at)
-        const complete = values.every((v) => v !== undefined) && covered !== null
+        const missing = TABLES.filter((_, i) => values[i] === undefined)
+        const complete = missing.length === 0 && covered !== null
         return {
           owner,
           unverified,
@@ -556,6 +592,8 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
           covered: complete ? (covered ?? []) : [],
           titles: complete ? (titlesAt(titles, at) ?? NO_TITLES) : NO_TITLES,
           pending: inOrder(pending),
+          dropped: complete ? null : droppedAt(at, missing, kept),
+          keptBy: keptBy(kept),
         }
       }),
     claim: (owner, seen = null) =>
@@ -614,7 +652,9 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
           ...Object.entries(rows ?? {}).map(([t, value]) =>
             tables.put(value, t as keyof TableRows),
           ),
-          ...(kept ? [meta.put(kept.cursor, CURSOR), meta.put(kept, KEPT)] : []),
+          ...(kept
+            ? [meta.put(kept.cursor, CURSOR), meta.put({ ...kept, by: BUILD } satisfies Kept, KEPT)]
+            : []),
           ...(titles ? [meta.put(titles, TITLES)] : []),
           ...(change.put ?? []).map((e) =>
             meta.put({ ...e, owner } satisfies StoredPending, pendingKey(e.mutation.mid)),
@@ -688,8 +728,9 @@ export function memoryPersistence(): Persistence {
   let unverified: string | null = null
   let cursor = 0
   let tables: Partial<TableRows> = {}
-  // What `tables` holds whole up to `cursor`, as `KEPT` says it in IndexedDB.
+  // What `tables` holds whole up to `cursor`, and who said so, as `KEPT` says them in IndexedDB.
   let covered: string[] = []
+  let by: string | null = null
   // Which language's titles, as `TITLES` says it in IndexedDB: none until a write names them.
   let titles: TitlesRecord | undefined
   // Only the owner's: a claim wipes them with everything else, and every write checks.
@@ -701,6 +742,7 @@ export function memoryPersistence(): Persistence {
     cursor = 0
     tables = {}
     covered = []
+    by = null
     titles = undefined
     pending.clear()
     bodies.clear()
@@ -719,9 +761,12 @@ export function memoryPersistence(): Persistence {
           covered: [],
           titles: NO_TITLES,
           pending: [],
+          dropped: null,
+          keptBy: null,
         }
       }
       const whole = complete()
+      const missing = TABLES.filter((t) => !(t in tables))
       return {
         owner,
         unverified,
@@ -730,6 +775,8 @@ export function memoryPersistence(): Persistence {
         covered: whole ? covered : [],
         titles: whole ? (titlesAt(titles, cursor) ?? NO_TITLES) : NO_TITLES,
         pending: inOrder(pending.values()),
+        dropped: whole ? null : droppedAt(cursor, missing, { tables: covered, cursor, by }),
+        keptBy: by,
       }
     },
     async claim(o, seen = null) {
@@ -765,6 +812,7 @@ export function memoryPersistence(): Persistence {
         if (change.cursor !== undefined) {
           covered = keptAfter(covered, rows, change.covered ?? [], change.cursor).tables
           cursor = change.cursor
+          by = BUILD
         }
       }
       for (const e of change.put ?? []) pending.set(e.mutation.mid, e)

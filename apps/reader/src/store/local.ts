@@ -82,6 +82,11 @@ export class LocalStore {
    */
   private covered: ReadonlySet<string> = new Set()
   /**
+   * Where `covered` comes from, for a start-over to name (`onRestart`): the stored copy and the
+   * build that last wrote it, a snapshot, or a pull that left a table out.
+   */
+  private coveredFrom = 'nothing held'
+  /**
    * Which language's titles the confirmed tables hold, and whether whole up to the cursor
    * (`TitlesHeld`). Titles are only ever in `lang`: a switch lets the others go at once, and a
    * pull in another language brings none. `lang` null is every language a pull sent, until the
@@ -125,6 +130,13 @@ export class LocalStore {
    * were, for an unfollow): a page cached from before still counts the old state (ADR 0031).
    */
   onFollowsConfirmed: ((rows: FollowRow[]) => void) | null = null
+  /**
+   * Called when the device lets go of the copy it held for this account and starts over from a
+   * snapshot, with why: the stored copy did not load, a delta sent a table not held whole, or
+   * tela-api started it over. A sign-in or sign-out is not one. Set before `open`, to hear the
+   * first.
+   */
+  onRestart: ((why: string) => void) | null = null
   /** The account this tab holds: every write is made for it, and every request names it. */
   userId: string | null = null
   /**
@@ -224,6 +236,8 @@ export class LocalStore {
       tables: saved.rows ? tablesFromRows(saved.rows) : emptyTables(),
     }
     this.covered = new Set(saved.covered)
+    this.coveredFrom = `kept by ${saved.keptBy ?? 'an unnamed build'} at ${saved.cursor}`
+    if (saved.dropped !== null) this.onRestart?.(saved.dropped)
     this.titles = saved.titles
     // Only the record's language, whatever another build left in the table beside it; written
     // back with the next pull.
@@ -270,6 +284,7 @@ export class LocalStore {
     this.userId = owner
     this.confirmed = { cursor: 0, tables: emptyTables() }
     this.covered = new Set()
+    this.coveredFrom = 'nothing held'
     // The next account's language is its own: told again (`learnWho`, `Routed`).
     this.titles = { lang: null, whole: false }
     this.titlesRound++
@@ -563,15 +578,30 @@ export class LocalStore {
     const owner = this.userId
     if (owner === null || epoch !== this.epoch) return false
     const sent = new Set(Object.keys(given.rows))
-    if (!given.reset && TABLES.some((t) => sent.has(t) && !this.covered.has(t))) {
+    const unheld = TABLES.filter((t) => sent.has(t) && !this.covered.has(t))
+    if (!given.reset && unheld.length > 0) {
+      this.onRestart?.(
+        `delta at ${this.confirmed.cursor} sent ${unheld.join(', ')}, not held whole (${this.coveredFrom})`,
+      )
       this.confirmed = { ...this.confirmed, cursor: 0 }
       return true
     }
+    // A database restored behind the cursor: tela-api answers it with a snapshot.
+    if (given.reset && this.confirmed.cursor > 0) {
+      this.onRestart?.(`tela-api started over a pull at ${this.confirmed.cursor}`)
+    }
     // What the copy holds whole from here: what this snapshot sent, or what the copy held and
-    // this delta sent too.
+    // this delta sent too. And, for a start-over to name, which answer left a table out.
+    const without = TABLES.filter((t) => !sent.has(t))
+    const dropping = without.filter((t) => this.covered.has(t))
     this.covered = new Set(
       TABLES.filter((t) => sent.has(t) && (given.reset || this.covered.has(t))),
     )
+    const lacking = (tables: string[]) => (tables.length > 0 ? ` without ${tables.join(', ')}` : '')
+    if (given.reset) this.coveredFrom = `a snapshot at ${given.cursor}${lacking(without)}`
+    else if (dropping.length > 0) {
+      this.coveredFrom = `a pull at ${this.confirmed.cursor}${lacking(dropping)}`
+    }
     // Titles in the language held only. A pull in another one (asked for before a switch) passed
     // that language's rows without bringing them: what is held is no longer whole, and the engine
     // fetches the language's titles again, every one held, since some may be stale.
@@ -697,7 +727,10 @@ export class LocalStore {
     const wiped = await this.persistence.claim(userId, seen)
     this.unverified = null
     // The copy stopped being this account's after the tab loaded it: what it holds is gone there.
-    if (wiped && previous === userId) this.reset(userId)
+    if (wiped && previous === userId) {
+      this.reset(userId)
+      this.onRestart?.('claim: another account held the stored copy')
+    }
     return previous !== null && previous !== userId
   }
 

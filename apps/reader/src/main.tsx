@@ -21,6 +21,7 @@ import { registerShell } from './shell'
 import { bindApi } from './store/api'
 import {
   type EarlierBuild,
+  earlierBuild,
   indexedDbPersistence,
   memoryPersistence,
   type Persistence,
@@ -40,7 +41,9 @@ async function deviceStore() {
   // A browser that refuses IndexedDB (some private modes) still reads, just without a memory.
   const persistence: Persistence = await indexedDbPersistence().catch(() => memoryPersistence())
   try {
-    return { persistence, store: await openStore(persistence) }
+    // A start-over is a full download, and its cause is gone with the copy: told while it is known.
+    const restarted = (why: string) => report('restart', why)
+    return { persistence, store: await openStore(persistence, earlierBuild, restarted) }
   } catch (err) {
     report('boot', err)
     const memory = memoryPersistence()
