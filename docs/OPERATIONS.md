@@ -538,7 +538,9 @@ is tela-api.
   `Content-Security-Policy` in `worker/security.ts` and `_headers` together, and deploy tela-web.
   A violation that does show names the directive and the address it blocked: allow the address in
   both places, or remove what asked for it.
-- **Writes to `/api/*` without this origin get 403** `cross-origin write refused`.
+- **Writes to `/api/*` without this origin get 403** `cross-origin write refused`. Hubs
+  (`/api/websub/*`) and the admin script (`/api/admin/*`) are exempt. A browser always sends
+  `Origin` on a POST, so seeing this from the app means something is proxying it.
 - **Errors in readers' browsers** reach tela-api's Workers Logs as `client error` lines (`POST
   /api/client-errors`): `kind` is `boundary` (a view threw and its error boundary showed Try
   again), `error` or `rejection` (left unhandled, only from Tela's own scripts), `boot` (the app
@@ -549,9 +551,7 @@ is tela-api.
   (`redact_query_string` on tela-web and tela-api, as on tela-redirect): an invite code or a
   sign-in link's `?email=…&otp=…` would otherwise be readable there. After a deploy, a burst of
   one `boundary` message on one path is a bug in that view; `boot` lines from many paths at once
-  are the device store or a cached shell. Hubs
-  (`/api/websub/*`) and the admin script (`/api/admin/*`) are exempt. A browser always sends
-  `Origin` on a POST, so seeing this from the app means something is proxying it.
+  are the device store or a cached shell.
 - **The app shell** is cached by a service worker (`public/sw.js`), for fast repeat visits. It
   fetches the shell from `/__tela/shell`, which tela-web never runs for, so the single-page
   fallback answers it with `index.html`; it keeps it under `/`. Keep `/*` and `/__tela/*` out of
