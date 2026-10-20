@@ -4,7 +4,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { READING_LANGUAGES } from '@tela/shared'
-import type { ProfileRow } from '@tela/sync'
+import { type ProfileRow, readingLangOf } from '@tela/sync'
 import { chooseLocale, chosenLocale, detectLocale, localeToAdopt } from '../src/i18n'
 import { circleLabel, pillLabel } from '../src/lib/format'
 import { memoryPersistence } from '../src/store/db'
@@ -106,6 +106,31 @@ describe('the language chosen on this browser', () => {
     expect(detectLocale('tela_locale=fr', ['zh-TW', 'en'])).toBe('fr')
     expect(detectLocale('tela_locale=%', ['zh-TW', 'en'])).toBe('zh-Hant')
     expect(detectLocale('', [])).toBe('en')
+  })
+})
+
+describe('the language posts are read in', () => {
+  /** What `useReadingLang` makes of the store's view, as the page renders it. */
+  const reading = (store: LocalStore, uiLocale: string) =>
+    readingLangOf(store.getSnapshot().tables.profile, uiLocale)
+
+  test("is a visitor's interface language", async () => {
+    expect(reading(await visitor(), 'zh-Hant')).toBe('zh-Hant')
+  })
+
+  test("is the member's choice, else the account's interface, before the page's", async () => {
+    expect(reading(await member({ readingLang: 'fr', uiLocale: 'en' }), 'en')).toBe('fr')
+    // The page takes the account's interface language a render after the row lands; the titles
+    // the device keeps must not follow the cookie's for that moment.
+    expect(reading(await member({ uiLocale: 'zh-Hans' }), 'en')).toBe('zh-Hans')
+    expect(reading(await member({}), 'fr')).toBe('fr')
+  })
+
+  test('counts a choice still on its way to the server', async () => {
+    const store = await member({ uiLocale: 'en', readingLangAt: NOW - 1000 })
+    store.mutate({ type: 'setProfile', readingLang: 'zh-Hant' })
+    expect(store.unsent()).toHaveLength(1)
+    expect(reading(store, 'en')).toBe('zh-Hant')
   })
 })
 

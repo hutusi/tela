@@ -2,13 +2,15 @@
  * tela-api's routes (ADR 0024). Portable: built from `ApiDeps`, so the Cloudflare entry and the
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
-import { audit, bumpSeq, currentSeq, first, newGroupId, schema } from '@tela/data'
+import { audit, bumpSeq, currentSeq, first, newGroupId, readTitles, schema } from '@tela/data'
+import { isReadingLanguage } from '@tela/shared'
 import {
   CLIENT_HEADER,
   MEMBER_HEADER,
   MIN_CLIENT,
   NAMES_MEMBER_SINCE,
   pushSchema,
+  TITLE_IDS_MAX,
 } from '@tela/sync'
 import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -348,11 +350,43 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     return c.json({ id: member.id, email: member.email, profile: profile ?? null })
   })
 
+  /**
+   * The pull (ADR 0025). `?titles=<lang>` names the device's reading language, and only its title
+   * rows come (ADR 0052); without it, every language's, for shells from before that.
+   */
   app.get('/api/v1/sync', async (c) => {
     const cursor = Number(c.req.query('cursor') ?? '0')
     if (!Number.isInteger(cursor) || cursor < 0) return c.json({ error: 'invalid_cursor' }, 400)
-    const pull = await answerPull(deps.db, c.get('member').id, cursor, deps.clock.now())
+    // A language this tela-api does not read in (one a newer tela-web added before this was
+    // deployed, or after this was rolled back) is no reason to stop a device's sync: it gets every
+    // language, as a shell that names none does, and keeps what it wants of them (ADR 0052).
+    const asked = c.req.query('titles')
+    const titles = isReadingLanguage(asked) ? asked : undefined
+    const pull = await answerPull(deps.db, c.get('member').id, cursor, deps.clock.now(), titles)
     return c.json(pull, 200, { 'cache-control': 'no-store' })
+  })
+
+  /**
+   * The titles of named posts in one language (ADR 0052): what a device asks for when its reading
+   * language changes, for the posts it holds, instead of starting over. `{lang, ids}` answers
+   * `{rows}`, title rows as the pull sends them, only of feeds the member follows or posts they
+   * keep. Behind the same checks as the pull, and the app-wide body limit: 1,000 ids of seven
+   * digits are about 8 KB.
+   */
+  app.post('/api/v1/sync/titles', async (c) => {
+    const body = await c.req.json<{ lang?: unknown; ids?: unknown }>().catch(() => null)
+    const lang = body?.lang
+    if (!isReadingLanguage(lang)) return c.json({ error: 'invalid_titles' }, 400)
+    const ids: unknown = body?.ids
+    if (
+      !Array.isArray(ids) ||
+      ids.length > TITLE_IDS_MAX ||
+      !ids.every((id) => Number.isSafeInteger(id) && id > 0)
+    ) {
+      return c.json({ error: 'invalid_ids' }, 400)
+    }
+    const rows = await readTitles(deps.db, { userId: c.get('member').id, lang, ids })
+    return c.json({ rows }, 200, { 'cache-control': 'no-store' })
   })
 
   app.post('/api/v1/mutations', async (c) => {

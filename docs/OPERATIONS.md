@@ -285,6 +285,34 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
          name and `tela-data`, `/discover/blogrolls` lists it within five minutes, and a private
          one answers 404;
        - the admin console's Discover area has a Blogrolls filter that lists it.
+   - Titles in the reading language (ADR 0052) change no table and keep protocol 3, with no
+     `MIN_CLIENT` bump. A device keeps titles in its reading language only: each pull names it
+     (`?titles=<lang>`, answered with `titlesLang`), and when its titles are not whole (a switch,
+     or another tab's cursor) it asks for them again by article id (`POST /api/v1/sync/titles`). Deploy tela-api, then tela-web; tela-jobs is
+     unchanged:
+     - tela-api first, because the new shell names a language on every pull and fetches titles by
+       id. A protocol-3 shell names none, and the new tela-api sends it every language, as before.
+     - No device starts over. A copy from before keeps its reading language's titles, whole, and
+       lets the others go at its first boot on the new shell. A copy that a tab of the earlier
+       shell, left open, has pulled into since is not whole: the device asks for its titles again
+       by id, every one held since some may be stale, and shows untitled posts as written until
+       then (the `titles` record in
+       `apps/reader/src/store/db.ts`).
+     - **Either Worker may go back alone.**
+       - An older tela-api ignores `?titles=` and sends every language, which the new shell
+         filters, and answers the titles route 404, which the shell takes as "next pull": a member
+         who switches language in that window sees posts as written, the newest excepted, until
+         tela-api is forward again. Nothing is lost, and no device starts over.
+       - An older tela-web pulls every language again into the copy the new shell kept, and
+         shows the reading language's titles it finds there. A member who switches language under
+         it sees the older posts as written. Forward again, the new shell finds its record stale,
+         lets the other languages go and fetches what is missing.
+     - After deploy, check that:
+       - `GET /api/v1/sync?cursor=0&titles=<lang>` is a fraction of `?cursor=0` (encoded size,
+         with the page's member headers);
+       - switching the reading language in Settings shows posts as written, then their titles in
+         the new language, with no `cursor=0` request;
+       - Workers Logs show no new `client error` lines.
    - Protocol 2 (2026-09-29) keeps each device's copy in IndexedDB `tela-2`; earlier shells use
      `tela`, which the newer shell empties at each boot and marks as seen. A tela-web rollback
      leaves the `tela-2` copies in place, and the older shell starts over in `tela`. On the way

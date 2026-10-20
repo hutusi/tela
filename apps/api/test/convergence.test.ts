@@ -16,12 +16,19 @@ import {
   type Confirmed,
   emptyTables,
   type Mutation,
+  mergeTitles,
+  nextTitleIds,
   type Pending,
   type PullResponse,
   type PushResponse,
   privacyChange,
+  pruneTitlesTo,
+  readingLangOf,
   settle,
   type Tables,
+  TITLE_IDS_MAX,
+  type TitleRow,
+  titlesIn,
   view,
 } from '@tela/sync'
 import { sql } from 'drizzle-orm'
@@ -46,6 +53,12 @@ const PEOPLE = ['person-one-0000001', 'person-two-0000002', 'person-three-00003'
  * by 1 to 5 ms, so the second device's next change often carries an older `at` than the first's.
  */
 const SKEWS = [0, 3]
+/**
+ * Each device's browser language, which its reading language follows while the account names
+ * neither a reading nor an interface language (ADR 0040): the two can hold titles in different
+ * languages, and each must still equal a snapshot in its own (ADR 0052).
+ */
+const BROWSERS = ['fr', 'zh-Hant']
 
 /** What a snapshot and a synced device must agree on, independent of how they got there. */
 function live(t: Tables) {
@@ -119,6 +132,12 @@ function live(t: Tables) {
       uiLocale: t.profile?.uiLocale,
       readingLang: t.profile?.readingLang,
     },
+    // The titles of the articles held: a device holds them in its reading language only, and a
+    // pull may bring titles of articles it does not hold, which nothing shows (ADR 0052).
+    titles: [...t.titles.values()]
+      .filter((row) => ids.has(row.articleId))
+      .map((row) => ({ articleId: row.articleId, lang: row.lang, title: row.title }))
+      .sort((a, b) => a.articleId - b.articleId || a.lang.localeCompare(b.lang)),
   }
 }
 
@@ -134,6 +153,13 @@ type Device = {
   pending: Pending[]
   skew: number
   hidesSeen: Record<Flag, number>
+  /** This browser's language, which the reading language follows when the account names none. */
+  browser: string
+  /**
+   * The language its titles are in, whether it holds that language's titles whole, and how far
+   * its fetch of them has come (the store's `titles` record and the engine's pass, ADR 0052).
+   */
+  titles: { lang: string; whole: boolean; after: number }
 }
 
 /** `only` limits the changes a device makes to those `choice`s, so a rare one is met often. */
@@ -145,12 +171,28 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
   let nextArticle = 1
   const write = (...s: ReturnType<typeof api.db.run>[]) =>
     api.db.batch([bumpSeq(api.db), ...s] as never)
-  const addArticle = (feedId: number) => {
+  /** The feed of each article written, so a title row can name it. */
+  const feedOf = new Map<number, number>()
+  let titleVersions = 0
+  /** tela-jobs translating a title, or translating it again: a new row, or a new seq on one. */
+  const translate = (articleId: number, lang: string) =>
+    write(
+      api.db.run(sql`insert into article_titles
+          (article_id, lang, feed_id, title, excerpt, status, source_hash, updated_at, seq)
+        values (${articleId}, ${lang}, ${feedOf.get(articleId) ?? 1},
+          ${`${lang}:Post ${articleId} v${++titleVersions}`}, null, 'done', 'h', ${api.clock.now()}, ${currentSeq})
+        on conflict (article_id, lang) do update set title = excluded.title,
+          updated_at = excluded.updated_at, seq = excluded.seq`),
+    )
+  const addArticle = async (feedId: number) => {
     const id = nextArticle++
-    return write(
+    feedOf.set(id, feedId)
+    await write(
       api.db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at, seq)
         values (${id}, ${feedId}, ${`k${id}`}, ${`Post ${id}`}, ${api.clock.now()}, ${api.clock.now()}, ${currentSeq})`),
     )
+    // Its titles, in some of the languages, as the titles job writes them one group at a time.
+    for (const lang of READING_LANGUAGES) if (random() < 0.5) await translate(id, lang)
   }
   for (const f of FEEDS) {
     await write(
@@ -178,11 +220,13 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
         where user_id = ${id}`),
     )
 
-  const devices: Device[] = SKEWS.map((skew) => ({
+  const devices: Device[] = SKEWS.map((skew, i) => ({
     confirmed: { cursor: 0, tables: emptyTables() },
     pending: [],
     skew,
     hidesSeen: { publicSubscriptions: 0, publicLikes: 0 },
+    browser: BROWSERS[i] ?? 'en',
+    titles: { lang: BROWSERS[i] ?? 'en', whole: false, after: 0 },
   }))
   let mids = 0
   // The privacy invariant (issue #16): a show with a base never applies over a hide its device had
@@ -199,15 +243,59 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
     return Number(rows[0]?.v ?? 0)
   }
 
-  const pull = async (d: Device) => {
+  /**
+   * The device's reading language, as its view says (a change still pending counts): when it is
+   * not the one its titles are in, the titles go at once and the fetch of the new one's starts.
+   */
+  const follow = (d: Device) => {
+    const lang = readingLangOf(view(d.confirmed, d.pending).profile, d.browser)
+    if (lang === d.titles.lang) return
+    d.confirmed = { ...d.confirmed, tables: pruneTitlesTo(d.confirmed.tables, lang) }
+    d.titles = { lang, whole: false, after: 0 }
+  }
+  /**
+   * Pull, naming the language the titles are in, then fetch that language's titles while they are
+   * not whole, a page at a time; now and then stop early, as a tab closed mid-way does, for the
+   * next pull to carry on. `finish` never stops early. Now and then the member changes language
+   * while a pull is on its way, so it lands in the language it was asked in, not the device's.
+   */
+  const pull = async (d: Device, finish = false) => {
+    follow(d)
     for (;;) {
-      const res = await api.request(`/api/v1/sync?cursor=${d.confirmed.cursor}`, { as: member })
+      const res = await api.request(
+        `/api/v1/sync?cursor=${d.confirmed.cursor}&titles=${d.titles.lang}`,
+        { as: member },
+      )
       const body = (await res.json()) as PullResponse
-      d.confirmed = applyPull(d.confirmed, body)
+      if (!finish && random() < 0.15) {
+        mutate(d, 16)
+        follow(d)
+      }
+      const { pull: taken, folded } = titlesIn(body, d.titles.lang)
+      d.confirmed = applyPull(d.confirmed, taken)
+      if (!folded) d.titles = { ...d.titles, whole: false, after: 0 }
+      else if (body.reset) d.titles = { ...d.titles, whole: true, after: 0 }
       d.pending = settle(d.confirmed, d.pending)
       if (!body.more) break
     }
     d.hidesSeen = { ...hides }
+    // A pull can bring the other device's change of language: the app follows it at once
+    // (`Routed`'s effect hands the store the language its view names), before any fetch.
+    follow(d)
+    while (!d.titles.whole) {
+      if (!finish && random() < 0.25) break
+      const lang = d.titles.lang
+      const ids = nextTitleIds(d.confirmed.tables, lang, TITLE_IDS_MAX, d.titles.after)
+      if (ids.length === 0) {
+        d.titles = { ...d.titles, whole: true }
+        break
+      }
+      const res = await api.request('/api/v1/sync/titles', { body: { lang, ids }, as: member })
+      expect(res.status).toBe(200)
+      const { rows } = (await res.json()) as { rows: TitleRow[] }
+      d.confirmed = { ...d.confirmed, tables: mergeTitles(d.confirmed.tables, rows, lang) }
+      d.titles = { ...d.titles, after: ids.at(-1) ?? d.titles.after }
+    }
   }
   /**
    * One request. A batch applies in order, so a device's batch is sent in parts, each privacy show
@@ -249,13 +337,13 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
       .filter((p) => !rejected.has(p.mutation.mid))
       .map((p) => (applied.has(p.mutation.mid) ? { ...p, ackedAt: seq } : p))
   }
-  const mutate = (d: Device) => {
+  const mutate = (d: Device, chosen?: number) => {
     const shown = view(d.confirmed, d.pending)
     const articleIds = [...shown.articles.keys()]
     const at = api.clock.now() - d.skew
     api.clock.advance(1 + Math.floor(random() * 5))
     const mid = `seed${seed}-m${++mids}-pad`
-    const choice = only ? (pick(only) as number) : Math.floor(random() * 27)
+    const choice = chosen ?? (only ? (pick(only) as number) : Math.floor(random() * 27))
     const article = pick(articleIds)
     const feed = pick(FEEDS) as number
     let m: Mutation | null = null
@@ -408,8 +496,13 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
     if (r < 0.45) mutate(d)
     else if (r < 0.65) await push(d, random() < 0.25)
     else if (r < 0.88) await pull(d)
-    else if (r < 0.95) await addArticle(pick(FEEDS) as number)
-    else await rename(pick(PEOPLE) as string)
+    else if (r < 0.93) await addArticle(pick(FEEDS) as number)
+    else if (r < 0.97 && nextArticle > 1) {
+      await translate(
+        1 + Math.floor(random() * (nextArticle - 1)),
+        pick(READING_LANGUAGES) as string,
+      )
+    } else await rename(pick(PEOPLE) as string)
   }
 
   // Quiescence: everything pushed, everything pulled, by every device, and then each pulls once
@@ -417,16 +510,24 @@ async function scenario(seed: number, steps: number, only?: readonly number[]) {
   for (let i = 0; i < 10 && devices.some((d) => d.pending.length > 0); i++) {
     for (const d of devices) {
       await push(d, false)
-      await pull(d)
+      await pull(d, true)
     }
   }
-  for (const d of devices) await pull(d)
-  const snapshot = applyPull(
-    { cursor: 0, tables: emptyTables() },
-    (await (await api.request('/api/v1/sync?cursor=0', { as: member })).json()) as PullResponse,
-  )
+  for (const d of devices) await pull(d, true)
   for (const d of devices) {
+    // Each device against a fresh snapshot in the language its titles are in, which is the one its
+    // view names; it holds that language whole, and no title in any other.
+    const lang = d.titles.lang
+    expect(lang).toBe(readingLangOf(view(d.confirmed, d.pending).profile, d.browser))
+    const snapshot = applyPull(
+      { cursor: 0, tables: emptyTables() },
+      (await (
+        await api.request(`/api/v1/sync?cursor=0&titles=${lang}`, { as: member })
+      ).json()) as PullResponse,
+    )
     expect(d.pending).toEqual([])
+    expect(d.titles.whole).toBe(true)
+    expect([...d.confirmed.tables.titles.values()].filter((row) => row.lang !== lang)).toEqual([])
     expect(live(view(d.confirmed, d.pending))).toEqual(live(snapshot.tables))
   }
 }
@@ -455,6 +556,17 @@ describe('blogrolls converge (ADR 0050)', () => {
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
     test(`seed ${seed}: two devices keeping blogrolls, their blogs and notes`, async () => {
       await scenario(seed, 200, [21, 21, 22, 22, 23, 24, 24, 24, 25, 25, 26, 26, 3, 5])
+    })
+  }
+})
+
+describe("titles converge in each device's reading language (ADR 0052)", () => {
+  // Language changes above all, with reads, recommendations and subscriptions between them: titles
+  // are written and rewritten throughout, a change lands while a pull is on its way, and a fetch of
+  // a language's titles is cut short and carried on, on two devices whose browsers differ.
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    test(`seed ${seed}: two devices switching reading language while titles are written`, async () => {
+      await scenario(seed, 200, [16, 16, 16, 0, 7, 3, 3])
     })
   }
 })

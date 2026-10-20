@@ -23,6 +23,7 @@ import {
   privacyChange,
   privacyUnsettled,
   settle,
+  type TitleRow,
   view,
 } from '@tela/sync'
 import { sql } from 'drizzle-orm'
@@ -259,6 +260,238 @@ describe('pull', () => {
     const res = await pull(10_000)
     expect(res.reset).toBe(true)
     expect(res.rows.subscriptions).toHaveLength(1)
+  })
+
+  describe('titles in one language (ADR 0052)', () => {
+    /** One batch writing an article's title rows in `langs`, as a title job commits them. */
+    async function addTitles(articleId: number, feedId: number, langs: string[]) {
+      await write(
+        ...langs.map((lang) =>
+          db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status,
+              source_hash, updated_at, seq)
+            values (${articleId}, ${lang}, ${feedId}, ${`${lang}: Post ${articleId}`}, 'done', 'h',
+              ${now}, ${currentSeq})`),
+        ),
+      )
+    }
+    const pullIn = async (cursor: number, lang: string) => {
+      const res = await api.request(`/api/v1/sync?cursor=${cursor}&titles=${lang}`, { as: reader })
+      expect(res.status).toBe(200)
+      return (await res.json()) as PullResponse
+    }
+    const titlesOf = (p: PullResponse) =>
+      p.rows.titles.map((t) => `${t.articleId}:${t.lang}`).sort()
+    const ALL = ['en', 'fr', 'zh-Hans', 'zh-Hant']
+
+    test('a snapshot that names a language carries only its titles, and says which', async () => {
+      await push([{ type: 'subscribe', feedId: 1 }])
+      const a = await addArticle(1)
+      const b = await addArticle(1)
+      await addTitles(a, 1, ALL)
+      await addTitles(b, 1, ['en', 'fr'])
+      // A post kept from a feed not followed comes with its titles too, in the same language.
+      const liked = await addArticle(2)
+      await addTitles(liked, 2, ALL)
+      await push([{ type: 'setLiked', articleId: liked, liked: true }])
+
+      const fr = await pullIn(0, 'fr')
+      expect(fr.titlesLang).toBe('fr')
+      expect(titlesOf(fr)).toEqual([`${a}:fr`, `${b}:fr`, `${liked}:fr`])
+      expect(fr.rows.articles.map((x) => x.id).sort()).toEqual([a, b, liked])
+      const hant = await pullIn(0, 'zh-Hant')
+      expect(hant.titlesLang).toBe('zh-Hant')
+      expect(titlesOf(hant)).toEqual([`${a}:zh-Hant`, `${liked}:zh-Hant`])
+    })
+
+    test('a delta that names a language carries only its titles, a new feed whole too', async () => {
+      await push([{ type: 'subscribe', feedId: 1 }])
+      const a = await addArticle(1)
+      const older = await addArticle(2)
+      await addTitles(older, 2, ALL)
+      const snap = await pullIn(0, 'fr')
+      expect(titlesOf(snap)).toEqual([])
+      await addTitles(a, 1, ['en', 'fr', 'zh-Hans'])
+      // Feed 2's titles were written before its subscription, so they come as its fresh horizon.
+      await push([{ type: 'subscribe', feedId: 2 }])
+      const delta = await pullIn(snap.cursor, 'fr')
+      expect(delta.reset).toBe(false)
+      expect(delta.titlesLang).toBe('fr')
+      expect(titlesOf(delta)).toEqual([`${a}:fr`, `${older}:fr`])
+      expect(titlesOf(await pullIn(delta.cursor, 'fr'))).toEqual([])
+    })
+
+    test('a pull that names none carries every language and names none, as before', async () => {
+      await push([{ type: 'subscribe', feedId: 1 }])
+      const a = await addArticle(1)
+      await addTitles(a, 1, ['en', 'fr'])
+      const snap = await pull(0)
+      expect('titlesLang' in snap).toBe(false)
+      expect(titlesOf(snap)).toEqual([`${a}:en`, `${a}:fr`])
+      await addTitles(a, 1, ['zh-Hans', 'zh-Hant'])
+      const delta = await pull(snap.cursor)
+      expect('titlesLang' in delta).toBe(false)
+      expect(titlesOf(delta)).toEqual([`${a}:zh-Hans`, `${a}:zh-Hant`])
+    })
+
+    test('a language outside the launch set gets every language, as naming none does', async () => {
+      // Tags are compared exactly: `zh-Hans` and `zh-Hant` are different languages here, and a
+      // stored tag is never regional, so `zh` or `zh-hant` names none of them. Refusing it would
+      // stop the device's whole sync over a language a newer tela-web added before this tela-api
+      // had it; every language, which the device filters, keeps it syncing.
+      await push([{ type: 'subscribe', feedId: 1 }])
+      const a = await addArticle(1)
+      await addTitles(a, 1, ['fr', 'zh-Hans'])
+      for (const lang of ['de', '', 'zh', 'zh-hant', 'EN', 'en-US', 'en,fr']) {
+        const res = await api.request(`/api/v1/sync?cursor=0&titles=${encodeURIComponent(lang)}`, {
+          as: reader,
+        })
+        expect(res.status).toBe(200)
+        const body = (await res.json()) as PullResponse
+        expect('titlesLang' in body).toBe(false)
+        expect(titlesOf(body)).toEqual([`${a}:fr`, `${a}:zh-Hans`])
+      }
+    })
+
+    test('pages end by the titles of the language asked, not by the others', async () => {
+      await push([{ type: 'subscribe', feedId: 1 }])
+      // 1,200 posts, then their titles in two batches of 600 posts each, French and English.
+      const ids = Array.from({ length: 1200 }, (_, i) => 100 + i)
+      await write(
+        db.run(sql`insert into articles (id, feed_id, dedup_key, fetched_at, sort_at, seq)
+          select value, 1, 'k' || value, ${now}, ${now}, ${currentSeq}
+          from json_each(${JSON.stringify(ids)}) where true`),
+      )
+      const snap = await pullIn(0, 'fr')
+      expect(snap.more).toBe(false)
+      const titleBatch = async (batch: number[]) =>
+        write(
+          db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status,
+              source_hash, updated_at, seq)
+            select a.value, l.value, 1, 't', 'done', 'h', ${now}, ${currentSeq}
+            from json_each(${JSON.stringify(batch)}) a, json_each('["en","fr"]') l where true`),
+        )
+      await titleBatch(ids.slice(0, 600))
+      const first = await headSeq(db)
+      await titleBatch(ids.slice(600))
+
+      // In French, 600 rows a batch: the first page ends after the first batch.
+      const page1 = await pullIn(snap.cursor, 'fr')
+      expect(page1.more).toBe(true)
+      expect(page1.cursor).toBe(first)
+      expect(page1.rows.titles).toHaveLength(600)
+      expect(page1.rows.titles.every((t) => t.lang === 'fr' && t.seq === first)).toBe(true)
+      const page2 = await pullIn(page1.cursor, 'fr')
+      expect(page2.more).toBe(false)
+      expect(page2.cursor).toBe(await headSeq(db))
+      expect(page2.rows.titles).toHaveLength(600)
+      expect(
+        new Set([...page1.rows.titles, ...page2.rows.titles].map((t) => t.articleId)).size,
+      ).toBe(1200)
+      // In every language one batch is 1,200 rows, more than a page holds, so it comes unpaged.
+      const all = await pull(snap.cursor)
+      expect(all.more).toBe(false)
+      expect(all.rows.titles).toHaveLength(2400)
+    })
+
+    test('a cursor from the future starts over in the language asked', async () => {
+      await push([{ type: 'subscribe', feedId: 1 }])
+      const a = await addArticle(1)
+      await addTitles(a, 1, ALL)
+      const res = await pullIn(10_000, 'zh-Hans')
+      expect(res.reset).toBe(true)
+      expect(res.titlesLang).toBe('zh-Hans')
+      expect(titlesOf(res)).toEqual([`${a}:zh-Hans`])
+    })
+
+    describe('of named posts, when the reading language changes', () => {
+      const fetchTitles = (body: unknown, as: SignedIn | null = reader) =>
+        api.request('/api/v1/sync/titles', as ? { body, as } : { body, cookie: reader.cookie })
+      const titlesFor = async (lang: string, ids: number[]) => {
+        const res = await fetchTitles({ lang, ids })
+        expect(res.status).toBe(200)
+        return (await res.json()) as { rows: TitleRow[] }
+      }
+      const keysOf = (rows: TitleRow[]) => rows.map((t) => `${t.articleId}:${t.lang}`).sort()
+
+      test("only what the member's pull would send: a feed followed, a post kept", async () => {
+        const other = await signedIn(api, 'other@x.test')
+        await push([{ type: 'subscribe', feedId: 1 }])
+        await push([{ type: 'subscribe', feedId: 2 }], other)
+        const followed = await addArticle(1)
+        const untranslated = await addArticle(1)
+        const othersOnly = await addArticle(2)
+        const liked = await addArticle(2)
+        await addTitles(followed, 1, ALL)
+        await addTitles(untranslated, 1, ['en'])
+        await addTitles(othersOnly, 2, ALL)
+        await addTitles(liked, 2, ALL)
+        await push([{ type: 'setLiked', articleId: liked, liked: true }])
+
+        const asked = [followed, untranslated, othersOnly, liked, 9999]
+        const { rows } = await titlesFor('fr', asked)
+        expect(keysOf(rows)).toEqual([`${followed}:fr`, `${liked}:fr`])
+        // In the pull's shape, row for row: what a snapshot in that language would have sent.
+        const sort = (r: TitleRow[]) => [...r].sort((x, y) => x.articleId - y.articleId)
+        expect(sort(rows)).toEqual(sort((await pullIn(0, 'fr')).rows.titles))
+        expect(rows.find((t) => t.articleId === followed)).toEqual({
+          articleId: followed,
+          lang: 'fr',
+          title: `fr: Post ${followed}`,
+          excerpt: null,
+          status: 'done',
+          seq: expect.any(Number),
+        })
+        // The other member asks for the same posts and gets their own.
+        const theirs = await fetchTitles({ lang: 'fr', ids: asked }, other)
+        expect(keysOf(((await theirs.json()) as { rows: TitleRow[] }).rows)).toEqual([
+          `${othersOnly}:fr`,
+          `${liked}:fr`,
+        ])
+      })
+
+      test('no posts named, no rows', async () => {
+        expect(await titlesFor('en', [])).toEqual({ rows: [] })
+      })
+
+      test('a language outside the launch set is refused', async () => {
+        for (const body of [
+          { lang: 'de', ids: [1] },
+          { lang: 'zh', ids: [1] },
+          { ids: [1] },
+          null,
+        ]) {
+          const res = await fetchTitles(body)
+          expect(res.status).toBe(400)
+          expect(await res.json()).toEqual({ error: 'invalid_titles' })
+        }
+      })
+
+      test('more than 1,000 posts, or anything but post ids, is refused', async () => {
+        const ids = (n: number) => Array.from({ length: n }, (_, i) => 1_000_000 + i)
+        expect((await titlesFor('en', ids(1000))).rows).toEqual([])
+        for (const bad of [ids(1001), [0], [-1], [1.5], ['1'], [null], 'x', null, undefined]) {
+          const res = await fetchTitles({ lang: 'en', ids: bad })
+          expect(res.status).toBe(400)
+          expect(await res.json()).toEqual({ error: 'invalid_ids' })
+        }
+      })
+
+      test('behind the same checks as the pull', async () => {
+        const body = { lang: 'en', ids: [1] }
+        const anonymous = await api.request('/api/v1/sync/titles', { body })
+        expect(anonymous.status).toBe(401)
+        const old = await fetchTitles(body, null)
+        expect(old.status).toBe(409)
+        expect(await old.json()).toEqual({ error: 'upgrade' })
+        const someoneElse = await api.request('/api/v1/sync/titles', {
+          body,
+          as: reader,
+          headers: { [MEMBER_HEADER]: 'u_someone_else' },
+        })
+        expect(someoneElse.status).toBe(409)
+        expect(await someoneElse.json()).toEqual({ error: 'account_changed' })
+      })
+    })
   })
 })
 

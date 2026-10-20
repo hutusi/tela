@@ -19,6 +19,7 @@ import {
   indexedDbPersistence,
   memoryPersistence,
   type Persistence,
+  titlesAfter,
 } from '../src/store/db'
 import { LocalStore } from '../src/store/local'
 import { metaKeys, seedEarlierBuild } from './earlier-build'
@@ -205,6 +206,7 @@ describe('the device database', () => {
       cursor: 0,
       rows: null,
       covered: [],
+      titles: { lang: null, whole: false },
       pending: [],
     })
     // Nothing of it is left to be read back later, under anyone.
@@ -223,6 +225,7 @@ describe('the device database', () => {
       cursor: 0,
       rows: null,
       covered: [],
+      titles: { lang: null, whole: false },
       pending: [],
     })
     expect(await metaKeys(name)).toEqual(['owner'])
@@ -303,6 +306,7 @@ describe('the device database', () => {
         cursor: 0,
         rows: null,
         covered: [],
+        titles: { lang: null, whole: false },
         pending: [],
       })
       expect(await metaKeys(name)).toEqual(['owner'])
@@ -358,6 +362,7 @@ describe('the device database', () => {
       cursor: 0,
       rows: null,
       covered: [],
+      titles: { lang: null, whole: false },
       pending: [],
     })
     await now.claim('b')
@@ -481,6 +486,176 @@ describe('the device database', () => {
   })
 })
 
+describe('the language of the titles a copy holds', () => {
+  const fr = (whole: boolean, folded = true) => ({ lang: 'fr', whole, folded })
+  const en = (whole: boolean, folded = true) => ({ lang: 'en', whole, folded })
+
+  test('a write of the titles table carries its writer’s record; any other keeps the stored one only while it stays true', () => {
+    const titles = { titles: [] }
+    const articles = { articles: [] }
+    // The titles table written: whatever its writer holds, whole or not, in any language.
+    expect(titlesAfter(null, titles, fr(false), 9)).toEqual({ lang: 'fr', whole: false, cursor: 9 })
+    expect(titlesAfter({ lang: 'en', whole: true }, titles, fr(true), 9)).toEqual({
+      lang: 'fr',
+      whole: true,
+      cursor: 9,
+    })
+    // Left as it was, by a pull in its language: as whole as it was.
+    expect(titlesAfter({ lang: 'fr', whole: true }, articles, fr(false), 9)).toEqual({
+      lang: 'fr',
+      whole: true,
+      cursor: 9,
+    })
+    expect(titlesAfter({ lang: 'fr', whole: false }, articles, fr(true), 9)).toEqual({
+      lang: 'fr',
+      whole: false,
+      cursor: 9,
+    })
+    // By a pull in another language, or one that brought none of its own: no longer whole.
+    expect(titlesAfter({ lang: 'fr', whole: true }, articles, en(true), 9)).toEqual({
+      lang: 'fr',
+      whole: false,
+      cursor: 9,
+    })
+    expect(titlesAfter({ lang: 'fr', whole: true }, articles, fr(true, false), 9)).toEqual({
+      lang: 'fr',
+      whole: false,
+      cursor: 9,
+    })
+    // Every language, from a build before the record: whole under a pull of them all, and under a
+    // pull in one language that language is whole too, since the copy held it whole before. The
+    // other languages' rows go when the copy is next loaded in that language.
+    const every = { lang: null, whole: true }
+    expect(titlesAfter(every, articles, { ...every, folded: true }, 9)).toEqual({
+      ...every,
+      cursor: 9,
+    })
+    expect(titlesAfter(every, articles, fr(true), 9)).toEqual({
+      lang: 'fr',
+      whole: true,
+      cursor: 9,
+    })
+    expect(titlesAfter(every, articles, fr(true, false), 9)).toEqual({
+      lang: 'fr',
+      whole: false,
+      cursor: 9,
+    })
+    // Nothing trusted to keep.
+    expect(titlesAfter(null, articles, fr(true), 9)).toEqual({
+      lang: 'fr',
+      whole: false,
+      cursor: 9,
+    })
+  })
+
+  const kinds: [string, () => Promise<[Persistence, Persistence, string | null]>][] = [
+    [
+      'IndexedDB',
+      async () => {
+        const name = fresh()
+        return [await indexedDbPersistence(name), await indexedDbPersistence(name), name]
+      },
+    ],
+    [
+      'memory',
+      async () => {
+        const one = memoryPersistence()
+        return [one, one, null]
+      },
+    ],
+  ]
+  const snapshot = (n: number) =>
+    tablesOf(pull(n, { profile: [profile], subscriptions: [sub(1)] }, true))
+
+  for (const [kind, tabs] of kinds) {
+    test(`another tab moving the cursor in another language leaves the copy not whole (${kind})`, async () => {
+      const [one, two] = await tabs()
+      await one.claim('a')
+      await one.commit('a', { tables: snapshot(5), cursor: 5, titles: fr(true) })
+      expect((await one.load()).titles).toEqual({ lang: 'fr', whole: true })
+      // A pull of its own language, that wrote no title: still whole.
+      await one.commit('a', { tables: { articles: [] }, from: 5, cursor: 7, titles: fr(true) })
+      expect((await two.load()).titles).toEqual({ lang: 'fr', whole: true })
+      // Another tab, still on English, pulls past French rows it never asked for.
+      await two.commit('a', { tables: { articles: [] }, from: 7, cursor: 9, titles: en(true) })
+      expect((await one.load()).titles).toEqual({ lang: 'fr', whole: false })
+      // The first tab's next pull in French writes nothing that makes it whole again.
+      await one.commit('a', { tables: { articles: [] }, from: 9, cursor: 10, titles: fr(true) })
+      expect((await one.load()).titles).toEqual({ lang: 'fr', whole: false })
+      // What it fetched, written with the titles table, does.
+      await one.commit('a', { tables: { titles: [] }, from: 10, cursor: 10, titles: fr(true) })
+      expect((await two.load()).titles).toEqual({ lang: 'fr', whole: true })
+    })
+
+    test(`a copy from before the record holds every language whole (${kind})`, async () => {
+      const [one] = await tabs()
+      await one.claim('a')
+      // As the build before it writes: no word of titles at all.
+      await one.commit('a', { tables: snapshot(5), cursor: 5 })
+      expect((await one.load()).titles).toEqual({ lang: null, whole: true })
+      await one.commit('a', { tables: { articles: [] }, from: 5, cursor: 6 })
+      expect((await one.load()).titles).toEqual({ lang: null, whole: true })
+    })
+
+    test(`a record the cursor has moved past loads not whole (${kind})`, async () => {
+      const [one, two] = await tabs()
+      await one.claim('a')
+      await one.commit('a', { tables: snapshot(5), cursor: 5, titles: fr(true) })
+      // A tab of the build before the record pulls, every language, and says nothing of them.
+      await two.commit('a', { tables: { articles: [] }, from: 5, cursor: 9 })
+      const loaded = await one.load()
+      expect(loaded.cursor).toBe(9)
+      expect(loaded.titles).toEqual({ lang: 'fr', whole: false })
+    })
+
+    test(`a write left out says so, and leaves the record as it was (${kind})`, async () => {
+      const [one] = await tabs()
+      await one.claim('a')
+      await one.commit('a', { tables: snapshot(10), cursor: 10, titles: en(true) })
+      // Titles fetched by a tab behind the copy: they cannot land at a cursor it has passed.
+      const told: boolean[] = []
+      expect(
+        await one.commit('a', {
+          tables: { titles: [] },
+          from: 8,
+          cursor: 8,
+          titles: fr(true),
+          placed: (written) => void told.push(written),
+        }),
+      ).toBe(true)
+      expect(told).toEqual([false])
+      expect((await one.load()).titles).toEqual({ lang: 'en', whole: true })
+      await one.commit('a', {
+        tables: { titles: [] },
+        from: 10,
+        cursor: 10,
+        titles: fr(false),
+        placed: (written) => void told.push(written),
+      })
+      expect(told).toEqual([false, true])
+      expect((await one.load()).titles).toEqual({ lang: 'fr', whole: false })
+    })
+  }
+
+  test('an earlier build moving the cursor leaves the record behind, and it loads not whole', async () => {
+    const name = fresh()
+    const now = await indexedDbPersistence(name)
+    await now.claim('a')
+    expect(await now.commit('a', { tables: snapshot(5), cursor: 5, titles: fr(true) })).toBe(true)
+    // What a tab of the build before the record does: the cursor and its stamp, nothing else.
+    const raw = await openDB(name)
+    const kept = (await raw.get('meta', 'kept')) as { tables: string[] }
+    await raw.put('meta', 9, 'cursor')
+    await raw.put('meta', { tables: kept.tables, cursor: 9 }, 'kept')
+    // Kept beside the titles table, never in it, where that build reads an array of rows.
+    expect(Array.isArray(await raw.get('tables', 'titles'))).toBe(true)
+    raw.close()
+    const loaded = await now.load()
+    expect(loaded.cursor).toBe(9)
+    expect(loaded.titles).toEqual({ lang: 'fr', whole: false })
+  })
+})
+
 describe('the mark an earlier build having run leaves', () => {
   const kinds: [string, () => Promise<[Persistence, Persistence]>][] = [
     [
@@ -523,6 +698,7 @@ describe('the mark an earlier build having run leaves', () => {
         cursor: 0,
         rows: null,
         covered: [],
+        titles: { lang: null, whole: false },
         pending: [],
       })
       expect(await one.claim('b', loaded)).toBe(true)

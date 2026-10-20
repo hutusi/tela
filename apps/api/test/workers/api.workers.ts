@@ -397,6 +397,67 @@ it('invites, signs in, pushes and pulls on D1', async () => {
     )
   ).json()) as { items: { kind: string }[] }
   expect(older.items.map((i) => i.kind)).toEqual(['recommended'])
+
+  // Titles in the device's language only (ADR 0052): the language a bound parameter in both the
+  // fresh and the changed title query, on D1.
+  const beforeTitles = (await (
+    await call(`/api/v1/sync?cursor=${oldUnread.cursor}`, member)
+  ).json()) as PullResponse
+  await db.batch([
+    bumpSeq(db),
+    db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status, source_hash,
+        updated_at, seq)
+      values (1, 'en', 1, 'Post', 'echo', 'h', ${now}, ${currentSeq}),
+        (1, 'fr', 1, 'Billet', 'done', 'h', ${now}, ${currentSeq}),
+        (2, 'fr', 1, 'Vieux billet', 'done', 'h', ${now}, ${currentSeq})`),
+  ])
+  const inFrench = (await (
+    await call('/api/v1/sync?cursor=0&titles=fr', member)
+  ).json()) as PullResponse
+  expect(inFrench.titlesLang).toBe('fr')
+  expect(inFrench.rows.titles.map((t) => [t.articleId, t.lang]).sort()).toEqual([
+    [1, 'fr'],
+    [2, 'fr'],
+  ])
+  const changedInFrench = (await (
+    await call(`/api/v1/sync?cursor=${beforeTitles.cursor}&titles=fr`, member)
+  ).json()) as PullResponse
+  expect(changedInFrench.rows.titles.map((t) => [t.articleId, t.lang]).sort()).toEqual([
+    [1, 'fr'],
+    [2, 'fr'],
+  ])
+  const everyLanguage = (await (
+    await call(`/api/v1/sync?cursor=${beforeTitles.cursor}`, member)
+  ).json()) as PullResponse
+  expect(everyLanguage.titlesLang).toBeUndefined()
+  expect(everyLanguage.rows.titles).toHaveLength(3)
+
+  // And a new language's titles by id: the ids one JSON parameter through `json_each`, scoped by
+  // the feeds followed and a three-term union of the posts kept, on D1. Post 3 is no feed's the
+  // member follows, nor kept.
+  await db.batch([
+    bumpSeq(db),
+    db.run(
+      sql`insert into sites (id, home_url, created_at, updated_at, seq) values (2, 'https://c.example', 0, 0, ${currentSeq})`,
+    ),
+    db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at, updated_at, seq)
+      values (2, 2, 'https://c.example/feed', 'c.example', 0, 0, 0, ${currentSeq})`),
+    db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at, seq)
+      values (3, 2, 'k3', 'Elsewhere', ${now}, ${now}, ${currentSeq})`),
+    db.run(sql`insert into article_titles (article_id, lang, feed_id, title, status, source_hash,
+        updated_at, seq)
+      values (3, 'fr', 2, 'Ailleurs', 'done', 'h', ${now}, ${currentSeq})`),
+  ])
+  const byId = await call('/api/v1/sync/titles', {
+    body: { lang: 'fr', ids: [1, 2, 3, 999] },
+    ...member,
+  })
+  expect(byId.status).toBe(200)
+  const { rows } = (await byId.json()) as { rows: PullResponse['rows']['titles'] }
+  expect(rows.map((t) => [t.articleId, t.lang, t.title]).sort()).toEqual([
+    [1, 'fr', 'Billet'],
+    [2, 'fr', 'Vieux billet'],
+  ])
 })
 
 it("reads the front page's edition and checks a handle, on D1", async () => {

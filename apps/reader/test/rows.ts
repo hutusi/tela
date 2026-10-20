@@ -1,5 +1,11 @@
 /** Rows as a pull brings them, with defaults, for the reader's unit tests. */
-import { type ArticleRow, emptyRows, type PullResponse, type SubscriptionRow } from '@tela/sync'
+import {
+  type ArticleRow,
+  emptyRows,
+  type PullResponse,
+  type SubscriptionRow,
+  type TitleRow,
+} from '@tela/sync'
 
 export const DAY = 86_400_000
 export const NOW = 100 * DAY
@@ -33,6 +39,19 @@ export const sub = (feedId: number, over: Partial<SubscriptionRow> = {}): Subscr
   seq: 1,
   ...over,
 })
+
+/** A title the jobs made in `lang`, as the mock translator words it. */
+export const title = (articleId: number, lang: string, seq = 1): TitleRow => ({
+  articleId,
+  lang,
+  title: `${lang}:Post ${articleId}`,
+  excerpt: null,
+  status: 'done',
+  seq,
+})
+
+/** A pull as a tela-api asked for one language's titles answers it (`?titles=`). */
+export const inLang = (p: PullResponse, titlesLang: string): PullResponse => ({ ...p, titlesLang })
 
 export const pull = (
   cursor: number,

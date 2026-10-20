@@ -84,11 +84,18 @@ describe('asking for a translation', () => {
     })
   })
 
-  test('a failed one may be asked for again', async () => {
+  test('a failed one may be asked for again, answered with a seq past the failure', async () => {
     await article()
-    await db.run(sql`insert into body_translations (content_key, lang, state, updated_at)
-      values ('ckey1', 'zh-Hans', 'failed', 0)`)
-    expect((await askJson()).status).toBe('requested')
+    await db.batch([
+      bumpSeq(db),
+      db.run(sql`insert into body_translations (content_key, lang, state, updated_at, seq)
+        values ('ckey1', 'zh-Hans', 'failed', 0, ${currentSeq})`),
+    ] as never)
+    const failed = await first<{ seq: number }>(db, sql`select seq from body_translations`)
+    const again = await askJson()
+    expect(again.status).toBe('requested')
+    // A pull that read the failed row can land after this answer: the seq says which is later.
+    expect((again.translation as { seq: number }).seq).toBeGreaterThan(failed?.seq ?? Infinity)
   })
 
   test('a blog that opted out is refused before anything is counted or reserved', async () => {
@@ -170,6 +177,11 @@ describe('asking for a translation', () => {
     await askJson()
     const status = await api.request('/api/v1/translations/ckey1/zh-Hans', { as: reader })
     expect(status.headers.get('cache-control')).toBe('no-store')
+    const delta = (await (
+      await api.request(`/api/v1/sync?cursor=${snap.cursor}`, { as: reader })
+    ).json()) as PullResponse
+    expect(delta.rows.translations).toMatchObject([{ contentKey: 'ckey1', state: 'requested' }])
+    // The same seq as the synced row: the reader orders the two by it.
     expect(await status.json()).toEqual({
       contentKey: 'ckey1',
       lang: 'zh-Hans',
@@ -177,11 +189,8 @@ describe('asking for a translation', () => {
       chunkKeys: [],
       objectKey: null,
       failedLeaves: [],
+      seq: delta.rows.translations[0]?.seq,
     })
-    const delta = (await (
-      await api.request(`/api/v1/sync?cursor=${snap.cursor}`, { as: reader })
-    ).json()) as PullResponse
-    expect(delta.rows.translations).toMatchObject([{ contentKey: 'ckey1', state: 'requested' }])
   })
 })
 

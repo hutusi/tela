@@ -11,9 +11,15 @@
  *
  * No I/O here, so the rules can be tested on their own and shared with anything that syncs.
  */
-import { MAX_BLOGROLL_BLOGS, MAX_BLOGROLLS, MAX_FOLDERS } from '@tela/shared'
+import {
+  isReadingLanguage,
+  MAX_BLOGROLL_BLOGS,
+  MAX_BLOGROLLS,
+  MAX_FOLDERS,
+  type ReadingLanguage,
+} from '@tela/shared'
 import type { Mutation } from './mutations'
-import { completePull, type PullResponse } from './protocol'
+import { completePull, type PullResponse, TITLE_IDS_MAX } from './protocol'
 import type {
   ArticleRow,
   BlogrollBlogRow,
@@ -748,6 +754,102 @@ export function view(confirmed: Confirmed, pending: readonly Pending[]): Tables 
  */
 export function settle(confirmed: Confirmed, pending: readonly Pending[]): Pending[] {
   return pending.filter((p) => p.ackedAt === undefined || p.ackedAt > confirmed.cursor)
+}
+
+/**
+ * The language a member reads posts in (ADR 0040): their own choice, else their interface
+ * language, the account's before the page's, else English. A reader always passes the tables it
+ * renders (the view), so a choice still on its way to the server already counts, and the page
+ * never asks for one language's titles while it shows another's. The account's interface language
+ * comes before `uiLocale`, the page's, which takes it from the account only after a render: asked
+ * in between, the page's would name the cookie's language for a moment, and the device would
+ * fetch that language's titles for nothing.
+ */
+export function readingLangOf(
+  profile: Pick<ProfileRow, 'readingLang' | 'uiLocale'> | null | undefined,
+  uiLocale: string,
+): ReadingLanguage {
+  for (const lang of [profile?.readingLang, profile?.uiLocale, uiLocale]) {
+    if (isReadingLanguage(lang)) return lang
+  }
+  return 'en'
+}
+
+/**
+ * A pull as the device holding only `lang`'s titles takes it, and whether it brought that
+ * language: whether the device still holds `lang` whole after folding it in, if it did before. A
+ * tela-api asked for one language answers with it (`titlesLang`); one that predates the question
+ * (a rollback) sends every language and says none, and filtered here that is `lang`'s as well. A
+ * pull in another language (asked for before the member switched) brings none of `lang`'s, though
+ * its cursor passes theirs: its titles are dropped, and the device must fetch `lang`'s again.
+ */
+export function titlesIn(
+  pull: PullResponse,
+  lang: string,
+): { pull: PullResponse; folded: boolean } {
+  const sent = pull.titlesLang
+  const folded = sent === undefined || sent === lang
+  const titles = pull.rows.titles as TitleRow[] | undefined
+  if (titles === undefined) return { pull, folded }
+  const kept = folded ? titles.filter((row) => row.lang === lang) : []
+  if (kept.length === titles.length) return { pull, folded }
+  return { pull: { ...pull, rows: { ...pull.rows, titles: kept } }, folded }
+}
+
+/**
+ * Title rows fetched by id, folded into `tables`: only `lang`'s, only for articles the device
+ * holds (one let go meanwhile stays gone), and the later write of each, by seq, so a page read
+ * before a pull that brought a newer title never puts the older one back. The same tables when
+ * nothing changed.
+ */
+export function mergeTitles(tables: Tables, rows: readonly TitleRow[], lang: string): Tables {
+  let titles: Map<string, TitleRow> | null = null
+  for (const row of rows) {
+    if (row.lang !== lang || !tables.articles.has(row.articleId)) continue
+    const key = titleKey(row.articleId, lang)
+    const held = (titles ?? tables.titles).get(key)
+    if (held && held.seq >= row.seq) continue
+    titles ??= new Map(tables.titles)
+    titles.set(key, row)
+  }
+  return titles ? { ...tables, titles } : tables
+}
+
+/**
+ * The next articles to ask `lang`'s titles for: every one the device holds with an id past
+ * `after`, lowest first, up to `limit`, whether or not it holds a title for it. A titles record
+ * goes not whole in two ways. A switch lets every title go, so all of them are missing. But
+ * another tab still in another language can move the shared cursor past changed rows of this one
+ * (a title translated again), and then the titles held are there, some of them stale: asking only
+ * for what is missing left those stale for good and called the language whole (Codex's review
+ * found it with two connections to one database). So a pass asks for them all, and `mergeTitles`
+ * keeps whichever of two rows is the later. A post written in `lang` is never asked for: no title
+ * is ever made in a post's own language. A pass goes by id, each page `after` the last one asked,
+ * so a post the server has no title for is asked for once a pass. The ids are the device's, not
+ * the server's horizon: it keeps posts older than that.
+ */
+export function nextTitleIds(
+  tables: Tables,
+  lang: string,
+  limit = TITLE_IDS_MAX,
+  after = 0,
+): number[] {
+  const ids: number[] = []
+  for (const article of tables.articles.values()) {
+    if (article.id > after && article.sourceLang !== lang) ids.push(article.id)
+  }
+  return ids.sort((a, b) => a - b).slice(0, limit)
+}
+
+/** The tables with every title not in `lang` let go; the same tables when there was none. */
+export function pruneTitlesTo(tables: Tables, lang: string): Tables {
+  let titles: Map<string, TitleRow> | null = null
+  for (const [key, row] of tables.titles) {
+    if (row.lang === lang) continue
+    titles ??= new Map(tables.titles)
+    titles.delete(key)
+  }
+  return titles ? { ...tables, titles } : tables
 }
 
 /** The tables as plain arrays, to persist or compare. */

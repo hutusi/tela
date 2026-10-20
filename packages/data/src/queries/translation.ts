@@ -246,6 +246,8 @@ export type BodyTranslationRow = {
   /** The finished translation object, once done or partial. */
   objectKey: string | null
   failedLeaves: string[]
+  /** Stamped by every write, so the higher of two reads of the row is the later. */
+  seq: number
 }
 
 export async function loadBodyTranslation(
@@ -265,6 +267,7 @@ export async function loadBodyTranslation(
     chunk_keys: string
     object_key: string | null
     failed_leaves: string
+    seq: number
   }>(sql`select * from body_translations where content_key = ${contentKey} and lang = ${lang}`)
   const r = rows[0]
   if (!r) return null
@@ -280,6 +283,7 @@ export async function loadBodyTranslation(
     chunkKeys: JSON.parse(r.chunk_keys) as string[],
     objectKey: r.object_key,
     failedLeaves: JSON.parse(r.failed_leaves) as string[],
+    seq: r.seq,
   }
 }
 

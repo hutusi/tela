@@ -3,8 +3,8 @@
  * standard, chosen so there is almost nothing between Tela and the browser to age):
  *
  * - `meta`: whose rows these are (`owner`), the cursor and which tables the build that moved it
- *   keeps (`kept`), and the pending mutations, one record each (`pending:<mid>`, tagged with the
- *   owner that queued it). Tabs share this database, and
+ *   keeps (`kept`), which language's titles it holds (`titles`), and the pending mutations, one
+ *   record each (`pending:<mid>`, tagged with the owner that queued it). Tabs share this database, and
  *   each holds only its own pending list in memory: one record for the whole list let a tab's
  *   save erase another tab's unsent changes.
  * - `tables`: one record per synced table (a few thousand rows at most; written whole).
@@ -70,8 +70,22 @@ export type Persisted = {
    * bring its rows back. Empty with no rows.
    */
   covered: string[]
+  /** Which language's titles the copy holds, and whether whole up to `cursor` (`TitlesHeld`). */
+  titles: TitlesHeld
   pending: Pending[]
 }
+
+/**
+ * Which language's titles a copy holds, and whether it holds them whole up to its cursor: every
+ * title the server has in that language for the articles held. `lang` null is every language a
+ * pull sent, as a copy from a build before the device kept one language holds them, or a copy
+ * holds them while it does not know its language yet. The device keeps titles in its reading
+ * language only, and fetches what it lacks of them (`SyncEngine`) until they are whole.
+ */
+export type TitlesHeld = { lang: string | null; whole: boolean }
+
+/** The titles of a copy that holds nothing to trust: every language, none of it whole. */
+const NO_TITLES: TitlesHeld = { lang: null, whole: false }
 
 /**
  * One write of an owner's rows: whatever it names lands together, or none of it does. A pull's
@@ -91,13 +105,28 @@ export type Change = {
    * Every table as the writer holds it, consistent at `cursor`: written instead of `tables` when
    * the stored copy is behind where this pull started (another tab's late snapshot set it back),
    * so a tab ahead of the copy keeps it current rather than waiting for that tab to pull again.
+   * A function is called only then: a writer that would build it for nothing (a page of titles)
+   * passes one.
    */
-  whole?: TableRows
+  whole?: TableRows | (() => TableRows)
   /**
    * The tables the writer's copy holds whole up to `cursor` (`Persisted.covered`). A write that
    * moves the cursor without it covers none: the copy is not trusted until a snapshot.
    */
   covered?: readonly string[]
+  /**
+   * The writer's titles (`TitlesHeld`), and whether the pull from `from` to `cursor` brought
+   * their language (`folded`; a write that does not move the cursor brought nothing to miss).
+   * What the stored copy then says of its titles (`titlesAfter`). A write that moves the cursor
+   * without it leaves that record where it was, which then reads as stale: what an earlier
+   * build's write does.
+   */
+  titles?: TitlesHeld & { folded: boolean }
+  /**
+   * Told, as the write is made, whether its tables and cursor were written or left out (`fits`):
+   * a writer whose titles were left out writes them again with its next pull.
+   */
+  placed?: (written: boolean) => void
   /** Unsent changes to record, one record each, so no tab writes over another's. */
   put?: readonly Pending[]
   /** Changes to forget: answered and caught up with, or refused. */
@@ -320,6 +349,56 @@ export function keptAfter(
   const was = new Set(stored ?? [])
   return { tables: covered.filter((t) => all || writes.has(t) || was.has(t)), cursor }
 }
+
+/**
+ * Which language's titles the copy holds, and where the cursor was when that was last said
+ * (`TitlesHeld`). A record of its own beside `KEPT`, never a table in it: `KEPT` says the titles
+ * table is whole, which a pull in another language makes untrue while the table is still sent,
+ * so whether a language is whole can only be said in a record stamped with the cursor it was true
+ * at. Without the stamp, a tab still on the old language (sharing this database) moves the cursor
+ * past the new language's rows, and the copy would claim them. Nor inside the titles table's own
+ * record: earlier builds read that as an array of rows.
+ */
+const TITLES = 'titles'
+type TitlesRecord = TitlesHeld & { cursor: number }
+
+/**
+ * The copy's titles as its record says them at `cursor`: whole only if the record was written
+ * there. No record at all is a copy from before this build, which pulled every language: every
+ * language, whole as far as `KEPT` says, so only a caller that trusts `KEPT` asks. Null when the
+ * record cannot be read.
+ */
+function titlesAt(record: unknown, cursor: number): TitlesHeld | null {
+  if (record === undefined) return { lang: null, whole: true }
+  if (typeof record !== 'object' || record === null) return null
+  const r = record as Partial<TitlesRecord>
+  if (typeof r.whole !== 'boolean' || typeof r.cursor !== 'number') return null
+  if (r.lang !== null && typeof r.lang !== 'string') return null
+  return { lang: r.lang, whole: r.whole && r.cursor === cursor }
+}
+
+/**
+ * The titles record after a write of `rows` at `cursor` over a copy whose titles were `stored`
+ * (null: nothing to trust). A write that puts the titles table puts the writer's whole copy of
+ * it, so the writer's record goes with it. One that leaves the table moves the cursor past
+ * whatever the server wrote meanwhile: the stored titles stay whole only if they were, and the
+ * pull brought their language (`folded`, and the same language, or every language, on either
+ * side); otherwise
+ * they are what they were and no longer whole, until a write puts them whole again.
+ */
+export function titlesAfter(
+  stored: TitlesHeld | null,
+  rows: Partial<TableRows>,
+  writer: TitlesHeld & { folded: boolean },
+  cursor: number,
+): TitlesRecord {
+  if ('titles' in rows) return { lang: writer.lang, whole: writer.whole, cursor }
+  if (stored === null) return { lang: writer.lang, whole: false, cursor }
+  // A copy holding every language (one from before ADR 0052) holds the writer's whole too.
+  const brought =
+    writer.folded && (writer.lang === null || stored.lang === null || writer.lang === stored.lang)
+  return { lang: stored.lang ?? writer.lang, whole: brought && stored.whole, cursor }
+}
 const UNVERIFIED = 'unverified'
 /** Earlier builds' keys: the owner, and the whole pending list in one record. Never read. */
 const LEGACY = ['userId', 'pending']
@@ -355,7 +434,9 @@ function fits(change: Change, stored: number): boolean {
 function placed(change: Change, stored: number): Partial<TableRows> | null {
   if (fits(change, stored)) return change.tables ?? {}
   // Ahead of the copy: the writer's whole copy is a snapshot at its cursor, which always fits.
-  if (change.whole && change.cursor !== undefined && change.cursor >= stored) return change.whole
+  if (change.whole && change.cursor !== undefined && change.cursor >= stored) {
+    return typeof change.whole === 'function' ? change.whole() : change.whole
+  }
   return null
 }
 
@@ -439,13 +520,15 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
             cursor: 0,
             rows: null,
             covered: [],
+            titles: NO_TITLES,
             pending: [],
           }
         }
         const meta = tx.objectStore('meta')
-        const [cursor, kept, unverified, keys, records, values] = await Promise.all([
+        const [cursor, kept, titles, unverified, keys, records, values] = await Promise.all([
           meta.get(CURSOR),
           meta.get(KEPT),
+          meta.get(TITLES),
           markOf(tx),
           meta.getAllKeys(pendingRange()),
           meta.getAll(pendingRange()) as Promise<StoredPending[]>,
@@ -460,16 +543,18 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
           else if (key !== undefined) stray.push(meta.delete(key))
         })
         await Promise.all(stray)
-        const covered = keptAt(kept, Number(cursor ?? 0))
+        const at = Number(cursor ?? 0)
+        const covered = keptAt(kept, at)
         const complete = values.every((v) => v !== undefined) && covered !== null
         return {
           owner,
           unverified,
-          cursor: complete ? Number(cursor ?? 0) : 0,
+          cursor: complete ? at : 0,
           rows: complete
             ? (Object.fromEntries(TABLES.map((t, i) => [t, values[i]])) as TableRows)
             : null,
           covered: complete ? (covered ?? []) : [],
+          titles: complete ? (titlesAt(titles, at) ?? NO_TITLES) : NO_TITLES,
           pending: inOrder(pending),
         }
       }),
@@ -503,24 +588,34 @@ export async function indexedDbPersistence(name = DATABASE): Promise<Persistence
     commit: (owner, change) =>
       write(['meta', 'tables'], async (tx) => {
         const meta = tx.objectStore('meta')
-        const [stored, storedCursor, storedKept] = await Promise.all([
+        const [stored, storedCursor, storedKept, storedTitles] = await Promise.all([
           ownerOf(tx),
           meta.get(CURSOR),
           meta.get(KEPT),
+          meta.get(TITLES),
         ])
         if (stored !== owner) return false
         const tables = tx.objectStore('tables')
         const at = Number(storedCursor ?? 0)
         const rows = placed(change, at)
+        const was = keptAt(storedKept, at)
         const kept =
           rows && change.cursor !== undefined
-            ? keptAfter(keptAt(storedKept, at), rows, change.covered ?? [], change.cursor)
+            ? keptAfter(was, rows, change.covered ?? [], change.cursor)
             : null
+        // A copy whose `KEPT` is not trusted holds no titles worth keeping either.
+        const before = was === null ? null : titlesAt(storedTitles, at)
+        const titles =
+          rows && kept && change.titles
+            ? titlesAfter(before, rows, change.titles, kept.cursor)
+            : null
+        change.placed?.(rows !== null)
         await Promise.all([
           ...Object.entries(rows ?? {}).map(([t, value]) =>
             tables.put(value, t as keyof TableRows),
           ),
           ...(kept ? [meta.put(kept.cursor, CURSOR), meta.put(kept, KEPT)] : []),
+          ...(titles ? [meta.put(titles, TITLES)] : []),
           ...(change.put ?? []).map((e) =>
             meta.put({ ...e, owner } satisfies StoredPending, pendingKey(e.mutation.mid)),
           ),
@@ -595,6 +690,8 @@ export function memoryPersistence(): Persistence {
   let tables: Partial<TableRows> = {}
   // What `tables` holds whole up to `cursor`, as `KEPT` says it in IndexedDB.
   let covered: string[] = []
+  // Which language's titles, as `TITLES` says it in IndexedDB: none until a write names them.
+  let titles: TitlesRecord | undefined
   // Only the owner's: a claim wipes them with everything else, and every write checks.
   const pending = new Map<string, Pending>()
   const bodies = new Map<string, StoredBody>()
@@ -604,23 +701,34 @@ export function memoryPersistence(): Persistence {
     cursor = 0
     tables = {}
     covered = []
+    titles = undefined
     pending.clear()
     bodies.clear()
     objects.clear()
   }
+  const complete = () => TABLES.every((t) => t in tables)
   return {
     async load() {
       if (owner === null) {
         wipe()
-        return { owner: null, unverified, cursor: 0, rows: null, covered: [], pending: [] }
+        return {
+          owner: null,
+          unverified,
+          cursor: 0,
+          rows: null,
+          covered: [],
+          titles: NO_TITLES,
+          pending: [],
+        }
       }
-      const complete = TABLES.every((t) => t in tables)
+      const whole = complete()
       return {
         owner,
         unverified,
-        cursor: complete ? cursor : 0,
-        rows: complete ? (tables as TableRows) : null,
-        covered: complete ? covered : [],
+        cursor: whole ? cursor : 0,
+        rows: whole ? (tables as TableRows) : null,
+        covered: whole ? covered : [],
+        titles: whole ? (titlesAt(titles, cursor) ?? NO_TITLES) : NO_TITLES,
         pending: inOrder(pending.values()),
       }
     },
@@ -646,6 +754,12 @@ export function memoryPersistence(): Persistence {
     async commit(o, change) {
       if (owner !== o) return false
       const rows = placed(change, cursor)
+      if (rows && change.cursor !== undefined && change.titles) {
+        // Before the tables change: what the copy held at its cursor, if it held anything.
+        const before = complete() ? titlesAt(titles, cursor) : null
+        titles = titlesAfter(before, rows, change.titles, change.cursor)
+      }
+      change.placed?.(rows !== null)
       if (rows) {
         tables = { ...tables, ...rows }
         if (change.cursor !== undefined) {

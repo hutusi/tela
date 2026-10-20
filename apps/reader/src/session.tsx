@@ -4,7 +4,9 @@
  * and a 401 from any sync call ends it and wipes the device's copy while it is still that
  * member's.
  */
+import { type ProfileRow, readingLangOf } from '@tela/sync'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { detectLocale } from './i18n'
 import { AccountChanged, api, SignedOut, UpgradeRequired } from './store/api'
 import { type EarlierBuild, earlierBuild, type Persistence } from './store/db'
 import type { SyncEngine } from './store/engine'
@@ -118,11 +120,24 @@ export async function forgetOnSignOut(store: Pick<LocalStore, 'userId' | 'forget
 export const ME_DEADLINE = 15_000
 
 /**
- * Who the session is: an id, or null when nobody is signed in, which only a 401 says. Any other
- * answer rejects, since it says nothing about the session: a 5xx mid-deploy, a captive portal's
- * page, a WAF challenge, no network at all, or no answer within `deadline`.
+ * Who the session is, as /me says it: the account's id, and the two languages its profile holds
+ * (null while it has none), so a device that holds nothing of the account yet knows which
+ * language's titles to ask its first snapshot for.
  */
-export async function whoAmI(deadline = ME_DEADLINE): Promise<string | null> {
+export type Me = { id: string; profile: Pick<ProfileRow, 'readingLang' | 'uiLocale'> | null }
+
+/** A language the profile /me sent holds, or null for none, or for anything that is not one. */
+const languageIn = (profile: Record<string, unknown>, key: 'readingLang' | 'uiLocale') => {
+  const value = profile[key]
+  return typeof value === 'string' ? value : null
+}
+
+/**
+ * Who the session is, or null when nobody is signed in, which only a 401 says. Any other answer
+ * rejects, since it says nothing about the session: a 5xx mid-deploy, a captive portal's page, a
+ * WAF challenge, no network at all, or no answer within `deadline`.
+ */
+export async function whoAmI(deadline = ME_DEADLINE): Promise<Me | null> {
   let res: Response
   try {
     res = await api('/api/v1/me', { signal: AbortSignal.timeout(deadline) })
@@ -131,9 +146,29 @@ export async function whoAmI(deadline = ME_DEADLINE): Promise<string | null> {
     throw err
   }
   if (!res.ok) throw new Error(`/api/v1/me answered ${res.status}`)
-  const { id } = (await res.json()) as { id?: unknown }
+  const { id, profile } = (await res.json()) as { id?: unknown; profile?: unknown }
   if (typeof id !== 'string' || !id) throw new Error('/api/v1/me named no one')
-  return id
+  if (typeof profile !== 'object' || profile === null) return { id, profile: null }
+  const held = profile as Record<string, unknown>
+  return {
+    id,
+    profile: {
+      readingLang: languageIn(held, 'readingLang'),
+      uiLocale: languageIn(held, 'uiLocale'),
+    },
+  }
+}
+
+/**
+ * The page's interface language as the app first renders it (`Routed`): the cookie's, else the
+ * browser's. What a member reads in when their account names neither language.
+ */
+function pageLocale(): string {
+  try {
+    return detectLocale(document.cookie ?? '', navigator.languages ?? [navigator.language])
+  } catch {
+    return 'en'
+  }
 }
 
 /** What asking /me made of the tab; null when a later question took over before it could act. */
@@ -145,31 +180,43 @@ export type Learned = 'member' | 'guest' | 'unreachable' | null
  * unsent changes, and asks again (`whenReachable`); so does a claim the device's storage refused.
  * An answer that comes once `current()` is false changes nothing: a sign-in in this tab has asked
  * since, and its answer is the newer one.
+ *
+ * A device that holds nothing of the member's yet takes the language they read in from /me's
+ * profile, so its first snapshot brings that language's titles alone, not every language's first
+ * and the reading one's after. One that holds their rows reads it from its own profile row, as
+ * the app hands it over (`Routed`), which counts a choice still on its way.
  */
 export async function learnWho(
-  store: Pick<LocalStore, 'userId' | 'unverified' | 'mark' | 'setUser' | 'forgetAccount'>,
+  store: Pick<
+    LocalStore,
+    'userId' | 'unverified' | 'mark' | 'setUser' | 'forgetAccount' | 'hasData' | 'setReadingLang'
+  >,
   current: () => boolean,
-  ask: () => Promise<string | null> = whoAmI,
+  ask: () => Promise<Me | null> = whoAmI,
+  locale: () => string = pageLocale,
 ): Promise<Learned> {
   // The mark as the question leaves: the answer reflects whatever that mark is about.
   const seen = await store.mark().catch(() => store.unverified)
-  let id: string | null
+  let me: Me | null
   try {
-    id = await ask()
+    me = await ask()
   } catch {
     return current() ? 'unreachable' : null
   }
   if (!current()) return null
-  if (id === null) {
+  if (me === null) {
     // Nobody is signed in: a copy this tab still holds is no one's to show.
     await forgetOnSignOut(store)
     return 'guest'
   }
   try {
-    await store.setUser(id, seen)
+    await store.setUser(me.id, seen)
   } catch {
     return 'unreachable'
   }
+  // Asked again while setUser ran (a sign-in's question took over): that answer names the language.
+  if (!current()) return null
+  if (!store.hasData) store.setReadingLang(readingLangOf(me.profile, locale()))
   return 'member'
 }
 

@@ -9,6 +9,8 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **A device keeps titles in its reading language only**, not in all four, and a new reading
+  language's titles are fetched behind the list, which shows posts as written until they come.
 - **Pages download only the fonts their text needs.** Each face is declared for its own
   characters, so English, French and Chinese pages fetch the Latin subset alone (134 KB instead of
   383 KB), and the two faces every page uses first are preloaded.

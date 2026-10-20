@@ -6,6 +6,10 @@
  * - Any other cursor is a delta: rows written after it. A subscription newer than the cursor
  *   brings its feed's horizon snapshot along, since those articles were written before it.
  * - A page ends on a seq boundary. `more` means pull again from `cursor` straight away.
+ * - `&titles=<lang>` asks for the title rows of one reading language only, fresh and changed,
+ *   said back as `titlesLang` (ADR 0052). Without it, or with a language outside the launch set,
+ *   every language comes and no `titlesLang`: refusing a language tela-api does not know yet would
+ *   stop a device's whole sync. Only `POST /api/v1/sync/titles` refuses one, 400 `invalid_titles`.
  * - SQLite has one writer, so seq order is commit order with no gaps; a row the client has not
  *   seen always has a seq above its cursor.
  */
@@ -16,6 +20,12 @@ export const HORIZON_DAYS = 30
 
 /** Rows per table in one delta page. */
 export const PAGE_ROWS = 1000
+
+/**
+ * The most posts one request for titles may name (`POST /api/v1/sync/titles`, ADR 0052): tela-api
+ * refuses more, and the device asks for this many at a time.
+ */
+export const TITLE_IDS_MAX = 1000
 
 /**
  * Oldest client the API still speaks to. A member call from an older one is answered 409
@@ -55,6 +65,11 @@ export type PullResponse = {
   more: boolean
   /** A snapshot: drop everything held and take these rows. */
   reset: boolean
+  /**
+   * The one language the title rows are in, as the pull asked with `&titles=`; absent means every
+   * language (a pull that named none, or a tela-api from before ADR 0052).
+   */
+  titlesLang?: string
   rows: SyncRows
   tombstones: Tombstone[]
 }

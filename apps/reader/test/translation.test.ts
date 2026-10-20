@@ -6,31 +6,54 @@ import {
   type Live,
   moreAdvanced,
   pollDelay,
+  pullsAfterRequest,
   readerState,
 } from '../src/lib/use-translation'
 import type { TranslationObject } from '../src/store/objects'
 
-const at = (state: string, chunks: number): Live => ({
+const at = (state: string, chunks: number, seq?: number): Live => ({
   state,
   chunkKeys: Array.from({ length: chunks }, (_, i) => `tc/k/en/r/${i}.json`),
   objectKey: null,
   failedLeaves: [],
+  ...(seq === undefined ? {} : { seq }),
 })
 
 describe('what an open article shows of its translation', () => {
-  test('a later state wins, whichever side it comes from', () => {
+  test('a new attempt outranks the ended row it replaced, whichever reached the device first', () => {
+    // Try again over a failure, while a pull that read the failed row is still out: it lands
+    // after the answer, or before it, and either way it is the older row (Codex's review).
+    for (const ended of ['failed', 'skipped', 'done', 'partial']) {
+      expect(moreAdvanced(at(ended, 0, 10), at('requested', 0, 15))?.state).toBe('requested')
+      expect(moreAdvanced(at(ended, 3, 10), at('running', 1, 16))?.chunkKeys).toHaveLength(1)
+    }
+  })
+
+  test('a row written after the answer wins: the attempt has moved on since', () => {
+    expect(moreAdvanced(at('failed', 0, 20), at('requested', 0, 15))?.state).toBe('failed')
+    expect(moreAdvanced(at('running', 2, 18), at('running', 5, 22))?.chunkKeys).toHaveLength(5)
+    expect(moreAdvanced(at('running', 5, 22), at('running', 2, 18))?.chunkKeys).toHaveLength(5)
+    expect(moreAdvanced(at('done', 4, 30), at('done', 4, 30))?.state).toBe('done')
+  })
+
+  test('without a seq on both sides, as from a tela-api before it, by state as before', () => {
+    expect(moreAdvanced(at('failed', 0, 10), at('requested', 0))?.state).toBe('failed')
+    expect(moreAdvanced(at('requested', 0), at('running', 1, 16))?.state).toBe('running')
+  })
+
+  test('without seqs, a later state wins, whichever side it comes from', () => {
     expect(moreAdvanced(at('requested', 0), at('running', 1))?.state).toBe('running')
     expect(moreAdvanced(at('done', 4), at('running', 3))?.state).toBe('done')
     expect(moreAdvanced(undefined, at('running', 1))?.state).toBe('running')
   })
 
-  test('while both run, the chunks polling has seen are not held back by the last pull', () => {
+  test('without seqs, while both run, the chunks polling has seen are not held back by the last pull', () => {
     // A pull a minute ago said running with two chunks; polling now sees five.
     expect(moreAdvanced(at('running', 2), at('running', 5))?.chunkKeys).toHaveLength(5)
     expect(moreAdvanced(at('running', 5), at('running', 2))?.chunkKeys).toHaveLength(5)
   })
 
-  test('between two finished answers, the synced row stands', () => {
+  test('without seqs, between two finished answers, the synced row stands', () => {
     expect(moreAdvanced(at('done', 3), at('partial', 4))?.state).toBe('done')
   })
 })
@@ -165,5 +188,22 @@ describe('polling a translation under way', () => {
     expect(pollDelay(40_000, false)).toBe(1_500)
     // The first chunk is on screen: the rest comes at the usual pace.
     expect(pollDelay(800, true)).toBe(1_500)
+  })
+})
+
+describe('what a translation request pulls', () => {
+  test('a translation already done, whose row the device may lack', () => {
+    expect(pullsAfterRequest('ready')).toBe(true)
+  })
+
+  test('not a new attempt: its answer outranks any older row, and the poll pulls when it ends', () => {
+    expect(pullsAfterRequest('requested')).toBe(false)
+    expect(pullsAfterRequest('in_progress')).toBe(false)
+  })
+
+  test('a refusal writes nothing', () => {
+    for (const status of ['invalid', 'unavailable', 'rate_limited', 'budget_exhausted']) {
+      expect(pullsAfterRequest(status)).toBe(false)
+    }
   })
 })

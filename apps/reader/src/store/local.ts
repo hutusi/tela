@@ -20,22 +20,27 @@ import {
   type FolderRow,
   type FollowRow,
   type Mutation,
+  mergeTitles,
+  nextTitleIds,
   type Pending,
   type PrivacyFlag,
   type PullResponse,
   type PushResponse,
   privacyChange,
   privacyUnsettled,
+  pruneTitlesTo,
   rowsOf,
   settle,
   type TableRows,
   type Tables,
+  type TitleRow,
   tablesFromRows,
+  titlesIn,
   view,
 } from '@tela/sync'
 import { newId } from '../lib/id'
 import type { Person } from '../views/types'
-import { type Change, type Persistence, TABLES } from './db'
+import { type Change, type Persistence, TABLES, type TitlesHeld } from './db'
 
 /** A mutation as the UI states it: the store adds the id and the time. */
 export type MutationInput = Mutation extends infer M
@@ -76,6 +81,27 @@ export class LocalStore {
    * last a snapshot (`Persisted.covered`). A tela-api from before a table leaves it out.
    */
   private covered: ReadonlySet<string> = new Set()
+  /**
+   * Which language's titles the confirmed tables hold, and whether whole up to the cursor
+   * (`TitlesHeld`). Titles are only ever in `lang`: a switch lets the others go at once, and a
+   * pull in another language brings none. `lang` null is every language a pull sent, until the
+   * store is told the member's (`setReadingLang`).
+   */
+  private titles: TitlesHeld = { lang: null, whole: false }
+  /**
+   * Moves on whenever the titles held stop being whole (a switch, a pull in another language,
+   * another account): the engine's pass through the articles held is for one round, and starts
+   * over in the next (`titleIds`).
+   */
+  titlesRound = 0
+  /**
+   * The titles have changed here since a write that carried them landed: storage left that write
+   * out, since another tab had moved the copy past it (`Change.placed`). The next pull's write
+   * carries them.
+   */
+  private titlesDirty = false
+  /** Called when the reading language changes, so the sync engine fetches its titles. */
+  onLanguage: (() => void) | null = null
   private pending: Pending[] = []
   /**
    * Changes in `pending` held back from the server for an Undo, by id, with the timer that lets
@@ -198,6 +224,16 @@ export class LocalStore {
       tables: saved.rows ? tablesFromRows(saved.rows) : emptyTables(),
     }
     this.covered = new Set(saved.covered)
+    this.titles = saved.titles
+    // Only the record's language, whatever another build left in the table beside it; written
+    // back with the next pull.
+    if (saved.titles.lang !== null) {
+      const tables = pruneTitlesTo(this.confirmed.tables, saved.titles.lang)
+      if (tables !== this.confirmed.tables) {
+        this.confirmed = { ...this.confirmed, tables }
+        this.titlesDirty = true
+      }
+    }
     this.pending = saved.pending
     this.pruneHolds()
     this.recompute()
@@ -234,6 +270,10 @@ export class LocalStore {
     this.userId = owner
     this.confirmed = { cursor: 0, tables: emptyTables() }
     this.covered = new Set()
+    // The next account's language is its own: told again (`learnWho`, `Routed`).
+    this.titles = { lang: null, whole: false }
+    this.titlesRound++
+    this.titlesDirty = false
     this.pending = []
     // A held change was the old account's: it is never let go into the new one's.
     this.pruneHolds()
@@ -243,13 +283,116 @@ export class LocalStore {
     this.recompute()
   }
 
-  /** Write through as `owner`. A refusal means the copy is someone else's now. */
-  private async write(owner: string, epoch: number, change: Change): Promise<void> {
-    if (await this.persistence.commit(owner, change)) return
+  /**
+   * Write through as `owner`. A refusal means the copy is someone else's now. Says whether the
+   * tables and cursor were written, or left out since another tab had moved the copy past them
+   * (`Change` in db.ts).
+   */
+  private async write(owner: string, epoch: number, change: Change): Promise<boolean> {
+    let written = false
+    const placed = (yes: boolean) => {
+      written = yes
+    }
+    if (await this.persistence.commit(owner, { ...change, placed })) return written
     // Refused after the tab itself moved on (a sign-in here, or a forget): nothing it holds is lost.
-    if (epoch !== this.epoch || this.lostIn === epoch) return
+    if (epoch !== this.epoch || this.lostIn === epoch) return false
     this.lostIn = epoch
     this.onLost?.()
+    return false
+  }
+
+  /** The reading language this device holds titles in; null for every language, until told. */
+  get titleLang(): string | null {
+    return this.titles.lang
+  }
+
+  /** Whether the device holds every title the server has in that language, up to its cursor. */
+  get titlesWhole(): boolean {
+    return this.titles.whole
+  }
+
+  /**
+   * The member reads in `lang` now (`readingLangOf`, handed over by the app as the view says it):
+   * hold that language's titles only. The others go at once, so the lists show posts as written
+   * until the new ones come, and the engine fetches them (`onLanguage`) rather than start over.
+   * A copy that held every language (from before the device kept one) held this one whole too.
+   */
+  setReadingLang(lang: string): void {
+    if (this.titles.lang === lang) return
+    const before = this.confirmed.tables
+    const tables = pruneTitlesTo(before, lang)
+    this.titles = { lang, whole: this.titles.lang === null && this.titles.whole }
+    if (!this.titles.whole) this.titlesRound++
+    if (tables !== before) {
+      this.confirmed = { ...this.confirmed, tables }
+      this.recompute()
+    }
+    const owner = this.userId
+    if (owner !== null) void this.storeTitles(owner, this.epoch)
+    this.onLanguage?.()
+  }
+
+  /**
+   * The articles held past `after`, by id, whose titles in the language held a pass asks for: the
+   * next page to fetch, titled or not, since a title held may be stale (`nextTitleIds`). None
+   * while the language is not known.
+   */
+  titleIds(after: number): number[] {
+    const lang = this.titles.lang
+    return lang === null ? [] : nextTitleIds(this.confirmed.tables, lang, undefined, after)
+  }
+
+  /**
+   * Fold in titles fetched by id in `lang`, asked for in `epoch`, into the confirmed tables as
+   * they are now (a pull may have landed meanwhile): dropped if the tab holds another account or
+   * another language since.
+   */
+  async applyTitles(rows: readonly TitleRow[], lang: string, epoch: number): Promise<void> {
+    const owner = this.userId
+    if (owner === null || epoch !== this.epoch || lang !== this.titles.lang) return
+    const before = this.confirmed.tables
+    const tables = mergeTitles(before, rows, lang)
+    if (tables === before) return
+    this.confirmed = { ...this.confirmed, tables }
+    this.recompute()
+    await this.storeTitles(owner, epoch)
+  }
+
+  /**
+   * The engine has asked for every title missing in `lang` in `round`: what the server had is
+   * here, and every title written since comes with a pull in `lang`. Whole, unless the round, the
+   * language or the account moved meanwhile.
+   */
+  async titlesFetched(lang: string, epoch: number, round: number): Promise<void> {
+    const owner = this.userId
+    if (owner === null || epoch !== this.epoch) return
+    if (lang !== this.titles.lang || round !== this.titlesRound || this.titles.whole) return
+    this.titles = { lang, whole: true }
+    await this.storeTitles(owner, epoch)
+  }
+
+  /**
+   * Store the titles as held, with what they are (`Change.titles`), at the cursor they are held
+   * at. Storage leaves them out when another tab has moved the copy past that cursor; the next
+   * pull's write carries them then (`titlesDirty`).
+   */
+  private async storeTitles(owner: string, epoch: number): Promise<void> {
+    const { cursor, tables } = this.confirmed
+    // Nothing stored to place them beside: the next pull writes everything.
+    if (cursor === 0) {
+      this.titlesDirty = true
+      return
+    }
+    const written = await this.write(owner, epoch, {
+      tables: { titles: [...tables.titles.values()] },
+      cursor,
+      from: cursor,
+      // Only if the stored copy is behind this tab (`placed`): not built for every page.
+      whole: () => rowsOf(tables),
+      covered: [...this.covered],
+      titles: { ...this.titles, folded: true },
+    })
+    if (epoch === this.epoch) this.titlesDirty = !written
   }
 
   /**
@@ -429,8 +572,21 @@ export class LocalStore {
     this.covered = new Set(
       TABLES.filter((t) => sent.has(t) && (given.reset || this.covered.has(t))),
     )
+    // Titles in the language held only. A pull in another one (asked for before a switch) passed
+    // that language's rows without bringing them: what is held is no longer whole, and the engine
+    // fetches the language's titles again, every one held, since some may be stale.
+    const lang = this.titles.lang
+    const { pull: titled, folded } =
+      lang === null
+        ? {
+            pull: given,
+            folded: given.titlesLang === undefined,
+          }
+        : titlesIn(given, lang)
+    if (!folded) this.titlesRound++
+    this.titles = { lang, whole: folded && (given.reset || this.titles.whole) }
     // Every table this build knows, so the loop below never reads one an older tela-api left out.
-    const pull = completePull(given)
+    const pull = completePull(titled)
     const before = this.confirmed.tables
     const from = this.confirmed.cursor
     const queued = this.pending
@@ -467,14 +623,19 @@ export class LocalStore {
         (was instanceof Map && now instanceof Map && was.size !== now.size)
       if (touched) (changed as Record<string, unknown>)[name] = rows[name]
     }
-    await this.write(owner, epoch, {
+    // Titles a write of this tab's left out (`storeTitles`) go with this one.
+    if (this.titlesDirty) changed.titles = rows.titles
+    const carried = 'titles' in changed
+    const written = await this.write(owner, epoch, {
       tables: changed,
       cursor: this.confirmed.cursor,
       from,
       whole: rows,
       covered: [...this.covered],
+      titles: { ...this.titles, folded },
       drop: gone(queued, this.pending),
     })
+    if (carried && epoch === this.epoch) this.titlesDirty = !written
     return false
   }
 

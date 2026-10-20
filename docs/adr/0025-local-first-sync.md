@@ -8,7 +8,9 @@ and by the edge renderer. Amended by 0031 (2026-09-30): a member also holds the 
 follow, and `follow`, `unfollow` and `setPrivacy` join the mutations. Amended by 0035
 (2026-10-02): `/` and the info pages join the public pages the edge renders, for visitors only, and
 the service worker takes its shell from `/__tela/shell` rather than `/`. Amended by 0040
-(2026-10-07): `setProfile` goes to the later `at`, each language on a clock of its own.
+(2026-10-07): `setProfile` goes to the later `at`, each language on a clock of its own. Amended by
+0052 (2026-10-20): a pull may name one language, and a device then holds titles in its reading
+language only, fetching a new one's in the background when it changes.
 
 ## Context
 

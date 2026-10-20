@@ -121,6 +121,40 @@ test.describe('stylesheet', () => {
     expect(preloads[1]).toMatch(/^\/assets\/eb-garamond-latin-500-normal-[\w-]+\.woff2$/)
   })
 
+  test('Latin Extended and Vietnamese fetch their own subsets once text needs them', async ({
+    page,
+  }) => {
+    await page.goto('/reading')
+    await synced(page)
+    await page.evaluate(() => document.fonts.ready)
+    // Ask for a face as text in it would: the browser fetches the subsets whose unicode-range
+    // covers the text, and says which faces it loaded.
+    const load = (font: string, text: string) =>
+      page.evaluate(
+        async ([f, t]) => (await document.fonts.load(f as string, t as string)).length,
+        [font, text],
+      )
+    const fetched = (name: RegExp) =>
+      page.evaluate(
+        (source) =>
+          performance
+            .getEntriesByType('resource')
+            .map((e) => new URL(e.name).pathname)
+            .some((path) => new RegExp(source).test(path)),
+        name.source,
+      )
+    // Polish (and Czech, Turkish, …): Latin Extended.
+    expect(await load('400 16px "EB Garamond"', 'Zażółć gęślą jaźń')).toBeGreaterThan(0)
+    expect(await fetched(/\/assets\/eb-garamond-latin-ext-400-normal-[\w-]+\.woff2$/)).toBe(true)
+    // Vietnamese is a subset of its own, not part of Latin Extended.
+    expect(await load('400 16px "EB Garamond"', 'Tiếng Việt')).toBeGreaterThan(0)
+    expect(await fetched(/\/assets\/eb-garamond-vietnamese-400-normal-[\w-]+\.woff2$/)).toBe(true)
+    // Figtree has no Vietnamese: no face of it covers ế, so nothing is fetched and the browser
+    // falls back to the system's sans for those letters.
+    expect(await load('400 16px Figtree', 'ế')).toBe(0)
+    expect(await fetched(/\/assets\/figtree-vietnamese/)).toBe(false)
+  })
+
   test('a link inside a post keeps its underline', async ({ page }) => {
     await page.goto('/reading')
     await synced(page)
