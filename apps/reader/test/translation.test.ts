@@ -170,13 +170,34 @@ describe('polling a translation under way', () => {
 })
 
 describe('what a translation request pulls', () => {
-  test('only a translation already done, whose row the device may lack', () => {
-    expect(pullsAfterRequest('ready')).toBe(true)
-    // The poll follows these and pulls when they end; the pull after the push brings the row.
-    for (const status of ['requested', 'in_progress']) expect(pullsAfterRequest(status)).toBe(false)
-    // A refusal writes nothing.
+  test('a translation already done, whose row the device may lack', () => {
+    expect(pullsAfterRequest('ready', undefined)).toBe(true)
+    expect(pullsAfterRequest('ready', at('done', 0))).toBe(true)
+  })
+
+  test("not an article's first request: the pull after the push brings the row", () => {
+    for (const status of ['requested', 'in_progress']) {
+      expect(pullsAfterRequest(status, undefined)).toBe(false)
+      // A row already going: the poll follows it and pulls when it ends.
+      expect(pullsAfterRequest(status, at('requested', 0))).toBe(false)
+      expect(pullsAfterRequest(status, at('running', 2))).toBe(false)
+    }
+  })
+
+  test('a new attempt over a row that had ended, as Try again makes: the new row outranks nothing', () => {
+    // The failed row would win over the request's own answer (moreAdvanced), so nothing would
+    // poll until a pull brought the new one (Codex's review).
+    for (const ended of ['failed', 'skipped', 'done', 'partial']) {
+      expect(moreAdvanced(at(ended, 0), at('requested', 0))?.state).toBe(ended)
+      expect(pullsAfterRequest('requested', at(ended, 0))).toBe(true)
+      expect(pullsAfterRequest('in_progress', at(ended, 0))).toBe(true)
+    }
+  })
+
+  test('a refusal writes nothing', () => {
     for (const status of ['invalid', 'unavailable', 'rate_limited', 'budget_exhausted']) {
-      expect(pullsAfterRequest(status)).toBe(false)
+      expect(pullsAfterRequest(status, undefined)).toBe(false)
+      expect(pullsAfterRequest(status, at('failed', 0))).toBe(false)
     }
   })
 })

@@ -83,15 +83,20 @@ const NOTICE: Record<string, TranslationNotice> = {
 }
 
 /**
- * Whether a translation request's answer is a reason to pull. Only `ready` is: the translation is
- * done and its row may not be on the device yet. `requested` and `in_progress` are followed by the
- * poll, which pulls when the translation ends, and the pull after the push that marked the post
- * read already brings the new row; pulling here as well landed during that pull, and the engine's
- * coalescing turned it into a second round that brought nothing, on every article opened. A
- * refusal (`rate_limited`, `invalid`, …) writes nothing to pull.
+ * Whether a translation request's answer is a reason to pull, given the row the device holds for
+ * it. `ready` is: the translation is done, and its row may not be on the device yet. A new attempt
+ * (`requested`, `in_progress`) is when the device holds a row that had ended, failed or skipped or
+ * done: that row outranks the request's own answer (`moreAdvanced`), so until a pull brings the
+ * new row nothing polls and the reader still says it failed, for up to a minute after Try again
+ * (Codex's review). Not when it holds none, an article's first request: the pull after the push
+ * that marked it read brings the row, and the poll pulls when the translation ends; pulling here
+ * as well landed during that pull and cost a second round, on every article opened. A refusal
+ * (`rate_limited`, `invalid`, …) writes nothing to pull.
  */
-export function pullsAfterRequest(status: string): boolean {
-  return status === 'ready'
+export function pullsAfterRequest(status: string, held: Live | undefined): boolean {
+  if (status === 'ready') return true
+  if (status !== 'requested' && status !== 'in_progress') return false
+  return held !== undefined && held.state !== 'requested' && held.state !== 'running'
 }
 
 /** Between the two asks for a finished object: long enough for a dropped connection to return. */
@@ -188,11 +193,11 @@ export function useArticleTranslation(
       const body = (await res.json()) as { status: string; translation: Live | null }
       if (NOTICE[body.status]) setNotice(NOTICE[body.status] as TranslationNotice)
       else if (body.translation) setLive(body.translation)
-      if (pullsAfterRequest(body.status)) void engine.pull()
+      if (pullsAfterRequest(body.status, row)) void engine.pull()
     } catch {
       setNotice('unavailable')
     }
-  }, [article, readingLang, engine])
+  }, [article, readingLang, engine, row])
 
   // Ask once per article and language, when there is nothing to show yet.
   useEffect(() => {
