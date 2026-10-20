@@ -5,8 +5,9 @@
  * - Pull: at start, when the tab becomes visible, every 60 s while it is, after each push, and on
  *   demand (an open article waiting for its full text). Each pull asks for titles in the reading
  *   language only, and while the device does not hold that language's whole (a switch, a copy
- *   another tab moved on in another language), each round of it fetches a page of what is
- *   missing, by article id (`fetchTitles`).
+ *   another tab moved on in another language), the same round then fetches them by article id, a
+ *   page at a time until the pass ends (`fetchTitles`); a pull asked for meanwhile goes first. A
+ *   refused page waits 2 minutes, doubling to an hour.
  * - Push: a quarter-second after the last local change, so a burst of reads goes as one push, and
  *   at once when the tab is hidden or closed, so the last change before leaving is not left
  *   waiting for the next visit; offline, it keeps retrying with backoff and loses nothing

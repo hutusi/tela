@@ -6,9 +6,10 @@
  * - Any other cursor is a delta: rows written after it. A subscription newer than the cursor
  *   brings its feed's horizon snapshot along, since those articles were written before it.
  * - A page ends on a seq boundary. `more` means pull again from `cursor` straight away.
- * - `&titles=<lang>` asks for the title rows of one reading language only, fresh and changed
- *   (ADR 0052); without it every language comes. A language outside the launch set is a 400
- *   `invalid_titles`.
+ * - `&titles=<lang>` asks for the title rows of one reading language only, fresh and changed,
+ *   said back as `titlesLang` (ADR 0052). Without it, or with a language outside the launch set,
+ *   every language comes and no `titlesLang`: refusing a language tela-api does not know yet would
+ *   stop a device's whole sync. Only `POST /api/v1/sync/titles` refuses one, 400 `invalid_titles`.
  * - SQLite has one writer, so seq order is commit order with no gaps; a row the client has not
  *   seen always has a seq above its cursor.
  */
