@@ -60,7 +60,10 @@ export function reservationFor(bodyChars: number, sourceLang: string | null): nu
 
 type Row = Awaited<ReturnType<typeof loadBodyTranslation>>
 
-/** What the reader sees of a translation: never who asked or what it cost. */
+/**
+ * What the reader sees of a translation: never who asked or what it cost. The seq lets it tell
+ * this answer from a synced row of an earlier attempt, which a pull can bring after it.
+ */
 const view = (row: NonNullable<Row>) => ({
   contentKey: row.contentKey,
   lang: row.lang,
@@ -68,6 +71,7 @@ const view = (row: NonNullable<Row>) => ({
   chunkKeys: row.chunkKeys,
   objectKey: row.objectKey,
   failedLeaves: row.failedLeaves,
+  seq: row.seq,
 })
 
 export function translationRoutes(deps: ApiDeps) {
