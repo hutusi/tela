@@ -33,7 +33,10 @@ export type ArticleTranslation = {
   retry(): void
 }
 
-export type Live = Pick<TranslationRow, 'state' | 'chunkKeys' | 'objectKey' | 'failedLeaves'>
+export type Live = Pick<TranslationRow, 'state' | 'chunkKeys' | 'objectKey' | 'failedLeaves'> & {
+  /** Absent from a tela-api from before answers carried it. */
+  seq?: number
+}
 
 const POLL_MS = 1500
 /** How often the status is asked for while the first chunk is awaited: it is what the reader sees. */
@@ -62,14 +65,19 @@ const RANK: Record<string, number> = {
 }
 
 /**
- * The more advanced of what sync says and what polling has seen. A later state wins. Between two
- * still running, the one naming more chunks is the newer, since a request's chunks only ever
- * append; otherwise a synced row, refreshed by a pull about once a minute, would hold back the
- * chunks polling sees every 1.5 s.
+ * The later of what sync says and what a request or a poll has answered. Every write to the row
+ * stamps a new seq, so the higher seq is the later row, whichever way it came: a pull that read
+ * an ended row before Try again can land after the new attempt's answer, or while it is out, and
+ * ranked by state that failure would hold back the attempt, with nothing polling (Codex's review).
+ * Without a seq on both (a tela-api from before), by state: a later state wins, and between two
+ * still running, the one naming more chunks, since a request's chunks only ever append; otherwise
+ * a synced row, refreshed by a pull about once a minute, would hold back the chunks polling sees
+ * every 1.5 s.
  */
 export function moreAdvanced(row: Live | undefined, live: Live | null): Live | null {
   if (!row) return live
   if (!live) return row
+  if (row.seq !== undefined && live.seq !== undefined) return live.seq > row.seq ? live : row
   const byState = (RANK[live.state] ?? 0) - (RANK[row.state] ?? 0)
   if (byState !== 0) return byState > 0 ? live : row
   const going = live.state === 'requested' || live.state === 'running'
@@ -83,20 +91,15 @@ const NOTICE: Record<string, TranslationNotice> = {
 }
 
 /**
- * Whether a translation request's answer is a reason to pull, given the row the device holds for
- * it. `ready` is: the translation is done, and its row may not be on the device yet. A new attempt
- * (`requested`, `in_progress`) is when the device holds a row that had ended, failed or skipped or
- * done: that row outranks the request's own answer (`moreAdvanced`), so until a pull brings the
- * new row nothing polls and the reader still says it failed, for up to a minute after Try again
- * (Codex's review). Not when it holds none, an article's first request: the pull after the push
- * that marked it read brings the row, and the poll pulls when the translation ends; pulling here
- * as well landed during that pull and cost a second round, on every article opened. A refusal
- * (`rate_limited`, `invalid`, …) writes nothing to pull.
+ * Whether a translation request's answer is a reason to pull: only `ready`, a translation done
+ * whose row may not be on the device yet. A new attempt (`requested`, `in_progress`) is not: its
+ * answer outranks whatever older row the device holds or a pull still out brings
+ * (`moreAdvanced`), the poll that starts pulls when it ends, and the pull after the push that
+ * marked the article read brings its row. Pulling here as well landed during that pull and cost a
+ * second round, on every article opened. A refusal (`rate_limited`, `invalid`, …) writes nothing.
  */
-export function pullsAfterRequest(status: string, held: Live | undefined): boolean {
-  if (status === 'ready') return true
-  if (status !== 'requested' && status !== 'in_progress') return false
-  return held !== undefined && held.state !== 'requested' && held.state !== 'running'
+export function pullsAfterRequest(status: string): boolean {
+  return status === 'ready'
 }
 
 /** Between the two asks for a finished object: long enough for a dropped connection to return. */
@@ -193,11 +196,11 @@ export function useArticleTranslation(
       const body = (await res.json()) as { status: string; translation: Live | null }
       if (NOTICE[body.status]) setNotice(NOTICE[body.status] as TranslationNotice)
       else if (body.translation) setLive(body.translation)
-      if (pullsAfterRequest(body.status, row)) void engine.pull()
+      if (pullsAfterRequest(body.status)) void engine.pull()
     } catch {
       setNotice('unavailable')
     }
-  }, [article, readingLang, engine, row])
+  }, [article, readingLang, engine])
 
   // Ask once per article and language, when there is nothing to show yet.
   useEffect(() => {

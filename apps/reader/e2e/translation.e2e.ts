@@ -40,6 +40,33 @@ function pushed(page: Page, fragment: string) {
   )
 }
 
+/** The state of the device's stored row for a translation, or null when it holds none. */
+function storedTranslation(page: Page, contentKey: string, lang: string): Promise<string | null> {
+  return page.evaluate(
+    ({ contentKey, lang }) =>
+      new Promise<string | null>((resolve) => {
+        const open = indexedDB.open('tela-2')
+        // Not created yet: never create it empty under the app.
+        open.onupgradeneeded = () => open.transaction?.abort()
+        open.onerror = () => resolve(null)
+        open.onsuccess = () => {
+          const db = open.result
+          const get = db.transaction('tables').objectStore('tables').get('translations')
+          get.onerror = () => {
+            db.close()
+            resolve(null)
+          }
+          get.onsuccess = () => {
+            db.close()
+            const rows = (get.result ?? []) as { contentKey: string; lang: string; state: string }[]
+            resolve(rows.find((t) => t.contentKey === contentKey && t.lang === lang)?.state ?? null)
+          }
+        }
+      }),
+    { contentKey, lang },
+  )
+}
+
 test.beforeAll(async () => {
   // A Japanese blog, whose titles the setup's sweeps have not seen yet.
   await ensureFeeds(['/jnito.xml'])
@@ -622,6 +649,90 @@ test.describe('translation', () => {
       await expect(bar.getByTestId('mode-side')).toBeVisible()
     } finally {
       stop()
+    }
+  })
+
+  /**
+   * A pull that read a translation's ended row before a new attempt began can land while that
+   * attempt's request is out. The device then holds the failure, and the request answers
+   * `requested`: the later row, as its seq says, so the reader polls the attempt rather than show
+   * a failure nothing follows (Codex's review). Here the pull is made to carry a failed row one
+   * seq older than the answer, as a pull that read before the request would; later pulls wait, so
+   * nothing but the answer can say the attempt is under way.
+   */
+  test('a failed row a pull brings while the request is out loses to the request', async ({
+    page,
+  }) => {
+    type Answer = { status: string; translation: { contentKey: string; seq: number } }
+    type Row = { contentKey: string; lang: string }
+    let answered: (answer: Answer) => void = () => undefined
+    const asked = new Promise<Answer>((resolve) => {
+      answered = resolve
+    })
+    let open: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => {
+      open = resolve
+    })
+    let pulls: 'through' | 'stale' | 'held' = 'through'
+    await page.route(/\/api\/v1\/sync\?cursor=/, async (route) => {
+      if (pulls === 'through') return route.continue()
+      if (pulls === 'held') return gate.then(() => route.continue())
+      pulls = 'held'
+      // Read after the request's write, so no later pull sends its row again.
+      const res = await route.fetch()
+      const pull = (await res.json()) as { rows: { translations?: Row[] } }
+      const { contentKey, seq } = (await asked).translation
+      pull.rows.translations = [
+        ...(pull.rows.translations ?? []).filter(
+          (t) => t.contentKey !== contentKey || t.lang !== 'en',
+        ),
+        {
+          contentKey,
+          lang: 'en',
+          state: 'failed',
+          chunkKeys: [],
+          objectKey: null,
+          failedLeaves: [],
+          seq: seq - 1,
+        } as Row,
+      ]
+      await route.fulfill({ response: res, json: pull })
+    })
+    await page.route('**/api/v1/translations', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue()
+      const res = await route.fetch()
+      const answer = (await res.json()) as Answer
+      answered(answer)
+      pulls = 'stale'
+      // A pull while the request is out: the app pulls when it comes back online.
+      await page.evaluate(() => window.dispatchEvent(new Event('online')))
+      const { contentKey } = answer.translation
+      for (let i = 0; i < 100; i++) {
+        if ((await storedTranslation(page, contentKey, 'en')) === 'failed') break
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+      await route.fulfill({ response: res, json: answer })
+    })
+
+    await page.goto('/reading')
+    await synced(page)
+    await page.getByTestId('subscription').filter({ hasText: 'give IT a try' }).click()
+    await expect(page).toHaveURL(/\/reading\?feed=\d+$/)
+    const bar = page.getByTestId('translation-bar')
+    const stop = keepCycling(page)
+    try {
+      // A post no other spec opens, so opening it asks for its translation.
+      await page.getByTestId('article-row').filter({ hasText: 'ギターもベースも' }).click()
+      const answer = await asked
+      expect(answer.status).toBe('requested')
+      await expect(bar).toHaveAttribute('data-state', /done|partial/, { timeout: 30_000 })
+      await expect(page.getByTestId('body-translated').first()).toContainText('en:')
+      // Still the failure on the device: the answer and the polls behind it showed the attempt.
+      expect(await storedTranslation(page, answer.translation.contentKey, 'en')).toBe('failed')
+    } finally {
+      stop()
+      open()
+      await page.unrouteAll({ behavior: 'ignoreErrors' })
     }
   })
 })
