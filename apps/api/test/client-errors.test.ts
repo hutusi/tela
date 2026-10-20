@@ -60,6 +60,34 @@ describe('a client error report', () => {
     expect((lines()[0] as { stack: string }).stack).toHaveLength(STACK_MAX)
   })
 
+  test('a start-over is logged apart, as a warning: a cost, not an error', async () => {
+    const warned = spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const res = await report({
+        kind: 'restart',
+        message: 'delta at 9769 sent folders, not held whole (kept by index-abc.js at 9769)',
+        path: '/reading',
+        build: 'index-abc.js',
+      })
+      expect(res.status).toBe(204)
+      expect(lines()).toEqual([])
+      expect(warned.mock.calls).toEqual([
+        [
+          'client restart',
+          {
+            kind: 'restart',
+            message: 'delta at 9769 sent folders, not held whole (kept by index-abc.js at 9769)',
+            stack: null,
+            path: '/reading',
+            build: 'index-abc.js',
+          },
+        ],
+      ])
+    } finally {
+      warned.mockRestore()
+    }
+  })
+
   test('refuses what is not a report, and what is larger than one', async () => {
     expect((await report({ kind: 'nonsense', message: 'x' })).status).toBe(400)
     expect((await report({ kind: 'error' })).status).toBe(400)

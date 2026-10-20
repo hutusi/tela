@@ -3,7 +3,8 @@
  * render an error boundary caught, an error or rejection the page left unhandled, a boot that
  * failed, a content security policy violation (ADR 0051). Visitors' pages report too, so it needs
  * no session and sits outside `/api/v1`. Nothing is stored: each report is one log line, the
- * Workers Logs of tela-api.
+ * Workers Logs of tela-api. A device that let go of its copy and starts over from a snapshot says
+ * why too, logged apart as `client restart`, since it is a cost to look into rather than an error.
  *
  * Nothing in a report may name a person or a secret. Query strings are cut from the page's path
  * and from every address in the message and stack, so `/join?code=…` or `/login?email=…` never
@@ -25,7 +26,14 @@ const MESSAGE_MAX = 1000
 const PATH_MAX = 300
 const BUILD_MAX = 64
 /** What the app reports (`src/lib/report.ts`). */
-export const CLIENT_ERROR_KINDS = ['boundary', 'error', 'rejection', 'boot', 'csp'] as const
+export const CLIENT_ERROR_KINDS = [
+  'boundary',
+  'error',
+  'rejection',
+  'boot',
+  'csp',
+  'restart',
+] as const
 type Kind = (typeof CLIENT_ERROR_KINDS)[number]
 /** better-auth's bucket for a request whose IP it cannot tell, which all such requests share. */
 const NO_IP = 'no-trusted-ip'
@@ -65,13 +73,15 @@ export function clientErrorRoutes(deps: ApiDeps, auth: Auth) {
     if (!CLIENT_ERROR_KINDS.includes(kind as Kind) || !message) {
       return c.json({ error: 'invalid' }, 400)
     }
-    console.error('client error', {
+    const line = {
       kind,
       message,
       stack: field(body.stack, STACK_MAX),
       path: field(body.path, PATH_MAX),
       build: field(body.build, BUILD_MAX),
-    })
+    }
+    if (kind === 'restart') console.warn('client restart', line)
+    else console.error('client error', line)
     return c.body(null, 204)
   })
 
