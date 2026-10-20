@@ -816,12 +816,17 @@ export function mergeTitles(tables: Tables, rows: readonly TitleRow[], lang: str
 }
 
 /**
- * The next articles to ask `lang`'s titles for: those the device holds with an id past `after`
- * and no title in `lang`, lowest first, up to `limit`. A post written in `lang` is never asked
- * for: no title is ever made in a post's own language. A pass goes by id, each page `after` the
- * last one asked, because a post the server has no title for (not translated yet, or its blog
- * opted out) stays missing, and a pass that went by what is missing alone would ask for it for
- * ever. The ids are the device's, not the server's horizon: it keeps posts older than that.
+ * The next articles to ask `lang`'s titles for: every one the device holds with an id past
+ * `after`, lowest first, up to `limit`, whether or not it holds a title for it. A titles record
+ * goes not whole in two ways. A switch lets every title go, so all of them are missing. But
+ * another tab still in another language can move the shared cursor past changed rows of this one
+ * (a title translated again), and then the titles held are there, some of them stale: asking only
+ * for what is missing left those stale for good and called the language whole (Codex's review
+ * found it with two connections to one database). So a pass asks for them all, and `mergeTitles`
+ * keeps whichever of two rows is the later. A post written in `lang` is never asked for: no title
+ * is ever made in a post's own language. A pass goes by id, each page `after` the last one asked,
+ * so a post the server has no title for is asked for once a pass. The ids are the device's, not
+ * the server's horizon: it keeps posts older than that.
  */
 export function nextTitleIds(
   tables: Tables,
@@ -831,8 +836,7 @@ export function nextTitleIds(
 ): number[] {
   const ids: number[] = []
   for (const article of tables.articles.values()) {
-    if (article.id <= after || article.sourceLang === lang) continue
-    if (!tables.titles.has(titleKey(article.id, lang))) ids.push(article.id)
+    if (article.id > after && article.sourceLang !== lang) ids.push(article.id)
   }
   return ids.sort((a, b) => a - b).slice(0, limit)
 }

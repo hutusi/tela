@@ -519,7 +519,8 @@ describe('titles in the reading language', () => {
       '/api/v1/sync?cursor=5&titles=fr',
       '/api/v1/sync/titles',
     ])
-    expect(calls[1]?.body).toEqual({ lang: 'fr', ids: [8] })
+    // Both held posts, the one the pull just titled too: a pass asks for every title held.
+    expect(calls[1]?.body).toEqual({ lang: 'fr', ids: [7, 8] })
     expect(keys(store)).toEqual(['7:fr'])
     expect(store.titlesWhole).toBe(false)
     expect(store.cursor).toBe(7)
@@ -544,8 +545,30 @@ describe('titles in the reading language', () => {
       '/api/v1/sync',
       '/api/v1/sync/titles',
     ])
-    expect(calls.at(-1)?.body).toEqual({ lang: 'fr', ids: [8] })
+    expect(calls.at(-1)?.body).toEqual({ lang: 'fr', ids: [7, 8] })
     expect(calls.some((c) => c.path.includes('cursor=0'))).toBe(false)
+  })
+
+  test('a cursor moved past this language by another: the titles held are asked for again, stale ones too', async () => {
+    // Codex's review, with two connections to one database: another tab, in another language,
+    // moved the shared cursor past a French title translated again. The French titles held are
+    // there but may be stale; asking only for the missing ones left one stale for good.
+    const store = await reading('fr', [ja(7), ja(8)], [title(7, 'fr', 2), title(8, 'fr', 2)])
+    await store.applyPull(inLang(pull(9, {}), 'en'), store.epoch)
+    expect(store.titlesWhole).toBe(false)
+    expect(keys(store)).toEqual(['7:fr', '8:fr'])
+    const again = (id: number) => ({ ...title(id, 'fr', 8), title: `fr:Post ${id}, again` })
+    const calls = routes((path, body) =>
+      path === '/api/v1/sync/titles'
+        ? { rows: body.ids.filter((id) => id === 7).map(again) }
+        : inLang(pull(9, {}), 'fr'),
+    )
+    await engineFor(store).pull()
+    expect(calls[1]?.body).toEqual({ lang: 'fr', ids: [7, 8] })
+    expect(store.getSnapshot().tables.titles.get('7:fr')?.title).toBe('fr:Post 7, again')
+    // Unchanged on the server, kept as held.
+    expect(store.getSnapshot().tables.titles.get('8:fr')?.title).toBe('fr:Post 8')
+    expect(store.titlesWhole).toBe(true)
   })
 
   test('a backfill across two pages, where a post the server has no title for is asked once', async () => {

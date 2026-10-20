@@ -1252,10 +1252,11 @@ describe('titles in the reading language only', () => {
     expect(mergeTitles(before.tables, [title(7, 'fr', 4)], 'fr')).toBe(before.tables)
   })
 
-  test('asks only for held posts missing the language, never one written in it, a page at a time', () => {
+  test('asks for every held post, titled or not, never one written in the language, a page at a time', () => {
     const withOne = mergeTitles(held.tables, [title(7, 'fr')], 'fr')
-    // 9 is written in French: no French title is ever made for it.
-    expect(nextTitleIds(withOne, 'fr')).toEqual([8])
+    // 9 is written in French: no French title is ever made for it. 7 has one, which another
+    // tab's cursor may have moved past a newer version of: asked for again too.
+    expect(nextTitleIds(withOne, 'fr')).toEqual([7, 8])
     expect(nextTitleIds(held.tables, 'en')).toEqual([9])
     expect(nextTitleIds(held.tables, 'zh-Hans')).toEqual([7, 8, 9])
     expect(nextTitleIds(held.tables, 'zh-Hans', 2)).toEqual([7, 8])

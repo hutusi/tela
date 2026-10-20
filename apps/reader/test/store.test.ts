@@ -698,7 +698,7 @@ describe('titles in the reading language only', () => {
     expect(keys(store)).toEqual([])
     expect(store.titlesWhole).toBe(false)
     expect(store.titlesRound).toBe(round + 1)
-    expect(store.missingTitles(0)).toEqual([7, 8])
+    expect(store.titleIds(0)).toEqual([7, 8])
     expect(store.cursor).toBe(5)
     expect(told).toBe(1)
     await tick()

@@ -287,15 +287,16 @@ The account is on Workers Paid. Run wrangler from a real terminal (`wrangler log
        - the admin console's Discover area has a Blogrolls filter that lists it.
    - Titles in the reading language (ADR 0052) change no table and keep protocol 3, with no
      `MIN_CLIENT` bump. A device keeps titles in its reading language only: each pull names it
-     (`?titles=<lang>`, answered with `titlesLang`), and the titles a device is missing come by
-     article id (`POST /api/v1/sync/titles`). Deploy tela-api, then tela-web; tela-jobs is
+     (`?titles=<lang>`, answered with `titlesLang`), and when its titles are not whole (a switch,
+     or another tab's cursor) it asks for them again by article id (`POST /api/v1/sync/titles`). Deploy tela-api, then tela-web; tela-jobs is
      unchanged:
      - tela-api first, because the new shell names a language on every pull and fetches titles by
        id. A protocol-3 shell names none, and the new tela-api sends it every language, as before.
      - No device starts over. A copy from before keeps its reading language's titles, whole, and
        lets the others go at its first boot on the new shell. A copy that a tab of the earlier
-       shell, left open, has pulled into since is not whole: the device fetches what it lacks, by
-       id, and shows those posts as written until then (the `titles` record in
+       shell, left open, has pulled into since is not whole: the device asks for its titles again
+       by id, every one held since some may be stale, and shows untitled posts as written until
+       then (the `titles` record in
        `apps/reader/src/store/db.ts`).
      - **Either Worker may go back alone.**
        - An older tela-api ignores `?titles=` and sends every language, which the new shell

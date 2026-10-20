@@ -65,11 +65,14 @@ that pull's title rows and fetches its language again.
 
 **The device's titles are only ever in its language.** When the reading language changes, the
 device drops the old language's rows at once. It records the new language as not yet whole, and
-lists and the reader show original titles until the rows arrive. It then fetches them for the
-posts it holds that lack one, 1,000 ids a request in id order, one request per round of its single
-pull loop, so a page never lands before an old-language pull still in flight. A pass walks the ids
-once: a post tela-api has no title for (not yet translated, or in its own language) is asked for
-once a pass, not for ever, and the pass ending is what makes the language whole. The language, and whether the device holds it whole, are stored
+lists and the reader show original titles until the rows arrive. It then fetches them for every
+post it holds, titled or not, 1,000 ids a request in id order, inside its single pull loop after
+the pull, so a page never lands before an old-language pull still in flight. Titled or not: a
+language goes not whole also when another tab, still in another language, moves the shared cursor
+past rows of this one, and then the titles held are there but may be stale (a title translated
+again); the higher seq wins as the rows are merged. A pass walks the ids once: a post tela-api has
+no title for (not yet translated) is asked for once a pass, not for ever, and the pass ending is
+what makes the language whole. A post written in the language is never asked for. The language, and whether the device holds it whole, are stored
 beside the cursor and stamped with it, like the record of tables held whole: tabs share one copy,
 and a tab still on the old language can move the cursor past rows of the new one.
 

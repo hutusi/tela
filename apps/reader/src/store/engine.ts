@@ -176,7 +176,8 @@ export class SyncEngine {
   }
 
   /**
-   * Pull until caught up, then fetch the titles the reading language is missing, a page at a time.
+   * Pull until caught up, then fetch the reading language's titles while they are not whole, a page
+   * at a time.
    * Calls while one runs coalesce into one more pull after it.
    */
   pull(): Promise<void> {
@@ -236,8 +237,9 @@ export class SyncEngine {
   }
 
   /**
-   * Fetch one page of the titles the device's reading language is missing (`POST
-   * /api/v1/sync/titles`), by article id; says whether there is another page to fetch. A pass
+   * Fetch one page of the reading language's titles for the articles held, titled or not, since a
+   * title held may be stale (`POST /api/v1/sync/titles`, `nextTitleIds`), by article id; says
+   * whether there is another page to fetch. A pass
    * goes through the ids once per round of the store's (`LocalStore.titlesRound`), each page
    * after the last one asked, so a post the server has no title for is asked for once, and once
    * the pass is through, the titles are whole. A tela-api from before this (a rollback answers
@@ -264,7 +266,7 @@ export class SyncEngine {
       }
       return false
     }
-    const ids = this.store.missingTitles(pass.after)
+    const ids = this.store.titleIds(pass.after)
     if (ids.length > 0) {
       let rows: TitleRow[]
       try {
@@ -286,7 +288,7 @@ export class SyncEngine {
       }
       await this.store.applyTitles(rows, lang, epoch)
       pass.after = ids.at(-1) ?? pass.after
-      if (this.store.missingTitles(pass.after).length > 0) return true
+      if (this.store.titleIds(pass.after).length > 0) return true
     }
     await this.store.titlesFetched(lang, epoch, round)
     if (this.titlesPass === pass) this.titlesPass = null

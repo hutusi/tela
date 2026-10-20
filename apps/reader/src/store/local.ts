@@ -90,8 +90,8 @@ export class LocalStore {
   private titles: TitlesHeld = { lang: null, whole: false }
   /**
    * Moves on whenever the titles held stop being whole (a switch, a pull in another language,
-   * another account): the engine's pass through what is missing is for one round, and starts
-   * over in the next (`missingTitles`).
+   * another account): the engine's pass through the articles held is for one round, and starts
+   * over in the next (`titleIds`).
    */
   titlesRound = 0
   /**
@@ -333,10 +333,11 @@ export class LocalStore {
   }
 
   /**
-   * The articles held past `after`, by id, still missing a title in the language held: the next
-   * page of titles to fetch. None while the language is not known.
+   * The articles held past `after`, by id, whose titles in the language held a pass asks for: the
+   * next page to fetch, titled or not, since a title held may be stale (`nextTitleIds`). None
+   * while the language is not known.
    */
-  missingTitles(after: number): number[] {
+  titleIds(after: number): number[] {
     const lang = this.titles.lang
     return lang === null ? [] : nextTitleIds(this.confirmed.tables, lang, undefined, after)
   }
@@ -573,7 +574,7 @@ export class LocalStore {
     )
     // Titles in the language held only. A pull in another one (asked for before a switch) passed
     // that language's rows without bringing them: what is held is no longer whole, and the engine
-    // fetches what is missing.
+    // fetches the language's titles again, every one held, since some may be stale.
     const lang = this.titles.lang
     const { pull: titled, folded } =
       lang === null
