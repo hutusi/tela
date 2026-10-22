@@ -314,6 +314,42 @@ export const CURATED_SITES = [
     note: 'Italiano; without redirect=false, Blogger sends the feed to http FeedBurner',
   },
   { feedUrl: 'https://attivissimo.me/feed/', topics: ['science', 'tech'], note: 'Italiano' },
+
+  // Blogs an operator listed from members' subscriptions (ADR 0041), here for their topics and
+  // names: listed without a topic, a blog shows under All and under no chip. They came in by
+  // review rather than by this list's bar, so one stays while it has posted in six months.
+  { feedUrl: 'https://addyosmani.com/rss.xml', topics: ['tech'], title: 'Addy Osmani' },
+  { feedUrl: 'https://lilianweng.github.io/index.xml', topics: ['science', 'tech'] },
+  { feedUrl: 'https://swyx.io/rss.xml', topics: ['tech', 'essays'], title: 'swyx' },
+  {
+    feedUrl: 'https://brennan.day/feed.xml',
+    topics: ['essays', 'tech'],
+    title: "Brennan's Weblog",
+  },
+  {
+    feedUrl: 'https://yihui.org/index.xml',
+    topics: ['tech', 'science'],
+    title: 'Yihui Xie | 谢益辉',
+    note: 'Writes in English and Chinese',
+  },
+  {
+    feedUrl: 'https://refactoringenglish.com/blog/index.xml',
+    topics: ['essays', 'tech'],
+    title: 'Refactoring English',
+  },
+  { feedUrl: 'https://limboy.me/index.xml', topics: ['essays', 'tech'] },
+  { feedUrl: 'https://www.longluo.me/atom.xml', topics: ['tech', 'science'] },
+  { feedUrl: 'https://onevcat.com/feed.xml', topics: ['tech'] },
+  { feedUrl: 'https://geektutu.com/feed.xml', topics: ['tech'] },
+  { feedUrl: 'https://t9t.io/blog/zh/rss.xml', topics: ['tech', 'essays'], title: 'T9T' },
+  { feedUrl: 'https://blog.yihong0618.me/rss.xml', topics: ['life', 'essays'] },
+  { feedUrl: 'https://yinji.org/feed.xml', topics: ['life', 'essays', 'cities'] },
+  { feedUrl: 'https://catcoding.me/atom.xml', topics: ['tech'] },
+  { feedUrl: 'https://conge.livingwithfcs.org/feed.xml', topics: ['essays', 'life'] },
+  { feedUrl: 'https://surmon.me/rss.xml', topics: ['tech', 'life'], title: 'Surmon' },
+  { feedUrl: 'https://macshuo.com/?feed=rss2', topics: ['tech'], title: 'MacTalk' },
+  { feedUrl: 'https://www.changhai.org/feed.xml', topics: ['science', 'essays'], title: '卢昌海' },
+  { feedUrl: 'https://depp.wang/rss2.xml', topics: ['essays', 'tech', 'life'] },
 ] as const satisfies readonly CuratedSite[]
 
 // Deliberately absent: rachelbythebay.com. She runs a feed-reader conformance test and blocks
