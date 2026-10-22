@@ -128,6 +128,13 @@ everything so far sits under `[Unreleased]`.
   says why. Posts and blogs you already read stay out of the way, and whom you follow is matched
   on your device, so the pages are the same for everyone and cached at the edge (ADR 0044).
   Following's *Readers to follow* uses the same rule.
+- **30 more blogs in Discover, aimed at its thinnest corners.** The editorial list grows from 110
+  to 158: 29 new blogs, one from the review queue, and 18 that were listed from members'
+  subscriptions without a topic. The new ones bring 6 for design, the thinnest chip, 5 for
+  photography and 3 for food. They also bring 5 in Traditional Chinese and more in Japanese,
+  Korean, Spanish, German, Italian and Portuguese, so none of those rests on two to four blogs.
+  Only three are in English. The blogs from members' subscriptions get topics, and a better name
+  where the feed's was poor, so each shows under a chip, not only under All.
 - **78 more blogs in Discover.** The editorial list grows from 35 to 110: 27 in Chinese (19
   Simplified, 8 Traditional), 16 in French, which had none, 16 in Japanese, Korean, Spanish,
   Portuguese, German and Italian, and 19 for the thin topics: photography, cities, food, outdoors

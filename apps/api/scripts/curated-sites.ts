@@ -119,6 +119,16 @@ export const CURATED_SITES = [
   { feedUrl: 'https://theness.com/neurologicablog/feed/', topics: ['science'], featured: true },
   { feedUrl: 'https://www.experimental-history.com/feed', topics: ['science', 'essays'] },
   { feedUrl: 'https://scottaaronson.blog/?feed=rss2', topics: ['science', 'tech'] },
+  { feedUrl: 'https://www.chrbutler.com/feed.rss', topics: ['design', 'essays'] },
+  {
+    feedUrl: 'https://www.johncoulthart.com/feuilleton/feed/',
+    topics: ['design', 'essays'],
+    note: 'John Coulthart, on illustration, book and poster design',
+  },
+  {
+    feedUrl: 'https://idiotic-hat.blogspot.com/feeds/posts/default',
+    topics: ['photography', 'essays'],
+  },
 
   // 简体中文
   { feedUrl: 'https://www.ruanyifeng.com/blog/atom.xml', topics: ['tech'], featured: true },
@@ -187,6 +197,20 @@ export const CURATED_SITES = [
     topics: ['food', 'tech', 'outdoors'],
     note: 'Hong Kong; mixes scripts, and detection reads it as Traditional',
   },
+  {
+    feedUrl: 'https://wilsonchao.com/blog/feed.xml',
+    topics: ['life', 'science', 'essays'],
+    title: '趙玴祥',
+    note: 'A cardiac surgeon in Kaohsiung; the site-wide /feed.xml mixes in music links',
+  },
+  { feedUrl: 'https://tianyanfeng.blog/feed/', topics: ['essays', 'life'] },
+  { feedUrl: 'https://shenjing.me/blog/rss.xml', topics: ['life', 'essays'], title: 'Shen Jing' },
+  { feedUrl: 'https://jai33snotes.com/feed/', topics: ['essays', 'life', 'outdoors'] },
+  {
+    feedUrl: 'https://travlog.wei-lee.me/zh-tw/feeds/all.atom.xml',
+    topics: ['cities', 'food'],
+    note: 'Wei Lee travelling and eating; excerpts in the feed, and the pages extract cleanly',
+  },
 
   // Français
   { feedUrl: 'https://www.bortzmeyer.org/feed-full.atom', topics: ['tech'], featured: true },
@@ -241,6 +265,17 @@ export const CURATED_SITES = [
   { feedUrl: 'https://couleur-science.eu/rss.php', topics: ['science'] },
   { feedUrl: 'https://www.velophile.be/feed/', topics: ['outdoors'], note: 'Belgium' },
   { feedUrl: 'https://www.arthurperret.fr/feed.xml', topics: ['design', 'tech'] },
+  {
+    feedUrl: 'https://www.liminaire.fr/spip.php?page=backend',
+    topics: ['photography', 'cities'],
+    title: 'Liminaire',
+    note: 'Pierre Ménard',
+  },
+  {
+    feedUrl: 'https://lunettesrouges1.wordpress.com/feed/',
+    topics: ['photography', 'essays'],
+    note: 'Marc Lenot on exhibitions; excerpts in the feed, and the pages extract cleanly',
+  },
 
   // Other source languages, which is where reading a post beside its original earns its keep.
   { feedUrl: 'https://azukiazusa.dev/rss.xml', topics: ['tech'], note: '日本語' },
@@ -255,6 +290,33 @@ export const CURATED_SITES = [
     feedUrl: 'https://kaz-ataka.hatenablog.com/feed',
     title: 'ニューロサイエンスとマーケティングの間',
     topics: ['essays', 'cities', 'science'],
+    note: '日本語',
+  },
+  {
+    feedUrl: 'https://utsumikeiichi.hateblo.jp/feed',
+    topics: ['design', 'cities', 'photography'],
+    title: 'ぬかよろこび通信Q',
+    note: '日本語; Keiichi Utsumi, on pictograms and everyday street design',
+  },
+  {
+    feedUrl: 'https://yasuhisa.com/could/rss/',
+    topics: ['design', 'essays'],
+    title: 'could',
+    note: '日本語; Yasuhisa Hasegawa; about monthly, in for the design chip',
+  },
+  {
+    feedUrl: 'https://filmmer.hatenablog.com/feed',
+    topics: ['photography', 'life'],
+    note: '日本語',
+  },
+  {
+    feedUrl: 'https://tsujimotter.hatenablog.com/feed',
+    topics: ['science'],
+    note: '日本語; mathematics, with TeX',
+  },
+  {
+    feedUrl: 'https://hayasinonakanozou.hatenablog.com/feed',
+    topics: ['essays', 'cities'],
     note: '日本語',
   },
   { feedUrl: 'https://www.44bits.io/ko/feed/all', topics: ['tech'], note: '한국어' },
@@ -273,6 +335,17 @@ export const CURATED_SITES = [
     note: '한국어; https times out',
   },
   {
+    feedUrl: 'https://nasica1.tistory.com/rss',
+    topics: ['essays', 'cities'],
+    note: '한국어; long history series',
+  },
+  {
+    feedUrl: 'https://ryunan9903.tistory.com/rss',
+    topics: ['food', 'life'],
+    title: '류토피아',
+    note: '한국어; about two posts a day',
+  },
+  {
     feedUrl: 'https://www.buddenbohm-und-soehne.de/feed/',
     featured: true,
     topics: ['essays', 'life', 'cities'],
@@ -280,6 +353,22 @@ export const CURATED_SITES = [
   },
   { feedUrl: 'https://www.designtagebuch.de/feed/', topics: ['design'], note: 'Deutsch' },
   { feedUrl: 'https://www.zukunft-mobilitaet.net/feed/', topics: ['cities'], note: 'Deutsch' },
+  {
+    feedUrl: 'https://maipenquynh.de/de/feed/',
+    topics: ['photography', 'life'],
+    note: 'Deutsch; the German feed lives under /de/',
+  },
+  { feedUrl: 'https://magentratzerl.de/feed/', topics: ['food'], note: 'Deutsch' },
+  {
+    feedUrl: 'https://www.vorspeisenplatte.de/speisen/feed',
+    topics: ['life', 'food', 'essays'],
+    note: 'Deutsch; die Kaltmamsell, daily',
+  },
+  {
+    feedUrl: 'https://wirres.net/feed/',
+    topics: ['essays', 'life'],
+    note: 'Deutsch; a soft hyphen in nearly every word, and still detected as German',
+  },
   { feedUrl: 'https://kirainet.com/feed/', topics: ['life', 'cities'], note: 'Español' },
   {
     feedUrl: 'https://danielmarin.naukas.com/feed/',
@@ -291,6 +380,29 @@ export const CURATED_SITES = [
     feedUrl: 'https://elcafedeocata.blogspot.com/feeds/posts/default',
     topics: ['essays'],
     note: 'Español',
+  },
+  {
+    feedUrl: 'https://www.santiagodemolina.com/feeds/posts/default?redirect=false',
+    topics: ['design', 'essays'],
+    title: 'Múltiples estrategias de arquitectura',
+    note: 'Español; Santiago de Molina, weekly; excerpts in the feed, and the pages extract cleanly',
+  },
+  {
+    feedUrl: 'https://stepienybarno.es/blog/feed/',
+    topics: ['design', 'cities'],
+    title: 'Stepien y Barno',
+    note: 'Español; an architect couple; the root /feed/ lists only site pages',
+  },
+  {
+    feedUrl: 'https://artedemadrid.wordpress.com/feed/',
+    topics: ['cities', 'essays'],
+    note: 'Español',
+  },
+  {
+    feedUrl: 'https://danielmurmarin.blogspot.com/feeds/posts/default',
+    topics: ['outdoors', 'photography'],
+    title: 'Crónicas Montañeras',
+    note: 'Español; Pyrenees trip reports',
   },
   {
     feedUrl: 'https://manualdousuario.net/feed/',
@@ -309,11 +421,32 @@ export const CURATED_SITES = [
     note: 'Português; excerpts in the feed, and the pages extract cleanly',
   },
   {
+    feedUrl: 'https://saopauloantiga.com.br/feed/',
+    topics: ['cities', 'photography'],
+    note: 'Português; excerpts in the feed, and the pages extract cleanly',
+  },
+  {
+    feedUrl: 'https://restosdecoleccao.blogspot.com/feeds/posts/default',
+    topics: ['cities', 'design'],
+    note: 'Português; excerpts in the feed, and the pages extract cleanly',
+  },
+  {
     feedUrl: 'https://leonardo.blogspot.com/feeds/posts/default?redirect=false',
     topics: ['essays'],
     note: 'Italiano; without redirect=false, Blogger sends the feed to http FeedBurner',
   },
   { feedUrl: 'https://attivissimo.me/feed/', topics: ['science', 'tech'], note: 'Italiano' },
+  {
+    feedUrl: 'https://letteredallatoscana.substack.com/feed',
+    topics: ['food', 'essays'],
+    note: 'Italiano; Giulia Scarpaleggia',
+  },
+  {
+    feedUrl: 'https://aldopiombino.blogspot.com/feeds/posts/default',
+    topics: ['science'],
+    title: 'Scienzeedintorni',
+    note: 'Italiano; Aldo Piombino, geology',
+  },
 
   // Blogs an operator listed from members' subscriptions (ADR 0041), here for their topics and
   // names: listed without a topic, a blog shows under All and under no chip. They came in by
