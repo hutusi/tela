@@ -356,6 +356,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Fixed
 
+- **Importing or adding a feed Tela already had could leave an empty blog behind.** An OPML import
+  made a site for each feed's address even when the feed was already filed under its blog's own
+  home, such as `https://simonwillison.net` beside `http://simonwillison.net`. Adding or claiming
+  a known feed under another home did the same. Nothing ever filled such a site. One was listed
+  and showed in Discover as a card with no name and no posts. A site is now made only for a feed
+  that is new.
 - **A member's six digits could be guessed without their mail.** Sign-in codes were limited per IP
   only, and an IPv6 /48 holds 65,536 of better-auth's buckets. Every endpoint that mails or checks
   a code now also counts per address (five sends and ten checks an hour), for any address, so the

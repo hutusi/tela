@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { claimDue, first, type Lease, type TelaDb } from '@tela/data'
+import { claimDue, first, importFeedUrls, type Lease, type TelaDb } from '@tela/data'
 import { addTestUser, createTestDb } from '@tela/data/testing'
 import { fakeClock, memoryBlobs } from '@tela/platform/portable'
 import { claimReason } from '@tela/shared'
@@ -787,5 +787,64 @@ describe('websubSubscribeJob', () => {
       sql`select status from websub_subscriptions where feed_id = ${feedId}`,
     )
     expect(row?.status).toBe('failed')
+  })
+})
+
+describe('placeholder sites', () => {
+  /** Sites with no feed at all: a placeholder nothing filled, which Discover shows as a nameless card. */
+  const feedless = () =>
+    db.all<{ home_url: string }>(
+      sql`select home_url from sites s where not exists (select 1 from feeds f where f.site_id = s.id)`,
+    )
+
+  /** A feed whose blog declares a home other than the feed's own origin, as most blogs do. */
+  async function filedUnderItsHome() {
+    server.text('/feed.xml', rss({ link: 'https://blog.example/', items: [] }))
+    return registerFeed(db, {
+      feedUrl: server.url('/feed.xml'),
+      homeUrl: 'https://blog.example/',
+      now: clock.now(),
+    })
+  }
+
+  test('an OPML import naming a feed Tela has makes no site for that address', async () => {
+    const { feedId } = await filedUnderItsHome()
+    await addTestUser(db, 'u1')
+    const url = new URL(server.url('/feed.xml'))
+    const ids = await importFeedUrls(
+      db,
+      [{ feedUrl: url.toString(), host: url.hostname, origin: url.origin }],
+      'u1',
+      clock.now(),
+    )
+    expect(ids).toEqual([feedId])
+    expect(await feedless()).toEqual([])
+  })
+
+  test('an import still makes the site a new feed is filed under until its first fetch', async () => {
+    await addTestUser(db, 'u1')
+    const url = new URL(server.url('/new.xml'))
+    const [id] = await importFeedUrls(
+      db,
+      [{ feedUrl: url.toString(), host: url.hostname, origin: url.origin }],
+      'u1',
+      clock.now(),
+    )
+    const row = await first<{ home_url: string }>(
+      db,
+      sql`select s.home_url from feeds f join sites s on s.id = f.site_id where f.id = ${id}`,
+    )
+    expect(row?.home_url).toBe(url.origin)
+  })
+
+  test('registering a known feed under another declared home makes no site for that home', async () => {
+    const before = await filedUnderItsHome()
+    const again = await registerFeed(db, {
+      feedUrl: server.url('/feed.xml'),
+      homeUrl: 'https://elsewhere.example/',
+      now: clock.now(),
+    })
+    expect(again).toEqual({ ...before, created: false })
+    expect(await feedless()).toEqual([])
   })
 })

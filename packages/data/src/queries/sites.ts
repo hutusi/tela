@@ -41,6 +41,30 @@ export function ensureOriginSite(db: TelaDb, origin: string, now: number, meta: 
 const siteIdOf = (origin: string) => sql`(select id from sites where home_url = ${origin})`
 
 /**
+ * `ensureOriginSite` for a feed about to be inserted, and nothing when that feed exists already:
+ * it keeps the site it has, so a site made for it here would hold no feed and show in Discover as
+ * a card with no name and no posts. In the batch that inserts the feed, so the two agree.
+ */
+function ensureSiteForNewFeed(
+  db: TelaDb,
+  feedUrl: string,
+  origin: string,
+  now: number,
+  meta: SiteMeta,
+) {
+  return db.run(sql`
+    insert into sites (home_url, title, description, primary_lang, created_at, updated_at, seq)
+    select ${origin}, ${meta.title ?? null}, ${meta.description ?? null}, ${meta.primaryLang ?? null},
+      ${now}, ${now}, ${currentSeq}
+    where not exists (select 1 from feeds where feed_url = ${feedUrl})
+    on conflict (home_url) do update set
+      title = coalesce(sites.title, excluded.title),
+      description = coalesce(sites.description, excluded.description),
+      primary_lang = coalesce(sites.primary_lang, excluded.primary_lang)
+  `)
+}
+
+/**
  * A blog waiting for an operator's review for Discover (ADR 0041), over `sites s`: one a member
  * added (private, unclaimed, someone reads it), with a live feed that has brought posts, which no
  * operator has decided about yet (`review` is null; every decision writes it with `reviewed_at`).
@@ -151,11 +175,14 @@ export async function ensureFeed(
 ): Promise<{ feedId: number; siteId: number; created: boolean }> {
   const [, , inserted] = await db.batch([
     bumpSeq(db),
-    ensureOriginSite(db, input.siteOrigin, input.now, input.site ?? {}),
+    ensureSiteForNewFeed(db, input.feedUrl, input.siteOrigin, input.now, input.site ?? {}),
     db
       .insert(feeds)
       .values({
-        siteId: sql`${siteIdOf(input.siteOrigin)}`,
+        // A feed that exists already made no site above; its own site keeps the column filled
+        // until the conflict below drops the row.
+        siteId: sql`coalesce(${siteIdOf(input.siteOrigin)},
+          (select site_id from feeds where feed_url = ${input.feedUrl}))`,
         feedUrl: input.feedUrl,
         host: input.host,
         title: input.title ?? null,
@@ -198,11 +225,12 @@ export async function declaredHomeHonoured(
 }
 
 /**
- * Register many feed URLs at once (an OPML import): each under a placeholder site keyed by its own
- * origin, due at once. Three statements whatever the count, so 500 feeds stay far inside D1's
- * per-invocation query limit; the first fetch moves each feed to the site it declares. Returns
- * the feed ids, new and existing alike. Nothing is fetched here, so nothing is verified: a URL
- * that is not a feed fails its first fetch and dies like any other dead feed.
+ * Register many feed URLs at once (an OPML import): each new one under a placeholder site keyed by
+ * its own origin, due at once. Three statements whatever the count, so 500 feeds stay far inside
+ * D1's per-invocation query limit; the first fetch moves each feed to the site it declares. A URL
+ * Tela has already keeps its feed's site, and gets no placeholder: nothing would ever fill it.
+ * Returns the feed ids, new and existing alike. Nothing is fetched here, so nothing is verified:
+ * a URL that is not a feed fails its first fetch and dies like any other dead feed.
  */
 export async function importFeedUrls(
   db: TelaDb,
@@ -216,7 +244,8 @@ export async function importFeedUrls(
     bumpSeq(db),
     db.run(sql`
       insert into sites (home_url, created_at, updated_at, seq)
-      select distinct value->>2, ${now}, ${now}, ${currentSeq} from json_each(${rows}) where true
+      select distinct value->>2, ${now}, ${now}, ${currentSeq} from json_each(${rows})
+      where not exists (select 1 from feeds f where f.feed_url = value->>0)
       on conflict (home_url) do nothing
     `),
     db.run(sql`

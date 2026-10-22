@@ -46,7 +46,13 @@ import {
 } from './queries/invites'
 import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates, fileImportedFeeds, writeImportFiling } from './queries/reader'
-import { DISCOVER_REVIEW, publicReaderCount, recountReaders } from './queries/sites'
+import {
+  DISCOVER_REVIEW,
+  ensureFeed,
+  importFeedUrls,
+  publicReaderCount,
+  recountReaders,
+} from './queries/sites'
 import { readPull, readTitles } from './queries/sync'
 import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
 import { feeds, sites } from './schema'
@@ -936,6 +942,55 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { articleId: 5, readAt: 10, readUpdatedAt: 30 }, // read at 10: its first time, the later clock
         { articleId: 7, readAt: 35, readUpdatedAt: 40 }, // read later on the copy: unchanged
         { articleId: 9, readAt: 20, readUpdatedAt: null }, // read once: still no clock to keep
+      ])
+    })
+  })
+
+  describe('placeholder sites', () => {
+    const feedless = (db: TelaDb) =>
+      db.all(sql`
+        select home_url as "homeUrl" from sites s
+        where not exists (select 1 from feeds f where f.site_id = s.id) order by home_url`)
+    const feedUrl = 'http://blog.example/feed.xml'
+
+    it('a known feed, registered or imported again, makes no site that would hold nothing', async () => {
+      const db = await makeDb()
+      await db.run(
+        sql`insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'u', 'u@x.y', 1, 0, 0)`,
+      )
+      const made = await ensureFeed(db, {
+        feedUrl,
+        host: 'blog.example',
+        siteOrigin: 'https://blog.example',
+        now: T0,
+      })
+      expect(made.created).toBe(true)
+      expect(
+        await ensureFeed(db, {
+          feedUrl,
+          host: 'blog.example',
+          siteOrigin: 'https://elsewhere.example',
+          now: T0,
+        }),
+      ).toEqual({ ...made, created: false })
+      const ids = await importFeedUrls(
+        db,
+        [
+          { feedUrl, host: 'blog.example', origin: 'http://blog.example' },
+          {
+            feedUrl: 'https://new.example/feed',
+            host: 'new.example',
+            origin: 'https://new.example',
+          },
+        ],
+        'u1',
+        T0,
+      )
+      expect(ids).toHaveLength(2)
+      expect(await feedless(db)).toEqual([])
+      expect(await db.all(sql`select home_url as "homeUrl" from sites order by home_url`)).toEqual([
+        { homeUrl: 'https://blog.example' },
+        { homeUrl: 'https://new.example' },
       ])
     })
   })
