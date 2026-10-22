@@ -340,9 +340,9 @@ One time. Production holds test data only, so nothing is migrated: the owner's s
 travel as OPML, and Discover is curated again. Steps 2–5 ran on 2026-09-29, with Gate G2's full
 compare and step 1's cleanup left to finish beside the new stack; steps 6–9 are still open.
 
-1. **Gate G2 passed:** the shadow tela-jobs matched the Fly worker's articles by dedup key. Then
-   delete the shadow's Worker `tela-jobs-shadow`, D1 `tela-shadow`, bucket `tela-content-shadow`
-   and queues `tela-shadow-*`, and the `env.shadow` block in `apps/jobs/wrangler.jsonc`.
+1. **Gate G2 passed** on 2026-10-07: the shadow tela-jobs matched the Fly worker's articles by
+   dedup key. Its Worker, D1, queues and `env.shadow` block were deleted on 2026-10-22, and its
+   bucket `tela-content-shadow` was given a one-day expiry rule, to be deleted once empty.
 2. **Export the owner's subscriptions** from the running site: Settings → Export OPML.
 3. **Provision and deploy** as above. Deploying tela-web replaces the Next Worker of the same name
    on tela.ainaive.com: that is the switch, and it takes effect at once.
