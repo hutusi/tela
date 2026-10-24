@@ -72,6 +72,14 @@ next fetch would answer 304 and never look at the item again. So the same batch 
 not land on its planned version; the next fetch reads every item and decides again. The feed's
 batch writes its versions before it moves its articles, so the row is there to find.
 
+One loss a replay cannot mend: a reprocess that made, from the stored HTML, the very body the feed
+brings, on the very version number the feed chose. The feed's move is refused, but the next fetch
+finds that body stored and skips the item, and the title the blogger edited with it (Codex's third
+review). So the feed's update is two statements: the body moves only from the version it was read
+at, while what only the feed knows (title, link, author, date) lands whenever the article ends up
+on the row the change chose, whoever moved it there. Nothing else writes those columns, and a
+feed's fetches run one at a time under its lease.
+
 **Pace, not politeness.** Nothing is fetched, so the due query names no host and a success claims
 nothing after it. The tick's limit is the pace: 50 a minute, newest first, on the extract queue.
 Neither health check's backlog counts it.

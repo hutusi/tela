@@ -437,32 +437,52 @@ export type ArticleChange = {
   titleHash: string
 }
 
+/**
+ * Two statements, for a guarded move and the item's own details. The body moves only from the
+ * version the change was decided from, onto a row that holds the content it brings (`pointAt`).
+ * What only the feed knows (title, link, author, date) lands whenever the article ends up on the
+ * row the change chose, whoever moved it there: a reprocess can make the same body from the stored
+ * HTML first, and a fetch that then dropped its edited title would never apply it, since the next
+ * fetch finds that body stored and skips the item (Codex's third review). Nothing else writes those
+ * columns, and a feed's fetches run one at a time under its lease.
+ */
 export function updateArticles(db: TelaDb, rows: ArticleChange[]) {
-  return db.run(sql`
-    update articles set
-      url = j.value->>'url', url_host = j.value->>'urlHost', title = j.value->>'title',
-      author = j.value->>'author', published_at = j.value->>'publishedAt',
-      sort_at = coalesce(j.value->>'publishedAt', articles.fetched_at),
-      source_lang = j.value->>'sourceLang', excerpt = j.value->>'excerpt',
-      current_version = j.value->>'currentVersion', content_key = j.value->>'contentKey',
-      word_count = j.value->>'wordCount', reading_minutes = j.value->>'readingMinutes',
-      extract_state = j.value->>'extractState', title_hash = j.value->>'titleHash',
-      seq = ${currentSeq}
-    from json_each(${JSON.stringify(rows)}) as j
-    where articles.id = j.value->>'id'
-      and articles.current_version is j.value->>'expectVersion'
-      and exists (select 1 from article_versions v where v.article_id = articles.id
-        and v.version = j.value->>'currentVersion' and v.content_key = j.value->>'contentKey')
-  `)
+  const changes = JSON.stringify(rows)
+  return [
+    db.run(sql`
+      update articles set
+        source_lang = j.value->>'sourceLang', excerpt = j.value->>'excerpt',
+        current_version = j.value->>'currentVersion', content_key = j.value->>'contentKey',
+        word_count = j.value->>'wordCount', reading_minutes = j.value->>'readingMinutes',
+        extract_state = j.value->>'extractState', seq = ${currentSeq}
+      from json_each(${changes}) as j
+      where articles.id = j.value->>'id'
+        and articles.current_version is j.value->>'expectVersion'
+        and exists (select 1 from article_versions v where v.article_id = articles.id
+          and v.version = j.value->>'currentVersion' and v.content_key = j.value->>'contentKey')
+    `),
+    db.run(sql`
+      update articles set
+        url = j.value->>'url', url_host = j.value->>'urlHost', title = j.value->>'title',
+        author = j.value->>'author', published_at = j.value->>'publishedAt',
+        sort_at = coalesce(j.value->>'publishedAt', articles.fetched_at),
+        title_hash = j.value->>'titleHash', seq = ${currentSeq}
+      from json_each(${changes}) as j
+      where articles.id = j.value->>'id'
+        and articles.current_version = j.value->>'currentVersion'
+        and articles.content_key = j.value->>'contentKey'
+    `),
+  ] as const
 }
 
 /**
- * A change another writer beat (`updateArticles` moved nothing) must not be forgotten. The fetch
- * that planned it also saves the feed's validators and body hash, so the next fetch would answer
- * 304, or match the hash, and never look at the item again: the post kept its old title and body
- * for good (Codex's review). So when any planned change did not land, this statement, after the
- * feed's own update in the same batch, forgets them and makes the feed due now: its next fetch
- * reads every item and decides again from what the article holds then.
+ * A change that did not land must not be forgotten. The fetch that planned it also saves the
+ * feed's validators and body hash, so the next fetch would answer 304, or match the hash, and never
+ * look at the item again: the post kept its old title and body for good (Codex's review). So when
+ * any planned article is not on the row its change chose, this statement, after the feed's own
+ * update in the same batch, forgets them and makes the feed due now: its next fetch reads every
+ * item and decides again from what the article holds then. An article another writer put on that
+ * very row took the change's details from `updateArticles`, and needs nothing again.
  */
 export function replayIfRejected(
   db: TelaDb,

@@ -515,7 +515,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       await db.batch([
         bumpSeq(db),
         insertVersions(db, 1, [version(1, 2)], T0),
-        updateArticles(db, [
+        ...updateArticles(db, [
           {
             id: inserted.find((r) => r.dedup_key === 'g:1')?.id ?? 0,
             expectVersion: 1,
@@ -803,18 +803,46 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
           [{ ...v('fed', 3), provenance: 'feed', dedupKey: 'g:1', rawKey: null, sourceUrl: null }],
           T0,
         ),
-        updateArticles(db, [fed(1)]),
+        ...updateArticles(db, [fed(1)]),
         replayIfRejected(db, 1, [fed(1)], T0),
       ])
       expect((await state())?.content_key).toBe('reprocessed')
       expect(await validators()).toEqual({ etag: null, last_body_hash: null, next_fetch_at: T0 })
+      // One that chose the very row the reprocess put the article on (the same body, made from
+      // the item) lands what only the feed knows; the body stays as the reprocess left it.
+      await db.run(
+        sql`update feeds set etag = 'e1', last_body_hash = 'b1', next_fetch_at = ${T0 + MIN} where id = 1`,
+      )
+      const same = {
+        ...fed(1),
+        title: 'Post 1, edited',
+        currentVersion: 2,
+        contentKey: 'reprocessed',
+        extractState: 'none' as const,
+      }
+      await db.batch([
+        bumpSeq(db),
+        ...updateArticles(db, [same]),
+        replayIfRejected(db, 1, [same], T0),
+      ])
+      expect(
+        await first(
+          db,
+          sql`select title, title_hash, extract_state from articles where id = ${id}`,
+        ),
+      ).toEqual({ title: 'Post 1, edited', title_hash: 'th-f', extract_state: 'due' })
+      expect(await validators()).toEqual({
+        etag: 'e1',
+        last_body_hash: 'b1',
+        next_fetch_at: T0 + MIN,
+      })
       // Decided from what is there now, it moves, and the feed keeps what it saved.
       await db.run(
         sql`update feeds set etag = 'e2', last_body_hash = 'b2', next_fetch_at = ${T0 + MIN} where id = 1`,
       )
       await db.batch([
         bumpSeq(db),
-        updateArticles(db, [fed(2)]),
+        ...updateArticles(db, [fed(2)]),
         replayIfRejected(db, 1, [fed(2)], T0),
       ])
       expect(await state()).toEqual({

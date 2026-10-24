@@ -368,52 +368,64 @@ describe('reprocessArticleJob', () => {
     expect(after?.title_hash).toBe(before?.title_hash)
   })
 
-  test("a feed's change that loses to a reprocess is fetched again, not lost behind a 304", async () => {
-    const item = (body: string, title: string) =>
-      rss({
-        link: server.url('/'),
-        items: [
-          {
-            guid: 'p1',
-            link: server.url('/posts/1'),
-            title,
-            description: 'x',
-            content: body,
-            date: 'Thu, 01 Oct 2026 08:00:00 GMT',
-          },
-        ],
-      })
-    server.text('/feed.xml', item(longHtml(4), 'Post 1'))
-    const { feedId } = await registerFeed(db, {
-      feedUrl: server.url('/feed.xml'),
-      now: clock.now(),
+  /** A feed of one post, as the fixture serves it now. */
+  const onePost = (body: string, title: string, date = 'Thu, 01 Oct 2026 08:00:00 GMT') =>
+    rss({
+      link: server.url('/'),
+      items: [
+        { guid: 'p1', link: server.url('/posts/1'), title, description: 'x', content: body, date },
+      ],
     })
-    await ingestFeed(ctx(), await claim('feed.fetch', feedId))
-    await db.run(sql`delete from leases`)
-    // The post is due for a reprocess, and the feed edits it.
-    await db.batch([
-      db.run(sql`update article_versions set pipeline_version = 0, content_key = 'older'
-        where article_id = 1`),
-      db.run(sql`update articles set content_key = 'older' where id = 1`),
-    ] as never)
-    server.text('/feed.xml', item(`${longHtml(4)}<p>An added paragraph.</p>`, 'Post 1, edited'))
-    clock.advance(2 * 60 * MIN)
-    // The reprocess commits while the fetch is storing its objects: both took version 2.
-    let raced = false
-    const racingPut: Blobs = {
+
+  /** Blobs that run `meanwhile` before the first write: a writer landing while a fetch stores. */
+  const racingPut = (meanwhile: () => Promise<void>): Blobs => {
+    let ran = false
+    return {
       get: (key) => blobs.get(key),
       head: (key) => blobs.head(key),
       put: async (key, body, options) => {
-        if (!raced) {
-          raced = true
-          await reprocessArticleJob(ctx(), await claim('article.reprocess', 1))
+        if (!ran) {
+          ran = true
+          await meanwhile()
         }
         return blobs.put(key, body, options)
       },
       delete: (key) => blobs.delete(key),
       list: (options) => blobs.list(options),
     }
-    await ingestFeed({ ...ctx(), blobs: racingPut }, await claim('feed.fetch', feedId))
+  }
+
+  /** The post fetched once, then stored as if by an older pipeline: due for a reprocess. */
+  const fetchedThenAged = async () => {
+    server.text('/feed.xml', onePost(longHtml(4), 'Post 1'))
+    const { feedId } = await registerFeed(db, {
+      feedUrl: server.url('/feed.xml'),
+      now: clock.now(),
+    })
+    await ingestFeed(ctx(), await claim('feed.fetch', feedId))
+    await db.run(sql`delete from leases`)
+    await db.batch([
+      db.run(sql`update article_versions set pipeline_version = 0, content_key = 'older'
+        where article_id = 1`),
+      db.run(sql`update articles set content_key = 'older' where id = 1`),
+    ] as never)
+    return feedId
+  }
+
+  const reprocessNow = async () => {
+    await reprocessArticleJob(ctx(), await claim('article.reprocess', 1))
+  }
+
+  test("a feed's change that loses to a reprocess is fetched again, not lost behind a 304", async () => {
+    const feedId = await fetchedThenAged()
+    // The feed edits the post.
+    server.text('/feed.xml', onePost(`${longHtml(4)}<p>An added paragraph.</p>`, 'Post 1, edited'))
+    clock.advance(2 * 60 * MIN)
+    // The reprocess commits while the fetch is storing its objects: both took version 2.
+    await ingestFeed(
+      { ...ctx(), blobs: racingPut(reprocessNow) },
+      await claim('feed.fetch', feedId),
+    )
     expect(
       (await first<{ title: string }>(db, sql`select title from articles where id = 1`))?.title,
     ).toBe('Post 1')
@@ -438,6 +450,47 @@ describe('reprocessArticleJob', () => {
     )
     expect(after).toEqual({ title: 'Post 1, edited', current_version: 3 })
     expect(await consistent()).toBe(true)
+  })
+
+  test("a feed's edit lands when a reprocess made the same body first", async () => {
+    const feedId = await fetchedThenAged()
+    // The feed edits only the title and the date, so today's pipeline makes the same body from
+    // the item as the reprocess makes from the stored HTML. A replay could not help: the next
+    // fetch would find that body already stored and skip the item (Codex's third review).
+    server.text(
+      '/feed.xml',
+      onePost(longHtml(4), 'Post 1, edited', 'Fri, 02 Oct 2026 08:00:00 GMT'),
+    )
+    clock.advance(2 * 60 * MIN)
+    await ingestFeed(
+      { ...ctx(), blobs: racingPut(reprocessNow) },
+      await claim('feed.fetch', feedId),
+    )
+    const after = await first<{
+      title: string
+      published_at: number
+      sort_at: number
+      current_version: number
+    }>(db, sql`select title, published_at, sort_at, current_version from articles where id = 1`)
+    expect(after).toEqual({
+      title: 'Post 1, edited',
+      published_at: Date.UTC(2026, 9, 2, 8),
+      sort_at: Date.UTC(2026, 9, 2, 8),
+      current_version: 2,
+    })
+    // The reprocess's row, which holds the body the feed brought.
+    expect(await version(1, 2)).toMatchObject({
+      provenance: 'feed',
+      pipeline_version: PIPELINE_VERSION,
+    })
+    expect(await consistent()).toBe(true)
+    // It landed, so the feed keeps what it saved: nothing to fetch again.
+    const feed = await first<{ last_body_hash: string | null; next_fetch_at: number }>(
+      db,
+      sql`select last_body_hash, next_fetch_at from feeds where id = ${feedId}`,
+    )
+    expect(feed?.last_body_hash).not.toBeNull()
+    expect(feed?.next_fetch_at).toBeGreaterThan(clock.now())
   })
 
   test('a body that comes out the same keeps the language its object says', async () => {
