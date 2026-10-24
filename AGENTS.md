@@ -84,6 +84,7 @@ cd apps/reader/redirect && wrangler deploy -c wrangler.jsonc   # tela-redirect (
 12. **Outbound fetches refuse private ranges.** The HTTP client checks names and literals, Cloudflare's `global_fetch_strictly_public` refuses the socket, and the relay pins the address it resolved. The relay serves only signed `POST /fetch`, follows no redirects and caps the body: it is not an open proxy (ADR 0008).
 13. **Reading languages are the launch set in `packages/shared/src/languages.ts`** (ADR 0006).
 14. **Never name a package script `prepare`, `postinstall`, or another npm lifecycle hook** — Bun runs them on install.
+15. **Bump `PIPELINE_VERSION`** (`packages/shared/src/constants.ts`) with any change to what `processArticleHtml` makes of a body: sanitizing, normalization, skip rules, excerpts, and every `NORM_VERSION` bump. `article.reprocess` then makes each article's current version again from its stored raw HTML, adding a version only where the content object changed (ADR 0055). Forgotten, the fix reaches only what is fetched after it. A change to *extraction* is not this: the raw HTML Tela stores is Readability's output, so a better extraction still needs the page fetched again (OPERATIONS.md).
 
 ## Style
 
@@ -169,7 +170,7 @@ Defects that already cost time here, not hypotheticals.
 Update whichever covers what you changed, in the same change:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the living system map. Tracks: schema changes, new kinds of work, new routes, new safeguards.
-- [docs/adr/](docs/adr/) — decision records 0001–0054. A reversed decision gets a superseding ADR, not a silent edit.
+- [docs/adr/](docs/adr/) — decision records 0001–0055. A reversed decision gets a superseding ADR, not a silent edit.
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — provisioning, deploys and day-2 runbooks. Anything touching env vars, secrets, deploys, rate limits or failure signatures lands here.
 - [docs/DESIGN.md](docs/DESIGN.md) — tokens, layout rules, components, the i18n string convention.
 - [packages/content/README.md](packages/content/README.md) — the normative spec for sanitization, blocks and hashing. Changing a rule here means bumping `NORM_VERSION`.

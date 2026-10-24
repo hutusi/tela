@@ -3,7 +3,7 @@
  * on libSQL (the portable path) and under the Workers test pool on real D1. A difference between
  * the two is a bug in the portable adapter, which is exactly what this suite exists to catch.
  */
-import { MAX_FOLDERS } from '@tela/shared'
+import { MAX_FOLDERS, PIPELINE_VERSION } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { exportDatabase, verifyExport } from './backup'
 import type { TelaDb } from './db'
@@ -20,11 +20,14 @@ import {
   startLease,
 } from './leases'
 import {
+  adoptReprocessedVersion,
+  dueReprocessing,
   existingArticles,
   fillSiteMetadata,
   insertArticles,
   insertVersions,
   mergeFeed,
+  stampPipeline,
   updateArticles,
 } from './queries/ingest'
 import {
@@ -545,6 +548,120 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         sql`select title, primary_lang from sites where id = 1`,
       )
       expect(site).toEqual({ title: 'Blog', primary_lang: 'en' })
+    })
+  })
+
+  describe('reprocessing stored bodies (ADR 0055)', () => {
+    it('a current version made by an older pipeline is due until stamped or replaced', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['h1'])
+      await db.batch([
+        bumpSeq(db),
+        insertArticles(
+          db,
+          1,
+          [
+            {
+              dedupKey: 'g:1',
+              url: 'https://h1/p/1',
+              urlHost: 'h1',
+              title: 'Post 1',
+              author: null,
+              publishedAt: T0,
+              sourceLang: 'en',
+              excerpt: 'Excerpt',
+              contentKey: 'key-1',
+              wordCount: 100,
+              readingMinutes: 1,
+              extractState: 'done',
+              titleHash: 'th-1',
+            },
+          ],
+          T0,
+        ),
+        insertVersions(
+          db,
+          1,
+          [
+            {
+              dedupKey: 'g:1',
+              version: 1,
+              provenance: 'feed',
+              contentKey: 'key-1',
+              rawKey: 'r/1.html',
+              bodyChars: 500,
+              excerpt: 'Excerpt',
+              wordCount: 100,
+              readingMinutes: 1,
+              lang: 'en',
+              sourceUrl: null,
+            },
+          ],
+          T0,
+        ),
+      ])
+      const id =
+        (await first<{ id: number }>(db, sql`select id from articles where dedup_key = 'g:1'`))
+          ?.id ?? 0
+      await db.run(sql`update articles set current_version = 1 where id = ${id}`)
+      const due = async () =>
+        claimDue(db, {
+          kind: 'article.reprocess',
+          owner: `o${Math.random()}`,
+          now: T0,
+          ttlMs: MIN,
+          limit: 10,
+          due: dueReprocessing(),
+        }).then(async (rows) => {
+          await db.run(sql`delete from leases`)
+          return rows.map((r) => r.key)
+        })
+      // Inserted under this pipeline: not due.
+      expect(await due()).toEqual([])
+      await db.run(sql`update article_versions set pipeline_version = 0 where article_id = ${id}`)
+      expect(await due()).toEqual([String(id)])
+      await db.batch([bumpSeq(db), stampPipeline(db, id, 1)])
+      expect(await due()).toEqual([])
+
+      // Made again and different: a new current version, the extraction state as it was.
+      await db.run(sql`update article_versions set pipeline_version = 0 where article_id = ${id}`)
+      const made = {
+        version: 2,
+        provenance: 'feed' as const,
+        contentKey: 'key-1-again',
+        bodyChars: 520,
+        excerpt: 'Excerpt again',
+        wordCount: 110,
+        readingMinutes: 1,
+        lang: 'en',
+      }
+      await db.batch([
+        bumpSeq(db),
+        ...adoptReprocessedVersion(
+          db,
+          id,
+          { ...made, rawKey: 'r/1.html', sourceUrl: null },
+          made,
+          'th-2',
+          T0,
+        ),
+      ])
+      expect(await due()).toEqual([])
+      const row = await first<Record<string, unknown>>(
+        db,
+        sql`select a.current_version, a.content_key, a.extract_state, a.title_hash,
+              v.pipeline_version, v.raw_key
+            from articles a join article_versions v on v.article_id = a.id and v.version = 2
+            where a.id = ${id}`,
+      )
+      expect(row).toEqual({
+        current_version: 2,
+        content_key: 'key-1-again',
+        extract_state: 'done',
+        title_hash: 'th-2',
+        pipeline_version: PIPELINE_VERSION,
+        raw_key: 'r/1.html',
+      })
     })
   })
 

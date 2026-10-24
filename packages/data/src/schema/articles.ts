@@ -86,9 +86,15 @@ export const articleVersions = sqliteTable(
     version: integer().notNull(),
     provenance: text({ enum: PROVENANCES }).notNull(),
     contentKey: text().notNull(),
-    /** The raw item HTML (`r/<sha>.html`), so a NORM_VERSION bump can replay the pipeline. */
+    /** The raw item HTML (`r/<sha>.html`), which `article.reprocess` processes again. */
     rawKey: text(),
     normVersion: integer().notNull(),
+    /**
+     * The PIPELINE_VERSION this version's content object was made (or last checked) under. A
+     * current version under an older one is due for `article.reprocess` (ADR 0055); 0 is a version
+     * from before the column.
+     */
+    pipelineVersion: integer().notNull().default(0),
     bodyChars: integer().notNull(),
     /** What the article shows when this version is current. */
     excerpt: text(),
@@ -102,6 +108,8 @@ export const articleVersions = sqliteTable(
     primaryKey({ columns: [t.articleId, t.version] }),
     check('article_versions_provenance_check', oneOf(t.provenance, PROVENANCES)),
     index('article_versions_content_key_idx').on(t.contentKey),
+    /** What `article.reprocess` reads: nothing past the range once every version is current. */
+    index('article_versions_pipeline_idx').on(t.pipelineVersion),
   ],
 )
 

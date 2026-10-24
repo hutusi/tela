@@ -76,6 +76,7 @@ export function wantJob(w: Wanted, kind: string, key: string) {
     case 'websub.subscribe':
       return add(w.feeds, intKey(key))
     case 'article.extract':
+    case 'article.reprocess':
       return add(w.articles, intKey(key))
     case 'translate.body':
       return w.contents.add(splitBodyKey(key).contentKey)
@@ -99,6 +100,7 @@ export function targetOf(names: Names, kind: string, key: string): Target {
     case 'websub.subscribe':
       return n === null ? null : feed(names.feeds.get(n))
     case 'article.extract':
+    case 'article.reprocess':
       return n === null ? null : feed(names.articles.get(n))
     case 'translate.body':
       return feed(names.contents.get(splitBodyKey(key).contentKey))

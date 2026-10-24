@@ -99,6 +99,7 @@ describe('tick and runJob', () => {
     expect(JSON.parse(beat?.info ?? '{}')).toEqual({
       'feed.fetch': 0,
       'article.extract': 0,
+      'article.reprocess': 0,
       'member.gravatar': 0,
       'site.claim': 0,
       errors: {},

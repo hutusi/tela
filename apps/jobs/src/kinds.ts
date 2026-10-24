@@ -10,6 +10,7 @@ import {
   dueExtractions,
   dueFeeds,
   dueGravatarChecks,
+  dueReprocessing,
   dueTitles,
   FEED_FETCH_TTL_MS,
   failDueTitles,
@@ -28,10 +29,12 @@ import {
   extractArticleJob,
   gravatarCheckJob,
   ingestFeed,
+  reprocessArticleJob,
   siteAssetsJob,
   verifyClaimJob,
   websubSubscribeJob,
 } from '@tela/ingest/pipeline'
+import { PIPELINE_VERSION } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
 import { translateBodyJob } from './translation/body'
 import { TITLE_TTL_MS, type TranslationContext, translateTitlesJob } from './translation/titles'
@@ -89,6 +92,25 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     due: () => dueExtractions(),
     run: extractArticleJob,
     exhausted: (db, key) => [settleExtraction(db, Number(key), 'failed')],
+  },
+  'article.reprocess': {
+    // Each current version made under an older PIPELINE_VERSION, made again from its raw HTML
+    // (ADR 0055). Nothing is fetched, so no host to wait for: the limit is the only pace, a few
+    // thousand stored posts an hour, newest first, beside extraction on its queue.
+    queue: 'extract',
+    ttlMs: 2 * MIN,
+    limit: 50,
+    backoff: { baseMs: 10 * MIN, maxMs: 6 * 60 * MIN, maxAttempts: 3 },
+    due: () => dueReprocessing(),
+    run: reprocessArticleJob,
+    // A body the pipeline keeps failing on keeps the version it has; stamped so it stops being due.
+    exhausted: (db, key) => [
+      db.run(sql`
+        update article_versions set pipeline_version = ${PIPELINE_VERSION}
+        where article_id = ${Number(key)}
+          and version = (select current_version from articles where id = ${Number(key)})
+      `),
+    ],
   },
   'site.assets': {
     // Without an asset store nothing could be stored, and every site would stay due forever.

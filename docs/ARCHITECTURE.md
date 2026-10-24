@@ -65,7 +65,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `site_topics`, `site_claims` | A blog's topics; claim attempts and how each was proved (`method`: a meta tag, a `rel="me"` link, a link on every page, or GitHub both ways, ADR 0045; a check that found no proof stores its reason as JSON in `error`), with the operator who vouched for one (`vouched_by`, so its check skips only the proof), when an operator last decided on it (`reviewed_at`, ADR 0039), and when one last rejected or removed it (`overruled_at`: from then on only the tag or `rel="me"` proves it) |
 | `feeds` | The fetch unit: validators, schedule (`next_fetch_at`, `fetch_interval_sec`), `fetch_region`, `timeout_streak`, `status`, `content_mode`, `hub_url`, `merged_into` (another address for the blog's canonical feed, ADR 0028), `last_item_at` (the newest item it listed when last fetched, which the pull sends with the feed so Settings can say when a blog last posted, ADR 0049) |
 | `articles` | `dedup_key` unique per feed, `sort_at`, `source_lang`, `current_version`, `content_key`, `extract_state`, counts. `AUTOINCREMENT` ids, so the unread watermark never meets a reused id. Ordered two ways: within a feed by `(feed_id, sort_at, id)` (`articles_feed_sort_idx`), and across every feed by `(sort_at, id)` (`articles_sort_idx`, Discover's Articles) |
-| `article_versions` | Every body an article has had: provenance (feed or readability), `content_key`, `raw_key` (ADR 0022) |
+| `article_versions` | Every body an article has had: provenance (feed or readability), `content_key`, `raw_key` (ADR 0022), and the `pipeline_version` it was made under (ADR 0055) |
 | `article_titles` | Eager title and excerpt per launch language: `done`, `echo` or `failed` against the title hash |
 | `block_translations` | The content-addressed block cache: source hash × target language × `NORM_VERSION` |
 | `body_translations` | A body per content version and language: state, reservation, streamed `chunk_keys`, the finished object (ADR 0023) |
@@ -139,6 +139,11 @@ ADR 0053).
 - Versions: `chooseCurrent` decides which body readers see. A summary feed's current version is
   its latest Readability extraction, so a changed summary asks for a new extraction instead of
   replacing the full text.
+- `reprocessArticleJob` (`pipeline/reprocess.ts`, kind `article.reprocess`, ADR 0055): an
+  article whose current version was made under an older `PIPELINE_VERSION` is made again from
+  the raw HTML it was stored with. A different content object becomes a new version of the same
+  provenance, `extract_state` untouched; the same one is stamped current. No fetch and no host, so
+  its pace is the tick's limit, newest first.
 - `extractArticleJob`, `siteAssetsJob` (raster favicons to `tela-assets`), `verifyClaimJob`
   (`pipeline/proofs.ts` reads the home page: a meta tag, a `rel="me"` link to the profile, or a
   link without one that the blog's 404 page shows too, to the profile or to a GitHub whose

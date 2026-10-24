@@ -1,9 +1,18 @@
 /**
- * Bump whenever the block normalization, placeholder grammar, or hashing rules in
- * packages/content change. It is mixed into every block hash so a rule change can
- * never mix old and new cache entries in the translations table.
+ * Bump whenever what a tagged text means or how it is hashed changes in packages/content: the
+ * placeholder grammar, the tagged-text serialization, the hash input. It is mixed into every
+ * block hash so a rule change can never mix old and new cache entries (ADR 0005, 0053). A bump
+ * also bumps PIPELINE_VERSION, so every stored body is processed again under it.
  */
 export const NORM_VERSION = 1
+
+/**
+ * Bump whenever `processArticleHtml` can turn a stored body into something else: sanitizing,
+ * normalization, skip rules, excerpts. Every version stores the pipeline it was processed under,
+ * and `article.reprocess` processes each article's current version again from its raw HTML when
+ * that is older, adding a version only where the result changed (ADR 0055).
+ */
+export const PIPELINE_VERSION = 1
 
 /** Source tokens translated per article body; the rest renders as source (`partial`). */
 export const MAX_ARTICLE_TRANSLATION_TOKENS = 40_000

@@ -3,7 +3,7 @@
  * rows travel as one JSON parameter through json_each (ADR 0021), so a 200-item first fetch is
  * one read and one fenced batch, not hundreds of statements.
  */
-import { NORM_VERSION } from '@tela/shared'
+import { NORM_VERSION, PIPELINE_VERSION } from '@tela/shared'
 import { and, eq, isNull, type SQL, sql } from 'drizzle-orm'
 import type { SQLiteUpdateSetSource } from 'drizzle-orm/sqlite-core'
 import type { TelaDb } from '../db'
@@ -404,10 +404,12 @@ export type NewVersion = {
 export function insertVersions(db: TelaDb, feedId: number, rows: NewVersion[], now: number) {
   return db.run(sql`
     insert into article_versions (article_id, version, provenance, content_key, raw_key,
-      norm_version, body_chars, excerpt, word_count, reading_minutes, lang, source_url, created_at)
+      norm_version, pipeline_version, body_chars, excerpt, word_count, reading_minutes, lang,
+      source_url, created_at)
     select a.id, j.value->>'version', j.value->>'provenance', j.value->>'contentKey',
-      j.value->>'rawKey', ${NORM_VERSION}, j.value->>'bodyChars', j.value->>'excerpt',
-      j.value->>'wordCount', j.value->>'readingMinutes', j.value->>'lang', j.value->>'sourceUrl', ${now}
+      j.value->>'rawKey', ${NORM_VERSION}, ${PIPELINE_VERSION}, j.value->>'bodyChars',
+      j.value->>'excerpt', j.value->>'wordCount', j.value->>'readingMinutes', j.value->>'lang',
+      j.value->>'sourceUrl', ${now}
     from json_each(${JSON.stringify(rows)}) as j
     join articles a on a.feed_id = ${feedId} and a.dedup_key = j.value->>'dedupKey'
     where true
@@ -568,6 +570,45 @@ export function settleExtraction(db: TelaDb, articleId: number, state: 'done' | 
   `)
 }
 
+/** One version, made by the pipeline at hand, so stamped with it. */
+function insertVersion(
+  db: TelaDb,
+  articleId: number,
+  version: Omit<NewVersion, 'dedupKey'>,
+  now: number,
+) {
+  return db.run(sql`
+    insert into article_versions (article_id, version, provenance, content_key, raw_key,
+      norm_version, pipeline_version, body_chars, excerpt, word_count, reading_minutes, lang,
+      source_url, created_at)
+    values (${articleId}, ${version.version}, ${version.provenance}, ${version.contentKey},
+      ${version.rawKey}, ${NORM_VERSION}, ${PIPELINE_VERSION}, ${version.bodyChars},
+      ${version.excerpt}, ${version.wordCount}, ${version.readingMinutes}, ${version.lang},
+      ${version.sourceUrl}, ${now})
+    on conflict (article_id, version) do nothing
+  `)
+}
+
+/** Point an article at its current version: what it shows, and the hash its titles key on. */
+function pointAt(
+  db: TelaDb,
+  articleId: number,
+  current: StoredVersion,
+  titleHash: string,
+  extract?: 'done',
+) {
+  return db.run(sql`
+    update articles set
+      current_version = ${current.version}, content_key = ${current.contentKey},
+      excerpt = ${current.excerpt}, word_count = ${current.wordCount},
+      reading_minutes = ${current.readingMinutes},
+      source_lang = coalesce(${current.lang}, source_lang),
+      title_hash = ${titleHash}, extract_state = coalesce(${extract ?? null}, extract_state),
+      seq = ${currentSeq}
+    where id = ${articleId}
+  `)
+}
+
 /** Add an extracted version and point the article at whatever is current now. */
 export function adoptExtractedVersion(
   db: TelaDb,
@@ -578,22 +619,119 @@ export function adoptExtractedVersion(
   now: number,
 ) {
   return [
-    db.run(sql`
-      insert into article_versions (article_id, version, provenance, content_key, raw_key,
-        norm_version, body_chars, excerpt, word_count, reading_minutes, lang, source_url, created_at)
-      values (${article.id}, ${version.version}, ${version.provenance}, ${version.contentKey},
-        ${version.rawKey}, ${NORM_VERSION}, ${version.bodyChars}, ${version.excerpt},
-        ${version.wordCount}, ${version.readingMinutes}, ${version.lang}, ${version.sourceUrl}, ${now})
-      on conflict (article_id, version) do nothing
-    `),
-    db.run(sql`
-      update articles set
-        current_version = ${current.version}, content_key = ${current.contentKey},
-        excerpt = ${current.excerpt}, word_count = ${current.wordCount},
-        reading_minutes = ${current.readingMinutes},
-        source_lang = coalesce(${current.lang}, source_lang),
-        title_hash = ${titleHash}, extract_state = 'done', seq = ${currentSeq}
-      where id = ${article.id}
-    `),
+    insertVersion(db, article.id, version, now),
+    pointAt(db, article.id, current, titleHash, 'done'),
+  ] as const
+}
+
+/**
+ * Articles whose current version was processed under an older pipeline, for `claimDue`: newest
+ * first, since those are the ones being read. No fetch, so no host to be polite to. Read through
+ * the version index, so once every version is current it reads nothing.
+ */
+export const dueReprocessing = (): SQL =>
+  sql`select v.article_id as key, null as host, 0 - a.sort_at as ord
+      from article_versions v
+      join articles a on a.id = v.article_id and a.current_version = v.version
+      where v.pipeline_version < ${PIPELINE_VERSION}`
+
+/** What reprocessing needs about one article: its current version, its raw HTML, its versions. */
+export type ArticleForReprocess = {
+  id: number
+  url: string | null
+  title: string
+  sourceLang: string | null
+  contentMode: 'unknown' | 'full' | 'summary'
+  current: {
+    version: number
+    provenance: 'feed' | 'readability'
+    contentKey: string
+    rawKey: string | null
+    sourceUrl: string | null
+    pipelineVersion: number
+  }
+  versions: StoredVersion[]
+}
+
+export async function loadArticleForReprocess(
+  db: TelaDb,
+  articleId: number,
+): Promise<ArticleForReprocess | null> {
+  const row = await first<{
+    id: number
+    url: string | null
+    title: string
+    source_lang: string | null
+    content_mode: 'unknown' | 'full' | 'summary'
+    version: number
+    provenance: 'feed' | 'readability'
+    content_key: string
+    raw_key: string | null
+    source_url: string | null
+    pipeline_version: number
+    versions: string
+  }>(
+    db,
+    sql`
+      select a.id, a.url, a.title, a.source_lang, f.content_mode,
+        v.version, v.provenance, v.content_key, v.raw_key, v.source_url, v.pipeline_version,
+        coalesce((
+          select json_group_array(json_object(
+            'version', o.version, 'provenance', o.provenance,
+            'contentKey', o.content_key, 'bodyChars', o.body_chars, 'excerpt', o.excerpt,
+            'wordCount', o.word_count, 'readingMinutes', o.reading_minutes, 'lang', o.lang))
+          from article_versions o where o.article_id = a.id
+        ), '[]') as versions
+      from articles a
+      join feeds f on f.id = a.feed_id
+      join article_versions v on v.article_id = a.id and v.version = a.current_version
+      where a.id = ${articleId}
+    `,
+  )
+  if (!row) return null
+  return {
+    id: row.id,
+    url: row.url,
+    title: row.title,
+    sourceLang: row.source_lang,
+    contentMode: row.content_mode,
+    current: {
+      version: row.version,
+      provenance: row.provenance,
+      contentKey: row.content_key,
+      rawKey: row.raw_key,
+      sourceUrl: row.source_url,
+      pipelineVersion: row.pipeline_version,
+    },
+    versions: JSON.parse(row.versions) as StoredVersion[],
+  }
+}
+
+/**
+ * The current pipeline made this version's body again and it came out the same, or never will
+ * (no raw HTML): it is current, and stops being due. The version's content is not touched.
+ */
+export function stampPipeline(db: TelaDb, articleId: number, version: number) {
+  return db.run(sql`
+    update article_versions set pipeline_version = ${PIPELINE_VERSION}
+    where article_id = ${articleId} and version = ${version}
+  `)
+}
+
+/**
+ * Add a version the current pipeline made from a stored body, and point the article at whatever
+ * is current now. Its extraction state is left as it was: nothing was fetched.
+ */
+export function adoptReprocessedVersion(
+  db: TelaDb,
+  articleId: number,
+  version: Omit<NewVersion, 'dedupKey'>,
+  current: StoredVersion,
+  titleHash: string,
+  now: number,
+) {
+  return [
+    insertVersion(db, articleId, version, now),
+    pointAt(db, articleId, current, titleHash),
   ] as const
 }

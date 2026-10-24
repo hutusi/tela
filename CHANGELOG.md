@@ -9,6 +9,10 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **Stored posts follow fixes to how bodies are processed.** Every version records the pipeline it
+  was made under, and a background job makes each post's body again from the HTML it was stored
+  with whenever that changes: a fix now reaches posts a feed no longer lists and pages that are
+  gone, with nothing fetched.
 - **Posts keep the structure of the original.** Lists show their bullets and numbers again, a
   Chinese post's headings, code and captions are no longer body text, code blocks are not shrunk
   twice, an image inside a sentence stays in the sentence, and side by side an original paragraph
