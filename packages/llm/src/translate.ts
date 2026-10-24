@@ -65,6 +65,16 @@ export type TranslateBlocksOutcome = {
 }
 
 /**
+ * HTML shows a run of whitespace as one space, so a line break inside a block is where the
+ * author's editor wrapped, not something they wrote. Sent as is, the model copies it, and a browser
+ * draws it as a space between two Chinese characters (Paul Graham's essays, wrapped at 70 columns).
+ * The cache key collapses whitespace too (`normalizeForHash`), so the request matches its key.
+ */
+function collapseWhitespace(text: string): string {
+  return text.replace(/[\t\n\f\r ]+/g, ' ').trim()
+}
+
+/**
  * Translate blocks in chunks, validate every block, retry the failures once in strict mode,
  * and carry the last two translations of a chunk into the next as context. Provider errors
  * on one chunk mark its blocks failed and the run continues; if no chunk succeeds at all the
@@ -78,16 +88,17 @@ export async function translateBlocks(
   const translated = new Map<string, string>()
   const failed = new Map<string, string>()
   const usage: TranslationUsage[] = []
-  const bySource = new Map(input.blocks.map((b) => [b.id, b.text]))
+  const sources = input.blocks.map((b) => ({ ...b, text: collapseWhitespace(b.text) }))
+  const bySource = new Map(sources.map((b) => [b.id, b.text]))
   const allowIdentical = new Set(input.allowIdenticalBlockIds ?? [])
   const echoed = new Set<string>()
   const capped = new Set<string>()
-  let accepted = input.blocks
+  let accepted = sources
   if (input.maxSourceTokens !== undefined) {
     accepted = []
     let total = 0
     let over = false
-    for (const b of input.blocks) {
+    for (const b of sources) {
       if (!over) {
         total += estimateTokens(b.text)
         if (total > input.maxSourceTokens) over = true

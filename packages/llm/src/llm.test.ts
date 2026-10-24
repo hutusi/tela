@@ -127,6 +127,24 @@ describe('translateBlocks with the mock translator', () => {
     expect(calls[0]?.strict).toBe(false)
   })
 
+  test('sends a hard-wrapped block as one line', async () => {
+    const calls: Parameters<ReturnType<typeof createMockTranslator>['translate']>[0][] = []
+    const out = await translateBlocks(createMockTranslator({ calls }), {
+      blocks: [
+        {
+          id: 'b1',
+          text: 'One thing I know is that\nif you want to do <g1>great\n  things</g1>, work.\n',
+        },
+      ],
+      sourceLang: 'en',
+      targetLang: 'zh-Hans',
+    })
+    expect(calls[0]?.blocks).toEqual([
+      { id: 'b1', text: 'One thing I know is that if you want to do <g1>great things</g1>, work.' },
+    ])
+    expect(out.translated.has('b1')).toBe(true)
+  })
+
   test('allows an identical title without exempting prose in the same request', async () => {
     const translator: Translator = {
       model: 'echo',

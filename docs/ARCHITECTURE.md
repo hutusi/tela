@@ -181,8 +181,9 @@ and hashes as the `NORM_VERSION` contract.
 ## Translation (`packages/llm`, `apps/jobs/src/translation`)
 
 - `packages/llm` is the adapter: a `Translator` interface over Bailian (GLM), Anthropic and a
-  deterministic mock. `translateBlocks` validates every block (placeholder multiset, length ratio,
-  non-identity) and retries failures once in strict mode.
+  deterministic mock. `translateBlocks` sends each block with its whitespace collapsed, validates
+  every block (placeholder multiset, length ratio, non-identity) and retries failures once in
+  strict mode.
 - **Titles, eager** (`translate.title`, keyed by feed): the sweep finds feeds with articles whose
   current title hash has no row in some reading language (`READING_LANGUAGES`: `zh-Hans`, `zh-Hant`, `en`, `fr`); a job translates up to 20 titles and
   excerpts of one feed per call per language, and commits each (language, source) group in its

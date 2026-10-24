@@ -81,7 +81,9 @@ id   = first 10 hex of hash, with "-2", "-3", … for repeated blocks in the sam
 ```
 
 The id is written as `data-tb` on the leaf; `data-tb-skip` marks blocks that are not translated.
-`translations` rows are keyed by the full hash and the target language.
+`translations` rows are keyed by the full hash and the target language. The model is sent each
+block with its whitespace collapsed (`translateBlocks` in `@tela/llm`), as the hash is: a line
+break in the source is where an editor wrapped, and copied into Chinese it shows as a space.
 
 Skipped blocks: `pre`; blocks whose plain text is shorter than two characters; blocks with no
 letters (`\p{L}`), which covers image-only paragraphs, dates, and separators.
