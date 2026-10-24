@@ -79,6 +79,52 @@ describe('extractArticle', () => {
     expect(extractArticle(html, 'https://blog.example/thanks')?.contentHtml).toContain('@ada')
   })
 
+  test('a heading with a scroll-margin utility keeps its place, a comments title does not', () => {
+    // aihero.dev: `scroll-mt-*` on every heading, and Readability's negative class pattern has
+    // `scroll`, so every section heading went, words and all.
+    const words = long('A paragraph of the post that says something worth reading about the loop.')
+    const html = `<html><body><article>
+      <p>${words}</p><h2 class="the-loop scroll-mt-[72px] tracking-[-0.025em]">The loop</h2>
+      <p>${words}</p><h2 class="md:scroll-mt-24">How to update</h2><p>${words}</p>
+      <h2 class="comments-title">3 comments</h2><p>${words}</p>
+    </article></body></html>`
+    const out = extractArticle(html, 'https://blog.example/loop')?.contentHtml ?? ''
+    expect(out).toContain('The loop')
+    expect(out).toContain('How to update')
+    expect(out).not.toContain('3 comments')
+  })
+
+  test('a gallery of pictures stays in the post; a grid of related posts does not', () => {
+    const words = long(
+      'The walk went up through the cedars and down to the river by the old castle.',
+    )
+    const wordpress = [1, 2, 3, 4]
+      .map(
+        (n) =>
+          `<dl class="gallery-item"><dt><a href="/p${n}.jpg"><img src="/p${n}.jpg"></a></dt><dd>Photo ${n}</dd></dl>`,
+      )
+      .join('')
+    const figures = [5, 6, 7]
+      .map(
+        (n) => `<figure><a href="/p${n}.jpg"><img src="/p${n}.jpg" alt="Castle ${n}"></a></figure>`,
+      )
+      .join('')
+    const related = [8, 9, 10]
+      .map(
+        (n) =>
+          `<a href="/post-${n}"><img src="/r${n}.jpg"><span>Another post worth reading ${n}</span></a>`,
+      )
+      .join('')
+    const html = `<html><body><article>
+      <p>${words}</p><div class="gallery">${wordpress}</div>
+      <p>${words}</p><div class="photogallery"><div class="photos">${figures}</div></div>
+      <p>${words}</p><div class="grid">${related}</div>
+    </article></body></html>`
+    const out = extractArticle(html, 'https://blog.example/walk')?.contentHtml ?? ''
+    for (const n of [1, 2, 3, 4, 5, 6, 7]) expect(out).toContain(`/p${n}.jpg`)
+    expect(out).not.toContain('Another post worth reading')
+  })
+
   test('returns null for pages without an article', () => {
     expect(
       extractArticle('<html><body><a href="/">x</a></body></html>', 'https://x.example/'),

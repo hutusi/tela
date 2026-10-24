@@ -28,11 +28,20 @@ rewriting) and `@tela/content/tagged` (placeholder grammar) have no parser depen
   header footer main` (unwrapped in step 2). Inline tags: `a em strong b i u s del ins mark sub sup
   span abbr cite q small kbd samp var code br img time dfn bdi bdo wbr`.
 - Removed with content: `script style textarea option noscript template svg iframe video audio
-  object embed form button input select canvas math head title`. Any other tag is dropped but its
+  object embed form button input select canvas math head title` (an `iframe`, `video` or `audio`
+  worth a link has become one by then, below). Any other tag is dropped but its
   text is kept. `font→span`, `center→div`, `strike→s`, `tt→code`, `picture→span`.
 - Attributes: `a[href title hreflang]`, `img[src alt title width height]`, table `colspan rowspan
   scope`, `ol[start reversed type]`, `li[value]`, `code/pre[class=language-*|lang-*]`, `abbr/dfn[title]`,
   `q/blockquote[cite]`, `details[open]`, `time[datetime]`, and `dir`/`lang` everywhere.
+- Embeds become links first (`embedsAsLinks`, ADR 0054): a `video` or `audio` (its `src` or first
+  `source`), and an `iframe` that is a player or a card (a known player or card host, or an address
+  with an `/embed`, `/player`, `/video`… segment), is replaced by `<div><a href>` to where it can
+  be opened: a YouTube or Vimeo player's watch page, a link card's `url` parameter. The link
+  reads `▶ host/path` for what plays and `↗ host/path` for the rest. Any other iframe is a widget
+  and goes with its content; so does an embed whose following `<cite>` already links its address
+  (Hatena's blog cards). The link is its own block, so the paragraph around a player keeps its
+  text and its hash.
 - URLs are absolutized against the article URL (fallback: feed URL). `href` that is not http(s) or
   mailto turns the link into a `span`. `img` without a usable http(s) `src` is dropped, as are 1×1
   pixels. Lazy-loading attributes (`data-src`, `data-original`, `data-lazy-src`, `data-actualsrc`)
@@ -42,6 +51,8 @@ rewriting) and `@tela/content/tagged` (placeholder grammar) have no parser depen
 
 Goal: every text-bearing element is a **leaf** whose children are inline only.
 
+0. A highlighter's line-number table (one row, a `pre` of digits beside a `pre` of code, as Hexo
+   and Hugo lay code out) is replaced by its code `pre`.
 1. Unwrap `div section article aside header footer main`, and `tbody thead tfoot tr td th caption`
    outside a `<table>` (a browser's parser ignores those): replace each with its children,
    bottom-up. Where the wrapper's words would run into words outside it, keep a boundary between
@@ -58,7 +69,9 @@ Goal: every text-bearing element is a **leaf** whose children are inline only.
 5. In a `<p>`, two or more `<br>`s in a row (whitespace between them allowed) end the paragraph
    when there are words before and after them; the `<br>`s go. A single `<br>` stays, and so do
    breaks before the first words or after the last.
-6. Remove empty leaves (`<p></p>`, `<p> </p>`, `<p><br></p>`); keep leaves that contain an `img`.
+6. Remove empty leaves (`<p></p>`, `<p> </p>`, `<p><br></p>`); keep leaves that contain an `img`,
+   and keep every table cell however empty, since a cell removed slides the rest of its row under
+   the wrong heading.
 
 Leaf tags: `p h1-h6 li figcaption th td dt dd summary caption pre`. A `li` (or `td`, …) that still
 contains blocks is a container, and its wrapped `<p>` children are the leaves. Whether a leaf holds
@@ -100,7 +113,9 @@ block with its whitespace collapsed (`translateBlocks` in `@tela/llm`), as the h
 break in the source is where an editor wrapped, and copied into Chinese it shows as a space.
 
 Skipped blocks: `pre`; blocks whose plain text is shorter than two characters; blocks with no
-letters (`\p{L}`), which covers image-only paragraphs, dates, and separators.
+letters (`\p{L}`), which covers image-only paragraphs, dates, and separators; and blocks that are
+only an address (a bare URL, a link showing one, an embed's `▶`/`↗` link), which a model can only
+echo, and an echo is refused as untranslated.
 
 ## 5. Derived fields
 

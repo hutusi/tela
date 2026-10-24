@@ -344,8 +344,12 @@ function paragraphsOf(p: Element): ChildNode[] {
   return segments.map((nodes) => copyAround(p, nodes))
 }
 
+/** Leaves kept however empty: a table's cells hold its columns. */
+const KEEP_EMPTY = new Set(['pre', 'td', 'th'])
+
 function isEmptyBlock(el: Element): boolean {
-  if (!LEAF_TAGS.has(el.name) || el.name === 'pre') return false
+  // An empty corner cell removed slid the rest of its row under the wrong headings.
+  if (!LEAF_TAGS.has(el.name) || KEEP_EMPTY.has(el.name)) return false
   if (/\S/.test(textContent(el))) return false
   const keeps = (n: ChildNode): boolean => isTag(n) && (n.name === 'img' || n.children.some(keeps))
   return !el.children.some(keeps)
@@ -397,15 +401,74 @@ export function blockTaggedText(el: Element): { text: string; placeholders: Plac
   return toTaggedText(toInline(el.children))
 }
 
+/**
+ * A block that is only an address: a bare URL, a link that shows one, or an embed's link
+ * (`▶ youtube.com/watch?v=…`, sanitize.ts). The model can only echo it, and an echo is refused as
+ * "identical to source", so it was shown as a block that failed to translate.
+ */
+const ONLY_AN_ADDRESS = /^(?:[▶↗]\s?)?(?:https?:\/\/)?[\w-]+(?:\.[\w-]+)+(?:[/?#]\S*)?$/u
+
 function isTranslatable(el: Element, plain: string): boolean {
   if (SKIP_TAGS.has(el.name)) return false
   if (plain.length < 2) return false
+  if (ONLY_AN_ADDRESS.test(plain)) return false
   return /\p{L}/u.test(plain)
+}
+
+/** The element children of `el`, whitespace-only text aside; null if any text has words. */
+function onlyElements(el: Element): Element[] | null {
+  const out: Element[] = []
+  for (const n of el.children) {
+    if (isTag(n)) out.push(n)
+    else if (isText(n) && /\S/.test(n.data)) return null
+  }
+  return out
+}
+
+/**
+ * The code a highlighter laid out as a table, line numbers in one cell and the code in the other
+ * (Hexo, Hugo: `<table><tr><td><pre>1 2 3</pre></td><td><pre>code</pre></td></tr></table>`), or
+ * null when `table` is a real table. Kept as a table it read as a bordered data table in 14px sans.
+ */
+function codeOfLineNumberTable(table: Element): Element | null {
+  const rows: Element[] = []
+  const walk = (el: Element) => {
+    for (const k of onlyElements(el) ?? []) {
+      if (k.name === 'tr') rows.push(k)
+      else if (k.name === 'tbody' || k.name === 'thead') walk(k)
+    }
+  }
+  walk(table)
+  if (rows.length !== 1) return null
+  const cells = onlyElements(rows[0] as Element)
+  if (cells?.length !== 2 || cells.some((c) => c.name !== 'td' && c.name !== 'th')) return null
+  const [numbers, code] = cells.map((c) => onlyElements(c)) as [Element[] | null, Element[] | null]
+  if (numbers?.length !== 1 || numbers[0]?.name !== 'pre') return null
+  if (code?.length !== 1 || code[0]?.name !== 'pre') return null
+  if (!/^[\d\s]*\d[\d\s]*$/.test(textContent(numbers[0]))) return null
+  return code[0]
+}
+
+function unwrapLineNumberTables(parent: ParentNode) {
+  const next: ChildNode[] = []
+  for (const child of parent.children) {
+    if (isTag(child)) {
+      const code = child.name === 'table' ? codeOfLineNumberTable(child) : null
+      if (code) {
+        next.push(code)
+        continue
+      }
+      unwrapLineNumberTables(child)
+    }
+    next.push(child)
+  }
+  setChildren(parent, next)
 }
 
 /** Normalize sanitized HTML into leaf blocks and annotate each with a stable id. */
 export async function annotateBlocks(sanitizedHtml: string): Promise<AnnotatedContent> {
   const doc = parseDocument(sanitizedHtml)
+  unwrapLineNumberTables(doc)
   unwrapAll(doc)
   liftInlineWrappers(doc)
   normalizeTree(doc)

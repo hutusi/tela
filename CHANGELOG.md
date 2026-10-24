@@ -9,6 +9,12 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **Posts keep the structure of the original.** Lists show their bullets and numbers again, a
+  Chinese post's headings, code and captions are no longer body text, code blocks are not shrunk
+  twice, an image inside a sentence stays in the sentence, and side by side an original paragraph
+  no longer touches the next row. Tables keep their empty cells, code a highlighter laid out as a
+  table of line numbers is stored as code, extracted posts keep the headings and the photo
+  galleries Readability used to drop, and a video, player or map becomes a link where it was.
 - **Translations keep their paragraphs.** A post whose paragraphs sat inside one more element (Paul
   Graham's essays, Blogger's nested spans, a link around a card), whose layout table Readability
   left half-removed, or whose paragraphs were only `<br><br>` apart, was stored as one block: the

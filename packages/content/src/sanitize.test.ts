@@ -56,4 +56,49 @@ describe('sanitizeArticleHtml', () => {
       '<table><tr><td colspan="2" dir="rtl" lang="ar">x</td></tr></table>',
     )
   })
+
+  test('a video or a player becomes a link to where it can be watched', () => {
+    const cases: [string, string][] = [
+      [
+        '<iframe src="https://www.youtube-nocookie.com/embed/abc_123?rel=0"></iframe>',
+        '<div><a href="https://www.youtube.com/watch?v=abc_123">▶ youtube.com/watch?v=abc_123</a></div>',
+      ],
+      [
+        '<iframe src="https://player.vimeo.com/video/42"></iframe>',
+        '<div><a href="https://vimeo.com/42">▶ vimeo.com/42</a></div>',
+      ],
+      [
+        '<video controls><source src="/clip.mp4" type="video/mp4">Your browser cannot play it.</video>',
+        '<div><a href="https://blog.example/clip.mp4">▶ blog.example/clip.mp4</a></div>',
+      ],
+      // A route map is opened, not played.
+      [
+        '<iframe src="https://www.komoot.com/tour/7/embed?hl=fr"></iframe>',
+        '<div><a href="https://www.komoot.com/tour/7/embed?hl=fr">↗ komoot.com/tour/7/embed</a></div>',
+      ],
+      // A link card links to the post it shows.
+      [
+        '<iframe src="https://cdn.embedly.com/widgets/media.html?url=https%3A%2F%2Fx.example%2Fpost"></iframe>',
+        '<div><a href="https://x.example/post">↗ x.example/post</a></div>',
+      ],
+    ]
+    for (const [embed, link] of cases) expect(sanitizeArticleHtml(embed, base)).toBe(link)
+  })
+
+  test('a widget, a bad address, or a card its citation already links is not a link', () => {
+    // slashdot puts a "discuss" box on every item; a like button is the same.
+    expect(
+      sanitizeArticleHtml(
+        '<p>t</p><iframe src="https://slashdot.org/slashdot-it.pl?op=discuss&id=1&smallembed=1"></iframe>',
+        base,
+      ),
+    ).toBe('<p>t</p>')
+    expect(sanitizeArticleHtml('<video src="javascript:alert(1)"></video>', base)).toBe('')
+    // Hatena writes a citation after each of its blog cards.
+    const card =
+      '<iframe src="https://hatenablog-parts.com/embed?url=https%3A%2F%2Fgithub.com%2Fa%2Fb"></iframe><cite><a href="https://github.com/a/b">github.com</a></cite>'
+    expect(sanitizeArticleHtml(card, base)).toBe(
+      '<cite><a href="https://github.com/a/b">github.com</a></cite>',
+    )
+  })
 })

@@ -89,10 +89,12 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 2. Parsing (`parseFeedText`) with `feedsmith`: RSS, Atom, RDF, JSON Feed → `ParsedFeed` with
    `summaryHtml` and `contentHtml` per item.
 3. Sanitize (`sanitizeArticleHtml`) with an allowlist; links and images absolutized; lazy-load
-   attributes folded into `src`; tracking pixels dropped.
+   attributes folded into `src`; tracking pixels dropped; a video, audio, player or link card
+   replaced first by a link of its own to where it opens (ADR 0054).
 4. Normalize + annotate (`annotateBlocks`): wrappers and table parts outside a table unwrapped
    (with a boundary where their words would run into their neighbours'), inline elements around
-   blocks lifted, inline runs wrapped, `<p>`s split on `<br><br>` (ADR 0053), every
+   blocks lifted, inline runs wrapped, `<p>`s split on `<br><br>` (ADR 0053), a highlighter's
+   line-number table stored as its code, empty table cells kept, every
    text-bearing element a leaf with a `data-tb` id = first 10 hex of
    `sha256(normalized tagged text + NORM_VERSION)`, duplicates suffixed by position.
 5. Tagged text (`toTaggedText` / `fromTaggedText` / `checkPlaceholders`): inline markup becomes
@@ -103,8 +105,11 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
    with their leaf ids, images indexed so `/img/<key>/<i>` can serve them, keyed by the hash of
    the annotated HTML. Immutable, so it is cached forever everywhere. `extractArticle` (Readability
    on linkedom) recovers full text for summary-only feeds. It first drops what a browser never
-   shows as the post (`<template>` link previews, webmention and backlink containers), and it
-   refuses a result that is 70% link text or more (a site menu) or has under 100 characters.
+   shows as the post (`<template>` link previews, webmention and backlink containers), quiets
+   layout utilities whose names hold Readability's negative words (`scroll-mt-*` cost a post all
+   its headings), and puts each block of pictures in a `<figure>` (Readability deletes galleries
+   otherwise). It refuses a result that is 70% link text or more (a site menu) or has under 100
+   characters.
 
 Fixtures: 21 captured real feeds in `packages/content/fixtures/`; snapshot tests pin block ids
 and hashes as the `NORM_VERSION` contract (a leaf-shape fix may change them without a bump,

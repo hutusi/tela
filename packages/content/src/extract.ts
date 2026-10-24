@@ -41,6 +41,59 @@ function dropNonContent(document: ReturnType<typeof parseHTML>['document']): voi
   }
 }
 
+/**
+ * Layout utilities whose names hold one of Readability's "not the post" words. It deletes a
+ * heading whose class matches its negative pattern, which includes `scroll`, so Tailwind's
+ * `scroll-mt-[72px]` on every heading took all of a post's section headings, words and all
+ * (aihero.dev). A real `comments-title` or `widget-title` is left for it to remove.
+ */
+const LAYOUT_UTILITY = /^(?:[^:\s]+:)*!?-?(?:scroll|overflow|overscroll|snap)-/
+
+function quietLayoutClasses(document: ReturnType<typeof parseHTML>['document']): void {
+  for (const el of [...document.querySelectorAll('[class]')]) {
+    const tokens = (el.getAttribute('class') ?? '').split(/\s+/).filter(Boolean)
+    const kept = tokens.filter((t: string) => !LAYOUT_UTILITY.test(t))
+    if (kept.length === tokens.length) continue
+    if (kept.length > 0) el.setAttribute('class', kept.join(' '))
+    else el.removeAttribute('class')
+  }
+}
+
+/** Words a block of pictures may carry per picture outside its captions (a WordPress `dd`). */
+const GALLERY_WORDS_PER_IMAGE = 80
+
+type DomElement = NonNullable<ReturnType<ReturnType<typeof parseHTML>['document']['querySelector']>>
+
+/**
+ * A block of pictures: two images or more, no heading, quotation, code or table, no link with
+ * words (a grid of related posts has them), and next to no text outside its captions.
+ */
+function isGallery(el: DomElement): boolean {
+  const images = el.querySelectorAll('img').length
+  if (images < 2) return false
+  if (el.querySelector('h1, h2, h3, h4, h5, h6, blockquote, pre, table')) return false
+  for (const a of [...el.querySelectorAll('a')]) if (/\S/.test(a.textContent ?? '')) return false
+  let words = (el.textContent ?? '').replace(/\s+/g, '').length
+  for (const c of [...el.querySelectorAll('figcaption')]) {
+    words -= (c.textContent ?? '').replace(/\s+/g, '').length
+  }
+  return words <= images * GALLERY_WORDS_PER_IMAGE
+}
+
+/**
+ * Readability deletes a block with more than one image and few paragraphs unless a <figure> holds
+ * it, which took the photographs out of photo posts: craigmod.com's galleries, a WordPress
+ * gallery, columns of pictures. Each block of pictures, outermost first, goes into a figure.
+ */
+function protectGalleries(document: ReturnType<typeof parseHTML>['document']): void {
+  for (const el of [...document.querySelectorAll('div, section, dl, ul')]) {
+    if (el.closest('figure') || !isGallery(el)) continue
+    const figure = document.createElement('figure')
+    el.parentNode?.insertBefore(figure, el)
+    figure.appendChild(el)
+  }
+}
+
 /** The share of an extraction's text, whitespace aside, that sits inside links. */
 function linkDensity(document: ReturnType<typeof parseHTML>['document'], html: string): number {
   const probe = document.createElement('div')
@@ -57,6 +110,8 @@ function linkDensity(document: ReturnType<typeof parseHTML>['document'], html: s
 export function extractArticle(html: string, url: string): ExtractedArticle | null {
   const { document } = parseHTML(html)
   dropNonContent(document)
+  quietLayoutClasses(document)
+  protectGalleries(document)
   // Give relative links a base so Readability can absolutize them.
   if (!document.querySelector('base[href]')) {
     const base = document.createElement('base')

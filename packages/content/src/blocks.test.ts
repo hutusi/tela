@@ -143,6 +143,40 @@ describe('annotateBlocks', () => {
     expect(Object.values(edges.tagged)).toEqual(['<x1/><x2/>Only words.<x3/><x4/>'])
   })
 
+  test('an empty table cell stays, so the rest of its row keeps its columns', async () => {
+    const { html, blocks } = await annotateBlocks(
+      '<table><tr><th></th><th>Before</th><th>After</th></tr><tr><td>Speed</td><td></td><td>Fast</td></tr></table>',
+    )
+    expect(html.match(/<t[hd][ >]/g)).toHaveLength(6)
+    expect(blocks.filter((b) => b.skip).map((b) => b.tag)).toEqual(['th', 'td'])
+  })
+
+  test("a highlighter's line-number table is stored as its code", async () => {
+    const code = '<pre><span>let a = 1</span><br><span>a += 1</span></pre>'
+    for (const shape of [
+      `<figure><table><tbody><tr><td><pre><span>1</span><br><span>2</span></pre></td><td>${code}</td></tr></tbody></table></figure>`,
+      // onevcat.com: Readability leaves it inside a <code>.
+      `<code><table><tr><td><pre>1\n2\n</pre></td><td>${code}</td></tr></table></code>`,
+    ]) {
+      const { html, blocks } = await annotateBlocks(shape)
+      expect(html).not.toContain('<table')
+      expect(html).toContain('<span>let a = 1</span>')
+      expect(blocks.map((b) => [b.tag, b.skip])).toEqual([['pre', true]])
+    }
+    // A table of numbers and words is a table.
+    const real = await annotateBlocks('<table><tr><td>1</td><td>Alpha</td></tr></table>')
+    expect(real.html).toContain('<table')
+  })
+
+  test('a block that is only an address is not translated', async () => {
+    const { blocks } = await annotateBlocks(
+      '<p>https://example.com/post</p><p><a href="https://x.org/a">x.org/a</a></p>' +
+        '<p><a href="https://www.youtube.com/watch?v=1">▶ youtube.com/watch?v=1</a></p>' +
+        '<p>Read more at <a href="https://x.org">x.org</a> today.</p>',
+    )
+    expect(blocks.map((b) => Boolean(b.skip))).toEqual([true, true, true, false])
+  })
+
   test('paragraph boundaries survive translation', async () => {
     const { html, blocks } = await annotateBlocks(
       '<tr><td><span><p>Hello there.</p><p>Goodbye now.</p></span></td></tr>',
