@@ -420,6 +420,8 @@ export function insertVersions(db: TelaDb, feedId: number, rows: NewVersion[], n
 /** What an existing article shows after a fetch changed it (the chosen current version's stats). */
 export type ArticleChange = {
   id: number
+  /** The current version the change was decided from: a writer since then wins (`pointAt`). */
+  expectVersion: number | null
   url: string | null
   urlHost: string | null
   title: string
@@ -448,6 +450,35 @@ export function updateArticles(db: TelaDb, rows: ArticleChange[]) {
       seq = ${currentSeq}
     from json_each(${JSON.stringify(rows)}) as j
     where articles.id = j.value->>'id'
+      and articles.current_version is j.value->>'expectVersion'
+      and exists (select 1 from article_versions v where v.article_id = articles.id
+        and v.version = j.value->>'currentVersion' and v.content_key = j.value->>'contentKey')
+  `)
+}
+
+/**
+ * A change another writer beat (`updateArticles` moved nothing) must not be forgotten. The fetch
+ * that planned it also saves the feed's validators and body hash, so the next fetch would answer
+ * 304, or match the hash, and never look at the item again: the post kept its old title and body
+ * for good (Codex's review). So when any planned change did not land, this statement, after the
+ * feed's own update in the same batch, forgets them and makes the feed due now: its next fetch
+ * reads every item and decides again from what the article holds then.
+ */
+export function replayIfRejected(
+  db: TelaDb,
+  feedId: number,
+  changes: ArticleChange[],
+  now: number,
+) {
+  const planned = changes.map((c) => ({ id: c.id, version: c.currentVersion, key: c.contentKey }))
+  return db.run(sql`
+    update feeds set etag = null, last_modified = null, last_body_hash = null,
+      next_fetch_at = ${now}
+    where id = ${feedId} and exists (
+      select 1 from json_each(${JSON.stringify(planned)}) as j
+      join articles a on a.id = j.value->>'id'
+      where a.current_version is not j.value->>'version' or a.content_key is not j.value->>'key'
+    )
   `)
 }
 
@@ -506,6 +537,8 @@ export function noteHub(
 export type ArticleForExtraction = {
   id: number
   feedId: number
+  /** What it shows now: the extraction moves it from here, or loses to a writer since. */
+  currentVersion: number | null
   url: string | null
   title: string
   author: string | null
@@ -530,12 +563,13 @@ export async function loadArticleForExtraction(
     extract_state: ExtractState
     fetch_region: 'global' | 'cn'
     content_mode: 'unknown' | 'full' | 'summary'
+    current_version: number | null
     versions: string
   }>(
     db,
     sql`
       select a.id, a.feed_id, a.url, a.title, a.author, a.source_lang, a.extract_state,
-        f.fetch_region, f.content_mode,
+        a.current_version, f.fetch_region, f.content_mode,
         coalesce((
           select json_group_array(json_object(
             'version', v.version, 'provenance', v.provenance,
@@ -551,6 +585,7 @@ export async function loadArticleForExtraction(
   return {
     id: row.id,
     feedId: row.feed_id,
+    currentVersion: row.current_version,
     url: row.url,
     title: row.title,
     author: row.author,
@@ -589,15 +624,24 @@ function insertVersion(
   `)
 }
 
-/** Point an article at its current version: what it shows, and the hash its titles key on. */
+/**
+ * Point an article at its current version: what it shows, and the hash its titles key on. Three
+ * writers add versions (a feed's fetch, an extraction, a reprocess), each under its own lease, so
+ * two can read the same article and both take the next version number: the second insert is
+ * ignored, and an unguarded update then pointed the article at the first writer's row with the
+ * second's content key, for good. So an article moves only from the current version it was read
+ * at, and only onto a row that holds the content it brings. A writer that lost writes nothing,
+ * and finds out from the empty RETURNING; the next sweep or fetch decides again from what is there.
+ */
 function pointAt(
   db: TelaDb,
   articleId: number,
+  from: number | null,
   current: StoredVersion,
   titleHash: string,
   extract?: 'done',
 ) {
-  return db.run(sql`
+  return db.all<{ id: number }>(sql`
     update articles set
       current_version = ${current.version}, content_key = ${current.contentKey},
       excerpt = ${current.excerpt}, word_count = ${current.wordCount},
@@ -605,14 +649,23 @@ function pointAt(
       source_lang = coalesce(${current.lang}, source_lang),
       title_hash = ${titleHash}, extract_state = coalesce(${extract ?? null}, extract_state),
       seq = ${currentSeq}
-    where id = ${articleId}
+    where id = ${articleId} and current_version is ${from}
+      and exists (select 1 from article_versions where article_id = ${articleId}
+        and version = ${current.version} and content_key = ${current.contentKey})
+    returning id
   `)
+}
+
+/** Whether the `pointAt` among a committed batch's results moved its article. */
+export function pointed(results: unknown[], index: number): boolean {
+  const rows = results[index]
+  return Array.isArray(rows) && rows.length > 0
 }
 
 /** Add an extracted version and point the article at whatever is current now. */
 export function adoptExtractedVersion(
   db: TelaDb,
-  article: { id: number; feedId: number },
+  article: { id: number; feedId: number; currentVersion: number | null },
   version: Omit<NewVersion, 'dedupKey'>,
   current: StoredVersion,
   titleHash: string,
@@ -620,7 +673,7 @@ export function adoptExtractedVersion(
 ) {
   return [
     insertVersion(db, article.id, version, now),
-    pointAt(db, article.id, current, titleHash, 'done'),
+    pointAt(db, article.id, article.currentVersion, current, titleHash, 'done'),
   ] as const
 }
 
@@ -639,6 +692,8 @@ export const dueReprocessing = (): SQL =>
 export type ArticleForReprocess = {
   id: number
   url: string | null
+  /** The base an item without a link of its own was first made against (`processItem`). */
+  feedUrl: string
   title: string
   sourceLang: string | null
   contentMode: 'unknown' | 'full' | 'summary'
@@ -660,6 +715,7 @@ export async function loadArticleForReprocess(
   const row = await first<{
     id: number
     url: string | null
+    feed_url: string
     title: string
     source_lang: string | null
     content_mode: 'unknown' | 'full' | 'summary'
@@ -673,7 +729,7 @@ export async function loadArticleForReprocess(
   }>(
     db,
     sql`
-      select a.id, a.url, a.title, a.source_lang, f.content_mode,
+      select a.id, a.url, f.feed_url, a.title, a.source_lang, f.content_mode,
         v.version, v.provenance, v.content_key, v.raw_key, v.source_url, v.pipeline_version,
         coalesce((
           select json_group_array(json_object(
@@ -692,6 +748,7 @@ export async function loadArticleForReprocess(
   return {
     id: row.id,
     url: row.url,
+    feedUrl: row.feed_url,
     title: row.title,
     sourceLang: row.source_lang,
     contentMode: row.content_mode,
@@ -724,14 +781,14 @@ export function stampPipeline(db: TelaDb, articleId: number, version: number) {
  */
 export function adoptReprocessedVersion(
   db: TelaDb,
-  articleId: number,
+  article: { id: number; currentVersion: number },
   version: Omit<NewVersion, 'dedupKey'>,
   current: StoredVersion,
   titleHash: string,
   now: number,
 ) {
   return [
-    insertVersion(db, articleId, version, now),
-    pointAt(db, articleId, current, titleHash),
+    insertVersion(db, article.id, version, now),
+    pointAt(db, article.id, article.currentVersion, current, titleHash),
   ] as const
 }

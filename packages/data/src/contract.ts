@@ -20,6 +20,7 @@ import {
   startLease,
 } from './leases'
 import {
+  adoptExtractedVersion,
   adoptReprocessedVersion,
   dueReprocessing,
   existingArticles,
@@ -27,6 +28,8 @@ import {
   insertArticles,
   insertVersions,
   mergeFeed,
+  pointed,
+  replayIfRejected,
   stampPipeline,
   updateArticles,
 } from './queries/ingest'
@@ -515,6 +518,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         updateArticles(db, [
           {
             id: inserted.find((r) => r.dedup_key === 'g:1')?.id ?? 0,
+            expectVersion: 1,
             url: 'https://h1/p/1',
             urlHost: 'h1',
             title: 'Post 1, edited',
@@ -639,7 +643,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         bumpSeq(db),
         ...adoptReprocessedVersion(
           db,
-          id,
+          { id, currentVersion: 1 },
           { ...made, rawKey: 'r/1.html', sourceUrl: null },
           made,
           'th-2',
@@ -661,6 +665,168 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         title_hash: 'th-2',
         pipeline_version: PIPELINE_VERSION,
         raw_key: 'r/1.html',
+      })
+    })
+  })
+
+  describe('two writers on one article', () => {
+    it('the second to commit from the same current version moves nothing', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['h1'])
+      const v = (key: string, version = 2) => ({
+        version,
+        provenance: 'readability' as const,
+        contentKey: key,
+        bodyChars: 900,
+        excerpt: key,
+        wordCount: 150,
+        readingMinutes: 1,
+        lang: 'en',
+      })
+      await db.batch([
+        bumpSeq(db),
+        insertArticles(
+          db,
+          1,
+          [
+            {
+              dedupKey: 'g:1',
+              url: 'https://h1/p/1',
+              urlHost: 'h1',
+              title: 'Post 1',
+              author: null,
+              publishedAt: T0,
+              sourceLang: 'en',
+              excerpt: 'Excerpt',
+              contentKey: 'key-1',
+              wordCount: 100,
+              readingMinutes: 1,
+              extractState: 'due',
+              titleHash: 'th-1',
+            },
+          ],
+          T0,
+        ),
+        insertVersions(
+          db,
+          1,
+          [
+            {
+              ...v('key-1', 1),
+              provenance: 'feed',
+              dedupKey: 'g:1',
+              rawKey: null,
+              sourceUrl: null,
+            },
+          ],
+          T0,
+        ),
+      ])
+      const id =
+        (await first<{ id: number }>(db, sql`select id from articles where dedup_key = 'g:1'`))
+          ?.id ?? 0
+      const state = () =>
+        first<{
+          current_version: number
+          content_key: string
+          extract_state: string
+          row_key: string
+        }>(
+          db,
+          sql`select a.current_version, a.content_key, a.extract_state, v.content_key as row_key
+              from articles a join article_versions v on v.article_id = a.id and v.version = a.current_version
+              where a.id = ${id}`,
+        )
+      // Both read version 1 and both take version 2. The reprocess commits first.
+      const first1 = await db.batch([
+        bumpSeq(db),
+        ...adoptReprocessedVersion(
+          db,
+          { id, currentVersion: 1 },
+          { ...v('reprocessed'), rawKey: null, sourceUrl: null },
+          v('reprocessed'),
+          'th-r',
+          T0,
+        ),
+      ])
+      expect(pointed(first1 as unknown[], 2)).toBe(true)
+      const second = await db.batch([
+        bumpSeq(db),
+        ...adoptExtractedVersion(
+          db,
+          { id, feedId: 1, currentVersion: 1 },
+          { ...v('extracted'), rawKey: null, sourceUrl: null },
+          v('extracted'),
+          'th-e',
+          T0,
+        ),
+      ])
+      expect(pointed(second as unknown[], 2)).toBe(false)
+      expect(await state()).toEqual({
+        current_version: 2,
+        content_key: 'reprocessed',
+        extract_state: 'due',
+        row_key: 'reprocessed',
+      })
+      // A feed's change decided from version 1 moves nothing either, version 3 or not, and its
+      // feed forgets what would let the next fetch skip the item.
+      await db.run(
+        sql`update feeds set etag = 'e1', last_body_hash = 'b1', next_fetch_at = ${T0 + MIN} where id = 1`,
+      )
+      const fed = (expectVersion: number) => ({
+        id,
+        expectVersion,
+        url: 'https://h1/p/1',
+        urlHost: 'h1',
+        title: 'Post 1',
+        author: null,
+        publishedAt: T0,
+        sourceLang: 'en',
+        excerpt: 'fed',
+        currentVersion: 3,
+        contentKey: 'fed',
+        wordCount: 150,
+        readingMinutes: 1,
+        extractState: 'none' as const,
+        titleHash: 'th-f',
+      })
+      const validators = () =>
+        first<Record<string, unknown>>(
+          db,
+          sql`select etag, last_body_hash, next_fetch_at from feeds where id = 1`,
+        )
+      await db.batch([
+        bumpSeq(db),
+        insertVersions(
+          db,
+          1,
+          [{ ...v('fed', 3), provenance: 'feed', dedupKey: 'g:1', rawKey: null, sourceUrl: null }],
+          T0,
+        ),
+        updateArticles(db, [fed(1)]),
+        replayIfRejected(db, 1, [fed(1)], T0),
+      ])
+      expect((await state())?.content_key).toBe('reprocessed')
+      expect(await validators()).toEqual({ etag: null, last_body_hash: null, next_fetch_at: T0 })
+      // Decided from what is there now, it moves, and the feed keeps what it saved.
+      await db.run(
+        sql`update feeds set etag = 'e2', last_body_hash = 'b2', next_fetch_at = ${T0 + MIN} where id = 1`,
+      )
+      await db.batch([
+        bumpSeq(db),
+        updateArticles(db, [fed(2)]),
+        replayIfRejected(db, 1, [fed(2)], T0),
+      ])
+      expect(await state()).toEqual({
+        current_version: 3,
+        content_key: 'fed',
+        extract_state: 'none',
+        row_key: 'fed',
+      })
+      expect(await validators()).toEqual({
+        etag: 'e2',
+        last_body_hash: 'b2',
+        next_fetch_at: T0 + MIN,
       })
     })
   })

@@ -31,12 +31,24 @@ version was made under an older pipeline (`dueReprocessing`, read through an ind
 `pipeline_version`, so it reads nothing once all are current). The job:
 
 - reads the version's raw HTML from blob storage and runs today's `processArticleHtml` and
-  `buildContentObject` over it, with the version's source URL as base and the article's language as
-  hint;
-- if the content object comes out with the same key, stamps the version current and writes nothing
-  else;
-- if it differs, stores the object and adds a version of the same provenance from the same raw
-  HTML. `chooseCurrent` then makes it current, since it reads each provenance's latest. The article
+  `buildContentObject` over it. The base is the one the body was first made against, which every
+  version now keeps as its `source_url`: the item's link, or for an item with no link of its own the
+  feed's address *as it was then*, since a feed that moves later would otherwise move an old post's
+  relative images (Codex's second review). Older rows fall back to the article's link, then the
+  feed's address; production had no link-less article when this landed. The hint is the article's
+  own language, so a near tie stays as it was;
+- if the content object comes out with the same key *and* what the version derives from it beside
+  the object (excerpt, word count, reading time, body length) comes out the same, stamps the version
+  current and writes nothing else. The content key hashes the annotated body alone, so an
+  excerpt-only fix would otherwise be stamped away;
+- if either differs, stores the object (unless its key is the one already stored) and adds a
+  version of the same provenance from the same raw HTML. A version that differs only in what it
+  derives keeps the content key, and with it every body translation;
+- a body's language is its content object's, which is immutable, keyed by the body alone, and what
+  the body job reads its source language from. So an unchanged body keeps the language it has: a
+  corrected one would have said English while its object said French, and refused a French reader
+  as "already in that language" (Codex's second review). A language follows a new body, and a
+  detector fix alone does not reach stored posts. `chooseCurrent` then makes it current, since it reads each provenance's latest. The article
   points at it (excerpt, counts, title hash, seq), and `extract_state` is left as it was, since
   nothing was fetched;
 - with no raw HTML (a version from before it was kept, or an object gone), stamps the version and
@@ -44,6 +56,21 @@ version was made under an older pipeline (`dueReprocessing`, read through an ind
 
 Each is one fenced batch under the article's lease (invariant 6). Only the current version is made
 again; older ones are history.
+
+**Writers do not overwrite each other.** A feed's fetch, an extraction and a reprocess each add
+versions under a lease of their own kind, so two can read one article at once and both take the
+next version number. The second insert was ignored, and its article update then pointed the
+article at the first writer's row with the second's content key, for good (Codex's review
+reproduced it; the race between a fetch and an extraction was there before this job). Now an
+article moves only from the current version it was read at, and only onto a row that holds the
+content it brings (`pointAt`, and the same two conditions in `updateArticles`). A writer that lost
+writes nothing and learns it from the empty `RETURNING`: a reprocess is due again if its version
+still is, and an extraction retries. A feed's fetch must not lose its change behind its own
+validators: the batch that planned the change also saves the feed's ETag and body hash, and the
+next fetch would answer 304 and never look at the item again. So the same batch ends with
+`replayIfRejected`, which forgets them and makes the feed due now whenever a planned article did
+not land on its planned version; the next fetch reads every item and decides again. The feed's
+batch writes its versions before it moves its articles, so the row is there to find.
 
 **Pace, not politeness.** Nothing is fetched, so the due query names no host and a success claims
 nothing after it. The tick's limit is the pace: 50 a minute, newest first, on the extract queue.

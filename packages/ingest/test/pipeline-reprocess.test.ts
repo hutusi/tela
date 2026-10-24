@@ -1,11 +1,26 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { claimDue, dueReprocessing, first, type Lease, type TelaDb } from '@tela/data'
+import {
+  adoptExtractedVersion,
+  claimDue,
+  dueReprocessing,
+  first,
+  type Lease,
+  type TelaDb,
+} from '@tela/data'
 import { createTestDb } from '@tela/data/testing'
+import type { Blobs } from '@tela/platform'
 import { fakeClock, memoryBlobs } from '@tela/platform/portable'
 import { PIPELINE_VERSION } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { createHttpClient } from '../src/http'
-import { type IngestContext, ingestFeed, registerFeed, reprocessArticleJob } from '../src/pipeline'
+import {
+  commit,
+  extractArticleJob,
+  type IngestContext,
+  ingestFeed,
+  registerFeed,
+  reprocessArticleJob,
+} from '../src/pipeline'
 import { FixtureServer, longHtml, rss } from './fixture-server'
 
 const NOW = Date.UTC(2026, 9, 25, 10)
@@ -186,5 +201,312 @@ describe('reprocessArticleJob', () => {
     expect(await reprocessArticleJob(ctx(), lease)).toEqual({ status: 'lost' })
     expect((await article())?.current_version).toBe(1)
     expect(await version(1, 2)).toBeUndefined()
+  })
+
+  /** Blobs that run `meanwhile` the first time a raw body is read: a writer landing mid-job. */
+  const racing = (meanwhile: () => Promise<void>): Blobs => {
+    let ran = false
+    return {
+      get: async (key) => {
+        if (!ran && key.startsWith('r/')) {
+          ran = true
+          await meanwhile()
+        }
+        return blobs.get(key)
+      },
+      head: (key) => blobs.head(key),
+      put: (key, body, options) => blobs.put(key, body, options),
+      delete: (key) => blobs.delete(key),
+      list: (options) => blobs.list(options),
+    }
+  }
+
+  /** Whether the article points at a version row that holds the content key it shows. */
+  const consistent = async (id = 1) => {
+    const row = await first<{ ok: number }>(
+      db,
+      sql`select count(*) as ok from articles a join article_versions v
+          on v.article_id = a.id and v.version = a.current_version and v.content_key = a.content_key
+          where a.id = ${id}`,
+    )
+    return row?.ok === 1
+  }
+
+  /** What an extraction commits, under its own lease: version 2, the article moved onto it. */
+  const extractionLands = async () => {
+    const lease = await claim('article.extract', 1, 'x')
+    const made = {
+      version: 2,
+      provenance: 'readability' as const,
+      contentKey: 'extracted',
+      bodyChars: 9000,
+      excerpt: 'Extracted',
+      wordCount: 1500,
+      readingMinutes: 7,
+      lang: 'en',
+    }
+    await commit(ctx(), lease, [
+      ...adoptExtractedVersion(
+        db,
+        { id: 1, feedId: 1, currentVersion: 1 },
+        { ...made, rawKey: null, sourceUrl: null },
+        made,
+        'th-x',
+        clock.now(),
+      ),
+    ])
+  }
+
+  test('a writer that moved the article meanwhile wins, and the reprocess writes nothing', async () => {
+    await fullFeed()
+    await db.batch([
+      db.run(sql`update article_versions set pipeline_version = 0, content_key = 'older'
+        where article_id = 1`),
+      db.run(sql`update articles set content_key = 'older' where id = 1`),
+    ] as never)
+    const lease = await claim('article.reprocess', 1)
+    // Both read version 1 and both take version 2: the extraction commits first.
+    const result = await reprocessArticleJob({ ...ctx(), blobs: racing(extractionLands) }, lease)
+    expect(result).toEqual({ status: 'skipped', reason: 'superseded' })
+    expect(await article()).toMatchObject({ current_version: 2, content_key: 'extracted' })
+    expect(await consistent()).toBe(true)
+  })
+
+  test('an extraction that loses to a reprocess writes nothing, and goes again', async () => {
+    await fullFeed()
+    await db.run(sql`update articles set extract_state = 'due' where id = 1`)
+    server.set('/posts/1', (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      res.end(`<html><body><article><h1>Post 1</h1>${longHtml(12)}</article></body></html>`)
+    })
+    // The reprocess lands while the extraction is fetching the page: it takes version 2.
+    await db.batch([
+      db.run(sql`update article_versions set pipeline_version = 0, content_key = 'older'
+        where article_id = 1`),
+      db.run(sql`update articles set content_key = 'older' where id = 1`),
+    ] as never)
+    const extract = await claim('article.extract', 1, 'x')
+    const reprocessFirst: IngestContext['http'] = {
+      ...http,
+      get: async (url, options) => {
+        await reprocessArticleJob(ctx(), await claim('article.reprocess', 1))
+        return http.get(url, options)
+      },
+    }
+    const result = await extractArticleJob({ ...ctx(), http: reprocessFirst }, extract)
+    expect(result).toEqual({ status: 'retry', error: 'the article changed meanwhile' })
+    const after = await article()
+    expect(after?.current_version).toBe(2)
+    expect(after?.extract_state).toBe('due')
+    expect(await consistent()).toBe(true)
+  })
+
+  test('an item without a link of its own is made against the feed, as it first was', async () => {
+    server.text(
+      '/feed.xml',
+      rss({
+        link: server.url('/'),
+        items: [
+          {
+            guid: 'no-link',
+            title: 'A post with no link',
+            description: 'x',
+            content: `${longHtml(3)}<p>See <a href="/elsewhere">this</a>.</p><p><img src="/photo.jpg" alt="A photo"></p>`,
+            date: 'Thu, 01 Oct 2026 08:00:00 GMT',
+          },
+        ],
+      }),
+    )
+    const { feedId } = await registerFeed(db, {
+      feedUrl: server.url('/feed.xml'),
+      now: clock.now(),
+    })
+    await ingestFeed(ctx(), await claim('feed.fetch', feedId))
+    await db.run(sql`delete from leases`)
+    const first = await article()
+    const object = await (await blobs.get(`c/${first?.content_key}.json`))?.text()
+    expect(object).toContain(server.url('/elsewhere'))
+    // Made again from the same raw HTML, it must come out the same: the same base.
+    await db.batch([
+      db.run(sql`update article_versions set pipeline_version = 0, content_key = 'older'
+        where article_id = 1`),
+      db.run(sql`update articles set content_key = 'older' where id = 1`),
+    ] as never)
+    expect(await reprocessArticleJob(ctx(), await claim('article.reprocess', 1))).toEqual({
+      status: 'reprocessed',
+      version: 2,
+    })
+    expect((await article())?.content_key).toBe(first?.content_key)
+  })
+
+  test('an excerpt the pipeline now makes differently is a new version of the same body', async () => {
+    await fullFeed()
+    const made = await article()
+    const before = await first<{ title_hash: string }>(
+      db,
+      sql`select title_hash from articles where id = 1`,
+    )
+    // An older pipeline cut the excerpt another way; the body itself came out the same.
+    await db.batch([
+      db.run(sql`update article_versions set pipeline_version = 0, excerpt = 'An older excerpt'
+        where article_id = 1`),
+      db.run(
+        sql`update articles set excerpt = 'An older excerpt', title_hash = 'th-old' where id = 1`,
+      ),
+    ] as never)
+    expect(await reprocessArticleJob(ctx(), await claim('article.reprocess', 1))).toEqual({
+      status: 'reprocessed',
+      version: 2,
+    })
+    const after = await first<{ content_key: string; excerpt: string; title_hash: string }>(
+      db,
+      sql`select content_key, excerpt, title_hash from articles where id = 1`,
+    )
+    // The same content key: its body translations are still its own.
+    expect(after?.content_key).toBe(made?.content_key)
+    expect(after?.excerpt).not.toBe('An older excerpt')
+    expect(after?.title_hash).toBe(before?.title_hash)
+  })
+
+  test("a feed's change that loses to a reprocess is fetched again, not lost behind a 304", async () => {
+    const item = (body: string, title: string) =>
+      rss({
+        link: server.url('/'),
+        items: [
+          {
+            guid: 'p1',
+            link: server.url('/posts/1'),
+            title,
+            description: 'x',
+            content: body,
+            date: 'Thu, 01 Oct 2026 08:00:00 GMT',
+          },
+        ],
+      })
+    server.text('/feed.xml', item(longHtml(4), 'Post 1'))
+    const { feedId } = await registerFeed(db, {
+      feedUrl: server.url('/feed.xml'),
+      now: clock.now(),
+    })
+    await ingestFeed(ctx(), await claim('feed.fetch', feedId))
+    await db.run(sql`delete from leases`)
+    // The post is due for a reprocess, and the feed edits it.
+    await db.batch([
+      db.run(sql`update article_versions set pipeline_version = 0, content_key = 'older'
+        where article_id = 1`),
+      db.run(sql`update articles set content_key = 'older' where id = 1`),
+    ] as never)
+    server.text('/feed.xml', item(`${longHtml(4)}<p>An added paragraph.</p>`, 'Post 1, edited'))
+    clock.advance(2 * 60 * MIN)
+    // The reprocess commits while the fetch is storing its objects: both took version 2.
+    let raced = false
+    const racingPut: Blobs = {
+      get: (key) => blobs.get(key),
+      head: (key) => blobs.head(key),
+      put: async (key, body, options) => {
+        if (!raced) {
+          raced = true
+          await reprocessArticleJob(ctx(), await claim('article.reprocess', 1))
+        }
+        return blobs.put(key, body, options)
+      },
+      delete: (key) => blobs.delete(key),
+      list: (options) => blobs.list(options),
+    }
+    await ingestFeed({ ...ctx(), blobs: racingPut }, await claim('feed.fetch', feedId))
+    expect(
+      (await first<{ title: string }>(db, sql`select title from articles where id = 1`))?.title,
+    ).toBe('Post 1')
+    expect(await consistent()).toBe(true)
+    const feed = await first<Record<string, unknown>>(
+      db,
+      sql`select etag, last_modified, last_body_hash, next_fetch_at from feeds where id = ${feedId}`,
+    )
+    // It forgot what would have let its next fetch skip the item, and is due now.
+    expect(feed).toEqual({
+      etag: null,
+      last_modified: null,
+      last_body_hash: null,
+      next_fetch_at: clock.now(),
+    })
+
+    await db.run(sql`delete from leases`)
+    await ingestFeed(ctx(), await claim('feed.fetch', feedId))
+    const after = await first<{ title: string; current_version: number }>(
+      db,
+      sql`select title, current_version from articles where id = 1`,
+    )
+    expect(after).toEqual({ title: 'Post 1, edited', current_version: 3 })
+    expect(await consistent()).toBe(true)
+  })
+
+  test('a body that comes out the same keeps the language its object says', async () => {
+    await fullFeed()
+    const made = await article()
+    // What an older detector stored, in the version, the article and the shared object alike.
+    const key = `c/${made?.content_key}.json`
+    const object = JSON.parse((await (await blobs.get(key))?.text()) ?? '{}')
+    await blobs.put(key, JSON.stringify({ ...object, lang: 'fr' }))
+    await db.batch([
+      db.run(
+        sql`update article_versions set pipeline_version = 0, lang = 'fr' where article_id = 1`,
+      ),
+      db.run(sql`update articles set source_lang = 'fr' where id = 1`),
+    ] as never)
+    expect(await reprocessArticleJob(ctx(), await claim('article.reprocess', 1))).toEqual({
+      status: 'unchanged',
+    })
+    const after = await first<{ source_lang: string; lang: string }>(
+      db,
+      sql`select a.source_lang, v.lang from articles a
+          join article_versions v on v.article_id = a.id and v.version = a.current_version where a.id = 1`,
+    )
+    // Still what its object says, so a reader of the other language is not refused.
+    expect(after).toEqual({ source_lang: 'fr', lang: 'fr' })
+  })
+
+  test("a feed that moved does not move an older link-less post's images", async () => {
+    server.text(
+      '/feed.xml',
+      rss({
+        link: server.url('/'),
+        items: [
+          {
+            guid: 'no-link',
+            title: 'A post with no link',
+            description: 'x',
+            content: `${longHtml(3)}<p><img src="photo.jpg" alt="A photo"></p>`,
+            date: 'Thu, 01 Oct 2026 08:00:00 GMT',
+          },
+        ],
+      }),
+    )
+    const { feedId } = await registerFeed(db, {
+      feedUrl: server.url('/feed.xml'),
+      now: clock.now(),
+    })
+    await ingestFeed(ctx(), await claim('feed.fetch', feedId))
+    await db.run(sql`delete from leases`)
+    const made = await article()
+    // The base it was made against is kept with the version.
+    expect(
+      (
+        await first<{ source_url: string }>(
+          db,
+          sql`select source_url from article_versions where article_id = 1`,
+        )
+      )?.source_url,
+    ).toBe(server.url('/feed.xml'))
+    // The feed moves; the post is made again.
+    await db.batch([
+      db.run(
+        sql`update feeds set feed_url = ${server.url('/moved/feed.xml')} where id = ${feedId}`,
+      ),
+      db.run(sql`update article_versions set pipeline_version = 0, content_key = 'older'
+        where article_id = 1`),
+      db.run(sql`update articles set content_key = 'older' where id = 1`),
+    ] as never)
+    await reprocessArticleJob(ctx(), await claim('article.reprocess', 1))
+    expect((await article())?.content_key).toBe(made?.content_key)
   })
 })

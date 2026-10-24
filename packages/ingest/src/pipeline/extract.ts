@@ -12,6 +12,7 @@ import {
   EXTRACTION_MUST_BE_LONGER_BY,
   type Lease,
   loadArticleForExtraction,
+  pointed,
   type StoredVersion,
   settleExtraction,
 } from '@tela/data'
@@ -133,5 +134,9 @@ export async function extractArticleJob(ctx: IngestContext, lease: Lease): Promi
     ),
   ])
   if (!committed.ok) return { status: 'lost' }
+  // fence, seq, the insert, then the move: another writer (a feed's fetch, a reprocess) moved the
+  // article since it was read, and this extraction wrote nothing. Still due, so it goes again.
+  if (!pointed(committed.results, 3))
+    return { status: 'retry', error: 'the article changed meanwhile' }
   return { status: 'extracted', version: next, chars: processed.text.length }
 }

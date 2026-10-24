@@ -42,6 +42,7 @@ import {
   type NewVersion,
   noteHub,
   recentArticleCount,
+  replayIfRejected,
   type StoredVersion,
   siteFeedPosts,
   updateArticles,
@@ -228,6 +229,7 @@ async function adoptDeclaredHome(
 
 type ProcessedItem = {
   item: ParsedItem
+  baseUrl: string
   key: string
   title: string
   sourceLang: string | null
@@ -243,9 +245,12 @@ type ProcessedItem = {
 
 async function processItem(item: ParsedItem, feed: FeedForFetch, parsed: ParsedFeed) {
   const html = item.contentHtml ?? item.summaryHtml ?? ''
+  // What relative links resolve against: kept with the version, since the feed's own address can
+  // move later, and `article.reprocess` must make the body against the base it was first made on.
+  const baseUrl = item.url ?? feed.feedUrl
   const processed = await processArticleHtml({
     html,
-    baseUrl: item.url ?? feed.feedUrl,
+    baseUrl,
     // The blog's own majority before the feed's declared tag, which is sometimes a template's
     // default (a Chinese blog declaring `en-US`). A hint only breaks near ties.
     langHint: item.language ?? feed.site.primaryLang ?? parsed.language,
@@ -253,6 +258,7 @@ async function processItem(item: ParsedItem, feed: FeedForFetch, parsed: ParsedF
   })
   return {
     item,
+    baseUrl,
     key: await dedupKey(item),
     title: titleFor(item, processed.excerpt),
     sourceLang: processed.lang === 'und' ? null : processed.lang,
@@ -310,7 +316,9 @@ function newVersion(p: ProcessedItem, version: number): NewVersion {
     wordCount: p.wordCount,
     readingMinutes: p.readingMinutes,
     lang: p.sourceLang,
-    sourceUrl: p.item.url,
+    // Where the body came from and what its links resolve against: the item, or for an item with
+    // no link of its own, the feed as it was then.
+    sourceUrl: p.baseUrl,
   }
 }
 
@@ -358,6 +366,7 @@ async function plan(
     const wants = wantsExtraction(all, mode, SUMMARY_MAX_CHARS)
     changes.push({
       id: prior.id,
+      expectVersion: prior.currentVersion,
       url: p.item.url,
       urlHost: hostOf(p.item.url),
       title: p.title,
@@ -615,9 +624,10 @@ export async function ingestFeed(ctx: IngestContext, lease: Lease): Promise<Inge
 
   const statements: Statement[] = [...moved.statements]
   if (planned.inserts.length > 0) statements.push(insertArticles(db, feed.id, planned.inserts, now))
-  if (planned.changes.length > 0) statements.push(updateArticles(db, planned.changes))
   if (planned.versions.length > 0)
     statements.push(insertVersions(db, feed.id, planned.versions, now))
+  // After the versions: an article moves only onto a row that holds its new content (`pointAt`).
+  if (planned.changes.length > 0) statements.push(updateArticles(db, planned.changes))
   statements.push(...adopted.statements)
   statements.push(
     fillSiteMetadata(
@@ -632,6 +642,11 @@ export async function ingestFeed(ctx: IngestContext, lease: Lease): Promise<Inge
     ),
   )
   statements.push(updateFeed(db, feed.id, feedSet, now))
+  // After the feed's update, which saved its validators: a change another writer beat is fetched
+  // again rather than lost behind a 304.
+  if (planned.changes.length > 0) {
+    statements.push(replayIfRejected(db, feed.id, planned.changes, now))
+  }
   if (ctx.websub && parsed.hubUrl) {
     statements.push(noteHub(db, feed, parsed.hubUrl, newWebsubSecret(), now))
   }
