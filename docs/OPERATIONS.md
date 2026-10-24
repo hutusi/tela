@@ -826,12 +826,18 @@ says who holds it:
   A post re-processed with a new content key gets a new version, stamped with a seq, so devices
   fetch it again and its old body translation stays with the old key. Two ways to re-process:
   - an extracted post (`article_versions.provenance = 'readability'`): make it due again,
-    `update articles set extract_state = 'due' where …` (by `url_host`, or by id). The sweep
-    re-fetches each page, politely per host;
+    `update articles set extract_state = 'due' where id in (…)`. The sweep re-fetches each page,
+    politely per host, so one host's posts go one at a time. **At most twenty at once:** a post
+    fetched over six hours ago counts as waiting for its full text the moment it is due, and more
+    than twenty of those fail the health check, which pings the dead-man switch's `/fail` and
+    mails the owner. Re-queuing Paul Graham's 200 essays by `url_host` did exactly that
+    (2026-10-24). Queue the next ones as these finish;
   - a feed's posts: make the feed process every item it still lists, not just answer 304 or
     match its last body, `update feeds set etag = null, last_modified = null,
-    last_body_hash = null, next_fetch_at = 0 where id = …`. Posts the feed no longer lists
-    keep their old version.
+    last_body_hash = null, next_fetch_at = strftime('%s','now') * 1000 where id in (…)`. Due
+    now rather than at `0`: a feed due for over two hours with no lease counts as overdue, and
+    more than three of those fail the health check too. Posts the feed no longer lists keep
+    their old version.
   A post whose body did not have the fixed shape gets the same content key and no new version,
   so either is safe to run over more than the affected posts.
 - **What gave up:** `select * from dead_letters order by at desc limit 20`. Nothing retries a
