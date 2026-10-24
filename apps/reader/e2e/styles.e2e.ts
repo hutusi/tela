@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
+import { FORMATTING, FORMATTING_LANGS } from './formatting'
 import {
   ensureFeeds,
   expectHeaderFits,
@@ -596,6 +597,94 @@ test.describe('stylesheet', () => {
       single as number,
     )
   })
+
+  // Each of these rendered as plain text while the stored HTML was right: preflight took the list
+  // markers away; a Chinese body's headings, code and captions were body text, since a size set
+  // with `.article-body :lang(zh)` reached every descendant and outranked their own; code in a
+  // <pre> shrank twice; an image inside a sentence broke its line; and side by side, an original
+  // paragraph longer than its translation touched the next row. Only computed styles show it.
+  for (const lang of FORMATTING_LANGS) {
+    test(`a ${lang} post keeps its structure in every layout`, async ({ page }) => {
+      test.setTimeout(90_000)
+      await ensureFeeds([`/formatting/${lang}.xml`])
+      // An English post is read in Chinese, a Chinese one in English: both scripts get both columns.
+      await setPrefs(page.request, {}, { readingLang: lang === 'en' ? 'zh-Hans' : null })
+      await page.setViewportSize({ width: 1700, height: 1000 })
+      await page.goto('/reading')
+      await synced(page)
+      await page
+        .getByTestId('article-row')
+        .filter({ hasText: FORMATTING[lang].title })
+        .first()
+        .click()
+      await expect(page.getByTestId('translation-bar')).toHaveAttribute(
+        'data-state',
+        /done|partial/,
+        {
+          timeout: 30_000,
+        },
+      )
+      await expect(page.locator('[data-testid="body-translated"] dd')).toHaveCount(1)
+
+      const check = async (column: 'body-original' | 'body-translated', where: string) => {
+        const s = await page.evaluate((col) => {
+          const css = (sel: string) => {
+            const el = document.querySelector(`[data-testid="${col}"] ${sel}`)
+            return el ? getComputedStyle(el) : null
+          }
+          const px = (v: string | undefined) => Number.parseFloat(v ?? 'NaN')
+          return {
+            p: px(css('p')?.fontSize),
+            h2: px(css('h2')?.fontSize),
+            h3: px(css('h3')?.fontSize),
+            sup: px(css('sup')?.fontSize),
+            ul: css('ul')?.listStyleType,
+            ol: css('ol')?.listStyleType,
+            pre: px(css('pre')?.fontSize),
+            preCode: px(css('pre code')?.fontSize),
+            inlineImg: css('p img')?.display,
+            figureImg: css('figure img')?.display,
+            dd: px(css('dd')?.marginLeft),
+          }
+        }, column)
+        const at = `${where}, ${column}`
+        expect(s.h2, `${at}: an h2 reads as body text`).toBeGreaterThan(s.p * 1.15)
+        expect(s.h3, `${at}: an h3 reads as body text`).toBeGreaterThan(s.p)
+        expect(s.sup, `${at}: a footnote marker is full size`).toBeLessThan(s.p)
+        expect(s.ul, `${at}: bullets`).toBe('disc')
+        expect(s.ol, `${at}: numbers`).toBe('decimal')
+        expect(s.pre, `${at}: code is as large as the text`).toBeLessThan(s.p)
+        expect(s.preCode, `${at}: code in a pre shrinks a second time`).toBe(s.pre)
+        expect(s.inlineImg, `${at}: an image in a sentence`).toBe('inline')
+        expect(s.figureImg, `${at}: a figure's image`).toBe('block')
+        expect(s.dd, `${at}: a definition is not indented`).toBeGreaterThan(0)
+      }
+
+      await check('body-original', 'two columns')
+      await check('body-translated', 'two columns')
+      // Side by side the taller cell sets the row, so each original block ends with the space its
+      // translation's does; 0 put a long original paragraph against the next one.
+      const ends = await page.evaluate(() =>
+        [...document.querySelectorAll('[data-testid="body-original"]')].map((cell) =>
+          cell.lastElementChild ? getComputedStyle(cell.lastElementChild).marginBottom : '20px',
+        ),
+      )
+      expect(new Set(ends), 'an original block ends flush with the next row').toEqual(
+        new Set(['20px']),
+      )
+
+      await page.setViewportSize({ width: 1280, height: 1000 })
+      await check('body-original', 'stacked')
+      await check('body-translated', 'stacked')
+
+      await page.getByTestId('mode-orig').click()
+      await expect(page.locator('.article-body')).toHaveCount(1)
+      await check('body-original', 'one column')
+      await page.getByTestId('mode-trans').click()
+      await expect(page.locator('[data-testid="body-translated"]')).toHaveCount(1)
+      await check('body-translated', 'one column')
+    })
+  }
 
   test('search is reachable below the desktop breakpoint too', async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 })

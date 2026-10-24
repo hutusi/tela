@@ -437,6 +437,10 @@
   margin: 32px 0 12px;
   color: var(--color-ink);
 }
+/* Set on a full square, CJK needs the space between its characters (as `.tracking-tight`). */
+.article-body :is(h1, h2, h3, h4, h5, h6):is(:lang(zh), :lang(ja), :lang(ko)) {
+  letter-spacing: normal;
+}
 .article-body h1 {
   font-size: 1.5em;
 }
@@ -449,8 +453,19 @@
 .article-body :is(h4, h5, h6) {
   font-size: 1em;
 }
+/* Tailwind's preflight takes list markers away (`list-style: none`), and a numbered list without
+   its numbers loses what it says. */
 .article-body :is(ul, ol) {
   padding-left: 1.4em;
+}
+.article-body ul {
+  list-style: disc;
+}
+.article-body ul ul {
+  list-style: circle;
+}
+.article-body ol {
+  list-style: decimal;
 }
 .article-body li {
   margin: 0 0 6px;
@@ -463,6 +478,10 @@
 .article-body :is(pre, code, kbd, samp) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.8em;
+}
+.article-body pre code {
+  /* The rule above sizes the code inside a <pre> as well as the <pre>: 0.8 of 0.8. */
+  font-size: inherit;
 }
 .article-body pre {
   background: var(--color-surface);
@@ -481,16 +500,36 @@
   max-width: 100%;
   height: auto;
   border-radius: 6px;
+  /* Preflight makes every image a block, which puts an emoji or a formula on a line of its own.
+     An image is inline in the original unless something makes it otherwise. */
+  display: inline;
+  vertical-align: middle;
+}
+.article-body figure img {
+  display: block;
 }
 .article-body figure {
   margin-left: 0;
   margin-right: 0;
 }
-.article-body figcaption {
+.article-body :is(figcaption, caption) {
   font-family: var(--font-sans);
   font-size: 13px;
   color: var(--color-muted);
   margin-top: 6px;
+}
+.article-body caption {
+  margin: 0 0 6px;
+  text-align: left;
+}
+.article-body dt {
+  font-weight: 600;
+}
+.article-body dd {
+  margin: 0 0 8px 1.5em;
+}
+.article-body summary {
+  cursor: pointer;
 }
 .article-body table {
   border-collapse: collapse;
@@ -519,7 +558,10 @@
   text-decoration-color: var(--color-line);
   text-underline-offset: 3px;
 }
-.article-body :lang(zh),
+/* Body text in a CJK language, set on the body itself (the single-column run, or a paired cell).
+   Never on what is inside it: `:lang()` matches every descendant, since language is inherited, and
+   at (0,2,0) a size set that way outranked every element's own, so a Chinese post's headings,
+   code, captions and tables were all body text. Inside, sizes are relative and follow from here. */
 .article-body:lang(zh),
 .article-body:lang(ja),
 .article-body:lang(ko) {
@@ -629,6 +671,12 @@
   /* Matching the narrow rule selector for selector: :not(.article-source) makes that one
      (0,4,0), so a tidier (0,3,0) here loses wherever the two disagree, container query or not. */
   .article-body.article-block:not(.article-source) > :last-child {
+    margin-bottom: 20px;
+  }
+  /* Side by side, the original's block ends with the same space as its translation's. Stacked, the
+     two hug and the space falls after the translation; here the taller cell sets the row, and an
+     original paragraph longer than its translation touched the next one. */
+  .article-body.article-source > :last-child {
     margin-bottom: 20px;
   }
 }

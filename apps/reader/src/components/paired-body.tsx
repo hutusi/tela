@@ -44,6 +44,8 @@ export function PairedBody({
 }: Props) {
   const tt = useTranslations('translation')
   const locale = useLocale()
+  // An unknown language says so (`lang=""`) rather than taking the page's (reader.tsx).
+  const sourceTag = sourceLang ?? ''
   // It starts the column's label ("Anglais · traduction"), though French writes "anglais".
   const targetName = asLabel(
     (LANGUAGE_NAMES[locale as UiLocale] ?? LANGUAGE_NAMES.en)[targetLang] ?? targetLang,
@@ -83,7 +85,7 @@ export function PairedBody({
         <p
           className="article-source mb-6 font-serif text-[18px] font-medium leading-[1.25] tracking-tight text-ink-2 lg:text-[32px] lg:leading-[1.12]"
           style={{ textWrap: 'pretty' }}
-          lang={sourceLang}
+          lang={sourceTag}
           dir="auto"
           data-edge-first=""
           data-testid="article-title-original"
@@ -108,7 +110,7 @@ export function PairedBody({
           const translatedCell = (
             <div
               className={cell}
-              lang={pair.untranslated ? sourceLang : targetLang}
+              lang={pair.untranslated ? sourceTag : targetLang}
               data-testid="body-translated"
               // biome-ignore lint/security/noDangerouslySetInnerHtml: allowlist-sanitized by @tela/content; model output re-escaped on rehydration (ADR 0005)
               dangerouslySetInnerHTML={{ __html: cells[i]?.translated ?? '' }}
@@ -118,7 +120,7 @@ export function PairedBody({
             <Fragment key={pair.id}>
               <div
                 className={`${cell} article-source`}
-                lang={sourceLang}
+                lang={sourceTag}
                 dir="auto"
                 data-testid="body-original"
                 // Two columns tile the source cells into one continuous band; only its two ends

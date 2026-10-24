@@ -6,6 +6,7 @@ import { createHmac, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
+import { FORMATTING_LANGS, formattingFeed } from './formatting'
 import { FRESH_LANGS, freshFeed, freshPost } from './fresh'
 
 const port = Number(process.argv[2] ?? process.env.E2E_FIXTURE_PORT ?? 4790)
@@ -195,6 +196,13 @@ const routes: Record<string, () => { body: Buffer | string; type: string }> = {
       </channel></rss>`,
     type: 'application/rss+xml; charset=utf-8',
   }),
+  // Every block the reader styles, in English and in Chinese (`./formatting.ts`).
+  ...Object.fromEntries(
+    FORMATTING_LANGS.map((lang) => [
+      `/formatting/${lang}.xml`,
+      () => ({ body: formattingFeed(lang, port), type: 'application/rss+xml; charset=utf-8' }),
+    ]),
+  ),
   // This week's posts in four languages, each blog with a home of its own (`./fresh.ts`).
   ...Object.fromEntries(
     FRESH_LANGS.flatMap((lang) => [

@@ -280,6 +280,9 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
   const showTrans = shown !== 'orig'
   const twoCols = shown === 'side'
   const sourceLang = article.sourceLang ?? undefined
+  // A post whose language is not known says so (`lang=""`) rather than taking the page's: under a
+  // Chinese interface an English post of unknown language was set as Chinese.
+  const bodyLang = sourceLang ?? ''
   const name = feedTitle(tables, article.feedId) || store.sourceName(article.feedId)
   const site = siteOfFeed(tables, article.feedId)
   // The blog's name leads to its posts, as the sidebar's row does: only for a blog the member
@@ -447,7 +450,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
                 <h1
                   className="mb-6 font-serif text-[30px] font-medium leading-[1.12] tracking-tight lg:text-[40px]"
                   style={{ textWrap: 'pretty' }}
-                  lang={showTrans ? titles.lang : sourceLang}
+                  lang={showTrans ? titles.lang : bodyLang}
                   data-testid="article-title"
                 >
                   {title}
@@ -459,7 +462,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
                         <Untranslated key={run.id} pending={run.pending} sourceLang={sourceLang}>
                           <Body
                             html={run.html}
-                            lang={sourceLang}
+                            lang={bodyLang}
                             dir="auto"
                             testId="body-translated"
                           />
@@ -468,7 +471,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
                         <Body
                           key={run.id}
                           html={run.html}
-                          lang={showTrans ? readingLang : sourceLang}
+                          lang={showTrans ? readingLang : bodyLang}
                           dir={showTrans ? undefined : 'auto'}
                           testId={showTrans ? 'body-translated' : 'body-original'}
                         />

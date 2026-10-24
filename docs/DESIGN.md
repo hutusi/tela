@@ -76,6 +76,17 @@ their own families by the same tokens, so a Japanese post's kanji are not drawn 
 `lang` or the page's): it draws Latin display type closer and crams CJK, which is set on a full
 square. Base UI size 14px; article body 19.5px/1.55 (CJK 18px/1.8).
 
+Article bodies keep the structure the original has: headings at 1.5/1.35/1.15em of the body,
+lists with their bullets and numbers, code at 0.8em (a `pre`'s `code` inherits it rather than
+shrinking again), images inline unless a figure holds them, definitions indented 1.5em under a
+semibold term, footnote markers at preflight's 75%. The CJK size is set on the body itself (the
+single-column run, or a paired cell), never with `.article-body :lang(zh)`: `:lang()` matches
+every descendant, and a size set that way outranked each element's own, so a Chinese post's
+headings and code were body text. A post whose language is not known renders `lang=""`, so the
+interface's language does not decide its type. Side by side in two columns, an original block
+ends with the same 20px its translation does. `styles.e2e.ts` measures all of it in both scripts,
+in one column, stacked and in two columns (`e2e/formatting.ts`).
+
 Motion: `animate-fade` (250 ms fade + 4px rise) on view changes and popovers. Under
 `prefers-reduced-motion: reduce` the token itself becomes `none`, which covers every use at once,
 and so does `--animate-pulse`, the skeletons' throb; a scroll the script makes is smooth only
