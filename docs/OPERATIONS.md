@@ -821,6 +821,19 @@ says who holds it:
   `update feeds set content_mode = 'summary' where id = …`, then queue its posts, as for a dead
   letter: `update articles set extract_state = 'due' where feed_id = …`. Each extraction stamps
   its article's seq when it lands, which is when devices get the full text.
+- **Bodies stored before a normalization fix** keep the shape they were stored in: a fix changes
+  only what is processed after it, and leaf-shape fixes do not bump `NORM_VERSION` (ADR 0053).
+  A post re-processed with a new content key gets a new version, stamped with a seq, so devices
+  fetch it again and its old body translation stays with the old key. Two ways to re-process:
+  - an extracted post (`article_versions.provenance = 'readability'`): make it due again,
+    `update articles set extract_state = 'due' where …` (by `url_host`, or by id). The sweep
+    re-fetches each page, politely per host;
+  - a feed's posts: make the feed process every item it still lists, not just answer 304 or
+    match its last body, `update feeds set etag = null, last_modified = null,
+    last_body_hash = null, next_fetch_at = 0 where id = …`. Posts the feed no longer lists
+    keep their old version.
+  A post whose body did not have the fixed shape gets the same content key and no new version,
+  so either is safe to run over more than the affected posts.
 - **What gave up:** `select * from dead_letters order by at desc limit 20`. Nothing retries a
   dead letter. Fix the cause, then make the domain row due again:
   - a feed: `update feeds set next_fetch_at = 0 where id = …`;

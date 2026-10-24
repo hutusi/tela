@@ -2,8 +2,10 @@
 
 The pure content pipeline: no I/O, no database, runs on Node, Bun, and Cloudflare Workers.
 This file is the normative spec for how article bodies become **blocks**. The block hashes are a
-contract with the `translations` table: whenever a rule below changes, bump `NORM_VERSION` in
-`@tela/shared` so old and new cache entries never mix.
+contract with the translation cache: whenever what a tagged text means or how it is hashed changes
+(§3, §4), bump `NORM_VERSION` in `@tela/shared` so old and new cache entries never mix. A fix to
+which elements become leaves (§2) keeps it, provided every tree without the fixed shape annotates
+byte-identically (ADR 0053).
 
 ## Pipeline
 
@@ -40,15 +42,27 @@ rewriting) and `@tela/content/tagged` (placeholder grammar) have no parser depen
 
 Goal: every text-bearing element is a **leaf** whose children are inline only.
 
-1. Unwrap `div section article aside header footer main` (replace with children, bottom-up).
-2. In the root, in `blockquote figure details`, and in any element that has block children, wrap
+1. Unwrap `div section article aside header footer main`, and `tbody thead tfoot tr td th caption`
+   outside a `<table>` (a browser's parser ignores those): replace each with its children,
+   bottom-up. Where the wrapper's words would run into words outside it, keep a boundary between
+   them, so `<div>One.</div><div>Two.</div>` is two leaves, not one reading "One.Two.". Words are
+   text, or an element holding text or an `img`: an empty permalink beside a heading's title is
+   not. No boundary goes inside a `<pre>`.
+2. An inline element that holds blocks is a wrapper. A bare `<span>` is unwrapped. Any other
+   element (an `<a>` around a card, a `<span lang>`) is pushed down: a copy of it wraps each inline
+   run, and each leaf's content, inside it.
+3. In the root, in `blockquote figure details`, and in any element that has block children, wrap
    each run of inline nodes in `<p>`. In `ul`/`ol`, stray runs are wrapped in `<li>`. Whitespace-only
    text between blocks is dropped.
-3. A `<p>` that ended up with block children is a wrapper: unwrap it.
-4. Remove empty leaves (`<p></p>`, `<p> </p>`, `<p><br></p>`); keep leaves that contain an `img`.
+4. A `<p>` that ended up with block children is a wrapper: unwrap it.
+5. In a `<p>`, two or more `<br>`s in a row (whitespace between them allowed) end the paragraph
+   when there are words before and after them; the `<br>`s go. A single `<br>` stays, and so do
+   breaks before the first words or after the last.
+6. Remove empty leaves (`<p></p>`, `<p> </p>`, `<p><br></p>`); keep leaves that contain an `img`.
 
 Leaf tags: `p h1-h6 li figcaption th td dt dd summary caption pre`. A `li` (or `td`, …) that still
-contains blocks is a container, and its wrapped `<p>` children are the leaves.
+contains blocks is a container, and its wrapped `<p>` children are the leaves. Whether a leaf holds
+blocks is read from its direct children: step 2 makes sure no inline element hides them.
 
 ## 3. Tagged text (`tagged.ts`)
 
@@ -133,5 +147,6 @@ until every live article has a new version.
 ## Fixtures
 
 `fixtures/feeds/` holds real captures listed in `fixtures/SOURCE.md` and
-`src/fixtures.test-helper.ts`. `process.test.ts` snapshots block ids and hashes for three of them:
-a failing snapshot means the contract changed and `NORM_VERSION` needs a bump.
+`src/fixtures.test-helper.ts`. `process.test.ts` snapshots block ids and hashes for three of them.
+A failing snapshot means either the contract changed and `NORM_VERSION` needs a bump, or a leaf
+shape was fixed (ADR 0053); the commit says which.

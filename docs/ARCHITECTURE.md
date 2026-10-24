@@ -90,7 +90,9 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
    `summaryHtml` and `contentHtml` per item.
 3. Sanitize (`sanitizeArticleHtml`) with an allowlist; links and images absolutized; lazy-load
    attributes folded into `src`; tracking pixels dropped.
-4. Normalize + annotate (`annotateBlocks`): wrappers unwrapped, inline runs wrapped, every
+4. Normalize + annotate (`annotateBlocks`): wrappers and table parts outside a table unwrapped
+   (with a boundary where their words would run into their neighbours'), inline elements around
+   blocks lifted, inline runs wrapped, `<p>`s split on `<br><br>` (ADR 0053), every
    text-bearing element a leaf with a `data-tb` id = first 10 hex of
    `sha256(normalized tagged text + NORM_VERSION)`, duplicates suffixed by position.
 5. Tagged text (`toTaggedText` / `fromTaggedText` / `checkPlaceholders`): inline markup becomes
@@ -105,7 +107,8 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
    refuses a result that is 70% link text or more (a site menu) or has under 100 characters.
 
 Fixtures: 21 captured real feeds in `packages/content/fixtures/`; snapshot tests pin block ids
-and hashes as the `NORM_VERSION` contract.
+and hashes as the `NORM_VERSION` contract (a leaf-shape fix may change them without a bump,
+ADR 0053).
 
 ## Ingestion (`packages/ingest`, run by tela-jobs)
 

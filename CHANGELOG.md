@@ -9,6 +9,13 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **Translations keep their paragraphs.** A post whose paragraphs sat inside one more element (Paul
+  Graham's essays, Blogger's nested spans, a link around a card), whose layout table Readability
+  left half-removed, or whose paragraphs were only `<br><br>` apart, was stored as one block: the
+  translation came back as one paragraph, and the side-by-side view paired the whole post as one
+  row. Such posts are now split paragraph by paragraph, words in neighbouring `<div>`s no longer
+  run together, and the model no longer copies the source's hard line breaks into Chinese as
+  spaces between characters.
 - **A device keeps titles in its reading language only**, not in all four, and a new reading
   language's titles are fetched behind the list, which shows posts as written until they come.
 - **Pages download only the fonts their text needs.** Each face is declared for its own

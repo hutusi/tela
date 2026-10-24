@@ -68,9 +68,94 @@ describe('annotateBlocks', () => {
     expect(out).toContain('>keep</pre>')
   })
 
+  test('table parts outside a table are unwrapped, and stay inside one', async () => {
+    // Readability's output for paulgraham.com: a row and a cell, and no table.
+    const { html, blocks } = await annotateBlocks(
+      '<tr><td><img src="https://x/t.gif"><span>June 2021<p>First paragraph.</p><p>Second one.</p></span></td></tr>',
+    )
+    expect(html).not.toMatch(/<t[rd]/)
+    expect(blocks.map((b) => b.tag)).toEqual(['p', 'p', 'p'])
+    expect(html).toMatch(/^<p data-tb="[0-9a-f]{10}"><img src="https:\/\/x\/t.gif">June 2021<\/p>/)
+
+    const table = await annotateBlocks('<table><tr><td>Cell one</td><td>Cell two</td></tr></table>')
+    expect(table.blocks.map((b) => b.tag)).toEqual(['td', 'td'])
+  })
+
+  test('an inline element around paragraphs gives each paragraph its own leaf', async () => {
+    const { blocks, tagged } = await annotateBlocks(
+      '<td><span>Intro<p>One para.</p><blockquote>A quote.</blockquote><p>Two para.</p></span></td>',
+    )
+    expect(blocks.map((b) => b.tag)).toEqual(['p', 'p', 'p', 'p'])
+    expect(Object.values(tagged)).toEqual(['Intro', 'One para.', 'A quote.', 'Two para.'])
+
+    // Blogger nests the paragraphs a few spans deep inside a <p>.
+    const blogger = await annotateBlocks(
+      '<p><br><span><span><p><span>First words.</span></p><p>More words.</p></span></span></p>',
+    )
+    expect(Object.values(blogger.tagged)).toEqual(['<g1>First words.</g1>', 'More words.'])
+  })
+
+  test('a link around blocks is pushed down into each of them', async () => {
+    const { html, tagged } = await annotateBlocks(
+      '<a href="https://e.x/post"><div><h3>Card title</h3><p>Card text</p></div></a>',
+    )
+    expect(html).toMatch(
+      /<h3 data-tb="[0-9a-f]{10}"><a href="https:\/\/e.x\/post">Card title<\/a><\/h3>/,
+    )
+    expect(html).toMatch(
+      /<p data-tb="[0-9a-f]{10}"><a href="https:\/\/e.x\/post">Card text<\/a><\/p>/,
+    )
+    expect(Object.values(tagged)).toEqual(['<g1>Card title</g1>', '<g1>Card text</g1>'])
+  })
+
+  test('wrappers whose words would run into their neighbours stay separate paragraphs', async () => {
+    const siblings = await annotateBlocks(
+      '<div>Para one.</div><div>Para two.</div>tail <b>text</b>',
+    )
+    expect(Object.values(siblings.tagged)).toEqual(['Para one.', 'Para two.', 'tail <g1>text</g1>'])
+
+    // A wrapper alone in its parent is unwrapped as before: no paragraph appears inside the item.
+    const lone = await annotateBlocks('<ul><li><div>Only child</div></li></ul>')
+    expect(lone.html).toMatch(/^<ul><li data-tb="[0-9a-f]{10}">Only child<\/li><\/ul>$/)
+    // An empty permalink beside a centred title shows nothing to run into: the heading stays one.
+    const heading = await annotateBlocks(
+      '<h2><a href="https://e.x/#t" title="t"></a><div>Title</div></h2><p>Body text</p>',
+    )
+    expect(heading.blocks.map((b) => b.tag)).toEqual(['h2', 'p'])
+    // Nor inside a <pre>, where the text is literal.
+    const pre = await annotateBlocks('<pre>one<div>two</div></pre>')
+    expect(pre.blocks.map((b) => [b.tag, b.skip])).toEqual([['pre', true]])
+  })
+
+  test('two line breaks end a paragraph, one does not', async () => {
+    const { blocks, tagged } = await annotateBlocks(
+      '<p>Jeff: First.<br><br>Leo: Second,<br>\nstill second.<br>\n<br>\n<br>Jeff: Third.</p>',
+    )
+    expect(blocks.map((b) => b.tag)).toEqual(['p', 'p', 'p'])
+    expect(Object.values(tagged)).toEqual([
+      'Jeff: First.',
+      'Leo: Second,<x1/>\nstill second.',
+      'Jeff: Third.',
+    ])
+
+    // Breaks before the first words or after the last separate nothing and stay.
+    const edges = await annotateBlocks('<p><br><br>Only words.<br><br></p>')
+    expect(Object.values(edges.tagged)).toEqual(['<x1/><x2/>Only words.<x3/><x4/>'])
+  })
+
+  test('paragraph boundaries survive translation', async () => {
+    const { html, blocks } = await annotateBlocks(
+      '<tr><td><span><p>Hello there.</p><p>Goodbye now.</p></span></td></tr>',
+    )
+    const [first, second] = blocks.map((b) => b.id) as [string, string]
+    const out = rehydrateBlocks(html, { [first]: '你好。', [second]: '再见。' })
+    expect(out).toBe(`<p data-tb="${first}">你好。</p><p data-tb="${second}">再见。</p>`)
+  })
+
   test('is stable: annotating annotated html yields the same ids', async () => {
     const first = await annotateBlocks(
-      '<p>Alpha <strong>beta</strong></p><blockquote>quote text</blockquote>',
+      '<p>Alpha <strong>beta</strong></p><blockquote>quote text</blockquote>' +
+        '<a href="https://e.x/"><div><p>card</p></div></a><div>one</div><div>two<br><br>three</div>',
     )
     const second = await annotateBlocks(first.html)
     expect(second.blocks.map((b) => b.id)).toEqual(first.blocks.map((b) => b.id))

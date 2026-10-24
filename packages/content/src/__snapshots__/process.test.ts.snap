@@ -622,10 +622,16 @@ exports[`processArticleHtml on real articles jnito.rss.xml: language, blocks, an
     false,
   ],
   [
-    "76d3b12fd8",
+    "5c026fd307",
     "p",
     6,
     false,
+  ],
+  [
+    "0e4ae292b4-2",
+    "p",
+    0,
+    true,
   ],
   [
     "011de89cf8",
@@ -646,7 +652,7 @@ exports[`processArticleHtml on real articles jnito.rss.xml: language, blocks, an
     false,
   ],
   [
-    "5c026fd307",
+    "5c026fd307-2",
     "p",
     6,
     false,
@@ -654,7 +660,7 @@ exports[`processArticleHtml on real articles jnito.rss.xml: language, blocks, an
 ]
 `;
 
-exports[`processArticleHtml on real articles jnito.rss.xml: language, blocks, and hashes are stable 2`] = `"f0e80d0e7b2a705087edef4a6c42c5c6acb3bc8ee02942fd4bb830eb87e79c5c"`;
+exports[`processArticleHtml on real articles jnito.rss.xml: language, blocks, and hashes are stable 2`] = `"c0c939633220a7343f5dc669c5443e641eaf6b9137cd165166979e2761187f09"`;
 
 exports[`processArticleHtml on real articles hutusi.rss.xml: language, blocks, and hashes are stable 1`] = `
 [

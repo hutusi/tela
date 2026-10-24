@@ -2,8 +2,10 @@
  * Block normalization and annotation.
  *
  * After sanitization the tree is reshaped so every text-bearing block is a leaf:
- *   - wrapper elements (div, section, …) are unwrapped
+ *   - wrapper elements (div, section, …), and table parts outside a table, are unwrapped
+ *   - inline elements that hold blocks are lifted out of the way
  *   - inline runs that sit next to block elements are wrapped in <p> (or <li> in lists)
+ *   - two or more <br>s in a row end a paragraph
  *   - empty blocks are removed
  * Each leaf then gets a stable id (data-tb) derived from the hash of its tagged text.
  */
@@ -21,6 +23,20 @@ import {
 } from './tagged'
 
 const UNWRAP = new Set(['div', 'section', 'article', 'aside', 'header', 'footer', 'main'])
+
+/**
+ * Table parts a browser's parser ignores outside a `<table>`. Readability leaves them behind when
+ * it drops a layout table (paulgraham.com: `<tr><td>` and no table), and kept, the one row is the
+ * article's only block. Outside a table they are unwrapped like the wrappers above.
+ */
+const TABLE_PARTS = new Set(['tbody', 'thead', 'tfoot', 'tr', 'td', 'th', 'caption'])
+
+/**
+ * Left where an unwrapped wrapper's inline content met inline content outside it, so the two are
+ * wrapped as separate paragraphs, as a browser lays them out: `<div>One.</div><div>Two.</div>` was
+ * one leaf reading "One.Two.". It counts as a block while the tree is normalized and is then removed.
+ */
+const BOUNDARY = 'tela-boundary'
 
 /** Elements that can be leaf blocks when they contain only inline content. */
 export const LEAF_TAGS = new Set([
@@ -57,6 +73,7 @@ const BLOCK_LEVEL = new Set([
   'details',
   'hr',
   ...UNWRAP,
+  BOUNDARY,
 ])
 
 /** Blocks never sent to the translator. */
@@ -98,19 +115,123 @@ function isMeaningfulInline(node: ChildNode): boolean {
   return isTag(node) && !BLOCK_LEVEL.has(node.name)
 }
 
-function unwrapAll(parent: ParentNode) {
+function isBlank(node: ChildNode): boolean {
+  return isText(node) && !/\S/.test(node.data)
+}
+
+/**
+ * Text, or an element holding text or a picture: what can run into a neighbour on screen. An empty
+ * anchor (a heading's permalink) or a lone `<br>` cannot, and treating one as words made a heading
+ * a container of paragraphs.
+ */
+function showsSomething(node: ChildNode): boolean {
+  if (isText(node)) return /\S/.test(node.data)
+  return isTag(node) && (node.name === 'img' || node.children.some(showsSomething))
+}
+
+/** The first block, or inline node that shows something: the neighbour words would run into. */
+function firstSolid(nodes: ChildNode[]): ChildNode | undefined {
+  return nodes.find((n) => isBlockElement(n) || showsSomething(n))
+}
+
+function lastSolid(nodes: ChildNode[]): ChildNode | undefined {
+  return nodes.findLast((n) => isBlockElement(n) || showsSomething(n))
+}
+
+function touchesInline(a: ChildNode | undefined, b: ChildNode | undefined): boolean {
+  return a !== undefined && b !== undefined && !isBlockElement(a) && !isBlockElement(b)
+}
+
+function unwrapAll(parent: ParentNode, inTable = false, inPre = false) {
   const next: ChildNode[] = []
-  for (const child of parent.children) {
+  const children = parent.children
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i] as ChildNode
     if (isTag(child)) {
-      unwrapAll(child)
-      if (UNWRAP.has(child.name)) {
-        next.push(...child.children)
+      unwrapAll(child, inTable || child.name === 'table', inPre || child.name === 'pre')
+      if (UNWRAP.has(child.name) || (!inTable && TABLE_PARTS.has(child.name))) {
+        const inner = child.children
+        // Inside a <pre> the text is literal, and a boundary would turn it into paragraphs.
+        if (!inPre && touchesInline(lastSolid(next), firstSolid(inner))) next.push(boundary())
+        next.push(...inner)
+        if (!inPre && touchesInline(lastSolid(inner), firstSolid(children.slice(i + 1)))) {
+          next.push(boundary())
+        }
         continue
       }
     }
     next.push(child)
   }
   setChildren(parent, next)
+}
+
+function boundary(): Element {
+  return new Element(BOUNDARY, {}, [])
+}
+
+function dropBoundaries(parent: ParentNode) {
+  const next: ChildNode[] = []
+  for (const child of parent.children) {
+    if (isTag(child)) {
+      if (child.name === BOUNDARY) continue
+      dropBoundaries(child)
+    }
+    next.push(child)
+  }
+  setChildren(parent, next)
+}
+
+/**
+ * An inline element that holds blocks (a `<span>` around every paragraph, an `<a>` around a card)
+ * is a wrapper, not inline content. Left in place, the leaf around it holds every paragraph, and
+ * tagged text keeps only their words: Paul Graham's essays reached the model as one run of text.
+ * A bare `<span>` is unwrapped. Anything else is pushed down, a copy of it around each inline run
+ * and each leaf's content, so a link, a language or a code span still covers what it covered.
+ */
+function liftInlineWrappers(parent: ParentNode) {
+  const next: ChildNode[] = []
+  for (const child of parent.children) {
+    if (isTag(child) && child.name !== 'pre') {
+      liftInlineWrappers(child)
+      if (!BLOCK_LEVEL.has(child.name) && hasBlockChild(child)) {
+        const bare = child.name === 'span' && Object.keys(child.attribs).length === 0
+        next.push(...(bare ? child.children : spreadInto(child.children, child)))
+        continue
+      }
+    }
+    next.push(child)
+  }
+  setChildren(parent, next)
+}
+
+/** `nodes` with each meaningful inline run wrapped in a copy of `wrapper`, and each block reached. */
+function spreadInto(nodes: ChildNode[], wrapper: Element): ChildNode[] {
+  const out: ChildNode[] = []
+  let run: ChildNode[] = []
+  const flush = () => {
+    if (run.some(isMeaningfulInline)) out.push(copyAround(wrapper, run))
+    else out.push(...run)
+    run = []
+  }
+  for (const node of nodes) {
+    if (isBlockElement(node)) {
+      flush()
+      if (node.name !== 'pre' && node.children.length > 0) {
+        setChildren(node, spreadInto(node.children, wrapper))
+      }
+      out.push(node)
+    } else {
+      run.push(node)
+    }
+  }
+  flush()
+  return out
+}
+
+function copyAround(wrapper: Element, nodes: ChildNode[]): Element {
+  const copy = new Element(wrapper.name, { ...wrapper.attribs }, [])
+  setChildren(copy, nodes)
+  return copy
 }
 
 function wrapRuns(parent: ParentNode, wrapperTag: 'p' | 'li') {
@@ -163,6 +284,64 @@ function normalizeTree(parent: ParentNode) {
     next.splice(idx, 1, ...parent.children)
     setChildren(grand, next)
   }
+}
+
+function isBreak(node: ChildNode): boolean {
+  return isTag(node) && node.name === 'br'
+}
+
+/**
+ * Two or more `<br>`s in a row end a paragraph. An editor that never makes a `<p>` (Blogger,
+ * Hatena) otherwise leaves a whole post in one leaf: one row beside its translation, and its
+ * paragraphs kept only if the model leaves every `<xN/>` where it was. A single `<br>` stays, a
+ * line break in a poem or an address, and so do breaks before the first words or after the last:
+ * they separate nothing, and splitting on them would re-version every post that ends in a few.
+ */
+function splitOnBreaks(parent: ParentNode) {
+  const next: ChildNode[] = []
+  for (const child of parent.children) {
+    if (isTag(child)) {
+      if (child.name === 'p' && !hasBlockChild(child)) {
+        next.push(...paragraphsOf(child))
+        continue
+      }
+      if (child.name !== 'pre') splitOnBreaks(child)
+    }
+    next.push(child)
+  }
+  setChildren(parent, next)
+}
+
+/** What a paragraph needs to be one. */
+function hasContent(nodes: ChildNode[]): boolean {
+  return nodes.some(showsSomething)
+}
+
+function paragraphsOf(p: Element): ChildNode[] {
+  const kids = p.children
+  const segments: ChildNode[][] = [[]]
+  let i = 0
+  while (i < kids.length) {
+    let j = i
+    let breaks = 0
+    while (j < kids.length && (isBreak(kids[j] as ChildNode) || isBlank(kids[j] as ChildNode))) {
+      if (isBreak(kids[j] as ChildNode)) breaks += 1
+      j += 1
+    }
+    const current = segments[segments.length - 1] as ChildNode[]
+    if (breaks >= 2 && hasContent(current) && hasContent(kids.slice(j))) {
+      segments.push([])
+      i = j
+    } else if (j > i) {
+      current.push(...kids.slice(i, j))
+      i = j
+    } else {
+      current.push(kids[i] as ChildNode)
+      i += 1
+    }
+  }
+  if (segments.length === 1) return [p]
+  return segments.map((nodes) => copyAround(p, nodes))
 }
 
 function isEmptyBlock(el: Element): boolean {
@@ -228,7 +407,10 @@ function isTranslatable(el: Element, plain: string): boolean {
 export async function annotateBlocks(sanitizedHtml: string): Promise<AnnotatedContent> {
   const doc = parseDocument(sanitizedHtml)
   unwrapAll(doc)
+  liftInlineWrappers(doc)
   normalizeTree(doc)
+  splitOnBreaks(doc)
+  dropBoundaries(doc)
   pruneEmpty(doc)
 
   const leaves: Element[] = []

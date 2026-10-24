@@ -1,6 +1,8 @@
 # 0005 — Sanitized HTML with tagged-text blocks and a content-addressed translation cache
 
-Status: accepted (2026-09-04)
+Status: accepted (2026-09-04). Amended by ADR 0053 (2026-10-23): a fix to which elements become
+leaves keeps `NORM_VERSION` when every tree without the fixed shape annotates byte-identically; a
+change to the placeholder grammar, the tagged-text serialization or the hash input still bumps it.
 
 ## Context
 
@@ -29,6 +31,7 @@ makes paragraphs that differ only by a link target collide.
 - Retranslation after an edit costs only the changed blocks; recurring footers cost once.
 - Two sentences with different link targets share one cache entry, which is correct: the target
   comes from the source block at render time.
-- Rule changes require a `NORM_VERSION` bump (snapshot tests enforce it) and invalidate the cache.
+- Rule changes require a `NORM_VERSION` bump (snapshot tests enforce it) and invalidate the cache
+  (narrowed by ADR 0053 to changes in what a tagged text means or how it is hashed).
 - Alternatives considered: storing structured JSON blocks (loses fidelity for tables, footnotes,
   embeds); translating whole HTML (unsafe, unstable); hashing plain text (link collisions).

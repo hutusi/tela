@@ -39,7 +39,9 @@ describe('processArticleHtml on real articles', () => {
         expect(b.id).toMatch(/^[0-9a-f]{10}(-\d+)?$/)
         expect(b.hash).toMatch(/^[0-9a-f]{64}$/)
       }
-      // The hashes are a contract: a change here means NORM_VERSION must be bumped.
+      // The hashes are a contract. A change here either changes what a tagged text means or how
+      // it is hashed, which bumps NORM_VERSION, or fixes which elements become leaves, which
+      // does not (ADR 0053): say which in the commit.
       expect(out.blocks.map((b) => [b.id, b.tag, b.chars, b.skip ?? false])).toMatchSnapshot()
       expect(out.contentHash).toMatchSnapshot()
     })
