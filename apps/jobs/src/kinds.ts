@@ -180,6 +180,8 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     ttlMs: TITLE_TTL_MS,
     limit: 100,
     backoff: { baseMs: 5 * MIN, maxMs: 6 * 60 * MIN, maxAttempts: 4 },
+    // The day's budgets are read as the due query runs (ADR 0057); the env value is only what a
+    // background budget of null falls back to.
     due: (now, ctx) => dueTitles(now, ctx.backgroundBudget ?? 0),
     run: translateTitlesJob,
     // The provider kept failing on this batch: record it failed so the sweep stops until the
@@ -194,7 +196,8 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     ttlMs: TRANSLATE_BODY_TTL_MS,
     limit: 20,
     backoff: { baseMs: MIN, maxMs: 30 * MIN, maxAttempts: 3 },
-    due: () => dueBodies(),
+    // A request put off to the next day waits for its `due_at` (ADR 0057).
+    due: (now) => dueBodies(now),
     run: translateBodyJob,
     // Also what retires a body whose every start died. The reservation goes back and what the
     // chunks spent is charged, before the flip that the settle's state filter reads.
@@ -205,8 +208,8 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
       return [
         settleBodyUsage(db, contentKey, lang, now),
         db.run(sql`
-          update body_translations set state = 'failed', reserved_tokens = 0, updated_at = ${now},
-            seq = ${currentSeq}
+          update body_translations set state = 'failed', reserved_tokens = 0, due_at = null,
+            updated_at = ${now}, seq = ${currentSeq}
           where content_key = ${contentKey} and lang = ${lang} and state in ('requested', 'running')
         `),
       ]

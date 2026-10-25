@@ -262,6 +262,10 @@
     "notTranslated": "Non traduit · {language}",
     "rateLimited": "Trop de demandes de traduction pour le moment. Réessayez d’ici un petit moment.",
     "budgetExhausted": "Vous avez épuisé votre quota de traduction du jour. Il se renouvelle demain.",
+    "budgetMember": "Vous avez fait traduire {n, plural, one {# nouvel article} other {# nouveaux articles}} aujourd’hui. Rouvrez celui-ci demain.",
+    "budgetSite": "La traduction fait une pause pour aujourd’hui. Rouvrez cet article demain.",
+    "waitingToday": "Tela traduira cet article après {time}.",
+    "waitingTomorrow": "Tela traduira cet article demain, après {time}.",
     "unavailable": "La traduction n’a pas pu démarrer. Réessayez.",
     "retry": "Relancer la traduction"
   },

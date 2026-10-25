@@ -105,6 +105,22 @@ describe('the health check', () => {
     ])
   })
 
+  test('a translation put off to the next day is stuck only half an hour after it fell due', async () => {
+    const { db, blobs } = await world()
+    // Asked for yesterday: one still waits, one fell due ten minutes ago, one forty.
+    await db.run(sql`insert into body_translations (content_key, lang, state, updated_at, due_at)
+      values ('k1', 'en', 'requested', ${NOW - 20 * HOUR}, ${NOW + HOUR}),
+        ('k2', 'en', 'requested', ${NOW - 20 * HOUR}, ${NOW - 10 * 60_000}),
+        ('k3', 'en', 'requested', ${NOW - 20 * HOUR}, ${NOW - 40 * 60_000})`)
+    const h = await health(db, blobs, NOW)
+    expect(h.checks.find((c) => c.name === 'stuckBodies')).toEqual({
+      name: 'stuckBodies',
+      value: 1,
+      limit: 0,
+      ok: false,
+    })
+  })
+
   test('counts only the dead letters nobody has resolved', async () => {
     const { db, blobs } = await world()
     await deadLetters(db, THRESHOLDS.deadLettersPerDay + 1, NOW - HOUR)

@@ -184,6 +184,12 @@ export type TranslationRow = {
   chunkKeys: string[]
   objectKey: string | null
   failedLeaves: string[]
+  /**
+   * A request put off to the next UTC day (ADR 0057) is not due before this instant: `requested`
+   * with a `dueAt` still ahead waits, and nothing polls it. Null once due or started; absent from
+   * a tela-api before it, and from a row a device stored before it.
+   */
+  dueAt?: number | null
   seq: number
 }
 

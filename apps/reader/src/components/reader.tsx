@@ -21,7 +21,10 @@ import { readerStyle, typographyOf } from '../lib/typography'
 import { useHighlights } from '../lib/use-highlights'
 import { BELOW_LG, useMediaQuery } from '../lib/use-media'
 import { useQuickPull } from '../lib/use-quick-pull'
-import { useArticleTranslation } from '../lib/use-translation'
+import {
+  type TranslationNotice as TranslationNoticeName,
+  useArticleTranslation,
+} from '../lib/use-translation'
 import { useNow, useStore, useTables } from '../store/hooks'
 import type { ContentObject } from '../store/objects'
 import {
@@ -429,7 +432,7 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
               className="mb-7 text-[13px] text-muted"
               data-testid={`translation-${translation.notice}`}
             >
-              <TranslationNotice notice={translation.notice} />
+              <TranslationNotice notice={translation.notice} perDay={translation.perDay} />
             </p>
           ) : null}
 
@@ -639,11 +642,20 @@ export function Reader({ article, readingLang, mode, onMode, onClose, next, list
   )
 }
 
+/**
+ * A refusal, in calm words: a day's limit is not an error (ADR 0057). The member's own count says
+ * how many a day allows; without that number it is said as the day's allowance.
+ */
 function TranslationNotice({
   notice,
+  perDay,
 }: {
-  notice: 'rateLimited' | 'budgetExhausted' | 'unavailable'
+  notice: TranslationNoticeName
+  perDay: number | null
 }) {
   const t = useTranslations('translation')
+  if (notice === 'budgetMember') {
+    return <>{perDay === null ? t('budgetExhausted') : t('budgetMember', { n: perDay })}</>
+  }
   return <>{t(notice)}</>
 }

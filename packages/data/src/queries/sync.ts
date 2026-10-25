@@ -114,7 +114,7 @@ const FOLLOW = sql`f.followee_id as "userId", p.handle, p.display_name as "displ
   ${sql.raw(avatarSql('p'))} as "avatar", f.created_at as "createdAt", f.deleted_at as "deletedAt", ${FOLLOW_SEQ} as seq`
 const TRANSLATION = sql.raw(`b.content_key as "contentKey", b.lang, b.state,
   b.chunk_keys as "chunkKeys", b.object_key as "objectKey", b.failed_leaves as "failedLeaves",
-  b.seq`)
+  b.due_at as "dueAt", b.seq`)
 
 function siteColumns(userId: string): SQL {
   return sql`s.id, s.home_url as "homeUrl", s.title, s.description, s.favicon_key as "faviconKey",

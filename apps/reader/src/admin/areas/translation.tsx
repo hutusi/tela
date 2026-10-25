@@ -1,7 +1,8 @@
 /**
  * The Translation ledger (ADR 0039, the design's `ovT`): what translation cost over the last 30
- * days, in tokens, by blog, by job and by model. Over the filters, the totals, the day's
- * background budget, the member cap, and the tokens of each day. Dollars and cache hits are not
+ * days, in tokens, by blog, by job and by model. Over the filters, the totals, the day's site
+ * and background budgets, the member limit, the translations waiting for tomorrow (ADR 0057), and
+ * the tokens of each day. Dollars and cache hits are not
  * shown: Tela records neither.
  */
 import type { AdminTranslationReport, AdminTranslationRow } from '@tela/shared/admin'
@@ -32,16 +33,27 @@ function Stat({ label, value, sub }: { label: string; value: string; sub: React.
   )
 }
 
-/** The background budget's day so far, against what tela-jobs last said the budget is. */
-function Background({ report }: { report: AdminTranslationReport }) {
+/**
+ * A day's tokens against a budget (ADR 0057): a bar while there is one, "No daily limit" for none
+ * (null), "Paused" for 0, and for a budget only tela-jobs knows, a word until its tick says it.
+ */
+function Budget({
+  label,
+  spent,
+  budget,
+  known = true,
+}: {
+  label: string
+  spent: number
+  budget: number | null
+  known?: boolean
+}) {
   const t = useTranslations('admin.running')
   const compact = useCompact()
-  const { used, reserved, budget } = report.background
-  const spent = used + reserved
   const share = budget ? Math.min(1, spent / budget) : 0
   return (
     <div className="flex min-w-0 flex-col gap-1 bg-paper px-[18px] py-3.5">
-      <span className="text-[12.5px] text-muted">{t('translation.background')}</span>
+      <span className="text-[12.5px] text-muted">{label}</span>
       <span className="font-serif text-[30px] leading-[1.1] text-ink tabular-nums">
         {budget
           ? t('translation.backgroundValue', { used: compact(spent), budget: compact(budget) })
@@ -57,7 +69,11 @@ function Background({ report }: { report: AdminTranslationReport }) {
         </span>
       ) : (
         <span className="text-[12.5px] text-ink-2">
-          {budget === 0 ? t('translation.unlimited') : t('translation.unknownBudget')}
+          {!known
+            ? t('translation.unknownBudget')
+            : budget === 0
+              ? t('translation.paused')
+              : t('translation.unlimited')}
         </span>
       )}
     </div>
@@ -115,15 +131,16 @@ function PerDay({ report }: { report: AdminTranslationReport }) {
   )
 }
 
-/** The month's tokens and calls, the day's budgets, and the tokens per day. */
+/** The month's tokens and calls, the day's budgets and limits, and the tokens per day. */
 export function TranslationReportView({ report }: { report: AdminTranslationReport }) {
   const t = useTranslations('admin.running')
   const compact = useCompact()
   const { inputTokens, outputTokens, calls } = report.totals
   const near = report.nearCap
+  const { background, site } = report
   return (
     <div className="mt-[22px]">
-      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-3">
         <Stat
           label={t('translation.tokens')}
           value={compact(inputTokens + outputTokens)}
@@ -141,11 +158,30 @@ export function TranslationReportView({ report }: { report: AdminTranslationRepo
               : t('translation.window')
           }
         />
-        <Background report={report} />
+        <Budget
+          label={t('translation.site')}
+          spent={site.used + site.reserved}
+          budget={site.budget}
+        />
+        <Budget
+          label={t('translation.background')}
+          spent={background.used + background.reserved}
+          budget={background.budget}
+          known={background.budgetKnown}
+        />
         <Stat
           label={t('translation.memberCap')}
-          value={t('translation.memberCapValue', { cap: compact(report.memberCap) })}
+          value={
+            report.memberCap === null
+              ? t('translation.memberUnlimited')
+              : t('translation.memberCapValue', { cap: report.memberCap })
+          }
           sub={t('translation.nearCap', { n: near })}
+        />
+        <Stat
+          label={t('translation.waiting')}
+          value={compact(report.waiting)}
+          sub={t('translation.waitingSub')}
         />
       </div>
       <PerDay report={report} />

@@ -3,6 +3,8 @@ import { useLocale, useTranslations } from 'use-intl'
 import type { ReadingMode } from '../lib/href'
 export type ReaderTranslationState =
   | 'none'
+  /** Asked for, and put off to the next UTC day (ADR 0057). */
+  | 'waiting'
   | 'requested'
   | 'running'
   | 'done'
@@ -15,6 +17,32 @@ export type TranslationView = {
   failedBlocks: number
   /** Something to show beside the original: the finished translation, or chunks still arriving. */
   available: boolean
+  /** When a waiting translation falls due; null unless `state` is `waiting`. */
+  dueAt?: number | null
+}
+
+const DAY_MS = 86_400_000
+
+/** The day `at` falls on where the member is, as a whole number of days. */
+const localDay = (at: number) => {
+  const d = new Date(at)
+  return Math.floor((at - d.getTimezoneOffset() * 60_000) / DAY_MS)
+}
+
+/**
+ * "Tela will translate this after 08:00", in the member's own time, and "tomorrow" when that is
+ * not today where they are: the next UTC midnight is 08:00 in Beijing and 01:00 in Paris.
+ */
+export function waitingLine(
+  t: (key: 'waitingToday' | 'waitingTomorrow', values: { time: string }) => string,
+  dueAt: number,
+  locale: string,
+  now: number = Date.now(),
+): string {
+  const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(
+    new Date(dueAt),
+  )
+  return t(localDay(dueAt) > localDay(now) ? 'waitingTomorrow' : 'waitingToday', { time })
 }
 
 const MODES: ReadingMode[] = ['side', 'trans', 'orig']
@@ -56,15 +84,17 @@ export function TranslationBar({
   const targetName = names[view.targetLang] ?? view.targetLang
   const ready = view.available
   const status =
-    view.state === 'done'
-      ? t('translatedBy', { target: targetName })
-      : view.state === 'partial'
-        ? t('partial', { target: targetName, n: view.failedBlocks })
-        : view.state === 'requested' || view.state === 'running'
-          ? t('translatingInto', { target: targetName })
-          : view.state === 'failed'
-            ? t('failed')
-            : null
+    view.state === 'waiting' && view.dueAt
+      ? waitingLine(t, view.dueAt, locale)
+      : view.state === 'done'
+        ? t('translatedBy', { target: targetName })
+        : view.state === 'partial'
+          ? t('partial', { target: targetName, n: view.failedBlocks })
+          : view.state === 'requested' || view.state === 'running'
+            ? t('translatingInto', { target: targetName })
+            : view.state === 'failed'
+              ? t('failed')
+              : null
   return (
     <div
       className="mb-7 flex flex-col gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2.5 text-[13px] lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-3.5 lg:px-3.5"

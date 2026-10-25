@@ -68,7 +68,19 @@ import {
   recountReaders,
 } from './queries/sites'
 import { readPull, readTitles } from './queries/sync'
-import { failDueTitles, settleBodyUsage, upsertArticleTitle, utcDay } from './queries/translation'
+import {
+  admitBodyTranslation,
+  bodyAllowance,
+  dueBodies,
+  dueTitles,
+  failDueTitles,
+  nextUtcMidnight,
+  readBodyAllowance,
+  settleBodyUsage,
+  takeOverBodyTranslation,
+  upsertArticleTitle,
+  utcDay,
+} from './queries/translation'
 import { feeds, sites } from './schema'
 import { bumpSeq, currentSeq, headSeq } from './seq'
 import { blockKey, seedBlockTranslations, writingMeanwhile } from './writes-meanwhile'
@@ -1951,6 +1963,228 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { subject: '*', day: utcDay(T0), reserved: 0, used: 300 },
         { subject: 'u1', day, reserved: 5000, used: 800 },
       ])
+    })
+  })
+
+  describe('translations that wait for their day (ADR 0057)', () => {
+    const D0 = utcDay(T0)
+    const D1 = utcDay(nextUtcMidnight(T0))
+    const MIDNIGHT = nextUtcMidnight(T0)
+
+    async function members(db: TelaDb, ...ids: string[]) {
+      for (const id of ids) {
+        await db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+          values (${id}, ${id}, ${`${id}@x.y`}, 1, 0, 0)`)
+        await db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+          values (${id}, ${`h_${id}`}, 0, 0)`)
+      }
+    }
+    const setting = (db: TelaDb, key: string, value: unknown) =>
+      db.run(sql`insert into settings (key, value, updated_at)
+        values (${key}, ${JSON.stringify(value)}, 0)
+        on conflict (key) do update set value = excluded.value`)
+    const ask = (userId: string, contentKey: string, reserve = 500, requestId = contentKey) => ({
+      contentKey,
+      lang: 'fr',
+      userId,
+      requestId: `${requestId}-${userId}`,
+      reserve,
+      now: T0,
+    })
+    const admit = async (db: TelaDb, a: ReturnType<typeof ask>) => {
+      const results = (await db.batch([
+        bumpSeq(db),
+        ...admitBodyTranslation(db, a),
+        readBodyAllowance(db, a.userId, T0),
+      ] as never)) as unknown as unknown[]
+      return bodyAllowance(results.at(-1), T0)
+    }
+    const row = (db: TelaDb, contentKey: string) =>
+      first<{ requested_by: string; reserved_day: string; due_at: number | null }>(
+        db,
+        sql`select requested_by, reserved_day, due_at from body_translations
+          where content_key = ${contentKey} and lang = 'fr'`,
+      )
+    const ledger = (db: TelaDb) =>
+      db.all(sql`select subject, day, reserved, requests from usage_daily order by subject, day`)
+
+    it("takes today while the member's count has room, then tomorrow, then nothing", async () => {
+      const db = await makeDb()
+      await members(db, 'u1')
+      await setting(db, 'member.translationsPerDay', 1)
+      expect((await admit(db, ask('u1', 'c1'))).usedToday).toBe(1)
+      expect(await row(db, 'c1')).toEqual({ requested_by: 'u1', reserved_day: D0, due_at: null })
+      // Today's one is taken: charged to tomorrow, due at the next UTC midnight.
+      const second = await admit(db, ask('u1', 'c2'))
+      expect([second.usedToday, second.usedTomorrow]).toEqual([1, 1])
+      expect(await row(db, 'c2')).toEqual({
+        requested_by: 'u1',
+        reserved_day: D1,
+        due_at: MIDNIGHT,
+      })
+      // Tomorrow's too: nothing is written, and the count says why.
+      const third = await admit(db, ask('u1', 'c3'))
+      expect(await row(db, 'c3')).toBe(undefined)
+      expect([third.perDay, third.usedTomorrow, third.exempt]).toEqual([1, 1, false])
+      // A conversion between the Chinese scripts is free: today, uncounted.
+      await admit(db, ask('u1', 'c4', 0))
+      expect(await row(db, 'c4')).toEqual({ requested_by: 'u1', reserved_day: D0, due_at: null })
+      expect(await ledger(db)).toEqual([
+        { subject: 'u1', day: D0, reserved: 500, requests: 1 },
+        { subject: 'u1', day: D1, reserved: 500, requests: 1 },
+      ])
+    })
+
+    it("puts off a request the site's tokens have no room for, but never an operator's", async () => {
+      const db = await makeDb()
+      await members(db, 'u1', 'op')
+      await db.run(sql`update profiles set is_admin = 1 where user_id = 'op'`)
+      await setting(db, 'translation.siteDailyTokens', 1000)
+      await setting(db, 'member.translationsPerDay', 1)
+      await db.run(sql`insert into usage_daily (subject, day, reserved, used)
+        values ('*', ${D0}, 0, 900)`)
+      await admit(db, ask('u1', 'c1', 200))
+      expect((await row(db, 'c1'))?.due_at).toBe(MIDNIGHT)
+      // The operator: today, past the member count and the site's tokens, and counted in both.
+      const op = await admit(db, ask('op', 'c2', 200))
+      await admit(db, ask('op', 'c3', 200))
+      expect((await row(db, 'c2'))?.reserved_day).toBe(D0)
+      expect((await row(db, 'c3'))?.due_at).toBe(null)
+      expect([op.exempt, op.perDay]).toEqual([true, null])
+      // A budget of 0 leaves room for nothing paid; null is no limit at all.
+      await setting(db, 'translation.siteDailyTokens', 0)
+      await admit(db, ask('u1', 'c4', 200))
+      expect(await row(db, 'c4')).toBe(undefined)
+      await setting(db, 'translation.siteDailyTokens', null)
+      await setting(db, 'member.translationsPerDay', null)
+      await admit(db, ask('u1', 'c5', 200))
+      expect((await row(db, 'c5'))?.due_at).toBe(null)
+    })
+
+    it('a request asked for again after it failed is put off like a new one', async () => {
+      const db = await makeDb()
+      await members(db, 'u1')
+      await setting(db, 'member.translationsPerDay', 1)
+      await db.run(sql`insert into body_translations (content_key, lang, state, updated_at)
+        values ('c0', 'fr', 'failed', 0)`)
+      await admit(db, ask('u1', 'c1'))
+      await admit(db, ask('u1', 'c0'))
+      expect(await row(db, 'c0')).toEqual({
+        requested_by: 'u1',
+        reserved_day: D1,
+        due_at: MIDNIGHT,
+      })
+    })
+
+    it('one member with room today takes a waiting request over, and only one of two racing', async () => {
+      const db = await makeDb()
+      await members(db, 'u1', 'u2', 'u3')
+      await setting(db, 'member.translationsPerDay', 1)
+      await admit(db, ask('u1', 'c0'))
+      await admit(db, ask('u1', 'c1'))
+      expect((await row(db, 'c1'))?.due_at).toBe(MIDNIGHT)
+      const old = {
+        requestId: 'c1-u1',
+        requestedBy: 'u1',
+        reservedDay: D1,
+        reservedTokens: 500,
+      }
+      // u2 and u3 both read the waiting row, and both ask to take it over.
+      for (const userId of ['u2', 'u3']) {
+        await db.batch([
+          bumpSeq(db),
+          ...takeOverBodyTranslation(db, ask(userId, 'c1', 500, 'take'), old),
+        ] as never)
+      }
+      expect(await row(db, 'c1')).toEqual({ requested_by: 'u2', reserved_day: D0, due_at: null })
+      expect(await ledger(db)).toEqual([
+        { subject: 'u1', day: D0, reserved: 500, requests: 1 },
+        { subject: 'u1', day: D1, reserved: 0, requests: 0 },
+        { subject: 'u2', day: D0, reserved: 500, requests: 1 },
+      ])
+    })
+
+    it('a member with no room today leaves a waiting request where it is', async () => {
+      const db = await makeDb()
+      await members(db, 'u1', 'u2')
+      await setting(db, 'member.translationsPerDay', 1)
+      await admit(db, ask('u1', 'c0'))
+      await admit(db, ask('u1', 'c1'))
+      await admit(db, ask('u2', 'c2'))
+      const old = { requestId: 'c1-u1', requestedBy: 'u1', reservedDay: D1, reservedTokens: 500 }
+      await db.batch([
+        bumpSeq(db),
+        ...takeOverBodyTranslation(db, ask('u2', 'c1', 500, 'take'), old),
+      ] as never)
+      expect(await row(db, 'c1')).toEqual({
+        requested_by: 'u1',
+        reserved_day: D1,
+        due_at: MIDNIGHT,
+      })
+    })
+
+    it('is due at its day, not before', async () => {
+      const db = await makeDb()
+      await members(db, 'u1')
+      await setting(db, 'member.translationsPerDay', 1)
+      await db.run(sql`insert into usage_daily (subject, day, requests) values ('u1', ${D0}, 1)`)
+      await admit(db, ask('u1', 'c1'))
+      const due = (now: number) => db.all(sql`select key from (${dueBodies(now)})`)
+      expect(await due(T0)).toEqual([])
+      expect(await due(MIDNIGHT)).toEqual([{ key: 'c1:fr' }])
+    })
+
+    it('gives the count back for a request that spent nothing, never below zero', async () => {
+      const db = await makeDb()
+      await members(db, 'u1')
+      await admit(db, ask('u1', 'c1'))
+      await admit(db, ask('u1', 'c2'))
+      await db.run(sql`update body_translations set used_tokens = 300 where content_key = 'c2'`)
+      await db.run(sql`insert into body_translations (content_key, lang, state, requested_by,
+          reserved_tokens, reserved_day, updated_at)
+        values ('c3', 'fr', 'running', 'u1', 500, ${D1}, 0)`)
+      const end = (contentKey: string) =>
+        db.batch([
+          settleBodyUsage(db, contentKey, 'fr', T0),
+          db.run(sql`update body_translations set state = 'done', reserved_tokens = 0
+            where content_key = ${contentKey}`),
+        ])
+      await end('c1')
+      await end('c2')
+      // Never counted on its day: given back from nothing, it stays at nothing.
+      await end('c3')
+      expect(
+        await db.all(sql`select day, reserved, used, requests from usage_daily order by day`),
+      ).toEqual([
+        { day: D0, reserved: 0, used: 300, requests: 1 },
+        { day: D1, reserved: 0, used: 0, requests: 0 },
+      ])
+    })
+
+    it("titles stop at the day's budgets: the site's, and the background's over the env", async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['blog.example'])
+      await db.run(sql`
+        insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at, title_hash)
+        values (1, 1, 'a', 'Old post', 1, 1, 'th-1'), (2, 1, 'b', 'New post', 2, 2, 'th-2')
+      `)
+      const due = (env: number) => db.all(sql`select key, ord from (${dueTitles(T0, env)})`)
+      // Newest first: the feed is ordered by its newest due post.
+      expect(await due(0)).toEqual([{ key: 1, ord: -2 }])
+      await db.run(sql`insert into usage_daily (subject, day, used) values ('*', ${D0}, 500),
+        ('u1', ${D0}, 400)`)
+      // No setting: the env budget, where 0 is no limit.
+      expect(await due(500)).toEqual([])
+      expect(await due(501)).toHaveLength(1)
+      // A stored budget wins over the env, and 0 pauses.
+      await setting(db, 'translation.backgroundDailyTokens', 0)
+      expect(await due(0)).toEqual([])
+      await setting(db, 'translation.backgroundDailyTokens', null)
+      // The site's day counts every subject: 900 of 900.
+      await setting(db, 'translation.siteDailyTokens', 900)
+      expect(await due(0)).toEqual([])
+      await setting(db, 'translation.siteDailyTokens', 901)
+      expect(await due(0)).toHaveLength(1)
     })
   })
 

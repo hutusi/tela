@@ -5,11 +5,17 @@
  */
 import { describe, expect, test } from 'bun:test'
 import type { UiLocale } from '@tela/shared'
-import type { AdminBlogrollRow, AdminList, AdminSiteRow } from '@tela/shared/admin'
+import type {
+  AdminBlogrollRow,
+  AdminList,
+  AdminSiteRow,
+  AdminTranslationReport,
+} from '@tela/shared/admin'
 import { renderToString } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
 import type { AnyAreaSpec } from '../src/admin/area'
 import { type DiscoverRow, useDiscoverArea } from '../src/admin/areas/discover'
+import { TranslationReportView } from '../src/admin/areas/translation'
 import { ActionPrompt } from '../src/admin/components/prompt'
 import { AdminContext } from '../src/admin/context'
 import { AdminI18n } from '../src/admin/i18n'
@@ -495,5 +501,46 @@ describe('the Overview', () => {
     expect(html).toContain('上周 35')
     expect(html).toContain('检查于 UTC 13:05')
     expect(html).toContain('已设为精选 · Nordvest')
+  })
+})
+
+describe('the Translation report (ADR 0057)', () => {
+  const report = (over: Partial<AdminTranslationReport> = {}): AdminTranslationReport => ({
+    days: [{ day: '2026-10-25', title: 1000, body: 2000 }],
+    totals: { inputTokens: 2000, outputTokens: 1000, calls: 3 },
+    unattributed: 0,
+    background: { day: '2026-10-25', used: 0, reserved: 0, budget: 0, budgetKnown: true },
+    site: { day: '2026-10-25', used: 3_000_000, reserved: 500_000, budget: 10_000_000 },
+    memberCap: 20,
+    nearCap: 2,
+    waiting: 7,
+    ...over,
+  })
+
+  test('the site against its budget, a paused background, the limit as a count, and the waiting', () => {
+    const html = render(<TranslationReportView report={report()} />, '/admin/translation')
+    expect(html).toContain('Site budget today')
+    expect(html).toContain('3.5M / 10M')
+    expect(html).toContain('Paused: the budget is 0')
+    expect(html).toContain('20 posts a day')
+    expect(html).toContain('2 reached it this week')
+    expect(html).toContain('Waiting for tomorrow')
+    expect(html).toMatch(/>7</)
+  })
+
+  test('no limit, and a budget only tela-jobs knows yet', () => {
+    const html = render(
+      <TranslationReportView
+        report={report({
+          memberCap: null,
+          site: { day: '2026-10-25', used: 0, reserved: 0, budget: null },
+          background: { day: '2026-10-25', used: 0, reserved: 0, budget: null, budgetKnown: false },
+        })}
+      />,
+      '/admin/translation',
+    )
+    expect(html).toContain('No limit')
+    expect(html).toContain('No daily limit')
+    expect(html).toContain('The budget shows once the next tick reports it')
   })
 })

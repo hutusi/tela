@@ -28,6 +28,7 @@ import {
 import {
   cachedTranslations,
   currentSeq,
+  first,
   type Lease,
   loadBodyTranslation,
   recordLlmCall,
@@ -139,6 +140,13 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
   if (!translator) return skip('no translator configured')
   const row = await loadBodyTranslation(db, contentKey, lang)
   if (!row || (row.state !== 'requested' && row.state !== 'running')) return skip('not requested')
+  // A request can wait a day (ADR 0057), and a post edited meanwhile points at new content: no
+  // article shows this one now, so nothing more is paid for it.
+  const shown = await first<{ x: number }>(
+    db,
+    sql`select 1 as x from articles where content_key = ${contentKey} limit 1`,
+  )
+  if (!shown) return settleFailed(ctx, lease, contentKey, lang, 'superseded')
   const stored = await ctx.blobs.get(objectKeys.content(contentKey))
   if (!stored) return settleFailed(ctx, lease, contentKey, lang, 'content object missing')
   const object = JSON.parse(await stored.text()) as ContentObject
@@ -309,7 +317,7 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
     await ctx.blobs.put(chunkKey, JSON.stringify(chunk), { contentType: 'application/json' })
     statements.push(
       db.run(sql`
-        update body_translations set state = 'running',
+        update body_translations set state = 'running', due_at = null,
           chunk_keys = json_insert(chunk_keys, '$[#]', ${chunkKey}),
           used_tokens = ${usedTokens}, updated_at = ${now}, seq = ${currentSeq}
         where content_key = ${contentKey} and lang = ${lang}
@@ -356,7 +364,7 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
     settleBodyUsage(db, contentKey, lang, now),
     db.run(sql`
       update body_translations set state = ${status}, object_key = ${finalKey},
-        failed_leaves = ${JSON.stringify([...failed])}, model = ${model},
+        failed_leaves = ${JSON.stringify([...failed])}, model = ${model}, due_at = null,
         used_tokens = ${usedTokens}, reserved_tokens = 0, updated_at = ${now}, seq = ${currentSeq}
       where content_key = ${contentKey} and lang = ${lang} and state in ('requested', 'running')
     `),
@@ -373,11 +381,12 @@ async function settleFailed(
 ): Promise<BodyResult> {
   const now = ctx.clock.now()
   const committed = await commit(ctx, lease, [
-    // Nothing was translated, but the reservation still goes back.
+    // Nothing more was translated, but the reservation still goes back, and the member's count
+    // too if nothing was spent at all.
     settleBodyUsage(ctx.db, contentKey, lang, now),
     ctx.db.run(sql`
       update body_translations set state = 'failed', failed_leaves = ${JSON.stringify([reason])},
-        reserved_tokens = 0, updated_at = ${now}, seq = ${currentSeq}
+        reserved_tokens = 0, due_at = null, updated_at = ${now}, seq = ${currentSeq}
       where content_key = ${contentKey} and lang = ${lang} and state in ('requested', 'running')
     `),
   ])

@@ -45,6 +45,8 @@ const TABLES = [
   'counters',
   'block_translations',
   'usage_daily',
+  // A setting one case stores would hold the next case to it.
+  'settings',
 ]
 
 async function freshDb(): Promise<TelaDb> {

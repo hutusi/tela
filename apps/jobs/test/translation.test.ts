@@ -240,6 +240,33 @@ describe('titles', () => {
     expect(calls).toHaveLength(0)
     expect(await db.all(sql`select 1 from article_titles`)).toHaveLength(0)
   })
+
+  test("stop once the site's day is spent, members' bodies included, and go on when it moves", async () => {
+    const ctx = context()
+    await ingest(ctx, feed(['Post one']))
+    await addReader()
+    await db.run(sql`insert into settings (key, value, updated_at)
+      values ('translation.siteDailyTokens', '1000', 0)`)
+    await db.run(
+      sql`insert into usage_daily (subject, day, used) values ('reader', ${utcDay(NOW)}, 1000)`,
+    )
+    await cycle(ctx)
+    expect(calls).toHaveLength(0)
+    // The operator raises it: the next tick translates, no deploy.
+    await db.run(sql`update settings set value = '5000' where key = 'translation.siteDailyTokens'`)
+    clock.advance(MIN)
+    await cycle(ctx)
+    expect(calls.map((c) => c.targetLang)).toEqual(['zh-Hans', 'fr'])
+  })
+
+  test("a stored background budget of 0 pauses titles, whatever the env's budget", async () => {
+    const ctx = context({ backgroundBudget: 2_000_000 })
+    await ingest(ctx, feed(['Post one']))
+    await db.run(sql`insert into settings (key, value, updated_at)
+      values ('translation.backgroundDailyTokens', '0', 0)`)
+    await cycle(ctx)
+    expect(calls).toHaveLength(0)
+  })
 })
 
 describe('titles, batched by feed', () => {
@@ -275,6 +302,18 @@ describe('titles, batched by feed', () => {
       sql`select target_lang from llm_calls where job = 'translate.title' order by id`,
     )
     expect(logged).toEqual([{ target_lang: 'zh-Hans' }, { target_lang: 'fr' }])
+  })
+
+  test("a job takes a feed's newest posts first, so an archive never holds up new titles", async () => {
+    const ctx = context()
+    await ingest(ctx, manyPosts(TITLES_PER_JOB + 5))
+    // Posts 1–5 are the archive: written long before the rest.
+    await db.run(sql`update articles set sort_at = sort_at - 365 * 86400000 where id <= 5`)
+    await cycle(ctx)
+    const titled = await db.all<{ id: number }>(
+      sql`select distinct article_id as id from article_titles order by article_id`,
+    )
+    expect(titled.map((r) => r.id)).toEqual(Array.from({ length: TITLES_PER_JOB }, (_, i) => i + 6))
   })
 
   test('a backlog larger than one job finishes over the next ticks', async () => {
@@ -343,10 +382,11 @@ describe('titles, batched by feed', () => {
    * need Simplified (Traditional rides on it), English and French; French ones Simplified and
    * English.
    */
+  /** Four posts, the newest (4, then 3) Japanese and French: a job takes the newest first. */
   async function twoSourceLanguages(ctx: PortableContext) {
     await ingest(ctx, manyPosts(4))
     await db.run(
-      sql`update articles set source_lang = case when id % 2 = 1 then 'ja' else 'fr' end`,
+      sql`update articles set source_lang = case when id % 2 = 0 then 'ja' else 'fr' end`,
     )
   }
 
@@ -607,6 +647,86 @@ describe('bodies', () => {
     expect(new Set(sent).size).toBe(sent.length)
     const chunks = JSON.parse(row!.chunk_keys) as string[]
     expect(new Set(chunks).size).toBe(chunks.length)
+  })
+})
+
+describe('a body translation that waits for its day (ADR 0057)', () => {
+  const MIDNIGHT = Date.UTC(2026, 8, 5)
+  const TOMORROW = utcDay(MIDNIGHT)
+
+  /** A request tela-api put off to tomorrow: charged and counted there, due at midnight. */
+  async function waiting(articleId: number, lang = 'zh-Hans', reserved = 20_000) {
+    const key = await request(articleId, lang, reserved)
+    await db.batch([
+      db.run(sql`update body_translations set reserved_day = ${TOMORROW}, due_at = ${MIDNIGHT}
+        where content_key = ${key} and lang = ${lang}`),
+      db.run(sql`delete from usage_daily where subject = 'reader'`),
+      db.run(sql`insert into usage_daily (subject, day, reserved, used, requests)
+        values ('reader', ${TOMORROW}, ${reserved}, 0, 1)`),
+    ])
+    return key
+  }
+  const day = (d: string) =>
+    first<{ reserved: number; used: number; requests: number }>(
+      db,
+      sql`select reserved, used, requests from usage_daily where subject = 'reader' and day = ${d}`,
+    )
+  const dueAt = (key: string, lang = 'zh-Hans') =>
+    first<{ due_at: number | null }>(
+      db,
+      sql`select due_at from body_translations where content_key = ${key} and lang = ${lang}`,
+    )
+
+  test('is left alone until midnight, then runs, and its first chunk says it started', async () => {
+    const ctx = context()
+    await addReader()
+    await ingest(ctx, feed(['A post'], 6))
+    await cycle(ctx) // titles
+    const key = await waiting(1)
+    calls.length = 0
+    await cycle(ctx)
+    expect(calls).toEqual([])
+    expect((await bodyRow(key))?.state).toBe('requested')
+    clock.set(MIDNIGHT + MIN)
+    await cycle(ctx)
+    const row = await bodyRow(key)
+    expect(row?.state).toBe('done')
+    expect(await dueAt(key)).toEqual({ due_at: null })
+    // Charged to the day it waited for, and counted there once.
+    expect(await day(TOMORROW)).toEqual({ reserved: 0, used: row!.used_tokens, requests: 1 })
+  })
+
+  test('whose post was edited meanwhile ends unpaid: no article shows that body any more', async () => {
+    const ctx = context()
+    await addReader()
+    await ingest(ctx, feed(['A post'], 6))
+    await cycle(ctx)
+    const key = await waiting(1)
+    await db.run(sql`update articles set content_key = 'edited' where id = 1`)
+    calls.length = 0
+    clock.set(MIDNIGHT + MIN)
+    await cycle(ctx)
+    expect(calls).toEqual([])
+    expect(await bodyRow(key)).toMatchObject({ state: 'failed', failed_leaves: '["superseded"]' })
+    // Nothing spent: the reservation and the count go back.
+    expect(await day(TOMORROW)).toEqual({ reserved: 0, used: 0, requests: 0 })
+  })
+
+  test('that cost nothing gives its count back', async () => {
+    // Simplified first, then Traditional: written as Simplified, every block already cached.
+    const ctx = context()
+    await addReader()
+    await ingest(ctx, feed(['A post'], 6))
+    await cycle(ctx)
+    await request(1, 'zh-Hans')
+    await cycle(ctx)
+    const key = await waiting(1, 'zh-Hant')
+    calls.length = 0
+    clock.set(MIDNIGHT + MIN)
+    await cycle(ctx)
+    expect(calls).toEqual([])
+    expect((await bodyRow(key, 'zh-Hant'))?.state).toBe('done')
+    expect(await day(TOMORROW)).toEqual({ reserved: 0, used: 0, requests: 0 })
   })
 })
 

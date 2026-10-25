@@ -131,7 +131,7 @@ export const REDUE: Record<LeaseKind, Redue> = {
   // request reserves on theirs, in the same batch and only if this request is the one written,
   // so a second retry sees the first's tokens taken; the job caps the post at the reservation and
   // the settle gives back what it did not spend. A new request id keeps the old run's chunk
-  // objects out of the new one's.
+  // objects out of the new one's. Due at once: a retry never waits for the next day (ADR 0057).
   'translate.body': {
     synced: true,
     statements: (db, key, now, { reserve = 0 }) => {
@@ -142,7 +142,8 @@ export const REDUE: Record<LeaseKind, Redue> = {
         db.run(sql`
           update body_translations set state = 'requested', request_id = ${requestId},
             requested_by = null, reserved_tokens = ${reserve}, reserved_day = ${day},
-            used_tokens = 0, chunk_keys = '[]', object_key = null, failed_leaves = '[]',
+            due_at = null, used_tokens = 0, chunk_keys = '[]', object_key = null,
+            failed_leaves = '[]',
             updated_at = ${now}, seq = ${currentSeq}
           where content_key = ${contentKey} and lang = ${lang} and state in ('failed', 'skipped')
         `),

@@ -1,11 +1,10 @@
 /**
  * The Translation area (ADR 0039): what translation cost over the last 30 days, in tokens, by
- * blog, by job and by model, and the day's budgets. A blog is charged through the call log's feed
+ * blog, by job and by model, and the day's budgets and limits (ADR 0057). A blog is charged through the call log's feed
  * (titles by their job's feed, bodies by the first article with their content); a title call
  * logged before the log named feeds, carrying several blogs' posts, is "unattributed".
  */
-import { BACKGROUND, type TelaDb, utcDay } from '@tela/data'
-import { MAX_ARTICLE_TRANSLATION_TOKENS, USER_DAILY_TRANSLATION_TOKENS } from '@tela/shared'
+import { BACKGROUND, settingSql, type TelaDb, utcDay } from '@tela/data'
 import {
   ADMIN_LIST_LIMIT,
   type AdminFilter,
@@ -155,9 +154,8 @@ async function translationReport(db: TelaDb, now: number): Promise<AdminTranslat
   const since = windowStart(now)
   const today = utcDay(now)
   const weekStart = utcDay(now - 6 * DAY)
-  // A member whose day has less than one article's worth left: the next article could be refused.
-  const nearCap = USER_DAILY_TRANSLATION_TOKENS - MAX_ARTICLE_TRANSLATION_TOKENS
-  const [days, totals, background, tick, near] = (await runBatch(db, [
+  const cap = settingSql('member.translationsPerDay')
+  const [days, totals, background, tick, near, site, settings, waiting] = (await runBatch(db, [
     // Days as whole UTC days since the epoch: integer division, no date functions.
     db.all(sql`
       select c.created_at / 86400000 as d,
@@ -179,12 +177,26 @@ async function translationReport(db: TelaDb, now: number): Promise<AdminTranslat
       select used, reserved from usage_daily where subject = ${BACKGROUND} and day = ${today}
     `),
     db.all(sql`select info from ops_heartbeats where name = 'tick'`),
+    // A member whose day reached the count (ADR 0057): their next request waited. Operators are
+    // exempt, so their count says nothing about the limit.
     db.all(sql`
       select count(distinct u.subject) as n from usage_daily u
       where u.subject <> ${BACKGROUND} and u.day >= ${weekStart}
-        and u.used + u.reserved > ${nearCap}
+        and u.requests >= ${cap}
+        and not exists (select 1 from profiles p where p.user_id = u.subject and p.is_admin = 1)
     `),
-  ])) as [Row[], Row[], Row[], Row[], Row[]]
+    db.all(sql`
+      select coalesce(sum(used), 0) as used, coalesce(sum(reserved), 0) as reserved
+      from usage_daily where day = ${today}
+    `),
+    db.all(sql`
+      select ${cap} as cap, ${settingSql('translation.siteDailyTokens')} as site,
+        ${settingSql('translation.backgroundDailyTokens')} as background
+    `),
+    db.all(sql`
+      select count(*) as n from body_translations where state = 'requested' and due_at > ${now}
+    `),
+  ])) as [Row[], Row[], Row[], Row[], Row[], Row[], Row[], Row[]]
   const byDay = new Map(days.map((r) => [Number(r.d), r]))
   const first = Math.floor(now / DAY) - (TRANSLATION_DAYS - 1)
   let info: Record<string, unknown> | undefined
@@ -193,6 +205,11 @@ async function translationReport(db: TelaDb, now: number): Promise<AdminTranslat
   } catch {}
   const config = configOf(info)
   const total = totals[0] ?? {}
+  const set = settings[0] ?? {}
+  const limit = (v: unknown) => (v === null || v === undefined ? null : Number(v))
+  // A stored background budget holds as it is; with none stored, the env value tela-jobs said.
+  const stored = limit(set.background)
+  const backgroundBudget = stored ?? (config ? config.backgroundBudget : null)
   return {
     days: Array.from({ length: TRANSLATION_DAYS }, (_, i) => {
       const row = byDay.get(first + i)
@@ -212,10 +229,18 @@ async function translationReport(db: TelaDb, now: number): Promise<AdminTranslat
       day: today,
       used: Number(background[0]?.used ?? 0),
       reserved: Number(background[0]?.reserved ?? 0),
-      budget: config ? config.backgroundBudget : null,
+      budget: backgroundBudget,
+      budgetKnown: stored !== null || config !== null,
     },
-    memberCap: USER_DAILY_TRANSLATION_TOKENS,
+    site: {
+      day: today,
+      used: Number(site[0]?.used ?? 0),
+      reserved: Number(site[0]?.reserved ?? 0),
+      budget: limit(set.site),
+    },
+    memberCap: limit(set.cap),
     nearCap: Number(near[0]?.n ?? 0),
+    waiting: Number(waiting[0]?.n ?? 0),
   }
 }
 

@@ -262,6 +262,10 @@
     "notTranslated": "Not translated · {language}",
     "rateLimited": "Too many translation requests for now. Please try again in a little while.",
     "budgetExhausted": "You have used today's translation allowance. It resets tomorrow.",
+    "budgetMember": "You've had {n, plural, one {# new post} other {# new posts}} translated today. Open this one again tomorrow.",
+    "budgetSite": "Translation is resting for today. Open this post again tomorrow.",
+    "waitingToday": "Tela will translate this after {time}.",
+    "waitingTomorrow": "Tela will translate this tomorrow, after {time}.",
     "unavailable": "The translation could not be started. Please try again.",
     "retry": "Try translating again"
   },

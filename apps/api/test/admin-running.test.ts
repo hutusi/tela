@@ -5,7 +5,6 @@
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { backUp, bumpSeq, currentSeq, first, heartbeat, LEASE_KINDS } from '@tela/data'
-import { USER_DAILY_TRANSLATION_TOKENS } from '@tela/shared'
 import {
   ADMIN_ACTIONS,
   type AdminCounts,
@@ -345,22 +344,40 @@ describe('Translation', () => {
     expect((await get('translation?f=nope')).status).toBe(400)
   })
 
-  test('the report: thirty days, the totals, the budgets and who came near the cap', async () => {
+  test('the report: thirty days, the totals, the budgets and who reached the limit', async () => {
     const today = new Date(now).toISOString().slice(0, 10)
     const yesterday = new Date(now - DAY).toISOString().slice(0, 10)
+    // The claimant reached the day's 20 yesterday; the operator went past it today, exempt.
     await api.db.run(sql`
-      insert into usage_daily (subject, day, reserved, used)
-      values ('*', ${today}, 1000, 3000),
-        (${claimant.userId}, ${yesterday}, 0, ${USER_DAILY_TRANSLATION_TOKENS - 1000}),
-        (${ops.userId}, ${today}, 0, 1000)
+      insert into usage_daily (subject, day, reserved, used, requests)
+      values ('*', ${today}, 1000, 3000, 0),
+        (${claimant.userId}, ${yesterday}, 0, 200000, 20),
+        (${ops.userId}, ${today}, 500, 1000, 25)
+    `)
+    // One body waits for tomorrow, one fell due and is starting.
+    await api.db.run(sql`
+      insert into body_translations (content_key, lang, state, requested_by, reserved_tokens,
+        reserved_day, due_at, updated_at)
+      values ('w1', 'fr', 'requested', ${claimant.userId}, 500, ${today}, ${now + HOUR}, 0),
+        ('w2', 'fr', 'requested', ${claimant.userId}, 500, ${today}, ${now - HOUR}, 0)
     `)
     const before = await get<AdminTranslationReport>('translation/report')
-    // No tick has reported its config yet.
-    expect(before.body.background).toEqual({ day: today, used: 3000, reserved: 1000, budget: null })
+    // No tick has reported its config yet, and no budget is stored: tela-jobs' is not known.
+    expect(before.body.background).toEqual({
+      day: today,
+      used: 3000,
+      reserved: 1000,
+      budget: null,
+      budgetKnown: false,
+    })
+    expect(before.body.site).toEqual({ day: today, used: 4000, reserved: 1500, budget: 10_000_000 })
+    expect(before.body.memberCap).toBe(20)
+    expect(before.body.waiting).toBe(1)
 
     await heartbeat(api.db, 'tick', now, {
       config: {
         backgroundBudget: 2_000_000,
+        siteBudget: 10_000_000,
         maxArticleTokens: 40_000,
         translator: true,
         relay: false,
@@ -376,10 +393,21 @@ describe('Translation', () => {
     expect(body.days[0]?.day).toBe(new Date(now - 29 * DAY).toISOString().slice(0, 10))
     expect(body.totals).toEqual({ inputTokens: 1750, outputTokens: 1260, calls: 5 })
     expect(body.unattributed).toBe(60)
-    expect(body.background.budget).toBe(2_000_000)
-    expect(body.memberCap).toBe(USER_DAILY_TRANSLATION_TOKENS)
-    // How many, never who: a member's tokens are what they read.
+    expect(body.background).toMatchObject({ budget: 2_000_000, budgetKnown: true })
+    // How many, never who: what a member reads is not the console's to show.
     expect(body.nearCap).toBe(1)
+
+    // A stored budget holds as it is, a pause included, whatever the last tick said; a member
+    // limit of none is none, and nobody reaches it.
+    await api.db.run(sql`
+      insert into settings (key, value, updated_at)
+      values ('translation.backgroundDailyTokens', '0', ${now}),
+        ('member.translationsPerDay', 'null', ${now})
+    `)
+    const set = (await get<AdminTranslationReport>('translation/report')).body
+    expect(set.background).toMatchObject({ budget: 0, budgetKnown: true })
+    expect(set.memberCap).toBe(null)
+    expect(set.nearCap).toBe(0)
   })
 })
 
@@ -443,6 +471,7 @@ describe('System', () => {
       'feed.fetch': 1,
       config: {
         backgroundBudget: 2_000_000,
+        siteBudget: 10_000_000,
         maxArticleTokens: 40_000,
         translator: true,
         relay: true,
@@ -467,6 +496,7 @@ describe('System', () => {
       digest: null,
       config: {
         backgroundBudget: 2_000_000,
+        siteBudget: 10_000_000,
         maxArticleTokens: 40_000,
         translator: true,
         relay: true,

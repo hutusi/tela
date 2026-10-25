@@ -262,6 +262,10 @@
     "notTranslated": "未翻譯 · {language}",
     "rateLimited": "翻譯請求過於頻繁，請稍後再試。",
     "budgetExhausted": "今日的翻譯額度已用完，明天會重設。",
+    "budgetMember": "今天已經為你翻譯了 {n} 篇新文章，明天再開啟這篇吧。",
+    "budgetSite": "今天的翻譯先歇一歇，明天再開啟這篇文章吧。",
+    "waitingToday": "Tela 會在 {time} 之後翻譯這篇文章。",
+    "waitingTomorrow": "Tela 會在明天 {time} 之後翻譯這篇文章。",
     "unavailable": "暫時無法開始翻譯，請重試。",
     "retry": "重新翻譯"
   },
