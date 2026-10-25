@@ -178,6 +178,11 @@ export const bodyTranslations = sqliteTable(
     usedTokens: integer().notNull().default(0),
     /** UTC day (YYYY-MM-DD) the reservation was charged to, so completion reconciles that day. */
     reservedDay: text(),
+    /**
+     * A request that waits (ADR 0057): its member's day, or the site's, had no room, so it was
+     * charged to the next day and is not due before this instant. Cleared when it starts.
+     */
+    dueAt: ms(),
     chunkKeys: text().notNull().default('[]'),
     objectKey: text(),
     failedLeaves: text().notNull().default('[]'),

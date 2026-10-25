@@ -675,3 +675,78 @@ describe('acting on dead work', () => {
     }
   })
 })
+
+describe('the Settings area (ADR 0056)', () => {
+  const setting = async (key: string, value: unknown) => {
+    const res = await api.request('/api/v1/admin/act', {
+      as: ops,
+      body: { action: 'setting.set', ids: [key], args: { value } },
+    })
+    expect(res.status).toBe(200)
+    return (await res.json()) as {
+      done: string[]
+      failed: { id: string; error: string }[]
+      undo: { group: string } | null
+    }
+  }
+  const rows = async () =>
+    (await get<{ settings: { key: string; value: unknown; stored: boolean }[] }>('settings')).body
+      .settings
+
+  test('lists every setting with its default, and sets one, audited and undoable', async () => {
+    const before = await rows()
+    expect(before.find((r) => r.key === 'signup.mode')).toMatchObject({
+      value: 'invite',
+      stored: false,
+    })
+    const set = await setting('signup.mode', 'open')
+    expect(set.done).toEqual(['signup.mode'])
+    expect((await rows()).find((r) => r.key === 'signup.mode')).toMatchObject({
+      value: 'open',
+      stored: true,
+    })
+    // The same value again is nothing to do.
+    expect((await setting('signup.mode', 'open')).failed).toEqual([
+      { id: 'signup.mode', error: 'not_applicable' },
+    ])
+    const undone = await api.request('/api/v1/admin/undo', { as: ops, body: set.undo })
+    expect(undone.status).toBe(200)
+    expect((await rows()).find((r) => r.key === 'signup.mode')).toMatchObject({
+      value: 'invite',
+      stored: false,
+    })
+  })
+
+  test('refuses a value its rule does not take, and a key that is not a setting', async () => {
+    expect((await setting('member.feedsPerDay', -3)).failed).toEqual([
+      { id: 'member.feedsPerDay', error: 'invalid' },
+    ])
+    expect((await setting('nope', 1)).failed).toEqual([{ id: 'nope', error: 'not_found' }])
+  })
+
+  test('an undo refuses once the setting moved on', async () => {
+    const first = await setting('member.maxSubscriptions', 500)
+    await setting('member.maxSubscriptions', 600)
+    const undone = await api.request('/api/v1/admin/undo', { as: ops, body: first.undo })
+    expect(undone.status).toBe(409)
+  })
+
+  test("the operator's CLI reads and sets them with the token", async () => {
+    const auth = { authorization: `Bearer ${ADMIN_TOKEN}` }
+    const set = await api.request('/api/admin/settings', {
+      body: { key: 'member.translationsPerDay', value: null },
+      headers: auth,
+    })
+    expect(await set.json()).toEqual({ key: 'member.translationsPerDay', changed: true })
+    const list = await api.request('/api/admin/settings', { method: 'GET', headers: auth })
+    const body = (await list.json()) as { settings: { key: string; value: unknown }[] }
+    expect(body.settings.find((r) => r.key === 'member.translationsPerDay')?.value).toBeNull()
+    const refused = await api.request('/api/admin/settings', {
+      body: { key: 'signup.mode', value: 'closed' },
+      headers: auth,
+    })
+    expect(refused.status).toBe(400)
+    const anon = await api.request('/api/admin/settings', { method: 'GET' })
+    expect(anon.status).toBe(403)
+  })
+})

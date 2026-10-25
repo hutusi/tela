@@ -85,6 +85,12 @@ export const ADMIN_ACTIONS = [
   'dead.dismiss',
   'lease.retryNow',
   'member.signOut',
+  'member.suspend',
+  'member.unsuspend',
+  'member.delete',
+  'report.resolve',
+  'report.dismiss',
+  'setting.set',
   'code.create',
   'code.addUses',
   'code.revoke',
@@ -120,6 +126,11 @@ export const UNDOABLE_ACTIONS = [
   'blogroll.hide',
   'blogroll.restore',
   'dead.dismiss',
+  'member.suspend',
+  'member.unsuspend',
+  'report.resolve',
+  'report.dismiss',
+  'setting.set',
   'code.revoke',
   'code.restore',
 ] as const satisfies readonly AdminActionName[]
@@ -161,6 +172,13 @@ export const ACTION_WRITES = {
   'dead.dismiss': 'resolution',
   'lease.retryNow': null,
   'member.signOut': null,
+  // A member's standing (ADR 0059): suspended or not; a deletion ends it for good.
+  'member.suspend': 'standing',
+  'member.unsuspend': 'standing',
+  'member.delete': 'standing',
+  'report.resolve': 'report',
+  'report.dismiss': 'report',
+  'setting.set': 'value',
   'code.create': 'code',
   'code.addUses': 'uses',
   'code.revoke': 'revoked',
@@ -206,6 +224,8 @@ export const ACTION_CONFIRM = [
   'claim.vouch',
   'claim.remove',
   'member.signOut',
+  'member.suspend',
+  'member.delete',
   'code.revoke',
   'hold.cancel',
 ] as const satisfies readonly AdminActionName[]
@@ -231,6 +251,8 @@ export type AdminActArgs = {
   code?: string
   /** `invite.address`. */
   email?: string
+  /** `setting.set`: the new value, checked by `parseSetting` for the key the request names. */
+  value?: unknown
 }
 
 export type AdminActRequest = {

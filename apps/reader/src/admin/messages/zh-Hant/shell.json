@@ -33,60 +33,218 @@
   },
   "actions": {
     "site": {
-      "feature": { "label": "設為精選", "short": "精選", "done": "已設為精選" },
-      "list": { "label": "列入發現", "short": "列入", "done": "已列入發現" },
-      "dismiss": { "label": "不列入發現", "short": "不列入", "done": "已標為不列入發現" },
-      "hide": { "label": "從發現中隱藏", "short": "隱藏", "done": "已隱藏" },
-      "restore": { "label": "恢復預設", "short": "恢復", "done": "已恢復預設" },
-      "topics": { "label": "話題", "short": "話題", "done": "話題已儲存" },
-      "translationOff": { "label": "暫停翻譯", "short": "暫停", "done": "翻譯已暫停" },
-      "translationOn": { "label": "恢復翻譯", "short": "恢復", "done": "翻譯已恢復" },
-      "fetchAll": { "label": "抓取全部訂閱源", "short": "抓取", "done": "已加入抓取佇列" }
+      "feature": {
+        "label": "設為精選",
+        "short": "精選",
+        "done": "已設為精選"
+      },
+      "list": {
+        "label": "列入發現",
+        "short": "列入",
+        "done": "已列入發現"
+      },
+      "dismiss": {
+        "label": "不列入發現",
+        "short": "不列入",
+        "done": "已標為不列入發現"
+      },
+      "hide": {
+        "label": "從發現中隱藏",
+        "short": "隱藏",
+        "done": "已隱藏"
+      },
+      "restore": {
+        "label": "恢復預設",
+        "short": "恢復",
+        "done": "已恢復預設"
+      },
+      "topics": {
+        "label": "話題",
+        "short": "話題",
+        "done": "話題已儲存"
+      },
+      "translationOff": {
+        "label": "暫停翻譯",
+        "short": "暫停",
+        "done": "翻譯已暫停"
+      },
+      "translationOn": {
+        "label": "恢復翻譯",
+        "short": "恢復",
+        "done": "翻譯已恢復"
+      },
+      "fetchAll": {
+        "label": "抓取全部訂閱源",
+        "short": "抓取",
+        "done": "已加入抓取佇列"
+      }
     },
     "claim": {
-      "recheck": { "label": "立即重新檢查", "short": "重新檢查", "done": "已加入檢查佇列" },
-      "vouch": { "label": "人工驗證", "short": "驗證", "done": "已擔保，正在檢查" },
-      "reject": { "label": "駁回", "short": "駁回", "done": "已駁回" },
-      "dismiss": { "label": "暫不處理", "short": "暫不處理", "done": "已移出佇列" },
-      "remove": { "label": "撤銷認領", "short": "撤銷", "done": "認領已撤銷" }
+      "recheck": {
+        "label": "立即重新檢查",
+        "short": "重新檢查",
+        "done": "已加入檢查佇列"
+      },
+      "vouch": {
+        "label": "人工驗證",
+        "short": "驗證",
+        "done": "已擔保，正在檢查"
+      },
+      "reject": {
+        "label": "駁回",
+        "short": "駁回",
+        "done": "已駁回"
+      },
+      "dismiss": {
+        "label": "暫不處理",
+        "short": "暫不處理",
+        "done": "已移出佇列"
+      },
+      "remove": {
+        "label": "撤銷認領",
+        "short": "撤銷",
+        "done": "認領已撤銷"
+      }
     },
     "feed": {
-      "fetch": { "label": "立即抓取", "short": "抓取", "done": "已加入抓取佇列" },
-      "pause": { "label": "暫停", "short": "暫停", "done": "已暫停" },
-      "resume": { "label": "恢復", "short": "恢復", "done": "已恢復" },
-      "revive": { "label": "重新啟用", "short": "啟用", "done": "已重新啟用，正在抓取" },
-      "relay": { "label": "透過中國中轉抓取", "short": "用中轉", "done": "改為透過中轉抓取" },
-      "global": { "label": "直接抓取", "short": "直連", "done": "改為直接抓取" }
+      "fetch": {
+        "label": "立即抓取",
+        "short": "抓取",
+        "done": "已加入抓取佇列"
+      },
+      "pause": {
+        "label": "暫停",
+        "short": "暫停",
+        "done": "已暫停"
+      },
+      "resume": {
+        "label": "恢復",
+        "short": "恢復",
+        "done": "已恢復"
+      },
+      "revive": {
+        "label": "重新啟用",
+        "short": "啟用",
+        "done": "已重新啟用，正在抓取"
+      },
+      "relay": {
+        "label": "透過中國中轉抓取",
+        "short": "用中轉",
+        "done": "改為透過中轉抓取"
+      },
+      "global": {
+        "label": "直接抓取",
+        "short": "直連",
+        "done": "改為直接抓取"
+      }
     },
     "blogroll": {
-      "hide": { "label": "從發現中隱藏", "short": "隱藏", "done": "已從發現中隱藏" },
-      "restore": { "label": "恢復到發現", "short": "恢復", "done": "已恢復" }
+      "hide": {
+        "label": "從發現中隱藏",
+        "short": "隱藏",
+        "done": "已從發現中隱藏"
+      },
+      "restore": {
+        "label": "恢復到發現",
+        "short": "恢復",
+        "done": "已恢復"
+      }
     },
     "dead": {
-      "retry": { "label": "立即重試", "short": "重試", "done": "已重新排隊" },
-      "dismiss": { "label": "忽略", "short": "忽略", "done": "已忽略" }
+      "retry": {
+        "label": "立即重試",
+        "short": "重試",
+        "done": "已重新排隊"
+      },
+      "dismiss": {
+        "label": "忽略",
+        "short": "忽略",
+        "done": "已忽略"
+      }
     },
     "lease": {
-      "retryNow": { "label": "立即重試", "short": "重試", "done": "一分鐘內重試" }
+      "retryNow": {
+        "label": "立即重試",
+        "short": "重試",
+        "done": "一分鐘內重試"
+      }
     },
     "member": {
       "signOut": {
         "label": "在所有裝置上登出",
         "short": "登出",
         "done": "五分鐘內將在所有裝置上登出"
+      },
+      "suspend": {
+        "label": "停用帳號",
+        "short": "停用",
+        "done": "已停用"
+      },
+      "unsuspend": {
+        "label": "恢復帳號",
+        "short": "恢復",
+        "done": "已恢復"
+      },
+      "delete": {
+        "label": "刪除帳號",
+        "short": "刪除",
+        "done": "帳號已刪除"
       }
     },
     "code": {
-      "create": { "label": "新建邀請碼", "short": "新建邀請碼", "done": "邀請碼已建立" },
-      "addUses": { "label": "增加名額", "short": "增加名額", "done": "名額已增加" },
-      "revoke": { "label": "作廢", "short": "作廢", "done": "已作廢" },
-      "restore": { "label": "恢復", "short": "恢復", "done": "已恢復" }
+      "create": {
+        "label": "新建邀請碼",
+        "short": "新建邀請碼",
+        "done": "邀請碼已建立"
+      },
+      "addUses": {
+        "label": "增加名額",
+        "short": "增加名額",
+        "done": "名額已增加"
+      },
+      "revoke": {
+        "label": "作廢",
+        "short": "作廢",
+        "done": "已作廢"
+      },
+      "restore": {
+        "label": "恢復",
+        "short": "恢復",
+        "done": "已恢復"
+      }
     },
     "hold": {
-      "cancel": { "label": "取消邀請", "short": "取消", "done": "已取消" }
+      "cancel": {
+        "label": "取消邀請",
+        "short": "取消",
+        "done": "已取消"
+      }
     },
     "invite": {
-      "address": { "label": "按電子郵件邀請", "short": "邀請", "done": "邀請已發出" }
+      "address": {
+        "label": "按電子郵件邀請",
+        "short": "邀請",
+        "done": "邀請已發出"
+      }
+    },
+    "report": {
+      "resolve": {
+        "label": "標為已處理",
+        "short": "處理",
+        "done": "已處理"
+      },
+      "dismiss": {
+        "label": "忽略",
+        "short": "忽略",
+        "done": "已忽略"
+      }
+    },
+    "setting": {
+      "set": {
+        "label": "修改",
+        "short": "修改",
+        "done": "已儲存"
+      }
     }
   },
   "confirm": {
@@ -95,7 +253,9 @@
       "remove": "確定撤銷這次認領嗎？部落格將沒有主人，只有讀者足夠多時才會列在發現裡。"
     },
     "member": {
-      "signOut": "確定讓這位成員在所有裝置上登出嗎？最多需要五分鐘。"
+      "signOut": "確定讓這位成員在所有裝置上登出嗎？最多需要五分鐘。",
+      "suspend": "停用這位成員？對方會被登出、無法再登入，個人主頁、推薦語和部落格列表都不再顯示。",
+      "delete": "刪除這個帳號？它的全部內容都會移除，使用者名稱永久保留不再分配。此操作無法撤銷。"
     },
     "code": {
       "revoke": "確定作廢這個邀請碼嗎？之後沒人能再用它加入；已經加入的人保留帳號。"
@@ -112,7 +272,9 @@
       "remove": "確定撤銷這 {n} 次認領嗎？這些部落格將沒有主人，只有讀者足夠多時才會列在發現裡。"
     },
     "member": {
-      "signOut": "確定讓這 {n} 位成員在所有裝置上登出嗎？最多需要五分鐘。"
+      "signOut": "確定讓這 {n} 位成員在所有裝置上登出嗎？最多需要五分鐘。",
+      "suspend": "停用這 {n} 位成員？他們會被登出、無法再登入，個人主頁、推薦語和部落格列表都不再顯示。",
+      "delete": "刪除這 {n} 個帳號？它們的全部內容都會移除，使用者名稱永久保留不再分配。此操作無法撤銷。"
     },
     "code": {
       "revoke": "確定作廢這 {n} 個邀請碼嗎？之後沒人能再用它們加入；已經加入的人保留帳號。"

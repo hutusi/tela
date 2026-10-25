@@ -33,12 +33,36 @@
   },
   "actions": {
     "site": {
-      "feature": { "label": "Feature", "short": "Feature", "done": "Featured" },
-      "list": { "label": "List in Discover", "short": "List", "done": "Listed" },
-      "dismiss": { "label": "Not for Discover", "short": "Decline", "done": "Not for Discover" },
-      "hide": { "label": "Hide from Discover", "short": "Hide", "done": "Hidden" },
-      "restore": { "label": "Restore", "short": "Restore", "done": "Restored" },
-      "topics": { "label": "Topics", "short": "Topics", "done": "Topics saved" },
+      "feature": {
+        "label": "Feature",
+        "short": "Feature",
+        "done": "Featured"
+      },
+      "list": {
+        "label": "List in Discover",
+        "short": "List",
+        "done": "Listed"
+      },
+      "dismiss": {
+        "label": "Not for Discover",
+        "short": "Decline",
+        "done": "Not for Discover"
+      },
+      "hide": {
+        "label": "Hide from Discover",
+        "short": "Hide",
+        "done": "Hidden"
+      },
+      "restore": {
+        "label": "Restore",
+        "short": "Restore",
+        "done": "Restored"
+      },
+      "topics": {
+        "label": "Topics",
+        "short": "Topics",
+        "done": "Topics saved"
+      },
       "translationOff": {
         "label": "Pause translation",
         "short": "Pause",
@@ -49,60 +73,178 @@
         "short": "Allow",
         "done": "Translation allowed"
       },
-      "fetchAll": { "label": "Fetch all feeds", "short": "Fetch", "done": "Fetch queued" }
+      "fetchAll": {
+        "label": "Fetch all feeds",
+        "short": "Fetch",
+        "done": "Fetch queued"
+      }
     },
     "claim": {
-      "recheck": { "label": "Re-check now", "short": "Re-check", "done": "Check queued" },
+      "recheck": {
+        "label": "Re-check now",
+        "short": "Re-check",
+        "done": "Check queued"
+      },
       "vouch": {
         "label": "Verify by hand",
         "short": "Verify",
         "done": "Vouched for; checking now"
       },
-      "reject": { "label": "Reject", "short": "Reject", "done": "Rejected" },
-      "dismiss": { "label": "Dismiss", "short": "Dismiss", "done": "Dismissed" },
-      "remove": { "label": "Remove claim", "short": "Remove", "done": "Claim removed" }
+      "reject": {
+        "label": "Reject",
+        "short": "Reject",
+        "done": "Rejected"
+      },
+      "dismiss": {
+        "label": "Dismiss",
+        "short": "Dismiss",
+        "done": "Dismissed"
+      },
+      "remove": {
+        "label": "Remove claim",
+        "short": "Remove",
+        "done": "Claim removed"
+      }
     },
     "feed": {
-      "fetch": { "label": "Fetch now", "short": "Fetch", "done": "Fetch queued" },
-      "pause": { "label": "Pause", "short": "Pause", "done": "Paused" },
-      "resume": { "label": "Resume", "short": "Resume", "done": "Resumed" },
-      "revive": { "label": "Revive", "short": "Revive", "done": "Revived; fetching now" },
+      "fetch": {
+        "label": "Fetch now",
+        "short": "Fetch",
+        "done": "Fetch queued"
+      },
+      "pause": {
+        "label": "Pause",
+        "short": "Pause",
+        "done": "Paused"
+      },
+      "resume": {
+        "label": "Resume",
+        "short": "Resume",
+        "done": "Resumed"
+      },
+      "revive": {
+        "label": "Revive",
+        "short": "Revive",
+        "done": "Revived; fetching now"
+      },
       "relay": {
         "label": "Fetch through the China relay",
         "short": "Use relay",
         "done": "Fetching through the relay"
       },
-      "global": { "label": "Fetch directly", "short": "Direct", "done": "Fetching directly" }
+      "global": {
+        "label": "Fetch directly",
+        "short": "Direct",
+        "done": "Fetching directly"
+      }
     },
     "blogroll": {
-      "hide": { "label": "Hide from Discover", "short": "Hide", "done": "Hidden from Discover" },
-      "restore": { "label": "Restore to Discover", "short": "Restore", "done": "Restored" }
+      "hide": {
+        "label": "Hide from Discover",
+        "short": "Hide",
+        "done": "Hidden from Discover"
+      },
+      "restore": {
+        "label": "Restore to Discover",
+        "short": "Restore",
+        "done": "Restored"
+      }
     },
     "dead": {
-      "retry": { "label": "Retry now", "short": "Retry", "done": "Queued again" },
-      "dismiss": { "label": "Dismiss", "short": "Dismiss", "done": "Dismissed" }
+      "retry": {
+        "label": "Retry now",
+        "short": "Retry",
+        "done": "Queued again"
+      },
+      "dismiss": {
+        "label": "Dismiss",
+        "short": "Dismiss",
+        "done": "Dismissed"
+      }
     },
     "lease": {
-      "retryNow": { "label": "Retry now", "short": "Retry", "done": "Retrying within a minute" }
+      "retryNow": {
+        "label": "Retry now",
+        "short": "Retry",
+        "done": "Retrying within a minute"
+      }
     },
     "member": {
       "signOut": {
         "label": "Sign out everywhere",
         "short": "Sign out",
         "done": "Signed out everywhere within five minutes"
+      },
+      "suspend": {
+        "label": "Suspend",
+        "short": "Suspend",
+        "done": "Suspended"
+      },
+      "unsuspend": {
+        "label": "Lift suspension",
+        "short": "Unsuspend",
+        "done": "Suspension lifted"
+      },
+      "delete": {
+        "label": "Delete account",
+        "short": "Delete",
+        "done": "Account deleted"
       }
     },
     "code": {
-      "create": { "label": "New code", "short": "New code", "done": "Code made" },
-      "addUses": { "label": "Add uses", "short": "Add uses", "done": "Uses added" },
-      "revoke": { "label": "Revoke", "short": "Revoke", "done": "Revoked" },
-      "restore": { "label": "Restore", "short": "Restore", "done": "Restored" }
+      "create": {
+        "label": "New code",
+        "short": "New code",
+        "done": "Code made"
+      },
+      "addUses": {
+        "label": "Add uses",
+        "short": "Add uses",
+        "done": "Uses added"
+      },
+      "revoke": {
+        "label": "Revoke",
+        "short": "Revoke",
+        "done": "Revoked"
+      },
+      "restore": {
+        "label": "Restore",
+        "short": "Restore",
+        "done": "Restored"
+      }
     },
     "hold": {
-      "cancel": { "label": "Cancel invitation", "short": "Cancel", "done": "Cancelled" }
+      "cancel": {
+        "label": "Cancel invitation",
+        "short": "Cancel",
+        "done": "Cancelled"
+      }
     },
     "invite": {
-      "address": { "label": "Invite by email", "short": "Invite", "done": "Invitation sent" }
+      "address": {
+        "label": "Invite by email",
+        "short": "Invite",
+        "done": "Invitation sent"
+      }
+    },
+    "report": {
+      "resolve": {
+        "label": "Mark resolved",
+        "short": "Resolve",
+        "done": "Resolved"
+      },
+      "dismiss": {
+        "label": "Dismiss",
+        "short": "Dismiss",
+        "done": "Dismissed"
+      }
+    },
+    "setting": {
+      "set": {
+        "label": "Change",
+        "short": "Change",
+        "done": "Saved"
+      }
     }
   },
   "confirm": {
@@ -111,7 +253,9 @@
       "remove": "Remove this claim? The blog will have no owner, and Discover lists it only if enough people read it."
     },
     "member": {
-      "signOut": "Sign this member out on every device? It takes up to five minutes everywhere."
+      "signOut": "Sign this member out on every device? It takes up to five minutes everywhere.",
+      "suspend": "Suspend this member? They are signed out, cannot sign in, and their profile, notes and blogrolls stop showing.",
+      "delete": "Delete this account? Everything it holds is removed and its handle is retired. This cannot be undone."
     },
     "code": {
       "revoke": "Revoke this code? Nobody else can join with it; whoever joined keeps their account."
@@ -128,7 +272,9 @@
       "remove": "Remove these {n} claims? Their blogs will have no owner, and Discover lists each only if enough people read it."
     },
     "member": {
-      "signOut": "Sign these {n} members out on every device? It takes up to five minutes everywhere."
+      "signOut": "Sign these {n} members out on every device? It takes up to five minutes everywhere.",
+      "suspend": "Suspend these {n} members? They are signed out, cannot sign in, and their profiles, notes and blogrolls stop showing.",
+      "delete": "Delete these {n} accounts? Everything they hold is removed and their handles are retired. This cannot be undone."
     },
     "code": {
       "revoke": "Revoke these {n} codes? Nobody else can join with them; whoever joined keeps their account."

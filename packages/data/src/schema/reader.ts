@@ -308,3 +308,24 @@ export const follows = sqliteTable(
     index('follows_followee_idx').on(t.followeeId, t.deletedAt),
   ],
 )
+
+/**
+ * Feeds an import named that were new to Tela beyond the member's day (ADR 0057): kept here and
+ * added on the days after, at most `member.feedsPerDay` a day, by `member.pendingFeeds`. Not
+ * synced; the member's usage answer says how many wait.
+ */
+export const pendingFeeds = sqliteTable(
+  'pending_feeds',
+  {
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    feedUrl: text().notNull(),
+    title: text(),
+    queuedAt: ms().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.feedUrl] }),
+    index('pending_feeds_queued_idx').on(t.queuedAt),
+  ],
+)

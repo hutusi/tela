@@ -157,3 +157,16 @@ export type AdminOverview = {
   }
   activity: (AdminHistoryEntry & { label: string | null })[]
 }
+
+/** One runtime setting as the console's Settings area shows it (ADR 0056). */
+export type AdminSettingRow = {
+  key: import('../settings').SettingKey
+  /** What holds now: the stored value, or the default. */
+  value: unknown
+  default: unknown
+  /** Whether a row overrides the default. */
+  stored: boolean
+  updatedAt: number | null
+}
+
+export type AdminSettings = { settings: AdminSettingRow[] }

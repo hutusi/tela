@@ -3,7 +3,7 @@
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
 import { audit, bumpSeq, currentSeq, first, newGroupId, readTitles, schema } from '@tela/data'
-import { isReadingLanguage } from '@tela/shared'
+import { isReadingLanguage, isSettingKey } from '@tela/shared'
 import {
   CLIENT_HEADER,
   MEMBER_HEADER,
@@ -22,6 +22,7 @@ import { fromOperator } from './operator'
 import { accountRoutes } from './routes/account'
 import { adminRoutes } from './routes/admin'
 import { runBatch } from './routes/admin/framework'
+import { applySetting, settingRows } from './routes/admin/running/settings'
 import { avatarRoutes } from './routes/avatars'
 import { blogrollRoutes } from './routes/blogrolls'
 import { claimRoutes } from './routes/claims'
@@ -279,6 +280,31 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
       `),
     ])
     return c.json({ userId: found.id, admin, changed: found.is_admin !== flag })
+  })
+
+  /**
+   * Runtime settings from the operator's CLI (`bun run admin settings|set`, ADR 0056): the same
+   * audited write the console's `setting.set` makes, with no member as its actor.
+   */
+  app.get('/api/admin/settings', async (c) => {
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
+    return c.json({ settings: await settingRows(deps.db) }, 200, { 'cache-control': 'no-store' })
+  })
+  app.post('/api/admin/settings', async (c) => {
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
+    const body = await c.req
+      .json<{ key?: unknown; value?: unknown }>()
+      .catch(() => ({}) as { key?: unknown; value?: unknown })
+    if (!isSettingKey(body.key) || !('value' in body)) return c.json({ error: 'invalid' }, 400)
+    const outcome = await applySetting(deps.db, {
+      key: body.key,
+      value: body.value,
+      actor: null,
+      group: newGroupId(),
+      now: deps.clock.now(),
+    })
+    if (outcome === 'invalid') return c.json({ error: 'invalid' }, 400)
+    return c.json({ key: body.key, changed: outcome === 'done' })
   })
 
   if (deps.config.testMode) {

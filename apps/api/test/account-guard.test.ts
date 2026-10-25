@@ -295,6 +295,7 @@ const MEMBER_ROUTES: MemberRoute[] = [
     effect: 'reads',
   },
   { route: 'GET /api/v1/admin/system', path: '/api/v1/admin/system?f=dead', effect: 'reads' },
+  { route: 'GET /api/v1/admin/settings', path: '/api/v1/admin/settings', effect: 'reads' },
   {
     route: 'GET /api/v1/admin/system/report',
     path: '/api/v1/admin/system/report',

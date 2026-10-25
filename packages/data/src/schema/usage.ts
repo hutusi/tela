@@ -41,6 +41,11 @@ export const usageDaily = sqliteTable(
     day: text().notNull(),
     reserved: integer().notNull().default(0),
     used: integer().notNull().default(0),
+    /**
+     * Body translations charged to the day (ADR 0057): what `member.translationsPerDay` counts.
+     * A request that turned out to cost nothing is given back when it settles.
+     */
+    requests: integer().notNull().default(0),
   },
-  (t) => [primaryKey({ columns: [t.subject, t.day] })],
+  (t) => [primaryKey({ columns: [t.subject, t.day] }), index('usage_daily_day_idx').on(t.day)],
 )

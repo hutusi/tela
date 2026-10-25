@@ -40,6 +40,11 @@ export const sites = sqliteTable(
     declaredFeedUrls: text().notNull().default('[]'),
     readerCount: integer().notNull().default(0),
     translationOptOut: flag(),
+    /**
+     * "Only use what my feed provides" (ADR 0061): its writer asked Tela never to fetch the blog's
+     * pages. Extraction and a favicon's home page are skipped; the feed is read as before.
+     */
+    feedOnly: flag(),
     assetsCheckedAt: ms(),
     /**
      * What an operator's review decided about the site for Discover (ADR 0041): `listed` (List,
@@ -130,6 +135,7 @@ export const feeds = sqliteTable(
     check('feeds_content_mode_check', oneOf(t.contentMode, CONTENT_MODES)),
     index('feeds_status_next_fetch_idx').on(t.status, t.nextFetchAt),
     index('feeds_site_idx').on(t.siteId),
+    index('feeds_added_by_created_idx').on(t.addedBy, t.createdAt),
   ],
 )
 
@@ -192,3 +198,16 @@ export const websubSubscriptions = sqliteTable(
   },
   (t) => [check('websub_subscriptions_status_check', oneOf(t.status, WEBSUB_STATUSES))],
 )
+
+/**
+ * A host's robots.txt, as Tela last read it (ADR 0061): page fetches (extraction, a favicon's
+ * home page) consult it; feed fetches do not, as in any feed reader. Keyed by origin, since many
+ * sites can share one. `status` is the HTTP status (0 when the fetch failed); `body` is capped.
+ * Rebuilt as fetches run, so the export does not keep it.
+ */
+export const robotsRules = sqliteTable('robots_rules', {
+  origin: text().primaryKey(),
+  status: integer().notNull(),
+  body: text().notNull().default(''),
+  fetchedAt: ms().notNull(),
+})

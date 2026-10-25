@@ -53,6 +53,13 @@ import {
 import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates, fileImportedFeeds, writeImportFiling } from './queries/reader'
 import {
+  readSettings,
+  restoreSetting,
+  setSetting,
+  settingChangedSince,
+  settingSql,
+} from './queries/settings'
+import {
   DISCOVER_REVIEW,
   ensureFeed,
   importFeedUrls,
@@ -1943,6 +1950,96 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { subject: '*', day: utcDay(T0), reserved: 0, used: 300 },
         { subject: 'u1', day, reserved: 5000, used: 800 },
       ])
+    })
+  })
+
+  describe('runtime settings (ADR 0056)', () => {
+    const value = (db: TelaDb, key: Parameters<typeof settingSql>[0]) =>
+      first<{ v: unknown }>(db, sql`select ${settingSql(key)} as v`)
+
+    it('reads the default until a row overrides it, a stored null included', async () => {
+      const db = await makeDb()
+      expect(await value(db, 'member.feedsPerDay')).toEqual({ v: 20 })
+      expect(await value(db, 'signup.mode')).toEqual({ v: 'invite' })
+      expect(await value(db, 'translation.backgroundDailyTokens')).toEqual({ v: null })
+      await db.batch([
+        ...setSetting(db, {
+          key: 'member.feedsPerDay',
+          value: null,
+          actor: null,
+          group: 'g1',
+          now: T0,
+        }),
+      ] as never)
+      // A stored null means no limit; it must not fall back to the default.
+      expect(await value(db, 'member.feedsPerDay')).toEqual({ v: null })
+      await db.batch([
+        ...setSetting(db, { key: 'signup.mode', value: 'open', actor: null, group: 'g2', now: T0 }),
+      ] as never)
+      expect(await value(db, 'signup.mode')).toEqual({ v: 'open' })
+      const all = await readSettings(db)
+      expect(all['member.feedsPerDay']).toBe(null)
+      expect(all['signup.mode']).toBe('open')
+      expect(all['member.maxSubscriptions']).toBe(300)
+    })
+
+    it('audits a change once, and an undo puts back the default by deleting the row', async () => {
+      const db = await makeDb()
+      const set = (v: number) =>
+        db.batch([
+          ...setSetting(db, {
+            key: 'member.translationsPerDay',
+            value: v,
+            actor: null,
+            group: `g${v}`,
+            now: T0,
+          }),
+        ] as never) as unknown as Promise<unknown[][]>
+      const first5 = await set(5)
+      expect(first5[1]).toEqual([{ key: 'member.translationsPerDay' }])
+      // The same value again changes nothing and logs nothing.
+      const again = await set(5)
+      expect(again[1]).toEqual([])
+      await set(7)
+      const log = await db.all<{ group_id: string; detail: string }>(
+        sql`select group_id, detail from admin_actions where action = 'setting.set' order by id`,
+      )
+      expect(log.map((r) => [r.group_id, JSON.parse(r.detail)])).toEqual([
+        ['g5', { from: { value: null, stored: 0 }, to: { value: 5, stored: true } }],
+        ['g7', { from: { value: 5, stored: 1 }, to: { value: 7, stored: true } }],
+      ])
+      // Undo the 7: still holding it, so not changed since; the 5 comes back.
+      expect(
+        await first(db, sql`select ${settingChangedSince('member.translationsPerDay', 7)} as c`),
+      ).toEqual({ c: 0 })
+      await db.batch([
+        restoreSetting(db, {
+          key: 'member.translationsPerDay',
+          from: { value: 5, stored: true },
+          now: T0,
+        }),
+      ] as never)
+      expect(await value(db, 'member.translationsPerDay')).toEqual({ v: 5 })
+      // Undo the 5: nothing was stored before it, so the row goes and the default holds.
+      await db.batch([
+        restoreSetting(db, {
+          key: 'member.translationsPerDay',
+          from: { value: null, stored: false },
+          now: T0,
+        }),
+      ] as never)
+      expect(await value(db, 'member.translationsPerDay')).toEqual({ v: 20 })
+      expect(await db.all(sql`select key from settings`)).toEqual([])
+    })
+
+    it('reads a stored value that no longer parses as the default', async () => {
+      const db = await makeDb()
+      await db.batch([
+        db.run(
+          sql`insert into settings (key, value, updated_at) values ('signup.mode', '"closed"', 0), ('nope', '1', 0)`,
+        ),
+      ] as never)
+      expect((await readSettings(db))['signup.mode']).toBe('invite')
     })
   })
 
