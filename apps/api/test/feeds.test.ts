@@ -133,11 +133,14 @@ describe('adding a feed', () => {
     expect(await count('subscriptions')).toBe(2)
   })
 
-  test('an unreachable host finds no feed, and writes nothing', async () => {
-    // Discovery treats a candidate it cannot fetch as not a feed.
+  test('an address that never answers is said to be unreachable, and writes nothing', async () => {
+    // Not that it has no feed: the add and claim pages then say they could not reach it.
+    const found = await post('/api/v1/feeds/discover', { url: 'http://127.0.0.1:9/' })
+    expect(found.status).toBe(422)
+    expect(await found.json()).toEqual({ error: 'unreachable' })
     const res = await post('/api/v1/feeds', { feedUrl: 'http://127.0.0.1:9/feed.xml' })
     expect(res.status).toBe(422)
-    expect(await res.json()).toEqual({ error: 'not_a_feed' })
+    expect(await res.json()).toEqual({ error: 'unreachable' })
     expect(await count('feeds')).toBe(0)
   })
 })

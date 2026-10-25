@@ -16,8 +16,9 @@ everything so far sits under `[Unreleased]`.
   is 6.6 MB), and a feed's posts are stored as each is made rather than held all at once. A page
   that names no feed sends discovery on to one more: where its refresh tag points (byvoid.com's
   home, a Hugo language redirect), or else the blog's home (paulgraham.com/articles.html). A feed
-  still too large to read is named as such instead of "no feed found", and a WordPress blog's
-  comments feed is no longer offered beside its posts.
+  still too large to read is named as such instead of "no feed found", a site that never answers
+  is said to be unreachable (after one try, not fifteen), and a WordPress blog's comments feed is
+  no longer offered beside its posts.
 - **Stored posts follow fixes to how bodies are processed.** Every version records the pipeline it
   was made under, and a background job makes each post's body again from the HTML it was stored
   with whenever that changes: a fix now reaches posts a feed no longer lists and pages that are

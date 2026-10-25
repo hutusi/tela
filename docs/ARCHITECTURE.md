@@ -88,7 +88,8 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
    feed-looking anchors; when the page declares none, those of one more page (where its meta
    refresh sends, else the blog's home); then well-known paths on the typed page's origin, and on
    the second page's when it answered from another. A WordPress comments feed is offered only when
-   the blog has no other.
+   the blog has no other. An address that never answers (a timeout, a refused connection, a private
+   address) ends discovery at once as `unreachable`, not as a blog without a feed.
 2. Parsing (`parseFeedText`) with `feedsmith`: RSS, Atom, RDF, JSON Feed → `ParsedFeed` with
    `summaryHtml` and `contentHtml` per item.
 3. Sanitize (`sanitizeArticleHtml`) with an allowlist; links and images absolutized; lazy-load

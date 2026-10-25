@@ -7,7 +7,7 @@ import {
   parseFeedText,
 } from '@tela/content'
 import type { FeedFormat } from '@tela/shared'
-import { type HttpClient, HttpError, type HttpResponse } from './http'
+import { type HttpClient, HttpError, type HttpErrorKind, type HttpResponse } from './http'
 import { FEED_MAX_BYTES } from './items'
 
 export type DiscoveredFeed = {
@@ -41,7 +41,13 @@ function feedCutOff(err: HttpError): boolean {
   return looksLikeFeed(head) || (/^\s*\{/.test(head) && head.includes('jsonfeed.org/version/'))
 }
 
-/** The feed at `url`, if it is one; `too_large` for a feed past `FEED_MAX_BYTES`. */
+/** Failures that say the address never answered at all, as against what it answered. */
+const UNANSWERED: ReadonlySet<HttpErrorKind> = new Set(['timeout', 'network', 'blocked'])
+
+/**
+ * The feed at `url`, if it is one; `too_large` for a feed past `FEED_MAX_BYTES`. Throws the
+ * HttpError when the address never answered (`UNANSWERED`).
+ */
 async function tryFeed(
   http: HttpClient,
   url: string,
@@ -50,8 +56,8 @@ async function tryFeed(
   try {
     res = await http.get(url, { maxBytes: FEED_MAX_BYTES })
   } catch (err) {
-    if (err instanceof HttpError) return feedCutOff(err) ? 'too_large' : null
-    throw err
+    if (!(err instanceof HttpError) || UNANSWERED.has(err.kind)) throw err
+    return feedCutOff(err) ? 'too_large' : null
   }
   if (res.status !== 200 || !res.body || !looksLikeFeed(res.body)) return null
   try {
@@ -96,7 +102,9 @@ function secondPage(page: HttpResponse | null, url: string): string | null {
  * one more page: `secondPage`), then well-known paths on the origin of each; a WordPress comments
  * feed only when nothing else was found. Every returned feed has been fetched and parsed. Throws a
  * `too_large` HttpError when nothing was found but a candidate was too large to read, so the member
- * is told that rather than that the blog has no feed.
+ * is told that rather than that the blog has no feed. Throws at once when the address typed never
+ * answers: rachelbythebay.com drops Cloudflare's connections, and fourteen more addresses on the
+ * same host, 20 seconds each, ended in "No feed found" instead of that it could not be reached.
  */
 export async function discoverFeeds(
   http: HttpClient,
@@ -106,7 +114,7 @@ export async function discoverFeeds(
   const maxCandidates = options.maxCandidates ?? 5
   const url = withScheme(input)
   let tooLarge: string | null = null
-  const direct = await tryFeed(http, url)
+  const direct = await tryFeed(http, url) // throws when the address never answers
   if (direct === 'too_large') tooLarge = url
   else if (direct) return [direct]
 
@@ -116,7 +124,10 @@ export async function discoverFeeds(
   const consider = async (candidate: string) => {
     if (seen.has(candidate) || found.length >= maxCandidates) return
     seen.add(candidate)
-    const feed = await tryFeed(http, candidate)
+    const feed = await tryFeed(http, candidate).catch((err) => {
+      if (err instanceof HttpError) return null
+      throw err
+    })
     if (feed === 'too_large') tooLarge ??= candidate
     else if (feed && !found.some((f) => f.url === feed.url)) found.push(feed)
   }

@@ -243,6 +243,23 @@ describe('discoverFeeds', () => {
     }
   })
 
+  // rachelbythebay.com drops Cloudflare's connections. Every request timed out, fourteen more were
+  // tried on the same host, and the member read "No feed found" instead of that it was unreachable.
+  test('an address that never answers is unreachable, not a blog without a feed', async () => {
+    const closed = await FixtureServer.start()
+    const gone = closed.url('/')
+    await closed.stop()
+    await expect(discoverFeeds(http, gone)).rejects.toMatchObject({ kind: 'network' })
+    server.set('/silent', () => {}) // accepts the connection, never answers
+    await expect(discoverFeeds(http, server.url('/silent'))).rejects.toMatchObject({
+      kind: 'timeout',
+    })
+    // Nothing else on a host that does not answer is asked.
+    expect(server.requestsFor('/silent')).toHaveLength(1)
+    expect(server.requestsFor('/')).toHaveLength(0)
+    expect(server.requestsFor('/feed')).toHaveLength(0)
+  })
+
   test('returns nothing for sites without feeds', async () => {
     server.set('/nothing', (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/html' })
