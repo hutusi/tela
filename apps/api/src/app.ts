@@ -10,6 +10,7 @@ import {
   isBarred,
   newGroupId,
   readTitles,
+  reapplyClosures,
   schema,
 } from '@tela/data'
 import { isReadingLanguage, isSettingKey } from '@tela/shared'
@@ -330,6 +331,17 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     })
     if (outcome === 'invalid') return c.json({ error: 'invalid' }, 400)
     return c.json({ key: body.key, changed: outcome === 'done' })
+  })
+
+  /**
+   * Close again every account closed since a restore's backup (`bun run admin closures`, ADR
+   * 0058): a Time Travel rollback or a restored export brings closed accounts back with it, and
+   * `closures/<id>` in R2 says which. Idempotent; run it before the restored database serves
+   * anyone.
+   */
+  app.post('/api/admin/closures', async (c) => {
+    if (!fromOperator(c, deps.config.adminToken)) return c.json({ error: 'forbidden' }, 403)
+    return c.json(await reapplyClosures(deps.db, deps.blobs, deps.clock.now()))
   })
 
   if (deps.config.testMode) {

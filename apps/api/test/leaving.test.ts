@@ -387,6 +387,16 @@ describe('deleting an account', () => {
       closed: 0,
     })
   })
+
+  test("the operator's `bun run admin closures` re-applies them on the live database", async () => {
+    expect((await deleteAccount(ada, SECRETS.email)).status).toBe(200)
+    const reapply = (headers: Record<string, string>) =>
+      api.request('/api/admin/closures', { body: {}, headers })
+    expect((await reapply({})).status).toBe(403)
+    const res = await reapply({ authorization: `Bearer ${ADMIN_TOKEN}` })
+    // Closed already, so nothing closes again; after a rollback the same call closes it.
+    expect(await res.json()).toEqual({ closures: 1, closed: 0 })
+  })
 })
 
 describe('an account out of good standing', () => {
