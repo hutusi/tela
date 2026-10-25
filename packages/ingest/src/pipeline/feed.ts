@@ -627,7 +627,7 @@ export async function ingestFeed(ctx: IngestContext, lease: Lease): Promise<Inge
   if (planned.versions.length > 0)
     statements.push(insertVersions(db, feed.id, planned.versions, now))
   // After the versions: an article moves only onto a row that holds its new content (`pointAt`).
-  if (planned.changes.length > 0) statements.push(...updateArticles(db, planned.changes))
+  if (planned.changes.length > 0) statements.push(updateArticles(db, planned.changes))
   statements.push(...adopted.statements)
   statements.push(
     fillSiteMetadata(

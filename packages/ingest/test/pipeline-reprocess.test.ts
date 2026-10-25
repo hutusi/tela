@@ -369,11 +369,18 @@ describe('reprocessArticleJob', () => {
   })
 
   /** A feed of one post, as the fixture serves it now. */
-  const onePost = (body: string, title: string, date = 'Thu, 01 Oct 2026 08:00:00 GMT') =>
+  const onePost = (body: string, title: string, more: { date?: string; link?: string } = {}) =>
     rss({
       link: server.url('/'),
       items: [
-        { guid: 'p1', link: server.url('/posts/1'), title, description: 'x', content: body, date },
+        {
+          guid: 'p1',
+          link: more.link ?? server.url('/posts/1'),
+          title,
+          description: 'x',
+          content: body,
+          date: more.date ?? 'Thu, 01 Oct 2026 08:00:00 GMT',
+        },
       ],
     })
 
@@ -396,8 +403,8 @@ describe('reprocessArticleJob', () => {
   }
 
   /** The post fetched once, then stored as if by an older pipeline: due for a reprocess. */
-  const fetchedThenAged = async () => {
-    server.text('/feed.xml', onePost(longHtml(4), 'Post 1'))
+  const fetchedThenAged = async (body = longHtml(4)) => {
+    server.text('/feed.xml', onePost(body, 'Post 1'))
     const { feedId } = await registerFeed(db, {
       feedUrl: server.url('/feed.xml'),
       now: clock.now(),
@@ -459,7 +466,7 @@ describe('reprocessArticleJob', () => {
     // fetch would find that body already stored and skip the item (Codex's third review).
     server.text(
       '/feed.xml',
-      onePost(longHtml(4), 'Post 1, edited', 'Fri, 02 Oct 2026 08:00:00 GMT'),
+      onePost(longHtml(4), 'Post 1, edited', { date: 'Fri, 02 Oct 2026 08:00:00 GMT' }),
     )
     clock.advance(2 * 60 * MIN)
     await ingestFeed(
@@ -491,6 +498,33 @@ describe('reprocessArticleJob', () => {
     )
     expect(feed?.last_body_hash).not.toBeNull()
     expect(feed?.next_fetch_at).toBeGreaterThan(clock.now())
+  })
+
+  test("a feed's corrected link asks for its page again when a reprocess made the same body first", async () => {
+    // A summary whose page was not found at the link the feed first gave.
+    const summary = '<p>A short summary of the post, with no links in it.</p>'
+    const feedId = await fetchedThenAged(summary)
+    await db.run(sql`update articles set extract_state = 'failed' where id = 1`)
+    // The feed corrects the link, and the reprocess makes the same body first (Codex's fourth
+    // review): the page at the new link is wanted, as it is when nothing races.
+    const fixed = server.url('/posts/1-fixed')
+    server.text('/feed.xml', onePost(summary, 'Post 1', { link: fixed }))
+    clock.advance(2 * 60 * MIN)
+    await ingestFeed(
+      { ...ctx(), blobs: racingPut(reprocessNow) },
+      await claim('feed.fetch', feedId),
+    )
+    expect(
+      await first<{ url: string; current_version: number; extract_state: string }>(
+        db,
+        sql`select url, current_version, extract_state from articles where id = 1`,
+      ),
+    ).toEqual({ url: fixed, current_version: 2, extract_state: 'due' })
+    expect(await version(1, 2)).toMatchObject({
+      provenance: 'feed',
+      pipeline_version: PIPELINE_VERSION,
+    })
+    expect(await consistent()).toBe(true)
   })
 
   test('a body that comes out the same keeps the language its object says', async () => {
