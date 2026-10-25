@@ -4,7 +4,8 @@
  */
 import type { InfoContent } from './types'
 
-const CONTACT = '[hutusi.com/about](https://hutusi.com/about) (in Chinese)'
+/** The one address for anything, private or not. Plain text: the pages link https only. */
+const CONTACT = 'me@hutu.si'
 const ISSUES = 'https://github.com/hutusi/tela/issues'
 
 export const en = {
@@ -93,7 +94,7 @@ export const en = {
         heading: 'Say hello',
         blocks: [
           {
-            p: `Questions, ideas, a bug, or a blog Tela should know about? Open an issue at [github.com/hutusi/tela](${ISSUES}), or get in touch through ${CONTACT}. Issues are public, so for anything private, use hutusi.com/about.`,
+            p: `Questions, ideas, a bug, or a blog Tela should know about? Write to ${CONTACT}, or open an issue at [github.com/hutusi/tela](${ISSUES}). Issues are public, so for anything private, use email.`,
           },
         ],
       },
@@ -105,8 +106,8 @@ export const en = {
     short: [
       'Tela keeps what it needs to run your reading list, and nothing for advertising.',
       "We don't sell your data, show ads or use analytics.",
-      'What you read, like and highlight stays private unless you choose to show it. Your profile, your recommendations, the blogrolls you make public and the blogs you claim are public.',
-      'You can export your subscriptions, with their folders, as OPML, and download your profile, settings, subscriptions, likes, recommendations, highlights, blogrolls and follows as one file, whenever you like.',
+      'What you read, like and highlight stays private unless you choose to show it. Your profile, your recommendations, the blogrolls you make public and the blogs you claim are public, and search engines can find them.',
+      'You can take your subscriptions and your data with you whenever you like, and delete your account in Settings → Account.',
     ],
     sections: {
       collect: {
@@ -119,24 +120,30 @@ export const en = {
               'Your handle, and if you add them, a display name, a bio and a picture.',
               'If you set a password, only a hash of it, never the password itself.',
               'If you sign in with Google or GitHub, which account there is yours. We keep no tokens from them, and not the name or picture they send.',
-              'How you joined: the invite code you used, and so who invited you. If you hand out codes, the codes you made and who joined with them.',
-              "If you start to join and don't finish, your email address is held against the code for a day.",
+              'If you joined with an invite code, that code, and so who invited you. If you hand out codes, the codes you made and who joined with them.',
+              "If you start to join with a code and don't finish, your email address is held against the code for a day.",
             ],
           },
           { h: 'Your reading' },
           {
             list: [
-              'The blogs you subscribe to, the folders you put them in, and the feeds you add.',
+              'The blogs you subscribe to, the folders you put them in, the feeds you add, and any an import is still adding.',
               "Which posts you've read, liked and recommended, and the notes on your recommendations.",
               'Your highlights and the notes on them.',
               'The people you follow.',
               'Your blogrolls: their names and descriptions, the blogs in them, your notes on those blogs, and whether each is public.',
               'Your settings: languages, theme, text size and the like.',
-              'The translations you ask for and what each cost, to keep everyone within a daily allowance.',
+              'The translations you ask for and what each cost, and how many blogs new to Tela you add each day, to keep everyone within the [daily limits](/terms#limits).',
             ],
           },
           { h: 'Blogs you claim' },
           { list: ['Which blogs you claim, how you proved it, and the result of each check.'] },
+          { h: 'Reports you send' },
+          {
+            list: [
+              'What you reported, why, anything you wrote with it, and the address of the page you reported it from.',
+            ],
+          },
           { h: 'Technical records' },
           {
             list: [
@@ -166,7 +173,22 @@ export const en = {
               'The person who runs Tela reviews the blogs members add, and may list them in Discover. The review shows each blog and how many members read it, never who.',
               'Writers see counts in their Dashboard, not names. Who read or liked something shows only where that member made it public.',
               "Never public: your email address, what you've read, your highlights and their notes, and your settings.",
-              'Public pages can take a few minutes to catch up with a change.',
+              'Public pages can take a few minutes to catch up with a change, and search engines can find them ([below](#search)).',
+            ],
+          },
+        ],
+      },
+      search: {
+        heading: 'Search engines and AI',
+        blocks: [
+          {
+            list: [
+              "Tela's public pages can be indexed by search engines: the front page, Discover, blogs' pages, public blogrolls and members' profiles.",
+              'AI tools that search the web to answer a question may read those pages too, and quote them or link to them.',
+              "Tela asks AI crawlers that collect training data to stay off the pages that show writers' work. It asks in its robots.txt, and can't make every crawler listen.",
+              "A new profile isn't offered to search engines for its first days.",
+              "Nothing that needs you to sign in is public: your reading list, your settings and everything private stay out of every crawler's reach.",
+              'A search engine keeps its own copy for a while, so a change or a removal can take time to reach its results.',
             ],
           },
         ],
@@ -178,8 +200,8 @@ export const en = {
             list: [
               'To run Tela: fetch your feeds, keep your reading list in step across your devices, and show your profile.',
               'To translate posts (below).',
-              'To email you, only to sign you in or keep your account safe.',
-              'To stop abuse.',
+              'To email you, only about your account: to sign you in, to confirm what you asked for, or to keep it safe.',
+              'To stop abuse, and to look into reports.',
             ],
           },
           {
@@ -191,6 +213,7 @@ export const en = {
               'A sign-in code, with a link, when you ask for one.',
               'An invitation, if the person who runs Tela invites you.',
               'A code to reset your password, when you ask for one.',
+              'A code to confirm, when you ask to delete your account.',
               'A notice when your sign-in methods change.',
             ],
           },
@@ -206,6 +229,7 @@ export const en = {
               "What is sent is the post's own text, with the post's title and the blog's name for context. Nothing about you is sent: not your name, email address, handle or what you read.",
               'Translation is done by Alibaba Cloud Model Studio (Bailian, dashscope.aliyuncs.com), in mainland China.',
               'A translation is kept and shared: everyone who reads that post in that language sees the same one.',
+              'Each account has a daily number of new translations, and Tela a daily budget for the whole site. Past either, a translation waits for the next day ([Terms](/terms#limits)).',
               'A writer who claims their blog can turn translation off for it in the Dashboard.',
             ],
           },
@@ -243,7 +267,7 @@ export const en = {
             ],
           },
           {
-            p: 'The person who runs Tela can see its database, to keep it working. No one else does, unless the law requires it.',
+            p: 'The person who runs Tela can see its database, to keep it working and to act on reports. No one else does, unless the law requires it.',
           },
         ],
       },
@@ -277,8 +301,27 @@ export const en = {
               'When a session ends, its record, with its IP address and browser, is deleted within a day. A session ends when you sign out, or after 60 days without use.',
               'The counters that stop abuse, which hold an IP address, an email address or an account number, are deleted after a day.',
               'Cloudflare keeps its request logs for 7 days.',
-              'A recommendation, highlight or blogroll you remove, or a blog you take out of a blogroll, stays in the database marked as removed, with its text, so your other devices catch up.',
+              'A recommendation, highlight or blogroll you remove, or a blog you take out of a blogroll, stays in the database marked as removed, with its text, so your other devices catch up. Deleting your account removes them ([below](#delete)).',
               'Cloudflare keeps a 30-day restore point of the whole database, and Tela copies the database every night, keeping each copy 30 days. Something you change or remove can stay in either that long. The nightly copy leaves out sessions, sign-in codes and abuse counters.',
+            ],
+          },
+        ],
+      },
+      delete: {
+        heading: 'Deleting your account',
+        blocks: [
+          {
+            p: "You can delete your account in Settings → Account. Tela emails you a code to confirm it, and once you enter the code, the account is closed. That can't be undone.",
+          },
+          {
+            list: [
+              "At once, or within minutes, Tela removes your email address, your sign-in methods, your profile and pictures, your subscriptions and folders, what you've read, your likes, recommendations and notes, your highlights, your blogrolls, and your follows both ways.",
+              'Every device you use is signed out, and the copy of your reading list in a browser is cleared the next time Tela runs there.',
+              'Your handle is kept, unused, so nobody can take it to pass as you.',
+              'Blogs you claimed are released. Their switches, such as translation, stay as they were.',
+              'Invite codes you made stop working. Anyone who joined with one keeps their account.',
+              'Records of what translations cost are kept, no longer tied to you. Blogs you added stay on Tela for the people who read them.',
+              'Backups keep a copy for up to 30 days ([How long we keep it](#keep)). Caches can show your old picture for up to 30 days, and your profile page for a few minutes.',
             ],
           },
         ],
@@ -289,14 +332,24 @@ export const en = {
           {
             list: [
               'Export your subscriptions, with their folders, as OPML in Settings → Subscriptions.',
-              'Download your profile, settings, subscriptions, likes, recommendations, highlights, blogrolls and the people you follow as one file in Settings → Privacy → Your data.',
+              'Download your data as one file in Settings → Privacy → Your data: your profile, settings, subscriptions, reading history, likes, recommendations, highlights, blogrolls, the people you follow, the blogs you claimed and your invite codes.',
               'Choose what others see in Settings → Privacy. Your picture and Gravatar are in Settings → Profile; an uploaded picture you remove is deleted.',
               'Set or change a password, link or unlink Google and GitHub, and sign out everywhere in Settings → Account.',
-              'See the invite codes you made and who joined with them in Settings → Invites, and revoke one nobody has used.',
+              'While joining Tela needs an invitation, see the invite codes you made and who joined with them in Settings → Invites, and revoke one nobody has used.',
               'Change your handle, name and bio whenever you like.',
               'Remove a recommendation, highlight, like, follow or blogroll at any time. It disappears from Tela at once, and from public pages within a few minutes. Making a blogroll private takes it off public pages the same way.',
-              'For anything else about your data, [get in touch](#contact).',
+              'Release a blog you claimed, from the Dashboard.',
+              'Delete your account in Settings → Account ([what happens](#delete)).',
+              `For anything else about your data, write to ${CONTACT}.`,
             ],
+          },
+        ],
+      },
+      age: {
+        heading: 'Age',
+        blocks: [
+          {
+            p: `Tela is for people aged 16 and over. If you know of an account that belongs to someone younger, write to ${CONTACT} and we'll delete it.`,
           },
         ],
       },
@@ -312,7 +365,7 @@ export const en = {
         heading: 'Contact',
         blocks: [
           {
-            p: `Tela is a personal, non-commercial project by hutusi (AI Naive). For anything about your data, use the contact details at ${CONTACT}. Bugs and ideas are welcome as [issues on GitHub](${ISSUES}), but those are public.`,
+            p: `Tela is a personal, non-commercial project run by one person, hutusi (AI Naive). For anything about your data, write to ${CONTACT}. Bugs and ideas are welcome as [issues on GitHub](${ISSUES}), but those are public.`,
           },
         ],
       },
@@ -322,17 +375,17 @@ export const en = {
   terms: {
     title: 'Terms',
     short: [
-      'Use Tela to read, follow and recommend.',
-      'Writers keep every right to their work. Tela shows it and links back.',
-      "Be decent: don't impersonate anyone, and don't break things.",
-      'Tela is a free, personal project and comes as it is.',
+      'Anyone aged 16 or over can join, and use Tela to read, follow and recommend.',
+      'Writers keep every right to their work. Tela shows it, links back, and leaves it alone when they ask.',
+      'Be decent: no spam, no impersonation, nothing illegal.',
+      'Tela is free, run by one person, has daily limits, and comes as it is.',
     ],
     sections: {
       who: {
         heading: 'Who we are',
         blocks: [
           {
-            p: 'Tela (telaread.com) is a personal, non-commercial project made by [hutusi](https://hutusi.com) under the name [AI Naive](https://ainaive.com). It\'s free. "We" on these pages means the person who runs it.',
+            p: `Tela (telaread.com) is a personal, non-commercial project run by one person, [hutusi](https://hutusi.com), under the name [AI Naive](https://ainaive.com). It's free. "We" on these pages means that person, whom you can reach at ${CONTACT}.`,
           },
         ],
       },
@@ -341,9 +394,11 @@ export const en = {
         blocks: [
           {
             list: [
-              'Tela is invite-only for now: you join with an invite code, or with an invitation from the person who runs Tela.',
-              'Sign in with a code sent to your email, a password, or Google or GitHub. Use an address you can receive mail at, and keep your sign-in safe.',
+              'You need to be 16 or older to use Tela.',
+              'Anyone can join with an email address they receive mail at. When there is reason to, such as a wave of spam, we may ask for invitations again: joining then needs an invite code from a member or from us. On a day with a great many new accounts, joining can also pause until the next day.',
+              'Sign in with a code sent to your email, a password, or Google or GitHub, and keep your sign-in safe.',
               "An account is for one person. Please don't share, sell or hand it over.",
+              'You can delete your account at any time in Settings → Account. [Privacy](/privacy#delete) says what goes, and when.',
             ],
           },
         ],
@@ -356,6 +411,7 @@ export const en = {
               'You can change your handle in Settings → Profile.',
               'Handles are 3 to 30 lowercase letters, digits or underscores, first come, first served. A few words are reserved.',
               'If you change yours, your old profile address stops working, and someone else can take the old handle.',
+              'When an account is deleted, its handle stays with it, and nobody can take it.',
               "We may change a handle that impersonates someone or uses a name that isn't yours to use.",
             ],
           },
@@ -366,11 +422,13 @@ export const en = {
         blocks: [
           {
             list: [
-              "Tela reads the feeds blogs publish. When a feed carries only a summary, Tela fetches the post's public page for the full text.",
+              "Tela reads the feeds blogs publish, as any feed reader does. When a feed carries only a summary, Tela fetches the post's public page for the full text.",
               "The writing stays the writer's, with every right to it. Signed-in members read it on Tela. Public pages show only titles and short excerpts, and each post links back to its own site.",
               'Translations are made by a machine and labelled as translations. The original is what the writer said.',
-              'If you write a blog, you can claim it to see how many people read it, choose its topics, or turn translation off.',
-              "If you'd rather your blog weren't on Tela, tell us through the [contact details below](#contact). We'll take it out of Discover, remove its page on Tela and stop fetching it.",
+              'If you write a blog, you can claim it to see how many people read it, choose its topics, turn translation off, or choose "Only use what my feed provides": Tela then reads only your feed and fetches none of your pages.',
+              'You can also keep Tela off your pages with robots.txt. Whenever Tela would fetch a page, it follows the rules for "User-agent: Tela", or else those for every agent. Your feed is still read, as feed readers do.',
+              `If you'd rather your blog weren't on Tela at all, write to ${CONTACT}. We'll take it out of Discover, remove its page on Tela and stop fetching it.`,
+              'There is more on the [For writers](/writers) page.',
             ],
           },
         ],
@@ -382,6 +440,7 @@ export const en = {
             list: [
               'Claim only a blog you write or control. You prove it with a tag or a link on its home page, or with your GitHub account, when the blog and the account link to each other.',
               'A claimed blog is listed in Discover, with your name and bio on its page.',
+              'You can release a blog you claimed at any time, from the Dashboard. Its switches stay as you left them.',
               "If a claim turns out to be false, we'll release it.",
             ],
           },
@@ -395,18 +454,50 @@ export const en = {
           },
         ],
       },
+      limits: {
+        heading: 'Limits',
+        blocks: [
+          {
+            p: 'Tela is shared, and translation is what it pays for most, so ordinary accounts have limits. The numbers can change, and Tela tells you when you reach one.',
+          },
+          {
+            list: [
+              "A daily number of new translations. A post already translated for someone else, or Traditional Chinese made from Simplified, doesn't count. Settings → Language shows how many you've used today.",
+              "A daily number of blogs new to Tela. Subscribing to a blog Tela already has doesn't count, and an import adds the rest of its new blogs on the days after.",
+              'A cap on how many blogs one account subscribes to.',
+              'Past your translation limit, a translation waits instead of failing: Tela makes it after midnight UTC (08:00 in Beijing), and the post says so.',
+              'Tela also has a daily translation budget for the whole site. When it is spent, translations wait for the next day in the same way, and new titles may show untranslated until then.',
+            ],
+          },
+        ],
+      },
       dont: {
         heading: "Please don't",
         blocks: [
           {
             list: [
-              'Spam or harass anyone.',
+              'Spam, harass or abuse anyone.',
               'Impersonate a person or a blog.',
-              'Scrape Tela at scale, or get around its limits.',
-              "Use Tela for anything illegal, or post what infringes someone else's rights.",
+              "Post anything illegal, or anything that infringes someone else's rights.",
+              'Sign up automatically or in bulk, scrape Tela at scale, or get around its limits.',
+              "Try to break Tela, or to get into an account that isn't yours.",
             ],
           },
-          { p: 'We may remove anything that breaks these rules, and release claims that do.' },
+          {
+            p: "We may hide anything that breaks these rules, release claims that do, and suspend or delete an account that does. A suspended account can't sign in, and its profile, notes and blogrolls are hidden.",
+          },
+        ],
+      },
+      reports: {
+        heading: 'Reports',
+        blocks: [
+          {
+            list: [
+              `If a profile, a blogroll, a blog or a recommendation's note on Tela breaks these terms, members can report it from its page, and anyone can write to ${CONTACT}.`,
+              'We look at each report and decide what to do: hide what was reported, suspend or delete the account behind it, or nothing.',
+              'Only we see who sent a report. It is never shown to the person reported, or to anyone else.',
+            ],
+          },
         ],
       },
       service: {
@@ -437,7 +528,7 @@ export const en = {
         heading: 'Contact',
         blocks: [
           {
-            p: `Use the contact details at ${CONTACT}, or open an [issue on GitHub](${ISSUES}).`,
+            p: `Write to ${CONTACT}, or open an [issue on GitHub](${ISSUES}), which is public.`,
           },
         ],
       },
