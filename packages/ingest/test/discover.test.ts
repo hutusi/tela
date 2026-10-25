@@ -47,7 +47,29 @@ describe('discoverFeeds', () => {
     server.text('/huge.xml', big(FEED_MAX_BYTES))
     const found = await discoverFeeds(http, server.url('/archive.xml'))
     expect(found.map((f) => [f.url, f.itemCount])).toEqual([[server.url('/archive.xml'), 1]])
-    expect(await discoverFeeds(http, server.url('/huge.xml'))).toEqual([])
+    // Past it, the member is told the feed is too large, not that there is none.
+    await expect(discoverFeeds(http, server.url('/huge.xml'))).rejects.toMatchObject({
+      kind: 'too_large',
+    })
+  })
+
+  test('a feed too large to read is not news when another feed was found', async () => {
+    server.set('/', (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' })
+      res.end(`<html><head>
+        <link rel="alternate" type="application/rss+xml" href="/everything.xml">
+        <link rel="alternate" type="application/rss+xml" href="/recent.xml">
+      </head></html>`)
+    })
+    server.text(
+      '/everything.xml',
+      rss({
+        items: [{ guid: '1', title: 'A', content: `<!-- ${'x'.repeat(FEED_MAX_BYTES)} -->` }],
+      }),
+    )
+    server.text('/recent.xml', rss({ items: [{ guid: '1', title: 'A', description: 'x' }] }))
+    const found = await discoverFeeds(http, server.url('/'))
+    expect(found.map((f) => f.url)).toEqual([server.url('/recent.xml')])
   })
 
   test('uses feeds declared by the page', async () => {

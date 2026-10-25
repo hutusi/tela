@@ -33,10 +33,10 @@ type Standing =
       proofs: { meta: string; relMe: string }
     }
 
-type StartError = 'invalid_url' | 'fetch_failed' | 'no_feed' | 'rate_limited'
+type StartError = 'invalid_url' | 'fetch_failed' | 'no_feed' | 'rate_limited' | 'feed_too_large'
 
 export function claimError(code: string | undefined): StartError {
-  if (code === 'invalid_url' || code === 'rate_limited') return code
+  if (code === 'invalid_url' || code === 'rate_limited' || code === 'feed_too_large') return code
   if (code === 'not_a_feed') return 'no_feed'
   return 'fetch_failed'
 }

@@ -27,7 +27,12 @@ import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
 import { readAtMost } from '../read-at-most'
 
-const ERROR_STATUS = { invalid_url: 400, unreachable: 422, not_a_feed: 422 } as const
+const ERROR_STATUS = {
+  invalid_url: 400,
+  unreachable: 422,
+  not_a_feed: 422,
+  feed_too_large: 422,
+} as const
 
 /** Claim a feed that has never been fetched and send it on, so a new subscriber sees posts now. */
 export async function fetchSoon(db: TelaDb, jobs: Jobs<JobQueues>, feedId: number, now: number) {

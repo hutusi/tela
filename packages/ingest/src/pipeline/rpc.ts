@@ -14,7 +14,11 @@ import type { HttpClient } from '../http'
 import { HttpError } from '../http'
 import { registerFeed } from './register'
 
-export type IngestError = 'invalid_url' | 'unreachable' | 'not_a_feed'
+/**
+ * `feed_too_large`: nothing else was found, and a feed was too large to read (`FEED_MAX_BYTES`).
+ * A shell or a tela-api older than it reads it as any error it does not know.
+ */
+export type IngestError = 'invalid_url' | 'unreachable' | 'not_a_feed' | 'feed_too_large'
 
 export type DiscoverResult = { feeds: DiscoveredFeed[] } | { error: IngestError }
 export type AddFeedResult =
@@ -66,7 +70,9 @@ export function createIngest(deps: { db: TelaDb; http: HttpClient; now: () => nu
     try {
       return { feeds: await discoverFeeds(http, url, { maxCandidates }) }
     } catch (err) {
-      if (err instanceof HttpError) return { error: 'unreachable' }
+      if (err instanceof HttpError) {
+        return { error: err.kind === 'too_large' ? 'feed_too_large' : 'unreachable' }
+      }
       throw err
     }
   }

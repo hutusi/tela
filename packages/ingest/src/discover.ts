@@ -29,12 +29,16 @@ function withScheme(input: string): string {
   return `https://${trimmed.replace(/^\/+/, '')}`
 }
 
-async function tryFeed(http: HttpClient, url: string): Promise<DiscoveredFeed | null> {
+/** The feed at `url`, if it is one; `too_large` for a body past `FEED_MAX_BYTES`. */
+async function tryFeed(
+  http: HttpClient,
+  url: string,
+): Promise<DiscoveredFeed | 'too_large' | null> {
   let res: Awaited<ReturnType<HttpClient['get']>>
   try {
     res = await http.get(url, { maxBytes: FEED_MAX_BYTES })
   } catch (err) {
-    if (err instanceof HttpError) return null
+    if (err instanceof HttpError) return err.kind === 'too_large' ? 'too_large' : null
     throw err
   }
   if (res.status !== 200 || !res.body || !looksLikeFeed(res.body)) return null
@@ -78,7 +82,8 @@ function secondPage(page: HttpResponse | null, url: string): string | null {
 /**
  * Find feeds for a URL: the URL itself, feeds declared by the page (or, when it declares none, by
  * one more page: `secondPage`), then well-known paths. Every returned feed has been fetched and
- * parsed.
+ * parsed. Throws a `too_large` HttpError when nothing was found but a candidate was too large to
+ * read, so the member is told that rather than that the blog has no feed.
  */
 export async function discoverFeeds(
   http: HttpClient,
@@ -87,8 +92,10 @@ export async function discoverFeeds(
 ): Promise<DiscoveredFeed[]> {
   const maxCandidates = options.maxCandidates ?? 5
   const url = withScheme(input)
+  let tooLarge: string | null = null
   const direct = await tryFeed(http, url)
-  if (direct) return [direct]
+  if (direct === 'too_large') tooLarge = url
+  else if (direct) return [direct]
 
   const page = await getPage(http, url)
   const found: DiscoveredFeed[] = []
@@ -97,7 +104,8 @@ export async function discoverFeeds(
     if (seen.has(candidate) || found.length >= maxCandidates) return
     seen.add(candidate)
     const feed = await tryFeed(http, candidate)
-    if (feed && !found.some((f) => f.url === feed.url)) found.push(feed)
+    if (feed === 'too_large') tooLarge ??= candidate
+    else if (feed && !found.some((f) => f.url === feed.url)) found.push(feed)
   }
   const declared = async (from: HttpResponse | null) => {
     if (from?.status !== 200 || !from.body) return
@@ -123,6 +131,9 @@ export async function discoverFeeds(
         if (found.length > 0) break
       }
     }
+  }
+  if (found.length === 0 && tooLarge) {
+    throw new HttpError('too_large', `${tooLarge} is larger than ${FEED_MAX_BYTES} bytes`)
   }
   return found
 }

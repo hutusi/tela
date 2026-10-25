@@ -109,6 +109,21 @@ describe('adding a feed', () => {
     expect(await count('feeds')).toBe(0)
   })
 
+  test('a feed too large to read is said to be so, and becomes no feed row', async () => {
+    server.text(
+      '/archive.xml',
+      `<?xml version="1.0"?><rss version="2.0"><channel><title>All</title><!-- ${'x'.repeat(11 * 1024 * 1024)} --></channel></rss>`,
+    )
+    noFeedAnywhere()
+    const res = await post('/api/v1/feeds/discover', { url: server.url('/archive.xml') })
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: 'feed_too_large' })
+    const add = await post('/api/v1/feeds', { feedUrl: server.url('/archive.xml') })
+    expect(add.status).toBe(422)
+    expect(await add.json()).toEqual({ error: 'feed_too_large' })
+    expect(await count('feeds')).toBe(0)
+  })
+
   test('a feed Tela already follows is not fetched again to be added', async () => {
     const other = await signedIn(api, 'other@x.test')
     await api.request('/api/v1/feeds', { body: { feedUrl: server.url('/feed.xml') }, as: other })
