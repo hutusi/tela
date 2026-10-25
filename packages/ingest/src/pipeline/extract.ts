@@ -22,7 +22,7 @@ import {
 } from '@tela/data'
 import { HttpError } from '../http'
 import { commit, type IngestContext, type Statement } from './context'
-import { checkRobots } from './robots'
+import { checkRobots, type RobotsCheck } from './robots'
 
 /** Readability parses the whole page in memory; pages past this are skipped as too large. */
 export const EXTRACTION_MAX_BYTES = 2 * 1024 * 1024
@@ -37,7 +37,10 @@ export type ExtractResult =
 
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 
-/** `learned`: what the robots.txt check found, written in the same fenced batch. */
+/**
+ * `learned`: what the robots.txt check found, written in the same fenced batch. `refused`: the
+ * page was not fetched for robots.txt, and new rules retry it (`extract_refused`).
+ */
 async function settle(
   ctx: IngestContext,
   lease: Lease,
@@ -45,12 +48,31 @@ async function settle(
   state: 'done' | 'failed' | 'none',
   reason: string,
   learned: Statement[] = [],
+  refused = false,
 ): Promise<ExtractResult> {
   const committed = await commit(ctx, lease, [
     ...learned,
-    settleExtraction(ctx.db, articleId, state),
+    settleExtraction(ctx.db, articleId, state, refused),
   ])
   return committed.ok ? { status: 'settled', state, reason } : { status: 'lost' }
+}
+
+/**
+ * robots.txt disallows the page, or could not be read: failed, not retried by the backoff (the
+ * sweep would ask again every few minutes), and marked, so rules that change make it due again.
+ */
+function refuse(
+  ctx: IngestContext,
+  lease: Lease,
+  articleId: number,
+  robots: RobotsCheck,
+  learned: Statement[],
+): Promise<ExtractResult> {
+  const why =
+    robots.verdict === 'disallowed'
+      ? `robots.txt disallows the page for ${robots.origin}`
+      : `robots.txt of ${robots.origin} is unreachable`
+  return settle(ctx, lease, articleId, 'failed', why, learned, true)
 }
 
 /**
@@ -77,7 +99,8 @@ export async function extractArticleJob(ctx: IngestContext, lease: Lease): Promi
     const committed = await commit(ctx, lease, [])
     return committed.ok ? { status: 'skipped', reason: 'not due' } : { status: 'lost' }
   }
-  // Turned on after the post was found due: nothing is fetched, and it waits for nothing.
+  // Turned on after the post was made due (the switch settles those, but an operator's undo only
+  // puts the column back): nothing is fetched, and it waits for nothing.
   if (article.feedOnly) {
     return settle(
       ctx,
@@ -89,17 +112,9 @@ export async function extractArticleJob(ctx: IngestContext, lease: Lease): Promi
   }
   if (!article.url) return settle(ctx, lease, article.id, 'failed', 'article has no url')
 
-  // Refused or unreachable, it is failed, not retried by the backoff: the sweep would ask again
-  // every few minutes. Rules that change make the host's failed posts due again (`checkRobots`).
   const robots = await checkRobots(ctx, article.url, article.fetchRegion)
-  const learned = robots.statements
-  if (robots.verdict !== 'allowed') {
-    const why =
-      robots.verdict === 'disallowed'
-        ? `robots.txt disallows the page for ${robots.origin}`
-        : `robots.txt of ${robots.origin} is unreachable`
-    return settle(ctx, lease, article.id, 'failed', why, learned)
-  }
+  const learned = [...robots.statements]
+  if (robots.verdict !== 'allowed') return refuse(ctx, lease, article.id, robots, learned)
 
   let page: Awaited<ReturnType<IngestContext['http']['get']>>
   try {
@@ -114,6 +129,14 @@ export async function extractArticleJob(ctx: IngestContext, lease: Lease): Promi
       return retry(ctx, lease, `${err.kind}: ${err.message}`, learned)
     }
     return settle(ctx, lease, article.id, 'failed', `${err.kind}: ${err.message}`, learned)
+  }
+  // Redirected to another origin (a blog that moved host, a link shortener), the page is that
+  // origin's, and so are the rules for it. The client follows redirects itself, so its answer is
+  // here by now: refused there, nothing it said is used or kept, whatever its status.
+  if (new URL(page.finalUrl).origin !== robots.origin) {
+    const landed = await checkRobots(ctx, page.finalUrl, article.fetchRegion)
+    learned.push(...landed.statements)
+    if (landed.verdict !== 'allowed') return refuse(ctx, lease, article.id, landed, learned)
   }
   if (page.status >= 500 || page.status === 429 || page.status === 408) {
     return retry(ctx, lease, `http ${page.status}`, learned)
@@ -190,7 +213,9 @@ export async function extractArticleJob(ctx: IngestContext, lease: Lease): Promi
   ])
   if (!committed.ok) return { status: 'lost' }
   // fence, seq, the insert, then the move: another writer (a feed's fetch, a reprocess) moved the
-  // article since it was read, and this extraction wrote nothing. Still due, so it goes again.
+  // article since it was read, or it is no longer due (its writer asked for only the feed while
+  // the page was read), and this extraction wrote nothing. Still due, it goes again; settled, the
+  // sweep no longer finds it.
   if (!pointed(committed.results, 3))
     return { status: 'retry', error: 'the article changed meanwhile' }
   return { status: 'extracted', version: next, chars: processed.text.length }

@@ -66,6 +66,17 @@ describe('the group Tela follows', () => {
     expect(allows('User-agent: Tela\n\nUser-agent: *\nDisallow: /\n', '/x')).toBe(false)
   })
 
+  test("an agent no token names still ends the group above it, so its rules are nobody's", () => {
+    // Common on Chinese blogs: Tela is under `*`, and 360Spider's `Disallow: /` is not Tela's.
+    const chinese = 'User-agent: *\nDisallow: /wp-admin/\n\nUser-agent: 360Spider\nDisallow: /\n'
+    expect(allows(chinese, '/2026/10/post')).toBe(true)
+    expect(allows(chinese, '/wp-admin/x')).toBe(false)
+    // An empty agent line ends the group the same way.
+    expect(allows('User-agent: *\nAllow: /\n\nUser-agent:\nDisallow: /\n', '/a')).toBe(true)
+    // And beside a token it names nothing more: the `*` in that group still applies.
+    expect(allows('User-agent: 360Spider\nUser-agent: *\nDisallow: /p\n', '/p')).toBe(false)
+  })
+
   test('no group, an empty file, or rules outside any group allow everything', () => {
     expect(allows('', '/x')).toBe(true)
     expect(allows('Disallow: /\n', '/x')).toBe(true)
@@ -143,6 +154,12 @@ describe('encodings', () => {
     expect(normalizePath('/a%2Fb')).toBe('/a%2Fb')
     expect(normalizePath('/100%')).toBe('/100%25')
     expect(normalizePath('/a b')).toBe('/a%20b')
+  })
+
+  test('characters a URL arrives encoded match a rule that writes them raw', () => {
+    expect(allows('User-agent: *\nDisallow: /{x}\n', '/{x}')).toBe(false)
+    expect(allows("User-agent: *\nDisallow: /search?q='\n", "/search?q='a")).toBe(false)
+    expect(allows('User-agent: *\nDisallow: /a"b<c>\n', '/a"b<c>')).toBe(false)
   })
 
   test('a rule written in any script matches the address a browser would send', () => {

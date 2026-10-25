@@ -62,14 +62,16 @@ export const dueFeeds = (now: number): SQL =>
       where status = 'active' and (next_fetch_at <= ${now} or refetch_requested_at is not null)`
 
 /**
- * Articles whose page should be extracted, for `claimDue`, politely per article host. Never on a
- * blog whose writer asked Tela to use only what its feed provides (ADR 0061).
+ * Articles whose page should be extracted, for `claimDue`, politely per article host. A blog
+ * whose writer asked Tela to use only what its feed provides (ADR 0061) is read too: none of its
+ * posts is made due, but one left due by whatever turned the switch on (an operator's undo puts
+ * the column back and nothing else) is claimed, and the job settles it without a fetch. Leaving
+ * it out here left such a post due for good, the reader saying "fetching the full text".
  */
 export const dueExtractions = (): SQL =>
   sql`select a.id as key, a.url_host as host, a.fetched_at as ord from articles a
-      join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
-      where a.extract_state = 'due' and a.url is not null and f.status = 'active'
-        and s.feed_only = 0`
+      join feeds f on f.id = a.feed_id
+      where a.extract_state = 'due' and a.url is not null and f.status = 'active'`
 
 /**
  * The extraction state a feed's batch writes, in SQL: `due` becomes `none` on a blog whose writer
@@ -632,32 +634,50 @@ export async function loadArticleForExtraction(
 /**
  * Settle an article's extraction without a new version: `done` (not longer, unchanged), `failed`
  * (no content, refused, given up), or `none` (its writer asked for only the feed: never fetched).
+ * `refused` says the page was not fetched because robots.txt disallowed it or could not be read
+ * (ADR 0061): new rules make only those due again. Every settle writes the mark, so a page that
+ * later fails for another reason is not taken for one robots.txt refused.
  */
-export function settleExtraction(db: TelaDb, articleId: number, state: 'done' | 'failed' | 'none') {
+export function settleExtraction(
+  db: TelaDb,
+  articleId: number,
+  state: 'done' | 'failed' | 'none',
+  refused = false,
+) {
+  const mark = state === 'failed' && refused ? 1 : 0
   return db.run(sql`
-    update articles set extract_state = ${state}, seq = ${currentSeq}
+    update articles set extract_state = ${state}, extract_refused = ${mark}, seq = ${currentSeq}
     where id = ${articleId} and extract_state = 'due'
   `)
 }
 
-/** One version, made by the pipeline at hand, so stamped with it. */
+/**
+ * One version, made by the pipeline at hand, so stamped with it. `onlyWhile`, when given, is a
+ * condition the insert waits on: an extraction's, that its article is still due.
+ */
 function insertVersion(
   db: TelaDb,
   articleId: number,
   version: Omit<NewVersion, 'dedupKey'>,
   now: number,
+  onlyWhile: SQL = sql`true`,
 ) {
   return db.run(sql`
     insert into article_versions (article_id, version, provenance, content_key, raw_key,
       norm_version, pipeline_version, body_chars, excerpt, word_count, reading_minutes, lang,
       source_url, created_at)
-    values (${articleId}, ${version.version}, ${version.provenance}, ${version.contentKey},
+    select ${articleId}, ${version.version}, ${version.provenance}, ${version.contentKey},
       ${version.rawKey}, ${NORM_VERSION}, ${PIPELINE_VERSION}, ${version.bodyChars},
       ${version.excerpt}, ${version.wordCount}, ${version.readingMinutes}, ${version.lang},
-      ${version.sourceUrl}, ${now})
+      ${version.sourceUrl}, ${now}
+    where ${onlyWhile}
     on conflict (article_id, version) do nothing
   `)
 }
+
+/** An extraction lands only on an article still waiting for it (`extract_state = 'due'`). */
+const stillDue = (articleId: number) =>
+  sql`exists (select 1 from articles where id = ${articleId} and extract_state = 'due')`
 
 /**
  * Point an article at its current version: what it shows, and the hash its titles key on. Three
@@ -667,6 +687,11 @@ function insertVersion(
  * second's content key, for good. So an article moves only from the current version it was read
  * at, and only onto a row that holds the content it brings. A writer that lost writes nothing,
  * and finds out from the empty RETURNING; the next sweep or fetch decides again from what is there.
+ *
+ * An extraction (`extract`) also moves it only while it is still due: its writer may have turned
+ * "Only use what my feed provides" on while the page was being read (ADR 0061), settling it
+ * `none`, and that answer stands over a page already fetched. A reprocess or a feed's change
+ * passes none, and moves the article whatever its extraction state.
  */
 function pointAt(
   db: TelaDb,
@@ -676,15 +701,16 @@ function pointAt(
   titleHash: string,
   extract?: 'done',
 ) {
+  const settles = extract ? sql`extract_state = ${extract}, extract_refused = 0,` : sql``
   return db.all<{ id: number }>(sql`
     update articles set
       current_version = ${current.version}, content_key = ${current.contentKey},
       excerpt = ${current.excerpt}, word_count = ${current.wordCount},
       reading_minutes = ${current.readingMinutes},
       source_lang = coalesce(${current.lang}, source_lang),
-      title_hash = ${titleHash}, extract_state = coalesce(${extract ?? null}, extract_state),
-      seq = ${currentSeq}
+      title_hash = ${titleHash}, ${settles} seq = ${currentSeq}
     where id = ${articleId} and current_version is ${from}
+      ${extract ? sql`and extract_state = 'due'` : sql``}
       and exists (select 1 from article_versions where article_id = ${articleId}
         and version = ${current.version} and content_key = ${current.contentKey})
     returning id
@@ -697,7 +723,11 @@ export function pointed(results: unknown[], index: number): boolean {
   return Array.isArray(rows) && rows.length > 0
 }
 
-/** Add an extracted version and point the article at whatever is current now. */
+/**
+ * Add an extracted version and point the article at whatever is current now, both only while it
+ * is still due: an article settled meanwhile keeps no version of a page it no longer wants, which
+ * a feed's later change could otherwise choose as current.
+ */
 export function adoptExtractedVersion(
   db: TelaDb,
   article: { id: number; feedId: number; currentVersion: number | null },
@@ -707,7 +737,7 @@ export function adoptExtractedVersion(
   now: number,
 ) {
   return [
-    insertVersion(db, article.id, version, now),
+    insertVersion(db, article.id, version, now, stillDue(article.id)),
     pointAt(db, article.id, article.currentVersion, current, titleHash, 'done'),
   ] as const
 }

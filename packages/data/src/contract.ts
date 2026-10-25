@@ -893,6 +893,109 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         next_fetch_at: T0 + MIN,
       })
     })
+
+    it('an extraction that ends after its post was settled adds and moves nothing (ADR 0061)', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['h1'])
+      const v = (key: string, version: number, provenance: 'feed' | 'readability') => ({
+        version,
+        provenance,
+        contentKey: key,
+        bodyChars: 900,
+        excerpt: key,
+        wordCount: 150,
+        readingMinutes: 1,
+        lang: 'en',
+        rawKey: null,
+        sourceUrl: null,
+      })
+      await db.batch([
+        bumpSeq(db),
+        insertArticles(
+          db,
+          1,
+          [
+            {
+              dedupKey: 'g:1',
+              url: 'https://h1/p/1',
+              urlHost: 'h1',
+              title: 'Post 1',
+              author: null,
+              publishedAt: T0,
+              sourceLang: 'en',
+              excerpt: 'Excerpt',
+              contentKey: 'key-1',
+              wordCount: 100,
+              readingMinutes: 1,
+              extractState: 'due',
+              titleHash: 'th-1',
+            },
+          ],
+          T0,
+        ),
+        insertVersions(db, 1, [{ ...v('key-1', 1, 'feed'), dedupKey: 'g:1' }], T0),
+      ])
+      const id =
+        (await first<{ id: number }>(db, sql`select id from articles where dedup_key = 'g:1'`))
+          ?.id ?? 0
+      const state = () =>
+        first(
+          db,
+          sql`select current_version, content_key, extract_state,
+                (select count(*) from article_versions where article_id = ${id}) as versions
+              from articles where id = ${id}`,
+        )
+      // The writer turns "Only use what my feed provides" on while the page is being read.
+      await db.run(sql`update articles set extract_state = 'none' where id = ${id}`)
+      const extracted = v('extracted', 2, 'readability')
+      const late = await db.batch([
+        bumpSeq(db),
+        ...adoptExtractedVersion(
+          db,
+          { id, feedId: 1, currentVersion: 1 },
+          extracted,
+          extracted,
+          'th-e',
+          T0,
+        ),
+      ])
+      expect(pointed(late as unknown[], 2)).toBe(false)
+      expect(await state()).toEqual({
+        current_version: 1,
+        content_key: 'key-1',
+        extract_state: 'none',
+        versions: 1,
+      })
+      // A reprocess passes no extraction state: it moves the article whatever that is.
+      const remade = v('remade', 2, 'feed')
+      const reprocess = await db.batch([
+        bumpSeq(db),
+        ...adoptReprocessedVersion(db, { id, currentVersion: 1 }, remade, remade, 'th-r', T0),
+      ])
+      expect(pointed(reprocess as unknown[], 2)).toBe(true)
+      expect(await state()).toEqual({
+        current_version: 2,
+        content_key: 'remade',
+        extract_state: 'none',
+        versions: 2,
+      })
+      // Still due, an extraction lands, and clears a refusal it no longer is.
+      await db.run(
+        sql`update articles set extract_state = 'due', extract_refused = 1 where id = ${id}`,
+      )
+      const now = v('extracted', 3, 'readability')
+      const landed = await db.batch([
+        bumpSeq(db),
+        ...adoptExtractedVersion(db, { id, feedId: 1, currentVersion: 2 }, now, now, 'th-e', T0),
+      ])
+      expect(pointed(landed as unknown[], 2)).toBe(true)
+      expect(
+        await first(
+          db,
+          sql`select current_version, extract_state, extract_refused from articles where id = ${id}`,
+        ),
+      ).toEqual({ current_version: 3, extract_state: 'done', extract_refused: 0 })
+    })
   })
 
   describe('merging a feed into another (ADR 0028)', () => {

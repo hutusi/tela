@@ -215,6 +215,52 @@ describe('siteAssetsJob', () => {
       fetched_at: NOW,
     })
   })
+
+  test('a home page redirected to another origin asks that origin too', async () => {
+    const other = await FixtureServer.start()
+    try {
+      const { siteId } = await siteFor('/feed.xml')
+      iconsBothWays()
+      server.redirect('/', other.url('/'))
+      other.set('/', (_req, res) => {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        res.end('<html><head><link rel="icon" sizes="64x64" href="/moved.png"></head></html>')
+      })
+      other.set('/robots.txt', (_req, res) => {
+        res.writeHead(200, { 'content-type': 'text/plain' })
+        res.end('User-agent: Tela\nDisallow: /\n')
+      })
+      expect(await siteAssetsJob(ctx(), await claim('site.assets', siteId))).toEqual({
+        status: 'done',
+        favicon: true,
+        homePage: false,
+      })
+      // Refused where it landed, the page's icons are not looked for: the blog's own icon is.
+      expect(other.requests.map((r) => r.path)).toEqual(['/', '/robots.txt'])
+      expect(server.requestsFor('/favicon.ico')).toHaveLength(1)
+      expect(await db.all(sql`select origin from robots_rules order by origin`)).toHaveLength(2)
+    } finally {
+      await other.stop()
+    }
+  })
+
+  test('reads robots.txt from where the blog is fetched, which extraction shares', async () => {
+    const { feedId, siteId } = await siteFor('/feed.xml')
+    await db.run(sql`update feeds set fetch_region = 'cn' where id = ${feedId}`)
+    iconsBothWays()
+    const asked: { path: string; region: string | undefined }[] = []
+    const spy: HttpClient = {
+      get: (url, options) => {
+        asked.push({ path: new URL(url).pathname, region: options?.region })
+        return http.get(url, options)
+      },
+    }
+    await siteAssetsJob(ctx({ http: spy }), await claim('site.assets', siteId))
+    expect(asked.find((a) => a.path === '/robots.txt')).toEqual({
+      path: '/robots.txt',
+      region: 'cn',
+    })
+  })
 })
 
 describe('discovery on a feed-only blog (ADR 0061)', () => {

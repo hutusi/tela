@@ -259,10 +259,11 @@ describe('reprocessArticleJob', () => {
 
   test('a writer that moved the article meanwhile wins, and the reprocess writes nothing', async () => {
     await fullFeed()
+    // Due, or the extraction would land nowhere: it adopts only a page its post still waits for.
     await db.batch([
       db.run(sql`update article_versions set pipeline_version = 0, content_key = 'older'
         where article_id = 1`),
-      db.run(sql`update articles set content_key = 'older' where id = 1`),
+      db.run(sql`update articles set content_key = 'older', extract_state = 'due' where id = 1`),
     ] as never)
     const lease = await claim('article.reprocess', 1)
     // Both read version 1 and both take version 2: the extraction commits first.

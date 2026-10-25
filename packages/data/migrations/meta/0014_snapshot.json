@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c930b4a8-d926-430e-aa72-8e292980ed61",
+  "id": "86e44082-1de4-4451-b6cd-5926c49a0640",
   "prevId": "ed3f885d-8c04-4e95-b488-63363d9d2bfc",
   "tables": {
     "admin_actions": {
@@ -509,6 +509,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'none'"
+        },
+        "extract_refused": {
+          "name": "extract_refused",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "title_hash": {
           "name": "title_hash",

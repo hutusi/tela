@@ -819,7 +819,7 @@ says who holds it:
 | Kind | Due when |
 |---|---|
 | `feed.fetch` | `next_fetch_at` has passed, or a WebSub ping asked |
-| `article.extract` | `extract_state = 'due'`: a summary-only post waiting for its page, set when the feed lists it; never on a blog that chose "Only use what my feed provides", and only where the origin's robots.txt lets Tela in (ADR 0061) |
+| `article.extract` | `extract_state = 'due'`: a summary-only post waiting for its page, set when the feed lists it; never on a blog that chose "Only use what my feed provides" (one left due there is settled to `none` unfetched), and fetched only where the origin's robots.txt lets Tela in (ADR 0061) |
 | `article.reprocess` | the article's current version was made under an older `PIPELINE_VERSION` (ADR 0055) |
 | `site.assets` | a site's favicon has never been checked |
 | `member.gravatar` | a member shows their Gravatar and it was never asked about, or the answer has run out: 30 days after a picture, 7 after none (ADR 0033). Refresh asks again at once |
@@ -1103,8 +1103,9 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   within about 6 minutes. They never trigger a translation. A 503 means tela-api failed.
 - **Writers' pages** (ADR 0061): page fetches (extraction, a favicon's home page) read the origin's
   robots.txt, kept in `robots_rules` for a day (an hour when it was unreachable); feeds never do.
-  A post refused this way shows `failed` and keeps its excerpt. To retry one by hand, delete its
-  origin's `robots_rules` row and set the article `due`. A writer's "Only use what my feed
+  A post refused this way shows `failed` with `extract_refused = 1` and keeps its excerpt; new
+  rules on its origin make only those due again. To retry one by hand, delete its origin's
+  `robots_rules` row and set the article `due`. A writer's "Only use what my feed
   provides" is `sites.feed_only`; an operator sets it from the blog's record.
 
 ## Launching

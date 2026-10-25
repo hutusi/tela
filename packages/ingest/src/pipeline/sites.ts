@@ -14,7 +14,7 @@ import {
   moveFeedToOrigin,
   type TelaDb,
 } from '@tela/data'
-import type { ClaimMethod, ClaimReason, HomeUnreachable } from '@tela/shared'
+import type { ClaimMethod, ClaimReason, FetchRegion, HomeUnreachable } from '@tela/shared'
 import { findAll, getAttributeValue } from 'domutils'
 import { type SQL, sql } from 'drizzle-orm'
 import { parseDocument } from 'htmlparser2'
@@ -87,9 +87,12 @@ export async function siteAssetsJob(
   lease: Lease,
 ): Promise<{ status: 'done' | 'skipped' | 'lost'; favicon?: boolean; homePage?: boolean }> {
   const siteId = Number(lease.key)
-  const site = await first<{ home_url: string; feed_only: number }>(
+  const site = await first<{ home_url: string; feed_only: number; region: FetchRegion | null }>(
     ctx.db,
-    sql`select home_url, feed_only from sites where id = ${siteId} and assets_checked_at is null`,
+    sql`select home_url, feed_only,
+          (select fetch_region from feeds where site_id = sites.id and status = 'active'
+            and merged_into is null order by id limit 1) as region
+        from sites where id = ${siteId} and assets_checked_at is null`,
   )
   if (!site || !ctx.assets) {
     const committed = await commit(ctx, lease, [])
@@ -98,10 +101,19 @@ export async function siteAssetsJob(
   let learned: Statement[] = []
   let page: Awaited<ReturnType<typeof tryGet>> = null
   if (site.feed_only !== 1) {
-    const robots = await checkRobots(ctx, site.home_url, 'global')
-    learned = robots.statements
+    // Read from where the blog's feed is: the rules are kept per origin, and extraction reads
+    // them too, so a read that timed out from the wrong side would hold its pages back an hour.
+    const robots = await checkRobots(ctx, site.home_url, site.region ?? 'global')
+    learned = [...robots.statements]
     if (robots.verdict === 'allowed') {
       page = await tryGet(ctx.http, site.home_url, 'text/html, */*;q=0.5')
+    }
+    // Redirected to another origin, the home page is that origin's, and so are its rules (as
+    // extraction reads them): refused there, nothing it declared is used.
+    if (page && new URL(page.finalUrl).origin !== robots.origin) {
+      const landed = await checkRobots(ctx, page.finalUrl, site.region ?? 'global')
+      learned.push(...landed.statements)
+      if (landed.verdict !== 'allowed') page = null
     }
   }
   const html = page?.status === 200 ? page.body : ''

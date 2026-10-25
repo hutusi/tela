@@ -15,8 +15,8 @@
  *
  * What a check learns is returned as statements for the caller's own fenced batch (invariant 6),
  * never written on the side. When the rules it read differ from the ones kept, the host's posts
- * whose extraction failed are made due again: one a robots.txt refused is retried that way once the
- * writer changes it, and the extraction asks the new rules first.
+ * robots.txt refused (`extract_refused`) are made due again: retried that way once the writer
+ * changes it, and the extraction asks the new rules first.
  */
 import { currentSeq, first } from '@tela/data'
 import type { FetchRegion } from '@tela/shared'
@@ -148,14 +148,16 @@ export async function checkRobots(
 }
 
 /**
- * Make a host's failed extractions due again, on a blog that still lets Tela fetch its pages. It
- * cannot tell a page robots.txt refused from one that failed for another reason, and retries
- * both: rules change rarely, and each retry asks the rules first.
+ * Make the extractions robots.txt refused on a host due again, on a blog that still lets Tela
+ * fetch its pages. Only those: a page that failed for another reason (a 404, no article in it)
+ * would fail again, and a flaky robots.txt that comes back every day would have it fetched every
+ * day. The mark goes with the retry, and the retry's own settle says again whether robots.txt
+ * refused it.
  */
 function redueRefused(ctx: IngestContext, host: string): Statement {
   return ctx.db.run(sql`
-    update articles set extract_state = 'due', seq = ${currentSeq}
-    where extract_state = 'failed' and url_host = ${host}
+    update articles set extract_state = 'due', extract_refused = 0, seq = ${currentSeq}
+    where extract_state = 'failed' and extract_refused = 1 and url_host = ${host}
       and feed_id in (select f.id from feeds f join sites s on s.id = f.site_id
         where f.status = 'active' and s.feed_only = 0)
   `)

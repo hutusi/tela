@@ -47,12 +47,14 @@ const KEYS: Record<string, 'agent' | 'allow' | 'disallow'> = {
 
 /**
  * An agent line's product token, lower-case: the run of letters, `_` and `-` it starts with
- * (`Tela/0.1` names `tela`), or `*`. Null for a line that names no agent.
+ * (`Tela/0.1` names `tela`), or `*`. A line that names no such token (`360Spider`, or nothing at
+ * all) is still an agent line, and still ends the group before it: it reads as `''`, which no
+ * crawler is, so its rules apply to nobody. Skipped instead, its rules fell into the group above
+ * it, and `User-agent: 360Spider` / `Disallow: /` under a `*` group shut Tela out of the blog.
  */
-function tokenOf(value: string): string | null {
+function tokenOf(value: string): string {
   if (value.startsWith('*')) return '*'
-  const token = /^[A-Za-z_-]+/.exec(value)?.[0]
-  return token ? token.toLowerCase() : null
+  return /^[A-Za-z_-]+/.exec(value)?.[0]?.toLowerCase() ?? ''
 }
 
 /** Every group in a robots.txt, in order; lines outside a group, and other records, ignored. */
@@ -72,7 +74,6 @@ export function parseRobots(text: string): RobotsGroup[] {
     const value = line.slice(colon + 1).trim()
     if (key === 'agent') {
       const token = tokenOf(value)
-      if (!token) continue
       if (!current || inRules) {
         current = { agents: [], rules: [] }
         groups.push(current)
@@ -106,6 +107,13 @@ export function rulesFor(groups: RobotsGroup[], token: string = ROBOTS_TOKEN): R
 
 const UNRESERVED = /[A-Za-z0-9\-._~]/
 const HEX = '0123456789ABCDEF'
+/**
+ * Printable characters a URL's path or query arrives percent-encoded (the WHATWG URL parser
+ * encodes them), so a rule that writes them raw is encoded to meet it: `Disallow: /{x}` must
+ * match `/%7Bx%7D`. Both sides go through `normalizePath`, so encoding more than the parser does
+ * is harmless.
+ */
+const ENCODED = new Set([0x22, 0x27, 0x3c, 0x3e, 0x60, 0x7b, 0x7d])
 
 /**
  * A path as RFC 9309 compares it: every byte outside printable ASCII percent-encoded as UTF-8,
@@ -128,7 +136,7 @@ export function normalizePath(path: string): string {
       }
       continue
     }
-    if (b <= 0x20 || b >= 0x7f) {
+    if (b <= 0x20 || b >= 0x7f || ENCODED.has(b)) {
       out += `%${HEX[b >> 4]}${HEX[b & 15]}`
       continue
     }

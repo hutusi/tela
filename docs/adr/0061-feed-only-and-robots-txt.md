@@ -28,9 +28,14 @@ While it is on:
 - **no post is made due for extraction.** The guard is in the SQL of the feed batch's article
   insert and update, so a fetch already running when the switch turns cannot write `due` after it;
   the reader shows "fetching the full text" while a post is due, and that post would wait for good.
-  The due query, the job (for a post claimed before the switch), the operator's retry and the
-  health check's backlog leave such posts alone too. Turning it on settles the blog's waiting posts
-  (`due` → `none`) in the same batch.
+  Turning it on settles the blog's waiting posts (`due` → `none`) in the same batch, and an
+  extraction already reading a page then keeps nothing of it: its version and its move both wait
+  on the post still being due, so `none` is never overwritten with `done`, and no version of a
+  page the writer refused is left for a feed's later change to choose as current. Whatever else
+  sets the flag (an operator's undo of `site.feedAll`, or of a claim removal, puts the column back
+  and nothing else) leaves them to the job: the due query hands it a feed-only blog's due posts
+  like any others, and it settles each to `none` without a fetch. The operator's retry leaves such
+  a blog's failed posts failed, and the health check's backlog does not count its due ones.
 - **the favicon job tries `/favicon.ico` alone**, as a browser would, and never the home page.
 - **discovery of a URL on the blog answers from its stored feeds**, matched by its home with or
   without `www.` and over either scheme, and asks the blog nothing. Adding one of its feeds by an
@@ -49,7 +54,17 @@ for one agent merged, the longest match deciding and `Allow` winning a tie, `*` 
 paths percent-encoded alike on both sides, the first 500 KiB read. They are kept per origin in
 `robots_rules`, only the group that applies, written back as one-group robots.txt, so a row says
 exactly what Tela obeys. Fetched with the same client as everything else: private ranges refused,
-a 10 s timeout, at most five redirects (across hosts, as the RFC allows).
+a 10 s timeout, at most five redirects (across hosts, as the RFC allows), and from the region the
+blog's feed is fetched from (ADR 0008), the favicon job's read too: the rules are shared, and one
+read that timed out from the wrong side would hold the blog's pages back an hour.
+
+A page that redirects to another origin (a blog that moved host, a link shortener), a post's or
+the home page, is that origin's page, and its robots.txt is asked too, before anything the page
+answered is used. The client follows redirects itself, so the page has been fetched by then;
+refused there, it is dropped, whatever its status: the post is failed and marked as refused
+(below), and the home page's icons are not looked for. Both checks' rules are kept. Such a post is made due again by new rules on its own host, the one its link
+names, not on the host it landed on: in the common case (apex to `www`, `http` to `https`) the
+two robots.txt are one file behind the same redirect, and change together.
 
 | robots.txt answers                                    | Tela                     | asked again |
 | ----------------------------------------------------- | ------------------------ | ----------- |
@@ -65,12 +80,15 @@ has the switch, and robots.txt for the rest.
 
 **A refused page is failed, not retried.** The post keeps the feed's version and excerpt, and
 `extract_state` becomes `failed`, the existing value: the backoff would ask again every few
-minutes, and a robots.txt does not change that fast. When the rules read later (on the next page
-due on that origin, once the kept ones are stale) differ from the kept ones, and the new answer is
-not unreachable, the host's failed extractions become due again in the same batch. It cannot tell
-a page robots.txt refused from one that failed for another reason without a new column, so a rules
-change retries both, once; each asks the rules first. A first read changes nothing (no rules were
-there to refuse anything). What a check learns commits in the job's own fenced batch (invariant 6);
+minutes, and a robots.txt does not change that fast. `articles.extract_refused` (migration 0014)
+marks it: set when robots.txt disallowed the page or could not be read, cleared by every other
+settle. When the rules read later (on the next page due on that origin, once the kept ones are
+stale) differ from the kept ones, and the new answer is not unreachable, the host's marked
+extractions become due again in the same batch, the mark cleared with them; each asks the rules
+first, and settles the mark again. A page that failed for another reason (a 404, no article in
+it) is not among them: it would fail again, and a robots.txt that drops out and comes back every
+day would have it fetched every day. A first read changes nothing (no rules were there to refuse
+anything). What a check learns commits in the job's own fenced batch (invariant 6);
 a page that asks for a retry keeps it under the held lease, so the retry does not ask robots.txt
 again.
 
@@ -109,8 +127,12 @@ lifted; robots.txt, the sitemap and llms.txt already name it.
 
 - **Ask robots.txt for feeds too.** It would make a common `Disallow: /` (meant for search
   crawlers) cut a blog off from the readers who subscribed to it, which no feed reader does.
-- **Mark a refused page with an `extract_state` of its own.** Clearer, but a schema change this
-  round does not need: a rules change retrying the host's failed pages once is cheap.
+- **Mark a refused page with an `extract_state` of its own.** Every reader of the state (the
+  reader's "fetching the full text", the operator's retry, the health check) would have to learn
+  it; a flag beside `failed` changes none of them.
+- **Retry every failed page on the host when the rules change.** The first version did, with
+  nothing to tell a refusal from a 404: each time a flaky robots.txt came back, every page that
+  had failed for good was fetched again.
 - **Keep the raw robots.txt.** The applicable group is all a check needs, and a 500 KiB file read
   from D1 before every page would cost more than it says.
 - **Extract only when a member opens the post.** ADR 0022 chose eager extraction because opening

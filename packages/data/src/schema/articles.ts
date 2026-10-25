@@ -14,7 +14,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 import { user } from './auth'
-import { ms, oneOf, seq, validJson } from './columns'
+import { flag, ms, oneOf, seq, validJson } from './columns'
 import { feeds } from './sources'
 import { BODY_TRANSLATION_STATES, EXTRACT_STATES, PROVENANCES, TITLE_STATUSES } from './values'
 
@@ -47,6 +47,11 @@ export const articles = sqliteTable(
     wordCount: integer().notNull().default(0),
     readingMinutes: integer().notNull().default(0),
     extractState: text({ enum: EXTRACT_STATES }).notNull().default('none'),
+    /**
+     * Whether a `failed` extraction was refused by the blog's robots.txt (ADR 0061), so that new
+     * rules make only those due again, never every page that failed for another reason.
+     */
+    extractRefused: flag(),
     /**
      * Hash of the title and excerpt readers see now. A title translation made from another hash is
      * stale, which is how the title sweep finds work without a queue (ADR 0021).
