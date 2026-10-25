@@ -97,6 +97,26 @@ describe('discoverFeeds', () => {
     })
   })
 
+  // Codex's second review: the start was read as UTF-8 whatever the charset said.
+  test('a feed too large to read is known in the charset it declares', async () => {
+    const utf16 =
+      (text: string): RouteHandler =>
+      (_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/rss+xml; charset=utf-16le' })
+        res.end(Buffer.from(`﻿${text}`, 'utf16le'))
+      }
+    const feed = (pad: number) =>
+      rss({ items: [{ guid: '1', title: 'A', content: `<!-- ${'x'.repeat(pad)} -->` }] })
+    server.set('/small.xml', utf16(feed(10)))
+    expect((await discoverFeeds(http, server.url('/small.xml'))).map((f) => f.itemCount)).toEqual([
+      1,
+    ])
+    server.set('/large.xml', utf16(feed(FEED_MAX_BYTES / 2)))
+    await expect(discoverFeeds(http, server.url('/large.xml'))).rejects.toMatchObject({
+      kind: 'too_large',
+    })
+  })
+
   test('uses feeds declared by the page', async () => {
     server.set('/', (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/html' })

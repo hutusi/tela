@@ -8,10 +8,12 @@ export class HttpError extends Error {
   /**
    * On `too_large`, what came before the cap, so a caller can tell what was too large: an 11 MB
    * page at a guessed `/feed` is not a feed too large to read. `cappedStream` keeps the first
-   * `HEAD_BYTES` that arrived; a client's `get` adds the status.
+   * `HEAD_BYTES` that arrived; a client's `get` adds the status, and the head decoded as the whole
+   * body would have been (a UTF-16 feed reads as nothing in UTF-8).
    */
   head?: Uint8Array
   status?: number
+  headText?: string
   constructor(
     public kind: HttpErrorKind,
     message: string,
@@ -296,6 +298,7 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
         } catch (err) {
           if (!(err instanceof HttpError)) throw classify(err)
           err.status = status
+          if (err.head) err.headText = decodeBody(err.head, response.headers.get('content-type'))
           throw err
         }
         const body =

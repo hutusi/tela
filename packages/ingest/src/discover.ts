@@ -30,12 +30,13 @@ function withScheme(input: string): string {
 }
 
 /**
- * A body cut off at the cap that was a feed: a 200 whose start reads as one, by the test a whole
- * body gets. A page past the cap, a 404 with a large page, or a JSON API is not a feed too large.
+ * A body cut off at the cap that was a feed: a 200 whose start, decoded as the body would have
+ * been, reads as one by the test a whole body gets. A page past the cap, a 404 with a large page,
+ * or a JSON API is not a feed too large.
  */
 function feedCutOff(err: HttpError): boolean {
-  if (err.kind !== 'too_large' || err.status !== 200 || !err.head) return false
-  const head = new TextDecoder().decode(err.head)
+  const head = err.headText
+  if (err.kind !== 'too_large' || err.status !== 200 || !head) return false
   // Cut short, a JSON Feed no longer parses, but its version URL still says what it is.
   return looksLikeFeed(head) || (/^\s*\{/.test(head) && head.includes('jsonfeed.org/version/'))
 }
