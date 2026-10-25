@@ -24,6 +24,7 @@ import { useAdmin } from '../context'
 export const KIND_TILES: Record<string, { letter: string; hue: number }> = {
   'feed.fetch': { letter: 'F', hue: 1 },
   'article.extract': { letter: 'E', hue: 2 },
+  'article.reprocess': { letter: 'R', hue: 9 },
   'translate.title': { letter: 'T', hue: 3 },
   'translate.body': { letter: 'B', hue: 4 },
   'site.assets': { letter: 'S', hue: 5 },

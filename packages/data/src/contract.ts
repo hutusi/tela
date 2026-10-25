@@ -3,7 +3,7 @@
  * on libSQL (the portable path) and under the Workers test pool on real D1. A difference between
  * the two is a bug in the portable adapter, which is exactly what this suite exists to catch.
  */
-import { MAX_FOLDERS } from '@tela/shared'
+import { MAX_FOLDERS, PIPELINE_VERSION } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { exportDatabase, verifyExport } from './backup'
 import type { TelaDb } from './db'
@@ -20,11 +20,17 @@ import {
   startLease,
 } from './leases'
 import {
+  adoptExtractedVersion,
+  adoptReprocessedVersion,
+  dueReprocessing,
   existingArticles,
   fillSiteMetadata,
   insertArticles,
   insertVersions,
   mergeFeed,
+  pointed,
+  replayIfRejected,
+  stampPipeline,
   updateArticles,
 } from './queries/ingest'
 import {
@@ -512,6 +518,7 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         updateArticles(db, [
           {
             id: inserted.find((r) => r.dedup_key === 'g:1')?.id ?? 0,
+            expectVersion: 1,
             url: 'https://h1/p/1',
             urlHost: 'h1',
             title: 'Post 1, edited',
@@ -545,6 +552,317 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         sql`select title, primary_lang from sites where id = 1`,
       )
       expect(site).toEqual({ title: 'Blog', primary_lang: 'en' })
+    })
+  })
+
+  describe('reprocessing stored bodies (ADR 0055)', () => {
+    it('a current version made by an older pipeline is due until stamped or replaced', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['h1'])
+      await db.batch([
+        bumpSeq(db),
+        insertArticles(
+          db,
+          1,
+          [
+            {
+              dedupKey: 'g:1',
+              url: 'https://h1/p/1',
+              urlHost: 'h1',
+              title: 'Post 1',
+              author: null,
+              publishedAt: T0,
+              sourceLang: 'en',
+              excerpt: 'Excerpt',
+              contentKey: 'key-1',
+              wordCount: 100,
+              readingMinutes: 1,
+              extractState: 'done',
+              titleHash: 'th-1',
+            },
+          ],
+          T0,
+        ),
+        insertVersions(
+          db,
+          1,
+          [
+            {
+              dedupKey: 'g:1',
+              version: 1,
+              provenance: 'feed',
+              contentKey: 'key-1',
+              rawKey: 'r/1.html',
+              bodyChars: 500,
+              excerpt: 'Excerpt',
+              wordCount: 100,
+              readingMinutes: 1,
+              lang: 'en',
+              sourceUrl: null,
+            },
+          ],
+          T0,
+        ),
+      ])
+      const id =
+        (await first<{ id: number }>(db, sql`select id from articles where dedup_key = 'g:1'`))
+          ?.id ?? 0
+      await db.run(sql`update articles set current_version = 1 where id = ${id}`)
+      const due = async () =>
+        claimDue(db, {
+          kind: 'article.reprocess',
+          owner: `o${Math.random()}`,
+          now: T0,
+          ttlMs: MIN,
+          limit: 10,
+          due: dueReprocessing(),
+        }).then(async (rows) => {
+          await db.run(sql`delete from leases`)
+          return rows.map((r) => r.key)
+        })
+      // Inserted under this pipeline: not due.
+      expect(await due()).toEqual([])
+      await db.run(sql`update article_versions set pipeline_version = 0 where article_id = ${id}`)
+      expect(await due()).toEqual([String(id)])
+      await db.batch([bumpSeq(db), stampPipeline(db, id, 1)])
+      expect(await due()).toEqual([])
+
+      // Made again and different: a new current version, the extraction state as it was.
+      await db.run(sql`update article_versions set pipeline_version = 0 where article_id = ${id}`)
+      const made = {
+        version: 2,
+        provenance: 'feed' as const,
+        contentKey: 'key-1-again',
+        bodyChars: 520,
+        excerpt: 'Excerpt again',
+        wordCount: 110,
+        readingMinutes: 1,
+        lang: 'en',
+      }
+      await db.batch([
+        bumpSeq(db),
+        ...adoptReprocessedVersion(
+          db,
+          { id, currentVersion: 1 },
+          { ...made, rawKey: 'r/1.html', sourceUrl: null },
+          made,
+          'th-2',
+          T0,
+        ),
+      ])
+      expect(await due()).toEqual([])
+      const row = await first<Record<string, unknown>>(
+        db,
+        sql`select a.current_version, a.content_key, a.extract_state, a.title_hash,
+              v.pipeline_version, v.raw_key
+            from articles a join article_versions v on v.article_id = a.id and v.version = 2
+            where a.id = ${id}`,
+      )
+      expect(row).toEqual({
+        current_version: 2,
+        content_key: 'key-1-again',
+        extract_state: 'done',
+        title_hash: 'th-2',
+        pipeline_version: PIPELINE_VERSION,
+        raw_key: 'r/1.html',
+      })
+    })
+  })
+
+  describe('two writers on one article', () => {
+    it('the second to commit from the same current version moves nothing', async () => {
+      const db = await makeDb()
+      await seedFeeds(db, ['h1'])
+      const v = (key: string, version = 2) => ({
+        version,
+        provenance: 'readability' as const,
+        contentKey: key,
+        bodyChars: 900,
+        excerpt: key,
+        wordCount: 150,
+        readingMinutes: 1,
+        lang: 'en',
+      })
+      await db.batch([
+        bumpSeq(db),
+        insertArticles(
+          db,
+          1,
+          [
+            {
+              dedupKey: 'g:1',
+              url: 'https://h1/p/1',
+              urlHost: 'h1',
+              title: 'Post 1',
+              author: null,
+              publishedAt: T0,
+              sourceLang: 'en',
+              excerpt: 'Excerpt',
+              contentKey: 'key-1',
+              wordCount: 100,
+              readingMinutes: 1,
+              extractState: 'due',
+              titleHash: 'th-1',
+            },
+          ],
+          T0,
+        ),
+        insertVersions(
+          db,
+          1,
+          [
+            {
+              ...v('key-1', 1),
+              provenance: 'feed',
+              dedupKey: 'g:1',
+              rawKey: null,
+              sourceUrl: null,
+            },
+          ],
+          T0,
+        ),
+      ])
+      const id =
+        (await first<{ id: number }>(db, sql`select id from articles where dedup_key = 'g:1'`))
+          ?.id ?? 0
+      const state = () =>
+        first<{
+          current_version: number
+          content_key: string
+          extract_state: string
+          row_key: string
+        }>(
+          db,
+          sql`select a.current_version, a.content_key, a.extract_state, v.content_key as row_key
+              from articles a join article_versions v on v.article_id = a.id and v.version = a.current_version
+              where a.id = ${id}`,
+        )
+      // Both read version 1 and both take version 2. The reprocess commits first.
+      const first1 = await db.batch([
+        bumpSeq(db),
+        ...adoptReprocessedVersion(
+          db,
+          { id, currentVersion: 1 },
+          { ...v('reprocessed'), rawKey: null, sourceUrl: null },
+          v('reprocessed'),
+          'th-r',
+          T0,
+        ),
+      ])
+      expect(pointed(first1 as unknown[], 2)).toBe(true)
+      const second = await db.batch([
+        bumpSeq(db),
+        ...adoptExtractedVersion(
+          db,
+          { id, feedId: 1, currentVersion: 1 },
+          { ...v('extracted'), rawKey: null, sourceUrl: null },
+          v('extracted'),
+          'th-e',
+          T0,
+        ),
+      ])
+      expect(pointed(second as unknown[], 2)).toBe(false)
+      expect(await state()).toEqual({
+        current_version: 2,
+        content_key: 'reprocessed',
+        extract_state: 'due',
+        row_key: 'reprocessed',
+      })
+      // A feed's change decided from version 1 moves nothing either, version 3 or not, and its
+      // feed forgets what would let the next fetch skip the item.
+      await db.run(
+        sql`update feeds set etag = 'e1', last_body_hash = 'b1', next_fetch_at = ${T0 + MIN} where id = 1`,
+      )
+      const fed = (expectVersion: number) => ({
+        id,
+        expectVersion,
+        url: 'https://h1/p/1',
+        urlHost: 'h1',
+        title: 'Post 1',
+        author: null,
+        publishedAt: T0,
+        sourceLang: 'en',
+        excerpt: 'fed',
+        currentVersion: 3,
+        contentKey: 'fed',
+        wordCount: 150,
+        readingMinutes: 1,
+        extractState: 'none' as const,
+        titleHash: 'th-f',
+      })
+      const validators = () =>
+        first<Record<string, unknown>>(
+          db,
+          sql`select etag, last_body_hash, next_fetch_at from feeds where id = 1`,
+        )
+      await db.batch([
+        bumpSeq(db),
+        insertVersions(
+          db,
+          1,
+          [{ ...v('fed', 3), provenance: 'feed', dedupKey: 'g:1', rawKey: null, sourceUrl: null }],
+          T0,
+        ),
+        updateArticles(db, [fed(1)]),
+        replayIfRejected(db, 1, [fed(1)], T0),
+      ])
+      expect((await state())?.content_key).toBe('reprocessed')
+      expect(await validators()).toEqual({ etag: null, last_body_hash: null, next_fetch_at: T0 })
+      // One that chose the very row the reprocess put the article on (the same body, made from
+      // the item) lands in full: the feed's edits, and its page wanted again where it had failed.
+      await db.run(
+        sql`update feeds set etag = 'e1', last_body_hash = 'b1', next_fetch_at = ${T0 + MIN} where id = 1`,
+      )
+      await db.run(sql`update articles set extract_state = 'failed' where id = ${id}`)
+      const same = {
+        ...fed(1),
+        url: 'https://h1/p/1-fixed',
+        title: 'Post 1, edited',
+        excerpt: 'reprocessed',
+        currentVersion: 2,
+        contentKey: 'reprocessed',
+        extractState: 'due' as const,
+      }
+      await db.batch([bumpSeq(db), updateArticles(db, [same]), replayIfRejected(db, 1, [same], T0)])
+      expect(
+        await first(
+          db,
+          sql`select url, title, title_hash, current_version, extract_state from articles
+              where id = ${id}`,
+        ),
+      ).toEqual({
+        url: 'https://h1/p/1-fixed',
+        title: 'Post 1, edited',
+        title_hash: 'th-f',
+        current_version: 2,
+        extract_state: 'due',
+      })
+      expect(await validators()).toEqual({
+        etag: 'e1',
+        last_body_hash: 'b1',
+        next_fetch_at: T0 + MIN,
+      })
+      await db.run(sql`update articles set extract_state = 'due' where id = ${id}`)
+      // Decided from what is there now, it moves, and the feed keeps what it saved.
+      await db.run(
+        sql`update feeds set etag = 'e2', last_body_hash = 'b2', next_fetch_at = ${T0 + MIN} where id = 1`,
+      )
+      await db.batch([
+        bumpSeq(db),
+        updateArticles(db, [fed(2)]),
+        replayIfRejected(db, 1, [fed(2)], T0),
+      ])
+      expect(await state()).toEqual({
+        current_version: 3,
+        content_key: 'fed',
+        extract_state: 'none',
+        row_key: 'fed',
+      })
+      expect(await validators()).toEqual({
+        etag: 'e2',
+        last_body_hash: 'b2',
+        next_fetch_at: T0 + MIN,
+      })
     })
   })
 

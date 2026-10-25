@@ -800,6 +800,7 @@ says who holds it:
 |---|---|
 | `feed.fetch` | `next_fetch_at` has passed, or a WebSub ping asked |
 | `article.extract` | `extract_state = 'due'`: a summary-only post waiting for its page |
+| `article.reprocess` | the article's current version was made under an older `PIPELINE_VERSION` (ADR 0055) |
 | `site.assets` | a site's favicon has never been checked |
 | `member.gravatar` | a member shows their Gravatar and it was never asked about, or the answer has run out: 30 days after a picture, 7 after none (ADR 0033). Refresh asks again at once |
 | `site.claim` | a member asked for their claim to be checked |
@@ -821,10 +822,20 @@ says who holds it:
   `update feeds set content_mode = 'summary' where id = …`, then queue its posts, as for a dead
   letter: `update articles set extract_state = 'due' where feed_id = …`. Each extraction stamps
   its article's seq when it lands, which is when devices get the full text.
-- **Bodies stored before a normalization fix** keep the shape they were stored in: a fix changes
-  only what is processed after it, and leaf-shape fixes do not bump `NORM_VERSION` (ADR 0053).
-  A post re-processed with a new content key gets a new version, stamped with a seq, so devices
-  fetch it again and its old body translation stays with the old key. Two ways to re-process:
+- **Bodies stored before a pipeline fix** are made again by `article.reprocess` (ADR 0055).
+  Bump `PIPELINE_VERSION` in `packages/shared/src/constants.ts` with the change to sanitizing,
+  normalization, skip rules or excerpts, and deploy tela-jobs: every article whose current version
+  was made under an older one is due, newest first, 50 a minute. Each is made again from the raw
+  HTML it was stored with; one that comes out different becomes a new version (seq stamped, so
+  devices fetch it, and its old body translation stays with the old key), one that comes out the
+  same is stamped current. Nothing is fetched, so neither health check's backlog moves. How far it
+  has got: `select count(*) from article_versions v join articles a on a.id = v.article_id and
+  a.current_version = v.version where v.pipeline_version < <PIPELINE_VERSION>`. To make one again
+  without a bump: `update article_versions set pipeline_version = 0 where article_id = … and
+  version = (select current_version from articles where id = …)`.
+
+  A fix to *extraction* (Readability's input) needs the page again, which the stored raw HTML is
+  not:
   - an extracted post (`article_versions.provenance = 'readability'`): make it due again,
     `update articles set extract_state = 'due' where id in (…)`. The sweep re-fetches each page,
     politely per host, so one host's posts go one at a time. **At most twenty at once:** a post
@@ -832,14 +843,13 @@ says who holds it:
     than twenty of those fail the health check, which pings the dead-man switch's `/fail` and
     mails the owner. Re-queuing Paul Graham's 200 essays by `url_host` did exactly that
     (2026-10-24). Queue the next ones as these finish;
-  - a feed's posts: make the feed process every item it still lists, not just answer 304 or
-    match its last body, `update feeds set etag = null, last_modified = null,
+  - a feed whose items themselves changed: make it process every item it still lists, not just
+    answer 304 or match its last body, `update feeds set etag = null, last_modified = null,
     last_body_hash = null, next_fetch_at = strftime('%s','now') * 1000 where id in (…)`. Due
     now rather than at `0`: a feed due for over two hours with no lease counts as overdue, and
-    more than three of those fail the health check too. Posts the feed no longer lists keep
-    their old version.
+    more than three of those fail the health check too.
   A post whose body did not have the fixed shape gets the same content key and no new version,
-  so either is safe to run over more than the affected posts.
+  so any of these is safe to run over more than the affected posts.
 - **What gave up:** `select * from dead_letters order by at desc limit 20`. Nothing retries a
   dead letter. Fix the cause, then make the domain row due again:
   - a feed: `update feeds set next_fetch_at = 0 where id = …`;

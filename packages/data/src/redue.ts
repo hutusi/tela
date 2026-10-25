@@ -59,6 +59,18 @@ export const REDUE: Record<LeaseKind, Redue> = {
       `),
     ],
   },
+  // Not synced: which pipeline a version was made under is not a column devices hold. Due again
+  // means made again, and a version that comes out different moves `seq` when it is adopted.
+  'article.reprocess': {
+    synced: false,
+    statements: (db, key) => [
+      db.run(sql`
+        update article_versions set pipeline_version = 0
+        where article_id = ${id(key)}
+          and version = (select current_version from articles where id = ${id(key)})
+      `),
+    ],
+  },
   'site.assets': {
     synced: true,
     statements: (db, key, now) => [

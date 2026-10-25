@@ -26,9 +26,13 @@ beforeEach(async () => {
         updated_at)
       values (1, 1, 'https://a.example/feed', 'a.example', ${NOW - HOUR}, 'https://hub.example', 0, 0)`),
     db.run(sql`insert into articles (id, feed_id, dedup_key, url, url_host, title, title_hash,
-        source_lang, fetched_at, sort_at, extract_state, content_key)
+        source_lang, fetched_at, sort_at, extract_state, content_key, current_version)
       values (1, 1, 'a', 'https://a.example/1', 'a.example', 'A post', 'h1', 'en', ${NOW - HOUR},
-        ${NOW - HOUR}, 'due', 'ck1')`),
+        ${NOW - HOUR}, 'due', 'ck1', 1)`),
+    // Made under pipeline 0, before the column: due for reprocessing.
+    db.run(sql`insert into article_versions (article_id, version, provenance, content_key,
+        norm_version, body_chars, created_at)
+      values (1, 1, 'feed', 'ck1', 1, 10, 0)`),
     db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status, created_at)
       values (1, 1, 'u1', 'meta', 'tok', 'pending', 0)`),
     db.run(sql`insert into websub_subscriptions (feed_id, hub_url, topic_url, secret, status,
@@ -44,6 +48,7 @@ beforeEach(async () => {
 const KEYS: Record<LeaseKind, string> = {
   'feed.fetch': '1',
   'article.extract': '1',
+  'article.reprocess': '1',
   'translate.title': '1',
   'translate.body': 'ck1:fr',
   'site.assets': '1',

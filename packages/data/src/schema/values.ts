@@ -33,6 +33,7 @@ export type HighlightSide = (typeof HIGHLIGHT_SIDES)[number]
 export const LEASE_KINDS = [
   'feed.fetch',
   'article.extract',
+  'article.reprocess',
   'translate.title',
   'translate.body',
   'site.assets',

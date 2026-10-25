@@ -5,7 +5,9 @@ This file is the normative spec for how article bodies become **blocks**. The bl
 contract with the translation cache: whenever what a tagged text means or how it is hashed changes
 (§3, §4), bump `NORM_VERSION` in `@tela/shared` so old and new cache entries never mix. A fix to
 which elements become leaves (§2) keeps it, provided every tree without the fixed shape annotates
-byte-identically (ADR 0053).
+byte-identically (ADR 0053). Any change to what `processArticleHtml` makes of a body (sanitizing,
+normalization, skips, excerpts; a `NORM_VERSION` bump too) bumps `PIPELINE_VERSION`, and
+`article.reprocess` makes every stored body again from its raw HTML (ADR 0055).
 
 ## Pipeline
 
