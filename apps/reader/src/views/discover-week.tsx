@@ -49,7 +49,7 @@ export function DiscoverWeekView({
   const t = useTranslations('discover')
   if (week === null) {
     return (
-      <DiscoverFrame tab="week">
+      <DiscoverFrame tab="week" hl={reading.lang}>
         {onRetry ? (
           <LoadFailed onRetry={onRetry} />
         ) : (
@@ -63,7 +63,7 @@ export function DiscoverWeekView({
   }
   const shared = { member, reading, locale, now }
   return (
-    <DiscoverFrame tab="week">
+    <DiscoverFrame tab="week" hl={reading.lang}>
       <SectionHead
         first
         label={t(`week.span.${week.span}`)}

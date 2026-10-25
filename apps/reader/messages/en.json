@@ -1046,5 +1046,12 @@
     "more": "More blogs in Discover →",
     "import": "Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>.",
     "footer": "More blogs in <discover>Discover</discover>. Coming from another reader? <opml>Import an OPML file</opml> or <add>paste a blog’s address</add>."
+  },
+  "feeds": {
+    "label": "Feeds",
+    "rss": "New posts as RSS, for a feed reader",
+    "opml": "These blogs as OPML, to import into a feed reader",
+    "blogroll": "The newest posts from the blogs in {name}, a blogroll by {owner} on Tela.",
+    "discover": "The newest posts from the blogs in Tela’s directory."
   }
 }

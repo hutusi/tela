@@ -131,6 +131,27 @@ describe("a guest's blogroll, as the edge renders it", () => {
     expect(count(html, 'blogroll-row')).toBe(2)
   })
 
+  test('its feeds, as plain links, when the page offers them and a listed blog fills them', () => {
+    // Not offered: the owner's page of a private one gives none.
+    expect(count(html, 'feed-links')).toBe(0)
+    const offered = wrap(<BlogrollView data={DATA} locale="en" now={NOW} feeds={{ hl: 'fr' }} />)
+    expect(count(offered, 'feed-links')).toBe(1)
+    expect(offered).toContain(`href="/l/${ID}.rss?hl=fr" type="application/rss+xml"`)
+    expect(offered).toContain(`href="/l/${ID}.opml" type="text/x-opml"`)
+    expect(offered).toContain('>RSS</a>')
+    expect(offered).toContain('>OPML</a>')
+    // A blogroll of unlisted blogs only has nothing in its feeds to offer.
+    const unlisted = wrap(
+      <BlogrollView
+        data={{ ...DATA, blogs: DATA.blogs.map((b) => ({ ...b, listed: false })) }}
+        locale="en"
+        now={NOW}
+        feeds={{ hl: 'fr' }}
+      />,
+    )
+    expect(count(unlisted, 'feed-links')).toBe(0)
+  })
+
   test('empty, it says so and offers nothing to subscribe to', () => {
     const empty = wrap(<BlogrollView data={{ ...DATA, blogs: [] }} locale="en" now={NOW} />)
     expect(empty).toContain('No blogs here yet.')
@@ -327,6 +348,13 @@ describe("the owner's own blogroll, from the store", () => {
     const html = page(await storeWith({ ...OWN, blogrolls: [ownRow({ isPublic: true })] }))
     expect(html).toContain('<span class="sr-only">Who can see it: Public</span>')
     expect(html).toContain('Public. It shows on your profile and can appear in Discover.')
+  })
+
+  test('its feeds are offered only while others can see it (ADR 0062)', async () => {
+    expect(count(page(await storeWith(OWN)), 'feed-links')).toBe(0)
+    const html = page(await storeWith({ ...OWN, blogrolls: [ownRow({ isPublic: true })] }))
+    expect(html).toContain(`href="/l/${ID}.rss?hl=en"`)
+    expect(html).toContain(`href="/l/${ID}.opml"`)
   })
 
   test('made just now with nothing in it, it opens on Add blogs, each subscription a tick box', async () => {

@@ -13,6 +13,7 @@
     "./tagged": "./src/tagged.ts",
     "./extract": "./src/extract.ts",
     "./opml": "./src/opml.ts",
+    "./rss": "./src/rss.ts",
     "./tokens": "./src/tokens.ts",
     "./url": "./src/url.ts"
   },
@@ -33,6 +34,7 @@
     "sanitize-html": "^2.17.7"
   },
   "devDependencies": {
-    "@types/sanitize-html": "^2.16.1"
+    "@types/sanitize-html": "^2.16.1",
+    "fast-xml-parser": "~5.10.0"
   }
 }

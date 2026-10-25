@@ -1046,5 +1046,12 @@
     "more": "Plus de blogs dans Découvrir →",
     "import": "Vous venez d’un autre lecteur ? <opml>Importez un fichier OPML</opml> ou <add>collez l’adresse d’un blog</add>.",
     "footer": "Plus de blogs dans <discover>Découvrir</discover>. Vous venez d’un autre lecteur ? <opml>Importez un fichier OPML</opml> ou <add>collez l’adresse d’un blog</add>."
+  },
+  "feeds": {
+    "label": "Flux",
+    "rss": "Les nouveaux articles en RSS, pour un lecteur de flux",
+    "opml": "Ces blogs en OPML, à importer dans un lecteur de flux",
+    "blogroll": "Les derniers articles des blogs de {name}, une blogroll de {owner} sur Tela.",
+    "discover": "Les derniers articles des blogs de l’annuaire de Tela."
   }
 }

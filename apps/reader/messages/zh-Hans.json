@@ -1046,5 +1046,12 @@
     "more": "在「发现」中查看更多博客 →",
     "import": "从别的阅读器过来？<opml>导入 OPML 文件</opml>，或<add>粘贴博客地址</add>。",
     "footer": "在「<discover>发现</discover>」中查看更多博客。从别的阅读器过来？<opml>导入 OPML 文件</opml>，或<add>粘贴博客地址</add>。"
+  },
+  "feeds": {
+    "label": "订阅源",
+    "rss": "用 RSS 在阅读器里订阅新文章",
+    "opml": "这些博客的 OPML 文件，可导入阅读器",
+    "blogroll": "{owner} 在 Tela 上的博客链「{name}」里各个博客的最新文章。",
+    "discover": "Tela 收录博客的最新文章。"
   }
 }

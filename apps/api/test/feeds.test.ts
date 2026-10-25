@@ -197,9 +197,16 @@ describe('OPML', () => {
     )
     const res = await api.request('/api/v1/feeds/opml', { as: reader })
     expect(res.headers.get('content-type')).toContain('text/x-opml')
+    expect(res.headers.get('content-disposition')).toBe(
+      'attachment; filename="tela-subscriptions.opml"',
+    )
     const text = await res.text()
     expect(text).toContain('xmlUrl="https://a.example/feed"')
     expect(text).not.toContain('b.example')
+    // The head as it always was: its title and when it was made, nobody's name.
+    expect(text).toContain(
+      `  <head>\n    <title>Tela subscriptions</title>\n    <dateCreated>${new Date(api.clock.now()).toUTCString()}</dateCreated>\n  </head>`,
+    )
   })
 })
 

@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { FOLDER_NAME_MAX } from '@tela/shared'
+import { XMLValidator } from 'fast-xml-parser'
+import { parseOpml } from 'feedsmith'
 import { buildOpml, feedsFromOpml, feedUrlsFromOpml, MAX_OPML_DEPTH, MAX_OPML_FEEDS } from './opml'
 
 function opml(body: string): string {
@@ -112,7 +114,80 @@ describe('feedsFromOpml', () => {
   })
 })
 
+const EXPORT = { title: 'Tela subscriptions', dateCreated: new Date(Date.UTC(2026, 8, 28)) }
+
 describe('buildOpml', () => {
+  test("a member's export is byte for byte what it was before a document had its own title", () => {
+    const doc = buildOpml(
+      [
+        {
+          feedUrl: 'https://a.example/feed?x=1&y=2',
+          title: 'A & "B"',
+          homeUrl: 'https://a.example',
+          folder: 'Tech',
+        },
+        { feedUrl: 'https://b.example/feed', title: "<b>'s", homeUrl: 'https://b.example' },
+        {
+          feedUrl: 'https://c.example/feed',
+          title: 'Ç 中文',
+          homeUrl: 'https://c.example',
+          folder: 'Tech',
+        },
+      ],
+      { title: 'Tela subscriptions', dateCreated: new Date(Date.UTC(2026, 8, 28, 7, 5)) },
+    )
+    // Written by the builder as it was (2026-10-25), from the same input.
+    expect(doc).toBe(`<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>Tela subscriptions</title>
+    <dateCreated>Mon, 28 Sep 2026 07:05:00 GMT</dateCreated>
+  </head>
+  <body>
+    <outline text="Tech" title="Tech">
+      <outline type="rss" text="A &amp; &quot;B&quot;" title="A &amp; &quot;B&quot;" xmlUrl="https://a.example/feed?x=1&amp;y=2" htmlUrl="https://a.example"/>
+      <outline type="rss" text="Ç 中文" title="Ç 中文" xmlUrl="https://c.example/feed" htmlUrl="https://c.example"/>
+    </outline>
+    <outline type="rss" text="&lt;b&gt;&apos;s" title="&lt;b&gt;&apos;s" xmlUrl="https://b.example/feed" htmlUrl="https://b.example"/>
+  </body>
+</opml>
+`)
+  })
+
+  test("a blogroll's head: its own title, when it changed and who keeps it, escaped", () => {
+    const doc = buildOpml([], {
+      title: 'Cities & <walks>',
+      dateModified: new Date(Date.UTC(2026, 9, 1)),
+      ownerName: 'Ana "R"',
+      ownerId: 'https://tela.test/@ana',
+    })
+    expect(XMLValidator.validate(doc)).toBe(true)
+    expect(doc).toContain('<title>Cities &amp; &lt;walks&gt;</title>')
+    expect(doc).not.toContain('dateCreated')
+    expect(doc).toContain('<dateModified>Thu, 01 Oct 2026 00:00:00 GMT</dateModified>')
+    expect(doc).toContain('<ownerName>Ana &quot;R&quot;</ownerName>')
+    expect(doc).toContain('<ownerId>https://tela.test/@ana</ownerId>')
+    const head = (parseOpml(doc) as { head?: Record<string, unknown> }).head
+    expect(head?.title).toBe('Cities & <walks>')
+    expect(head?.ownerName).toBe('Ana "R"')
+  })
+
+  test('a character XML cannot hold is dropped, so a hostile title leaves the document readable', () => {
+    const doc = buildOpml(
+      [
+        {
+          feedUrl: 'https://a.example/feed',
+          title: 'Bell\u0007 nul\u0000 lone\uD800 ok\u{1F600}',
+          homeUrl: 'https://a.example',
+        },
+      ],
+      EXPORT,
+    )
+    expect(XMLValidator.validate(doc)).toBe(true)
+    expect(doc).toContain('text="Bell nul lone ok\u{1F600}"')
+    expect(feedUrlsFromOpml(doc)).toEqual(['https://a.example/feed'])
+  })
+
   test('writes what feedUrlsFromOpml reads back, escaping titles and URLs', () => {
     const doc = buildOpml(
       [
@@ -123,8 +198,9 @@ describe('buildOpml', () => {
         },
         { feedUrl: 'https://b.example/feed', title: '<b>', homeUrl: 'https://b.example' },
       ],
-      new Date(Date.UTC(2026, 8, 28)),
+      EXPORT,
     )
+    expect(XMLValidator.validate(doc)).toBe(true)
     expect(doc).toContain('text="A &amp; &quot;B&quot;"')
     expect(feedUrlsFromOpml(doc)).toEqual([
       'https://a.example/feed?x=1&y=2',
@@ -147,7 +223,7 @@ describe('buildOpml', () => {
         feed('c', 'Tech'),
         feed('none', null),
       ],
-      new Date(Date.UTC(2026, 8, 28)),
+      EXPORT,
     )
     expect(doc).toContain(
       '<outline text="Cities &amp; &lt;Towns&gt;" title="Cities &amp; &lt;Towns&gt;">',

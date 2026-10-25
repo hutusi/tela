@@ -1,9 +1,26 @@
-/** What Discover's tabs share (ADR 0044): the page, its heading and intro, and the tabs. */
+/**
+ * What Discover's tabs share (ADR 0044): the page, its heading and intro, the tabs, and at its
+ * foot Discover's own feeds (ADR 0062), narrowed to the tab's topic and titled in `hl`.
+ */
 import { useTranslations } from 'use-intl'
 import { DiscoverTabs } from '../components/discover-tabs'
+import { FeedLinks } from '../components/feed-links'
 import type { DiscoverTab } from '../lib/discover-href'
+import { discoverFeedHref } from '../lib/feed-href'
 
-export function DiscoverFrame({ tab, children }: { tab: DiscoverTab; children: React.ReactNode }) {
+export function DiscoverFrame({
+  tab,
+  topic = null,
+  hl = null,
+  children,
+}: {
+  tab: DiscoverTab
+  /** The topic the tab is narrowed to, which its feeds are too. */
+  topic?: string | null | undefined
+  /** The language the feeds' titles are read in: the page's reading language. */
+  hl?: string | null | undefined
+  children: React.ReactNode
+}) {
   const t = useTranslations('discover')
   return (
     <main
@@ -18,6 +35,11 @@ export function DiscoverFrame({ tab, children }: { tab: DiscoverTab; children: R
       </p>
       <DiscoverTabs tab={tab} />
       {children}
+      <FeedLinks
+        rss={discoverFeedHref('rss', { topic, hl })}
+        opml={discoverFeedHref('opml', { topic, hl })}
+        className="mt-12"
+      />
     </main>
   )
 }

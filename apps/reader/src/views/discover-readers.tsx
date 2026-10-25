@@ -32,7 +32,7 @@ export function DiscoverReadersView({
     people: (suggestions ?? []).filter((s) => s.group === group),
   })).filter((g) => g.people.length > 0)
   return (
-    <DiscoverFrame tab="readers">
+    <DiscoverFrame tab="readers" hl={reading.lang}>
       <p className="m-0 max-w-[620px] text-[13px] leading-normal text-muted">{t('intro')}</p>
       {suggestions === null && onRetry ? (
         <LoadFailed onRetry={onRetry} />

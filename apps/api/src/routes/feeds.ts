@@ -154,7 +154,7 @@ export function feedRoutes(deps: ApiDeps) {
         homeUrl: r.home_url,
         folder: r.folder,
       })),
-      new Date(deps.clock.now()),
+      { title: 'Tela subscriptions', dateCreated: new Date(deps.clock.now()) },
     )
     return c.body(opml, 200, {
       'content-type': 'text/x-opml; charset=utf-8',

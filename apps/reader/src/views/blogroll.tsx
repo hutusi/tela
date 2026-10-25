@@ -12,10 +12,12 @@ import { languageBadge } from '@tela/shared'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { FeedLinks } from '../components/feed-links'
 import { CHECK, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
 import { SiteAvatar } from '../components/site-avatar'
 import { daysAgo } from '../lib/days'
+import { blogrollFeedHref } from '../lib/feed-href'
 import { displayHost, relativeFormat, shortDate } from '../lib/format'
 import type { BlogrollBlog, BlogrollData, MemberControls, Person } from './types'
 
@@ -43,6 +45,11 @@ export type BlogrollViewProps = {
   readOnly?: boolean | undefined
   /** A line under the list: the owner's says who can see the blogroll. */
   footer?: ReactNode
+  /**
+   * Its RSS and OPML (ADR 0062), the RSS's titles in `hl`: only while others can see it, since a
+   * private blogroll's feeds are a 404.
+   */
+  feeds?: { hl: string | null } | undefined
 }
 
 /**
@@ -91,6 +98,7 @@ export function BlogrollView({
   empty,
   readOnly = false,
   footer,
+  feeds,
 }: BlogrollViewProps) {
   const t = useTranslations('blogroll')
   const { blogroll, owner, blogs } = data
@@ -196,6 +204,15 @@ export function BlogrollView({
         <p className="mt-8 mb-0 text-center text-[13.5px] text-muted" data-testid="blogroll-footer">
           {footer}
         </p>
+      ) : null}
+
+      {/* Its feeds hold its listed blogs only: with none, they would be empty. */}
+      {feeds && blogs.some((b) => b.listed) ? (
+        <FeedLinks
+          rss={blogrollFeedHref(blogroll.id, 'rss', feeds.hl)}
+          opml={blogrollFeedHref(blogroll.id, 'opml')}
+          className="mt-8 text-center"
+        />
       ) : null}
     </main>
   )

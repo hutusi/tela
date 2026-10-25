@@ -82,7 +82,7 @@ export function DiscoverArticlesView({
   const filtered = (over: Partial<ArticlesParams>) =>
     articlesHref({ ...params, cursor: null, ...over })
   return (
-    <DiscoverFrame tab="articles">
+    <DiscoverFrame tab="articles" topic={params.topic} hl={reading.lang}>
       <div className="mb-2 flex flex-wrap items-center gap-3">
         <TopicChips topic={params.topic} hrefOf={(topic) => filtered({ topic })} />
         <div className="flex-1" />

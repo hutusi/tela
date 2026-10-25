@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test'
+import { parseFeedText } from '@tela/content'
+import { feedsFromOpml } from '@tela/content/opml'
 import { bumpSeq, currentSeq } from '@tela/data'
 import type { Blobs } from '@tela/platform'
 import { memoryBlobs } from '@tela/platform/portable'
 import { preferredLanguages, type UiLocale } from '@tela/shared'
 import { sql } from 'drizzle-orm'
+import { XMLValidator } from 'fast-xml-parser'
 import { createTestApi, signedIn, type TestApi } from '../../api/test/helpers'
 import { detectLocale } from '../src/i18n'
 import { type PublicRoute, publicRoute, renderPublicPage } from '../src/ssr'
@@ -1505,5 +1508,303 @@ describe('writes to the API', () => {
       403,
     )
     expect((await post(act, { cookie, ...client })).status).toBe(403)
+  })
+})
+
+describe("Tela's own feeds (ADR 0062)", () => {
+  const ROLL = 'abcdefABCDEF'
+  const OWNER = 'member-anna-0000001'
+  const feedOf = (path: string, headers: Record<string, string> = {}) =>
+    edge.fetch(new Request(`${ORIGIN}${path}`, { headers }))
+
+  async function write(...statements: unknown[]) {
+    const db = api.db
+    await db.batch([bumpSeq(db), ...statements] as never)
+  }
+  /** A blog and its feed, both numbered `id`. */
+  async function blog(id: number, o: { listing?: string; optOut?: boolean; title?: string } = {}) {
+    const db = api.db
+    await write(
+      db.run(sql`insert into sites (id, home_url, title, listing, translation_opt_out, created_at,
+          updated_at, seq)
+        values (${id}, ${`https://blog${id}.example`}, ${o.title ?? `Blog ${id}`},
+          ${o.listing ?? 'listed'}, ${o.optOut ? 1 : 0}, 0, 0, ${currentSeq})`),
+      db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+          updated_at, seq)
+        values (${id}, ${id}, ${`https://blog${id}.example/feed`}, ${`blog${id}.example`}, 0, 0,
+          0, ${currentSeq})`),
+    )
+  }
+  /** A post `ago` minutes old, its title and excerpt hashed `h<id>`. */
+  async function post(id: number, feedId: number, title: string, ago: number, lang = 'en') {
+    const db = api.db
+    const now = api.clock.now()
+    await write(
+      db.run(sql`insert into articles (id, feed_id, dedup_key, url, title, excerpt, source_lang,
+          fetched_at, sort_at, title_hash, seq)
+        values (${id}, ${feedId}, ${`k${id}`}, ${`https://blog${feedId}.example/p/${id}`},
+          ${title}, ${`About ${title}`}, ${lang}, ${now}, ${now - ago * 60_000}, ${`h${id}`},
+          ${currentSeq})`),
+    )
+  }
+  async function translated(id: number, lang: string, title: string) {
+    const db = api.db
+    await write(
+      db.run(sql`insert into article_titles (article_id, lang, feed_id, title, excerpt, status,
+          source_hash, updated_at, seq)
+        values (${id}, ${lang}, (select feed_id from articles where id = ${id}), ${title},
+          ${`${title} …`}, 'done', ${`h${id}`}, 0, ${currentSeq})`),
+    )
+  }
+  async function blogroll(feeds: number[], o: { isPublic?: boolean; hiddenAt?: number } = {}) {
+    const db = api.db
+    await write(
+      db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+        values (${OWNER}, 'anna', 'anna@x.test', 1, 0, 0)`),
+      db.run(sql`insert into profiles (user_id, handle, display_name, created_at, updated_at, seq)
+        values (${OWNER}, 'anna', 'Ana & <Co>', 0, 0, ${currentSeq})`),
+      db.run(sql`insert into blogrolls (id, user_id, name, description, is_public, public_version,
+          public_since, hidden_at, created_at, updated_at, seq)
+        values (${ROLL}, ${OWNER}, 'Cities, on foot', '', ${o.isPublic === false ? 0 : 1}, 1, 1,
+          ${o.hiddenAt ?? null}, 1, 1000, ${currentSeq})`),
+      ...feeds.map((feedId, i) =>
+        db.run(sql`insert into blogroll_blogs (blogroll_id, feed_id, user_id, note_at, added_at,
+            updated_at, seq)
+          values (${ROLL}, ${feedId}, ${OWNER}, 0, ${i + 1}, ${i + 1}, ${currentSeq})`),
+      ),
+    )
+  }
+  const rssTitles = (xml: string) => parseFeedText(xml, `${ORIGIN}/feed`).items.map((i) => i.title)
+
+  test("a blogroll's RSS: its listed blogs' newest posts, in the language `hl` pins", async () => {
+    await blog(1)
+    await blog(2, { optOut: true })
+    await blog(3, { listing: 'private' })
+    await blogroll([1, 2, 3])
+    await post(10, 1, 'Walking <Lisbon> & more', 10)
+    await post(11, 2, 'Kerbs', 20)
+    await post(12, 3, 'Unlisted', 5)
+    await post(13, 1, 'Déjà en français', 30, 'fr')
+    await translated(10, 'fr', 'Marcher à Lisbonne')
+    await translated(10, 'zh-Hans', '漫步里斯本')
+    await translated(10, 'zh-Hant', '漫步里斯本（繁）')
+    // A row in the post's own language changes nothing, and an opted-out blog's none.
+    await translated(13, 'fr', 'Ne jamais montrer')
+    await translated(11, 'fr', 'Bordures')
+
+    const res = await feedOf(`/l/${ROLL}.rss?hl=fr`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('application/rss+xml; charset=utf-8')
+    expect(res.headers.get('x-robots-tag')).toBe('noindex')
+    expect(res.headers.get('content-disposition')).toBeNull()
+    const xml = await res.text()
+    expect(XMLValidator.validate(xml)).toBe(true)
+    const feed = parseFeedText(xml, `${ORIGIN}/l/${ROLL}.rss`)
+    expect(feed.title).toBe('Cities, on foot')
+    expect(feed.homeUrl).toBe(`${ORIGIN}/l/${ROLL}?hl=fr`)
+    expect(feed.selfUrl).toBe(`${ORIGIN}/l/${ROLL}.rss?hl=fr`)
+    expect(feed.language).toBe('fr')
+    expect(feed.description).toBe(
+      'Les derniers articles des blogs de Cities, on foot, une blogroll de Ana & <Co> sur Tela.',
+    )
+    expect(feed.items.map((i) => [i.title, i.url, i.author])).toEqual([
+      ['Marcher à Lisbonne', 'https://blog1.example/p/10', 'Blog 1'],
+      ['Kerbs', 'https://blog2.example/p/11', 'Blog 2'],
+      ['Déjà en français', 'https://blog1.example/p/13', 'Blog 1'],
+    ])
+    // The excerpt goes with the title it belongs to, as text.
+    expect(feed.items[0]?.summaryHtml).toContain('Marcher à Lisbonne …')
+    expect(feed.items[1]?.summaryHtml).toContain('About Kerbs')
+    // Never a body.
+    expect(feed.items.every((i) => i.contentHtml === null)).toBe(true)
+
+    // zh-Hant is the stored conversion, in any case `hl` is written in.
+    expect(rssTitles(await (await feedOf(`/l/${ROLL}.rss?hl=ZH-hant`)).text())[0]).toBe(
+      '漫步里斯本（繁）',
+    )
+    expect(rssTitles(await (await feedOf(`/l/${ROLL}.rss?hl=zh-Hans`)).text())[0]).toBe(
+      '漫步里斯本',
+    )
+    // No `hl`, or one Tela does not have: every post as written, and no language.
+    for (const path of [`/l/${ROLL}.rss`, `/l/${ROLL}.rss?hl=de`]) {
+      const original = await (await feedOf(path)).text()
+      expect(rssTitles(original)).toEqual(['Walking <Lisbon> & more', 'Kerbs', 'Déjà en français'])
+      expect(original).not.toContain('<language>')
+      expect(original).toContain(`<atom:link href="${ORIGIN}/l/${ROLL}.rss" rel="self"`)
+    }
+    // Every language from one read of tela-api: the colo keeps its answer.
+    expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/feeds/'))).toEqual([
+      `/api/v1/public/feeds/blogrolls/${ROLL}`,
+    ])
+  })
+
+  test("a blogroll's OPML: its listed blogs in its order, shown inline", async () => {
+    await blog(1, { title: 'Garden & <Notes>' })
+    await blog(2, { listing: 'private' })
+    await blog(3, { listing: 'featured' })
+    await blogroll([3, 2, 1])
+    const res = await feedOf(`/l/${ROLL}.opml`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/x-opml; charset=utf-8')
+    expect(res.headers.get('content-disposition')).toBe(
+      `inline; filename="tela-blogroll-${ROLL}.opml"`,
+    )
+    const xml = await res.text()
+    expect(XMLValidator.validate(xml)).toBe(true)
+    expect(feedsFromOpml(xml)).toEqual([
+      { url: 'https://blog3.example/feed', folder: null },
+      { url: 'https://blog1.example/feed', folder: null },
+    ])
+    expect(xml).toContain('<title>Cities, on foot</title>')
+    expect(xml).toContain('<ownerName>Ana &amp; &lt;Co&gt;</ownerName>')
+    expect(xml).toContain(`<ownerId>${ORIGIN}/@anna</ownerId>`)
+    expect(xml).toContain('text="Garden &amp; &lt;Notes&gt;"')
+  })
+
+  test('a feed is answered 304 while its bytes are the same, and HEAD has no body', async () => {
+    await blog(1)
+    await blogroll([1])
+    await post(10, 1, 'One', 10)
+    const first = await feedOf(`/l/${ROLL}.rss`)
+    const etag = first.headers.get('etag') ?? ''
+    expect(etag).toMatch(/^"[0-9a-f]{24}"$/)
+    expect(first.headers.get('cache-control')).toBe('public, max-age=60')
+    const again = await feedOf(`/l/${ROLL}.rss`, { 'if-none-match': `W/${etag}` })
+    expect(again.status).toBe(304)
+    expect(await again.text()).toBe('')
+    const head = await edge.fetch(new Request(`${ORIGIN}/l/${ROLL}.rss`, { method: 'HEAD' }))
+    expect(head.status).toBe(200)
+    expect(head.headers.get('etag')).toBe(etag)
+    expect(await head.text()).toBe('')
+  })
+
+  test('a hidden or unknown blogroll has no feeds, and a bad id asks tela-api nothing', async () => {
+    await blog(1)
+    await blogroll([1], { hiddenAt: 5 })
+    for (const path of [`/l/${ROLL}.rss`, `/l/${ROLL}.opml`, '/l/ZZZZZZZZZZZZ.rss']) {
+      const res = await feedOf(path)
+      expect([path, res.status]).toEqual([path, 404])
+      expect(res.headers.get('cache-control')).toBe('public, max-age=60')
+    }
+    const before = apiCalls.length
+    for (const path of ['/l/short.rss', '/l/abcdefABCDE!.opml', '/l/.rss']) {
+      expect([path, (await feedOf(path)).status]).toEqual([path, 404])
+    }
+    expect(apiCalls).toHaveLength(before)
+  })
+
+  test("the blogroll's page is still its page, and a feed's failure is a 503 nobody keeps", async () => {
+    await blog(1)
+    await blogroll([1])
+    const page = await feedOf(`/l/${ROLL}`)
+    expect(page.headers.get('content-type')).toContain('text/html')
+    expect(await page.text()).toContain('data-testid="blogroll-page"')
+    expect(apiCalls).toContain(`/api/v1/public/blogrolls/${ROLL}`)
+    expect(apiCalls).not.toContain(`/api/v1/public/feeds/blogrolls/${ROLL}`)
+
+    const down = createEdge({
+      blobs,
+      api: { fetch: async () => new Response('down', { status: 503 }) },
+      assets: { fetch: async () => new Response(TEMPLATE) },
+      pages: pages as unknown as PublicPages,
+      cache: memoryCache(),
+      fetchImage: async () => new Response('nope', { status: 404 }),
+      config: { authSecret: 'a-test-secret-that-is-long-enough-for-hmac', privateBeta: false },
+    })
+    const res = await down.fetch(new Request(`${ORIGIN}/discover/articles.rss`))
+    expect(res.status).toBe(503)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+
+  test('the pages name their feeds in their head, in their language, and link them', async () => {
+    await blog(1)
+    await blog(2, { listing: 'private' })
+    await blogroll([1, 2])
+    const roll = await (await feedOf(`/l/${ROLL}`)).text()
+    expect(roll).toContain(
+      `<link rel="alternate" type="application/rss+xml" title="Cities, on foot · RSS" href="/l/${ROLL}.rss?hl=en" />`,
+    )
+    expect(roll).toContain(
+      `<link rel="alternate" type="text/x-opml" title="Cities, on foot · OPML" href="/l/${ROLL}.opml" />`,
+    )
+    expect(roll).toContain(`href="/l/${ROLL}.rss?hl=en" type="application/rss+xml"`)
+
+    const fr = { cookie: 'tela_locale=fr' }
+    const articles = await (await feedOf('/discover/articles?topic=tech', fr)).text()
+    expect(articles).toContain(
+      '<link rel="alternate" type="application/rss+xml" title="Découvrir · Tela · RSS" href="/discover/articles.rss?topic=tech&amp;hl=fr" />',
+    )
+    expect(articles).toContain(
+      '<link rel="alternate" type="text/x-opml" title="Découvrir · Tela · OPML" href="/discover.opml?topic=tech&amp;hl=fr" />',
+    )
+    // And at the foot of the page, for a person.
+    expect(articles).toContain(
+      'href="/discover/articles.rss?topic=tech&amp;hl=fr" type="application/rss+xml"',
+    )
+    for (const tab of [
+      '/discover',
+      '/discover/blogs',
+      '/discover/blogrolls',
+      '/discover/readers',
+    ]) {
+      const html = await (await feedOf(tab)).text()
+      expect([tab, html.includes('href="/discover.opml?hl=en"')]).toEqual([tab, true])
+      expect(html).toContain('data-testid="feed-links"')
+    }
+  })
+
+  test('a blogroll of unlisted blogs offers no feeds: there would be nothing in them', async () => {
+    await blog(2, { listing: 'private' })
+    await blogroll([2])
+    const html = await (await feedOf(`/l/${ROLL}`)).text()
+    expect(html).toContain('data-testid="blogroll-page"')
+    expect(html).not.toContain('rel="alternate"')
+    expect(html).not.toContain('data-testid="feed-links"')
+  })
+
+  test("Discover's RSS and OPML: its public blogs and newest posts, by topic, titled in `hl`", async () => {
+    await blog(1)
+    await blog(2, { listing: 'featured' })
+    await blog(3, { listing: 'private' })
+    await write(
+      api.db.run(sql`insert into site_topics (site_id, topic) values (1, 'tech'), (3, 'tech')`),
+    )
+    await post(10, 1, 'Rust tips', 10)
+    await post(11, 2, 'Bread', 20)
+    await post(12, 3, 'Hidden', 5)
+    await translated(10, 'fr', 'Astuces Rust')
+
+    const all = await (await feedOf('/discover/articles.rss')).text()
+    expect(XMLValidator.validate(all)).toBe(true)
+    expect(rssTitles(all)).toEqual(['Rust tips', 'Bread'])
+    const allRead = parseFeedText(all, `${ORIGIN}/feed`)
+    expect(allRead.title).toBe('Discover · Tela')
+    expect(allRead.homeUrl).toBe(`${ORIGIN}/discover/articles?sort=new`)
+
+    const tech = await (await feedOf('/discover/articles.rss?hl=fr&topic=tech&utm=x')).text()
+    const read = parseFeedText(tech, `${ORIGIN}/feed`)
+    expect(read.title).toBe('Tech · Découvrir · Tela')
+    expect(read.description).toBe('Les derniers articles des blogs de l’annuaire de Tela.')
+    expect(read.homeUrl).toBe(`${ORIGIN}/discover/articles?topic=tech&sort=new&hl=fr`)
+    expect(read.selfUrl).toBe(`${ORIGIN}/discover/articles.rss?topic=tech&hl=fr`)
+    expect(read.items.map((i) => i.title)).toEqual(['Astuces Rust'])
+
+    const opml = await feedOf('/discover.opml?topic=tech')
+    expect(opml.headers.get('content-disposition')).toBe(
+      'inline; filename="tela-discover-tech.opml"',
+    )
+    const xml = await opml.text()
+    expect(XMLValidator.validate(xml)).toBe(true)
+    expect(feedsFromOpml(xml).map((f) => f.url)).toEqual(['https://blog1.example/feed'])
+    expect(feedsFromOpml(await (await feedOf('/discover.opml')).text()).map((f) => f.url)).toEqual([
+      'https://blog2.example/feed',
+      'https://blog1.example/feed',
+    ])
+    // RSS and OPML of one topic are one read of tela-api; a topic Tela lacks is no topic.
+    expect(apiCalls.filter((p) => p.startsWith('/api/v1/public/feeds/'))).toEqual([
+      '/api/v1/public/feeds/discover',
+      '/api/v1/public/feeds/discover',
+    ])
+    expect(await (await feedOf('/discover/articles.rss?topic=nope')).text()).toBe(all)
   })
 })

@@ -37,6 +37,7 @@ import {
 import { NOTHING_HIDDEN } from './lib/discover-overlay'
 import { composeWeek } from './lib/discover-week'
 import { FRONT_PATH, frontHref, type TitlesMode, titlesMode } from './lib/edition'
+import { blogrollFeedHref, discoverFeedHref } from './lib/feed-href'
 import { displayHost } from './lib/format'
 import { suggestReaders } from './lib/suggest-readers'
 import { pageTitle } from './lib/title'
@@ -229,6 +230,44 @@ function titleOf(
 }
 
 /**
+ * The feeds a page offers (ADR 0062), as `<link rel="alternate">` for a feed reader handed the
+ * page's address: a blogroll's own, while it has a listed blog for them to hold, and Discover's on
+ * every tab, narrowed to its topic. The RSS reads in the page's language, as the page does.
+ */
+function feedAlternates(route: PublicRoute, data: unknown, locale: UiLocale): string[] {
+  if (data === null) return []
+  const link = (type: string, title: string, href: string) =>
+    `<link rel="alternate" type="${type}" title="${escapeHtml(title)}" href="${escapeHtml(href)}" />`
+  if (route.kind === 'blogroll') {
+    const { blogroll, blogs } = data as BlogrollData
+    if (!blogs?.some((b) => b.listed)) return []
+    return [
+      link(
+        'application/rss+xml',
+        `${blogroll.name} · RSS`,
+        blogrollFeedHref(route.id, 'rss', locale),
+      ),
+      link('text/x-opml', `${blogroll.name} · OPML`, blogrollFeedHref(route.id, 'opml')),
+    ]
+  }
+  if (
+    route.kind !== 'week' &&
+    route.kind !== 'articles' &&
+    route.kind !== 'blogs' &&
+    route.kind !== 'blogrolls' &&
+    route.kind !== 'readers'
+  ) {
+    return []
+  }
+  const topic = route.kind === 'articles' || route.kind === 'blogs' ? route.params.topic : null
+  const name = `${createTranslator({ locale, messages: MESSAGES[locale] })('nav.discover')} · Tela`
+  return [
+    link('application/rss+xml', `${name} · RSS`, discoverFeedHref('rss', { topic, hl: locale })),
+    link('text/x-opml', `${name} · OPML`, discoverFeedHref('opml', { topic, hl: locale })),
+  ]
+}
+
+/**
  * The page as HTML, poured into the SPA's own index.html. `data` null means the endpoint said the
  * page does not exist (a private blog, an unknown handle).
  */
@@ -289,6 +328,7 @@ export function renderPublicPage(input: {
       <DiscoverBlogrollsView
         cards={(data as BlogrollsData).blogrolls ?? []}
         next={(data as BlogrollsData).next ?? null}
+        hl={locale}
       />
     ) : route.kind === 'readers' ? (
       <DiscoverReadersView
@@ -298,7 +338,12 @@ export function renderPublicPage(input: {
     ) : route.kind === 'site' ? (
       <SiteView data={siteDataOf(data as SiteData)} reading={reading} locale={locale} now={now} />
     ) : route.kind === 'blogroll' ? (
-      <BlogrollView data={blogrollDataOf(data as BlogrollData)} locale={locale} now={now} />
+      <BlogrollView
+        data={blogrollDataOf(data as BlogrollData)}
+        locale={locale}
+        now={now}
+        feeds={{ hl: locale }}
+      />
     ) : (
       <ProfileView
         data={profileDataOf(data as ProfileData)}
@@ -335,6 +380,7 @@ export function renderPublicPage(input: {
           `<meta property="og:description" content="${escapeHtml(description)}" />`,
         ]
       : []),
+    ...feedAlternates(route, data, locale),
   ].join('\n    ')
   // A page without data (About, Privacy, Terms) hands nothing over.
   const handover =

@@ -20,6 +20,9 @@
  *   `/` that carries a session cookie is a member's: the plain shell, from the assets, never
  *   cached, and tela-api is not asked (ADR 0035). Every other path is the SPA's
  *   static assets, which answer without running this Worker at all.
+ * - `/l/<id>.rss`, `/l/<id>.opml`, `/discover/articles.rss` and `/discover.opml` are Tela's own
+ *   feeds (ADR 0062), rendered here from tela-api's public JSON through the same copy per colo,
+ *   in the language `?hl=` pins.
  * - A write to `/api/*` must come from this origin: cookies are `SameSite=Lax`, and this closes
  *   what Lax leaves open to a sibling subdomain.
  *
@@ -28,7 +31,9 @@
 import { isBlockedHost } from '@tela/ingest/net'
 import type { Blobs } from '@tela/platform'
 import { getCookieCache } from 'better-auth/cookies'
+import { type FeedRoute, feedRoute } from '../src/lib/feed-href'
 import { safeDecode } from '../src/lib/safe-decode'
+import { renderFeed } from './feeds'
 import { withSecurityHeaders } from './security'
 
 export type EdgeCache = {
@@ -120,6 +125,12 @@ const PAGE_DEADLINE_MS = 3_000
 /** When the colo's copy of a public answer was made, so a hit can say its `age`. Never sent on. */
 const STORED_AT = 'x-tela-stored-at'
 const WRITES = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+/**
+ * A feed, in the browser or feed reader: a minute, then a conditional GET, which its ETag answers
+ * 304 while the colo's copy has not changed. The copy itself lives as tela-api says, so a blogroll
+ * made private stops being served within minutes, as its page does.
+ */
+const FEED_CACHE = 'public, max-age=60'
 
 /** A public answer the colo may keep for everyone: one tela-api says a shared cache may. */
 function keepsAtTheColo(res: Response): boolean {
@@ -392,6 +403,52 @@ export function createEdge(deps: EdgeDeps) {
     return new Response(body, res)
   }
 
+  /**
+   * One of Tela's own feeds (ADR 0062): its data through the colo's copy, as a page's, rendered in
+   * the language its `?hl=` pins. A feed of nothing others can see is a 404, kept a minute; one
+   * whose data could not be had or read is a 503, kept nowhere, which a feed reader tries again.
+   * The same bytes keep the same ETag, so a reader polling it is answered 304.
+   */
+  async function serveFeed(request: Request, route: FeedRoute, waiter?: Waiter) {
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      return text('method not allowed', 405, { allow: 'GET, HEAD' })
+    }
+    const missing = () =>
+      text('not found', 404, { 'cache-control': 'public, max-age=60', 'x-robots-tag': 'noindex' })
+    const unavailable = () =>
+      text('unavailable', 503, { 'cache-control': 'no-store', 'retry-after': '60' })
+    if (route.kind === 'missing') return missing()
+    const url = new URL(request.url)
+    let feed: ReturnType<typeof renderFeed>
+    try {
+      const res = await pageJson(new URL(route.api, url), waiter)
+      if (res.status === 404) return missing()
+      if (res.status !== 200) return unavailable()
+      feed = renderFeed(route, await res.json(), url.origin)
+    } catch (err) {
+      console.error('feed failed', url.pathname, err)
+      return unavailable()
+    }
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(feed.body))
+    const etag = `"${[...new Uint8Array(digest).slice(0, 12)]
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')}"`
+    const headers: Record<string, string> = {
+      'content-type': feed.type,
+      'cache-control': FEED_CACHE,
+      etag,
+      // A feed is not a page to list in a search: the page it is of is.
+      'x-robots-tag': 'noindex',
+      'x-content-type-options': 'nosniff',
+      ...(feed.filename ? { 'content-disposition': `inline; filename="${feed.filename}"` } : {}),
+    }
+    const asked = request.headers.get('if-none-match') ?? ''
+    if (asked.split(',').some((tag) => tag.trim().replace(/^W\//, '') === etag)) {
+      return new Response(null, { status: 304, headers })
+    }
+    return new Response(request.method === 'HEAD' ? null : feed.body, { headers })
+  }
+
   async function servePublic(request: Request, waiter?: Waiter): Promise<Response> {
     const url = new URL(request.url)
     const read = request.method === 'GET' || request.method === 'HEAD'
@@ -574,8 +631,11 @@ export function createEdge(deps: EdgeDeps) {
             ? await serveImage(request, key, i, waiter)
             : text('not found', 404)
       } else {
-        // `run_worker_first` sends only the public pages here besides the above.
-        response = await servePublic(request, waiter)
+        // `run_worker_first` sends only the public pages and feeds here besides the above.
+        const feed = feedRoute(url)
+        response = feed
+          ? await serveFeed(request, feed, waiter)
+          : await servePublic(request, waiter)
       }
       if (config.privateBeta && !response.headers.has('x-robots-tag')) {
         response = new Response(response.body, response)

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { detectLocale } from '../src/i18n'
 import { blogsApiPath, blogsHref, parseBlogsParams, tabOf } from '../src/lib/discover-href'
+import { feedRoute } from '../src/lib/feed-href'
 import { canonicalReadingHref, listsFilter, parseReadingParams, readingHref } from '../src/lib/href'
 import { addError } from '../src/lib/opml'
 import { safeDecode } from '../src/lib/safe-decode'
@@ -244,7 +245,20 @@ describe('public pages at the edge', () => {
       '/discover/blogs',
       '/discover/blogrolls',
       '/discover/readers',
+      // Discover's feeds (ADR 0062), by name too.
+      '/discover.opml',
+      '/discover/articles.rss',
     ])
+    // So do Tela's own feeds: the asset router would answer each with the app's HTML, 200.
+    for (const path of [
+      '/l/abcdefABCDEF.rss',
+      '/l/abcdefABCDEF.opml',
+      '/discover.opml',
+      '/discover/articles.rss',
+    ]) {
+      expect(feedRoute(new URL(path, 'https://tela.test'))).not.toBeNull()
+      expect(runsFirst(path)).toBe(true)
+    }
   })
 })
 

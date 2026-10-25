@@ -14,7 +14,10 @@
  * - the cached index.html is replaced only once every file the new one loads is cached, and the
  *   files of the one it replaces are kept, so whichever shell a navigation gets boots offline and
  *   after the deploy that removed its files from the network;
- * - `/api/*`, `/o/*` and `/img/*` are never touched: the local store and the edge own those.
+ * - `/api/*`, `/o/*` and `/img/*` are never touched: the local store and the edge own those;
+ * - nor is a navigation to a file (a path whose last part has an extension: a feed, `robots.txt`).
+ *   No page of the app's has one, and the shell in its place would boot the app on an address it
+ *   has no page for, so a click on a blogroll's RSS link would show Not found (ADR 0062).
  *
  * What index.html loads (its scripts, stylesheets and preloads) is fetched before the swap. Fonts
  * are cached as the page asks for them, since a page loads only the few its text needs; they are
@@ -40,6 +43,8 @@ const SHELL_URL = '/__tela/shell'
 /** How long activation waits for its warm before it lets the open tabs' requests through. */
 const WARM_MS = 3000
 const PASS = /^\/(api|o|img|avatar)\//
+/** A file, not a page: `/l/<id>.rss`, `/discover.opml`, `/robots.txt`. Handles have no dot. */
+const FILE = /\/[^/]*\.[A-Za-z0-9]+$/
 const ICONS = new Set(['/favicon.ico', '/icon.svg', '/apple-icon.png'])
 /** What a hashed file's content type must name, by extension. */
 const TYPES = { js: 'javascript', css: 'text/css', woff2: 'font/woff2', woff: 'font/woff' }
@@ -188,6 +193,7 @@ self.addEventListener('fetch', (event) => {
     return
 
   if (request.mode === 'navigate') {
+    if (FILE.test(url.pathname)) return
     event.respondWith(
       (async () => {
         const cache = await caches.open(SHELL)

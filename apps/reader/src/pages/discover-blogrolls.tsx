@@ -20,6 +20,8 @@ import {
 import { useTitle } from '../lib/title'
 import { useOpenedWith, useTopOnArrival } from '../lib/use-discover'
 import { retryOf, usePublic } from '../lib/use-public'
+import { useReadingLang } from '../store/hooks'
+import { useUi } from '../ui'
 import { type BlogrollReason, DiscoverBlogrollsView } from '../views/discover-blogrolls'
 import type { BlogrollCard, BlogrollsData } from '../views/types'
 
@@ -53,6 +55,7 @@ export function BlogrollsPage() {
   const cursor = blogrollsCursor(search)
   const { loaded, pages, next, more, busy } = useBlogrolls(cursor)
   const t = useTranslations()
+  const hl = useReadingLang(useUi().locale)
   useTitle(`${t('discover.tabs.blogrolls')} · ${t('nav.discover')}`)
   // A cursor is a page of its own, reached by a link.
   useTopOnArrival(`blogrolls:${cursor}`)
@@ -82,6 +85,7 @@ export function BlogrollsPage() {
       cards={cards}
       next={next}
       reasonOf={reasonOf}
+      hl={hl}
       loadingMore={busy}
       onRetry={retryOf(loaded)}
       onMore={(e) => {

@@ -15,6 +15,7 @@
   "dependencies": {
     "@fontsource/eb-garamond": "^5.3.0",
     "@fontsource/figtree": "^5.3.0",
+    "@tela/content": "workspace:*",
     "@tela/ingest": "workspace:*",
     "@tela/platform": "workspace:*",
     "@tela/shared": "workspace:*",
@@ -39,6 +40,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "drizzle-orm": "^0.45.2",
     "fake-indexeddb": "^6.2.5",
+    "fast-xml-parser": "~5.10.0",
     "tailwindcss": "^4.3.3",
     "vite": "^8.3.1",
     "wrangler": "^4.143.0"

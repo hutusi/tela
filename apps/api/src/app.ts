@@ -35,6 +35,7 @@ import { inviteRoutes, operatorCodeRoutes } from './routes/invites'
 import { memberRoutes } from './routes/members'
 import { pictureRoutes } from './routes/picture'
 import { publicRoutes } from './routes/public'
+import { publicFeedRoutes } from './routes/public-feeds'
 import { socialRoutes } from './routes/social'
 import { translationRoutes } from './routes/translations'
 import { websubRoutes } from './routes/websub'
@@ -331,6 +332,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1/public/discover', discoverRoutes(deps))
   // A public blogroll's page (ADR 0050); its owner reads their own from the device.
   app.route('/api/v1/public/blogrolls', blogrollRoutes(deps))
+  // What tela-web renders Tela's own RSS and OPML from (ADR 0062).
+  app.route('/api/v1/public/feeds', publicFeedRoutes(deps))
   app.route('/api/v1/public', publicRoutes(deps, auth))
   // Hubs, not members, call this; the signature is the authorization.
   app.route('/api/websub', websubRoutes(deps))
