@@ -18,6 +18,7 @@ import { bumpSeq, currentSeq } from '../seq'
 import { settingSql } from './settings'
 import { utcDayStart } from './signup'
 import { recountReaders } from './sites'
+import { standingOk } from './standing'
 import { utcDay } from './translation'
 
 /** Room nothing bounds: more than any count, and still a valid `LIMIT`. */
@@ -232,10 +233,18 @@ export function pendingFeedsOf(db: TelaDb, userId: string, limit = 500) {
 }
 
 /**
+ * A member out of good standing (ADRs 0058, 0059), as SQL over the member's id. A member with no
+ * profile is not, as `isBarred` has it.
+ */
+const barred = (member: SQL | string) => sql`exists (select 1 from profiles pr
+  where pr.user_id = ${member} and not ${standingOk('pr')})`
+
+/**
  * Add what the member's day now leaves room for of their waiting feeds, under the lease that took
  * them: one fenced batch, so a holder that lost its lease adds nothing. A waiting feed someone else
  * added meanwhile subscribes free. `drop` names waiting URLs that cannot be added at all (no
- * origin), which stop waiting.
+ * origin), which stop waiting. A member suspended or closed while the run read their rows is
+ * refused as a lost lease is, by the fence's own table: nothing is added for them.
  */
 export async function addPendingFeeds(
   db: TelaDb,
@@ -249,6 +258,7 @@ export async function addPendingFeeds(
   })
   const results = (await db.batch([
     fence(db, input.lease, input.now),
+    db.run(sql`insert into lease_fence (x) select null where ${barred(input.userId)}`),
     bumpSeq(db),
     ...statements,
     db.run(sql`
@@ -257,13 +267,15 @@ export async function addPendingFeeds(
     `),
     release(db, input.lease),
   ] as never)) as unknown[]
-  return readBrought(results, 2)
+  return readBrought(results, 3)
 }
 
 /**
  * Members with feeds waiting that a run would move now (`member.pendingFeeds`), oldest wait first:
  * their day has room and so has their cap, or a feed they wait for is one Tela has now, or one
- * they follow already. A wait an exhausted run pushed past `now` waits until then.
+ * they follow already. A wait an exhausted run pushed past `now` waits until then. A suspended
+ * member's wait is kept and not swept, so lifting the suspension brings their feeds on; a closed
+ * account's was dropped as it closed.
  */
 export function duePendingFeeds(now: number): SQL {
   const member = sql`p.user_id`
@@ -271,6 +283,7 @@ export function duePendingFeeds(now: number): SQL {
     where q.user_id = p.user_id)`
   return sql`select p.user_id as key, null as host, min(p.queued_at) as ord
     from pending_feeds p
+    where not ${barred(member)}
     group by p.user_id
     having min(p.queued_at) <= ${now}
       and (${subscriptionRoom(member)} > 0 and (${feedRoom(member, now)} > 0 or ${known})

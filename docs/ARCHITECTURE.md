@@ -77,7 +77,7 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 | `websub_subscriptions` | One per feed with a hub: topic, secret, status, lease |
 | `leases`, `lease_fence` | Who holds which piece of background work, and the fence that aborts a stale holder's batch |
 | `dead_letters`, `ops_heartbeats` | Work that gave up, until an operator retries or dismisses it (`resolved_at`, `resolution`, `resolved_by`); the last `tick`, `health`, `daily` and `digest` runs, the tick's with the switches tela-jobs runs with (ADR 0039) |
-| `llm_calls`, `usage_daily` | Every model call, with the feed it was for (`feed_id`); reserved and used tokens per member and day (`'*'` is background), and `requests`, the body translations a member's day was charged (ADR 0057); the day's site total is the sum over every subject |
+| `llm_calls`, `usage_daily` | Every model call, with the feed it was for (`feed_id`); reserved and used tokens per member and day (`'*'` is background, `'~closed'` the erased accounts' days folded together, ADR 0058), and `requests`, the body translations a member's day was charged (ADR 0057); the day's site total is the sum over every subject |
 | `settings` | Runtime settings (ADR 0056): one row per setting changed from its default in `@tela/shared`'s `SETTINGS`, as JSON. Not synced; read inline by the statement that enforces a limit (`settingSql`) |
 | `pending_feeds` | An import's feeds new to Tela beyond the member's day, which `member.pendingFeeds` adds on the days after (ADR 0063) |
 | `reports` | Reports of public content (ADR 0059): who reported, what (`target_kind`, `target_key`), why, and where it stands. Not synced |

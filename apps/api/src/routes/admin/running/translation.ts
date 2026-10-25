@@ -4,7 +4,7 @@
  * (titles by their job's feed, bodies by the first article with their content); a title call
  * logged before the log named feeds, carrying several blogs' posts, is "unattributed".
  */
-import { BACKGROUND, settingSql, type TelaDb, utcDay } from '@tela/data'
+import { BACKGROUND, CLOSED, settingSql, type TelaDb, utcDay } from '@tela/data'
 import {
   ADMIN_LIST_LIMIT,
   type AdminFilter,
@@ -178,10 +178,11 @@ async function translationReport(db: TelaDb, now: number): Promise<AdminTranslat
     `),
     db.all(sql`select info from ops_heartbeats where name = 'tick'`),
     // A member whose day reached the count (ADR 0057): their next request waited. Operators are
-    // exempt, so their count says nothing about the limit.
+    // exempt, so their count says nothing about the limit, and closed accounts' rows, folded into
+    // one subject (ADR 0058), are no member's.
     db.all(sql`
       select count(distinct u.subject) as n from usage_daily u
-      where u.subject <> ${BACKGROUND} and u.day >= ${weekStart}
+      where u.subject not in (${BACKGROUND}, ${CLOSED}) and u.day >= ${weekStart}
         and u.requests >= ${cap}
         and not exists (select 1 from profiles p where p.user_id = u.subject and p.is_admin = 1)
     `),

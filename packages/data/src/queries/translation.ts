@@ -18,6 +18,14 @@ export function utcDay(now: number): string {
 /** The background budget's ledger subject; members use their own user id. */
 export const BACKGROUND = '*'
 
+/**
+ * Where an erased account's ledger goes (ADR 0058): `member.erase` folds the member's rows into it,
+ * a day at a time, so the site's total for each day (a sum over every subject) is what it was. It
+ * is no member: nothing reads it by subject, and the console's member counts leave it out. No user
+ * id has a `~` in it.
+ */
+export const CLOSED = '~closed'
+
 const DAY_MS = 86_400_000
 
 /** The next UTC midnight after `now`: when a request that waits becomes due (ADR 0057). */
@@ -497,6 +505,20 @@ export function readBodyAllowance(db: TelaDb, userId: string, now: number) {
   `)
 }
 
+/**
+ * Whether a request reserving `reserve` would find room today, as `roomOn` judges it in SQL: a
+ * conversion always does, and so does an operator; anyone else needs their count under the day's
+ * and the site's tokens within its budget. A guess read before the batch, which judges again:
+ * it tells tela-api whether a take-over is worth asking for at all.
+ */
+export function roomToday(allowance: BodyAllowance, reserve: number): boolean {
+  if (reserve === 0 || allowance.exempt) return true
+  return (
+    (allowance.perDay === null || allowance.usedToday < allowance.perDay) &&
+    (allowance.siteBudget === null || allowance.siteToday + reserve <= allowance.siteBudget)
+  )
+}
+
 /** The rows of `readBodyAllowance`, as numbers. */
 export function bodyAllowance(rows: unknown, now: number): BodyAllowance {
   const r = (rows as Record<string, unknown>[])[0] ?? {}
@@ -540,4 +562,55 @@ export function settleBodyUsage(db: TelaDb, contentKey: string, lang: string, no
         select requested_by is not null and reserved_tokens > 0 and used_tokens = 0 ${row}
       ))
   `)
+}
+
+/**
+ * End a member's body requests that have not started (`requested`: waiting for their day, or due
+ * and not yet begun), unpaid, as the member leaves standing: their account closes (ADR 0058) or is
+ * suspended (ADR 0059). Each is given back as `settleBodyUsage` gives back one, a day at a time:
+ * the reservation off the day it was charged to, and its count when nothing was spent. A lease on
+ * one goes, so a run that claimed it writes nothing. One already running finishes and is settled
+ * as ever, to the member it names. `requested_by` stays, as it must while a request is open.
+ *
+ * Left waiting instead, a request would hold the post for every other reader (they are told it is
+ * in progress), keep its reservation in the site's day, and read as stuck once it fell due. Ended,
+ * the next reader who opens the post asks for it afresh. `guard` is a condition the statements
+ * also hold to (true as SQL), for a batch whose own change of standing may not have applied.
+ */
+export function withdrawBodyRequests(
+  db: TelaDb,
+  userId: string,
+  now: number,
+  guard: SQL = sql`true`,
+): ReturnType<TelaDb['run']>[] {
+  const today = utcDay(now)
+  const open = sql`requested_by = ${userId} and state = 'requested' and ${guard}`
+  return [
+    db.run(sql`
+      insert into usage_daily (subject, day, reserved, used, requests)
+      select ${userId}, coalesce(reserved_day, ${today}), 0, sum(used_tokens), 0
+      from body_translations where ${open}
+      group by coalesce(reserved_day, ${today})
+      on conflict (subject, day) do update set
+        reserved = max(0, usage_daily.reserved - (
+          select coalesce(sum(reserved_tokens), 0) from body_translations
+          where ${open} and coalesce(reserved_day, ${today}) = excluded.day
+        )),
+        used = usage_daily.used + excluded.used,
+        requests = max(0, usage_daily.requests - (
+          select count(*) from body_translations
+          where ${open} and coalesce(reserved_day, ${today}) = excluded.day
+            and reserved_tokens > 0 and used_tokens = 0
+        ))
+    `),
+    db.run(sql`
+      delete from leases where kind = 'translate.body'
+        and key in (select content_key || ':' || lang from body_translations where ${open})
+    `),
+    db.run(sql`
+      update body_translations set state = 'failed', reserved_tokens = 0, due_at = null,
+        updated_at = ${now}, seq = ${currentSeq}
+      where ${open}
+    `),
+  ]
 }

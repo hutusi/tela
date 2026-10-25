@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { backUp, bumpSeq, currentSeq, first, heartbeat, LEASE_KINDS } from '@tela/data'
+import { bodySpendFor } from '@tela/shared'
 import {
   ADMIN_ACTIONS,
   type AdminCounts,
@@ -348,12 +349,14 @@ describe('Translation', () => {
   test('the report: thirty days, the totals, the budgets and who reached the limit', async () => {
     const today = new Date(now).toISOString().slice(0, 10)
     const yesterday = new Date(now - DAY).toISOString().slice(0, 10)
-    // The claimant reached the day's 20 yesterday; the operator went past it today, exempt.
+    // The claimant reached the day's 20 yesterday; the operator went past it today, exempt; and
+    // closed accounts' ledgers, folded together past 20, are no member's (ADR 0058).
     await api.db.run(sql`
       insert into usage_daily (subject, day, reserved, used, requests)
       values ('*', ${today}, 1000, 3000, 0),
         (${claimant.userId}, ${yesterday}, 0, 200000, 20),
-        (${ops.userId}, ${today}, 500, 1000, 25)
+        (${ops.userId}, ${today}, 500, 1000, 25),
+        ('~closed', ${yesterday}, 0, 9000, 30)
     `)
     // One body waits for tomorrow, one fell due and is starting.
     await api.db.run(sql`
@@ -605,8 +608,11 @@ describe('acting on dead work', () => {
   test('a bulk of body retries reserves as it goes, and stops where the budget does', async () => {
     const today = new Date(now).toISOString().slice(0, 10)
     await heartbeat(api.db, 'tick', now, {
-      config: { backgroundBudget: 100_000, maxArticleTokens: 40_000 },
+      config: { backgroundBudget: 80_000, maxArticleTokens: 10_000 },
     })
+    // A post at the ceiling is reckoned at its whole spend, prompts and output too.
+    const each = bodySpendFor(10_000)
+    expect(each).toBe(30_000)
     await api.db.run(sql`insert into usage_daily (subject, day, reserved, used)
       values ('*', ${today}, 0, 10000)`)
     const ids: string[] = []
@@ -617,7 +623,7 @@ describe('acting on dead work', () => {
       `)
       ids.push(`dead:${await deadLetter('translate.body', `${ck}:fr`)}`)
     }
-    // 10,000 spent of 100,000: room for two posts at the 40,000 ceiling, not a third.
+    // 10,000 spent of 80,000: room for two posts at 30,000, not a third.
     expect(await act('dead.retry', ids)).toMatchObject({
       done: [ids[0], ids[1]],
       failed: [{ id: ids[2], error: 'limit' }],
@@ -627,13 +633,13 @@ describe('acting on dead work', () => {
         api.db,
         sql`select reserved, used from usage_daily where subject = '*'`,
       ),
-    ).toEqual({ reserved: 80_000, used: 10_000 })
+    ).toEqual({ reserved: 2 * each, used: 10_000 })
     const rows = await api.db.all<{ content_key: string; state: string; reserved_tokens: number }>(
       sql`select content_key, state, reserved_tokens from body_translations order by content_key`,
     )
     expect(rows).toEqual([
-      { content_key: 'b1', state: 'requested', reserved_tokens: 40_000 },
-      { content_key: 'b2', state: 'requested', reserved_tokens: 40_000 },
+      { content_key: 'b1', state: 'requested', reserved_tokens: each },
+      { content_key: 'b2', state: 'requested', reserved_tokens: each },
       { content_key: 'b3', state: 'failed', reserved_tokens: 0 },
     ])
     // Another kind is not background translation, and is retried whatever the budget.

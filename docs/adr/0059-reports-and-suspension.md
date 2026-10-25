@@ -57,6 +57,14 @@ mail gate, the claim at sign-in, a provider's start and return) asks for its mak
 it runs, so a join is answered `invalid_code` as for a withdrawn code, a hold placed before admits
 nobody, and lifting the suspension gives the codes back with their holds.
 
+**What a suspended member asked for stops.** The same batch ends their body translations that have
+not started (waiting for their day, or due and not begun), given back to their ledger, reservation
+and count, as a closing does (`withdrawBodyRequests`, 0058); one running finishes. Left waiting,
+such a request would hold the post from every other reader, who is told it is in progress, keep
+its tokens in the site's day, and read as stuck once due. Their imported feeds still waiting
+(0063) stay, and `member.pendingFeeds` neither finds them due nor, if a run was already under way,
+adds anything: lifting the suspension brings them on as before.
+
 **One predicate hides a member everywhere public.** `standingOk` (a profile with neither
 `suspended_at` nor `deleted_at`) is in every public answer that names a member: the profile page,
 Discover's readers and blogrolls, the notes beside a blog's posts and Discover's, the recommenders

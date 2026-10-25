@@ -827,7 +827,7 @@ says who holds it:
 | `websub.subscribe` | a hub subscription is new, failed, or near its lease's end |
 | `translate.title` | a feed has articles without titles in every launch language |
 | `translate.body` | a member asked for a post in their language, and its `due_at` has passed or it has none (ADR 0057) |
-| `member.pendingFeeds` | a member has imported feeds waiting (`pending_feeds`) and their day and cap have room, or a waiting feed is now one Tela has (ADR 0063). Exhausted: the wait moves a day out; Retry brings it back |
+| `member.pendingFeeds` | a member in good standing has imported feeds waiting (`pending_feeds`) and their day and cap have room, or a waiting feed is now one Tela has (ADR 0063); a suspended member's wait is kept until the suspension is lifted. Exhausted: the wait moves a day out; Retry brings it back |
 | `member.erase` | an account closed at least 10 minutes ago and not yet erased: what its own devices held, in chunks (ADR 0058). Out of attempts it waits on its dead letter; Retry in System makes it due again. A run that finds one of the member's translations still running ends without stamping and comes back next tick |
 
 **Day 2, all plain SQL** (`wrangler d1 execute tela --remote --command "…"`):
@@ -986,9 +986,9 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
 - **Sign out everywhere** deletes the member's sessions; a device's signed copy of one still
   answers for up to five minutes wherever only that copy is read.
 - **Retry** on a dead letter makes its row due again for the next tick, with fresh attempts. A body
-  translation retried runs as background work: the background budget pays, up to
-  `LLM_MAX_ARTICLE_TOKENS` for the post, and once the day's budget is spent the console refuses
-  one until tomorrow. The health check counts only unresolved dead letters, and
+  translation retried runs as background work: the background budget pays, reserving the whole
+  spend of `LLM_MAX_ARTICLE_TOKENS` source tokens (about 2.9 tokens each, input and output: 115k
+  at 40,000), and once the day's budget is spent the console refuses one until tomorrow. The health check counts only unresolved dead letters, and
   the digest says how many of the week's were resolved.
 - **Heartbeats** (`ops_heartbeats`): `tick` (each kind dispatched, `errors` for each kind it
   could not run, and the switches tela-jobs runs with: the background budget, the article cap,
@@ -1078,7 +1078,9 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   do. Both undo.
 - **Suspension:** People › a member › Suspend ends their sessions and refuses sign-in, and their
   profile, notes and blogrolls leave every public page; cached pages linger up to 5 minutes per
-  colo, pictures longer. Lift it from People › Suspended. An admin is never suspended.
+  colo, pictures longer. Their body translations not yet started end, given back; their waiting
+  imported feeds stay and arrive once it is lifted. Lift it from People › Suspended. An admin is
+  never suspended.
 
 ## Search engines and AI
 
@@ -1187,8 +1189,9 @@ A public reader count is shown only from three readers.
 ## Translation
 
 - **Spend:** `select * from usage_daily order by day desc limit 14` (subject `'*'` is background
-  titles, anything else a member), and per call `select job, model, count(*), sum(input_tokens),
-  sum(output_tokens) from llm_calls where created_at > … group by job, model`. The digest has the
+  titles, `'~closed'` erased accounts' spend, kept so a closing gives no budget back, anything else
+  a member), and per call `select job, model, count(*), sum(input_tokens), sum(output_tokens)
+  from llm_calls where created_at > … group by job, model`. The digest has the
   week's totals. A call whose reply could not be read (no JSON, or not the schema) was still
   billed, so it is logged and charged like any other: a title job's to the background budget, a
   body's to what that translation has spent (`used_tokens`). A provider that keeps answering
@@ -1204,7 +1207,8 @@ A public reader count is shown only from three readers.
     archive a newcomer imported never holds up today's titles.
   - `member.translationsPerDay` (20) counts the body translations a member's requests pay for. A
     post already translated for anyone, a conversion between the Chinese scripts (its own limit,
-    `convert`, 600 an hour) and a request that cost nothing do not count. Past it, a request waits
+    `convert`, 600 an hour), one script of a post already translated into the other (the same,
+    made from the cache) and a request that cost nothing do not count. Past it, a request waits
     for the next UTC day, one day deep, and a member with room today who opens a waiting post
     takes it over. The hourly `translate` bucket (30) still guards against a runaway client.
   - Pause titles: `bun run admin set translation.backgroundDailyTokens 0`. Stop paid bodies for
@@ -1213,8 +1217,8 @@ A public reader count is shown only from three readers.
   - Day 2: waiting now, `select count(*), min(due_at) from body_translations where state =
     'requested' and due_at > unixepoch() * 1000`; the site today, `select coalesce(sum(used +
     reserved), 0) from usage_daily where day = date('now')`; members at their count, `select
-    subject, requests from usage_daily where day = date('now') and subject <> '*' order by
-    requests desc limit 20`; stuck after midnight, `select content_key, lang, due_at from
+    subject, requests from usage_daily where day = date('now') and subject not in ('*',
+    '~closed') order by requests desc limit 20`; stuck after midnight, `select content_key, lang, due_at from
     body_translations where state in ('requested', 'running') and max(updated_at, coalesce(due_at,
     0)) < unixepoch() * 1000 - 1800000`. At 00:00 UTC the waiting bodies start, 20 a minute: watch
     the stuck check on the first nights.

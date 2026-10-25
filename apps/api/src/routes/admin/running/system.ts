@@ -23,7 +23,7 @@ import {
   utcDay,
 } from '@tela/data'
 import type { Blobs } from '@tela/platform'
-import { MAX_ARTICLE_TRANSLATION_TOKENS } from '@tela/shared'
+import { bodySpendFor, MAX_ARTICLE_TRANSLATION_TOKENS } from '@tela/shared'
 import {
   ADMIN_LIST_LIMIT,
   type AdminFilter,
@@ -266,10 +266,10 @@ async function systemDetail(
 /**
  * What a body retried may spend, and the budget it is held to. A body retried runs as background
  * work (no member reserved it), and nothing on its way checks the budget the titles are held to,
- * so it reserves its tokens there itself, as a member's request reserves on theirs: the post's
- * ceiling, which the job caps it at. The budget and the ceiling are the ones tela-jobs reported
- * with its last tick (ADR 0057): null is no limit, 0 paused. A tick from before that reported no
- * `siteBudget`, and its 0 meant no limit.
+ * so it reserves its tokens there itself, as a member's request reserves on theirs: the whole
+ * spend of a post at the ceiling (`bodySpendFor`), whose source tokens the job caps it at. The
+ * budget and the ceiling are the ones tela-jobs reported with its last tick (ADR 0057): null is no
+ * limit, 0 paused. A tick from before that reported no `siteBudget`, and its 0 meant no limit.
  */
 async function bodyAllowance(db: TelaDb): Promise<{ reserve: number; budget: number | null }> {
   const row = await first<{ budget: number | null; site: unknown; ceiling: number | null }>(
@@ -282,7 +282,7 @@ async function bodyAllowance(db: TelaDb): Promise<{ reserve: number; budget: num
   const ceiling = Number(row?.ceiling ?? 0)
   const budget = row?.budget === null || row?.budget === undefined ? null : Number(row.budget)
   return {
-    reserve: ceiling > 0 ? ceiling : MAX_ARTICLE_TRANSLATION_TOKENS,
+    reserve: bodySpendFor(ceiling > 0 ? ceiling : MAX_ARTICLE_TRANSLATION_TOKENS),
     budget: row?.site === null || row?.site === undefined ? budget || null : budget,
   }
 }

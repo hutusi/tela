@@ -14,6 +14,7 @@ import {
   first,
   historyOf,
   type TelaDb,
+  withdrawBodyRequests,
   writeClosure,
 } from '@tela/data'
 import {
@@ -333,18 +334,27 @@ async function personDetail(
 const suspendable = (id: string, actor: string) => sql`user_id = ${id} and user_id <> ${actor}
   and is_admin = 0 and suspended_at is null and deleted_at is null`
 
-/** End every session of a member while they are suspended: what a suspension starts with. */
-const endSessions = (db: TelaDb, id: string) =>
-  db.all(sql`delete from session where user_id = ${id}
-    and exists (select 1 from profiles where user_id = ${id} and suspended_at is not null)
-    returning id`)
+const isSuspended = (id: string) =>
+  sql`exists (select 1 from profiles where user_id = ${id} and suspended_at is not null)`
+
+/**
+ * End every session of a member while they are suspended, and the body translations they asked
+ * for that have not started: what a suspension starts with. A request left waiting would hold the
+ * post from every other reader for as long as the suspension lasts (`withdrawBodyRequests`).
+ */
+const endSessions = (db: TelaDb, id: string, now: number) => [
+  db.all(sql`delete from session where user_id = ${id} and ${isSuspended(id)} returning id`),
+  ...withdrawBodyRequests(db, id, now, isSuspended(id)),
+]
 
 /**
  * Suspend a member (ADR 0059): `suspended_at` set, and every session ended in the same batch. The
  * sign-in hook refuses them from then on, and every public answer leaves out their profile, notes
  * and blogrolls (`standingOk`). The profile's seq moves, so the devices of the members who follow
- * them drop the follow on their next pull. Undone, they can sign in again; the sessions it ended
- * are not given back.
+ * them drop the follow on their next pull. Their body translations not yet started end, given
+ * back; their imported feeds still waiting stay, and are not added while the suspension lasts
+ * (`duePendingFeeds`). Undone, they can sign in again, and their feeds arrive as before; the
+ * sessions and requests it ended are not given back.
  */
 const suspend: ActHandler = async (ctx, id) => {
   const { db } = ctx.deps
@@ -366,11 +376,11 @@ const suspend: ActHandler = async (ctx, id) => {
     ),
     db.all(sql`update profiles set suspended_at = ${ctx.now}, seq = ${currentSeq}
       where ${where} returning user_id`),
-    endSessions(db, id),
     db.all(sql`select user_id from profiles where user_id = ${id}`),
+    ...endSessions(db, id, ctx.now),
   ])
   if (returned(results[2]).length > 0) return 'done'
-  return returned(results[4]).length > 0 ? 'not_applicable' : 'not_found'
+  return returned(results[3]).length > 0 ? 'not_applicable' : 'not_found'
 }
 
 /** Lift a suspension: the member may sign in again, and shows wherever they chose to. */
@@ -402,9 +412,10 @@ const unsuspend: ActHandler = async (ctx, id) => {
 
 /**
  * Put a member's standing back while it is still what the action left. Putting a suspension back
- * (undoing a lift) ends their sessions again, as suspending does: they may have signed in since.
+ * (undoing a lift) ends their sessions again, and their requests not yet started, as suspending
+ * does: they may have signed in and asked since.
  */
-const restoreStanding: Inverse = (db, change) => {
+const restoreStanding: Inverse = (db, change, now) => {
   const to = (change.to ?? {}) as { suspendedAt?: number | null }
   const from = (change.from ?? {}) as { suspendedAt?: number | null }
   const id = change.targetKey
@@ -415,7 +426,7 @@ const restoreStanding: Inverse = (db, change) => {
     restore: [
       db.run(sql`update profiles set suspended_at = ${from.suspendedAt ?? null}, seq = ${currentSeq}
         where ${holds}`),
-      endSessions(db, id),
+      ...endSessions(db, id, now),
     ],
     synced: true,
   }

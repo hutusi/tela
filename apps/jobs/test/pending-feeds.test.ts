@@ -159,6 +159,34 @@ describe('member.pendingFeeds', () => {
     expect(await waiting()).toHaveLength(4)
   })
 
+  test("a suspended member's wait is kept and not swept, and lifting it brings their feeds on", async () => {
+    clock.set(NOW + DAY)
+    await db.run(sql`update profiles set suspended_at = ${NOW} where user_id = 'u1'`)
+    expect((await sweep()).claimed).toBe(0)
+    expect(await waiting()).toHaveLength(5)
+    await db.run(sql`update profiles set suspended_at = null where user_id = 'u1'`)
+    expect((await sweep()).outcomes).toMatchObject([{ result: { added: 2, subscribed: 2 } }])
+  })
+
+  test('a member who leaves standing while a run reads their rows has nothing added', async () => {
+    for (const column of ['suspended_at', 'deleted_at']) {
+      clock.set(NOW + DAY)
+      await tick(ctx)
+      const [message] = ctx.jobs.take('misc').filter((m) => m.kind === 'member.pendingFeeds')
+      if (!message) throw new Error('nothing was sent')
+      // Suspended, or closed, after the claim: the run still reads the rows it was sent for.
+      await db.run(sql`update profiles set ${sql.raw(column)} = ${NOW} where user_id = 'u1'`)
+      expect(await runJob(ctx, message)).toEqual({ status: 'lost' })
+      expect(await following()).toEqual([])
+      expect(await waiting()).toHaveLength(5)
+      expect(
+        await first(db, sql`select 1 as x from feeds where feed_url = ${url('p1')}`),
+      ).toBeUndefined()
+      await db.run(sql`update profiles set ${sql.raw(column)} = null where user_id = 'u1'`)
+      await db.run(sql`delete from leases`)
+    }
+  })
+
   test('a run that lost its lease adds nothing', async () => {
     clock.set(NOW + DAY)
     await tick(ctx)

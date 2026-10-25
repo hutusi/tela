@@ -486,6 +486,10 @@ describe('the subscription cap (ADR 0063)', () => {
     expect(await refused.json()).toEqual({ error: 'subscription_limit', limit: 1 })
     expect(server.requestsFor('/two.xml')).toEqual([])
     expect(await count('feeds')).toBe(1)
+    // A feed they follow already takes no place: adding it again is answered as ever.
+    expect(await (await post('/api/v1/feeds', { feedUrl: server.url('/one.xml') })).json()).toEqual(
+      { feedId: 1, siteId: 1 },
+    )
     // An admin holds as many as they like.
     await makeAdmin(reader)
     expect((await post('/api/v1/feeds', { feedUrl: server.url('/two.xml') })).status).toBe(200)

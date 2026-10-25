@@ -43,14 +43,22 @@ import {
   type TranslationUsage,
   translateBlocks,
 } from '@tela/llm'
-import { MAX_ARTICLE_TRANSLATION_TOKENS, NORM_VERSION } from '@tela/shared'
+import {
+  CHUNK_TOKENS,
+  FIRST_CHUNK_TOKENS,
+  MAX_ARTICLE_TRANSLATION_TOKENS,
+  NORM_VERSION,
+  sourceTokensFor,
+} from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { convertTagged, planFor } from './scripts'
 import type { TranslationContext } from './titles'
 
-/** The opening chunk: small, so the first paragraphs land in about five seconds. */
-export const FIRST_CHUNK_TOKENS = 400
-export const CHUNK_TOKENS = 3000
+/**
+ * The opening chunk is small, so the first paragraphs land in about five seconds; the rest are
+ * larger. Both live in `@tela/shared`, beside the estimate a reservation is made by.
+ */
+export { CHUNK_TOKENS, FIRST_CHUNK_TOKENS }
 /** An execution starts no chunk after this; the queue consumer's own limit is 15 minutes. */
 export const BODY_EXECUTION_BUDGET_MS = 10 * 60_000
 /** How long a chunk's batch holds the lease for the next one (a call is at most two minutes). */
@@ -189,16 +197,18 @@ export async function translateBodyJob(ctx: TranslationContext, lease: Lease): P
     else misses.set(id, tagged[id] as string)
   }
 
-  // Cap the source tokens one article may spend: the operator's ceiling, and the reader's
-  // reservation when they asked for it. Leaves past the cap render as source (`partial`). A
-  // reader's request that reserved nothing was judged a conversion between the Chinese scripts
-  // by the article's language; if the shared object says otherwise, it is never paid for.
+  // Cap the source tokens one article may send: the operator's ceiling, and what the reservation
+  // was made for when there is one. A reservation reckons the whole spend, prompts and output too
+  // (`bodySpendFor`), so the source it pays for is its inverse, never the reservation itself.
+  // Leaves past the cap render as source (`partial`). A reader's request that reserved nothing
+  // was judged a conversion between the Chinese scripts by the article's language; if the shared
+  // object says otherwise, it is never paid for.
   const unreserved = row.requestedBy !== null && row.reservedTokens === 0
   const cap = unreserved
     ? 0
     : Math.min(
         ctx.maxArticleTokens ?? MAX_ARTICLE_TRANSLATION_TOKENS,
-        row.reservedTokens > 0 ? row.reservedTokens : Number.POSITIVE_INFINITY,
+        row.reservedTokens > 0 ? sourceTokensFor(row.reservedTokens) : Number.POSITIVE_INFINITY,
       )
   let budgeted = 0
   for (const [id, text] of misses) {

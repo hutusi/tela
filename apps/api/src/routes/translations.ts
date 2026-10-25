@@ -21,11 +21,12 @@ import {
   isWaiting,
   loadBodyTranslation,
   readBodyAllowance,
+  roomToday,
   type TelaDb,
   TRANSLATE_BODY_TTL_MS,
   takeOverBodyTranslation,
 } from '@tela/data'
-import { isReadingLanguage, MAX_ARTICLE_TRANSLATION_TOKENS } from '@tela/shared'
+import { bodySpendFor, isReadingLanguage, MAX_ARTICLE_TRANSLATION_TOKENS } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
@@ -67,13 +68,22 @@ export function isScriptConversion(sourceLang: string | null, lang: string): boo
 }
 
 /**
- * Tokens to reserve against the day. The reservation is also the job's ceiling on source tokens,
- * so it leans high: a low guess would cut the translation short, while a high one is given back
- * when the job reconciles what it really spent.
+ * Source tokens a request is reserved for: a guess from the body's length, leaning high, since
+ * the job translates no more than the reservation pays for and a low guess would cut the post
+ * short. At most the per-post ceiling.
  */
-export function reservationFor(bodyChars: number, sourceLang: string | null): number {
+export function sourceGuessFor(bodyChars: number, sourceLang: string | null): number {
   const guess = CJK_SOURCE.test(sourceLang ?? '') ? bodyChars : Math.ceil(bodyChars / 4)
   return Math.min(MAX_ARTICLE_TRANSLATION_TOKENS, Math.ceil(guess * 1.5) + 500)
+}
+
+/**
+ * Tokens to reserve against the day: the whole spend of those source tokens, input and output
+ * (`bodySpendFor`), which is what the settle charges. A high guess is given back when the job
+ * reconciles what it really spent.
+ */
+export function reservationFor(bodyChars: number, sourceLang: string | null): number {
+  return bodySpendFor(sourceGuessFor(bodyChars, sourceLang))
 }
 
 /**
@@ -82,6 +92,25 @@ export function reservationFor(bodyChars: number, sourceLang: string | null): nu
  */
 export function exhaustedReason(allowance: BodyAllowance): ExhaustedReason {
   return allowance.perDay !== null && allowance.usedTomorrow >= allowance.perDay ? 'member' : 'site'
+}
+
+/** The other Chinese script, for a reader of one of them. */
+const otherScript = (lang: string) =>
+  lang === 'zh-Hans' ? 'zh-Hant' : lang === 'zh-Hant' ? 'zh-Hans' : null
+
+/**
+ * A body read in one Chinese script that is already translated into the other, from a third
+ * language. The model wrote Simplified for both (ADR 0038), and every leaf it wrote is in the
+ * shared block cache, so tela-jobs makes this one from the cache, converted for a Traditional
+ * reader, with no call. Free like a conversion: reserved nothing, the job pays for nothing (a
+ * reader's request that reserved nothing never reaches a model), and a leaf the other left
+ * untranslated stays the source here too.
+ */
+async function convertsFromOther(db: TelaDb, contentKey: string, lang: string) {
+  const other = otherScript(lang)
+  if (other === null) return false
+  const row = await loadBodyTranslation(db, contentKey, other)
+  return row?.state === 'done' || row?.state === 'partial'
 }
 
 type Row = Awaited<ReturnType<typeof loadBodyTranslation>>
@@ -198,8 +227,11 @@ export function translationRoutes(deps: ApiDeps) {
     }
     const now = deps.clock.now()
     // A conversion between the Chinese scripts costs nothing: its own, far larger rate limit, no
-    // reservation and no count, and neither the member's day nor the site's puts it off.
-    const conversion = isScriptConversion(article.source_lang, lang)
+    // reservation and no count, and neither the member's day nor the site's puts it off. So does
+    // one script of a post the other is already translated into.
+    const conversion =
+      isScriptConversion(article.source_lang, lang) ||
+      (await convertsFromOther(db, contentKey, lang))
     const reserve = conversion ? 0 : reservationFor(article.body_chars ?? 0, article.source_lang)
     const ask = {
       contentKey,
@@ -211,8 +243,11 @@ export function translationRoutes(deps: ApiDeps) {
     }
 
     if (existing && existing.requestId !== null && isWaiting(existing, now)) {
-      // It waits for tomorrow: a reader with room today takes it over, and it runs now. One who
-      // asks too often this hour is only told it waits, as one with no room today is.
+      // It waits for tomorrow: a reader with room today takes it over, and it runs now. One with no
+      // room today is told it waits, and spends none of the hour's asks on a take-over that could
+      // not happen; one who asks too often this hour is told it waits too.
+      const before = bodyAllowance(await readBodyAllowance(db, member.id, now), now)
+      if (!roomToday(before, reserve)) return answer('scheduled', existing, { allowance: before })
       if (!(await consumeLimit(db, conversion ? 'convert' : 'translate', member.id, now)).allowed) {
         return answer('scheduled', existing)
       }
@@ -248,10 +283,12 @@ export function translationRoutes(deps: ApiDeps) {
     const allowance = await decide(db, admitBodyTranslation(db, ask), member.id, now)
     const row = await loadBodyTranslation(db, contentKey, lang)
     if (row?.requestId !== ask.requestId) {
+      // Another request took the row first, and may have finished since: say what it is now.
       if (row && isWaiting(row, now)) return answer('scheduled', row, { allowance })
       if (row && (row.state === 'requested' || row.state === 'running')) {
         return answer('in_progress', row, { allowance })
       }
+      if (row && (row.state === 'done' || row.state === 'partial')) return answer('ready', row)
       return answer('budget_exhausted', row, { allowance, reason: exhaustedReason(allowance) })
     }
     if (row.dueAt !== null) return answer('scheduled', row, { allowance })

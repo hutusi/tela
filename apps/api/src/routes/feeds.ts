@@ -6,7 +6,7 @@
  */
 
 import { buildOpml, MAX_OPML_BYTES } from '@tela/content/opml'
-import { normalizeOrigin } from '@tela/content/url'
+import { asUrl, normalizeOrigin } from '@tela/content/url'
 import {
   claimDue,
   consumeLimit,
@@ -56,10 +56,22 @@ async function subscriptionLimitAnswer(db: TelaDb) {
   }
 }
 
-/** Whether the member holds as many subscriptions as the cap allows. */
-async function atSubscriptionCap(db: TelaDb, userId: string) {
-  const row = await first<{ room: number }>(db, sql`select ${subscriptionRoom(userId)} as room`)
-  return Number(row?.room ?? 0) <= 0
+/**
+ * Whether the member holds as many subscriptions as the cap allows, and the URL they typed is no
+ * feed they follow already: one they follow takes no place, so adding it again is answered as
+ * ever. Found by the URL as tela-jobs registers it, and through a merge, as `addFeed` finds one;
+ * a page or a redirect that leads to a feed they follow is not known before the fetch this check
+ * is there to save, and is refused.
+ */
+async function atSubscriptionCap(db: TelaDb, userId: string, feedUrl: string) {
+  const url = asUrl(feedUrl)?.toString() ?? null
+  const row = await first<{ room: number; following: number }>(
+    db,
+    sql`select ${subscriptionRoom(userId)} as room,
+      exists (select 1 from feeds f join subscriptions s on s.feed_id = coalesce(f.merged_into, f.id)
+        where f.feed_url = ${url} and s.user_id = ${userId} and s.deleted_at is null) as following`,
+  )
+  return Number(row?.room ?? 0) <= 0 && !row?.following
 }
 
 /** Claim a feed that has never been fetched and send it on, so a new subscriber sees posts now. */
@@ -111,7 +123,7 @@ export function feedRoutes(deps: ApiDeps) {
     }
     // Before the fetch, so a member at the cap adds no feed nobody would read. The subscribe below
     // is held to the cap as well, for two adds at once.
-    if (await atSubscriptionCap(db, member.id)) {
+    if (await atSubscriptionCap(db, member.id, feedUrl)) {
       return c.json(await subscriptionLimitAnswer(db), 409)
     }
     const added = await ingest.addFeed({ feedUrl, actorId: member.id, withinDay: true })

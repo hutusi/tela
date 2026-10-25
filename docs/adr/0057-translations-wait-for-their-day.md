@@ -27,12 +27,16 @@ most about 21 (2026-10-24), at most 266k tokens a day. Titles use 30–90k token
 requests pay for per UTC day, in `usage_daily.requests`. Free, so not counted:
 
 - a translation already made for anyone (`ready`);
-- a conversion between the Chinese scripts, which reserves nothing (ADR 0038);
+- a conversion between the Chinese scripts, which reserves nothing (ADR 0038), and so one script
+  of a post already translated (`done` or `partial`) into the other: the model wrote Simplified for
+  both, so tela-jobs makes it from the block cache with no call, and a request that reserved
+  nothing never reaches a model;
 - a request that spent no tokens: every block was already cached, or it ended before a call.
   `settleBodyUsage` gives that count back when the request settles, never below 0.
 
-The 40k-per-post ceiling still bounds each request, so a member's worst day is 20 × 40k, and the
-site budget bounds the money.
+The 40k-per-post ceiling still bounds the source tokens of each request, so a member's worst day is
+20 posts of 40k source tokens (about 115k tokens each, sent and written back), and the site budget
+bounds the money.
 
 **A site budget.** `translation.siteDailyTokens` (10M) holds every subject's tokens for the UTC day
 together, members' and titles' (`sum(used + reserved)` over `usage_daily`, through
@@ -70,10 +74,22 @@ every ending. The health check counts a row stuck only half an hour after it fel
 request waited points at new content: the job ends the old request as failed (`superseded`) before
 any call, and its reservation and count go back.
 
+**A reservation reckons the whole spend.** What the settle charges is every call's input and
+output, so a body reserves that, not its source tokens alone (`bodySpendFor` in `@tela/shared`):
+2.5 tokens a source token (the source sent, the translation written back at about 1.2 times it,
+the JSON around both and a strict retry) and 1,000 a chunk for the system prompt. The source tokens
+are guessed from the body's length, leaning high (1.5 times, plus 500), and the reservation is
+their whole spend, at most 115k for a post at the 40k ceiling. The job translates the source the
+reservation was made for (`sourceTokensFor`, its inverse), never the reservation read as source
+tokens, and never past the operator's ceiling; leaves past it render as source (`partial`). A body
+retried from the console reserves the whole spend of a post at the ceiling the same way.
+
 **Bodies are held at the door only.** A body admitted runs to its end, and continues across
 executions as before (ADR 0023). `dueBodies` reads no budget. Stopping a body mid-post would leave
-the reader half a translation, and the overshoot is bounded by what was admitted, each at most its
-reservation, which is also the job's ceiling on source tokens.
+the reader half a translation. The overshoot is what was admitted spending more than it was
+reckoned at: each body's source tokens are bounded by what its reservation was made for, but what
+the model writes back is not known until it does, so a reservation is an estimate of the spend, not
+a bound on it. Each call's output is capped (16k tokens), which bounds a body loosely.
 
 **A member with room today takes a waiting request over.** Opening a post that waits asks once
 more. If the asker has room today, one batch, guarded by the old request id:
@@ -85,7 +101,9 @@ more. If the asker has room today, one batch, guarded by the old request id:
 The last two do nothing unless the first moved the row, so of two members racing for it one has it,
 and the other is told it is in progress. `requested_by` never goes null while a request is open:
 the settle charges whoever holds it. An asker with no room today is told it waits, and so is one
-past the hourly `translate` bucket: a waiting post is never answered 429.
+past the hourly `translate` bucket: a waiting post is never answered 429. Only an asker with room
+today, as a read before the batch finds it (`roomToday`), spends one of the hour's asks on a
+take-over: reopening a post that waits, with no room, takes nothing from the next request.
 
 **Operators are not put off.** is_admin skips the member count, and the site's day never defers an
 operator's request, but their tokens count toward it: the owner's own reading stays visible in the
@@ -116,12 +134,14 @@ longer holds up everyone's new titles while the day's budget lasts.
 - At 00:00 UTC every request that waited falls due together. The tick claims 20 bodies a minute,
   so a night with many waiting starts them over a few minutes. Watch the stuck check the first
   nights.
-- Reservations lean high (1.5 times the estimate, plus 500), so the site's tomorrow can look full
-  before it is. With 20 a member, it rarely matters, and each settle gives the difference back.
+- Reservations lean high (the whole spend of 1.5 times the guessed source, plus 500), so the site's
+  tomorrow can look full before it is. With 20 a member, it rarely matters, and each settle gives
+  the difference back.
 - A request reserved for tomorrow counts in tomorrow's site total from the moment it is asked for.
   Raising the budget, or a take-over, gives it room today.
 - The site budget is crossed by what is in flight when the line is reached, never by new work:
-  each admitted body is bounded by its reservation, and a running title job by its 20 titles.
+  each admitted body by what it spends past its reservation, an estimate of input and output for
+  source tokens the job holds it to, and a running title job by its 20 titles.
 - The console's Translation area shows the member limit as a count, how many members reached it
   this week, the site's day against its budget, the background budget as it holds, and how many
   bodies wait.

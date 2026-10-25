@@ -82,6 +82,7 @@ import { readPull, readTitles } from './queries/sync'
 import {
   admitBodyTranslation,
   bodyAllowance,
+  CLOSED,
   dueBodies,
   dueTitles,
   failDueTitles,
@@ -1541,6 +1542,11 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       const due = async (now: number) =>
         ((await db.all(duePendingFeeds(now))) as { key: string }[]).map((r) => r.key)
       expect(await due(T0)).toEqual([])
+      expect(await due(T0 + 86_400_000)).toEqual(['u1'])
+      // Suspended, their wait is kept and not swept; lifted, it is due again.
+      await db.run(sql`update profiles set suspended_at = ${T0} where user_id = 'u1'`)
+      expect(await due(T0 + 86_400_000)).toEqual([])
+      await db.run(sql`update profiles set suspended_at = null where user_id = 'u1'`)
       expect(await due(T0 + 86_400_000)).toEqual(['u1'])
     })
     it('the usage answer counts the day, what waits and what is held', async () => {
@@ -3257,10 +3263,10 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { added_by: null },
       ])
       // The running translation keeps its member until it ends, and so does the ledger.
-      expect(await count(db, sql`usage_daily`)).toBe(1)
+      expect(await count(db, sql`usage_daily where subject = 'leaver'`)).toBe(1)
       await db.run(sql`update body_translations set state = 'done' where content_key = 'ck2'`)
       expect((await erase(db, T0 + DAY)).erased).toBe(true)
-      expect(await count(db, sql`usage_daily`)).toBe(0)
+      expect(await count(db, sql`usage_daily where subject = 'leaver'`)).toBe(0)
       expect(await count(db, sql`body_translations where requested_by is not null`)).toBe(0)
       expect(await rows(db, sql`select erased_at from profiles where user_id = 'leaver'`)).toEqual([
         { erased_at: T0 + DAY },
@@ -3269,6 +3275,39 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       const third = await erase(db, T0 + 2 * DAY)
       expect(third.sizes.every((n) => n === 0)).toBe(true)
       expect(third.erased).toBe(false)
+    })
+
+    it("keeps every day's site total: the ledger is folded into no member's, never dropped", async () => {
+      const db = await makeDb()
+      await world(db)
+      const yesterday = utcDay(T0 - DAY)
+      await db.run(sql`insert into usage_daily (subject, day, reserved, used, requests)
+        values ('leaver', ${yesterday}, 0, 4000, 2), ('friend', ${today}, 0, 700, 1),
+          (${CLOSED}, ${today}, 0, 50, 1)`)
+      await close(db)
+      await db.run(sql`update body_translations set state = 'done' where content_key = 'ck2'`)
+      const totals = () =>
+        rows(
+          db,
+          sql`select day, sum(used + reserved) as n from usage_daily group by day order by day`,
+        )
+      const before = await totals()
+      expect((await erase(db, T0 + DAY)).erased).toBe(true)
+      expect(await totals()).toEqual(before)
+      expect(
+        await rows(
+          db,
+          sql`select subject, day, reserved, used, requests from usage_daily
+          order by subject, day`,
+        ),
+      ).toEqual([
+        { subject: 'friend', day: today, reserved: 0, used: 700, requests: 1 },
+        { subject: CLOSED, day: yesterday, reserved: 0, used: 4000, requests: 2 },
+        { subject: CLOSED, day: today, reserved: 3000, used: 150, requests: 1 },
+      ])
+      // A run again folds nothing twice.
+      await erase(db, T0 + 2 * DAY)
+      expect(await totals()).toEqual(before)
     })
 
     it("takes thousands of a member's rows in chunks within D1's limits", async () => {

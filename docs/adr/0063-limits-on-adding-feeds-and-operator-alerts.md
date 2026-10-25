@@ -67,9 +67,11 @@ day for you; the other 48 arrive over the next 3 days."
 nothing is fetched. Its due query finds a member with waiting feeds while a run would move
 something: the day and the cap both have room, or a waiting feed is one Tela has now (someone else
 added it meanwhile: a free subscription, at once). A member at the cap keeps their wait and is not
-swept until they have room. The run reads the member's waiting rows and writes them in one fenced
-batch by the import's own statements, so a holder that lost its lease adds nothing and a run again
-adds nothing twice. Exhaustion pushes the member's wait a day out (`queued_at`, which the due query
+swept until they have room, and so does a suspended member (0059) until the suspension is lifted.
+The run reads the member's waiting rows and writes them in one fenced batch by the import's own
+statements, so a holder that lost its lease adds nothing and a run again adds nothing twice. The
+batch also refuses itself, as the fence does, for a member out of standing: suspended or closed
+(0058) after the run was claimed, they have nothing added. Exhaustion pushes the member's wait a day out (`queued_at`, which the due query
 reads); a retry from the console brings it back. The feeds it adds are due at once, and the feed
 sweep fetches them as it fetches an import's.
 
@@ -78,7 +80,10 @@ sweep fetches them as it fetches an import's.
 - The `subscribe` mutation's insert carries the room as a predicate, as `putFolder` carries
   `MAX_FOLDERS`. Past it a subscribe writes nothing; one already followed was a no-op anyway.
 - `POST /api/v1/feeds` refuses before it fetches (`409 {error: 'subscription_limit', limit}`), so a
-  member at the cap adds no feed nobody would read, and its subscribe holds the cap as well.
+  member at the cap adds no feed nobody would read, and its subscribe holds the cap as well. A URL
+  naming a feed they follow already (as tela-jobs registers it, `asUrl`, or a feed merged into
+  one) takes no place and is answered as ever; a page or a redirect that leads to one is refused,
+  since knowing would take the fetch the check saves.
 - The import and the pending kind stop at it, as above.
 
 **The device refuses first, and says why.** A refused subscribe is dropped without a word, so the

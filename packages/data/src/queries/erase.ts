@@ -19,6 +19,7 @@ import type { TelaDb } from '../db'
 import { currentSeq } from '../seq'
 import { ERASE_AFTER_MS, releaseClaim } from './leaving'
 import { recountReaders } from './sites'
+import { CLOSED } from './translation'
 
 type Statement = ReturnType<TelaDb['run']>
 
@@ -326,9 +327,12 @@ const inFlight = (id: string) => sql`exists (select 1 from body_translations
 
 /**
  * The last batch, once every step has run to the end and the pictures are gone. Whatever was written
- * for the member as the account closed is undone again (a follow of them made live, a name set); the usage ledger goes once nothing is left to settle to it; and
- * the profile is stamped erased only while nothing the steps take is left, so a run that finds
- * something carries on next time. The last statement's `RETURNING` says whether it stamped.
+ * for the member as the account closed is undone again (a follow of them made live, a name set).
+ * The usage ledger stops naming them once nothing is left to settle to it: each day's row is
+ * folded into `CLOSED`'s, then deleted, so the site's total for the day (ADR 0057), a sum over
+ * every subject, stays what it was and a closing never gives the day's budget back. The profile
+ * is stamped erased only while nothing the steps take is left, so a run that finds something
+ * carries on next time. The last statement's `RETURNING` says whether it stamped.
  */
 export function finishErasure(db: TelaDb, id: string, now: number): Statement[] {
   const left = (table: string, column = 'user_id') =>
@@ -365,6 +369,16 @@ export function finishErasure(db: TelaDb, id: string, now: number): Statement[] 
       update follows set deleted_at = ${now}, updated_at = max(updated_at, ${now}),
         seq = ${currentSeq}
       where followee_id = ${id} and deleted_at is null
+    `),
+    // Folded and deleted under the same guard, in one batch: a run again finds no rows to fold.
+    db.run(sql`
+      insert into usage_daily (subject, day, reserved, used, requests)
+      select ${CLOSED}, day, reserved, used, requests from usage_daily
+      where subject = ${id} and not ${inFlight(id)}
+      on conflict (subject, day) do update set
+        reserved = usage_daily.reserved + excluded.reserved,
+        used = usage_daily.used + excluded.used,
+        requests = usage_daily.requests + excluded.requests
     `),
     db.run(sql`delete from usage_daily where subject = ${id} and not ${inFlight(id)}`),
     db.run(sql`

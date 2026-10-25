@@ -23,7 +23,7 @@ import type { TelaDb } from '../db'
 import { isFenceRefusal } from '../leases'
 import { bumpSeq, currentSeq } from '../seq'
 import { audit, newGroupId } from './admin'
-import { utcDay } from './translation'
+import { withdrawBodyRequests } from './translation'
 
 type Statement = ReturnType<TelaDb['run']>
 
@@ -182,8 +182,6 @@ export type Closed = 'closed' | 'already' | 'admin' | 'not_found'
 export async function closeAccount(db: TelaDb, input: CloseAccount): Promise<Closed> {
   const { userId: id, now } = input
   const address = sql`(select email from user where id = ${id})`
-  const today = utcDay(now)
-  const waiting = sql`requested_by = ${id} and state = 'requested'`
   const items: Statement[] = input.refuseAdmin
     ? [
         db.run(sql`insert into lease_fence (x) select null
@@ -296,30 +294,8 @@ export async function closeAccount(db: TelaDb, input: CloseAccount): Promise<Clo
       delete from leases where kind = 'site.claim'
         and key in (select cast(id as text) from site_claims where user_id = ${id})
     `),
-    // Its waiting translations, given back as `settleBodyUsage` gives back one, a day at a time:
-    // the reservation off the day it was charged to, nothing spent. `requested_by` stays, as it
-    // must while a request is open: the settle charges `coalesce(requested_by, '*')`.
-    db.run(sql`
-      insert into usage_daily (subject, day, reserved, used)
-      select ${id}, coalesce(reserved_day, ${today}), 0, sum(used_tokens)
-      from body_translations where ${waiting}
-      group by coalesce(reserved_day, ${today})
-      on conflict (subject, day) do update set
-        reserved = max(0, usage_daily.reserved - (
-          select coalesce(sum(reserved_tokens), 0) from body_translations
-          where ${waiting} and coalesce(reserved_day, ${today}) = excluded.day
-        )),
-        used = usage_daily.used + excluded.used
-    `),
-    db.run(sql`
-      delete from leases where kind = 'translate.body'
-        and key in (select content_key || ':' || lang from body_translations where ${waiting})
-    `),
-    db.run(sql`
-      update body_translations set state = 'failed', reserved_tokens = 0, updated_at = ${now},
-        seq = ${currentSeq}
-      where ${waiting}
-    `),
+    // Its translations not yet started, given back and ended unpaid; one running finishes.
+    ...withdrawBodyRequests(db, id, now),
     db.run(sql`delete from pending_feeds where user_id = ${id}`),
     db.all(sql`select deleted_at from profiles where user_id = ${id}`),
   )

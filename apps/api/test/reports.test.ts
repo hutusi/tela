@@ -5,7 +5,7 @@
  * leaves out) until the suspension is lifted.
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { currentSeq, first, type TelaDb } from '@tela/data'
+import { currentSeq, first, nextUtcMidnight, type TelaDb, utcDay } from '@tela/data'
 import type {
   AdminActResponse,
   AdminCounts,
@@ -299,6 +299,52 @@ describe('suspending a member', () => {
       // A suspension can be lifted, and the account can still be deleted (ADR 0058).
       [other.userId, ['member.unsuspend', 'member.delete'], api.clock.now()],
     ])
+  })
+
+  test('ends the translations they asked for that have not started, and gives them back', async () => {
+    const today = utcDay(api.clock.now())
+    const tomorrow = utcDay(nextUtcMidnight(api.clock.now()))
+    const ask = (ck: string, state: string, by: string, reserved: number, day: string) =>
+      db.run(sql`insert into body_translations (content_key, lang, state, request_id, requested_by,
+          reserved_tokens, reserved_day, due_at, updated_at, seq)
+        values (${ck}, 'fr', ${state}, ${`r-${ck}`}, ${by}, ${reserved}, ${day},
+          ${day === tomorrow ? nextUtcMidnight(api.clock.now()) : null}, 0, ${currentSeq})`)
+    await write(
+      // One waits for tomorrow, one is due and not begun, one runs; and the operator's own.
+      ask('waits', 'requested', other.userId, 5000, tomorrow),
+      ask('due', 'requested', other.userId, 3000, today),
+      ask('runs', 'running', other.userId, 2000, today),
+      ask('ops', 'requested', ops.userId, 1000, today),
+      db.run(sql`insert into usage_daily (subject, day, reserved, used, requests)
+        values (${other.userId}, ${today}, 5000, 0, 2), (${other.userId}, ${tomorrow}, 5000, 0, 1),
+          (${ops.userId}, ${today}, 1000, 0, 1)`),
+      db.run(sql`insert into leases (kind, key, owner, until)
+        values ('translate.body', 'due:fr', 'claimed', ${api.clock.now() + 60_000})`),
+    )
+    expect((await act({ action: 'member.suspend', ids: [ops.userId] })).done).toEqual([])
+    expect((await act({ action: 'member.suspend', ids: [other.userId] })).done).toEqual([
+      other.userId,
+    ])
+    expect(
+      await db.all(sql`select content_key, state, reserved_tokens, due_at from body_translations
+        order by content_key`),
+    ).toEqual([
+      { content_key: 'due', state: 'failed', reserved_tokens: 0, due_at: null },
+      { content_key: 'ops', state: 'requested', reserved_tokens: 1000, due_at: null },
+      { content_key: 'runs', state: 'running', reserved_tokens: 2000, due_at: null },
+      { content_key: 'waits', state: 'failed', reserved_tokens: 0, due_at: null },
+    ])
+    // What the running one holds stays until it settles; the others' tokens and counts go back.
+    expect(
+      await db.all(sql`select subject = ${ops.userId} as ops, day, reserved, requests
+        from usage_daily order by ops, day`),
+    ).toEqual([
+      { ops: 0, day: today, reserved: 2000, requests: 1 },
+      { ops: 0, day: tomorrow, reserved: 0, requests: 0 },
+      { ops: 1, day: today, reserved: 1000, requests: 1 },
+    ])
+    // A run that claimed the one due writes nothing more.
+    expect(await first(db, sql`select 1 as x from leases where key = 'due:fr'`)).toBeUndefined()
   })
 
   test('is refused for an admin, yourself and nobody, and undone while nothing moved', async () => {

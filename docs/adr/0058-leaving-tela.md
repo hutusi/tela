@@ -75,7 +75,10 @@ follows, applied mutations, tombstones, queued imports and claims. Likes, recomm
 readers are recounted without the member before the rows behind them go, in the same batch, so at
 most 500 posts or blogs move per seq. What names the member in Tela's own records stops naming
 them: model calls, the feeds they added, translations they asked for that have ended, reports they
-made or resolved. Their uploaded pictures (`avatars/<id>/`) are deleted, the usage ledger last.
+made or resolved. Their uploaded pictures (`avatars/<id>/`) are deleted. The usage ledger is
+last, and it is folded, never dropped: each day's row is added into one subject that is no member
+(`'~closed'`) and then deleted, so the site's total for every day (0057, a sum over subjects)
+stays what it was.
 `erased_at` is stamped only while nothing is left and no translation of theirs is running; a run
 that finds one ends without it and is claimed again. Out of attempts, nothing is marked done: the
 dead letter stops it, and a retry from the console resolves the letter and makes it due again.
@@ -147,8 +150,10 @@ stays chosen when they leave, and any proof wins it back. The operator can still
 - Within the five minutes of the signed session copy, a GET other than `/me`, the pull and the
   export can still answer a closed account's tab. It is answering the member about what is left of
   their own account, and the next pull ends it.
-- The account's rows of today's usage ledger go with the erasure, so the site's total for the day
-  (0057) drops by what the member spent; a closed account spends nothing more.
+- The account's usage ledger stops naming them, but what they spent stays in the site's total for
+  each day (0057): closing accounts gives no budget back. The `'~closed'` subject holds every closed
+  account's days together; the console's count of members at the day's limit leaves it out, as it
+  does `'*'`.
 - Counts others see drop ten minutes after a closing, not at once, and only when `member.erase`
   runs; until then a post shows the member's like.
 - A release leaves the claim row `failed` with the text `released by its claimant`: claims have no

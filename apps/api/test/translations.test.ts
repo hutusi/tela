@@ -9,9 +9,11 @@ import {
   type TelaDb,
   utcDay,
 } from '@tela/data'
+import { createTestDb } from '@tela/data/testing'
+import { MAX_ARTICLE_TRANSLATION_TOKENS, MAX_BODY_SPEND, sourceTokensFor } from '@tela/shared'
 import type { PullResponse } from '@tela/sync'
 import { sql } from 'drizzle-orm'
-import { isScriptConversion, reservationFor } from '../src/routes/translations'
+import { isScriptConversion, reservationFor, sourceGuessFor } from '../src/routes/translations'
 import { createTestApi, type SignedIn, signedIn, type TestApi } from './helpers'
 
 let api: TestApi
@@ -69,6 +71,7 @@ const usage = () =>
     sql`select reserved, used from usage_daily where subject = ${reader.userId}`,
   )
 /** Every member's day, as the ledger holds it. */
+const bytewise = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 const ledger = () =>
   db.all(sql`select subject, day, reserved, requests from usage_daily order by subject, day`)
 const owner = (contentKey: string) =>
@@ -170,6 +173,41 @@ describe('asking for a translation', () => {
     })
     expect(await usage()).toEqual({ reserved: 0, used: 0 })
     expect(api.jobs.sent).toMatchObject([{ body: { key: 'ckey1:zh-Hant' } }])
+  })
+
+  test('one Chinese script of a post already translated into the other is free, either way', async () => {
+    await article({ lang: 'en' })
+    await another(2, { lang: 'en' })
+    await another(3, { lang: 'en' })
+    await setting('member.translationsPerDay', 0)
+    await setting('translation.siteDailyTokens', 0)
+    // The model wrote Simplified for both, so the other script is in the block cache already.
+    await db.run(sql`insert into body_translations (content_key, lang, state, object_key, updated_at)
+      values ('ckey1', 'zh-Hans', 'done', 't/1', 0), ('ckey2', 'zh-Hant', 'partial', 't/2', 0),
+        ('ckey3', 'zh-Hans', 'failed', null, 0)`)
+    expect((await askJson({ articleId: 1, lang: 'fr' })).status).toBe('budget_exhausted')
+    expect(await askJson({ articleId: 1, lang: 'zh-Hant' })).toMatchObject({
+      status: 'requested',
+      allowance: { perDay: 0, usedToday: 0 },
+    })
+    expect((await askJson({ articleId: 2, lang: 'zh-Hans' })).status).toBe('requested')
+    // A failed one made nothing to convert: that is a translation, and paid for.
+    expect((await askJson({ articleId: 3, lang: 'zh-Hant' })).status).toBe('budget_exhausted')
+    expect(
+      await db.all(sql`select content_key, lang, reserved_tokens from body_translations
+        where state = 'requested' order by content_key`),
+    ).toEqual([
+      { content_key: 'ckey1', lang: 'zh-Hant', reserved_tokens: 0 },
+      { content_key: 'ckey2', lang: 'zh-Hans', reserved_tokens: 0 },
+    ])
+    expect(await usage()).toEqual({ reserved: 0, used: 0 })
+    expect(
+      await db.all(sql`select key, count from action_limits
+        where key like 'convert:%' or key like 'translate:%' order by key`),
+    ).toEqual([
+      { key: `convert:${reader.userId}`, count: 2 },
+      { key: `translate:${reader.userId}`, count: 2 },
+    ])
   })
 
   test('the answer says how many of the day the member has used', async () => {
@@ -292,10 +330,10 @@ describe('a day with no room (ADR 0057)', () => {
   test("the site's day puts a request off too, and a refusal says it was the site's", async () => {
     await article()
     await another(2)
-    await setting('translation.siteDailyTokens', 5000)
+    await setting('translation.siteDailyTokens', R + 1500)
     await db.run(sql`insert into usage_daily (subject, day, reserved, used)
       values ('*', ${utcDay(api.clock.now())}, 0, 2000)`)
-    // 2,000 of 5,000 spent today: a 3,500-token post waits for tomorrow, and fills it.
+    // 2,000 spent today leaves less than a post's reservation: it waits for tomorrow, and fills it.
     expect((await askJson(zh(1))).status).toBe('scheduled')
     expect(await askJson(zh(2))).toMatchObject({ status: 'budget_exhausted', reason: 'site' })
   })
@@ -335,14 +373,16 @@ describe('a day with no room (ADR 0057)', () => {
       'ckey1:zh-Hans',
       'ckey2:zh-Hans',
     ])
-    // The first member's tomorrow is given back; the second's today holds it.
+    // The first member's tomorrow is given back; the second's today holds it. Ordered as SQLite
+    // orders text, by code point: `localeCompare` put a `t…` id before an `X…` one, now and then.
     const today = utcDay(api.clock.now())
     expect(await ledger()).toEqual(
       [
         { subject: reader.userId, day: today, reserved: R, requests: 1 },
         { subject: reader.userId, day: utcDay(MIDNIGHT()), reserved: 0, requests: 0 },
         { subject: other.userId, day: today, reserved: R, requests: 1 },
-      ].sort((a, b) => a.subject.localeCompare(b.subject) || a.day.localeCompare(b.day)),
+        // In SQLite's order, byte by byte: localeCompare sorts the random mixed-case ids otherwise.
+      ].sort((a, b) => bytewise(a.subject, b.subject) || bytewise(a.day, b.day)),
     )
   })
 
@@ -371,20 +411,92 @@ describe('a day with no room (ADR 0057)', () => {
     await setting('member.translationsPerDay', 1)
     await askJson(zh(1))
     await askJson(zh(2))
+    // Another member, with room today but none of the hour's asks left.
+    const other = await signedIn(api, 'other@x.test')
     const hour = 3600_000
     const windowStart = Math.floor(api.clock.now() / hour) * hour
     await db.run(sql`insert into action_limits (key, window_start, count)
-      values (${`translate:${reader.userId}`}, ${windowStart}, ${ACTION_LIMITS.translate.limit})
+      values (${`translate:${other.userId}`}, ${windowStart}, ${ACTION_LIMITS.translate.limit})
       on conflict (key, window_start) do update set count = excluded.count`)
-    expect(await askJson(zh(2))).toMatchObject({ code: 200, status: 'scheduled' })
+    expect(await askJson(zh(2), other)).toMatchObject({ code: 200, status: 'scheduled' })
+    expect((await owner('ckey2'))?.requested_by).toBe(reader.userId)
+  })
+
+  test('opening a waiting post with no room today spends none of the hour on a take-over', async () => {
+    await article()
+    await another(2)
+    await setting('member.translationsPerDay', 1)
+    await askJson(zh(1))
+    await askJson(zh(2))
+    const asks = () =>
+      first<{ n: number }>(
+        db,
+        sql`select sum(count) as n from action_limits where key = ${`translate:${reader.userId}`}`,
+      )
+    const before = await asks()
+    for (let i = 0; i < 3; i++) {
+      expect(await askJson(zh(2))).toMatchObject({
+        status: 'scheduled',
+        allowance: { perDay: 1, usedToday: 1 },
+      })
+    }
+    expect(await asks()).toEqual(before)
+  })
+})
+
+describe('a request that loses the row to another', () => {
+  test('is told it is ready when the other finished meanwhile, not that the day is spent', async () => {
+    // A database whose next batch first lets another request finish the row, as a race would.
+    const base = (await createTestDb()).db
+    let meanwhile: (() => Promise<unknown>) | null = null
+    const raced = new Proxy(base, {
+      get(target, prop) {
+        if (prop === 'batch') {
+          return async (items: Parameters<TelaDb['batch']>[0]) => {
+            const run = meanwhile
+            meanwhile = null
+            if (run) await run()
+            return target.batch(items)
+          }
+        }
+        const value = Reflect.get(target, prop, target)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+    api = await createTestApi({}, { db: raced })
+    db = api.db
+    reader = await signedIn(api)
+    await article()
+    await db.run(sql`insert into body_translations (content_key, lang, state, updated_at)
+      values ('ckey1', 'zh-Hans', 'failed', 0)`)
+    meanwhile = () =>
+      base.run(sql`update body_translations set state = 'done', object_key = 't/done'
+        where content_key = 'ckey1'`)
+    expect(await askJson()).toMatchObject({
+      status: 'ready',
+      translation: { state: 'done', objectKey: 't/done' },
+    })
+    // Nothing reserved or counted for it.
+    expect(await usage()).toBeUndefined()
   })
 })
 
 describe('the reservation', () => {
   test('leans high, and stops at the per-article ceiling', () => {
-    expect(reservationFor(1000, 'ja')).toBe(2000)
-    expect(reservationFor(4000, 'en')).toBe(2000)
-    expect(reservationFor(10_000_000, 'zh-Hans')).toBe(40_000)
+    // 1,000 characters of Japanese, or 4,000 of English: 1,000 source tokens, guessed as 2,000.
+    expect(sourceGuessFor(1000, 'ja')).toBe(2000)
+    expect(sourceGuessFor(4000, 'en')).toBe(2000)
+    expect(sourceGuessFor(10_000_000, 'zh-Hans')).toBe(MAX_ARTICLE_TRANSLATION_TOKENS)
+  })
+
+  test('reserves the whole spend, prompts and output too, not the source alone', () => {
+    // Sent and written back, two chunks' prompts: what the settle will charge, input and output.
+    expect(reservationFor(1000, 'ja')).toBe(7000)
+    expect(reservationFor(4000, 'en')).toBe(7000)
+    expect(reservationFor(10_000_000, 'zh-Hans')).toBe(MAX_BODY_SPEND)
+    // And the job translates exactly the source it was reserved for, no less.
+    expect(sourceTokensFor(reservationFor(1000, 'ja'))).toBe(sourceGuessFor(1000, 'ja'))
+    expect(sourceTokensFor(MAX_BODY_SPEND)).toBe(MAX_ARTICLE_TRANSLATION_TOKENS)
   })
 
   test('is none between the two Chinese scripts, whichever way', () => {

@@ -5,7 +5,7 @@
  * bundle; in-process in tests. Every answer is a plain object: RPC across Workers carries data,
  * not errors.
  */
-import { normalizeOrigin } from '@tela/content'
+import { asUrl, normalizeOrigin } from '@tela/content'
 import { feedsFromOpml } from '@tela/content/opml'
 import { feedRoom, type TelaDb } from '@tela/data'
 import { FEED_FORMATS, type FeedFormat } from '@tela/shared'
@@ -73,19 +73,7 @@ export interface Ingest {
   readOpml(input: { opml: string }): Promise<ReadOpmlResult>
 }
 
-/** What a member typed, as a URL: a bare host gets https. */
-export function asUrl(input: string): URL | null {
-  const trimmed = input.trim()
-  if (!trimmed || trimmed.length > 2048) return null
-  try {
-    const url = new URL(
-      /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed.replace(/^\/+/, '')}`,
-    )
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url : null
-  } catch {
-    return null
-  }
-}
+export { asUrl }
 
 /**
  * The feeds Tela keeps for the blog `url` is on, when its writer asked Tela to use only what its

@@ -22,6 +22,7 @@ import {
   type Translator,
 } from '@tela/llm'
 import { fakeClock, memoryBlobs, memoryJobs } from '@tela/platform/portable'
+import { bodySpendFor } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { FixtureServer, longHtml, rss } from '../../../packages/ingest/test/fixture-server'
 import { type JobQueues, KINDS } from '../src/kinds'
@@ -554,6 +555,28 @@ describe('bodies', () => {
       sql`select reserved, used from usage_daily where subject = 'reader'`,
     )
     expect(ledger).toEqual({ reserved: 0, used: row!.used_tokens })
+  })
+
+  test('translate the source a reservation was made for: the reservation reckons the whole spend', async () => {
+    const ctx = context()
+    await addReader()
+    await ingest(ctx, feed(['A long post'], 20))
+    // Reserved for 400 source tokens: their input, output and prompts, about 2,000 in all.
+    const key = await request(1, 'zh-Hans', bodySpendFor(400))
+    await db.run(sql`delete from leases`)
+    calls.length = 0
+    await cycle(ctx)
+    const row = await bodyRow(key)
+    // Read as a cap on source tokens, the 2,000 would have let every paragraph through.
+    expect(row?.state).toBe('partial')
+    // The body's leaves, not the titles' and excerpts' (`t1`, `e1`).
+    const sent = calls.flatMap((c) => c.blocks).filter((b) => !/^[te]\d+$/.test(b.id))
+    const tokens = sent.reduce((n, b) => n + estimateTokens(b.text), 0)
+    expect(tokens <= 400).toBe(true)
+    // And no fewer: the next paragraph is the one that would have crossed it.
+    expect(tokens + estimateTokens(sent[0]!.text) > 400).toBe(true)
+    // What it spent, input and output, is about what was reserved for it.
+    expect(row!.used_tokens <= bodySpendFor(400)).toBe(true)
   })
 
   test('reuse the shared cache: a second article with the same paragraphs costs no call', async () => {
@@ -1124,9 +1147,10 @@ describe('Traditional Chinese', () => {
     expect(final.blocks.join('')).not.toContain('软件')
     expect(await cacheLangs()).toEqual(['fr', 'zh-Hans'])
 
-    // A Simplified reader of the same post pays nothing: every block is a cache hit.
+    // A Simplified reader of the same post pays nothing: every block is a cache hit. tela-api
+    // reserves nothing for it, and the job makes all of it from the cache.
     calls.length = 0
-    await request(1, 'zh-Hans', 20_000, 'reader')
+    await request(1, 'zh-Hans', 0)
     await cycle(ctx)
     const simplified = await bodyRow(key, 'zh-Hans')
     expect(simplified?.state).toBe('done')
@@ -1136,6 +1160,25 @@ describe('Traditional Chinese', () => {
       await (await blobs.get(simplified!.object_key!))!.text(),
     ) as TranslationObject
     expect(again.blocks.every((b) => b.includes('zh-Hans:软件'))).toBe(true)
+  })
+
+  test('and a Traditional reader after a Simplified one: reserved nothing, made whole from the cache', async () => {
+    const ctx = context({ translator: writesChinese() })
+    await addReader()
+    await ingest(ctx, feed(['A post'], 6))
+    await cycle(ctx) // titles
+    const key = await request(1, 'zh-Hans')
+    await cycle(ctx)
+    expect((await bodyRow(key, 'zh-Hans'))?.state).toBe('done')
+    calls.length = 0
+    await request(1, 'zh-Hant', 0)
+    await cycle(ctx)
+    const row = await bodyRow(key, 'zh-Hant')
+    expect(row?.state).toBe('done')
+    expect(calls).toEqual([])
+    expect(row?.used_tokens).toBe(0)
+    const final = JSON.parse(await (await blobs.get(row!.object_key!))!.text()) as TranslationObject
+    expect(final.blocks.every((b) => b.includes('zh-Hans:軟體'))).toBe(true)
   })
 
   test('a body in one Chinese script read in the other is converted: no call, no spend', async () => {
