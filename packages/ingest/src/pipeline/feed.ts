@@ -58,7 +58,7 @@ import {
   SUMMARY_MAX_CHARS,
 } from '../content-mode'
 import { HttpError } from '../http'
-import { selectItems, titleFor } from '../items'
+import { FEED_MAX_BYTES, selectItems, titleFor } from '../items'
 import { timeoutsWarrantRelay } from '../region-policy'
 import {
   backoffSec,
@@ -465,6 +465,7 @@ export async function ingestFeed(ctx: IngestContext, lease: Lease): Promise<Inge
       etag: feed.etag,
       lastModified: feed.lastModified,
       region: feed.fetchRegion,
+      maxBytes: FEED_MAX_BYTES,
     })
   } catch (err) {
     if (!(err instanceof HttpError)) throw err

@@ -204,6 +204,15 @@ describe('ingestFeed', () => {
     expect(article?.content_key).toBe(v2!.content_key)
   })
 
+  test('stores a feed past the 5 MB a page gets', async () => {
+    // 2.2 MB in each of three items: a 6.6 MB feed, as danluu.com's is.
+    const padding = `<!-- ${'x'.repeat(2.2 * 1024 * 1024)} -->`
+    server.text('/feed.xml', threeItems({ content: longHtml(4) + padding }))
+    const { feedId } = await addFeed('/feed.xml')
+    const result = await fetchOnce(feedId)
+    expect(result.status === 'fetched' ? result.newArticleIds : []).toHaveLength(3)
+  })
+
   // Objects are written as each item is processed, not held for the whole feed: the same test
   // that decides an item changed decides it is written.
   test('a changed feed writes the objects of the items that changed, and only those', async () => {

@@ -2,8 +2,8 @@ import type { Topic } from '@tela/shared'
 
 /**
  * One editorially chosen blog. The note is for whoever reviews a change to this list; it is
- * never stored. Prefer a feed of recent items over a full archive: the worker caps a response
- * body at 5 MB and a decade of posts in one file fails the fetch as `too_large`.
+ * never stored. Prefer a feed of recent items over a full archive: the worker reads a feed up to
+ * 10 MB, and a decade of posts in one file can still fail the fetch as `too_large`.
  */
 export type CuratedSite = {
   feedUrl: string

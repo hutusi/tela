@@ -118,14 +118,16 @@ ADR 0053).
 ## Ingestion (`packages/ingest`, run by tela-jobs)
 
 - `createHttpClient`: conditional headers, manual redirects with permanent-redirect detection,
-  a 5 MB cap, charset-aware decoding, private-network refusal, and the relay hook for
+  a 5 MB cap (10 MB for a feed, `FEED_MAX_BYTES`), charset-aware decoding, private-network refusal, and the relay hook for
   `fetch_region = 'cn'`. One abort signal per request, not per redirect hop. A 206 whose
   `Content-Range` covers the whole file is read as a 200 (Caddy answers so for a precompressed
   file, unasked).
 - `ingestFeed` (`pipeline/feed.ts`) runs a whole fetch under the feed's lease: conditional GET,
   relay flip, alias detection, provenance and declared-home adoption, the 200-item cap,
   content-mode learning, scheduling. Everything commits in one fenced batch, so two fetches of one
-  feed cannot interleave (the lease is the per-feed serialization).
+  feed cannot interleave (the lease is the per-feed serialization). Each item's content object
+  and raw HTML are written as it is processed, before that batch, and not held for the whole
+  feed: held, they cost about 13 times the feed's size.
 - One blog, one feed (`pipeline/merge.ts`, ADR 0028): before fetching, a feed whose blog has
   other active feeds checks whether it holds the same post URLs as one of them over the time
   both cover. If it does and the other is canonical (on the blog's own host, else older), it

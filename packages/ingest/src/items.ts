@@ -7,6 +7,15 @@ import type { ParsedItem } from '@tela/content'
  */
 export const MAX_ITEMS_PER_FETCH = 200
 
+/**
+ * How much of a feed is read, against the client's 5 MB for anything else. A blog whose feed
+ * carries its whole archive outgrows 5 MB: danluu.com's is 6.6 MB, 128 full posts back to 2013,
+ * and could not be added. Written as it is processed (`ingestFeed`), a feed costs about 5.5 times
+ * its size at the peak (its bytes, its text and the parsed strings), so 10 MB stays near 55 MB of
+ * a Worker's 128.
+ */
+export const FEED_MAX_BYTES = 10 * 1024 * 1024
+
 /** The newest `limit` items: dated ones first, newest first; undated ones keep document order after them. */
 export function selectItems(items: ParsedItem[], limit = MAX_ITEMS_PER_FETCH): ParsedItem[] {
   if (items.length <= limit) return items

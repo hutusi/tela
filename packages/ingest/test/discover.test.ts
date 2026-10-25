@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { discoverFeeds } from '../src/discover'
 import { createHttpClient } from '../src/http'
+import { FEED_MAX_BYTES } from '../src/items'
 import { FixtureServer, rss } from './fixture-server'
 
 let server: FixtureServer
@@ -36,6 +37,17 @@ describe('discoverFeeds', () => {
         homeUrl: 'https://blog.example/',
       },
     ])
+  })
+
+  // danluu.com's feed carries every post since 2013: 6.6 MB, past the 5 MB pages get.
+  test('reads a feed past the 5 MB a page gets, up to FEED_MAX_BYTES', async () => {
+    const big = (pad: number) =>
+      rss({ items: [{ guid: '1', title: 'A', content: `<p>x</p><!-- ${'x'.repeat(pad)} -->` }] })
+    server.text('/archive.xml', big(6 * 1024 * 1024))
+    server.text('/huge.xml', big(FEED_MAX_BYTES))
+    const found = await discoverFeeds(http, server.url('/archive.xml'))
+    expect(found.map((f) => [f.url, f.itemCount])).toEqual([[server.url('/archive.xml'), 1]])
+    expect(await discoverFeeds(http, server.url('/huge.xml'))).toEqual([])
   })
 
   test('uses feeds declared by the page', async () => {

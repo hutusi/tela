@@ -7,6 +7,7 @@ import {
 } from '@tela/content'
 import type { FeedFormat } from '@tela/shared'
 import { type HttpClient, HttpError } from './http'
+import { FEED_MAX_BYTES } from './items'
 
 export type DiscoveredFeed = {
   url: string
@@ -30,7 +31,7 @@ function withScheme(input: string): string {
 async function tryFeed(http: HttpClient, url: string): Promise<DiscoveredFeed | null> {
   let res: Awaited<ReturnType<HttpClient['get']>>
   try {
-    res = await http.get(url)
+    res = await http.get(url, { maxBytes: FEED_MAX_BYTES })
   } catch (err) {
     if (err instanceof HttpError) return null
     throw err
