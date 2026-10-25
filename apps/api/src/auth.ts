@@ -2,10 +2,12 @@
  * Sign-in (ADR 0024): better-auth with email codes, passwords, Google and GitHub, through its
  * Drizzle adapter over the same `TelaDb` everything else uses, so it runs on D1 in production and
  * libSQL in tests. An account is made at an address's first code sign-in, at a provider's return,
- * or by the operator's invite, and only for an address that holds an invitation (ADR 0034):
- * `user.create.before` is the gate, and the code mail is sent to nobody else. A provider's return
- * is admitted only by the invite code its sign-in carried. A password is never how an account
- * starts: it is set on a member a code has proved, and a forgotten one is reset by code (ADR 0036).
+ * or by the operator's invite. `user.create.before` is the gate. While sign-up is by invitation
+ * (`signup.mode`, ADR 0056), it admits only an address that holds one (ADR 0034), the code mail is
+ * sent to nobody else, and a provider's return is admitted only by the invite code its sign-in
+ * carried. While sign-up is open, a proved address is enough until the day's cap, and an
+ * invitation it holds is still claimed. A password is never how an account starts: it is set on a
+ * member a code has proved, and a forgotten one is reset by code (ADR 0036).
  */
 import {
   ACTION_LIMITS,
@@ -20,6 +22,7 @@ import {
   liveCode,
   schema,
   settleInvite,
+  signupState,
   type TelaDb,
   waitsOnFullCode,
 } from '@tela/data'
@@ -146,6 +149,11 @@ const REFUSALS = {
   INVITE_USED: 'Everyone this invite code was for has joined.',
   /** A provider's sign-in carried a code that is unknown or revoked: one answer for both. */
   INVALID_CODE: 'No such invite code, or it was withdrawn.',
+  /**
+   * Sign-up is open, and today's new accounts have reached `signup.maxPerDay` (ADR 0056): an
+   * address without an invitation waits for the next UTC day.
+   */
+  SIGNUPS_PAUSED: 'Tela is taking no more new accounts today.',
 } as const
 
 const refuse = (code: keyof typeof REFUSALS) =>
@@ -155,12 +163,16 @@ const refuse = (code: keyof typeof REFUSALS) =>
  * Why a provider's return makes no account, as the `error` of its redirect to the page that
  * started it: lowercase, like better-auth's own codes there. `invite_required`: the sign-in carried
  * no invite code. `invite_unavailable`: its code was filled or revoked while the visitor was at the
- * provider. `account_not_linked`: the provider has not verified the address, which is also what
- * better-auth answers a member whose provider is not linked, so the redirect says nothing of who
- * is a member; for that reason none carries a description, as better-auth's does not. The sheet
- * words each.
+ * provider. `signups_paused`: sign-up is open, but takes nobody else new today (ADR 0056).
+ * `account_not_linked`: the provider has not verified the address, which is also what better-auth
+ * answers a member whose provider is not linked, so the redirect says nothing of who is a member;
+ * for that reason none carries a description, as better-auth's does not. The sheet words each.
  */
-type ReturnRefusal = 'invite_required' | 'invite_unavailable' | 'account_not_linked'
+type ReturnRefusal =
+  | 'invite_required'
+  | 'invite_unavailable'
+  | 'signups_paused'
+  | 'account_not_linked'
 const refuseReturn = (code: ReturnRefusal) => new APIError('FORBIDDEN', { code })
 
 /**
@@ -171,7 +183,10 @@ const refuseReturn = (code: ReturnRefusal) => new APIError('FORBIDDEN', { code }
  * signs in with no state at all. An invite is checked here, before the visitor is sent away, and
  * handed to the callback in the OAuth state's server context, which only the server writes and
  * the callback alone reads. A check is a guess at a code like a join's, so it spends a join's
- * limits: per IP before the code is looked up, then per code for a live one.
+ * limits: per IP before the code is looked up, then per code for a live one. While sign-up is open
+ * (ADR 0056) a code records who invited the visitor rather than lets them in: a full one is left
+ * behind instead of refused, as a join leaves it, and an unknown one is still told, so a typo can
+ * be put right.
  */
 async function startWithProvider(
   db: TelaDb,
@@ -213,8 +228,10 @@ async function startWithProvider(
     const { allowed, retryAfterSec } = await consumeLimit(db, 'joinCode', code, now, limit)
     if (!allowed) throw tooMany(retryAfterSec)
   }
-  if (live.full)
+  if (live.full) {
+    if ((await signupState(db, now)).mode === 'open') return
     throw new APIError('CONFLICT', { code: 'INVITE_USED', message: REFUSALS.INVITE_USED })
+  }
   await addOAuthServerContext({ invite: code })
 }
 
@@ -435,16 +452,19 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       user: {
         create: {
           /**
-           * The gate (ADR 0034): every path that makes a user runs it, and it admits one only by
-           * claiming an invitation, in one statement. better-auth passes the endpoint it runs in
-           * through AsyncLocalStorage. Inside one, only the code sign-in, which proved the
-           * address, and a provider's return, whose provider verified it, may make an account;
-           * any other, and an address not verified, is refused rather than trusted, so a way in
-           * better-auth adds later makes nobody. Outside one is the admin route, which has written
-           * the operator's invitation first: a missing context grants nothing by itself, since a
-           * refactor or a background task loses it as easily. It refuses by throwing; a `false`
-           * would make `createUser` return null, and the sign-in fail on it with an empty 500. On
-           * a provider's return better-auth turns the throw into a redirect carrying its code.
+           * The gate (ADRs 0034, 0056): every path that makes a user runs it. better-auth passes
+           * the endpoint it runs in through AsyncLocalStorage. Inside one, only the code sign-in,
+           * which proved the address, and a provider's return, whose provider verified it, may
+           * make an account; any other, and an address not verified, is refused rather than
+           * trusted, so a way in better-auth adds later makes nobody. An invitation is claimed
+           * first, in one statement, in either mode: who invited whom is recorded, and an invited
+           * account never waits on the day's cap. Without one, an account is made only while
+           * sign-up is open, read as the gate runs, and only inside an endpoint. Outside one is
+           * the admin route, which has written the operator's invitation first: a missing context
+           * grants nothing by itself, since a refactor or a background task loses it as easily,
+           * and an open sign-up does not change that. It refuses by throwing; a `false` would
+           * make `createUser` return null, and the sign-in fail on it with an empty 500. On a
+           * provider's return better-auth turns the throw into a redirect carrying its code.
            * Whatever the client or the provider sent as a name or picture is dropped, so neither
            * rides in the session cookie, nor reaches a public profile: a profile is the member's
            * to fill.
@@ -459,25 +479,30 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
             }
             const email = user.email.toLowerCase()
             const now = clock.now()
+            const admitted = { data: { name: '', image: null } }
             if (fromProvider) {
-              // Admitted by the code its sign-in carried, and nothing else (ADR 0036): a hold or
-              // an operator's invitation is for the code sign-in, which proves the address
-              // itself. Someone else may have placed the hold, and only a code from that mailbox
-              // should spend it.
+              // The code its sign-in carried is all it claims (ADR 0036): a hold or an
+              // operator's invitation is for the code sign-in, which proves the address itself.
+              // Someone else may have placed the hold, and only a code from that mailbox should
+              // spend it.
               const state = await getOAuthState().catch(() => null)
               const invite = state?.serverContext?.invite
-              if (typeof invite !== 'string') throw refuseReturn('invite_required')
-              if (!(await claimByCode(db, { code: invite, email, now }))) {
-                throw refuseReturn('invite_unavailable')
-              }
-              return { data: { name: '', image: null } }
+              const carried = typeof invite === 'string'
+              if (carried && (await claimByCode(db, { code: invite, email, now }))) return admitted
+              const signup = await signupState(db, now)
+              if (signup.open) return admitted
+              if (signup.paused) throw refuseReturn('signups_paused')
+              throw refuseReturn(carried ? 'invite_unavailable' : 'invite_required')
             }
-            if (!(await claimInvite(db, { email, now }))) {
-              throw refuse(
-                (await waitsOnFullCode(db, { email, now })) ? 'INVITE_USED' : 'INVITE_REQUIRED',
-              )
+            if (await claimInvite(db, { email, now })) return admitted
+            if (context) {
+              const signup = await signupState(db, now)
+              if (signup.open) return admitted
+              if (signup.paused) throw refuse('SIGNUPS_PAUSED')
             }
-            return { data: { name: '', image: null } }
+            throw refuse(
+              (await waitsOnFullCode(db, { email, now })) ? 'INVITE_USED' : 'INVITE_REQUIRED',
+            )
           },
           // The profile comes in the same step that creates the account (the Postgres stack did
           // this with a trigger on auth.users). The invitation is settled on its own: a failure
@@ -624,22 +649,33 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
           }
           // better-auth calls this for an address with no account only for a sign-in code, and
           // with sign-up on would mail one to any address it is given. Only an address the gate
-          // would admit is mailed; for any other the code just stored (the plugin's row
-          // `sign-in-otp-<address>`) is deleted, and the endpoint answers as it does for everyone.
-          // A throw here would refuse nothing: better-auth logs it and answers the same, with the
-          // code left in place.
+          // would admit is mailed: one that holds an invitation, or any while sign-up is open and
+          // the day's cap is not reached (ADR 0056). For any other the code just stored (the
+          // plugin's row `sign-in-otp-<address>`) is deleted, and the endpoint answers as it does
+          // for everyone. A throw here would refuse nothing: better-auth logs it and answers the
+          // same, with the code left in place.
           let invited = member !== undefined && !member.email_verified
+          let joining = false
           if (member === undefined) {
-            if (!(await holdsInvite(db, { email: address, now: clock.now() }))) {
+            const now = clock.now()
+            if (await holdsInvite(db, { email: address, now })) invited = true
+            else if ((await signupState(db, now)).open) joining = true
+            else {
               await ctx?.context.internalAdapter.deleteVerificationByIdentifier(
                 `sign-in-otp-${address}`,
               )
               return
             }
-            invited = true
           }
           await mail.send(
-            signInMail({ to: email, code: otp, publicUrl: config.publicUrl, invited, locale }),
+            signInMail({
+              to: email,
+              code: otp,
+              publicUrl: config.publicUrl,
+              invited,
+              joining,
+              locale,
+            }),
           )
         },
       }),

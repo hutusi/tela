@@ -3,7 +3,8 @@
  * Four ways in, behind one gate on tela-api:
  *
  * - **An emailed code**, which is also how an account starts. Joining first holds an invite code
- *   beside the address (`/api/v1/join`), and the code's sign-in claims it.
+ *   beside the address (`/api/v1/join`), and the code's sign-in claims it. While sign-up is open
+ *   (ADR 0056) the code is optional: a join without one only asks for the mail.
  * - **A password**, chosen when joining, at the code step or from the mail's link, or set by a
  *   reset code: never before a code has proved the address. Log in opens on it (ADR 0043).
  * - **Google or GitHub**, started here and finished by tela-api's callback, which sends a refusal
@@ -21,6 +22,9 @@ import { holdLeaving } from '../leave'
 import { type SignedIn, useSession } from '../session'
 import { api } from '../store/api'
 import { type CardClaim, finishCard, keepClaim, takeClaim } from './claim-card'
+import { learnSignup, PROVIDERS, type Provider } from './door-config'
+
+export { PROVIDERS, type Provider }
 
 /** A password's length, as tela-api's better-auth checks it (ADR 0036). */
 export const PASSWORD_MIN = 10
@@ -89,9 +93,6 @@ export function loginPath(search: URLSearchParams): string {
   return next ? `/login?next=${encodeURIComponent(safeNext(next))}` : '/login'
 }
 
-export const PROVIDERS = ['google', 'github'] as const
-export type Provider = (typeof PROVIDERS)[number]
-
 /** Log in to an account, or make one with an invitation. */
 export type DoorMode = 'login' | 'join'
 
@@ -110,6 +111,10 @@ export type SignInError =
   | 'missing_code'
   | 'invalid_code'
   | 'code_used'
+  /** A join sent no code, and sign-up is by invitation after all (ADR 0056). */
+  | 'invite_only'
+  /** Sign-up is open, but today's places are taken: an invite code still joins. */
+  | 'signups_paused'
   | 'provider_unlinked'
   | 'provider_no_email'
   | 'provider_cancelled'
@@ -118,13 +123,20 @@ export type SignInError =
   | 'unreachable'
   | 'failed'
 
-/** The gate's refusals (ADR 0034), as an email-code sign-in or a provider names them. */
+/** The gate's refusals (ADRs 0034, 0056), as an email-code sign-in or a provider names them. */
 function inviteRefusal(code: unknown): SignInError | null {
   if (typeof code !== 'string') return null
   const known = code.toLowerCase()
   if (known === 'invite_required') return 'not_invited'
   if (known === 'invite_used' || known === 'invite_unavailable') return 'invite_used'
+  if (known === 'signups_paused') return 'signups_paused'
   return null
+}
+
+/** What a refusal says of the sign-up switch, for the sheet to follow at once. */
+function learnFrom(why: SignInError): void {
+  if (why === 'not_invited' || why === 'invite_only') learnSignup({ mode: 'invite', paused: false })
+  if (why === 'signups_paused') learnSignup({ mode: 'open', paused: true })
 }
 
 /**
@@ -137,10 +149,15 @@ export function codeError(status: number, code: unknown): SignInError {
   return inviteRefusal(code) ?? 'bad_code'
 }
 
-/** What `/api/v1/join` answered: 400 `invalid_code` or `invalid_email`, 409 `code_used`, 429. */
-export function joinError(status: number, error: unknown): SignInError {
+/**
+ * What `/api/v1/join` answered: 400 `invalid_code` or `invalid_email`, 409 `code_used`, 403
+ * `signups_paused`, 429. A join that sent no code and hears `invalid_code` was sent while the
+ * sheet thought sign-up open: it is by invitation now.
+ */
+export function joinError(status: number, error: unknown, sentCode = true): SignInError {
   if (status === 429) return 'rate_limited'
-  if (error === 'invalid_code') return 'invalid_code'
+  if (error === 'signups_paused') return 'signups_paused'
+  if (error === 'invalid_code') return sentCode ? 'invalid_code' : 'invite_only'
   if (error === 'invalid_email') return 'invalid_email'
   if (status === 409 || error === 'code_used') return 'code_used'
   return 'send_failed'
@@ -337,6 +354,11 @@ export function useSignIn(options: SignInOptions) {
     options.link ? { kind: 'link', link: options.link } : { kind: 'start' },
   )
   const [error, setError] = useState<SignInError | null>(options.error ?? null)
+  // A provider's refusal the page arrived with says as much of the switch as one made here.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, for what the page arrived saying
+  useEffect(() => {
+    if (options.error) learnFrom(options.error)
+  }, [])
   const [busy, setBusy] = useState(false)
   // Signed in, and waiting for /me to say as whom: the code is spent, so the form stays shut.
   const [waiting, setWaiting] = useState(false)
@@ -449,15 +471,23 @@ export function useSignIn(options: SignInOptions) {
       setStep({ kind: 'code', email, joining: false })
     }, 'send_failed')
 
-  /** Hold the invite beside the address, which mails it a code (ADR 0034). */
-  const join = (invite: string, input: string) =>
+  /**
+   * Hold the invite beside the address, which mails it a code (ADR 0034). With `optional` (sign-up
+   * is open, ADR 0056) an empty code is no code, and the join only asks for the mail.
+   */
+  const join = (invite: string, input: string, optional = false) =>
     run(async () => {
       const code = normalizeInviteCode(invite)
-      if (!code) return setError(invite.trim() ? 'invalid_code' : 'missing_code')
+      const typed = invite.trim() !== ''
+      if (!code && (typed || !optional)) return setError(typed ? 'invalid_code' : 'missing_code')
       const email = clean(input)
       if (!EMAIL.test(email)) return setError('invalid_email')
-      const res = await post('/api/v1/join', { code, email })
-      if (!res.ok) return setError(joinError(res.status, (await fields(res)).error))
+      const res = await post('/api/v1/join', code ? { code, email } : { email })
+      if (!res.ok) {
+        const why = joinError(res.status, (await fields(res)).error, code !== null)
+        learnFrom(why)
+        return setError(why)
+      }
       setStep({ kind: 'code', email, joining: true })
     }, 'send_failed')
 
@@ -475,8 +505,9 @@ export function useSignIn(options: SignInOptions) {
       )
       if (!res.ok) {
         const why = codeError(res.status, (await fields(res)).code)
+        learnFrom(why)
         // The gate's refusal has spent the code: only a fresh start can go on.
-        const refused = why === 'not_invited' || why === 'invite_used'
+        const refused = why === 'not_invited' || why === 'invite_used' || why === 'signups_paused'
         setStep(refused ? { kind: 'start' } : { kind: 'code', email, joining })
         return setError(why)
       }

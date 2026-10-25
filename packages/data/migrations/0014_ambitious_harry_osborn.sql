@@ -58,6 +58,7 @@ ALTER TABLE `body_translations` ADD `due_at` integer;--> statement-breakpoint
 ALTER TABLE `profiles` ADD `suspended_at` integer;--> statement-breakpoint
 ALTER TABLE `profiles` ADD `deleted_at` integer;--> statement-breakpoint
 ALTER TABLE `profiles` ADD `erased_at` integer;--> statement-breakpoint
+CREATE INDEX `profiles_created_idx` ON `profiles` (`created_at`);--> statement-breakpoint
 ALTER TABLE `sites` ADD `feed_only` integer DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE `usage_daily` ADD `requests` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 CREATE INDEX `usage_daily_day_idx` ON `usage_daily` (`day`);--> statement-breakpoint

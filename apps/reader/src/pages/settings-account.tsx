@@ -30,6 +30,7 @@ import {
   signOutEverywhere,
   unlinkProvider,
 } from '../lib/account-api'
+import { useOpenSignup } from '../lib/door-config'
 import { monthYear } from '../lib/format'
 import { useLive } from '../lib/use-live'
 import { PASSWORD_MAX, PASSWORD_MIN } from '../lib/use-sign-in'
@@ -55,6 +56,22 @@ function Intro({ children }: { children: React.ReactNode }) {
 // Invites
 
 export function InvitesSection() {
+  const t = useTranslations('invites')
+  // While sign-up is open nobody needs a code (ADR 0056): the section, which Settings no longer
+  // lists then, says so to whoever reaches its address, and the codes wait, kept, for invitations
+  // to come back.
+  const open = useOpenSignup()
+  if (open) {
+    return (
+      <div data-testid="invites-open">
+        <Intro>{t('open')}</Intro>
+      </div>
+    )
+  }
+  return <InviteList />
+}
+
+function InviteList() {
   const t = useTranslations('invites')
   const { value: invites, failed, reload } = useLive<Invites>(listInvites)
   const [busy, setBusy] = useState(false)

@@ -128,4 +128,13 @@ export async function signedIn(api: TestApi, email = 'reader@x.test'): Promise<S
   return { cookie: cookiesOf(res), userId, headers: memberHeaders(userId) }
 }
 
+/** Change a runtime setting as `bun run admin set` does (ADR 0056): audited, with no actor. */
+export async function operatorSets(api: TestApi, key: string, value: unknown): Promise<void> {
+  const res = await api.request('/api/admin/settings', {
+    body: { key, value },
+    headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+  })
+  if (res.status !== 200) throw new Error(`set ${key} failed: ${res.status} ${await res.text()}`)
+}
+
 export type { TelaDb }

@@ -108,15 +108,20 @@ export function signInMail(options: {
    * account the operator made that has not signed in yet.
    */
   invited: boolean
+  /**
+   * A first sign-in with no invitation, while sign-up is open (ADR 0056): the mail says the code
+   * joins Tela, and nothing of an invitation.
+   */
+  joining?: boolean
   locale: UiLocale
 }): MailMessage {
-  const { to, code, publicUrl, invited } = options
+  const { to, code, publicUrl, invited, joining = false } = options
   const write = writer(options.locale)
   const { both } = write
-  const kind = (t: MailText) => (invited ? t.invited : t.signIn)
+  const kind = (t: MailText) => (invited ? t.invited : joining ? t.joining : t.signIn)
   // A first sign-in's link asks for the password the joiner chooses, as the join's code step does
   // (ADR 0043). Only a hint to the page: the code alone still signs in.
-  const join = invited ? '&join=1' : ''
+  const join = invited || joining ? '&join=1' : ''
   return codeMail({
     write,
     to,

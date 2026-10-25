@@ -22,6 +22,8 @@ import {
   livePlaces,
   revokeCode,
   revokeOperatorCode,
+  type SignupState,
+  signupState,
 } from '@tela/data'
 import { INVITE_ALLOWANCE, isOperatorCode, normalizeInviteCode } from '@tela/shared'
 import { getIP } from 'better-auth/api'
@@ -61,11 +63,20 @@ export function inviteRoutes(deps: ApiDeps, auth: Auth) {
   const routes = new Hono<ApiEnv>()
 
   /**
-   * Join with a code (ADR 0034): hold the address beside it for a day, then mail it a sign-in code,
-   * which says it is invited. The hold takes no place: signing in takes one. An address that has an
-   * account is mailed an ordinary sign-in code, and takes neither a hold nor a place; the answer is
-   * the same 200, so it says nothing of who is a member. 400 `invalid_code` for a code that is
-   * unknown or revoked (one answer for both), 409 `code_used` once everyone it was for has joined.
+   * Join (ADRs 0034, 0056). With a code: hold the address beside it for a day, then mail it a
+   * sign-in code, which says it is invited. The hold takes no place: signing in takes one. An
+   * address that has an account is mailed an ordinary sign-in code, and takes neither a hold nor a
+   * place; the answer is the same 200, so it says nothing of who is a member. 400 `invalid_code`
+   * for a code that is unknown or revoked (one answer for both), 409 `code_used` once everyone it
+   * was for has joined.
+   *
+   * While sign-up is open the code is optional, and records who invited the joiner: without one,
+   * or with one everyone has joined with, the address is mailed a code that makes its account at
+   * sign-in. 403 `signups_paused` once the day's new accounts reach `signup.maxPerDay`, for any
+   * address, since whether Tela is taking anyone new today is public and says nothing of who is a
+   * member; nothing is mailed then. A code typed but unknown is still `invalid_code`, so a typo is
+   * put right rather than dropped. While sign-up is by invitation, no code is `invalid_code`, as
+   * it always was.
    */
   routes.post('/join', async (c) => {
     const body = await readBody(c)
@@ -74,42 +85,74 @@ export function inviteRoutes(deps: ApiDeps, auth: Auth) {
       return c.json({ error: 'invalid_email' }, 400)
     }
     const code = normalizeInviteCode(body.code)
-    if (!code) return c.json({ error: 'invalid_code' }, 400)
     const now = deps.clock.now()
+    const noCode =
+      body.code === undefined ||
+      body.code === null ||
+      (typeof body.code === 'string' && body.code.trim() === '')
+    // Read only when it decides something, and once: with a code, the mode matters only once the
+    // code is used up.
+    let state: SignupState | undefined
+    const signup = async () => {
+      state ??= await signupState(db, now)
+      return state
+    }
+    const open = async () => (await signup()).mode === 'open'
+    if (!code && !(noCode && (await open()))) return c.json({ error: 'invalid_code' }, 400)
     // Per IP first, before the code is looked up: the limit is the client's own, and it bounds
     // guesses at codes.
     const ip = getIP(c.req.raw, auth.options) ?? NO_IP
     if (!(await consumeLimit(db, 'joinIp', ip, now)).allowed) {
       return c.json({ error: 'rate_limited' }, 429)
     }
+    // The address's limits, shared with the login page's mails (`otpSend`).
+    const address: [LimitedAction, string, number?][] = [
+      ['joinAddress', email],
+      ['otpSend', email],
+    ]
+    const within = async (limits: [LimitedAction, string, number?][]) => {
+      for (const [action, subject, limit] of limits) {
+        if (!(await consumeLimit(db, action, subject, now, limit)).allowed) return false
+      }
+      return true
+    }
+    // The mail gate (`auth.ts`) finds the hold, the account, or an open sign-up, and mails
+    // accordingly, in the joiner's language: their language cookie and Accept-Language go along,
+    // and nothing else of their request does.
+    const mailCode = async () => {
+      await auth.api.sendVerificationOTP({
+        body: { email, type: 'sign-in' },
+        headers: languageHeaders(c.req.raw.headers),
+      })
+      return c.json({ ok: true })
+    }
+    /** A join with nothing to hold: open sign-up, unless the day is full. */
+    const joinOpen = async (counted: boolean) => {
+      if ((await signup()).paused) return c.json({ error: 'signups_paused' }, 403)
+      if (!counted && !(await within(address))) return c.json({ error: 'rate_limited' }, 429)
+      return mailCode()
+    }
+    if (!code) return joinOpen(false)
     // The rest are shared, so only a join with a live code spends them: junk spends no address's
     // hour nor any code's, not even a word's before the operator makes it a code, and the 400 says
     // no more than a 200 or 409 would. The address's come first, so a client hammering one address
-    // spends none of the code's, and its mails count with the login page's (`otpSend`). A code
-    // allows as many as it has places, and never fewer than twice what one client may send.
+    // spends none of the code's. A code allows as many as it has places, and never fewer than
+    // twice what one client may send.
     const places = await livePlaces(db, code)
     if (places === null) return c.json({ error: 'invalid_code' }, 400)
-    const limits: [LimitedAction, string, number?][] = [
-      ['joinAddress', email],
-      ['otpSend', email],
-      ['joinCode', code, Math.max(ACTION_LIMITS.joinCode.limit, places)],
-    ]
-    for (const [action, subject, limit] of limits) {
-      if (!(await consumeLimit(db, action, subject, now, limit)).allowed) {
-        return c.json({ error: 'rate_limited' }, 429)
-      }
+    if (
+      !(await within([
+        ...address,
+        ['joinCode', code, Math.max(ACTION_LIMITS.joinCode.limit, places)],
+      ]))
+    ) {
+      return c.json({ error: 'rate_limited' }, 429)
     }
     const outcome = await holdJoin(db, { code, email, now })
     if (outcome === 'invalid') return c.json({ error: 'invalid_code' }, 400)
-    if (outcome === 'used') return c.json({ error: 'code_used' }, 409)
-    // The mail gate (`auth.ts`) finds the hold, or the account, and mails accordingly, in the
-    // joiner's language: their language cookie and Accept-Language go along, and nothing else of
-    // their request does.
-    await auth.api.sendVerificationOTP({
-      body: { email, type: 'sign-in' },
-      headers: languageHeaders(c.req.raw.headers),
-    })
-    return c.json({ ok: true })
+    if (outcome === 'used')
+      return (await open()) ? joinOpen(true) : c.json({ error: 'code_used' }, 409)
+    return mailCode()
   })
 
   /** The member's codes that count toward their five, and who joined with each, by handle. */

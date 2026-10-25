@@ -29,6 +29,7 @@ function everyMail(locale: UiLocale): [string, Kind, MailMessage][] {
   return [
     ['sign-in', 'code', signInMail({ ...base, code: CODE, invited: false })],
     ['invited', 'code', signInMail({ ...base, code: CODE, invited: true })],
+    ['welcome', 'code', signInMail({ ...base, code: CODE, invited: false, joining: true })],
     ['password reset code', 'code', passwordResetMail({ ...base, code: CODE })],
     ['account made with GitHub', 'notice', providerAccountMail({ ...base, provider: 'github' })],
     [
@@ -56,12 +57,13 @@ describe('the English mails', () => {
 })
 
 describe("a sign-in code's link", () => {
-  test('asks for a password only on a first sign-in (ADR 0043)', () => {
-    const link = (invited: boolean) =>
-      lines(signInMail({ to: TO, code: CODE, publicUrl: PUBLIC_URL, locale: 'en', invited })).find(
-        (line) => line.startsWith(`${PUBLIC_URL}/login?`),
-      )
+  test('asks for a password only on a first sign-in (ADR 0043), invited or not (ADR 0056)', () => {
+    const link = (invited: boolean, joining = false) =>
+      lines(
+        signInMail({ to: TO, code: CODE, publicUrl: PUBLIC_URL, locale: 'en', invited, joining }),
+      ).find((line) => line.startsWith(`${PUBLIC_URL}/login?`))
     expect(link(true)).toBe(`${PUBLIC_URL}/login?email=o'neil%2Btela%40x.test&otp=${CODE}&join=1`)
+    expect(link(false, true)).toBe(link(true))
     expect(link(false)).toBe(`${PUBLIC_URL}/login?email=o'neil%2Btela%40x.test&otp=${CODE}`)
   })
 })

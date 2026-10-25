@@ -2,7 +2,15 @@ import { describe, expect, spyOn, test } from 'bun:test'
 import { createOperatorCode, first, headSeq, holdJoin, inviteAddress } from '@tela/data'
 import { sql } from 'drizzle-orm'
 import { PER_ADDRESS } from '../src/auth'
-import { ADMIN_TOKEN, codeFor, cookiesOf, createTestApi, signedIn, type TestApi } from './helpers'
+import {
+  ADMIN_TOKEN,
+  codeFor,
+  cookiesOf,
+  createTestApi,
+  operatorSets,
+  signedIn,
+  type TestApi,
+} from './helpers'
 
 const invite = (
   api: Awaited<ReturnType<typeof createTestApi>>,
@@ -270,6 +278,138 @@ describe('the invitation gate', () => {
     await d.ask('new@x.test')
     expect((await d.signIn('new@x.test', codeFor(api, 'new@x.test'))).status).toBe(200)
     expect(await headSeq(api.db)).toBe(seq)
+  })
+
+  describe('while sign-up is open (ADR 0056)', () => {
+    const DAY = 24 * 60 * 60 * 1000
+    const open = async (api: TestApi, maxPerDay?: number | null) => {
+      await operatorSets(api, 'signup.mode', 'open')
+      if (maxPerDay !== undefined) await operatorSets(api, 'signup.maxPerDay', maxPerDay)
+    }
+    const signUp = async (api: TestApi, d: ReturnType<typeof door>, email: string) => {
+      expect((await d.ask(email)).status).toBe(200)
+      return d.signIn(email, codeFor(api, email))
+    }
+    const redemptions = (api: TestApi) =>
+      api.db.all(sql`select code, email, user_id is not null as settled from invite_redemptions`)
+
+    test('a proved address makes an account with no invitation, welcomed rather than invited', async () => {
+      const api = await createTestApi()
+      await open(api)
+      const d = door(api)
+      expect((await d.ask('New@X.test')).status).toBe(200)
+      const otp = codeFor(api, 'new@x.test')
+      const welcome = api.mail.outbox.at(-1)
+      expect(welcome?.subject).toBe(`Welcome to Tela · 欢迎加入 Tela: ${otp}`)
+      // A first sign-in's link asks for the password the joiner chooses, as an invited one does.
+      expect(welcome?.text).toContain('&join=1')
+      const res = await d.signIn('new@x.test', otp, { name: 'Someone else' })
+      expect(res.status).toBe(200)
+      const me = await api.request('/api/v1/me', { cookie: cookiesOf(res) })
+      expect(await me.json()).toMatchObject({
+        email: 'new@x.test',
+        profile: { handle: expect.stringMatching(/^u_/) },
+      })
+      expect(await first<object>(api.db, sql`select name, image from user`)).toEqual({
+        name: '',
+        image: null,
+      })
+      expect(await redemptions(api)).toEqual([])
+    })
+
+    test('an invitation the address holds is still claimed, so who invited it is recorded', async () => {
+      const api = await createTestApi()
+      await open(api)
+      await held(api, ['new@x.test'])
+      expect((await signUp(api, door(api), 'new@x.test')).status).toBe(200)
+      expect(api.mail.outbox.at(-1)?.subject).toStartWith('You are invited to Tela')
+      expect(await redemptions(api)).toEqual([{ code: 'WELCOME', email: 'new@x.test', settled: 1 }])
+    })
+
+    test('back to invitations refuses at once, a code already mailed included', async () => {
+      const api = await createTestApi()
+      await open(api)
+      const d = door(api)
+      await d.ask('new@x.test')
+      const otp = codeFor(api, 'new@x.test')
+      await operatorSets(api, 'signup.mode', 'invite')
+      const res = await d.signIn('new@x.test', otp)
+      expect(res.status).toBe(403)
+      expect(await res.json()).toMatchObject({ code: 'INVITE_REQUIRED' })
+      expect(await count(api, 'user')).toBe(0)
+      // And no more codes go to the address.
+      const mailed = api.mail.outbox.length
+      expect((await d.ask('new@x.test')).status).toBe(200)
+      expect(api.mail.outbox).toHaveLength(mailed)
+    })
+
+    test("the day's cap pauses only those with no invitation, until the next UTC day", async () => {
+      const api = await createTestApi()
+      await open(api, 2)
+      const d = door(api)
+      expect((await signUp(api, d, 'a@x.test')).status).toBe(200)
+      // A code mailed before the day filled up signs nobody new in once it has.
+      await d.ask('late@x.test')
+      const late = codeFor(api, 'late@x.test')
+      expect((await signUp(api, d, 'b@x.test')).status).toBe(200)
+      const refused = await d.signIn('late@x.test', late)
+      expect(refused.status).toBe(403)
+      expect(await refused.json()).toMatchObject({ code: 'SIGNUPS_PAUSED' })
+      // The sheet is told, and a new address is mailed nothing, answered as anyone is.
+      expect(await (await api.request('/api/v1/public/auth')).json()).toMatchObject({
+        signup: 'open',
+        paused: true,
+      })
+      const mailed = api.mail.outbox.length
+      expect((await d.ask('c@x.test')).status).toBe(200)
+      expect(api.mail.outbox).toHaveLength(mailed)
+      // A member is still mailed their code, and an invitation still admits, past the cap.
+      expect((await d.ask('a@x.test')).status).toBe(200)
+      expect(api.mail.outbox.at(-1)?.subject).toContain('sign-in code')
+      await held(api, ['invited@x.test'])
+      expect((await signUp(api, d, 'invited@x.test')).status).toBe(200)
+      expect((await invite(api, 'operator@x.test')).status).toBe(200)
+      expect(await count(api, 'user')).toBe(4)
+      // The next UTC day takes newcomers again.
+      api.clock.advance(DAY)
+      expect((await signUp(api, d, 'c@x.test')).status).toBe(200)
+    })
+
+    test('a cap of 0 takes nobody new; no cap at all takes everyone', async () => {
+      const api = await createTestApi()
+      await open(api, 0)
+      const d = door(api)
+      expect((await d.ask('a@x.test')).status).toBe(200)
+      expect(api.mail.outbox).toEqual([])
+      await operatorSets(api, 'signup.maxPerDay', null)
+      for (const email of ['a@x.test', 'b@x.test', 'c@x.test'])
+        expect((await signUp(api, d, email)).status).toBe(200)
+    })
+
+    test('still refuses every way in but the code sign-in, an address not verified, and no context', async () => {
+      const api = await createTestApi()
+      await open(api)
+      const gate = api.auth.options.databaseHooks?.user?.create?.before
+      if (!gate) throw new Error('no gate')
+      const user = (emailVerified: boolean) => ({
+        id: 'someone',
+        email: 'new@x.test',
+        name: '',
+        emailVerified,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      const inside = (path: string) => ({ path }) as unknown as Parameters<typeof gate>[1]
+      const refused = { body: { code: 'INVITE_REQUIRED' } }
+      await expect(gate(user(true), inside('/sign-up/email'))).rejects.toMatchObject(refused)
+      await expect(gate(user(true), inside('/sign-in/social'))).rejects.toMatchObject(refused)
+      await expect(gate(user(false), inside('/sign-in/email-otp'))).rejects.toMatchObject(refused)
+      // A missing context is not the operator: open sign-up is for an address proved here.
+      await expect(gate(user(true), null)).rejects.toMatchObject(refused)
+      expect(await gate(user(true), inside('/sign-in/email-otp'))).toEqual({
+        data: { name: '', image: null },
+      })
+    })
   })
 })
 

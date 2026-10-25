@@ -12,6 +12,10 @@
     "subject": "You are invited to Tela",
     "heading": "You are invited to Tela"
   },
+  "joining": {
+    "subject": "Welcome to Tela",
+    "heading": "Welcome to Tela"
+  },
   "reset": {
     "subject": "Reset your Tela password",
     "heading": "Reset your Tela password",

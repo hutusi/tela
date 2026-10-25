@@ -46,6 +46,7 @@ import { SETTING_HINT, SettingRow } from '../components/setting-row'
 import { SubscriptionsManager } from '../components/subscriptions-manager'
 import { Switch } from '../components/switch'
 import { linkingReturn } from '../lib/account-api'
+import { useOpenSignup } from '../lib/door-config'
 import { canMakeFolder, filedIn, folderWith, groupRows, knownFolders } from '../lib/folders'
 import { displayHost } from '../lib/format'
 import type { ReadingMode } from '../lib/href'
@@ -82,6 +83,16 @@ export const SECTIONS = [
   'account',
 ] as const
 export type Section = (typeof SECTIONS)[number]
+
+/**
+ * The sections a side column or the phone's list offers. Invites goes while sign-up is open (ADR
+ * 0056): nobody needs a code, and the member's codes wait, kept, for invitations to come back. Its
+ * address still answers, saying so.
+ */
+function useShownSections(): readonly Section[] {
+  const open = useOpenSignup()
+  return open ? SECTIONS.filter((s) => s !== 'invites') : SECTIONS
+}
 
 /** Profile too has an address of its own, so a link to it lands on it at any width. */
 export const hrefOf = (section: Section) => `/settings/${section}`
@@ -133,6 +144,7 @@ export function SettingsPage() {
   const heading = useRef<HTMLHeadingElement>(null)
   const [barEnd, setBarEnd] = useState<HTMLDivElement | null>(null)
   useTitle(t('title'))
+  const sections = useShownSections()
   // On a phone a section is a page of its own, so arriving by a row or a link starts it at its top
   // with focus on its name, as a new page would. Back, Forward and a load (`POP`) leave the page
   // where the browser keeps it, and so does a redirect. Only the phone's heading has the ref.
@@ -225,7 +237,7 @@ export function SettingsPage() {
         <div className="flex flex-col gap-0.5">
           {/* Current by the section shown, not by the address: Profile is shown at `/settings`
               and at `/settings/profile`, and a NavLink would light it at only one. */}
-          {SECTIONS.map((s) => (
+          {sections.map((s) => (
             <Link
               key={s}
               to={hrefOf(s)}
@@ -281,6 +293,7 @@ function SettingsList() {
   const navigation = useNavigationType()
   const heading = useRef<HTMLHeadingElement>(null)
   const rows = useRef(new Map<Section, HTMLAnchorElement>())
+  const sections = useShownSections()
   // Arriving by a link starts at the heading, as a new page would; coming back to the list (Back,
   // the section's back bar, or the list put back in an entry Profile had) puts focus on the row
   // that was left, where the member was. The row is in the list entry's own state, so it travels
@@ -302,7 +315,7 @@ function SettingsList() {
       </h1>
       <nav aria-label={t('title')} data-testid="settings-nav">
         <ul className="m-0 list-none p-0">
-          {SECTIONS.map((s) => (
+          {sections.map((s) => (
             <li key={s} className="border-t border-line">
               <Link
                 ref={(el) => {

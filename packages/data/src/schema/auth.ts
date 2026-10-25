@@ -185,6 +185,8 @@ export const profiles = sqliteTable(
       sql`length(${t.handle}) between 3 and 30 and ${t.handle} not glob '*[^a-z0-9_]*'`,
     ),
     check('profiles_bio_check', sql`${t.bio} is null or length(${t.bio}) <= 280`),
+    // The day's new accounts (ADR 0056) are counted by when their profile was made.
+    index('profiles_created_idx').on(t.createdAt),
   ],
 )
 

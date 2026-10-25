@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c9767452-4da0-424b-b255-dc869b3d23c8",
+  "id": "c930b4a8-d926-430e-aa72-8e292980ed61",
   "prevId": "ed3f885d-8c04-4e95-b488-63363d9d2bfc",
   "tables": {
     "admin_actions": {
@@ -1206,6 +1206,13 @@
             "handle"
           ],
           "isUnique": true
+        },
+        "profiles_created_idx": {
+          "name": "profiles_created_idx",
+          "columns": [
+            "created_at"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {

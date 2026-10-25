@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:test'
-import { bumpSeq, currentSeq, type JobQueues, schema } from '@tela/data'
+import { accountsTodaySql, bumpSeq, currentSeq, type JobQueues, schema } from '@tela/data'
 import type { Ingest } from '@tela/ingest/pipeline'
 import { type Blobs, type Jobs, memoryMail } from '@tela/platform'
 import { d1Db } from '@tela/platform/cloudflare'
@@ -685,6 +685,46 @@ it("joins with a code, signs in, and shows on the inviter's list, on D1", async 
   expect(mail.outbox.at(-1)?.subject).toMatch(
     /^Votre code de connexion à Tela · Your Tela sign-in code: \d{6}$/,
   )
+})
+
+it("joins with no code while sign-up is open, until the day's cap, on D1", async () => {
+  const { db, mail, call, codeFor } = stack()
+  const set = (key: string, value: unknown) =>
+    call('/api/admin/settings', {
+      body: { key, value },
+      headers: { authorization: 'Bearer admin' },
+    })
+  expect((await set('signup.mode', 'open')).status).toBe(200)
+  // The tests before this one made accounts today too, in the same database: room for one more.
+  const [today] = await db.all<{ n: number }>(sql`select ${accountsTodaySql(Date.now())} as n`)
+  expect((await set('signup.maxPerDay', (today?.n ?? 0) + 1)).status).toBe(200)
+  expect(await (await call('/api/v1/public/auth')).json()).toMatchObject({
+    signup: 'open',
+    paused: false,
+  })
+  const joined = await call('/api/v1/join', {
+    body: { email: 'open@x.test' },
+    headers: { 'cf-connecting-ip': '198.51.100.20' },
+  })
+  expect(joined.status).toBe(200)
+  expect(mail.outbox.at(-1)?.subject).toMatch(/^Welcome to Tela · 欢迎加入 Tela: \d{6}$/)
+  // The gate reads the switch and counts the day's accounts as it runs, beside the user insert.
+  const signIn = await call('/api/auth/sign-in/email-otp', {
+    body: { email: 'open@x.test', otp: codeFor('open@x.test') },
+    headers: { 'cf-connecting-ip': '198.51.100.20' },
+  })
+  expect(signIn.status).toBe(200)
+  expect(
+    await db.all(sql`select count(*) as n from invite_redemptions where email = 'open@x.test'`),
+  ).toEqual([{ n: 0 }])
+  // That was the day's one: the next is paused, and told so.
+  const paused = await call('/api/v1/join', {
+    body: { email: 'next@x.test' },
+    headers: { 'cf-connecting-ip': '198.51.100.21' },
+  })
+  expect(paused.status).toBe(403)
+  expect(await paused.json()).toEqual({ error: 'signups_paused' })
+  expect(await (await call('/api/v1/public/auth')).json()).toMatchObject({ paused: true })
 })
 
 it('sets a password and logs in with it, hashed by scrypt in workerd, on D1', async () => {

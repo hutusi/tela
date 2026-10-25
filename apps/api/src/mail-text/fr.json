@@ -12,6 +12,10 @@
     "subject": "Votre invitation à rejoindre Tela",
     "heading": "Votre invitation à rejoindre Tela"
   },
+  "joining": {
+    "subject": "Bienvenue sur Tela",
+    "heading": "Bienvenue sur Tela"
+  },
   "reset": {
     "subject": "Réinitialiser votre mot de passe Tela",
     "heading": "Réinitialiser votre mot de passe Tela",

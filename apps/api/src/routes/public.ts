@@ -10,7 +10,7 @@
  * says how a blog was listed: nothing public renders it, and beside a held-back count it would
  * tell a blog an operator listed from the queue from an editorial pick (ADR 0041).
  */
-import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first, isShown } from '@tela/data'
+import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first, isShown, signupState } from '@tela/data'
 import { HANDLE, isTopic, RESERVED_HANDLES } from '@tela/shared'
 import { getIP } from 'better-auth/api'
 import { sql } from 'drizzle-orm'
@@ -57,16 +57,25 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
   const cached = { 'cache-control': PUBLIC_CACHE }
 
   /**
-   * Which providers the sign-in sheet may offer (ADR 0036): each only once its app is configured.
-   * A browser may keep the answer five minutes, so a provider switched on shows within that.
+   * What the sign-in sheet offers: each provider only once its app is configured (ADR 0036), and
+   * whether joining needs an invite code (`signup: 'invite'`) or not (`'open'`), and if not,
+   * whether today's new accounts have filled the day (`paused`, ADR 0056). A browser may keep the
+   * answer a minute, so a switch the operator flips shows in the sheet within that; the gate reads
+   * the switch itself whatever the sheet thought.
    */
-  routes.get('/auth', (c) =>
-    c.json(
-      { google: Boolean(deps.config.oauth?.google), github: Boolean(deps.config.oauth?.github) },
+  routes.get('/auth', async (c) => {
+    const signup = await signupState(db, deps.clock.now())
+    return c.json(
+      {
+        google: Boolean(deps.config.oauth?.google),
+        github: Boolean(deps.config.oauth?.github),
+        signup: signup.mode,
+        paused: signup.paused,
+      },
       200,
-      { 'cache-control': 'public, max-age=300' },
-    ),
-  )
+      { 'cache-control': 'public, max-age=60' },
+    )
+  })
 
   routes.get('/discover', async (c) => {
     const topic = c.req.query('topic')

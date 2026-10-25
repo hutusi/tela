@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { errorKey } from '../src/components/front-door'
 import { detectLocale } from '../src/i18n'
 import { blogsApiPath, blogsHref, parseBlogsParams, tabOf } from '../src/lib/discover-href'
 import { feedRoute } from '../src/lib/feed-href'
@@ -401,6 +402,8 @@ describe('answers the pages turn into messages', () => {
     expect(codeError(400, 'INVITE_USED')).toBe('invite_used')
     expect(codeError(400, 'INVALID_OTP')).toBe('bad_code')
     expect(codeError(400, undefined)).toBe('bad_code')
+    // Sign-up is open, and today's places are taken (ADR 0056).
+    expect(codeError(403, 'SIGNUPS_PAUSED')).toBe('signups_paused')
   })
   test("a join's answers", () => {
     expect(joinError(400, 'invalid_code')).toBe('invalid_code')
@@ -408,11 +411,22 @@ describe('answers the pages turn into messages', () => {
     expect(joinError(409, 'code_used')).toBe('code_used')
     expect(joinError(429, 'rate_limited')).toBe('rate_limited')
     expect(joinError(500, undefined)).toBe('send_failed')
+    // While sign-up is open (ADR 0056): a day whose places are taken, and a join that sent no code
+    // to a Tela that went back to invitations meanwhile, which a code it never sent cannot answer.
+    expect(joinError(403, 'signups_paused')).toBe('signups_paused')
+    expect(joinError(400, 'invalid_code', false)).toBe('invite_only')
+    expect(joinError(400, 'invalid_code', true)).toBe('invalid_code')
+  })
+  test('while sign-up is open, a code that is no code is to put right or leave out', () => {
+    expect(errorKey('invalid_code', true)).toBe('invalid_code_optional')
+    expect(errorKey('invalid_code', false)).toBe('invalid_code')
+    expect(errorKey('signups_paused', true)).toBe('signups_paused')
   })
   test("a provider's refusal, in either case, and any code nobody listed", () => {
     expect(providerError('invite_required')).toBe('not_invited')
     expect(providerError('INVITE_REQUIRED')).toBe('not_invited')
     expect(providerError('invite_unavailable')).toBe('invite_used')
+    expect(providerError('signups_paused')).toBe('signups_paused')
     expect(providerError('account_not_linked')).toBe('provider_unlinked')
     expect(providerError('email_not_verified')).toBe('provider_unlinked')
     expect(providerError('email_not_found')).toBe('provider_no_email')

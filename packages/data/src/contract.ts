@@ -59,6 +59,7 @@ import {
   settingChangedSince,
   settingSql,
 } from './queries/settings'
+import { nextUtcDay, signupState, utcDayStart } from './queries/signup'
 import {
   DISCOVER_REVIEW,
   ensureFeed,
@@ -2040,6 +2041,39 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         ),
       ] as never)
       expect((await readSettings(db))['signup.mode']).toBe('invite')
+    })
+
+    it('reads the sign-up switch in one statement, and pauses an open day at its cap', async () => {
+      const db = await makeDb()
+      const set = (key: 'signup.mode' | 'signup.maxPerDay', value: string | number | null) =>
+        db.batch([
+          ...setSetting(db, { key, value, actor: null, group: key, now: T0 } as never),
+        ] as never)
+      const join = async (id: string, at: number) => {
+        await db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+          values (${id}, '', ${`${id}@x.y`}, 1, 0, 0)`)
+        await db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+          values (${id}, ${`h_${id}`}, ${at}, ${at})`)
+      }
+      expect(await signupState(db, T0)).toEqual({ mode: 'invite', paused: false, open: false })
+      await set('signup.mode', 'open')
+      expect(await signupState(db, T0)).toEqual({ mode: 'open', paused: false, open: true })
+      // Yesterday's accounts count for nothing today; today's count from the UTC midnight.
+      await set('signup.maxPerDay', 2)
+      await join('u0', utcDayStart(T0) - 1)
+      await join('u1', utcDayStart(T0))
+      expect((await signupState(db, T0)).paused).toBe(false)
+      await join('u2', T0)
+      expect(await signupState(db, T0)).toEqual({ mode: 'open', paused: true, open: false })
+      expect((await signupState(db, nextUtcDay(T0))).open).toBe(true)
+      // No limit is null; a limit of 0 takes nobody new at all.
+      await set('signup.maxPerDay', null)
+      expect((await signupState(db, T0)).open).toBe(true)
+      await set('signup.maxPerDay', 0)
+      expect((await signupState(db, nextUtcDay(T0))).paused).toBe(true)
+      // The invite mode is never paused: nothing it admits is counted.
+      await set('signup.mode', 'invite')
+      expect(await signupState(db, T0)).toEqual({ mode: 'invite', paused: false, open: false })
     })
   })
 

@@ -12,6 +12,10 @@
     "subject": "邀請你加入 Tela",
     "heading": "邀請你加入 Tela"
   },
+  "joining": {
+    "subject": "歡迎加入 Tela",
+    "heading": "歡迎加入 Tela"
+  },
   "reset": {
     "subject": "重設 Tela 密碼",
     "heading": "重設 Tela 密碼",
