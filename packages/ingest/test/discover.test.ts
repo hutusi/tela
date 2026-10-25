@@ -136,6 +136,35 @@ describe('discoverFeeds', () => {
     expect(server.requestsFor('/')).toHaveLength(2)
   })
 
+  // Codex's review: the well-known paths moved to the second page's origin, so a refresh to
+  // another host lost the feed the typed host serves, which main found.
+  test('a second page on another host keeps the typed host’s well-known paths, and adds its own', async () => {
+    const other = await FixtureServer.start()
+    try {
+      html('/', `<meta http-equiv="refresh" content="0; url=${other.url('/')}">`)
+      other.set('/', (_req, res) => {
+        res.writeHead(200, { 'content-type': 'text/html' })
+        res.end('<html><body>Moved</body></html>')
+      })
+      const feed = rss({ items: [{ guid: '1', title: 'A', description: 'x' }] })
+      server.text('/feed', feed)
+      other.text('/feed', feed)
+      // The typed host's first, so whatever main found is found still.
+      expect((await discoverFeeds(http, server.url('/'))).map((f) => f.url)).toEqual([
+        server.url('/feed'),
+      ])
+      // A blog that moved to the refresh's host is found there.
+      server.set('/feed', (_req, res) => {
+        res.writeHead(404).end()
+      })
+      expect((await discoverFeeds(http, server.url('/'))).map((f) => f.url)).toEqual([
+        other.url('/feed'),
+      ])
+    } finally {
+      await other.stop()
+    }
+  })
+
   test('returns nothing for sites without feeds', async () => {
     server.set('/nothing', (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/html' })

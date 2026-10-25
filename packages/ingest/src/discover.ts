@@ -81,7 +81,7 @@ function secondPage(page: HttpResponse | null, url: string): string | null {
 
 /**
  * Find feeds for a URL: the URL itself, feeds declared by the page (or, when it declares none, by
- * one more page: `secondPage`), then well-known paths. Every returned feed has been fetched and
+ * one more page: `secondPage`), then well-known paths on the origin of each. Every returned feed has been fetched and
  * parsed. Throws a `too_large` HttpError when nothing was found but a candidate was too large to
  * read, so the member is told that rather than that the blog has no feed.
  */
@@ -115,21 +115,21 @@ export async function discoverFeeds(
   }
 
   await declared(page)
-  // The well-known paths are tried on the origin of the last page that answered.
-  let last = page
+  let second: HttpResponse | null = null
   if (found.length === 0) {
     const next = secondPage(page, url)
-    const second = next ? await getPage(http, next) : null
-    if (second?.status === 200) last = second
+    second = next ? await getPage(http, next) : null
     await declared(second)
   }
   if (found.length === 0) {
-    const origin = normalizeOrigin(last?.finalUrl ?? url)
-    if (origin) {
-      for (const candidate of candidateFeedUrls(origin)) {
-        await consider(candidate)
-        if (found.length > 0) break
-      }
+    // The well-known paths on the typed page's origin first, so a site found before the second
+    // page existed is found the same; then on the second page's, when it answered from another
+    // (a refresh to the blog's new domain).
+    const origins = new Set([normalizeOrigin(page?.finalUrl ?? url)])
+    if (second?.status === 200) origins.add(normalizeOrigin(second.finalUrl))
+    for (const candidate of [...origins].flatMap((o) => (o ? candidateFeedUrls(o) : []))) {
+      await consider(candidate)
+      if (found.length > 0) break
     }
   }
   if (found.length === 0 && tooLarge) {
