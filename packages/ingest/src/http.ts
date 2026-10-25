@@ -7,8 +7,8 @@ export class HttpError extends Error {
   override name = 'HttpError'
   /**
    * On `too_large`, what came before the cap, so a caller can tell what was too large: an 11 MB
-   * page at a guessed `/feed` is not a feed too large to read. `readCapped` keeps the first
-   * `HEAD_BYTES` read; a client's `get` adds the status.
+   * page at a guessed `/feed` is not a feed too large to read. `cappedStream` keeps the first
+   * `HEAD_BYTES` that arrived; a client's `get` adds the status.
    */
   head?: Uint8Array
   status?: number
@@ -20,7 +20,7 @@ export class HttpError extends Error {
   }
 }
 
-/** How much of a body cut off at the cap `readCapped` keeps on the error. */
+/** How much of a body cut off at the cap `cappedStream` keeps on the error. */
 export const HEAD_BYTES = 16 * 1024
 
 export type HttpResponse = {
@@ -120,19 +120,30 @@ export function classify(err: unknown): HttpError {
 /**
  * Pass bytes through until `maxBytes`, then fail the stream with a `too_large` HttpError and
  * cancel the upstream body. Counts what actually arrives, so a missing or dishonest
- * Content-Length changes nothing; usable for proxying as well as for buffering.
+ * Content-Length changes nothing; usable for proxying as well as for buffering. The error holds
+ * the first `HEAD_BYTES` that arrived, the chunk that crossed the cap included: the stream never
+ * passes that one on, and it can be the only one (a 32 KB body in one chunk, on CI).
  */
 export function cappedStream(
   body: ReadableStream<Uint8Array>,
   maxBytes: number,
 ): ReadableStream<Uint8Array> {
   let total = 0
+  const head: Uint8Array[] = []
+  let kept = 0
   return body.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
+        if (kept < HEAD_BYTES) {
+          const part = chunk.slice(0, HEAD_BYTES - kept)
+          head.push(part)
+          kept += part.byteLength
+        }
         total += chunk.byteLength
         if (total > maxBytes) {
-          controller.error(new HttpError('too_large', `response exceeds ${maxBytes} bytes`))
+          const err = new HttpError('too_large', `response exceeds ${maxBytes} bytes`)
+          err.head = joined(head, HEAD_BYTES)
+          controller.error(err)
           return
         }
         controller.enqueue(chunk)
@@ -162,16 +173,9 @@ export async function readCapped(
   const reader = cappedStream(message.body, maxBytes).getReader()
   const chunks: Uint8Array[] = []
   for (;;) {
-    let next: Awaited<ReturnType<typeof reader.read>>
-    try {
-      next = await reader.read()
-    } catch (err) {
-      if (err instanceof HttpError && err.kind === 'too_large')
-        err.head = joined(chunks, HEAD_BYTES)
-      throw err
-    }
-    if (next.done) break
-    chunks.push(next.value)
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
   }
   return joined(chunks, Number.POSITIVE_INFINITY)
 }

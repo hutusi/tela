@@ -146,7 +146,18 @@ describe('createHttpClient', () => {
     })
     const reader = cappedStream(source, 10_000).getReader()
     expect((await reader.read()).value?.byteLength).toBe(6000)
-    await expect(reader.read()).rejects.toMatchObject({ kind: 'too_large' })
+    // The error keeps the start of what arrived, the chunk that crossed the cap included.
+    const cut = await reader.read().catch((e: HttpError) => e)
+    expect(cut).toMatchObject({ kind: 'too_large' })
+    expect((cut as HttpError).head?.byteLength).toBe(12_000)
+    // Even when that chunk is the first: CI fetched a 32 KB body as one.
+    const one = new Uint8Array(HEAD_BYTES * 2).fill(7)
+    const whole = cappedStream(new Response(one).body as ReadableStream<Uint8Array>, 10_000)
+    const first = await whole
+      .getReader()
+      .read()
+      .catch((e: HttpError) => e)
+    expect((first as HttpError).head).toEqual(one.subarray(0, HEAD_BYTES))
     const fine = await readCapped(new Response(new Uint8Array(3000)), 10_000)
     expect(fine.byteLength).toBe(3000)
   })
