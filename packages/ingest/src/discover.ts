@@ -93,9 +93,10 @@ function secondPage(page: HttpResponse | null, url: string): string | null {
 
 /**
  * Find feeds for a URL: the URL itself, feeds declared by the page (or, when it declares none, by
- * one more page: `secondPage`), then well-known paths on the origin of each. Every returned feed has been fetched and
- * parsed. Throws a `too_large` HttpError when nothing was found but a candidate was too large to
- * read, so the member is told that rather than that the blog has no feed.
+ * one more page: `secondPage`), then well-known paths on the origin of each; a WordPress comments
+ * feed only when nothing else was found. Every returned feed has been fetched and parsed. Throws a
+ * `too_large` HttpError when nothing was found but a candidate was too large to read, so the member
+ * is told that rather than that the blog has no feed.
  */
 export async function discoverFeeds(
   http: HttpClient,
@@ -147,5 +148,19 @@ export async function discoverFeeds(
   if (found.length === 0 && tooLarge) {
     throw new HttpError('too_large', `${tooLarge} is larger than ${FEED_MAX_BYTES} bytes`)
   }
-  return found
+  const posts = found.filter((f) => !isCommentsFeed(f.url))
+  return posts.length > 0 ? posts : found
+}
+
+/**
+ * WordPress's feed of every comment on the blog, which it declares beside the posts' own
+ * (`/comments/feed/`, or `?feed=comments-rss2` without pretty permalinks). Offered as a second
+ * choice, "Comments for Austin Kleon" could be followed by mistake, so it is offered only when the
+ * blog has no other feed.
+ */
+function isCommentsFeed(url: string): boolean {
+  const { pathname, searchParams } = new URL(url)
+  return (
+    /\/comments\/feed(\/|$)/i.test(pathname) || /^comments-/i.test(searchParams.get('feed') ?? '')
+  )
 }

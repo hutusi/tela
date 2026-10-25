@@ -87,7 +87,8 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 1. Discovery (`findFeedLinks`, `findMetaRefresh`, `candidateFeedUrls`): `link[rel=alternate]`,
    feed-looking anchors; when the page declares none, those of one more page (where its meta
    refresh sends, else the blog's home); then well-known paths on the typed page's origin, and on
-   the second page's when it answered from another.
+   the second page's when it answered from another. A WordPress comments feed is offered only when
+   the blog has no other.
 2. Parsing (`parseFeedText`) with `feedsmith`: RSS, Atom, RDF, JSON Feed → `ParsedFeed` with
    `summaryHtml` and `contentHtml` per item.
 3. Sanitize (`sanitizeArticleHtml`) with an allowlist; links and images absolutized; lazy-load

@@ -133,6 +133,39 @@ describe('discoverFeeds', () => {
     expect(found.map((f) => [f.url, f.title])).toEqual([[server.url('/declared.xml'), 'Declared']])
   })
 
+  // WordPress declares its comments feed beside the posts' own; 5 of 78 blogs audited offered it.
+  test('a WordPress comments feed is offered only when the blog has no other', async () => {
+    const feed = (title: string) =>
+      rss({ title, items: [{ guid: '1', title: 'A', description: 'x' }] })
+    server.set('/', (req, res) => {
+      // Without pretty permalinks, WordPress serves its feeds by query.
+      if (req.url?.includes('feed=comments-rss2')) {
+        res.writeHead(200, { 'content-type': 'application/rss+xml' })
+        res.end(feed('Comments for Blog'))
+        return
+      }
+      res.writeHead(200, { 'content-type': 'text/html' })
+      res.end(`<html><head>
+        <link rel="alternate" type="application/rss+xml" title="Blog » Feed" href="/feed/">
+        <link rel="alternate" type="application/rss+xml" title="Blog » Comments Feed" href="/comments/feed/">
+        <link rel="alternate" type="application/rss+xml" href="/?feed=comments-rss2">
+      </head></html>`)
+    })
+    server.text('/feed/', feed('Blog'))
+    server.text('/comments/feed/', feed('Comments for Blog'))
+    const found = await discoverFeeds(http, server.url('/'))
+    expect(found.map((f) => f.url)).toEqual([server.url('/feed/')])
+    // A blog whose only feeds are its comments still has those.
+    server.set('/feed/', (_req, res) => {
+      res.writeHead(404).end()
+    })
+    const only = await discoverFeeds(http, server.url('/'))
+    expect(only.map((f) => f.url)).toEqual([
+      server.url('/comments/feed/'),
+      server.url('/?feed=comments-rss2'),
+    ])
+  })
+
   test('probes well-known paths when the page declares nothing', async () => {
     server.set('/plain', (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/html' })
