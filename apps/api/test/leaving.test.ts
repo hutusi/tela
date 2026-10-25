@@ -28,6 +28,7 @@ import {
   codeFor,
   cookiesOf,
   createTestApi,
+  operatorSets,
   type SignedIn,
   signedIn,
   type TestApi,
@@ -399,6 +400,44 @@ describe('deleting an account', () => {
   })
 })
 
+describe('a closed account’s address', () => {
+  test('is mailed no code of any kind, and keeps none, answered as any address is', async () => {
+    expect((await deleteAccount(ada, SECRETS.email)).status).toBe(200)
+    // As better-auth reads it, lowercased, which matches no account: while sign-up is open, an
+    // address with no account is mailed a code that would make one.
+    await operatorSets(api, 'signup.mode', 'open')
+    const placeholder = `deleted+${ada.userId}@deleted.invalid`.toLowerCase()
+    const mailed = api.mail.outbox.length
+    const ip = { 'cf-connecting-ip': '198.51.100.9' }
+    const signIn = await api.request('/api/auth/email-otp/send-verification-otp', {
+      body: { email: placeholder, type: 'sign-in' },
+      headers: ip,
+    })
+    const joined = await api.request('/api/v1/join', {
+      body: { email: placeholder },
+      headers: { 'cf-connecting-ip': '198.51.100.10' },
+    })
+    expect(await joined.json()).toEqual({ ok: true })
+    const reset = await api.request('/api/auth/email-otp/request-password-reset', {
+      body: { email: placeholder },
+      headers: ip,
+    })
+    const stranger = await api.request('/api/auth/email-otp/request-password-reset', {
+      body: { email: 'nobody@x.test' },
+      headers: ip,
+    })
+    expect(signIn.status).toBe(200)
+    expect([reset.status, await reset.json()]).toEqual([stranger.status, await stranger.json()])
+    expect(api.mail.outbox).toHaveLength(mailed)
+    expect(
+      await first<Row>(
+        db,
+        sql`select count(*) as n from verification where identifier like '%deleted.invalid'`,
+      ),
+    ).toEqual({ n: 0 })
+  })
+})
+
 describe('an account out of good standing', () => {
   test('cannot sign in, whichever way, and is signed out on its next call', async () => {
     await db.run(sql`update profiles set suspended_at = 1 where user_id = ${cy.userId}`)
@@ -417,6 +456,61 @@ describe('an account out of good standing', () => {
     expect(await signIn.json()).toMatchObject({ code: 'ACCOUNT_SUSPENDED' })
     expect(cookiesOf(signIn)).not.toContain('session_token=')
   })
+
+  test.each([
+    ['suspended_at', 'ACCOUNT_SUSPENDED'],
+    ['deleted_at', 'ACCOUNT_CLOSED'],
+  ] as const)(
+    'a sign-in racing %s is refused after the fact, and leaves no session',
+    async (column, code) => {
+      // The standing changes, and every session ends, just after the sign-in's hook has read it
+      // and before better-auth writes the session: the moment the operator's batch can land in.
+      const { db: plain } = await createTestDb()
+      let target: string | null = null
+      let landed = false
+      const meanwhile = async (rows: Row[]) => {
+        const id = target
+        if (id && rows.some((row) => 'closed' in row && 'suspended' in row)) {
+          target = null
+          landed = true
+          await plain.batch([
+            plain.run(sql`update profiles set ${sql.raw(column)} = 1 where user_id = ${id}`),
+            plain.run(sql`delete from session where user_id = ${id}`),
+          ])
+        }
+        return rows
+      }
+      // The query itself, so a batch can still prepare it; only running it alone runs `meanwhile`.
+      const all = (query: Parameters<TelaDb['all']>[0]) => {
+        const raw = plain.all<Row>(query)
+        const execute = raw.execute.bind(raw)
+        raw.execute = async () => meanwhile(await execute())
+        return raw
+      }
+      const racing = new Proxy(plain, {
+        get: (on, prop, receiver) => (prop === 'all' ? all : Reflect.get(on, prop, receiver)),
+      }) as TelaDb
+      const raced = await createTestApi({}, { db: racing })
+      const dee = await signedIn(raced, 'dee@x.test')
+      await raced.request('/api/auth/email-otp/send-verification-otp', {
+        body: { email: 'dee@x.test', type: 'sign-in' },
+      })
+      target = dee.userId
+      const signIn = await raced.request('/api/auth/sign-in/email-otp', {
+        body: { email: 'dee@x.test', otp: codeFor(raced, 'dee@x.test') },
+      })
+      expect(landed).toBe(true)
+      expect(signIn.status).toBe(403)
+      expect(await signIn.json()).toMatchObject({ code })
+      expect(cookiesOf(signIn)).not.toContain('session_token=')
+      expect(
+        await first<Row>(
+          plain,
+          sql`select count(*) as n from session where user_id = ${dee.userId}`,
+        ),
+      ).toEqual({ n: 0 })
+    },
+  )
 })
 
 describe('releasing a blog', () => {

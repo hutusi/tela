@@ -15,6 +15,7 @@ import {
   joinError,
   loginPath,
   mailLink,
+  passwordError,
   providerError,
   safeNext,
   startError,
@@ -409,6 +410,21 @@ describe('answers the pages turn into messages', () => {
     expect(codeError(400, undefined)).toBe('bad_code')
     // Sign-up is open, and today's places are taken (ADR 0056).
     expect(codeError(403, 'SIGNUPS_PAUSED')).toBe('signups_paused')
+  })
+  test('an account suspended or deleted is told so, never that the code or password was wrong', () => {
+    expect(codeError(403, 'ACCOUNT_SUSPENDED')).toBe('account_suspended')
+    expect(codeError(403, 'ACCOUNT_CLOSED')).toBe('account_closed')
+    expect(passwordError(403, 'ACCOUNT_SUSPENDED')).toBe('account_suspended')
+    expect(passwordError(403, 'ACCOUNT_CLOSED')).toBe('account_closed')
+    // Otherwise one answer for an unknown address, an account without a password and a wrong one.
+    expect(passwordError(401, 'INVALID_EMAIL_OR_PASSWORD')).toBe('bad_password')
+    expect(passwordError(400, undefined)).toBe('bad_password')
+    expect(passwordError(429, 'ACCOUNT_SUSPENDED')).toBe('rate_limited')
+    expect(passwordError(503, undefined)).toBe('failed')
+    // A provider's return names them in lowercase, as every refusal there.
+    expect(providerError('account_suspended')).toBe('account_suspended')
+    expect(providerError('account_closed')).toBe('account_closed')
+    expect(providerError('ACCOUNT_SUSPENDED')).toBe('account_suspended')
   })
   test("a join's answers", () => {
     expect(joinError(400, 'invalid_code')).toBe('invalid_code')

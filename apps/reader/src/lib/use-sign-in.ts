@@ -115,6 +115,10 @@ export type SignInError =
   | 'invite_only'
   /** Sign-up is open, but today's places are taken: an invite code still joins. */
   | 'signups_paused'
+  /** The account was suspended by the operator (ADR 0059). */
+  | 'account_suspended'
+  /** The account was deleted (ADR 0058). */
+  | 'account_closed'
   | 'provider_unlinked'
   | 'provider_no_email'
   | 'provider_cancelled'
@@ -133,6 +137,19 @@ function inviteRefusal(code: unknown): SignInError | null {
   return null
 }
 
+/**
+ * A sign-in refused for the account's standing (ADRs 0058, 0059): tela-api's session hook names it
+ * in the 403 of a code or password sign-in, and in lowercase in a provider's return. Only someone
+ * who proved the address, the password or the provider account is told.
+ */
+function standingRefusal(code: unknown): SignInError | null {
+  if (typeof code !== 'string') return null
+  const known = code.toLowerCase()
+  if (known === 'account_suspended') return 'account_suspended'
+  if (known === 'account_closed') return 'account_closed'
+  return null
+}
+
 /** What a refusal says of the sign-up switch, for the sheet to follow at once. */
 function learnFrom(why: SignInError): void {
   if (why === 'not_invited' || why === 'invite_only') learnSignup({ mode: 'invite', paused: false })
@@ -141,12 +158,23 @@ function learnFrom(why: SignInError): void {
 
 /**
  * A refused code: too many tries, the gate's refusal (the address holds no invitation, or the
- * one it held is full), or else the code itself. Saying "wrong code" for either of the first two
- * would send the visitor hunting for a typo.
+ * one it held is full), an account suspended or deleted, or else the code itself. Saying "wrong
+ * code" for any of the first three would send the visitor hunting for a typo.
  */
 export function codeError(status: number, code: unknown): SignInError {
   if (status === 429) return 'rate_limited'
-  return inviteRefusal(code) ?? 'bad_code'
+  return inviteRefusal(code) ?? standingRefusal(code) ?? 'bad_code'
+}
+
+/**
+ * A refused password: too many tries, tela-api failing, an account suspended or deleted (told only
+ * once the password was right), or else one answer for an unknown address, an account without a
+ * password and a wrong one.
+ */
+export function passwordError(status: number, code: unknown): SignInError {
+  if (status === 429) return 'rate_limited'
+  if (status >= 500) return 'failed'
+  return standingRefusal(code) ?? 'bad_password'
 }
 
 /**
@@ -169,7 +197,7 @@ export function joinError(status: number, error: unknown, sentCode = true): Sign
  * and a new one must still say something.
  */
 export function providerError(code: string): SignInError {
-  const refused = inviteRefusal(code)
+  const refused = inviteRefusal(code) ?? standingRefusal(code)
   if (refused) return refused
   switch (code.toLowerCase()) {
     case 'email_not_verified':
@@ -506,8 +534,14 @@ export function useSignIn(options: SignInOptions) {
       if (!res.ok) {
         const why = codeError(res.status, (await fields(res)).code)
         learnFrom(why)
-        // The gate's refusal has spent the code: only a fresh start can go on.
-        const refused = why === 'not_invited' || why === 'invite_used' || why === 'signups_paused'
+        // The gate's refusal, or the account's standing, has spent the code: only a fresh start
+        // can go on.
+        const refused =
+          why === 'not_invited' ||
+          why === 'invite_used' ||
+          why === 'signups_paused' ||
+          why === 'account_suspended' ||
+          why === 'account_closed'
         setStep(refused ? { kind: 'start' } : { kind: 'code', email, joining })
         return setError(why)
       }
@@ -528,12 +562,7 @@ export function useSignIn(options: SignInOptions) {
       const email = clean(input)
       if (!EMAIL.test(email)) return setError('invalid_email')
       const res = await signingIn(() => post('/api/auth/sign-in/email', { email, password }))
-      // One answer for an unknown address, an account without a password and a wrong one.
-      if (!res.ok) {
-        return setError(
-          res.status === 429 ? 'rate_limited' : res.status >= 500 ? 'failed' : 'bad_password',
-        )
-      }
+      if (!res.ok) return setError(passwordError(res.status, (await fields(res)).code))
       await enter()
     })
 
@@ -559,9 +588,10 @@ export function useSignIn(options: SignInOptions) {
       if (!done.ok) return setError(done.status === 429 ? 'rate_limited' : 'reset_failed')
       const res = await signingIn(() => post('/api/auth/sign-in/email', { email, password }))
       if (!res.ok) {
-        // The code is spent and the password set: what is left is signing in, by code for now.
+        // The code is spent and the password set: what is left is signing in, by code for now,
+        // unless the account itself may not.
         setStep({ kind: 'start' })
-        return setError('password_set')
+        return setError(standingRefusal((await fields(res)).code) ?? 'password_set')
       }
       await enter()
     })

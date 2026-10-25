@@ -37,7 +37,9 @@ every one of those members onto the unpaged path.
 the address becomes `deleted+<id>@deleted.invalid`, which no mail reaches and which stays unique,
 the name and picture go, and the profile keeps its handle and nothing else. The handle stays taken,
 because the unique index says so. Rows of other members that name the account (a redemption, a
-follow of it, an audit row) stay valid, and no cascade ever fires.
+follow of it, an audit row) stay valid, and no cascade ever fires. Tela mails nothing to an address
+at `deleted.invalid`, in any case: a code asked for one is deleted unsent, and the endpoint answers
+as it does for any address.
 
 **Closing is one batch, at once** (`closeAccount` in `@tela/data`), shared by the member's own
 deletion and the operator's:
@@ -52,8 +54,9 @@ deletion and the operator's:
    `deleted_at` set, with seq;
 6. every way in: sessions, passwords and provider links, mailed codes and OAuth states for the
    address, and Tela's own rate-limit counts for the member and the address;
-7. its invite codes revoked and the holds on them cancelled; the redemption it joined by keeps its
-   place and its member, with `deleted:<id>` for the address;
+7. its invite codes revoked and the holds on them cancelled (and again by the erasure, for a code
+   whose request passed the standing check just before the closing); the redemption it joined by
+   keeps its place and its member, with `deleted:<id>` for the address;
 8. the address replaced (after every statement that reads it);
 9. its blogs released, and a claim still pending failed with its check cut off;
 10. its body translations still waiting given back to its ledger and ended (`failed`); one already
@@ -86,7 +89,10 @@ with it a signed copy of the session for up to five minutes; so tela-api reads t
 standing from D1 on `/me`, the pull, the export and every call that is not a GET, and answers a
 closed or suspended account (0059) 401, which every shell already reads as the end of the session
 (0025): it wipes the device's copy. `session.create.before` refuses either standing a new session,
-whichever way in made it, by throwing (0034's rule for hooks). A follow of an account out of
+whichever way in made it, by throwing (0034's rule for hooks), and `session.create.after` reads the
+standing again once the row exists: a closing or a suspension that lands between the read and the
+insert ends every session but that one, so the after hook ends the account's sessions and refuses
+the sign-in before a cookie is set. A follow of an account out of
 standing writes nothing, so a follow queued on a device offline as the account closed cannot bring
 its row back. Soft deletes are the only deletion devices already understand, so `MIN_CLIENT`
 stays where it is.

@@ -60,6 +60,55 @@ describe('a member not in good standing', () => {
     expect(await counts()).toMatchObject({ following: 0, followers: 0 })
   })
 
+  test.each(['suspended_at', 'deleted_at'] as const)(
+    'is named in no export or invite list once %s is set, and their place stays taken',
+    async (column) => {
+      // The reader follows Anna (the fixture), Anna joined by the reader's code, and the reader by
+      // Bea's.
+      await write(
+        api.db,
+        api.db.run(sql`insert into invite_codes (code, created_by, max_uses, created_at)
+        values ('READERCODE01', ${reader.userId}, 1, 0), ('BEACODE00001', ${BEA}, 1, 0)`),
+        api.db.run(sql`insert into invite_redemptions (code, email, expires_at, redeemed_at, user_id,
+          settled_at, created_at)
+        values ('READERCODE01', 'anna@x.test', 0, 5, ${ANNA}, 5, 0)`),
+        api.db.run(sql`update invite_redemptions set code = 'BEACODE00001'
+        where user_id = ${reader.userId}`),
+      )
+      type Export = {
+        following: { handle: string }[]
+        inviteCodes: { joined: { handle: string | null; joinedAt: number }[] }[]
+        joinedBy: { invitedBy: string | null } | null
+      }
+      const named = async () => {
+        const body = (await (await api.request('/api/v1/export', { as: reader })).json()) as Export
+        const listed = (await (await api.request('/api/v1/invites', { as: reader })).json()) as {
+          codes: { handle: string | null; joinedAt: number | null }[]
+        }
+        return {
+          following: body.following.map((f) => f.handle),
+          joined: body.inviteCodes.flatMap((c) => c.joined),
+          invitedBy: body.joinedBy?.invitedBy ?? null,
+          listed: listed.codes.map((c) => [c.handle, c.joinedAt]),
+        }
+      }
+      expect(await named()).toEqual({
+        following: ['anna'],
+        joined: [{ handle: 'anna', joinedAt: 5 }],
+        invitedBy: 'bea',
+        listed: [['anna', 5]],
+      })
+      await leave(column, ANNA)
+      await leave(column, BEA)
+      expect(await named()).toEqual({
+        following: [],
+        joined: [{ handle: null, joinedAt: 5 }],
+        invitedBy: null,
+        listed: [[null, 5]],
+      })
+    },
+  )
+
   test('drops from a follower’s device and their Following, and cannot be followed', async () => {
     const before = await pullOf(api, reader, 0)
     expect(before.rows.follows.map((f) => f.userId)).toEqual([ANNA])

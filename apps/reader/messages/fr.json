@@ -137,6 +137,8 @@
       "code_used": "Toutes les personnes prévues pour ce code d’invitation se sont inscrites.",
       "invite_only": "Pour l’instant, Tela n’accueille de nouveaux membres que sur invitation. Saisissez votre code d’invitation.",
       "signups_paused": "Tela ne peut plus accueillir de nouveaux membres aujourd’hui. Réessayez après {at, time, short}, ou inscrivez-vous avec un code d’invitation.",
+      "account_suspended": "Ce compte est suspendu. Si vous pensez que c’est une erreur, écrivez à me@hutu.si.",
+      "account_closed": "Ce compte a été supprimé.",
       "provider_unlinked": "Vérifiez cette adresse auprès du fournisseur, ou connectez-vous par e-mail et associez-le dans Paramètres → Compte.",
       "provider_no_email": "Le fournisseur n’a pas communiqué d’adresse e-mail. Connectez-vous plutôt par e-mail.",
       "provider_cancelled": "La connexion a été annulée.",

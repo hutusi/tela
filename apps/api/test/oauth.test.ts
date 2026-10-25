@@ -416,6 +416,38 @@ describe('Google and GitHub', () => {
     ])
   })
 
+  test.each([
+    ['suspended_at', 'account_suspended'],
+    ['deleted_at', 'account_closed'],
+  ] as const)(
+    'send an account whose %s is set back with an error of its own, and no session',
+    async (column, error) => {
+      const api = await createTestApi({ oauth: OAUTH })
+      await createOperatorCode(api.db, { code: 'WELCOME', maxUses: 2, now: api.clock.now() })
+      expect((await roundTrip(api, 'github', 'WELCOME')).headers.get('location')).toBe('/discover')
+      const made = await first<{ id: string }>(
+        api.db,
+        sql`select id from user where email = 'new@x.test'`,
+      )
+      // Set by hand, so the session the account was made with stays: only a new one is refused.
+      await api.db.run(sql`update profiles set ${sql.raw(column)} = ${api.clock.now()}
+        where user_id = ${made?.id}`)
+      const back = await quietly(() => roundTrip(api, 'github'))
+      expect(back.status).toBe(302)
+      // Lowercase and without a description, as every refusal of a return is: the sheet words it.
+      expect(back.headers.get('location')).toBe(`/join?error=${error}`)
+      expect(back.headers.getSetCookie().some((c) => c.startsWith('tela.session_token='))).toBe(
+        false,
+      )
+      expect(
+        await first<{ n: number }>(
+          api.db,
+          sql`select count(*) as n from session where user_id = ${made?.id}`,
+        ),
+      ).toEqual({ n: 1 })
+    },
+  )
+
   test('refuse a return without its state cookie, and the same return twice', async () => {
     const api = await createTestApi({ oauth: OAUTH })
     await createOperatorCode(api.db, { code: 'WELCOME', maxUses: 5, now: api.clock.now() })

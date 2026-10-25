@@ -3,7 +3,8 @@
 Status: accepted (2026-10-25). Amends 0039: the console gains a Reports queue and suspending a
 member, which it left out because nothing stood behind them. Narrows 0050's abuse gap: a public
 blogroll can be reported, and a suspended member's blogrolls leave every page. Amends 0031: a
-follow of a member not in good standing is refused, and a follower's device drops it.
+follow of a member not in good standing is refused, and a follower's device drops it. Amends 0034:
+a member's invite code admits only while its maker is in good standing.
 
 ## Context
 
@@ -50,15 +51,21 @@ offers its author's; there is no take-down of one note.
 every session in the same batch; the sign-in hook (0058) refuses the account from then on. It is
 refused for an admin (ungrant first, from the command line) and for the operator acting.
 `member.unsuspend` clears it. Both move the profile's seq, and both undo while nothing moved since:
-undoing a lift ends the sessions made meanwhile; undoing a suspension gives none back.
+undoing a lift ends the sessions made meanwhile; undoing a suspension gives none back. A suspended
+member's invite codes admit nobody: every check that decides whether a code admits (a join, the
+mail gate, the claim at sign-in, a provider's start and return) asks for its maker's standing as
+it runs, so a join is answered `invalid_code` as for a withdrawn code, a hold placed before admits
+nobody, and lifting the suspension gives the codes back with their holds.
 
 **One predicate hides a member everywhere public.** `standingOk` (a profile with neither
 `suspended_at` nor `deleted_at`) is in every public answer that names a member: the profile page,
 Discover's readers and blogrolls, the notes beside a blog's posts and Discover's, the recommenders
 a post lists and the counts made of them, a blog's claimant, the front page's edition, follower
 and following counts, a picture's address, the Following feed, a blog owner's Dashboard notes, and
-a public blogroll's page. A suspended and a closed account are hidden alike, and come back alike
-if the column is cleared. Their handle stays taken.
+a public blogroll's page. It is also in what another member's own answers say of them: the
+export's follows, its invitees and who invited the member, and the invite list in Settings, where
+a place one of them took stays taken with no handle. A suspended and a closed account are hidden
+alike, and come back alike if the column is cleared. Their handle stays taken.
 
 **A follow of someone not in good standing goes, on the device, and comes back.** A new follow of
 one is acknowledged and writes nothing. An existing one is sent to the follower's device as
@@ -82,8 +89,9 @@ next pull, with no write per follow.
 - The operator hears of open reports by mail, at most once an hour, from the operator alerts
   (0057).
 - A report's `url` is kept as the reporter's browser had it, capped at a thousand characters, for
-  the operator only. Reports are in the nightly export. A closed account (0058) keeps its user row
-  as an anonymized shell, so its reports keep their reporter's id and lose only the name.
+  the operator only. Reports are in the nightly export. A closed account (0058) is taken off the
+  reports it made or resolved when `member.erase` runs: each report stays, with its reason, words
+  and address, and names no reporter or resolver. Until then the shell's id is all it names.
 - Deferred: telling a reporter what came of their report, a take-down of one note, and reports of
   a single post's title or excerpt, which are the writer's and reach the operator through the
   blog's own report.

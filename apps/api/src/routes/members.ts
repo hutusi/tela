@@ -337,10 +337,12 @@ export function memberRoutes(deps: ApiDeps) {
         from highlights h ${on(sql`h.article_id`)}
         where h.user_id = ${id} and h.deleted_at is null order by h.created_at desc
       `),
+      // Only those in good standing (ADR 0059), as their Following and their device show them.
       db.all(sql`
         select p.handle, p.display_name as "displayName", fo.created_at as "since"
         from follows fo join profiles p on p.user_id = fo.followee_id
-        where fo.follower_id = ${id} and fo.deleted_at is null order by p.handle
+        where fo.follower_id = ${id} and fo.deleted_at is null and ${standingOk('p')}
+        order by p.handle
       `),
       // Every blogroll they keep (ADR 0050), private ones too, with the blogs in it now and
       // their notes: blogs the operator hid from others are still theirs.
@@ -364,10 +366,13 @@ export function memberRoutes(deps: ApiDeps) {
         from site_claims c join sites s on s.id = c.site_id
         where c.user_id = ${id} order by c.created_at, c.id
       `),
-      // Who joined by each code, by handle: a hold's address is someone else's, never shown.
+      // Who joined by each code, by handle: a hold's address is someone else's, never shown, and
+      // a member out of good standing is a place taken with no handle.
       db.all(sql`
         select c.code, c.created_at as "createdAt", c.revoked_at as "revokedAt",
-          (select json_group_array(json_object('handle', p.handle, 'joinedAt', r.redeemed_at))
+          (select json_group_array(json_object(
+              'handle', case when ${standingOk('p')} then p.handle end,
+              'joinedAt', r.redeemed_at))
             from invite_redemptions r join profiles p on p.user_id = r.user_id
             where r.code = c.code and r.redeemed_at is not null) as joined
         from invite_codes c where c.created_by = ${id} order by c.created_at, c.code
@@ -375,7 +380,7 @@ export function memberRoutes(deps: ApiDeps) {
       db.all(sql`
         select r.code, r.redeemed_at as "joinedAt", p.handle as "invitedBy"
         from invite_redemptions r left join invite_codes c on c.code = r.code
-          left join profiles p on p.user_id = c.created_by
+          left join profiles p on p.user_id = c.created_by and ${standingOk('p')}
         where r.user_id = ${id} and r.settled_at is not null
         order by r.redeemed_at, r.id limit 1
       `),

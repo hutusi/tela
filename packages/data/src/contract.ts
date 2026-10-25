@@ -53,10 +53,12 @@ import {
   listMemberCodes,
   listOperatorCodes,
   liveCode,
+  livePlaces,
   pruneInvites,
   revokeCode,
   revokeOperatorCode,
   settleInvite,
+  waitsOnFullCode,
 } from './queries/invites'
 import { closeAccount, releaseClaim } from './queries/leaving'
 import { avatarOf, dueGravatarChecks } from './queries/people'
@@ -2879,6 +2881,42 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       expect(pruned).toHaveLength(2)
       expect((await rows(db)).map((r) => r.email)).toEqual(['lapsed@x.y', 'kept@x.y'])
     })
+
+    it('admits nobody by the codes of a member suspended or closed, and again once they are back', async () => {
+      const db = await makeDb()
+      await joined(db, 'inviter')
+      await member(db, 'inviter', A)
+      await member(db, 'inviter', B)
+      await createOperatorCode(db, { code: 'WELCOME', maxUses: 5, now: T0 })
+      // A hold placed while the inviter could still invite.
+      expect(await hold(db, A, 'early@x.y')).toBe('held')
+      for (const column of ['suspended_at', 'deleted_at']) {
+        const set = (value: number | null) =>
+          db.run(sql`update profiles set ${sql.raw(column)} = ${value} where user_id = 'inviter'`)
+        await set(T0)
+        // Their codes are as good as withdrawn to every check, and the hold admits nobody: the
+        // gate asks for an invitation, not for a code with room.
+        expect(await livePlaces(db, A)).toBe(null)
+        expect(await liveCode(db, B)).toBe(null)
+        expect(await hold(db, B, 'late@x.y')).toBe('invalid')
+        expect(await holdsInvite(db, { email: 'early@x.y', now: T0 })).toBe(false)
+        expect(await claimInvite(db, { email: 'early@x.y', now: T0 })).toBe(null)
+        expect(await waitsOnFullCode(db, { email: 'early@x.y', now: T0 })).toBe(false)
+        expect(await claimByCode(db, { code: B, email: 'p@x.y', now: T0 })).toBe(null)
+        // The operator's codes stand on nobody's standing.
+        expect(await liveCode(db, 'WELCOME')).toEqual({ places: 5, full: false })
+        await set(null)
+      }
+      // Back in good standing, they admit as they did, the hold placed before included.
+      expect(await livePlaces(db, A)).toBe(1)
+      expect(await holdsInvite(db, { email: 'early@x.y', now: T0 })).toBe(true)
+      expect((await claimInvite(db, { email: 'early@x.y', now: T0 }))?.code).toBe(A)
+      expect((await claimByCode(db, { code: B, email: 'p@x.y', now: T0 }))?.code).toBe(B)
+      expect((await rows(db)).map((r) => [r.code, r.email, r.redeemed])).toEqual([
+        [A, 'early@x.y', 1],
+        [B, 'p@x.y', 1],
+      ])
+    })
   })
 
   describe('leaving Tela (ADR 0058)', () => {
@@ -3146,6 +3184,35 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       expect(await count(db, sql`admin_actions`)).toBe(0)
       // A restore re-applying a closure does not ask.
       expect(await close(db, false)).toBe('closed')
+    })
+
+    it('revokes again a code minted as the account closed, and drops its holds', async () => {
+      const db = await makeDb()
+      await world(db)
+      await close(db)
+      // A tab of the member's, its session copy still good, made a code after the closing.
+      const D = 'D'.repeat(12)
+      await db.batch([
+        db.run(sql`insert into invite_codes (code, created_by, max_uses, created_at)
+          values (${D}, 'leaver', 1, ${T0 + MIN})`),
+        db.run(sql`insert into invite_redemptions (code, email, expires_at, created_at)
+          values (${D}, 'late@x.test', ${T0 + DAY}, ${T0 + MIN})`),
+      ] as never)
+      await erase(db, T0 + DAY)
+      expect(
+        await rows(
+          db,
+          sql`select code, revoked_at from invite_codes where created_by = 'leaver'
+          order by code`,
+        ),
+      ).toEqual([
+        { code: A, revoked_at: T0 },
+        { code: C, revoked_at: T0 },
+        { code: D, revoked_at: T0 + DAY },
+      ])
+      expect(await count(db, sql`invite_redemptions where code = ${D}`)).toBe(0)
+      // Who joined by the member's codes stays, as the closing left it.
+      expect(await count(db, sql`invite_redemptions where code = ${C}`)).toBe(1)
     })
 
     it('erases what only its devices held, recounting what others see first', async () => {

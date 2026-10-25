@@ -351,6 +351,16 @@ export function finishErasure(db: TelaDb, id: string, now: number): Statement[] 
     sql` or `,
   )
   return [
+    // A code whose request passed the standing check just before the closing, and was written
+    // after it: revoked as the closing revokes the member's, its holds first, which could never
+    // finish (its maker is out of standing, so none admitted anyone meanwhile).
+    db.run(sql`
+      delete from invite_redemptions where redeemed_at is null and code in (
+        select code from invite_codes where created_by = ${id} and revoked_at is null)
+    `),
+    db.run(sql`
+      update invite_codes set revoked_at = ${now} where created_by = ${id} and revoked_at is null
+    `),
     db.run(sql`
       update follows set deleted_at = ${now}, updated_at = max(updated_at, ${now}),
         seq = ${currentSeq}

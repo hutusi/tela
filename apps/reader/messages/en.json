@@ -137,6 +137,8 @@
       "code_used": "Everyone this invite code was for has joined.",
       "invite_only": "Tela is taking new members by invitation only right now. Enter your invite code.",
       "signups_paused": "Tela cannot take any more new members today. Try again after {at, time, short}, or join with an invite code.",
+      "account_suspended": "This account is suspended. If you think that’s a mistake, write to me@hutu.si.",
+      "account_closed": "This account was deleted.",
       "provider_unlinked": "Verify this address with the provider, or log in by email and link it in Settings → Account.",
       "provider_no_email": "The provider did not share an email address. Log in by email instead.",
       "provider_cancelled": "Sign-in was cancelled.",

@@ -174,6 +174,35 @@ describe("joining with a member's code", () => {
     expect(api.mail.outbox).toHaveLength(mailed)
   })
 
+  test.each(['suspended_at', 'deleted_at'] as const)(
+    'a code of a member whose %s is set admits nobody until it is cleared',
+    async (column) => {
+      const api = await createTestApi()
+      const inviter = await signedIn(api, 'inviter@x.test')
+      const d = door(api)
+      const code = await newCode(api, inviter)
+      // Asked for before the inviter was stopped: the hold stands, but admits nobody.
+      expect((await d.join(code, 'early@x.test')).status).toBe(200)
+      const set = (value: number | null) =>
+        api.db.run(sql`update profiles set ${sql.raw(column)} = ${value}
+        where user_id = ${inviter.userId}`)
+      await set(api.clock.now())
+      const late = await d.join(code, 'late@x.test')
+      expect(late.status).toBe(400)
+      expect(await late.json()).toEqual({ error: 'invalid_code' })
+      expect(mailsTo(api, 'late@x.test')).toEqual([])
+      const early = await d.signIn('early@x.test')
+      expect(early.status).toBe(403)
+      expect(await early.json()).toMatchObject({ code: 'INVITE_REQUIRED' })
+      expect(await isMember(api, 'early@x.test')).toBe(false)
+      // Lifted, the code admits as it did.
+      await set(null)
+      expect((await d.join(code, 'late@x.test')).status).toBe(200)
+      expect((await d.signIn('late@x.test')).status).toBe(200)
+      expect(await isMember(api, 'late@x.test')).toBe(true)
+    },
+  )
+
   test('a used code is 409, for a newcomer and a member alike, and mails nothing', async () => {
     const api = await createTestApi()
     const inviter = await signedIn(api, 'inviter@x.test')

@@ -13,6 +13,7 @@ import { INVITE_ALLOWANCE, INVITE_ALPHABET, INVITE_CODE_LENGTH } from '@tela/sha
 import { sql } from 'drizzle-orm'
 import type { TelaDb } from '../db'
 import { first } from '../first'
+import { standingOk } from './standing'
 
 const HOUR = 3600_000
 const DAY = 24 * HOUR
@@ -24,9 +25,21 @@ export const JOIN_HOLD_MS = DAY
  */
 export const OPERATOR_INVITE_MS = HOUR
 
-/** A code, aliased `c`, that can admit someone new: not revoked, and not every place taken. */
-const open = sql.raw(`c.revoked_at is null and (select count(*) from invite_redemptions x
-  where x.code = c.code and x.redeemed_at is not null) < c.max_uses`)
+/**
+ * A code, aliased `c`, whose maker may still invite: the operator's, or a member's who is not
+ * suspended or closed (ADRs 0058, 0059). Read whenever a code is used, so lifting a suspension
+ * gives the member's codes back as they were. A member with no profile is not barred, as
+ * `isBarred` says.
+ */
+const maker = sql`(c.created_by is null or not exists (select 1 from profiles cp
+  where cp.user_id = c.created_by and not ${standingOk('cp')}))`
+
+/**
+ * A code, aliased `c`, that can admit someone new: not revoked, its maker in good standing, and not
+ * every place taken.
+ */
+const open = sql`(c.revoked_at is null and ${maker} and (select count(*) from invite_redemptions x
+  where x.code = c.code and x.redeemed_at is not null) < c.max_uses)`
 
 /** A member's code, aliased `c`, that counts toward their five: unrevoked, or used for good. */
 const counted = sql.raw(`(c.revoked_at is null or exists (select 1 from invite_redemptions x
@@ -57,29 +70,34 @@ export type JoinOutcome =
    * the code it brought.
    */
   | 'member'
-  /** No such code, or a revoked one: one answer for both. */
+  /**
+   * No such code, a revoked one, or one whose maker is suspended or closed (ADR 0059): one answer
+   * for all.
+   */
   | 'invalid'
   /** Every place is taken. A member is told so too, so the answer says nothing of who is one. */
   | 'used'
 
 /**
  * A code's places while it is not revoked, which set the join's limit on it; null for an unknown or
- * revoked code, which a join refuses before it spends any count but the client's own. A full code
- * has its places all the same: `holdJoin` says it is used.
+ * revoked code, or one whose maker is out of good standing, which a join refuses before it spends
+ * any count but the client's own. A full code has its places all the same: `holdJoin` says it is
+ * used.
  */
 export async function livePlaces(db: TelaDb, code: string): Promise<number | null> {
   const row = await first<{ max_uses: number }>(
     db,
-    sql`select max_uses from invite_codes where code = ${code} and revoked_at is null`,
+    sql`select c.max_uses from invite_codes c
+      where c.code = ${code} and c.revoked_at is null and ${maker}`,
   )
   return row?.max_uses ?? null
 }
 
 /**
  * A code's places, and whether others have taken them all, while it is not revoked; null for an
- * unknown or revoked code. A provider's sign-in asks before it sends the visitor away (ADR 0036),
- * so a code that cannot admit them is refused before the provider is, not after; its return is
- * admitted only by `claimByCode`, which asks again.
+ * unknown or revoked code, or one whose maker is out of good standing. A provider's sign-in asks
+ * before it sends the visitor away (ADR 0036), so a code that cannot admit them is refused before
+ * the provider is, not after; its return is admitted only by `claimByCode`, which asks again.
  */
 export async function liveCode(
   db: TelaDb,
@@ -87,8 +105,8 @@ export async function liveCode(
 ): Promise<{ places: number; full: boolean } | null> {
   const row = await first<{ max_uses: number; full: number }>(
     db,
-    sql`select c.max_uses, not (${open}) as full from invite_codes c
-      where c.code = ${code} and c.revoked_at is null`,
+    sql`select c.max_uses, not ${open} as full from invite_codes c
+      where c.code = ${code} and c.revoked_at is null and ${maker}`,
   )
   return row ? { places: row.max_uses, full: Boolean(row.full) } : null
 }
@@ -124,7 +142,7 @@ export async function holdJoin(
         and exists (select 1 from invite_codes c where c.code = ${code} and c.max_uses = 1 and ${open})
     `),
     db.all<{ live: number; room: number; member: number; pending: number; again: number }>(sql`
-      select c.revoked_at is null as live,
+      select (c.revoked_at is null and ${maker}) as live,
         (select count(*) from invite_redemptions x
           where x.code = c.code and x.redeemed_at is not null) < c.max_uses as room,
         ${account(email)} as member,
@@ -197,9 +215,10 @@ export async function claimInvite(
 }
 
 /**
- * Why `claimInvite` admitted nothing for `email`: true when it still has a live hold, which can
- * only be on a code whose places others took since its code was mailed (revoking a code deletes its
- * holds). The gate then says the code is used up, rather than that an invitation is needed.
+ * Why `claimInvite` admitted nothing for `email`: true when it still has a live hold on a code
+ * whose maker may invite, which can only be a code whose places others took since its code was
+ * mailed (revoking a code deletes its holds). The gate then says the code is used up, rather than
+ * that an invitation is needed; a hold on the code of a member suspended since is told the latter.
  */
 export async function waitsOnFullCode(
   db: TelaDb,
@@ -208,7 +227,8 @@ export async function waitsOnFullCode(
   const row = await first<{ held: number }>(
     db,
     sql`select exists (select 1 from invite_redemptions r where r.email = ${input.email.toLowerCase()}
-      and r.code is not null and r.redeemed_at is null and r.expires_at > ${input.now}) as held`,
+      and r.code is not null and r.redeemed_at is null and r.expires_at > ${input.now}
+      and exists (select 1 from invite_codes c where c.code = r.code and ${maker})) as held`,
   )
   return Boolean(row?.held)
 }
@@ -349,11 +369,17 @@ export type MemberCode = {
   createdAt: number
   /** When someone joined with it; null while it is unused. */
   joinedAt: number | null
-  /** Who joined, once their account exists. A pending address is never shown. */
+  /**
+   * Who joined, once their account exists and while it is in good standing. A pending address is
+   * never shown.
+   */
   handle: string | null
 }
 
-/** The codes that count toward a member's five, oldest first. */
+/**
+ * The codes that count toward a member's five, oldest first. Whoever joined by one is named only
+ * while in good standing (ADR 0059); otherwise the place is taken, with no handle.
+ */
 export async function listMemberCodes(db: TelaDb, userId: string): Promise<MemberCode[]> {
   const rows = await db.all<{
     code: string
@@ -365,7 +391,7 @@ export async function listMemberCodes(db: TelaDb, userId: string): Promise<Membe
     from invite_codes c
     left join invite_redemptions r on r.id = (select x.id from invite_redemptions x
       where x.code = c.code and x.redeemed_at is not null order by x.redeemed_at, x.id limit 1)
-    left join profiles p on p.user_id = r.user_id
+    left join profiles p on p.user_id = r.user_id and ${standingOk('p')}
     where c.created_by = ${userId} and ${counted}
     order by c.created_at, c.code
   `)

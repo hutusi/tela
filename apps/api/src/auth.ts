@@ -18,6 +18,7 @@ import {
   currentSeq,
   first,
   holdsInvite,
+  isClosedEmail,
   type LimitedAction,
   liveCode,
   schema,
@@ -170,14 +171,42 @@ const refuse = (code: keyof typeof REFUSALS) =>
  * provider. `signups_paused`: sign-up is open, but takes nobody else new today (ADR 0056).
  * `account_not_linked`: the provider has not verified the address, which is also what better-auth
  * answers a member whose provider is not linked, so the redirect says nothing of who is a member;
- * for that reason none carries a description, as better-auth's does not. The sheet words each.
+ * for that reason none carries a description, as better-auth's does not. `account_suspended` and
+ * `account_closed`: the provider is linked to an account out of good standing (ADRs 0058, 0059),
+ * which only whoever holds that provider account learns. The sheet words each.
  */
 type ReturnRefusal =
   | 'invite_required'
   | 'invite_unavailable'
   | 'signups_paused'
   | 'account_not_linked'
+  | 'account_suspended'
+  | 'account_closed'
 const refuseReturn = (code: ReturnRefusal) => new APIError('FORBIDDEN', { code })
+
+/** Why a member may not sign in: closed (ADR 0058) or suspended (ADR 0059); null for neither. */
+type Barred = 'closed' | 'suspended'
+
+/** The member's standing, read from D1. A member with no profile yet is not barred. */
+async function barredAs(db: TelaDb, userId: string): Promise<Barred | null> {
+  const standing = await first<{ closed: number; suspended: number }>(
+    db,
+    sql`select deleted_at is not null as closed, suspended_at is not null as suspended
+      from profiles where user_id = ${userId}`,
+  )
+  if (standing?.closed) return 'closed'
+  if (standing?.suspended) return 'suspended'
+  return null
+}
+
+/**
+ * The refusal of a sign-in to a barred account: a 403 naming the standing, or at a provider's
+ * return the lowercase code its redirect carries, as every refusal there does.
+ */
+const refuseBarred = (barred: Barred, path: string | undefined) =>
+  path === PROVIDER_RETURN
+    ? refuseReturn(barred === 'closed' ? 'account_closed' : 'account_suspended')
+    : refuse(barred === 'closed' ? 'ACCOUNT_CLOSED' : 'ACCOUNT_SUSPENDED')
 
 /**
  * What a provider's sign-in may start with (ADR 0036): only the provider, the three return URLs
@@ -603,22 +632,30 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
            * of those left, so this is its backstop; a suspended one keeps them and stops here. It
            * refuses by throwing, as every hook must (`user.create.before`).
            */
-          before: async (session) => {
-            const standing = await first<{ closed: number; suspended: number }>(
-              db,
-              sql`select deleted_at is not null as closed, suspended_at is not null as suspended
-                from profiles where user_id = ${session.userId}`,
-            )
-            if (standing?.closed) throw refuse('ACCOUNT_CLOSED')
-            if (standing?.suspended) throw refuse('ACCOUNT_SUSPENDED')
+          before: async (session, context) => {
+            const barred = await barredAs(db, session.userId)
+            if (barred) throw refuseBarred(barred, context?.path)
           },
-          // A user whose profile insert failed is never created again, so a sign-in repairs it.
-          // A repair that fails does not fail the sign-in: a member without a profile is better
-          // off than one who cannot sign in to be given one.
-          after: async (session) =>
-            repairMember(db, session.userId, clock.now()).catch((err) =>
+          /**
+           * The standing read again, now the session exists. better-auth inserts the session after
+           * `before` has read the standing, and a suspension or a closing that commits in between
+           * ends every session the member has but this one, which would then be live for as long
+           * as it lasts. So a barred account's sessions are ended here, this one included, and the
+           * sign-in refused as `before` would: the throw comes before better-auth sets a cookie.
+           * A user whose profile insert failed is never created again, so a sign-in also repairs
+           * it. A repair that fails does not fail the sign-in: a member without a profile is
+           * better off than one who cannot sign in to be given one.
+           */
+          after: async (session, context) => {
+            const barred = await barredAs(db, session.userId)
+            if (barred) {
+              await db.delete(schema.session).where(eq(schema.session.userId, session.userId))
+              throw refuseBarred(barred, context?.path)
+            }
+            await repairMember(db, session.userId, clock.now()).catch((err) =>
               console.error('member not repaired', session.userId, err),
-            ),
+            )
+          },
         },
       },
     },
@@ -632,11 +669,25 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
         storeOTP: 'hashed',
         async sendVerificationOTP({ email, otp, type }, ctx) {
           const address = email.toLowerCase()
-          const member = await first<{ email_verified: number; ui_locale: string | null }>(
+          const member = await first<{
+            email_verified: number
+            ui_locale: string | null
+            closed: number
+          }>(
             db,
-            sql`select u.email_verified, p.ui_locale from user u
-              left join profiles p on p.user_id = u.id where u.email = ${address}`,
+            sql`select u.email_verified, p.ui_locale, p.deleted_at is not null as closed
+              from user u left join profiles p on p.user_id = u.id where u.email = ${address}`,
           )
+          // A closed account's address is a placeholder (ADR 0058) that no mail reaches. Asked for
+          // in lowercase it matches no account, and an open sign-up would mail it a code that makes
+          // one; asked for as it is, it is a closed account's. Either way, whatever the kind, the
+          // code just stored is deleted unsent, and the endpoint answers as for any address.
+          if (isClosedEmail(address) || member?.closed) {
+            await ctx?.context.internalAdapter.deleteVerificationByIdentifier(
+              `${type}-otp-${address}`,
+            )
+            return
+          }
           // In the language the asking browser picked (its cookie), else the account's, else the
           // one its Accept-Language prefers (`mail-locale.ts`). better-auth hands an endpoint the
           // request's headers as `ctx.headers`, both for a request and for tela-api's own

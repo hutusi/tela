@@ -121,8 +121,17 @@ export function releaseClaim(
 // ---------------------------------------------------------------------------------------------
 // Closing an account
 
-/** An address no mail reaches (RFC 6761's `.invalid`), unique per account as `user.email` must be. */
-export const closedEmail = (userId: string) => `deleted+${userId}@deleted.invalid`
+/** Where every closed account's address is: RFC 6761's `.invalid`, which no mail reaches. */
+const CLOSED_DOMAIN = '@deleted.invalid'
+
+/** An address no mail reaches, unique per account as `user.email` must be. */
+export const closedEmail = (userId: string) => `deleted+${userId}${CLOSED_DOMAIN}`
+
+/**
+ * Whether `email` is a closed account's address, in any case: better-auth's ids mix cases and it
+ * lowercases the address it is asked for, so what is asked for seldom matches the row itself.
+ */
+export const isClosedEmail = (email: string) => email.toLowerCase().endsWith(CLOSED_DOMAIN)
 
 /** How long after closing `member.erase` starts: past the five-minute signed session copy. */
 export const ERASE_AFTER_MS = 10 * 60_000

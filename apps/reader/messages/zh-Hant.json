@@ -137,6 +137,8 @@
       "code_used": "這個邀請碼的名額已經用完。",
       "invite_only": "Tela 目前僅限受邀加入。請輸入你的邀請碼。",
       "signups_paused": "今天的新成員名額已滿。請在 {at, time, short} 後再試，或用邀請碼加入。",
+      "account_suspended": "這個帳號已被暫停使用。如果你覺得這是誤會，請寫信到 me@hutu.si。",
+      "account_closed": "這個帳號已被刪除。",
       "provider_unlinked": "請先在服務商那裡驗證這個電子郵件，或用電子郵件登入後在 設定 → 帳戶 裡連結。",
       "provider_no_email": "服務商沒有提供電子郵件地址。請改用電子郵件登入。",
       "provider_cancelled": "登入已取消。",
