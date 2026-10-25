@@ -296,7 +296,8 @@ describe('suspending a member', () => {
     )
     expect(people.body.counts).toMatchObject({ suspended: 1 })
     expect(people.body.rows.map((r) => [r.userId, r.actions, r.suspendedAt])).toEqual([
-      [other.userId, ['member.unsuspend'], api.clock.now()],
+      // A suspension can be lifted, and the account can still be deleted (ADR 0058).
+      [other.userId, ['member.unsuspend', 'member.delete'], api.clock.now()],
     ])
   })
 

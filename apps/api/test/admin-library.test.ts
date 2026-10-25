@@ -1247,6 +1247,8 @@ describe('claims', () => {
     })
     const feed = await addFeed(site)
     const claim = await addClaim(site, owner.userId, { status: 'verified' })
+    // The claimant also asked Tela to use only what the feed provides (ADR 0061).
+    await api.db.run(sql`update sites set feed_only = 1 where id = ${site}`)
     const cursor = (
       (await (await api.request('/api/v1/sync?cursor=0', { as: owner })).json()) as PullResponse
     ).cursor
@@ -1264,6 +1266,7 @@ describe('claims', () => {
       claimed_at: null,
       declared_feed_urls: '[]',
       translation_opt_out: 0,
+      feed_only: 0,
       // One reader is not enough for the doors: the listing only the claim opened is closed.
       listing: 'private',
     })
@@ -1288,6 +1291,7 @@ describe('claims', () => {
     expect(await siteOf(site)).toMatchObject({
       claimed_by: owner.userId,
       translation_opt_out: 1,
+      feed_only: 1,
       listing: 'listed',
     })
     const home = await one<{ home_url: string }>(

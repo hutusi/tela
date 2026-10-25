@@ -164,6 +164,7 @@ type RemovedFrom = {
     claimedAt?: number | null
     declaredFeedUrls?: unknown
     translationOptOut?: number
+    feedOnly?: number
     listing?: SiteListing
   }
 }
@@ -207,7 +208,8 @@ const remove: ActHandler = async (ctx, id) => {
             'overruledAt', c.overruled_at),
           'site', json_object('id', s.id, 'claimedBy', s.claimed_by, 'claimedAt', s.claimed_at,
             'declaredFeedUrls', json(s.declared_feed_urls),
-            'translationOptOut', s.translation_opt_out, 'listing', s.listing))`,
+            'translationOptOut', s.translation_opt_out, 'feedOnly', s.feed_only,
+            'listing', s.listing))`,
         to: sql`json_object(
           'claim', json_object('status', 'failed', 'error', ${CLAIM_REMOVED_ERROR},
             'reviewedAt', ${ctx.now}, 'overruledAt', ${ctx.now}),
@@ -233,6 +235,7 @@ const remove: ActHandler = async (ctx, id) => {
  */
 const LISTING_ACTIONS = actionsWriting('listing')
 const TRANSLATION_ACTIONS = actionsWriting('translation')
+const FEED_ONLY_ACTIONS = actionsWriting('feedOnly')
 
 const restoreRemoved: Inverse = (db: TelaDb, change, now) => {
   const claimId = Number(change.targetKey)
@@ -255,6 +258,7 @@ const restoreRemoved: Inverse = (db: TelaDb, change, now) => {
     change.auditId,
     TRANSLATION_ACTIONS,
   )
+  const feedOnlySince = laterActionOn('site', String(siteId), change.auditId, FEED_ONLY_ACTIONS)
   return {
     changed: sql`not ${still}`,
     restore: [
@@ -270,6 +274,9 @@ const restoreRemoved: Inverse = (db: TelaDb, change, now) => {
           translation_opt_out = case when ${translationSince} then translation_opt_out
             when translation_opt_out = 0 then ${site.translationOptOut ?? 0}
             else translation_opt_out end,
+          feed_only = case when ${feedOnlySince} then feed_only
+            when feed_only = 0 then ${site.feedOnly ?? 0}
+            else feed_only end,
           listing = case when ${listingSince} then listing
             when listing = ${to.site?.listing ?? null} then ${site.listing ?? 'private'}
             else listing end,

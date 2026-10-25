@@ -276,6 +276,10 @@ https://tela.example/login?email=o'neil%2Btela%40x.test&otp=123456&join=1
 
 If you did not ask for this, you can ignore this email.
 如果这不是你本人的操作，请忽略这封邮件。"
+,
+  "to": "o'neil+tela@x.test",
+}
+`;
 
 exports[`the English mails account deletion code is what it has always been 1`] = `
 {

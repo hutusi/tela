@@ -68,8 +68,8 @@ export type ReleaseTarget =
  * owner and what came with one: the feeds it declared, and a listing only the claim opened. Its
  * feeds stay where they are: an unclaimed blog carries every feed that names it.
  *
- * Only an operator's removal also takes back the blog's opt-out of translation and marks the claim
- * overruled (ADR 0045), so that only the tag or `rel="me"` proves it again. A claimant who lets
+ * Only an operator's removal also takes back the blog's opt-outs (translation, and only using what
+ * its feed provides, ADR 0061) and marks the claim overruled (ADR 0045), so that only the tag or `rel="me"` proves it again. A claimant who lets
  * their own blog go, or whose account closes, leaves the blog as they set it: what its writer
  * chose stays chosen, and the operator can still change it from the console.
  *
@@ -107,6 +107,7 @@ export function releaseClaim(
     db.run(sql`
       update sites set claimed_by = null, claimed_at = null, declared_feed_urls = '[]',
         translation_opt_out = ${operator ? sql`0` : sql`translation_opt_out`},
+        feed_only = ${operator ? sql`0` : sql`feed_only`},
         listing = ${listingUnclaimed('')}, updated_at = ${now}, seq = ${currentSeq}
       where claimed_by = ${claimant} ${by === 'closure' ? sql`` : sql`and ${released}`}
     `),
