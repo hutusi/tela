@@ -84,8 +84,10 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 
 `packages/content`, pure TypeScript with no I/O (normative spec: `packages/content/README.md`):
 
-1. Discovery (`findFeedLinks`, `candidateFeedUrls`): `link[rel=alternate]`, feed-looking anchors,
-   then well-known paths.
+1. Discovery (`findFeedLinks`, `findMetaRefresh`, `candidateFeedUrls`): `link[rel=alternate]`,
+   feed-looking anchors; when the page declares none, those of one more page (where its meta
+   refresh sends, else the blog's home); then well-known paths on the origin of the last page that
+   answered.
 2. Parsing (`parseFeedText`) with `feedsmith`: RSS, Atom, RDF, JSON Feed → `ParsedFeed` with
    `summaryHtml` and `contentHtml` per item.
 3. Sanitize (`sanitizeArticleHtml`) with an allowlist; links and images absolutized; lazy-load

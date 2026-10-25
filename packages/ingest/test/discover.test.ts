@@ -79,6 +79,41 @@ describe('discoverFeeds', () => {
     expect(found.map((f) => f.title)).toEqual(['Probed'])
   })
 
+  const html = (path: string, head: string) =>
+    server.set(path, (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' })
+      res.end(`<html><head>${head}</head><body>A page</body></html>`)
+    })
+
+  // byvoid.com's home is Hugo's multilingual root: a meta refresh to /zht/, which names the feed.
+  test('follows a meta refresh when the page declares nothing', async () => {
+    html('/', `<meta http-equiv="refresh" content="0; url=${server.url('/zht/')}">`)
+    html('/zht/', '<link rel="alternate" type="application/rss+xml" href="/zht/feed.xml">')
+    server.text(
+      '/zht/feed.xml',
+      rss({ title: 'Beyond the Void', items: [{ guid: '1', title: 'A', description: 'x' }] }),
+    )
+    const found = await discoverFeeds(http, server.url('/'))
+    expect(found.map((f) => f.url)).toEqual([server.url('/zht/feed.xml')])
+  })
+
+  // paulgraham.com/articles.html names no feed; the home page does.
+  test('asks the home page when a page of the blog declares nothing', async () => {
+    html('/articles.html', '<title>Essays</title>')
+    html('/', '<link rel="alternate" type="application/rss+xml" href="/essays.rss">')
+    server.text(
+      '/essays.rss',
+      rss({ title: 'Essays', items: [{ guid: '1', title: 'A', description: 'x' }] }),
+    )
+    const found = await discoverFeeds(http, server.url('/articles.html'))
+    expect(found.map((f) => f.url)).toEqual([server.url('/essays.rss')])
+    // A home that declares nothing is asked once, never twice.
+    server.reset()
+    html('/', '<title>Home</title>')
+    expect(await discoverFeeds(http, server.url('/'))).toEqual([])
+    expect(server.requestsFor('/')).toHaveLength(2)
+  })
+
   test('returns nothing for sites without feeds', async () => {
     server.set('/nothing', (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/html' })

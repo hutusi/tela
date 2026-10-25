@@ -67,6 +67,27 @@ export function findFeedLinks(html: string, baseUrl: string): FeedCandidate[] {
   return out
 }
 
+/**
+ * Where a `<meta http-equiv="refresh">` sends the page, when that is another page. Hugo makes such
+ * a page of a multilingual site's root and of every alias, and declares the feed only at the
+ * target: byvoid.com's home sends to `/zht/`, which names `zht/feed.xml`. A refresh with no URL,
+ * or back to the page itself, sends nowhere.
+ */
+export function findMetaRefresh(html: string, baseUrl: string): string | null {
+  const doc = parseDocument(html)
+  const here = absoluteUrl(baseUrl)?.split('#')[0]
+  for (const meta of findAll((el) => el.name === 'meta', doc.children)) {
+    if ((getAttributeValue(meta, 'http-equiv') ?? '').trim().toLowerCase() !== 'refresh') continue
+    // "0; url=/zht/", "0;URL='/zht/'", or "0; /zht/": a delay, then the target.
+    const target = (getAttributeValue(meta, 'content') ?? '').match(
+      /^\s*\d*(?:\.\d*)?\s*[;,]\s*(?:url\s*=\s*)?(['"]?)(.*?)\1\s*$/i,
+    )?.[2]
+    const url = target ? absoluteUrl(target, baseUrl) : null
+    if (url && url.split('#')[0] !== here) return url
+  }
+  return null
+}
+
 /** Well-known feed locations for a site origin. */
 export function candidateFeedUrls(origin: string): string[] {
   return COMMON_FEED_PATHS.map((p) => new URL(p, origin).toString())

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { candidateFeedUrls, findFeedLinks } from './discover'
+import { candidateFeedUrls, findFeedLinks, findMetaRefresh } from './discover'
 
 describe('discover', () => {
   test('finds declared alternates before anchors and dedupes', () => {
@@ -29,6 +29,26 @@ describe('discover', () => {
       },
       { url: 'https://other.example/rss.xml', title: 'Other', type: null, source: 'anchor' },
     ])
+  })
+
+  test('a meta refresh says where the page sends, when that is another page', () => {
+    const page = (content: string, equiv = 'refresh') =>
+      `<html><head><meta http-equiv="${equiv}" content="${content}"></head></html>`
+    const base = 'https://byvoid.com/'
+    // Hugo's multilingual root, as byvoid.com serves it.
+    expect(findMetaRefresh(page('0; url=https://byvoid.com/zht/'), base)).toBe(
+      'https://byvoid.com/zht/',
+    )
+    expect(findMetaRefresh(page("0;URL='/zht/'"), base)).toBe('https://byvoid.com/zht/')
+    expect(findMetaRefresh(page('3, url = zht/'), base)).toBe('https://byvoid.com/zht/')
+    expect(findMetaRefresh(page('0; /zht/'), base)).toBe('https://byvoid.com/zht/')
+    expect(findMetaRefresh(page('0; url=/zht/', 'Refresh'), base)).toBe('https://byvoid.com/zht/')
+    // A reload, the page itself, a script, or no refresh at all sends nowhere.
+    expect(findMetaRefresh(page('300'), base)).toBeNull()
+    expect(findMetaRefresh(page('0; url=/'), base)).toBeNull()
+    expect(findMetaRefresh(page('0; url=/#top'), base)).toBeNull()
+    expect(findMetaRefresh(page('0; url=javascript:alert(1)'), base)).toBeNull()
+    expect(findMetaRefresh(page('0; url=/zht/', 'content-type'), base)).toBeNull()
   })
 
   test('candidate paths are absolute on the origin', () => {

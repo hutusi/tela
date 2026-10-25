@@ -138,6 +138,7 @@ echo, and an echo is refused as untranslated.
   `summaryHtml` is the short form (description / summary), `contentHtml` the full form
   (`content:encoded`, Atom content, `content_html`). Relative URLs resolve against the home URL.
 - `findFeedLinks` lists declared `<link rel=alternate>` feeds, then feed-looking anchors;
+  `findMetaRefresh` says where a `<meta http-equiv="refresh">` sends, when that is another page;
   `candidateFeedUrls` gives the well-known paths to probe.
 - `dedupKey`: `g:<guid>` → `u:<normalized link>` → `h:<sha256(title|published_at)>`.
 
