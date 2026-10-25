@@ -479,6 +479,8 @@ it("reads the front page's edition and checks a handle, on D1", async () => {
     db.run(sql`insert into article_titles (article_id, lang, feed_id, title, excerpt, status,
         source_hash, updated_at, seq)
       values (9003, 'en', 902, 'In English', 'An excerpt', 'done', 'h', 0, ${currentSeq})`),
+    // Made from the title the post has now: a translation of an older title is not shown.
+    db.run(sql`update articles set title_hash = 'h' where id = 9003`),
   ] as never)
   const res = await call('/api/v1/public/front')
   expect(res.status).toBe(200)

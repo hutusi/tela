@@ -36,6 +36,12 @@ test.beforeAll(async () => {
       data: { handle: HANDLE, displayName: 'Anna Kowalska', bio: 'Architect. Reads about cities.' },
     })
     expect(named.ok()).toBe(true)
+    // She joined over a week ago: Discover, and the Following page's suggestions drawn from it,
+    // suggest nobody newer (ADR 0060).
+    const aged = await anna.post(`${BASE}/api/test/age?handle=${HANDLE}&days=8`, {
+      headers: { origin: BASE },
+    })
+    expect(aged.ok()).toBe(true)
     // She reads Julia Evans, which the setup's member reads too; the feed is already in Tela.
     const added = await anna.post(`${BASE}/api/v1/feeds`, {
       headers: { origin: BASE, ...(await memberHeaders(anna)) },
