@@ -29,6 +29,8 @@ export type AdminSiteRow = AdminRowBase & {
   claimFailing: boolean
   primaryLang: string | null
   translationOptOut: boolean
+  /** "Only use what my feed provides" (ADR 0061): Tela fetches none of its pages. */
+  feedOnly: boolean
   topics: string[]
   /** When it was added: its first feed. */
   createdAt: number

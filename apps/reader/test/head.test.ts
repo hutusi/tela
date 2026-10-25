@@ -230,6 +230,25 @@ describe('each kind of page', () => {
     expect(headOf(html)).not.toContain('application/ld+json')
   })
 
+  test('For writers is indexed at its own path, in every language, and previews as itself', () => {
+    const html = render('/writers?utm_source=x', {})
+    expect(canonical(html)).toBe(`${ORIGIN}/writers`)
+    expect(robots(html)).toBeNull()
+    expect(alternates(html)).toEqual([
+      ['zh-Hans', `${ORIGIN}/writers?hl=zh-Hans`],
+      ['zh-Hant', `${ORIGIN}/writers?hl=zh-Hant`],
+      ['en', `${ORIGIN}/writers?hl=en`],
+      ['fr', `${ORIGIN}/writers?hl=fr`],
+      ['x-default', `${ORIGIN}/writers`],
+    ])
+    expect(og(html, 'og:title')).toBe('For writers')
+    expect(og(html, 'og:url')).toBe(`${ORIGIN}/writers`)
+    const fr = render('/writers?hl=fr', {}, 'fr')
+    expect(canonical(fr)).toBe(`${ORIGIN}/writers?hl=fr`)
+    expect(og(fr, 'og:title')).toBe('Pour les auteurs')
+    expect(og(fr, 'og:image')).toBe(`${ORIGIN}/og/fr.png`)
+  })
+
   test("Discover's tabs are collections of what they show, posts at their own addresses", () => {
     const week: WeekData = {
       since: 0,

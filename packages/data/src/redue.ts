@@ -56,6 +56,8 @@ export const REDUE: Record<LeaseKind, Redue> = {
       db.run(sql`
         update articles set extract_state = 'due', seq = ${currentSeq}
         where id = ${id(key)} and extract_state = 'failed'
+          and not exists (select 1 from feeds f join sites s on s.id = f.site_id
+            where f.id = articles.feed_id and s.feed_only = 1)
       `),
     ],
   },

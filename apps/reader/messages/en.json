@@ -565,6 +565,7 @@
   },
   "writers": {
     "title": "For writers",
+    "description": "Your calling card as an independent writer on Tela, how Tela reads your blog, and how to claim it or keep Tela out.",
     "kicker": "For writers",
     "hero": {
       "title": "Your <em>calling card</em> as an independent writer.",
@@ -671,6 +672,88 @@
         "body": "Readers can read your posts translated. If you would rather they didn't, turn it off for your blog from the Dashboard."
       }
     },
+    "reading": {
+      "title": "How Tela reads your blog",
+      "intro": "Tela is a feed reader. It reads the RSS, Atom or JSON feed your blog already publishes, as any feed reader does, and asks your server for as little as it can.",
+      "agent": {
+        "title": "It says who it is",
+        "body": "Every request carries Tela’s user agent, <code>Tela/0.1 (+https://telaread.com; feed reader)</code>, or for images <code>Tela/0.1 (+https://telaread.com; image proxy)</code>."
+      },
+      "often": {
+        "title": "About as often as you post",
+        "body": "Tela checks your feed about twice as often as you published over the past week: every 30 minutes at most, and at least once a day. Each check that finds nothing new waits a little longer for the next. Your feed’s <code>ttl</code> and <code>Cache-Control: max-age</code> can ask it to wait longer, up to a day."
+      },
+      "changed": {
+        "title": "Only what changed",
+        "body": "Each check sends back the <code>ETag</code> and <code>Last-Modified</code> your server gave, so a feed that hasn’t changed costs a 304 and nothing more."
+      },
+      "errors": {
+        "title": "It backs off",
+        "body": "When your server fails or doesn’t answer, Tela waits twice as long after each failure, up to a week, and as long as a <code>Retry-After</code> asks. After a <code>410 Gone</code>, or 30 failures in a row, it tries once a week."
+      },
+      "images": {
+        "title": "Images when someone reads",
+        "body": "The images in your posts are fetched only when someone reads the post, through Tela’s image proxy, and then kept for a week."
+      },
+      "pages": {
+        "title": "Your pages, only when the feed is short",
+        "body": "If your feed carries only summaries, Tela fetches each new post’s public page once, soon after the feed lists it, to show the full text to subscribers in the reader, and again only if the summary changes. It reads your home page once, when your blog is added, to find its icon. Both ask your robots.txt first."
+      }
+    },
+    "shows": {
+      "title": "What Tela shows",
+      "public": {
+        "title": "In public, titles and excerpts",
+        "body": "Tela’s public pages, the ones anyone and any search engine can open, show your posts’ titles and short excerpts, each linking to the post on your blog. They never show a post in full."
+      },
+      "members": {
+        "title": "To subscribers, your posts",
+        "body": "Members who subscribe to your blog read your posts in Tela’s reader, from your feed or the post’s page, as in any feed reader. Tela keeps that copy for signed-in members, never as a page anyone can open."
+      },
+      "translation": {
+        "title": "Translations, labelled",
+        "body": "Titles and excerpts are translated ahead of time into Tela’s reading languages, so readers can find your posts. A post itself is translated only for a reader who asks for it. Every translation is a machine’s, labelled as one and shown beside your original, and you can turn translation off for your blog."
+      }
+    },
+    "claiming": {
+      "title": "Claiming your blog",
+      "intro": "Claiming tells Tela the blog is yours. You need a Tela account and any one of these:",
+      "link": {
+        "title": "A link to your Tela profile",
+        "body": "A link to <code>telaread.com/@you</code> on your home page marked <code>rel=\"me\"</code>, or without it, in a header or footer your 404 page shows too, so it is your blog’s own link and not a mention in a post."
+      },
+      "meta": {
+        "title": "A meta tag",
+        "body": "The <code>tela-site-verification</code> tag Tela gives you, in your home page’s <code>head</code>. You can remove it once the claim is verified."
+      },
+      "github": {
+        "title": "Your GitHub",
+        "body": "Nothing to add, if you sign in with GitHub, your GitHub profile names your blog as its website, and your blog links to that profile in one of the ways above."
+      },
+      "check": "To check, Tela reads your home page and, for a link without <code>rel=\"me\"</code>, one address your blog doesn’t have, to see its 404 page.",
+      "gives": "A claimed blog is listed in Discover under your name. Your Dashboard shows how many read it on Tela, which posts they liked and recommended, and the notes they left; there you choose its topics, whether it is translated, and whether Tela uses only your feed."
+    },
+    "optOut": {
+      "title": "If you’d rather Tela didn’t",
+      "intro": "Each of these holds as soon as it is made. The last two need no claim.",
+      "translation": {
+        "title": "Turn translation off",
+        "body": "On your Dashboard, once your blog is claimed. Readers then see your posts only as you wrote them."
+      },
+      "feedOnly": {
+        "title": "Only use what my feed provides",
+        "body": "Also on your Dashboard. Tela stops fetching your blog’s pages, for full text and for its icon, and reads only your feed. If your feed carries whole posts, subscribers still read them in full, as in any feed reader; if it carries summaries, they read those and follow the link to your blog."
+      },
+      "robots": {
+        "title": "robots.txt",
+        "body": "To keep Tela off your pages without claiming anything, add this to your robots.txt. Tela reads it again within a day.",
+        "after": "As with any crawler, a group naming Tela takes the place of the one for everyone (<code>User-agent: *</code>). Your feed is still read, as every feed reader reads it: a subscriber asked for it."
+      },
+      "email": {
+        "title": "Leave Tela",
+        "body": "Write to <mail>me@hutu.si</mail>, and Tela will take your blog out of Discover, remove its page on Tela and stop fetching it. If you can’t claim the blog, the switches above can be set for you the same way."
+      }
+    },
     "cta": {
       "count": "{n, plural, one {# blog is} other {# blogs are}} already on Tela. <em>Where's yours?</em>",
       "title": "<em>Where's your blog?</em>",
@@ -751,6 +834,10 @@
     "translateHint": "Tela translates your posts for readers in other languages and always shows your original beside the translation. Turned off, readers see your posts only as you wrote them.",
     "translationOn": "Translation is on for {blog}.",
     "translationOff": "Translation is off for {blog}.",
+    "feedOnly": "Only use what my feed provides",
+    "feedOnlyHint": "Tela stops fetching your blog’s pages, for full text and for its icon, and reads only your feed. If your feed carries whole posts, subscribers still read them in full. <link>How Tela reads your blog</link>",
+    "feedOnlyOn": "Tela now uses only what the feed of {blog} provides.",
+    "feedOnlyOff": "Tela may fetch the pages of {blog} again.",
     "listing": {
       "private": "private",
       "listed": "listed in Discover",

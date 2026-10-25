@@ -228,6 +228,7 @@ describe('the badges and the Overview', () => {
         claimFailing: true,
         primaryLang: null,
         translationOptOut: false,
+        feedOnly: false,
         topics: ['art', 'tech'],
         createdAt: 0,
         postsLast30d: 1,

@@ -565,6 +565,7 @@
   },
   "writers": {
     "title": "Pour les auteurs",
+    "description": "Votre carte de visite d’auteur indépendant sur Tela, comment Tela lit votre blog, et comment le revendiquer ou tenir Tela à l’écart.",
     "kicker": "Pour les auteurs",
     "hero": {
       "title": "La <em>carte de visite</em> de votre écriture indépendante.",
@@ -671,6 +672,88 @@
         "body": "Les lecteurs peuvent lire vos articles traduits. Si vous préférez qu’ils ne le fassent pas, désactivez la traduction pour votre blog depuis le tableau de bord."
       }
     },
+    "reading": {
+      "title": "Comment Tela lit votre blog",
+      "intro": "Tela est un lecteur de flux. Il lit le flux RSS, Atom ou JSON que votre blog publie déjà, comme n’importe quel lecteur de flux, et demande le moins possible à votre serveur.",
+      "agent": {
+        "title": "Il dit qui il est",
+        "body": "Chaque requête porte l’agent utilisateur de Tela, <code>Tela/0.1 (+https://telaread.com; feed reader)</code>, ou pour les images <code>Tela/0.1 (+https://telaread.com; image proxy)</code>."
+      },
+      "often": {
+        "title": "Au rythme de vos articles",
+        "body": "Tela consulte votre flux environ deux fois plus souvent que vous avez publié la semaine passée : au plus toutes les 30 minutes, au moins une fois par jour. Chaque consultation qui ne trouve rien de neuf attend un peu plus la suivante. Le <code>ttl</code> de votre flux et <code>Cache-Control: max-age</code> peuvent lui demander d’attendre davantage, jusqu’à un jour."
+      },
+      "changed": {
+        "title": "Seulement ce qui a changé",
+        "body": "Chaque consultation renvoie l’<code>ETag</code> et le <code>Last-Modified</code> donnés par votre serveur : un flux inchangé ne coûte qu’une réponse 304."
+      },
+      "errors": {
+        "title": "Il ralentit",
+        "body": "Quand votre serveur échoue ou ne répond pas, Tela double son attente après chaque échec, jusqu’à une semaine, et attend aussi longtemps qu’un <code>Retry-After</code> le demande. Après un <code>410 Gone</code>, ou 30 échecs d’affilée, il n’essaie plus qu’une fois par semaine."
+      },
+      "images": {
+        "title": "Les images, à la lecture",
+        "body": "Les images de vos articles ne sont récupérées que lorsque quelqu’un lit l’article, par le proxy d’images de Tela, puis gardées une semaine."
+      },
+      "pages": {
+        "title": "Vos pages, seulement si le flux est court",
+        "body": "Si votre flux ne contient que des résumés, Tela récupère une fois la page publique de chaque nouvel article, peu après que le flux l’a annoncé, pour en montrer le texte intégral aux abonnés dans le lecteur, puis de nouveau seulement si le résumé change. Il lit une fois votre page d’accueil, à l’ajout de votre blog, pour en trouver l’icône. Dans les deux cas, il consulte d’abord votre robots.txt."
+      }
+    },
+    "shows": {
+      "title": "Ce que Tela montre",
+      "public": {
+        "title": "En public, titres et extraits",
+        "body": "Les pages publiques de Tela, celles que n’importe qui et n’importe quel moteur de recherche peut ouvrir, montrent les titres de vos articles et de courts extraits, chacun renvoyant à l’article sur votre blog. Elles ne montrent jamais un article en entier."
+      },
+      "members": {
+        "title": "Aux abonnés, vos articles",
+        "body": "Les membres abonnés à votre blog lisent vos articles dans le lecteur de Tela, tirés de votre flux ou de la page de l’article, comme dans n’importe quel lecteur de flux. Tela garde cette copie pour les membres connectés, jamais comme une page que tout le monde peut ouvrir."
+      },
+      "translation": {
+        "title": "Des traductions signalées",
+        "body": "Les titres et extraits sont traduits à l’avance dans les langues de lecture de Tela, pour que les lecteurs trouvent vos articles. Un article lui-même n’est traduit que pour le lecteur qui le demande. Chaque traduction est faite par une machine, signalée comme telle et montrée à côté de votre original, et vous pouvez désactiver la traduction pour votre blog."
+      }
+    },
+    "claiming": {
+      "title": "Revendiquer votre blog",
+      "intro": "Revendiquer un blog, c’est dire à Tela qu’il est à vous. Il vous faut un compte Tela et l’un de ces moyens :",
+      "link": {
+        "title": "Un lien vers votre profil Tela",
+        "body": "Un lien vers <code>telaread.com/@vous</code> sur votre page d’accueil, marqué <code>rel=\"me\"</code> ; sans cela, dans un en-tête ou un pied de page que votre page 404 montre aussi, pour que ce soit le lien de votre blog et non une mention dans un article."
+      },
+      "meta": {
+        "title": "Une balise meta",
+        "body": "La balise <code>tela-site-verification</code> que Tela vous donne, dans le <code>head</code> de votre page d’accueil. Vous pourrez la retirer une fois la revendication vérifiée."
+      },
+      "github": {
+        "title": "Votre GitHub",
+        "body": "Rien à ajouter si vous vous connectez avec GitHub, que votre profil GitHub indique votre blog comme site web et que votre blog renvoie à ce profil de l’une des façons ci-dessus."
+      },
+      "check": "Pour vérifier, Tela lit votre page d’accueil et, pour un lien sans <code>rel=\"me\"</code>, une adresse que votre blog n’a pas, pour voir sa page 404.",
+      "gives": "Un blog revendiqué figure dans Découvrir sous votre nom. Votre tableau de bord montre combien de personnes le lisent sur Tela, quels articles elles ont aimés et recommandés, et les notes qu’elles ont laissées ; vous y choisissez ses thèmes, s’il est traduit, et si Tela n’utilise que votre flux."
+    },
+    "optOut": {
+      "title": "Si vous préférez que Tela s’abstienne",
+      "intro": "Chacun de ces choix vaut dès qu’il est fait. Les deux derniers ne demandent aucune revendication.",
+      "translation": {
+        "title": "Désactiver la traduction",
+        "body": "Dans votre tableau de bord, une fois votre blog revendiqué. Les lecteurs ne voient alors vos articles que tels que vous les avez écrits."
+      },
+      "feedOnly": {
+        "title": "N’utiliser que ce que fournit mon flux",
+        "body": "Aussi dans votre tableau de bord. Tela cesse de récupérer les pages de votre blog, pour le texte intégral comme pour l’icône, et ne lit plus que votre flux. Si votre flux contient les articles en entier, vos abonnés les lisent toujours en entier, comme dans n’importe quel lecteur de flux ; s’il ne contient que des résumés, ils lisent ceux-ci et suivent le lien vers votre blog."
+      },
+      "robots": {
+        "title": "robots.txt",
+        "body": "Pour tenir Tela à l’écart de vos pages sans rien revendiquer, ajoutez ceci à votre robots.txt. Tela le relit dans la journée.",
+        "after": "Comme pour tout robot, un groupe qui nomme Tela remplace celui qui vaut pour tous (<code>User-agent: *</code>). Votre flux reste lu, comme par tout lecteur de flux : c’est ce qu’un abonné a demandé."
+      },
+      "email": {
+        "title": "Quitter Tela",
+        "body": "Écrivez à <mail>me@hutu.si</mail> : Tela retirera votre blog de Découvrir, supprimera sa page sur Tela et cessera de le récupérer. Si vous ne pouvez pas revendiquer le blog, les réglages ci-dessus peuvent être faits pour vous de la même façon."
+      }
+    },
     "cta": {
       "count": "{n, plural, one {# blog est} other {# blogs sont}} déjà sur Tela. <em>Et le vôtre ?</em>",
       "title": "<em>Où est votre blog ?</em>",
@@ -751,6 +834,10 @@
     "translateHint": "Tela traduit vos articles pour les lecteurs d’autres langues et montre toujours votre original à côté de la traduction. Si vous la désactivez, les lecteurs ne voient vos articles que tels que vous les avez écrits.",
     "translationOn": "La traduction est activée pour {blog}.",
     "translationOff": "La traduction est désactivée pour {blog}.",
+    "feedOnly": "N’utiliser que ce que fournit mon flux",
+    "feedOnlyHint": "Tela cesse de récupérer les pages de votre blog, pour le texte intégral comme pour l’icône, et ne lit plus que votre flux. Si votre flux contient les articles en entier, vos abonnés les lisent toujours en entier. <link>Comment Tela lit votre blog</link>",
+    "feedOnlyOn": "Tela n’utilise plus que ce que fournit le flux de {blog}.",
+    "feedOnlyOff": "Tela peut de nouveau récupérer les pages de {blog}.",
     "listing": {
       "private": "privé",
       "listed": "dans Découvrir",

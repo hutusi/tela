@@ -128,6 +128,38 @@ export function memberRoutes(deps: ApiDeps) {
   })
 
   /**
+   * "Only use what my feed provides" (ADR 0061): Tela stops fetching the blog's pages, for full
+   * text and for its favicon, and reads only its feeds. A post already waiting for its page waits
+   * no more: it is the feed's, as a post from a full feed is. What was extracted before stays.
+   */
+  routes.put('/sites/:siteId/feed-only', async (c) => {
+    const siteId = Number(c.req.param('siteId'))
+    if (!Number.isInteger(siteId) || !(await ownSite(siteId, c.get('member').id))) {
+      return c.json({ error: 'not_owner' }, 403)
+    }
+    const body = (await c.req.json().catch(() => ({}))) as { feedOnly?: unknown }
+    const feedOnly = body.feedOnly === true
+    await db.batch([
+      bumpSeq(db),
+      db.run(sql`
+        update sites set feed_only = ${feedOnly ? 1 : 0}, updated_at = ${deps.clock.now()},
+          seq = ${currentSeq}
+        where id = ${siteId}
+      `),
+      ...(feedOnly
+        ? [
+            db.run(sql`
+              update articles set extract_state = 'none', seq = ${currentSeq}
+              where extract_state = 'due'
+                and feed_id in (select id from feeds where site_id = ${siteId})
+            `),
+          ]
+        : []),
+    ] as never)
+    return c.json({ feedOnly })
+  })
+
+  /**
    * A blogger's view of their blogs: readers, recent posts and how they landed, and notes. The
    * totals are the whole blog's, every post and every live like, recommendation and note, not the
    * twenty posts listed: the notes below them cover every post, and a total of the twenty could
@@ -145,7 +177,7 @@ export function memberRoutes(deps: ApiDeps) {
       db.all(sql`
         select id, title, home_url as "homeUrl", favicon_key as "faviconKey", listing,
           primary_lang as "primaryLang", reader_count as "readerCount",
-          translation_opt_out as "translationOptOut",
+          translation_opt_out as "translationOptOut", feed_only as "feedOnly",
           (select count(distinct sub.user_id) from subscriptions sub
             join feeds f on f.id = sub.feed_id
             where f.site_id = sites.id and sub.deleted_at is null and sub.created_at > ${since}
@@ -227,6 +259,7 @@ export function memberRoutes(deps: ApiDeps) {
       sites: sites.map((s) => ({
         ...s,
         translationOptOut: s.translationOptOut === 1,
+        feedOnly: s.feedOnly === 1,
         topics: topics.filter((t) => t.siteId === s.id).map((t) => t.topic),
         totals: totalsOf(s.id),
         posts: posts.filter((p) => p.siteId === s.id).map(({ n: _n, siteId: _s, ...p }) => p),

@@ -5,7 +5,7 @@
  * reprobe, the claimant's own device.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { claimDue, first, type Lease } from '@tela/data'
+import { bumpSeq, claimDue, currentSeq, first, type Lease } from '@tela/data'
 import { createHttpClient } from '@tela/ingest/http'
 import {
   type IngestContext,
@@ -242,13 +242,14 @@ const siteOf = (id: number) =>
     claimed_at: number | null
     declared_feed_urls: string
     translation_opt_out: number
+    feed_only: number
     review: string | null
     reviewed_at: number | null
     seq: number
   }>(
     api.db,
     sql`select listing, claimed_by, claimed_at, declared_feed_urls, translation_opt_out,
-      review, reviewed_at, seq from sites where id = ${id}`,
+      feed_only, review, reviewed_at, seq from sites where id = ${id}`,
   )
 const feedOf = (id: number) =>
   one<{
@@ -978,6 +979,41 @@ describe('a blog’s topics and translation', () => {
     expect((await siteOf(site))?.translation_opt_out).toBe(0)
     await api.db.run(sql`update sites set translation_opt_out = 1 where id = ${site}`)
     expect((await undo(on.undo?.group)).status).toBe(409)
+  })
+
+  test('only its feed (ADR 0061): set for a writer who asked, a waiting page let go, undone', async () => {
+    const site = await addSite()
+    const feed = await addFeed(site)
+    await api.db.batch([
+      bumpSeq(api.db),
+      api.db.run(sql`insert into articles (feed_id, dedup_key, title, fetched_at, sort_at,
+          extract_state, seq)
+        values (${feed}, 'waiting', 'A summary', 0, 0, 'due', ${currentSeq})`),
+    ] as never)
+    const state = async () =>
+      (
+        await first<{ extract_state: string; seq: number }>(
+          api.db,
+          sql`select extract_state, seq from articles where dedup_key = 'waiting'`,
+        )
+      )?.extract_state
+    const before = (await siteOf(site))?.seq ?? 0
+    const only = await act('site.feedOnly', [site])
+    expect(only.done).toEqual([String(site)])
+    expect((await siteOf(site))?.feed_only).toBe(1)
+    expect((await siteOf(site))?.seq).toBeGreaterThan(before)
+    expect(await state()).toBe('none')
+    expect(await outcome('site.feedOnly', site)).toBe('not_applicable')
+    // Undone, Tela may fetch its pages again; the post it let go stays the feed's.
+    expect((await undo(only.undo?.group)).status).toBe(200)
+    expect((await siteOf(site))?.feed_only).toBe(0)
+    expect(await state()).toBe('none')
+    await api.db.run(sql`update sites set feed_only = 1 where id = ${site}`)
+    const all = await act('site.feedAll', [site])
+    expect((await siteOf(site))?.feed_only).toBe(0)
+    await api.db.run(sql`update sites set feed_only = 1 where id = ${site}`)
+    expect((await undo(all.undo?.group)).status).toBe(409)
+    expect(await outcome('site.feedOnly', 999)).toBe('not_found')
   })
 
   test('Fetch all feeds asks for every active feed now, and has no undo', async () => {

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { claimDue, dueExtractions, first, type Lease, type TelaDb } from '@tela/data'
+import { claimDue, dueExtractions, first, type Lease, REDUE, type TelaDb } from '@tela/data'
 import { createTestDb } from '@tela/data/testing'
 import { fakeClock, memoryBlobs } from '@tela/platform/portable'
 import { sql } from 'drizzle-orm'
@@ -250,5 +250,178 @@ describe('extractArticleJob', () => {
     await claim('article.extract', 1, 'fresh')
     expect(await extractArticleJob(ctx(), stale)).toEqual({ status: 'lost' })
     expect((await article())?.current_version).toBe(1)
+  })
+})
+
+describe('a page Tela may not fetch (ADR 0061)', () => {
+  const robots = (body: string, status = 200) =>
+    server.set('/robots.txt', (_req, res) => {
+      res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end(body)
+    })
+  const kept = () =>
+    first<{ status: number; body: string; fetched_at: number }>(
+      db,
+      sql`select status, body, fetched_at from robots_rules where origin = ${server.origin}`,
+    )
+  const asked = (path: string) => server.requests.filter((r) => r.path === path).length
+  const extract = async (id: number) => {
+    const result = await extractArticleJob(ctx(), await claim('article.extract', id))
+    await db.run(sql`delete from leases`)
+    return result
+  }
+
+  test("robots.txt refusing it keeps the feed's excerpt, and is asked once for the host", async () => {
+    await summaryFeed()
+    const before = await article(1)
+    robots('User-agent: *\nAllow: /\n\nUser-agent: Tela\nDisallow: /posts/\n')
+    servePage('/posts/1', page(6))
+    servePage('/posts/2', page(6))
+    server.requests.length = 0
+    expect(await extract(1)).toEqual({
+      status: 'settled',
+      state: 'failed',
+      reason: `robots.txt disallows the page for ${server.origin}`,
+    })
+    expect(await extract(2)).toMatchObject({ status: 'settled', state: 'failed' })
+    // The post is still the feed's, and nothing else was asked of the blog.
+    expect(await article(1)).toEqual({ ...before!, extract_state: 'failed' })
+    expect(server.requests.map((r) => r.path)).toEqual(['/robots.txt'])
+    expect(await kept()).toEqual({
+      status: 200,
+      body: 'User-agent: Tela\nDisallow: /posts/\n',
+      fetched_at: NOW,
+    })
+  })
+
+  test('no robots.txt (a 404) allows every page; one that fails to answer allows none', async () => {
+    await summaryFeed()
+    servePage('/posts/1', page(6))
+    servePage('/posts/2', page(6))
+    servePage('/posts/3', page(6))
+    // The fixture server answers a path it has no route for with a 404.
+    expect(await extract(1)).toMatchObject({ status: 'extracted' })
+    expect(await kept()).toMatchObject({ status: 404, body: '' })
+
+    // A day on, robots.txt is asked again, and a server error holds every page back.
+    clock.advance(24 * 60 * MIN + 1)
+    robots('down', 503)
+    server.requests.length = 0
+    expect(await extract(2)).toEqual({
+      status: 'settled',
+      state: 'failed',
+      reason: `robots.txt of ${server.origin} is unreachable`,
+    })
+    expect(asked('/posts/2')).toBe(0)
+    // Within the hour it is not asked again.
+    clock.advance(30 * MIN)
+    expect(await extract(3)).toMatchObject({ state: 'failed' })
+    expect(asked('/robots.txt')).toBe(1)
+    expect(await kept()).toMatchObject({ status: 503 })
+  })
+
+  test('rules that change make the posts they refused due again, and they are fetched', async () => {
+    await summaryFeed()
+    robots('User-agent: *\nDisallow: /\n')
+    servePage('/posts/1', page(6))
+    servePage('/posts/2', page(6))
+    expect(await extract(1)).toMatchObject({ state: 'failed' })
+    expect(await extract(2)).toMatchObject({ state: 'failed' })
+
+    // The writer lets Tela in. Nothing asks until a page is due: the blog's next post.
+    robots('User-agent: *\nDisallow: /\n\nUser-agent: Tela\nAllow: /\n')
+    clock.advance(24 * 60 * MIN + 1)
+    expect(await extract(3)).toMatchObject({ status: 'settled' })
+    expect((await article(1))?.extract_state).toBe('due')
+    expect((await article(2))?.extract_state).toBe('due')
+    expect(await extract(1)).toMatchObject({ status: 'extracted' })
+
+    // Read again a day later and the same, they make nothing due again.
+    servePage('/posts/2', 'gone', 404)
+    expect(await extract(2)).toMatchObject({ state: 'failed' })
+    clock.advance(24 * 60 * MIN + 1)
+    await db.run(sql`update articles set extract_state = 'due' where id = 3`)
+    await extract(3)
+    expect((await article(2))?.extract_state).toBe('failed')
+  })
+
+  test('a retry keeps what robots.txt said, so the next attempt does not ask it again', async () => {
+    await summaryFeed()
+    servePage('/posts/1', 'busy', 503)
+    const lease = await claim('article.extract', 1)
+    expect(await extractArticleJob(ctx(), lease)).toEqual({ status: 'retry', error: 'http 503' })
+    expect(await kept()).toMatchObject({ status: 404 })
+    // The lease is still the holder's, for the runner to back off.
+    expect(
+      await first<{ owner: string }>(
+        db,
+        sql`select owner from leases where kind = 'article.extract' and key = '1'`,
+      ),
+    ).toEqual({ owner: lease.owner })
+  })
+})
+
+describe('a blog whose writer asked for only its feed (ADR 0061)', () => {
+  async function feedOnlySummaryFeed() {
+    server.text('/feed.xml', teasers())
+    const { feedId, siteId } = await registerFeed(db, {
+      feedUrl: server.url('/feed.xml'),
+      now: clock.now(),
+    })
+    await db.run(sql`update sites set feed_only = 1 where id = ${siteId}`)
+    await ingestFeed(ctx(), await claim('feed.fetch', feedId))
+    return feedId
+  }
+  const dueNow = () =>
+    claimDue(db, {
+      kind: 'article.extract',
+      owner: 'x',
+      now: clock.now(),
+      ttlMs: MIN,
+      limit: 10,
+      due: dueExtractions(),
+    })
+
+  test('a summary is stored as the post, and no page is ever due', async () => {
+    await feedOnlySummaryFeed()
+    const states = await db.all<{ extract_state: string }>(sql`select extract_state from articles`)
+    expect(states.map((a) => a.extract_state)).toEqual(['none', 'none', 'none'])
+    expect(await dueNow()).toHaveLength(0)
+  })
+
+  test('an edited summary does not make the page due either', async () => {
+    const feedId = await feedOnlySummaryFeed()
+    server.text('/feed.xml', teasers('An edited teaser'))
+    clock.advance(MIN)
+    await ingestFeed(ctx(), await claim('feed.fetch', feedId))
+    expect(await article()).toMatchObject({ current_version: 2, extract_state: 'none' })
+  })
+
+  test('a post found due before the switch is settled without a request', async () => {
+    const feedId = await summaryFeed()
+    await db.run(sql`update sites set feed_only = 1
+      where id = (select site_id from feeds where id = ${feedId})`)
+    servePage('/posts/1', page(6))
+    server.requests.length = 0
+    expect(await extractArticleJob(ctx(), await claim('article.extract', 1))).toEqual({
+      status: 'settled',
+      state: 'none',
+      reason: 'its writer asked for only what the feed provides',
+    })
+    expect(server.requests).toHaveLength(0)
+    expect((await article())?.extract_state).toBe('none')
+    // And the sweep no longer finds the others.
+    await db.run(sql`delete from leases`)
+    expect(await dueNow()).toHaveLength(0)
+  })
+
+  test("an operator's retry of a failed page leaves a feed-only blog's post alone", async () => {
+    const feedId = await summaryFeed()
+    servePage('/posts/1', 'gone', 404)
+    await extractArticleJob(ctx(), await claim('article.extract', 1))
+    await db.run(sql`update sites set feed_only = 1
+      where id = (select site_id from feeds where id = ${feedId})`)
+    await db.batch(REDUE['article.extract'].statements(db, '1', clock.now(), {}) as never)
+    expect((await article())?.extract_state).toBe('failed')
   })
 })

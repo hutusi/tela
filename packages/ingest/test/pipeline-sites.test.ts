@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm'
 import { type GitHub, GitHubUnavailable } from '../src/github'
 import { createHttpClient, type HttpClient } from '../src/http'
 import {
+  createIngest,
   dueAssets,
   dueClaims,
   type IngestContext,
@@ -127,6 +128,7 @@ describe('siteAssetsJob', () => {
     expect(await siteAssetsJob(ctx(), await claim('site.assets', siteId))).toEqual({
       status: 'done',
       favicon: true,
+      homePage: true,
     })
     const site = await first<{ favicon_key: string; assets_checked_at: number }>(
       db,
@@ -157,8 +159,105 @@ describe('siteAssetsJob', () => {
     expect(await siteAssetsJob(ctx(), await claim('site.assets', siteId))).toEqual({
       status: 'done',
       favicon: false,
+      homePage: true,
     })
     expect(assets.size).toBe(0)
+  })
+
+  /** A home page declaring an icon, and `/favicon.ico` beside it, both PNGs. */
+  function iconsBothWays() {
+    serveHtml('/', '<html><head><link rel="icon" sizes="64x64" href="/icon.png"></head></html>')
+    for (const path of ['/icon.png', '/favicon.ico']) {
+      server.set(path, (_req, res) => {
+        res.writeHead(200, { 'content-type': 'image/png' })
+        res.end(PNG)
+      })
+    }
+  }
+
+  test("on a feed-only blog, tries /favicon.ico alone: its pages and robots.txt aren't asked", async () => {
+    const { siteId } = await siteFor('/feed.xml')
+    await db.run(sql`update sites set feed_only = 1 where id = ${siteId}`)
+    iconsBothWays()
+    server.requests.length = 0
+    expect(await siteAssetsJob(ctx(), await claim('site.assets', siteId))).toEqual({
+      status: 'done',
+      favicon: true,
+      homePage: false,
+    })
+    expect(server.requests.map((r) => r.path)).toEqual(['/favicon.ico'])
+    expect(await first(db, sql`select origin from robots_rules`)).toBeUndefined()
+  })
+
+  test('asks robots.txt before the home page, and keeps what it said for the next page', async () => {
+    const { siteId } = await siteFor('/feed.xml')
+    iconsBothWays()
+    server.text('/robots.txt', 'User-agent: *\nAllow: /\n\nUser-agent: Tela\nDisallow: /$\n', {
+      headers: { 'content-type': 'text/plain' },
+    })
+    server.requests.length = 0
+    expect(await siteAssetsJob(ctx(), await claim('site.assets', siteId))).toEqual({
+      status: 'done',
+      favicon: true,
+      homePage: false,
+    })
+    // Refused the home page, it still tries the icon a browser would ask for.
+    expect(server.requests.map((r) => r.path)).toEqual(['/robots.txt', '/favicon.ico'])
+    expect(
+      await first<Record<string, unknown>>(
+        db,
+        sql`select origin, status, body, fetched_at from robots_rules`,
+      ),
+    ).toEqual({
+      origin: server.origin,
+      status: 200,
+      body: 'User-agent: Tela\nDisallow: /$\n',
+      fetched_at: NOW,
+    })
+  })
+})
+
+describe('discovery on a feed-only blog (ADR 0061)', () => {
+  test('answers from the feeds Tela keeps, and asks the blog nothing', async () => {
+    const { feedId, siteId } = await siteFor('/feed.xml')
+    serveHtml('/posts/a', `<link rel="alternate" type="application/rss+xml" href="/feed.xml">`)
+    const ingest = createIngest({ db, http, now: () => clock.now() })
+    // Before the switch, a post's address is fetched to find the feed it declares.
+    server.requests.length = 0
+    expect(await ingest.discover({ url: server.url('/posts/a') })).toMatchObject({
+      feeds: [{ url: server.url('/feed.xml') }],
+    })
+    expect(server.requests.length).toBeGreaterThan(0)
+
+    await db.run(sql`update sites set feed_only = 1 where id = ${siteId}`)
+    server.requests.length = 0
+    expect(await ingest.discover({ url: server.url('/posts/a') })).toEqual({
+      feeds: [
+        {
+          url: server.url('/feed.xml'),
+          title: 'Test Blog',
+          format: 'rss',
+          itemCount: 1,
+          homeUrl: server.origin,
+        },
+      ],
+    })
+    // A feed address Tela does not know on the same blog is the blog's own feed, unfetched.
+    expect(await ingest.addFeed({ feedUrl: server.url('/other.xml'), actorId: null })).toEqual({
+      feedId,
+      siteId,
+      created: false,
+    })
+    expect(await ingest.startClaim({ url: server.url('/'), actorId: 'u1' })).toEqual({
+      feedId,
+      siteId,
+    })
+    expect(server.requests).toHaveLength(0)
+
+    // A blog with no feed left to offer has none, and is still not asked.
+    await db.run(sql`update feeds set status = 'dead' where id = ${feedId}`)
+    expect(await ingest.discover({ url: server.url('/') })).toEqual({ error: 'not_a_feed' })
+    expect(server.requests).toHaveLength(0)
   })
 })
 

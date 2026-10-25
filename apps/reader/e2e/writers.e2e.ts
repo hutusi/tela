@@ -53,6 +53,49 @@ test.beforeAll(async () => {
   }
 })
 
+test.describe('For writers, without JavaScript (ADR 0061)', () => {
+  test.use({ ...visitor(23), javaScriptEnabled: false })
+
+  test('is whole from the edge: the form, how Tela reads a blog, and every way to say no', async ({
+    page,
+  }) => {
+    const res = await page.goto('/writers')
+    expect(res?.status()).toBe(200)
+    expect(res?.headers()['x-robots-tag']).toBe('noindex, nofollow')
+    await expect(page).toHaveTitle('For writers · Tela')
+    await expect(page.locator('#tela-data')).toHaveCount(0)
+    await expect(page.getByTestId('writers-form')).toBeVisible()
+    await expect(page.getByTestId('writers-reading-agent')).toContainText(
+      'Tela/0.1 (+https://telaread.com; feed reader)',
+    )
+    await expect(page.getByTestId('writers-reading-pages')).toContainText(
+      'fetches each new post’s public page once, soon after the feed lists it',
+    )
+    await expect(page.getByTestId('writers-robots-snippet')).toHaveText(
+      'User-agent: Tela\nDisallow: /',
+    )
+    await expect(page.getByTestId('writers-opt-out-feedOnly')).toContainText(
+      'Only use what my feed provides',
+    )
+    await expect(page.getByRole('link', { name: 'me@hutu.si' })).toHaveAttribute(
+      'href',
+      'mailto:me@hutu.si',
+    )
+    // The anchor is in the page the edge sent, so the browser lands on it by itself.
+    await page.goto('/writers#opt-out')
+    await expect(page.locator('#opt-out')).toBeInViewport()
+  })
+
+  test('in the language the browser asks for', async ({ page, context }) => {
+    await context.addCookies([{ name: 'tela_locale', value: 'fr', url: BASE }])
+    await page.goto('/writers')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    await expect(page.getByTestId('writers-opt-out-feedOnly')).toContainText(
+      'N’utiliser que ce que fournit mon flux',
+    )
+  })
+})
+
 test.describe('For writers, for a visitor', () => {
   test.use(visitor(21))
 

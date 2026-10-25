@@ -102,6 +102,23 @@ describe('createHttpClient', () => {
     await expect(client().get(server.url('/chunked'))).rejects.toMatchObject({ kind: 'too_large' })
   })
 
+  test('a request may keep the start of an oversized body instead, and says it was cut', async () => {
+    server.set('/robots.txt', (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
+      for (let i = 0; i < 20; i++) res.write(`${String(i).padStart(999, '#')}\n`)
+      res.end()
+    })
+    const cut = await client().get(server.url('/robots.txt'), { maxBytes: 4500, truncate: true })
+    expect(cut).toMatchObject({ status: 200, bytes: 4500, truncated: true })
+    expect(cut.body.split('\n')).toHaveLength(5)
+    const whole = await client().get(server.url('/robots.txt'), {
+      maxBytes: 50_000,
+      truncate: true,
+    })
+    expect(whole.bytes).toBe(20_000)
+    expect(whole.truncated).toBeUndefined()
+  })
+
   // So discovery can tell a feed too large to read from a large error page.
   test('an oversized body says its status and how it began', async () => {
     server.text('/gone', `<html>${'x'.repeat(HEAD_BYTES * 2)}`, { status: 404 })

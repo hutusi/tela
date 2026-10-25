@@ -406,6 +406,13 @@ const MEMBER_ROUTES: MemberRoute[] = [
     body: () => ({ targetKind: 'profile', targetKey: a.userId, reason: 'spam' }),
     effect: 'writes',
   },
+  {
+    route: 'PUT /api/v1/sites/:siteId/feed-only',
+    path: '/api/v1/sites/1/feed-only',
+    method: 'PUT',
+    body: () => ({ feedOnly: true }),
+    effect: 'writes',
+  },
   { route: 'GET /api/v1/invites', path: '/api/v1/invites', effect: 'reads' },
   { route: 'POST /api/v1/invites', path: '/api/v1/invites', method: 'POST', effect: 'writes' },
   {

@@ -77,6 +77,16 @@
         "short": "恢复",
         "done": "翻译已恢复"
       },
+      "feedOnly": {
+        "label": "只用订阅源",
+        "short": "只用源",
+        "done": "已改为只用订阅源"
+      },
+      "feedAll": {
+        "label": "恢复抓取页面",
+        "short": "抓页面",
+        "done": "已恢复抓取页面"
+      },
       "fetchAll": {
         "label": "抓取全部订阅源",
         "short": "抓取",

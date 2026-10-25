@@ -54,7 +54,7 @@ const FEED_TROUBLE = sql`(f.status = 'dead'
 export const siteSelect = (since: number) => sql`
   select s.id, s.title, s.home_url, s.favicon_key, s.listing, s.claimed_by,
     op.handle as owner_handle, op.display_name as owner_name, s.reader_count, s.primary_lang,
-    s.translation_opt_out, s.created_at, s.description, s.claimed_at, s.review, s.reviewed_at,
+    s.translation_opt_out, s.feed_only, s.created_at, s.description, s.claimed_at, s.review, s.reviewed_at,
     (select count(*) from feeds f where f.site_id = s.id and f.merged_into is null) as feed_count,
     (select max(${FEED_RANK}) from feeds f where f.site_id = s.id and f.merged_into is null)
       as feed_rank,
@@ -85,6 +85,7 @@ export type SiteRaw = {
   reader_count: number
   primary_lang: string | null
   translation_opt_out: number
+  feed_only: number
   created_at: number
   description: string | null
   claimed_at: number | null
@@ -173,6 +174,7 @@ export function siteRow(raw: SiteRaw, area: 'sites' | 'discover'): AdminSiteRow 
     claimFailing: raw.claim_failing === 1,
     primaryLang: raw.primary_lang,
     translationOptOut: raw.translation_opt_out === 1,
+    feedOnly: raw.feed_only === 1,
     topics,
     createdAt: raw.created_at,
     postsLast30d: raw.posts_30d,

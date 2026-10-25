@@ -11,6 +11,7 @@
     "./net": "./src/net.ts",
     "./pipeline": "./src/pipeline/index.ts",
     "./relay": "./src/relay.ts",
+    "./robots": "./src/robots.ts",
     "./schedule": "./src/schedule.ts",
     "./region-policy": "./src/region-policy.ts",
     "./websub": "./src/websub.ts"

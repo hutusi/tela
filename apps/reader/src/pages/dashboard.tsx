@@ -28,6 +28,8 @@ type Site = {
   /** Members whose first live subscription to the blog is under 30 days old. */
   newReaders30d: number
   translationOptOut: boolean
+  /** "Only use what my feed provides" (ADR 0061). Absent from a tela-api older than it. */
+  feedOnly?: boolean
   /** The whole blog's: every post, and every live like, recommendation and note on them. */
   totals: { posts: number; likes: number; recommendations: number; notes: number }
   /** The newest twenty. */
@@ -208,14 +210,12 @@ export function DashboardPage() {
           site={site}
           notes={dash.notes.filter((n) => n.siteId === site.id)}
           locale={locale}
-          onTranslation={(optOut) =>
+          onChange={(patch) =>
             setDash((held) =>
               held
                 ? {
                     ...held,
-                    sites: held.sites.map((s) =>
-                      s.id === site.id ? { ...s, translationOptOut: optOut } : s,
-                    ),
+                    sites: held.sites.map((s) => (s.id === site.id ? { ...s, ...patch } : s)),
                   }
                 : held,
             )
@@ -231,13 +231,13 @@ function SiteDashboard({
   site,
   notes,
   locale,
-  onTranslation,
+  onChange,
 }: {
   site: Site
   notes: Note[]
   locale: string
-  /** The blog's translation setting as tela-api answered it. */
-  onTranslation: (optOut: boolean) => void
+  /** The blog's settings as tela-api answered a change to one. */
+  onChange: (patch: Pick<Site, 'translationOptOut'> | Pick<Site, 'feedOnly'>) => void
 }) {
   const t = useTranslations('dashboard')
   const ts = useTranslations('site')
@@ -278,8 +278,23 @@ function SiteDashboard({
         { method: 'PUT', body: { optOut: !on } },
       )
       if (status !== 200) return
-      onTranslation(body.optOut)
+      onChange({ translationOptOut: body.optOut })
       showToast(t(body.optOut ? 'translationOff' : 'translationOn', { blog: title }))
+    } finally {
+      saving.current = false
+    }
+  }
+  const setFeedOnly = async (on: boolean) => {
+    if (saving.current) return
+    saving.current = true
+    try {
+      const { status, body } = await apiJson<{ feedOnly: boolean }>(
+        `/api/v1/sites/${site.id}/feed-only`,
+        { method: 'PUT', body: { feedOnly: on } },
+      )
+      if (status !== 200) return
+      onChange({ feedOnly: body.feedOnly })
+      showToast(t(body.feedOnly ? 'feedOnlyOn' : 'feedOnlyOff', { blog: title }))
     } finally {
       saving.current = false
     }
@@ -444,6 +459,22 @@ function SiteDashboard({
             testId="dashboard-translate"
           />
         </SettingRow>
+        {/* A tela-api that does not say has no such switch yet: none is shown. */}
+        {site.feedOnly === undefined ? null : (
+          <SettingRow
+            label={t('feedOnly')}
+            hint={t.rich('feedOnlyHint', {
+              link: (chunks) => <Link to="/writers#opt-out">{chunks}</Link>,
+            })}
+          >
+            <Switch
+              checked={site.feedOnly}
+              onChange={(on) => void setFeedOnly(on).catch(() => undefined)}
+              label={t('feedOnly')}
+              testId="dashboard-feed-only"
+            />
+          </SettingRow>
+        )}
       </section>
     </section>
   )

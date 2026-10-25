@@ -1,12 +1,12 @@
 /**
  * Public pages, rendered at the edge (ADR 0025, 0035): the front page, Discover's tabs (ADR 0044;
- * Blogrolls, ADR 0050), a blog's page, a member's profile, a public blogroll (ADR 0050), and About,
- * Privacy and Terms, for visitors who have no shell cached yet and for link previews. The same
- * views the SPA renders, with a guest session and an empty store; the page's data is handed over
- * in `#tela-data`, so the SPA's first render needs no request of its own. About, Privacy and Terms
- * take no data at all (ADR 0035): their copy is in the bundle. Each page's head says where it is
- * in every language (`?hl=`), how it previews, whether it is indexed, and what it is in
- * schema.org's terms (ADR 0060, `lib/head.ts`).
+ * Blogrolls, ADR 0050), a blog's page, a member's profile, a public blogroll (ADR 0050), About,
+ * Privacy and Terms, and For writers (ADR 0061), for visitors who have no shell cached yet and for
+ * link previews. The same views the SPA renders, with a guest session and an empty store; the
+ * page's data is handed over in `#tela-data`, so the SPA's first render needs no request of its
+ * own. About, Privacy, Terms and For writers take no data at all (ADR 0035): their copy is in the
+ * bundle. Each page's head says where it is in every language (`?hl=`), how it previews, whether
+ * it is indexed, and what it is in schema.org's terms (ADR 0060, `lib/head.ts`).
  */
 import { hlLocale, UI_LOCALES, type UiLocale } from '@tela/shared'
 import { renderToString } from 'react-dom/server'
@@ -77,6 +77,7 @@ import type {
   SiteData,
   WeekData,
 } from './views/types'
+import { WritersView } from './views/writers'
 
 /**
  * `key` is what the edge caches the page under when it is not `api` alone: a profile's tabs share
@@ -107,6 +108,7 @@ export type PublicRoute =
   | { kind: 'profile'; handle: string; tab: string | null; api: string; key: string }
   | { kind: 'blogroll'; id: string; api: string }
   | { kind: 'info'; page: InfoPageId; api: null; key: string }
+  | { kind: 'writers'; api: null; key: string }
 
 /** The public page a URL names, and the endpoint its data comes from; null for anything else. */
 export function publicRoute(url: URL): PublicRoute | null {
@@ -145,6 +147,9 @@ export function publicRoute(url: URL): PublicRoute | null {
   if (url.pathname === '/discover/readers') {
     return { kind: 'readers', api: READERS_PATH, alwaysExists: true }
   }
+  // For writers, as a visitor sees it: its copy is in the bundle, and the count of blogs the app
+  // fetches once it takes the page over (ADR 0061).
+  if (url.pathname === '/writers') return { kind: 'writers', api: null, key: '/writers' }
   const info = url.pathname.slice(1)
   if (isInfoPage(info)) return { kind: 'info', page: info, api: null, key: `/info/${info}` }
   const site = url.pathname.match(/^\/s\/(\d{1,12})$/)
@@ -189,6 +194,8 @@ function pageAddress(route: PublicRoute): string {
       return `/@${route.handle}${route.tab ? `?tab=${route.tab}` : ''}`
     case 'info':
       return `/${route.page}`
+    case 'writers':
+      return '/writers'
     case 'redirect':
       return route.redirect
   }
@@ -270,6 +277,15 @@ function headOf(
     return {
       title: t(`info.tabs.${route.page}`),
       description: infoDescription(locale, route.page),
+      path,
+      robots: null,
+    }
+  }
+  // For writers, as a visitor reads it (ADR 0061): indexed like an info page.
+  if (route.kind === 'writers') {
+    return {
+      title: t('writers.title'),
+      description: t('writers.description'),
       path,
       robots: null,
     }
@@ -487,6 +503,8 @@ export function renderPublicPage(input: {
       />
     ) : route.kind === 'info' ? (
       <InfoView page={route.page} locale={locale} year={new Date(now).getFullYear()} />
+    ) : route.kind === 'writers' ? (
+      <WritersView visitor ownHandle={null} blogs={null} locale={locale} now={now} />
     ) : data === null || route.kind === 'redirect' ? (
       <NotFoundPage />
     ) : route.kind === 'week' ? (
@@ -565,7 +583,7 @@ export function renderPublicPage(input: {
   // unless the language named is their own.
   const pinned = hlLocale(url.searchParams.get('hl')) === locale
   const meta = headTags(head, { origin: url.origin, locale, pinned }).join('\n    ')
-  // A page without data (About, Privacy, Terms) hands nothing over.
+  // A page without data (About, Privacy, Terms, For writers) hands nothing over.
   const handover =
     data === null || route.api === null
       ? ''

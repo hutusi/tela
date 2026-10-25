@@ -60,10 +60,12 @@ export async function health(db: TelaDb, blobs: Blobs, now: number): Promise<Hea
     `),
     // Only what the sweep can take: a paused or dead feed's due pages wait for it, not for the
     // sweep (as `dueExtractions` reads them), and would keep the check red for as long as it is.
+    // So does a feed-only blog's (ADR 0061), whose pages the sweep never fetches.
     db.all(sql`
       select count(*) as n from articles a join feeds f on f.id = a.feed_id
+        join sites s on s.id = f.site_id
       where a.extract_state = 'due' and a.url is not null and f.status = 'active'
-        and a.fetched_at < ${now - 6 * HOUR}
+        and s.feed_only = 0 and a.fetched_at < ${now - 6 * HOUR}
     `),
     // The kinds the last tick could not claim or send, and why: it passes them and goes on.
     db.all(

@@ -77,6 +77,16 @@
         "short": "Allow",
         "done": "Translation allowed"
       },
+      "feedOnly": {
+        "label": "Use only its feed",
+        "short": "Feed only",
+        "done": "Using only its feed"
+      },
+      "feedAll": {
+        "label": "Fetch its pages again",
+        "short": "Pages",
+        "done": "Fetching its pages again"
+      },
       "fetchAll": {
         "label": "Fetch all feeds",
         "short": "Fetch",

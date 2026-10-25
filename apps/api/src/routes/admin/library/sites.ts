@@ -1,6 +1,6 @@
 /**
  * What an operator does to a blog: its listing and its review for Discover, its topics, whether
- * it is translated, and a fetch of every feed it has. A blog's row syncs to its readers, so every
+ * it is translated, whether Tela may fetch its pages, and a fetch of every feed it has. A blog's row syncs to its readers, so every
  * change bumps the sequence, bar Not for Discover, which writes only the review no device holds.
  */
 import { audit, bumpSeq, currentSeq, type TelaDb } from '@tela/data'
@@ -220,6 +220,41 @@ const restoreTranslation = restoreColumns({
 })
 
 /**
+ * "Only use what my feed provides" (ADR 0061), set for a writer who asked by mail, or taken back:
+ * the switch the blog's claimant has on the Dashboard. Turned on, a post waiting for its page
+ * waits no more, as the Dashboard's switch does; an undo leaves those settled.
+ */
+function setFeedOnly(action: 'site.feedOnly' | 'site.feedAll'): ActHandler {
+  const feedOnly = action === 'site.feedOnly' ? 1 : 0
+  return async (ctx, id) => {
+    const siteId = idOf(id)
+    if (siteId === null) return 'not_found'
+    return applyChange(ctx, {
+      action,
+      table: 'sites',
+      id: siteId,
+      applies: sql`feed_only <> ${feedOnly}`,
+      set: sql`feed_only = ${feedOnly}`,
+      from: sql`json_object('feedOnly', feed_only)`,
+      to: { feedOnly },
+      after: (db) =>
+        feedOnly === 1
+          ? [
+              db.run(sql`
+                update articles set extract_state = 'none', seq = ${currentSeq}
+                where extract_state = 'due'
+                  and feed_id in (select f.id from feeds f join sites s on s.id = f.site_id
+                    where f.site_id = ${siteId} and s.feed_only = 1)
+              `),
+            ]
+          : [],
+    })
+  }
+}
+
+const restoreFeedOnly = restoreColumns({ table: 'sites', columns: { feedOnly: 'feed_only' } })
+
+/**
  * Fetch every active feed of a site now: each is marked as asked for, which makes it due, then
  * claimed and sent like a reader's first fetch. A feed whose fetch is already running keeps the
  * mark, and the next sweep fetches it again. One audit row for the site, naming the feeds.
@@ -267,6 +302,8 @@ export const siteActions = {
   'site.topics': setTopics,
   'site.translationOff': setTranslation('site.translationOff'),
   'site.translationOn': setTranslation('site.translationOn'),
+  'site.feedOnly': setFeedOnly('site.feedOnly'),
+  'site.feedAll': setFeedOnly('site.feedAll'),
   'site.fetchAll': fetchAll,
 } satisfies Partial<Record<AdminActionName, ActHandler>>
 
@@ -279,4 +316,6 @@ export const siteInverses = {
   'site.topics': restoreTopics,
   'site.translationOff': restoreTranslation,
   'site.translationOn': restoreTranslation,
+  'site.feedOnly': restoreFeedOnly,
+  'site.feedAll': restoreFeedOnly,
 } satisfies Partial<Record<AdminActionName, Inverse>>

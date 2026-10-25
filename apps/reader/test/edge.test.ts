@@ -827,6 +827,50 @@ describe('public pages', () => {
     expect(fr).toContain('id="cookies"')
   })
 
+  test('For writers renders here in all four languages, from the bundle alone (ADR 0061)', async () => {
+    const titles: Record<string, string> = {
+      en: 'For writers',
+      'zh-Hans': '写作者',
+      'zh-Hant': '寫作者',
+      fr: 'Pour les auteurs',
+    }
+    for (const [locale, title] of Object.entries(titles)) {
+      const res = await page('/writers', { cookie: `tela_locale=${locale}` })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+      expect(res.headers.get('content-language')).toBe(locale)
+      const html = await res.text()
+      expect(html).toContain(`<html lang="${locale}"`)
+      expect(html).toContain(`<title>${title} · Tela</title>`)
+      expect(html).toContain('data-testid="writers-page"')
+      // A visitor's page: the form, never a member's links.
+      expect(html).toContain('data-testid="writers-form"')
+      expect(html).not.toContain('data-testid="writers-member"')
+      // Each section under its anchor, the same in every language, and robots.txt's two lines.
+      for (const id of ['reading', 'shows', 'claiming', 'opt-out'])
+        expect(html).toContain(`id="${id}"`)
+      expect(html).toContain('User-agent: Tela\nDisallow: /')
+      expect(html).toContain('<code class="')
+      expect(html).toContain('Tela/0.1 (+https://telaread.com; feed reader)')
+      expect(html).toContain('href="mailto:me@hutu.si"')
+      expect(html).not.toContain('id="tela-data"')
+      expect(html).not.toContain('name="robots"')
+    }
+    const en = await (await page('/writers?utm_source=x')).text()
+    expect(en).toMatch(
+      /<meta name="description" content="Your calling card as an independent writer/,
+    )
+    expect(en).toContain('Only use what my feed provides')
+    expect(en).toContain('fetches each new post’s public page once, soon after the feed lists it')
+    const zh = await (await page('/writers', { cookie: 'tela_locale=zh-Hans' })).text()
+    expect(zh).toContain('只用我的订阅源提供的内容')
+    const fr = await (await page('/writers', { cookie: 'tela_locale=fr' })).text()
+    expect(fr).toContain('N’utiliser que ce que fournit mon flux')
+    // Nothing asked of tela-api, and one page per language: the campaign's query is not a page.
+    expect(apiCalls).toEqual([])
+    expect(cache.size).toBe(4)
+  })
+
   test('nothing a blog says can close the handover script or become markup', async () => {
     await listedBlog(3, "</script><script>alert(1)</script> $& $'")
     const html = await (await page('/s/3')).text()

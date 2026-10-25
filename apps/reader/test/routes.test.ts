@@ -160,6 +160,8 @@ describe('public pages at the edge', () => {
     // About, Privacy and Terms need nothing from tela-api, and are cached by page.
     for (const page of ['about', 'privacy', 'terms'] as const)
       expect(route(`/${page}`)).toEqual({ kind: 'info', page, api: null, key: `/info/${page}` })
+    // So does For writers (ADR 0061), whatever is in its query.
+    expect(route('/writers?utm_source=x')).toEqual({ kind: 'writers', api: null, key: '/writers' })
     for (const path of [
       '/discover/',
       '/discover/week',
@@ -173,6 +175,8 @@ describe('public pages at the edge', () => {
       '/about/x',
       '/About',
       '/info/about',
+      '/writers/',
+      '/writers/x',
     ])
       expect(route(path)).toBeNull()
     expect(handleFrom('/%40someone')).toBe('someone')
@@ -196,7 +200,7 @@ describe('public pages at the edge', () => {
     // Anything else in the address is the default mode, under the default key.
     expect(route('/?titles=nope')).toMatchObject({ titles: 'original', key: '/' })
     // SPA-only: a code in `/join?code=` must never reach a cached page, or Workers Logs.
-    for (const path of ['/join', '/join?code=ABCD', '/writers', '/__tela/shell', '/admin/feeds'])
+    for (const path of ['/join', '/join?code=ABCD', '/__tela/shell', '/admin/feeds'])
       expect(route(path)).toBeNull()
   })
 
@@ -227,6 +231,7 @@ describe('public pages at the edge', () => {
       '/about',
       '/privacy',
       '/terms',
+      '/writers',
     ]
     for (const page of pages) {
       const url = new URL(page, 'https://tela.test')
@@ -237,7 +242,7 @@ describe('public pages at the edge', () => {
     // neither are the SPA's own pages: a code in `/join?code=` must never reach a cached page, or
     // Workers Logs (ADR 0035).
     // The admin console is the SPA's too: never rendered or cached at the edge (ADR 0039).
-    for (const path of ['/__tela/shell', '/join', '/writers', '/admin', '/admin/feeds'])
+    for (const path of ['/__tela/shell', '/join', '/admin', '/admin/feeds'])
       expect(runsFirst(path)).toBe(false)
     expect(patterns).not.toContain('/*')
     expect(patterns.filter((p) => p.startsWith('/discover'))).toEqual([

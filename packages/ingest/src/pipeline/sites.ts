@@ -23,6 +23,7 @@ import { type HttpClient, HttpError } from '../http'
 import { requestHubSubscription } from '../websub'
 import { commit, type IngestContext, type Statement } from './context'
 import { namesSite, type ProfileLink, profileHosts, readProofs } from './proofs'
+import { checkRobots } from './robots'
 
 /** The host of a site's origin (`https://blog.example` → `blog.example`), in SQL. */
 const siteHost = (homeUrl: SQL) => sql`substr(${homeUrl}, instr(${homeUrl}, '://') + 3)`
@@ -75,21 +76,34 @@ async function tryGet(http: HttpClient, url: string, accept: string) {
   }
 }
 
-/** Find and store a site's favicon. The stamp is written whatever happens, so it runs once. */
+/**
+ * Find and store a site's favicon. The stamp is written whatever happens, so it runs once. The
+ * home page is read for the icons it declares only where the blog's robots.txt allows it, and
+ * never on a blog whose writer asked for only its feed (ADR 0061): then `/favicon.ico` alone is
+ * tried, as a browser would.
+ */
 export async function siteAssetsJob(
   ctx: IngestContext,
   lease: Lease,
-): Promise<{ status: 'done' | 'skipped' | 'lost'; favicon?: boolean }> {
+): Promise<{ status: 'done' | 'skipped' | 'lost'; favicon?: boolean; homePage?: boolean }> {
   const siteId = Number(lease.key)
-  const site = await first<{ home_url: string }>(
+  const site = await first<{ home_url: string; feed_only: number }>(
     ctx.db,
-    sql`select home_url from sites where id = ${siteId} and assets_checked_at is null`,
+    sql`select home_url, feed_only from sites where id = ${siteId} and assets_checked_at is null`,
   )
   if (!site || !ctx.assets) {
     const committed = await commit(ctx, lease, [])
     return committed.ok ? { status: 'skipped' } : { status: 'lost' }
   }
-  const page = await tryGet(ctx.http, site.home_url, 'text/html, */*;q=0.5')
+  let learned: Statement[] = []
+  let page: Awaited<ReturnType<typeof tryGet>> = null
+  if (site.feed_only !== 1) {
+    const robots = await checkRobots(ctx, site.home_url, 'global')
+    learned = robots.statements
+    if (robots.verdict === 'allowed') {
+      page = await tryGet(ctx.http, site.home_url, 'text/html, */*;q=0.5')
+    }
+  }
   const html = page?.status === 200 ? page.body : ''
   const base = page?.status === 200 ? page.finalUrl : site.home_url
   let faviconKey: string | null = null
@@ -108,13 +122,16 @@ export async function siteAssetsJob(
   }
   const now = ctx.clock.now()
   const committed = await commit(ctx, lease, [
+    ...learned,
     ctx.db.run(sql`
       update sites set assets_checked_at = ${now}, favicon_key = coalesce(${faviconKey}, favicon_key),
         updated_at = ${now}, seq = ${currentSeq}
       where id = ${siteId}
     `),
   ])
-  return committed.ok ? { status: 'done', favicon: faviconKey !== null } : { status: 'lost' }
+  return committed.ok
+    ? { status: 'done', favicon: faviconKey !== null, homePage: page !== null }
+    : { status: 'lost' }
 }
 
 // ---------------------------------------------------------------------------------------------

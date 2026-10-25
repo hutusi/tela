@@ -61,11 +61,26 @@ export const dueFeeds = (now: number): SQL =>
   sql`select id as key, host, next_fetch_at as ord from feeds
       where status = 'active' and (next_fetch_at <= ${now} or refetch_requested_at is not null)`
 
-/** Articles whose page should be extracted, for `claimDue`, politely per article host. */
+/**
+ * Articles whose page should be extracted, for `claimDue`, politely per article host. Never on a
+ * blog whose writer asked Tela to use only what its feed provides (ADR 0061).
+ */
 export const dueExtractions = (): SQL =>
   sql`select a.id as key, a.url_host as host, a.fetched_at as ord from articles a
-      join feeds f on f.id = a.feed_id
-      where a.extract_state = 'due' and a.url is not null and f.status = 'active'`
+      join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
+      where a.extract_state = 'due' and a.url is not null and f.status = 'active'
+        and s.feed_only = 0`
+
+/**
+ * The extraction state a feed's batch writes, in SQL: `due` becomes `none` on a blog whose writer
+ * asked for only its feed (ADR 0061). Read in the batch, not from what the fetch loaded, so a
+ * fetch already running when the switch is turned cannot leave a post waiting for a page Tela
+ * will never fetch: the reader would say "fetching the full text" for good.
+ */
+const extractStateFor = (feedId: SQL | number, state: SQL) => sql`case when ${state} = 'due'
+    and exists (select 1 from feeds ef join sites es on es.id = ef.site_id
+      where ef.id = ${feedId} and es.feed_only = 1)
+  then 'none' else ${state} end`
 
 /** The feed a permanent redirect lands on, when it exists and this row has no reader. */
 export async function aliasTarget(db: TelaDb, feedId: number, destination: string) {
@@ -378,7 +393,7 @@ export function insertArticles(db: TelaDb, feedId: number, rows: NewArticle[], n
       j.value->>'title', j.value->>'author', j.value->>'publishedAt', ${now},
       coalesce(j.value->>'publishedAt', ${now}), j.value->>'sourceLang', j.value->>'excerpt', 1,
       j.value->>'contentKey', j.value->>'wordCount', j.value->>'readingMinutes',
-      j.value->>'extractState', j.value->>'titleHash', ${currentSeq}
+      ${extractStateFor(feedId, sql`j.value->>'extractState'`)}, j.value->>'titleHash', ${currentSeq}
     from json_each(${JSON.stringify(rows)}) as j where true
     on conflict (feed_id, dedup_key) do nothing
     returning id, dedup_key
@@ -456,8 +471,8 @@ export function updateArticles(db: TelaDb, rows: ArticleChange[]) {
       source_lang = j.value->>'sourceLang', excerpt = j.value->>'excerpt',
       current_version = j.value->>'currentVersion', content_key = j.value->>'contentKey',
       word_count = j.value->>'wordCount', reading_minutes = j.value->>'readingMinutes',
-      extract_state = j.value->>'extractState', title_hash = j.value->>'titleHash',
-      seq = ${currentSeq}
+      extract_state = ${extractStateFor(sql`articles.feed_id`, sql`j.value->>'extractState'`)},
+      title_hash = j.value->>'titleHash', seq = ${currentSeq}
     from json_each(${JSON.stringify(rows)}) as j
     where articles.id = j.value->>'id'
       and (articles.current_version is j.value->>'expectVersion'
@@ -559,6 +574,8 @@ export type ArticleForExtraction = {
   extractState: ExtractState
   fetchRegion: 'global' | 'cn'
   contentMode: 'unknown' | 'full' | 'summary'
+  /** Its blog's writer asked Tela to use only what the feed provides (ADR 0061). */
+  feedOnly: boolean
   versions: StoredVersion[]
 }
 
@@ -576,13 +593,14 @@ export async function loadArticleForExtraction(
     extract_state: ExtractState
     fetch_region: 'global' | 'cn'
     content_mode: 'unknown' | 'full' | 'summary'
+    feed_only: number
     current_version: number | null
     versions: string
   }>(
     db,
     sql`
       select a.id, a.feed_id, a.url, a.title, a.author, a.source_lang, a.extract_state,
-        a.current_version, f.fetch_region, f.content_mode,
+        a.current_version, f.fetch_region, f.content_mode, s.feed_only,
         coalesce((
           select json_group_array(json_object(
             'version', v.version, 'provenance', v.provenance,
@@ -590,7 +608,7 @@ export async function loadArticleForExtraction(
             'wordCount', v.word_count, 'readingMinutes', v.reading_minutes, 'lang', v.lang))
           from article_versions v where v.article_id = a.id
         ), '[]') as versions
-      from articles a join feeds f on f.id = a.feed_id
+      from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
       where a.id = ${articleId}
     `,
   )
@@ -606,12 +624,16 @@ export async function loadArticleForExtraction(
     extractState: row.extract_state,
     fetchRegion: row.fetch_region,
     contentMode: row.content_mode,
+    feedOnly: row.feed_only === 1,
     versions: JSON.parse(row.versions) as StoredVersion[],
   }
 }
 
-/** Settle an article's extraction without a new version (not longer, no content, or given up). */
-export function settleExtraction(db: TelaDb, articleId: number, state: 'done' | 'failed') {
+/**
+ * Settle an article's extraction without a new version: `done` (not longer, unchanged), `failed`
+ * (no content, refused, given up), or `none` (its writer asked for only the feed: never fetched).
+ */
+export function settleExtraction(db: TelaDb, articleId: number, state: 'done' | 'failed' | 'none') {
   return db.run(sql`
     update articles set extract_state = ${state}, seq = ${currentSeq}
     where id = ${articleId} and extract_state = 'due'
