@@ -74,6 +74,27 @@ function allowed(text: string, agent: string, path: string): boolean {
   return best?.allow ?? true
 }
 
+/**
+ * Whether `agent` may fetch `path` to a parser older than RFC 9309 that takes the first rule in its
+ * group that matches, in the file's order: robots.txt must read the same to it.
+ */
+function allowedFirstMatch(text: string, agent: string, path: string): boolean {
+  const { groups } = parse(text)
+  const named = groups.filter((g) => g.agents.includes(agent.toLowerCase()))
+  const rules = (named.length ? named : groups.filter((g) => g.agents.includes('*'))).flatMap(
+    (g) => g.rules,
+  )
+  for (const rule of rules) {
+    const anchored = rule.path.endsWith('$')
+    const body = anchored ? rule.path.slice(0, -1) : rule.path
+    const pattern = new RegExp(
+      `^${body.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replaceAll('*', '.*')}${anchored ? '$' : ''}`,
+    )
+    if (pattern.test(path)) return rule.allow
+  }
+  return true
+}
+
 const OPEN = robotsTxt({ origin: ORIGIN, noindex: false })
 
 describe('robots.txt', () => {
@@ -124,10 +145,12 @@ describe('robots.txt', () => {
 
   test("keeps training crawlers to Tela's own pages, off everything that shows writers' work", () => {
     for (const agent of TRAINING_AGENTS) {
-      for (const path of ['/', '/about', '/privacy', '/terms', '/writers', '/llms.txt']) {
+      for (const path of ['/about', '/privacy', '/terms', '/writers', '/llms.txt']) {
         expect([agent, path, allowed(OPEN, agent, path)]).toEqual([agent, path, true])
       }
       for (const path of [
+        // The front page's edition is writers' titles and excerpts.
+        '/',
         '/s/12',
         '/l/abcdefABCDEF',
         '/@ann',
@@ -142,6 +165,35 @@ describe('robots.txt', () => {
       }
     }
     expect(OWN_PAGES).toContain('/writers')
+  })
+
+  test('reads the same to a parser that takes the first matching rule', () => {
+    const paths = [
+      '/',
+      '/?titles=translated',
+      '/discover',
+      '/s/12',
+      '/@ann',
+      '/about',
+      '/writers',
+      '/llms.txt',
+      '/sitemap.xml',
+      '/api/v1/public/discover',
+      '/join?code=ABC',
+      '/admin',
+      '/__tela/shell',
+    ]
+    for (const agent of ['Googlebot', ...ANSWER_AGENTS, ...TRAINING_AGENTS]) {
+      for (const path of paths) {
+        expect([agent, path, allowedFirstMatch(OPEN, agent, path)]).toEqual([
+          agent,
+          path,
+          allowed(OPEN, agent, path),
+        ])
+      }
+    }
+    // Allowing everything is the default, and first would allow everything to such a parser.
+    expect(OPEN).not.toContain('Allow: /\n')
   })
 
   test('says the content signals in every group, and where the sitemap is', () => {

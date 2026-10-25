@@ -10,20 +10,35 @@ import {
   feedPageHref,
   feedRoute,
   feedSelfHref,
-  parseHl,
 } from '../src/lib/feed-href'
 import { feedTitle } from '../worker/feeds'
 
 const route = (path: string) => feedRoute(new URL(path, 'https://tela.test'))
 
 describe('?hl=', () => {
-  test('is one of the four interface languages, in any case, given back as Tela writes it', () => {
-    expect(parseHl('fr')).toBe('fr')
-    expect(parseHl('EN')).toBe('en')
-    expect(parseHl('zh-hans')).toBe('zh-Hans')
-    expect(parseHl(' ZH-HANT ')).toBe('zh-Hant')
-    for (const other of ['', null, undefined, 'de', 'zh', 'zh-CN', 'zh-TW', 'fr-FR', 'en,fr'])
-      expect(parseHl(other)).toBeNull()
+  const hl = (value: string) =>
+    (
+      feedRoute(
+        new URL(`/discover/articles.rss?hl=${encodeURIComponent(value)}`, 'https://t.test'),
+      ) as {
+        hl: string | null
+      }
+    ).hl
+
+  test("is read as a page's is: any case, any tag of a language, written back as Tela writes it", () => {
+    expect(hl('fr')).toBe('fr')
+    expect(hl('EN')).toBe('en')
+    expect(hl('zh-hans')).toBe('zh-Hans')
+    expect(hl(' ZH-HANT ')).toBe('zh-Hant')
+    // A regional tag reads as its language, as `?hl=` on a page does (`hlLocale`).
+    expect(hl('zh-TW')).toBe('zh-Hant')
+    expect(hl('zh_CN')).toBe('zh-Hans')
+    expect(hl('fr-FR')).toBe('fr')
+    expect(hl('en-GB')).toBe('en')
+    for (const other of ['', 'de', 'ja-JP', 'en,fr']) expect(hl(other)).toBeNull()
+    expect(feedSelfHref(route('/discover/articles.rss?hl=zh-tw') as never)).toBe(
+      '/discover/articles.rss?hl=zh-Hant',
+    )
   })
 })
 

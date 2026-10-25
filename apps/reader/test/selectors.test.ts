@@ -147,6 +147,51 @@ describe('what the reading view shows', () => {
     })
   })
 
+  test("shows a blog's posts as written once its writer turned translation off", () => {
+    const optOut = (translationOptOut: boolean) =>
+      tables({
+        subscriptions: [sub(1)],
+        feeds: [
+          {
+            id: 1,
+            siteId: 1,
+            feedUrl: 'https://blog1.example/feed',
+            title: null,
+            status: 'active',
+            lastFetchedAt: null,
+            lastError: null,
+            seq: 1,
+          },
+        ],
+        sites: [
+          {
+            id: 1,
+            homeUrl: 'https://blog1.example',
+            title: null,
+            description: null,
+            faviconKey: null,
+            primaryLang: 'ja',
+            listing: 'listed',
+            owned: false,
+            claimed: true,
+            readerCount: 0,
+            translationOptOut,
+            seq: 1,
+          },
+        ],
+        articles: [article(1, { sourceLang: 'ja' })],
+        titles: [
+          { articleId: 1, lang: 'en', title: 'en: one', excerpt: null, status: 'done', seq: 1 },
+        ],
+      })
+    expect(shownTitle(optOut(false), article(1, { sourceLang: 'ja' }), 'en').title).toBe('en: one')
+    expect(shownTitle(optOut(true), article(1, { sourceLang: 'ja' }), 'en')).toMatchObject({
+      title: 'Post 1',
+      badge: false,
+      lang: 'ja',
+    })
+  })
+
   test('says which language the title and the excerpt it shows are in', () => {
     const t = tables({
       subscriptions: [sub(1)],

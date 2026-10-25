@@ -1,24 +1,15 @@
 /**
  * Tela's own feeds (ADR 0062): a public blogroll as RSS and OPML (`/l/<id>.rss`, `/l/<id>.opml`)
  * and Discover's (`/discover/articles.rss`, `/discover.opml`), each with the tela-api endpoint it
- * is rendered from, and the page it is of. `?hl=` pins the language the titles are read in, as it
- * pins a page's; a feed without one carries every post as written.
+ * is rendered from, and the page it is of. `?hl=` pins the language the titles are read in, read
+ * as a page's is (`hlLocale`: `zh-TW` is Traditional); a feed without one carries every post as
+ * written.
  *
  * Pure: the edge routes and renders with these, and the pages link to them.
  */
-import { isTopic, type Topic, UI_LOCALES, type UiLocale } from '@tela/shared'
+import { hlLocale, isTopic, type Topic, type UiLocale } from '@tela/shared'
 import { blogrollHref, isBlogrollId } from './blogroll-href'
 import { articlesHref, tabHref } from './discover-href'
-
-/**
- * A language pinned by `?hl=`: one of the interface languages, in any case (`zh-hant`), given
- * back as Tela writes it; null for anything else, which pins nothing.
- */
-export function parseHl(value: string | null | undefined): UiLocale | null {
-  if (!value) return null
-  const asked = value.trim().toLowerCase()
-  return UI_LOCALES.find((l) => l.toLowerCase() === asked) ?? null
-}
 
 export type FeedFormat = 'rss' | 'opml'
 
@@ -37,7 +28,8 @@ export const discoverFeedApiPath = (topic: string | null) =>
 
 /** The feed a URL names, or null for a path that is none. */
 export function feedRoute(url: URL): FeedRoute | null {
-  const hl = parseHl(url.searchParams.get('hl'))
+  // The same reading as a page's (ADR 0060), so a link that pins a page pins its feed alike.
+  const hl = hlLocale(url.searchParams.get('hl'))
   const roll = url.pathname.match(/^\/l\/([^/]*)\.(rss|opml)$/)
   if (roll) {
     const id = roll[1]

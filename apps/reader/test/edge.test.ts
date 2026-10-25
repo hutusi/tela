@@ -659,7 +659,7 @@ describe('public pages', () => {
     expect(site).toContain('data-testid="claimed-badge"')
   })
 
-  test('a page this build cannot render is the plain shell, not an error', async () => {
+  test('a page this build cannot render is the plain shell as a 503, not an error', async () => {
     const throwing = createEdge({
       blobs,
       api: { fetch: async (req) => api.app.fetch(req) },
@@ -682,7 +682,9 @@ describe('public pages', () => {
     console.error = (...args: unknown[]) => void logged.push(args)
     try {
       const res = await throwing.fetch(new Request(`${ORIGIN}/s/4`))
-      expect(res.status).toBe(200)
+      expect(res.status).toBe(503)
+      expect(res.headers.get('retry-after')).toBe('120')
+      expect(res.headers.get('cache-control')).toBe('no-store')
       expect(await res.text()).toBe(TEMPLATE)
     } finally {
       console.error = error
@@ -923,6 +925,36 @@ describe('what search engines may index (ADR 0060)', () => {
     }
   })
 
+  test('a blog nobody vouched for gets no followed link: its posts and its Visit say ugc nofollow', async () => {
+    await listedBlog(1, 'Garden Notes')
+    await listedBlog(2, 'Claimed Only', 'listed', null)
+    const now = api.clock.now()
+    await api.db.batch([
+      bumpSeq(api.db),
+      api.db.run(sql`insert into articles (id, feed_id, dedup_key, url, title, source_lang,
+          fetched_at, sort_at, seq)
+        values (1, 1, 'k1', 'https://blog1.example/p/1', 'Listed post', 'en', ${now}, ${now - 1},
+            ${currentSeq}),
+          (2, 2, 'k2', 'https://blog2.example/p/2', 'Claimed post', 'en', ${now}, ${now - 2},
+            ${currentSeq})`),
+    ] as never)
+    const links = (html: string, host: string) =>
+      [...html.matchAll(new RegExp(`<a [^>]*href="https://${host}[^"]*"[^>]*>`, 'g'))].map(
+        (m) => m[0].match(/rel="([^"]+)"/)?.[1],
+      )
+    const listed = await (await visit('/s/1')).text()
+    expect(links(listed, 'blog1.example')).toEqual(['noopener noreferrer', 'noopener noreferrer'])
+    const claimed = await (await visit('/s/2')).text()
+    expect(links(claimed, 'blog2.example')).toEqual([
+      'ugc nofollow noopener noreferrer',
+      'ugc nofollow noopener noreferrer',
+    ])
+    // Discover, as tela-api says of each post's blog.
+    const articles = await (await visit('/discover/articles')).text()
+    expect(links(articles, 'blog1.example/p/1')).toEqual(['noopener noreferrer'])
+    expect(links(articles, 'blog2.example/p/2')).toEqual(['ugc nofollow noopener noreferrer'])
+  })
+
   test("a new member's profile waits a week", async () => {
     const reader = await signedIn(api, 'fresh@x.test')
     await api.request('/api/v1/profile', {
@@ -1160,11 +1192,14 @@ describe('the front page (ADR 0035)', () => {
     ])
   })
 
-  test('no front page from tela-api, a 404 included, is the plain shell, never kept', async () => {
+  test('no front page from tela-api, a 404 included, is the plain shell as a 503, never kept', async () => {
     for (const status of [404, 503]) {
       const front = frontEdge(() => new Response('no', { status }))
       const res = await visit(front, '/')
-      expect(res.status).toBe(200)
+      // The shell's head says noindex: as a 200 a crawler would drop the page (ADR 0060).
+      expect(res.status).toBe(503)
+      expect(res.headers.get('retry-after')).toBe('120')
+      expect(res.headers.get('cache-control')).toBe('no-store')
       expect(await res.text()).toBe(TEMPLATE)
       expect(res.headers.get('vary')).toBe('cookie, accept-language')
       expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
@@ -1191,7 +1226,7 @@ describe('the front page (ADR 0035)', () => {
     expect(html).not.toContain(' · </span>')
   })
 
-  test('a tela-api that hangs or throws is the plain shell too, in time, never kept', async () => {
+  test('a tela-api that hangs or throws is the plain shell as a 503 too, in time, never kept', async () => {
     const errors = spyOn(console, 'error').mockImplementation(() => {})
     const answers = {
       hangs: () => new Promise<Response>(() => {}),
@@ -1204,9 +1239,10 @@ describe('the front page (ADR 0035)', () => {
         const started = Date.now()
         const res = await visit(front, '/')
         expect(Date.now() - started, how).toBeLessThan(1_000)
-        expect(res.status, how).toBe(200)
+        expect(res.status, how).toBe(503)
         expect(await res.text(), how).toBe(TEMPLATE)
-        expect(res.headers.get('cache-control'), how).toBe('public, max-age=0, must-revalidate')
+        expect(res.headers.get('cache-control'), how).toBe('no-store')
+        expect(res.headers.get('retry-after'), how).toBe('120')
         expect(stored, how).toEqual([])
       }
       expect(errors).toHaveBeenCalledTimes(3)
@@ -1382,15 +1418,16 @@ describe("Discover's tabs (ADR 0044)", () => {
     expect(cache.size).toBe(0)
   })
 
-  test('no week from tela-api, a 404 included, is the plain shell, never kept', async () => {
+  test('no week from tela-api, a 404 included, is the plain shell as a 503, never kept', async () => {
     for (const status of [404, 503]) {
       const edge = tabsEdge({
         '/api/v1/public/discover/week': () => new Response('no', { status }),
       })
       const res = await visit(edge, '/discover')
-      expect(res.status).toBe(200)
+      expect(res.status).toBe(503)
       expect(await res.text()).toBe(TEMPLATE)
-      expect(res.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
+      expect(res.headers.get('cache-control')).toBe('no-store')
+      expect(res.headers.get('retry-after')).toBe('120')
     }
     expect(cache.size).toBe(0)
   })
@@ -1576,7 +1613,7 @@ describe('blogrolls (ADR 0050)', () => {
     cache = memoryCache()
     const older = rollsEdge({})
     const res = await visit(older, '/discover/blogrolls')
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(503)
     expect(await res.text()).toBe(TEMPLATE)
     expect(cache.size).toBe(0)
   })

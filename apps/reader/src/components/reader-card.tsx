@@ -86,6 +86,7 @@ export function ReaderCard({
         article={sample.article}
         source={blogOf(sample)}
         member={member}
+        vouched={sample.site.vouched}
         className="text-ink after:absolute after:inset-0 hover:text-ink hover:no-underline"
       >
         {chunks}

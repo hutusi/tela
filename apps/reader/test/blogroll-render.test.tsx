@@ -113,10 +113,11 @@ describe("a guest's blogroll, as the edge renders it", () => {
     expect(html.split(`href="${LOGIN}"`).length - 1).toBe(3)
   })
 
-  test('a blog with a page on Tela links there; one without, to the blog itself', () => {
+  test('a blog with a page on Tela links there; one without, to the blog itself, unfollowed', () => {
     expect(html).toContain('href="/s/11"')
+    // A member's list: nobody vouched for the blogs on it (ADR 0060).
     expect(html).toContain(
-      'href="https://www.kerb.example/" target="_blank" rel="noopener noreferrer"',
+      'href="https://www.kerb.example/" target="_blank" rel="ugc nofollow noopener noreferrer"',
     )
     // No name: its host.
     expect(html).toContain('>kerb.example</a>')

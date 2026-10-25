@@ -357,6 +357,19 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
       if (!deps.cycle) return c.json({ error: 'no_jobs' }, 404)
       return c.json(await deps.cycle({ refetch: c.req.query('refetch') === '1' }))
     })
+    // …and make a member's profile `days` older, for a spec that needs someone past the week a
+    // new account waits before Discover suggests them or search engines index them (ADR 0060).
+    app.post('/api/test/age', async (c) => {
+      const handle = c.req.query('handle') ?? ''
+      const days = Number(c.req.query('days'))
+      if (!handle || !Number.isInteger(days)) return c.json({ error: 'invalid' }, 400)
+      await deps.db.batch([
+        bumpSeq(deps.db),
+        deps.db.run(sql`update profiles set created_at = created_at - ${days * 86_400_000},
+          seq = ${currentSeq} where handle = ${handle.toLowerCase()}`),
+      ] as never)
+      return c.json({ handle, days })
+    })
   }
 
   // Anyone may read these, and nothing in them depends on who asks: the pages tela-web renders

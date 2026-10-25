@@ -328,10 +328,12 @@ function headOf(
                 url: `${origin}/@${person.handle}`,
                 name: person.displayName ?? `@${person.handle}`,
               }))
-    // A page past a cursor is a moment's slice of a list that moves on: followed, not indexed.
+    // A page past the first is a moment's slice of a list that moves on: followed, not indexed.
+    // Articles and Blogrolls page by a cursor, Blogs by its number.
     const cursor =
       (route.kind === 'articles' && route.params.cursor !== null) ||
-      (route.kind === 'blogrolls' && route.cursor !== null)
+      (route.kind === 'blogrolls' && route.cursor !== null) ||
+      (route.kind === 'blogs' && route.params.page > 1)
     return {
       title,
       description: t('discover.intro'),
@@ -365,9 +367,10 @@ function headOf(
               },
             }
           : {}),
+        // Each post as its writer published it: its own title, in the language it names.
         blogPost: published.map((a) => ({
           '@type': 'BlogPosting',
-          headline: titleIn(a, locale),
+          headline: a.title,
           url: a.url,
           ...(iso(a.publishedAt) ? { datePublished: iso(a.publishedAt) } : {}),
           ...(a.sourceLang ? { inLanguage: a.sourceLang } : {}),

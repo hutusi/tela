@@ -20,6 +20,7 @@ import { SiteAvatar } from '../components/site-avatar'
 import { daysAgo } from '../lib/days'
 import { blogrollFeedHref } from '../lib/feed-href'
 import { displayHost, relativeFormat, shortDate } from '../lib/format'
+import { outboundRel } from './post-link'
 import type { BlogrollBlog, BlogrollData, MemberControls, Person } from './types'
 
 /** What the owner's page puts into a row: its action (Remove) and its note, or the note editor. */
@@ -314,10 +315,11 @@ function BlogRow({
               {name}
             </Link>
           ) : isWeb(blog.homeUrl) ? (
+            // A member's list, of blogs nobody else vouched for: never a followed link (ADR 0060).
             <a
               href={blog.homeUrl}
               target="_blank"
-              rel="noopener noreferrer"
+              rel={outboundRel(false)}
               className={`${nameClass} hover:underline`}
             >
               {name}

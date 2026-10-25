@@ -32,6 +32,7 @@ import {
   PUBLIC_LISTING,
   postExtras,
   postOf,
+  profileIndexable,
   RECOMMENDERS_SHOWN,
   siteCard,
   TITLES,
@@ -154,6 +155,10 @@ const recommendedStatement = (now: number, since: number, filters: SQL, limit: n
  * they read if they show them, their earliest find (the post they recommended before the most
  * others did, from `EARLY_MIN` up) and their newest note on a public blog's post.
  *
+ * Only people whose profile is indexed (`profileIndexable`: a week old, in good standing): Readers
+ * and This week are indexed pages that name each person, with their bio and a note, and a new
+ * account must not reach them before its own profile would (ADR 0060).
+ *
  * Two round trips, as a profile takes: the pool, then one batch keyed by its ids through one JSON
  * parameter. "Before" is by recommendation id, never `created_at`: that is the device's `at`, which
  * the push clamps only from above, so a backdated one would make anyone early.
@@ -176,7 +181,7 @@ export async function readersPool(
         (select count(*) from recommendations r where r.user_id = p.user_id
           and r.deleted_at is null) as total
       from profiles p
-      where ${standingOk('p')} and (exists (select 1 from recommendations r
+      where ${profileIndexable(now)} and (exists (select 1 from recommendations r
           where r.user_id = p.user_id and r.deleted_at is null)
         or (p.public_subscriptions = 1 and exists (
           select 1 from subscriptions sub join feeds f on f.id = sub.feed_id

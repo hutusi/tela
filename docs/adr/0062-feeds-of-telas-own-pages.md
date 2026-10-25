@@ -37,7 +37,9 @@ What these may carry is already decided elsewhere, and the feeds must not loosen
 | `/discover/articles.rss` | Discover's Articles, newest first; `?topic=` narrows it |
 | `/discover.opml` | Discover's blogs, as the Blogs tab orders them; `?topic=` narrows it |
 
-Each takes `?hl=` (`en`, `fr`, `zh-Hans`, `zh-Hant`, in any case; anything else pins nothing).
+Each takes `?hl=` (`en`, `fr`, `zh-Hans`, `zh-Hant`), read as a page's is (`hlLocale`, ADR 0060):
+in any case and as any tag of the language reads, so `zh-TW` is Traditional and `en-GB` English,
+written back as Tela spells it; anything else pins nothing.
 `hl` says which language the titles are read in, and the language of the feed's own words: its
 title and description, from the reader's catalogues. A feed without `hl` carries every post as
 written, and its own words in English.
@@ -54,6 +56,10 @@ written, and its own words in English.
   - only a translation of the title and excerpt the post has now (`source_hash` against
     `title_hash`). A stale one may translate a title since rewritten, and a feed reader keeps
     what it was first given.
+
+  The last two hold for every public answer, not only the feeds: the titles and excerpts a public
+  page carries (`TITLES` and `EXCERPTS` in tela-api's `public-sql.ts`: the front page, Discover,
+  a blog's page and a profile) leave out a writer's opted-out blog and a stale translation alike.
 
   `zh-Hant` is the stored OpenCC conversion, as everywhere (0038).
 - **Description**: the public excerpt, translated with its title under the same rule, as plain

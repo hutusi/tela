@@ -47,6 +47,8 @@ export type FrontPost = {
     homeUrl: string
     faviconKey: string | null
     primaryLang: string | null
+    /** An operator listed it: the post's link is followed (ADR 0060). Absent: `ugc nofollow`. */
+    vouched?: boolean
   }
   claimant: { handle: string; displayName: string | null } | null
 }
@@ -111,6 +113,8 @@ type ProfilePost = {
   siteTitle: string | null
   homeUrl: string
   listed: boolean
+  /** An operator listed the blog: the post's link is followed (ADR 0060). Absent: `ugc nofollow`. */
+  vouched?: boolean
   article: PublicArticle
 }
 
@@ -233,6 +237,8 @@ export type PostSite = {
   faviconKey: string | null
   primaryLang: string | null
   claimed: boolean
+  /** An operator listed it: the post's link is followed (ADR 0060). Absent: `ugc nofollow`. */
+  vouched?: boolean
 }
 
 /**

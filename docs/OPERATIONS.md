@@ -37,7 +37,7 @@ directory.
 | `GRAVATAR_URL` | tela-api, tela-jobs | Where members' pictures are fetched from (tela-api, ADR 0032) and asked about (tela-jobs, ADR 0033), default `https://gravatar.com/avatar`. The e2e points it at its fixture server. A picture is cached for 30 days in each colo and browser under an address with its version, and turning the switch off cannot purge a colo: a copy already held stays, at an address nothing links to any more |
 | `GITHUB_TOKEN` | tela-jobs (secret, optional) | A fine-grained GitHub token with no repository access and no permissions, for a claim by GitHub (ADR 0045): it asks `api.github.com/user/<id>` for a member's login and website, which needs no permission. Unset, GitHub allows 60 requests an hour per egress IP, and Cloudflare's egress IPs are shared with other customers, so a check may find GitHub refusing (`github_unavailable`) for reasons of someone else's making. Set, 5,000 an hour. Make it under the owner's account, with the longest expiry GitHub allows, and diary its renewal: an expired token answers 401, which a claim also reads as `github_unavailable` |
 | `GITHUB_API_URL` | tela-jobs | Where GitHub's API answers, default `https://api.github.com`. For a test stack only |
-| `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, and fetches to private addresses. Never deployed |
+| `ENV` | tela-api, tela-jobs | `test` in local dev and e2e only: the sign-in outbox, `POST /api/test/cycle`, `POST /api/test/age` (a profile made older, past the week a new account waits), and fetches to private addresses. Never deployed |
 | `WORKER_USER_AGENT` | tela-jobs | Sent on every fetch; keep a contact URL in it, and keep it starting `Tela/`: a claim page tells a writer whose site turns Tela away to let that through |
 | `FETCH_TIMEOUT_MS` | tela-jobs, the relay | Per-request timeout, default 20000 |
 | `WEBSUB_ENABLED` | tela-jobs | `1` subscribes at feeds' hubs; hubs verify by calling `PUBLIC_URL/api/websub/<feedId>` |
@@ -539,10 +539,10 @@ is tela-api.
   colo's five, then the browser's one), while a page already open keeps what it shows. The owner's
   own blogroll renders from their device over the 404 page, so a private one opens for them on any
   device that has pulled it. `/` is rendered only for a request without `tela.session_token`; a
-  member's is the plain shell. If `/` shows the plain shell to signed-out visitors, tela-api's
-  `/api/v1/public/front` is not answering 200 within three seconds (deploy tela-api before
-  tela-web when it is new): tela-web logs `public page data late` or `public page data failed`
-  with the endpoint, which says which.
+  member's is the plain shell. If `/` shows the plain shell to signed-out visitors (a 503 with
+  `Retry-After`, ADR 0060), tela-api's `/api/v1/public/front` is not answering 200 within three
+  seconds (deploy tela-api before tela-web when it is new): tela-web logs `public page data late`
+  or `public page data failed` with the endpoint, which says which.
 - **Hashed assets** (`/assets/*`) are kept a day by the browser (`public/_headers`, ADR 0051),
   not a year: the single-page fallback answers a name a deploy lacks 200 with `index.html` under
   the same rule. After a tela-web rollback, a browser without the service worker that was handed
@@ -1088,8 +1088,9 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
   `TELA_NOINDEX` is set, nothing is.
 - **robots.txt** welcomes search engines and AI answer tools (OAI-SearchBot, ChatGPT-User,
   Claude-SearchBot, Claude-User, PerplexityBot…) on every public page, and lets AI training
-  crawlers read only Tela's own copy (`/`, `/about`, `/privacy`, `/terms`, `/writers`,
-  `/llms.txt`): writers' titles and excerpts are not Tela's to give for training. It ends with
+  crawlers read only Tela's own copy (`/about`, `/privacy`, `/terms`, `/writers`, `/llms.txt`;
+  not `/`, whose edition is writers' work): writers' titles and excerpts are not Tela's to give
+  for training. It ends with
   `Content-Signal: search=yes, ai-input=yes, ai-train=no` and the sitemap.
 - **Cloudflare's AI Crawl Control** can replace that file: keep "managed robots.txt" and "Block AI
   bots" off for telaread.com, and check with `curl -s https://telaread.com/robots.txt` after any

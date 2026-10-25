@@ -485,7 +485,12 @@ export function shownTitle(
   excerptLang: string | undefined
 } {
   const source = a.sourceLang ?? undefined
-  if (source !== undefined && never.includes(source)) {
+  // A language the member never translates, or a blog whose writer turned translation off: the
+  // post as written. Titles translated before the writer chose so stay on devices and on the
+  // server, so the choice is honoured here, where they are shown (ADR 0061).
+  const feed = t.feeds.get(a.feedId)
+  const optedOut = feed !== undefined && t.sites.get(feed.siteId)?.translationOptOut === true
+  if (optedOut || (source !== undefined && never.includes(source))) {
     return { title: a.title, excerpt: a.excerpt, badge: false, lang: source, excerptLang: source }
   }
   const translated = t.titles.get(titleKey(a.id, readingLang))

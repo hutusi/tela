@@ -14,7 +14,7 @@ import { SiteAvatar } from '../components/site-avatar'
 import { blogsHref } from '../lib/discover-href'
 import { cadenceKey, displayHost, shortDate } from '../lib/format'
 import { publicTitle } from '../lib/public-title'
-import { PostLink } from './post-link'
+import { outboundRel, PostLink } from './post-link'
 import type { MemberControls, Person, Reading, SiteData } from './types'
 
 const LABEL = 'm-0 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase'
@@ -42,6 +42,8 @@ export function SiteView({
   const td = useTranslations('discover')
   const tc = useTranslations('common')
   const { site } = data
+  // An operator listed it, so its page is indexed and its links are followed (ADR 0060).
+  const vouched = site.indexable === true
   const title = site.title ?? displayHost(site.homeUrl)
   const primary = data.feeds[0]
   const subscribed = primary !== undefined && member?.isSubscribed(primary.id) === true
@@ -128,7 +130,7 @@ export function SiteView({
             <a
               href={site.homeUrl}
               target="_blank"
-              rel="noopener noreferrer"
+              rel={outboundRel(vouched)}
               className={`${pill} border-thumb text-ink hover:border-ink`}
               data-testid="site-visit"
             >
@@ -204,6 +206,7 @@ export function SiteView({
                           article={a}
                           source={title}
                           member={member}
+                          vouched={vouched}
                           className="text-ink after:absolute after:inset-0 hover:no-underline"
                         >
                           {shown.title}
@@ -322,6 +325,7 @@ export function SiteView({
                           article={n.article}
                           source={title}
                           member={member}
+                          vouched={vouched}
                           className="text-ink-2 hover:underline"
                         >
                           {publicTitle(n.article, reading).title}

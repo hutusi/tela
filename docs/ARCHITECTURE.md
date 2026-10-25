@@ -354,7 +354,9 @@ The only public Worker, unpinned, with no D1.
   the plain shell from the assets, before the cache lookup, with no call to tela-api, never
   cached. Any answer but a 200 from tela-api, a 404 included, is the plain shell, uncached, never
   a 404 page at `/`; so is a call that throws or takes more than three seconds, body included
-  (`PAGE_DEADLINE_MS`), on every public page: a slow D1 never keeps a page blank. Every browser response for `/` carries `Vary: cookie`; the colo's copy
+  (`PAGE_DEADLINE_MS`), on every public page: a slow D1 never keeps a page blank. That fallback
+  is a 503 with `Retry-After: 120` and `no-store` (ADR 0060): the shell's own head says
+  `noindex`, which a crawler would read as the page's answer from a 200. Every browser response for `/` carries `Vary: cookie`; the colo's copy
   carries none (workerd ignores Vary), since only a visitor's copy is stored. A test
   (`apps/reader/test/routes.test.ts`) holds every public page to `run_worker_first`.
 - `/about`, `/privacy` and `/terms` are rendered the same way from the bundle alone: their route
@@ -525,7 +527,8 @@ A Vite + React SPA that renders from the device.
   workerd.
 - `bun run e2e` (`apps/reader/e2e`): the built reader, tela-api and tela-jobs in one `wrangler dev`
   on fresh local D1, R2 and queues, against the fixture feed server. Test mode (`ENV=test`) adds
-  the sign-in outbox and `POST /api/test/cycle`, which runs tela-jobs' sweeps to completion,
-  because local dev fires no crons. Service workers are blocked there, except in the
+  the sign-in outbox, `POST /api/test/cycle`, which runs tela-jobs' sweeps to completion,
+  because local dev fires no crons, and `POST /api/test/age`, which makes a profile older than
+  the week a new account waits before Discover suggests it. Service workers are blocked there, except in the
   `shell-worker` project, where `redirect.e2e.ts` runs the real `public/sw.js` and tela-redirect's
   kill switch in Chromium on two local origins.

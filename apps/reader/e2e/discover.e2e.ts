@@ -80,6 +80,11 @@ test.beforeAll(async () => {
       data: { handle: HANDLE, displayName: NAME, bio: 'Reads harbours and markets.' },
     })
     expect(named.ok()).toBe(true)
+    // She joined over a week ago: Discover suggests nobody newer (ADR 0060).
+    const aged = await admin.post(`${BASE}/api/test/age?handle=${HANDLE}&days=8`, {
+      headers: { origin: BASE },
+    })
+    expect(aged.ok()).toBe(true)
     for (const lang of RECOMMENDED) {
       const added = await dora.post(`${BASE}/api/v1/feeds`, {
         headers: { origin: BASE, ...(await memberHeaders(dora)) },

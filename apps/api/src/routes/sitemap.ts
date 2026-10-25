@@ -18,8 +18,8 @@ import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
 import {
-  BLOGROLL_INDEXABLE,
   BLOGROLL_UPDATED_AT,
+  blogrollIndexable,
   profileIndexable,
   publicNotFound,
   SITE_INDEXABLE,
@@ -45,8 +45,9 @@ const KINDS: Record<SitemapKind, (now: number) => { from: SQL; key: SQL; lastmod
     lastmod: sql`max(s.updated_at, coalesce((select max(f.last_item_at) from feeds f
       where f.site_id = s.id and f.merged_into is null), 0))`,
   }),
-  blogrolls: () => ({
-    from: sql`blogrolls r join profiles p on p.user_id = r.user_id where ${BLOGROLL_INDEXABLE}`,
+  blogrolls: (now) => ({
+    from: sql`blogrolls r join profiles p on p.user_id = r.user_id
+      where ${blogrollIndexable(now)}`,
     key: sql`r.id`,
     lastmod: BLOGROLL_UPDATED_AT,
   }),

@@ -303,6 +303,12 @@ describe('each kind of page', () => {
     const page: ArticlesData = { recommended: [], posts: [post(3, 1)], next: null, languages: [] }
     expect(robots(render('/discover/articles?sort=new&cursor=100:3', page))).toBe('noindex')
     expect(robots(render('/discover/articles?sort=new', page))).toBeNull()
+    // Blogs pages by number: its second page is as much a slice as a cursor's.
+    const blogs: DiscoverData = { sites: [], languages: [], total: 120, pageSize: 50 }
+    expect(robots(render('/discover/blogs?topic=tech&page=2', blogs))).toBe('noindex')
+    expect(canonical(render('/discover/blogs?topic=tech&page=2', blogs))).toBeNull()
+    expect(robots(render('/discover/blogs?topic=tech', blogs))).toBeNull()
+    expect(robots(render('/discover/blogs?page=1', blogs))).toBeNull()
     expect(canonical(render('/discover/articles?sort=new&hl=en', page, 'en'))).toBe(
       `${ORIGIN}/discover/articles?sort=new&hl=en`,
     )
@@ -323,7 +329,8 @@ describe('each kind of page', () => {
       blogPost: [
         {
           '@type': 'BlogPosting',
-          headline: 'La noche (en)',
+          // As written, beside the language it is in: never the visitor's translation.
+          headline: 'La noche',
           url: 'https://blog7.example/1',
           datePublished: '2026-10-20T00:00:00.000Z',
           inLanguage: 'es',

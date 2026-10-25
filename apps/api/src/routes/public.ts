@@ -252,8 +252,8 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       `),
       db.all(sql`
         select r.note, r.created_at as "createdAt", s.id as "siteId", s.title as "siteTitle",
-          s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS},
-          ${TITLES}
+          s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed,
+          ${SITE_INDEXABLE} as vouched, ${ARTICLE_COLUMNS}, ${TITLES}
         from recommendations r join articles a on a.id = r.article_id
         join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         where r.user_id = ${id} and r.deleted_at is null
@@ -271,8 +271,8 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       profile.public_likes
         ? db.all(sql`
             select st.liked_at as "likedAt", s.id as "siteId", s.title as "siteTitle",
-              s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed, ${ARTICLE_COLUMNS},
-              ${TITLES}
+              s.home_url as "homeUrl", (s.listing in ${PUBLIC_LISTING}) as listed,
+              ${SITE_INDEXABLE} as vouched, ${ARTICLE_COLUMNS}, ${TITLES}
             from user_article_states st join articles a on a.id = st.article_id
             join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
             where st.user_id = ${id} and st.liked_at is not null
@@ -307,13 +307,16 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       : null
     // The post as the reader holds one, beside the note (or when it was liked) and its blog.
     const withArticle = (r: Record<string, unknown>) => {
-      const { note, createdAt, likedAt, siteId, siteTitle, homeUrl, listed, ...article } = r
+      const { note, createdAt, likedAt, siteId, siteTitle, homeUrl, listed, vouched, ...article } =
+        r
       return {
         ...(likedAt === undefined ? { note, createdAt } : { likedAt }),
         siteId,
         siteTitle,
         homeUrl,
         listed: listed === 1,
+        // An operator listed the blog: the post's link is followed (ADR 0060).
+        vouched: vouched === 1,
         article: withTitles(article),
       }
     }
@@ -390,6 +393,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
               homeUrl,
               faviconKey,
               primaryLang,
+              siteVouched,
               claimantHandle,
               claimantName,
               excerpts,
@@ -397,7 +401,15 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
             } = r
             return {
               article: { ...withTitles(article), excerpts: parseLangMap(excerpts) },
-              site: { id: siteId, title: siteTitle, homeUrl, faviconKey, primaryLang },
+              site: {
+                id: siteId,
+                title: siteTitle,
+                homeUrl,
+                faviconKey,
+                primaryLang,
+                // An operator listed it: the post's link is followed (ADR 0060).
+                vouched: siteVouched === 1,
+              },
               claimant: claimantHandle
                 ? { handle: claimantHandle, displayName: claimantName }
                 : null,

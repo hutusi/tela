@@ -140,6 +140,12 @@ const PAGE_CACHE = 'public, max-age=0, must-revalidate'
  * it: a slow D1 must not keep the front page blank.
  */
 const PAGE_DEADLINE_MS = 3_000
+/**
+ * When a public page's data did not come, how soon a crawler should ask again (ADR 0060). The
+ * fallback is the plain shell, whose own head says `noindex`: a crawler handed it as a 200 drops
+ * the page, while a 503 with `Retry-After` says only "not now".
+ */
+const PAGE_RETRY_AFTER_SECONDS = 120
 /** When the colo's copy of a public answer was made, so a hit can say its `age`. Never sent on. */
 const STORED_AT = 'x-tela-stored-at'
 const WRITES = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
@@ -623,20 +629,24 @@ export function createEdge(deps: EdgeDeps) {
     // How old the data already is: the page is kept only as long as its data had left, so a page
     // made from the colo's four-minute-old copy is not kept five minutes more.
     let age = 0
+    // The page could not be made: the plain shell, which boots the app and asks again from the
+    // browser, as a 503 kept by nobody. Its head says `noindex` (it is the app's), so as a 200 a
+    // crawler that came at that moment would drop the page; a 503 with `Retry-After` is "not now".
+    const unavailable = () =>
+      new Response(template, {
+        status: 503,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+          'retry-after': String(PAGE_RETRY_AFTER_SECONDS),
+          vary,
+        },
+      })
     if (route.api !== null) {
       const answer = await pageData(route.api, url, route.alwaysExists === true, waiter)
       // tela-api is down, slow or failing, or (for a page that always exists) has no such endpoint
-      // yet: the plain shell, uncached, which asks again from the browser. A cached 404 at `/`
-      // would be the front page for five minutes.
-      if (!answer) {
-        return new Response(template, {
-          headers: {
-            'content-type': 'text/html; charset=utf-8',
-            'cache-control': PAGE_CACHE,
-            vary,
-          },
-        })
-      }
+      // yet. A cached 404 at `/` would be the front page for five minutes.
+      if (!answer) return unavailable()
       data = answer.data
       age = answer.age
     }
@@ -645,12 +655,10 @@ export function createEdge(deps: EdgeDeps) {
       html = pages.render({ route, url, data, locale, template })
     } catch (err) {
       // An answer this build cannot render (a tela-api of another release beside it): the plain
-      // shell, uncached, whose app asks again from the browser, rather than an error page. Logged,
-      // since a page that always falls back is otherwise invisible.
+      // shell, whose app asks again from the browser, rather than an error page. Logged, since a
+      // page that always falls back is otherwise invisible.
       console.error('public page did not render', url.pathname, err)
-      return new Response(template, {
-        headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': PAGE_CACHE, vary },
-      })
+      return unavailable()
     }
     // A page that is not to be indexed (a 404, a blog nobody vouched for) says so in its head,
     // and in a header for whatever reads no HTML; kept with the colo's copy.

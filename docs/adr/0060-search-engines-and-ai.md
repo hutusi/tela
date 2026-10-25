@@ -1,8 +1,9 @@
 # 0060 — Search engines and AI: languages in the address, what is indexed, and who may train
 
 Status: accepted (2026-10-25). Amends 0035: whether a public page is indexed is no longer one
-switch, and `TELA_PRIVATE_BETA` becomes `TELA_NOINDEX`. Amends 0015: indexing is decided apart
-from the sign-up mode (ADR 0056).
+switch, `TELA_PRIVATE_BETA` becomes `TELA_NOINDEX`, and a page tela-api did not answer is the
+plain shell as a 503, no longer a 200. Amends 0015: indexing is decided apart from the sign-up
+mode (ADR 0056).
 
 ## Context
 
@@ -57,7 +58,8 @@ varies by `cookie` when pinned, and by `cookie, accept-language` when not.
   (`public/og/<locale>.png`, drawn by `bun run share-cards` and committed); Twitter's
   `summary_large_image`.
 - JSON-LD: `WebSite` on `/`; `ProfilePage` with its `Person` on `/@handle`; `Blog` on `/s/:id`,
-  whose `url` is the blog's own home and whose posts are at their own addresses, never Tela's;
+  whose `url` is the blog's own home and whose posts are at their own addresses, never Tela's,
+  under their own titles (a `BlogPosting` names the language it is in, so never a translation);
   `CollectionPage` with an `ItemList` (the first 25 entries) on a blogroll and on Discover's tabs.
   Escaped as the handover is, so nothing a blog says can close the script.
 - A route may add its feeds (`feeds` in `PageHead`: RSS, OPML) as typed alternates.
@@ -72,14 +74,39 @@ answer that does not say (an older tela-api) is read as no:
 - a profile, once its account is seven days old (`profiles.created_at`) and in good standing
   (`standingOk`): time to report or suspend it before it is worth anything.
 - a blogroll, once Discover shows it (`inDiscover`: public, not hidden, and with enough blogs
-  others see to be more than a stub), of an owner in good standing.
+  others see to be more than a stub), of an owner whose profile is indexed: a week old and in
+  good standing. A new account's blogroll waits as its profile does, or making one would skip
+  the week.
 
-Tela's own pages are indexed: the front page, Discover's tabs (a page past a cursor is
-`noindex` and followed: it is a moment's slice of a list that moves), About, Privacy, Terms and
-For writers. A page that does not exist is `noindex`. A page that is not indexed names no
+**Discover suggests only people whose profile is indexed.** Readers and This week are indexed
+pages that name each person they suggest, with their bio and a note, so the pool they draw from
+(`readersPool`) takes only a profile a week old and in good standing (`profileIndexable`), or a
+new account would be on an indexed page the day it joins.
+
+**A link out to a blog is followed only once an operator vouched for that blog.** A public page
+links to the writer's own address, not Tela's, and an indexed page's link is something a
+spammer would pay for. So a link to a post or a blog's home says `rel="ugc nofollow noopener
+noreferrer"` unless the blog is listed by an operator (`SITE_INDEXABLE`, the rule its own page
+is indexed by). tela-api says so beside each post (`site.vouched` on Discover's posts, readers
+and the front page, `vouched` on a profile's posts; an answer that does not say is read as no),
+and a blog's page by its `indexable`. Every link out on a blogroll's page is `ugc nofollow`
+whatever the blog: the list is a member's, and they vouch for nobody. `outboundRel` in
+`views/post-link.tsx` is the one rule.
+
+Tela's own pages are indexed: the front page, Discover's tabs (a page past the first, by a
+cursor or Blogs' `?page=`, is `noindex` and followed: it is a moment's slice of a list that
+moves), About, Privacy, Terms and For writers. A page that does not exist is `noindex`. A page that is not indexed names no
 canonical and no languages, which would be two answers to one question. The page says its rule in
 `<meta name="robots">`, and the edge repeats it as `X-Robots-Tag`, from the colo's copy too.
 `/api/*` always carries `X-Robots-Tag: noindex`.
+
+**A page the edge could not make is a 503.** When tela-api fails, is slow past the three seconds,
+or answers something this build cannot render, a public page is the plain shell, which boots the
+app and asks again from the browser (ADR 0035). That shell's head is the app's, and says
+`noindex, nofollow`: as a 200, a crawler that came at that moment would drop the page from its
+index. So it is a 503 with `Retry-After: 120` and `Cache-Control: no-store`, and never the colo's
+to keep; a browser shows the app all the same. A member's `/` is the plain shell on purpose, and
+stays a 200.
 
 **`TELA_NOINDEX` replaces `TELA_PRIVATE_BETA`.** While set, robots.txt is `Disallow: /` and every
 answer the Worker gives carries `noindex, nofollow` unless it already says noindex. It stays set
@@ -90,12 +117,16 @@ in `apps/reader/wrangler.jsonc` until launch day, which deploys tela-web without
 DuckAssistBot, MistralAI-User, Meta-ExternalFetcher, YouBot), may read every public page and
 nothing of `/api/`, `/o/`, `/img/`, `/avatar/`, `/__tela/` or the app's routes (`/join`, whose
 `?code=` is an invitation, `/login`, `/reading`, `/following`, `/search`, `/add`, `/settings`,
-`/dashboard`, `/claim`, `/sites/`, `/admin`). The training crawlers and tokens (GPTBot, ClaudeBot,
+`/dashboard`, `/claim`, `/sites/`, `/admin`): Disallow lines alone, since allowing is the default
+and an `Allow: /` before them would open everything to a parser that takes the first rule that
+matches, as older ones do. The training crawlers and tokens (GPTBot, ClaudeBot,
 anthropic-ai, CCBot, Google-Extended, Applebot-Extended, Bytespider, meta-externalagent,
 FacebookBot, Amazonbot, cohere-training-data-crawler, Diffbot, AI2Bot, Ai2Bot-Dolma, Omgilibot,
-Webzio-Extended, PanguBot, Timpibot, ImagesiftBot, img2dataset) get an allow list: `/$`,
-`/about`, `/privacy`, `/terms`, `/writers`, `/llms.txt`, then `Disallow: /`. An allow list, so a
-page added later is closed to them until it is named. A crawler obeys only the group that names
+Webzio-Extended, PanguBot, Timpibot, ImagesiftBot, img2dataset) get an allow list: `/about`,
+`/privacy`, `/terms`, `/writers`, `/llms.txt`, then `Disallow: /`. Not the front page: its edition
+is writers' titles and excerpts, as Discover is. An allow list, so a page added later is closed to
+them until it is named, and its Allows first, so it reads the same by first match as by RFC 9309's
+longest. A crawler obeys only the group that names
 it, so each group spells out all its rules. Both say `Content-Signal: search=yes, ai-input=yes,
 ai-train=no`, and the file ends with `Sitemap:`.
 
@@ -137,8 +168,12 @@ excerpts, never full text, and it says so.
 - The colo keeps up to two copies of a page per language (pinned and not): the same tela-api
   answer, so no more D1 reads.
 - A blogroll is held to Discover's bar, three visible blogs, which is stricter than "public and
-  not hidden": a smaller one is a stub to a search engine. Its owner's age is not checked, unlike
-  a profile's; if spam arrives as blogrolls, the seven days apply there too.
+  not hidden": a smaller one is a stub to a search engine. Its owner's age is checked as a
+  profile's is.
+- A blogroll a new account made still shows on Discover's Blogrolls tab, which is indexed, with
+  its name and description, and a new account's note on a post still shows beside the post on
+  Discover's posts: the seven days keep their own pages out of the index and their people out of
+  Readers, not their cards and notes.
 
 ## Alternatives considered
 

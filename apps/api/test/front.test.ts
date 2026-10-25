@@ -189,6 +189,7 @@ describe('the front page', () => {
         values (${claimed}, 'zh-Hans', 1, '帖子', '摘要', 'done', 'h', 0, ${currentSeq}),
           (${unclaimed}, 'en', 2, 'A post', 'An excerpt', 'done', 'h', 0, ${currentSeq}),
           (${unclaimed}, 'zh-Hans', 2, '另一篇', null, 'done', 'h', 0, ${currentSeq})`),
+      db.run(sql`update articles set title_hash = 'h'`),
     )
     const res = await api.request('/api/v1/public/front')
     expect(res.headers.get('cache-control')).toBe(PROFILE_CACHE)
@@ -222,6 +223,30 @@ describe('the front page', () => {
       site: { id: 2, primaryLang: 'ja' },
       claimant: null,
     })
+  })
+
+  test('carries no translation a writer turned off, nor one of a title since rewritten', async () => {
+    await blog(1)
+    await blog(2)
+    await blog(3)
+    const optedOut = await post(1, HOUR)
+    const rewritten = await post(2, 2 * HOUR)
+    const current = await post(3, 3 * HOUR)
+    await write(
+      db.run(sql`update sites set translation_opt_out = 1 where id = 1`),
+      db.run(sql`update articles set title_hash = 'now'`),
+      db.run(sql`insert into article_titles (article_id, lang, feed_id, title, excerpt, status,
+          source_hash, updated_at, seq)
+        values (${optedOut}, 'fr', 1, 'Avant', 'Extrait', 'done', 'now', 0, ${currentSeq}),
+          (${rewritten}, 'fr', 2, 'Ancien titre', 'Ancien extrait', 'done', 'before', 0,
+            ${currentSeq}),
+          (${current}, 'fr', 3, 'Titre', 'Extrait', 'done', 'now', 0, ${currentSeq})`),
+    )
+    const posts = (await front()).edition.posts
+    const of = (id: number) => posts.find((p) => p.article.id === id)?.article
+    expect(of(optedOut)).toMatchObject({ titles: {}, excerpts: {} })
+    expect(of(rewritten)).toMatchObject({ titles: {}, excerpts: {} })
+    expect(of(current)).toMatchObject({ titles: { fr: 'Titre' }, excerpts: { fr: 'Extrait' } })
   })
 })
 

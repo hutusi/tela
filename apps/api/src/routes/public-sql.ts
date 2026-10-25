@@ -60,9 +60,8 @@ export const READER_COUNT = publicReaderCount('s')
  * A blog, over `sites s`: public and listed by an operator (List, Feature, curation; ADR 0041).
  * A claimed blog nobody has reviewed is public and not indexed.
  */
-export const SITE_INDEXABLE = sql.raw(
-  `(s.listing in ('listed', 'featured') and s.review = 'listed')`,
-)
+const SITE_INDEXABLE_SQL = `(s.listing in ('listed', 'featured') and s.review = 'listed')`
+export const SITE_INDEXABLE = sql.raw(SITE_INDEXABLE_SQL)
 /** How long a new account's profile waits before it is indexed: time to report or suspend it. */
 export const PROFILE_INDEX_AFTER = 7 * DAY
 /** A profile, over `profiles p`: a week old at `now`, and in good standing. */
@@ -70,21 +69,33 @@ export const profileIndexable = (now: number, p = 'p'): SQL =>
   sql`(${sql.raw(p)}.created_at <= ${now - PROFILE_INDEX_AFTER} and ${standingOk(p)})`
 /**
  * A blogroll, over `blogrolls r` and its owner's `profiles p`: one Discover shows (public, not
- * hidden, with enough blogs others see to be more than a stub), of an owner in good standing.
+ * hidden, with enough blogs others see to be more than a stub), of an owner whose profile would
+ * be indexed at `now`: a week old and in good standing. A new account's blogroll waits as its
+ * profile does, or the week would be skipped by making one.
  */
-export const BLOGROLL_INDEXABLE = sql`(${inDiscover('r')} and ${standingOk('p')})`
+export const blogrollIndexable = (now: number): SQL =>
+  sql`(${inDiscover('r')} and ${profileIndexable(now)})`
 /**
- * A post's titles in the launch languages it has one in, from a table aliased `a`: a public page
- * is cached for everyone, so it carries each and the reader picks the one they read in.
+ * Which of a post's stored title translations a public answer may carry, over `articles a`, its
+ * blog `sites s` and `article_titles t`: none on a blog whose writer turned translation off, and
+ * only one made from the title and excerpt the post has now (`source_hash`), since a stale one
+ * may translate a title since rewritten. The rule Tela's feeds keep too (ADR 0062).
+ */
+const SHOWN_TRANSLATION = `t.article_id = a.id and t.source_hash = a.title_hash
+  and s.translation_opt_out = 0`
+/**
+ * A post's titles in the launch languages it has one in, over `articles a` and its blog `sites s`:
+ * a public page is cached for everyone, so it carries each and the reader picks the one they read
+ * in. Only translations `SHOWN_TRANSLATION` allows.
  */
 export const TITLES = sql.raw(`(select json_group_object(t.lang, t.title) from article_titles t
-  where t.article_id = a.id and t.title is not null) as "titles"`)
+  where ${SHOWN_TRANSLATION} and t.title is not null) as "titles"`)
 /**
  * Beside `TITLES`, a post's excerpts in the launch languages it has one in: the front page's lead
  * shows the translated one when the visitor reads titles translated.
  */
 export const EXCERPTS = sql.raw(`(select json_group_object(t.lang, t.excerpt) from article_titles t
-  where t.article_id = a.id and t.excerpt is not null) as "excerpts"`)
+  where ${SHOWN_TRANSLATION} and t.excerpt is not null) as "excerpts"`)
 
 /** An object SQLite's `json_group_object` handed back as text; anything unreadable is none. */
 export function parseLangMap(value: unknown): Record<string, string> {
@@ -102,7 +113,11 @@ export function withTitles<T extends Record<string, unknown>>(row: T): T {
   return { ...row, titles: parseLangMap(row.titles) }
 }
 
-/** A post's blog as a public post list shows it beside the post. */
+/**
+ * A post's blog as a public post list shows it beside the post. `vouched`: an operator listed it
+ * (`SITE_INDEXABLE`), so a public page's link to it is followed; any other blog's says
+ * `ugc nofollow` (ADR 0060).
+ */
 export type PostSite = {
   id: number
   title: string | null
@@ -110,20 +125,33 @@ export type PostSite = {
   faviconKey: string | null
   primaryLang: string | null
   claimed: boolean
+  vouched: boolean
 }
+
+/** Whether an operator vouched for the blog `sites s`, as an answer names it beside a post. */
+export const SITE_VOUCHED = sql.raw(`${SITE_INDEXABLE_SQL} as "siteVouched"`)
 
 /** `PostSite`'s columns, over `sites s`, named apart from `ARTICLE_COLUMNS`. */
 export const POST_SITE = sql.raw(`s.id as "siteId", s.title as "siteTitle", s.home_url as "homeUrl",
   s.favicon_key as "faviconKey", s.primary_lang as "primaryLang",
-  (s.claimed_by is not null) as "siteClaimed"`)
+  (s.claimed_by is not null) as "siteClaimed", ${SITE_INDEXABLE_SQL} as "siteVouched"`)
 
 /**
  * A row of `ARTICLE_COLUMNS`, `TITLES` and `POST_SITE` (and `EXCERPTS`, when it was selected) as
  * the post and its blog. Take any other column off the row first: whatever is left is the post's.
  */
 export function postOf(row: Row): { article: Row; site: PostSite } {
-  const { siteId, siteTitle, homeUrl, faviconKey, primaryLang, siteClaimed, excerpts, ...article } =
-    row
+  const {
+    siteId,
+    siteTitle,
+    homeUrl,
+    faviconKey,
+    primaryLang,
+    siteClaimed,
+    siteVouched,
+    excerpts,
+    ...article
+  } = row
   return {
     article:
       excerpts === undefined
@@ -136,6 +164,7 @@ export function postOf(row: Row): { article: Row; site: PostSite } {
       faviconKey: (faviconKey as string | null) ?? null,
       primaryLang: (primaryLang as string | null) ?? null,
       claimed: siteClaimed === 1,
+      vouched: siteVouched === 1,
     },
   }
 }
@@ -198,7 +227,7 @@ export const siteCard = (since: number, now: number): SQL => sql`
 export const editionStatement = (now: number, extras?: SQL): SQL => sql`
   select ${ARTICLE_COLUMNS}, ${TITLES}, ${EXCERPTS},
     s.id as "siteId", s.title as "siteTitle", s.home_url as "homeUrl",
-    s.favicon_key as "faviconKey", s.primary_lang as "primaryLang",
+    s.favicon_key as "faviconKey", s.primary_lang as "primaryLang", ${SITE_VOUCHED},
     p.handle as "claimantHandle", p.display_name as "claimantName"${extras ? sql`, ${extras}` : sql``}
   from sites s
   join articles a on a.id = (

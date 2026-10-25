@@ -16,6 +16,7 @@ import {
   WEEK_POSTS,
 } from '../src/routes/discover'
 import { PROFILE_CACHE, PUBLIC_CACHE } from '../src/routes/public'
+import { PROFILE_INDEX_AFTER } from '../src/routes/public-sql'
 import { createTestApi, signedIn, type TestApi } from './helpers'
 
 const HOUR = 60 * 60 * 1000
@@ -33,6 +34,7 @@ type PostSite = {
   faviconKey: string | null
   primaryLang: string | null
   claimed: boolean
+  vouched: boolean
 }
 type Article = {
   id: number
@@ -268,6 +270,8 @@ describe('This week', () => {
       faviconKey: null,
       primaryLang: 'en',
       claimed: false,
+      // An operator listed it: its link is followed (ADR 0060).
+      vouched: true,
     })
     expect(second.article).toMatchObject({ title: `Post ${newer}`, titles: {}, excerpts: {} })
   })
@@ -306,7 +310,9 @@ describe('This week', () => {
     await push({ type: 'unrecommend', articleId: a, at: now - 9 * DAY })
     await push({ type: 'recommend', articleId: a, note: 'again', at: now - HOUR })
     expect((await week()).recommended).toEqual([])
-    // It is live, and Readers counts it, made ten days ago.
+    // It is live, and Readers counts it, made ten days ago, once the account is old enough to
+    // be suggested at all.
+    await db.run(sql`update profiles set created_at = 0 where user_id = ${me.userId}`)
     const [reader] = await readers()
     expect(reader).toMatchObject({ id: me.userId, recent: 1, total: 1 })
   })
@@ -667,6 +673,26 @@ describe('Readers', () => {
     const anna = (await readers()).find((r) => r.handle === 'anna')
     expect(anna?.early).toBeNull()
     expect(anna?.sample).toBeNull()
+  })
+
+  test('only people whose profile is indexed: a week old, in good standing', async () => {
+    await blog(1)
+    const a = await post(1, HOUR)
+    await person('member-new-00000006', 'newcomer')
+    await write(
+      db.run(sql`update profiles set created_at = ${now - PROFILE_INDEX_AFTER + 1}
+        where user_id = 'member-new-00000006'`),
+      db.run(sql`update profiles set suspended_at = ${now} where user_id = ${BORIS}`),
+    )
+    await recommend('member-new-00000006', a, HOUR, 'joined today')
+    await recommend(BORIS, a, HOUR, 'suspended since')
+    await recommend(ANNA, a, HOUR, 'a week and more')
+    expect((await readers()).map((r) => r.handle)).toEqual(['anna'])
+    expect((await week()).readers.map((r) => r.handle)).toEqual(['anna'])
+    // A week on, the newcomer is suggested as anyone is.
+    await db.run(sql`update profiles set created_at = ${now - PROFILE_INDEX_AFTER}
+      where user_id = 'member-new-00000006'`)
+    expect((await readers()).map((r) => r.handle).sort()).toEqual(['anna', 'newcomer'])
   })
 
   test('nobody to suggest is an empty list', async () => {

@@ -111,18 +111,58 @@ describe('a public answer says whether its page may be indexed', () => {
     expect(await indexable('bad')).not.toBe(true)
   })
 
-  test('a blogroll, once Discover shows it', async () => {
+  test('a blogroll, once Discover shows it and its owner is a week old', async () => {
     await member('member-ana-00000001', 'ana', 30 * DAY)
+    await member('member-new-00000001', 'new', PROFILE_INDEX_AFTER - 1)
     for (const id of [1, 2, 3]) await blog(id)
     await blogroll('rollFULLabcd', 'member-ana-00000001', [1, 2, 3])
     await blogroll('rollTHINabcd', 'member-ana-00000001', [1, 2])
     await blogroll('rollHIDEabcd', 'member-ana-00000001', [1, 2, 3], true)
+    // A new account's blogroll waits as its profile does: making one skips no week.
+    await blogroll('rollNEWWabcd', 'member-new-00000001', [1, 2, 3])
     const indexable = async (id: string) =>
       (await json<{ blogroll: { indexable: boolean } }>(`/api/v1/public/blogrolls/${id}`)).blogroll
         .indexable
     expect(await indexable('rollFULLabcd')).toBe(true)
     expect(await indexable('rollTHINabcd')).toBe(false)
     expect(await indexable('rollHIDEabcd')).toBe(false)
+    expect(await indexable('rollNEWWabcd')).toBe(false)
+  })
+})
+
+describe("a public answer says which blogs' links are followed", () => {
+  test('a post names whether an operator listed its blog, wherever it is shown', async () => {
+    await member('member-ana-00000001', 'ana', 30 * DAY)
+    await blog(1)
+    await blog(3, { review: null, claimedBy: 'member-ana-00000001' })
+    for (const id of [1, 3]) {
+      await write(
+        db.run(sql`insert into articles (id, feed_id, dedup_key, url, title, source_lang,
+            fetched_at, sort_at, seq)
+          values (${id}, ${id}, ${`k${id}`}, ${`https://blog${id}.example/${id}`}, ${`Post ${id}`},
+            'en', ${now - id}, ${now - id}, ${currentSeq})`),
+        db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at)
+          values ('member-ana-00000001', ${id}, 'Good', ${now - id}, ${now - id})`),
+      )
+    }
+    type Posted = { article: { id: number }; site: { vouched: boolean } }
+    const vouched = (posts: Posted[]) =>
+      Object.fromEntries(posts.map((p) => [p.article.id, p.site.vouched]))
+    const front = await json<{ edition: { posts: Posted[] } }>('/api/v1/public/front')
+    expect(vouched(front.edition.posts)).toEqual({ 1: true, 3: false })
+    const articles = await json<{ posts: Posted[] }>('/api/v1/public/discover/articles')
+    expect(vouched(articles.posts)).toEqual({ 1: true, 3: false })
+    const week = await json<{ recommended: Posted[]; edition: { posts: Posted[] } }>(
+      '/api/v1/public/discover/week',
+    )
+    expect(vouched(week.recommended)).toEqual({ 1: true, 3: false })
+    expect(vouched(week.edition.posts)).toEqual({ 1: true, 3: false })
+    const profile = await json<{
+      recommendations: { article: { id: number }; vouched: boolean }[]
+    }>('/api/v1/public/profiles/ana')
+    expect(
+      Object.fromEntries(profile.recommendations.map((r) => [r.article.id, r.vouched])),
+    ).toEqual({ 1: true, 3: false })
   })
 })
 
@@ -140,6 +180,7 @@ describe("the sitemap's data", () => {
     await blog(5, { listing: 'rejected', review: 'dismissed' })
     await blogroll('rollFULLabcd', 'member-ana-00000001', [1, 2, 3])
     await blogroll('rollTHINabcd', 'member-ana-00000001', [1])
+    await blogroll('rollNEWWabcd', 'member-new-00000001', [1, 2, 3])
   })
 
   test('counts the pages that may be indexed, and when each kind last changed', async () => {

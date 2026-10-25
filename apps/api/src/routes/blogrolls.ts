@@ -19,8 +19,8 @@ import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
 import {
-  BLOGROLL_INDEXABLE,
   BLOGROLL_UPDATED_AT,
+  blogrollIndexable,
   PROFILE_CACHE,
   PUBLIC_LISTING,
   publicNotFound,
@@ -43,7 +43,7 @@ export function blogrollRoutes(deps: ApiDeps) {
       // Its owner by their profile: a member with no profile has no public name to show it under.
       db.all(sql`
         select r.id, r.name, r.description, ${BLOGROLL_UPDATED_AT} as "updatedAt",
-          ${BLOGROLL_INDEXABLE} as indexable, p.user_id as "ownerId", p.handle, p.display_name as "displayName",
+          ${blogrollIndexable(deps.clock.now())} as indexable, p.user_id as "ownerId", p.handle, p.display_name as "displayName",
           ${avatarOf('p')} as avatar
         from blogrolls r join profiles p on p.user_id = r.user_id
         where r.id = ${id} and ${isShown('r')} and ${standingOk('p')}

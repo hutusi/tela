@@ -268,6 +268,8 @@ type PostItem = {
   siteId: number
   siteTitle: string | null
   homeUrl: string
+  /** An operator listed the blog: the post's link is followed (ADR 0060). */
+  vouched?: boolean
   article: PublicArticle
 }
 
@@ -353,6 +355,7 @@ function Posts({
                     article={item.article}
                     source={source}
                     member={member}
+                    vouched={item.vouched}
                     className="text-ink after:absolute after:inset-0 hover:no-underline"
                   >
                     {title}

@@ -1,14 +1,20 @@
 /**
  * robots.txt (ADR 0060). Search engines and the AI tools that search and answer for a person are
- * welcome on every public page; AI training crawlers may read Tela's own pages (the front page,
- * About, Privacy, Terms, For writers, llms.txt) and nothing that shows a writer's work: blogs,
- * blogrolls, profiles, Discover. The writers did not agree to train anyone's model by being read
- * on Tela, and the excerpts and titles there are theirs.
+ * welcome on every public page; AI training crawlers may read Tela's own pages (About, Privacy,
+ * Terms, For writers, llms.txt) and nothing that shows a writer's work: blogs, blogrolls,
+ * profiles, Discover, and the front page, whose edition is writers' titles and excerpts. The
+ * writers did not agree to train anyone's model by being read on Tela, and the excerpts and titles
+ * there are theirs.
  *
  * The training group is an allow list: whatever a later page adds is closed to it until it is
  * named here. A crawler obeys the one group that names it and ignores `*`, so each group says
  * everything its crawlers may and may not read. The Content-Signal line says the same for
  * whoever reads it (Cloudflare's Content Signals Policy, contentsignals.org).
+ *
+ * Each group reads the same to a parser that takes the first rule matching as to RFC 9309's
+ * longest match: the `*` group is Disallows alone (everything else is allowed by default, and an
+ * `Allow: /` first would have such a parser read everything as allowed), and the training group's
+ * Allows come before its `Disallow: /`.
  *
  * While TELA_NOINDEX is set, the answer is `Disallow: /` and nothing else.
  */
@@ -59,8 +65,11 @@ export const TRAINING_AGENTS = [
   'img2dataset',
 ] as const
 
-/** Tela's own copy: what a training crawler may read. `$` ends a path: `/` alone, not under it. */
-export const OWN_PAGES = ['/$', '/about', '/privacy', '/terms', '/writers', '/llms.txt'] as const
+/**
+ * Tela's own copy: what a training crawler may read. Not the front page: its edition is writers'
+ * titles and excerpts, as Discover is.
+ */
+export const OWN_PAGES = ['/about', '/privacy', '/terms', '/writers', '/llms.txt'] as const
 
 /**
  * What no crawler reads: the API, members' objects and pictures, and the app's own pages, which
@@ -98,7 +107,6 @@ export function robotsTxt({ origin, noindex }: { origin: string; noindex: boolea
     '',
     ...agents(['*', ...ANSWER_AGENTS]),
     `Content-Signal: ${CONTENT_SIGNAL}`,
-    'Allow: /',
     ...CLOSED_PATHS.map((path) => `Disallow: ${path}`),
     '',
     ...agents(TRAINING_AGENTS),
