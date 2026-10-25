@@ -987,6 +987,17 @@ tela-api over the network, unlike the rest of the reader, and every change it ma
      run `runPortable` (`apps/jobs/src/portable.ts`) beside it for the sweeps, and serve the
      built SPA and `createEdge` (`apps/reader/worker/edge.ts`) in front. Every dependency is
      already an interface with a portable adapter.
+- **The restore drill:** `bun run restore-drill` (`apps/api/scripts/restore-drill.ts`) takes the
+  newest export (or `--date`) from R2 through `wrangler r2 object get --remote` (the deploy login,
+  no S3 keys), restores it into a fresh, migrated libSQL file as step 2 does, and checks it: every
+  table's count against the manifest, `pragma integrity_check` and `foreign_key_check`, the public
+  pages' answers through `createApp`, and an admin's first sync. The scratch directory is deleted
+  at the end (`--keep` keeps it): the export holds addresses and password hashes. Run it after a
+  migration lands, and whenever the export changes.
+
+  | Date | Export | Rows | Restore | Result |
+  | --- | --- | --- | --- | --- |
+  | 2026-10-25 | 2026-10-25 (migrations to 0013, restored under 0014) | 76,330 in 32 tables, 42 parts, 40 MB | download 91 s, restore 1.2 s | whole: counts, integrity and foreign keys clean; public pages 200; an admin's first sync |
 
 ## Curation
 

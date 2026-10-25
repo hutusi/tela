@@ -23,6 +23,7 @@
     "e2e": "apps/reader/e2e/run.sh",
     "db:generate": "bun run --filter @tela/data generate",
     "admin": "bun apps/api/scripts/admin.ts",
+    "restore-drill": "bun apps/api/scripts/restore-drill.ts",
     "i18n:hant": "bun apps/reader/scripts/hant.ts"
   },
   "devDependencies": {

@@ -54,6 +54,8 @@ bun run admin codes                  # the operator's codes: places taken, live 
 bun run admin revoke <TEXT>          # nobody else joins with that code; who joined stays
 bun run admin curate                 # add the curated blogs, featuring those marked (apps/api/scripts/curated-sites.ts)
 bun run admin grant <email>          # open the admin console (/admin) to a member; ungrant closes it (ADR 0039)
+bun run admin settings               # the runtime settings; `bun run admin set <key> <value>` changes one (ADR 0056)
+bun run restore-drill                # restore the newest nightly export into a scratch libSQL file and check it (OPERATIONS.md)
 cd apps/jobs && wrangler deploy      # deploy order: tela-jobs, tela-api, then tela-web
 cd apps/reader && bunx vite build && wrangler deploy
 cd apps/reader/redirect && wrangler deploy -c wrangler.jsonc   # tela-redirect (ADR 0042), after tela-web
