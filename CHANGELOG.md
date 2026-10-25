@@ -9,6 +9,14 @@ everything so far sits under `[Unreleased]`.
 
 ### Changed
 
+- **Adding a blog finds feeds it used to miss.** A server that answers with the whole feed but
+  calls it a partial answer (status 206, as Caddy does for a compressed file) is read as it is
+  meant: kalzumeus.com could not be added, and its feed had failed every fetch. A feed is read up
+  to 10 MB instead of 5, so a blog whose feed carries its whole archive can be added (danluu.com's
+  is 6.6 MB), and a feed's posts are stored as each is made rather than held all at once. A page
+  that names no feed sends discovery on to one more: where its refresh tag points (byvoid.com's
+  home, a Hugo language redirect), or else the blog's home (paulgraham.com/articles.html). A feed
+  still too large to read is named as such instead of "no feed found".
 - **Stored posts follow fixes to how bodies are processed.** Every version records the pipeline it
   was made under, and a background job makes each post's body again from the HTML it was stored
   with whenever that changes: a fix now reaches posts a feed no longer lists and pages that are

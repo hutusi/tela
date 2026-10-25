@@ -5,6 +5,15 @@ export type HttpErrorKind = 'timeout' | 'network' | 'too_large' | 'redirect_loop
 
 export class HttpError extends Error {
   override name = 'HttpError'
+  /**
+   * On `too_large`, what came before the cap, so a caller can tell what was too large: an 11 MB
+   * page at a guessed `/feed` is not a feed too large to read. `cappedStream` keeps the first
+   * `HEAD_BYTES` that arrived; a client's `get` adds the status, and the head decoded as the whole
+   * body would have been (a UTF-16 feed reads as nothing in UTF-8).
+   */
+  head?: Uint8Array
+  status?: number
+  headText?: string
   constructor(
     public kind: HttpErrorKind,
     message: string,
@@ -12,6 +21,9 @@ export class HttpError extends Error {
     super(message)
   }
 }
+
+/** How much of a body cut off at the cap `cappedStream` keeps on the error. */
+export const HEAD_BYTES = 16 * 1024
 
 export type HttpResponse = {
   status: number
@@ -110,25 +122,48 @@ export function classify(err: unknown): HttpError {
 /**
  * Pass bytes through until `maxBytes`, then fail the stream with a `too_large` HttpError and
  * cancel the upstream body. Counts what actually arrives, so a missing or dishonest
- * Content-Length changes nothing; usable for proxying as well as for buffering.
+ * Content-Length changes nothing; usable for proxying as well as for buffering. The error holds
+ * the first `HEAD_BYTES` that arrived, the chunk that crossed the cap included: the stream never
+ * passes that one on, and it can be the only one (a 32 KB body in one chunk, on CI).
  */
 export function cappedStream(
   body: ReadableStream<Uint8Array>,
   maxBytes: number,
 ): ReadableStream<Uint8Array> {
   let total = 0
+  const head: Uint8Array[] = []
+  let kept = 0
   return body.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
+        if (kept < HEAD_BYTES) {
+          const part = chunk.slice(0, HEAD_BYTES - kept)
+          head.push(part)
+          kept += part.byteLength
+        }
         total += chunk.byteLength
         if (total > maxBytes) {
-          controller.error(new HttpError('too_large', `response exceeds ${maxBytes} bytes`))
+          const err = new HttpError('too_large', `response exceeds ${maxBytes} bytes`)
+          err.head = joined(head, HEAD_BYTES)
+          controller.error(err)
           return
         }
         controller.enqueue(chunk)
       },
     }),
   )
+}
+
+/**
+ * A 206 that holds the whole file. Tela never asks for a range, but Caddy serving a precompressed
+ * file answers a request that accepts gzip with `206` and `content-range: bytes 0-2106/2107`:
+ * every byte, so a 200 in all but name. Refused as a 206, kalzumeus.com's feed failed every fetch
+ * and could not be added. A range that misses a byte, or a 206 that names none, stays a 206.
+ */
+function wholeRange(response: Response): boolean {
+  if (response.status !== 206) return false
+  const range = response.headers.get('content-range')?.match(/^bytes\s+0-(\d+)\/(\d+)$/i)
+  return range !== null && range !== undefined && Number(range[1]) + 1 === Number(range[2])
 }
 
 /** Buffer a body through `cappedStream`. Accepts a Request as well as a Response. */
@@ -139,18 +174,24 @@ export async function readCapped(
   if (!message.body) return new Uint8Array()
   const reader = cappedStream(message.body, maxBytes).getReader()
   const chunks: Uint8Array[] = []
-  let total = 0
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
-    total += value.byteLength
     chunks.push(value)
   }
-  const out = new Uint8Array(total)
+  return joined(chunks, Number.POSITIVE_INFINITY)
+}
+
+/** The chunks as one array, up to `limit` bytes. */
+function joined(chunks: Uint8Array[], limit: number): Uint8Array {
+  const total = chunks.reduce((n, c) => n + c.byteLength, 0)
+  const out = new Uint8Array(Math.min(total, limit))
   let offset = 0
   for (const c of chunks) {
-    out.set(c, offset)
-    offset += c.byteLength
+    if (offset >= out.byteLength) break
+    const part = c.subarray(0, out.byteLength - offset)
+    out.set(part, offset)
+    offset += part.byteLength
   }
   return out
 }
@@ -250,17 +291,20 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
           continue
         }
 
+        const status = wholeRange(response) ? 200 : response.status
         let bytes: Uint8Array
         try {
           bytes = await readCapped(response, opts.maxBytes ?? maxBytes)
         } catch (err) {
-          if (err instanceof HttpError) throw err
-          throw classify(err)
+          if (!(err instanceof HttpError)) throw classify(err)
+          err.status = status
+          if (err.head) err.headText = decodeBody(err.head, response.headers.get('content-type'))
+          throw err
         }
         const body =
           bytes.byteLength === 0 ? '' : decodeBody(bytes, response.headers.get('content-type'))
         return {
-          status: response.status,
+          status,
           headers: response.headers,
           body,
           raw: bytes,

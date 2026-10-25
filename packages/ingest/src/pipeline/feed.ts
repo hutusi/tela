@@ -58,7 +58,7 @@ import {
   SUMMARY_MAX_CHARS,
 } from '../content-mode'
 import { HttpError } from '../http'
-import { selectItems, titleFor } from '../items'
+import { FEED_MAX_BYTES, selectItems, titleFor } from '../items'
 import { timeoutsWarrantRelay } from '../region-policy'
 import {
   backoffSec,
@@ -227,23 +227,28 @@ async function adoptDeclaredHome(
   }
 }
 
+/** What the plan needs of an item: its content object and raw HTML are written and let go. */
 type ProcessedItem = {
   item: ParsedItem
   baseUrl: string
   key: string
   title: string
   sourceLang: string | null
-  object: ContentObject
+  contentKey: string
   excerpt: string | null
   bodyChars: number
   wordCount: number
   readingMinutes: number
-  rawHtml: string
   rawSha: string
   sample: ContentSample
 }
 
-async function processItem(item: ParsedItem, feed: FeedForFetch, parsed: ParsedFeed) {
+async function processItem(
+  item: ParsedItem,
+  key: string,
+  feed: FeedForFetch,
+  parsed: ParsedFeed,
+): Promise<{ p: ProcessedItem; object: ContentObject; rawHtml: string }> {
   const html = item.contentHtml ?? item.summaryHtml ?? ''
   // What relative links resolve against: kept with the version, since the feed's own address can
   // move later, and `article.reprocess` must make the body against the base it was first made on.
@@ -256,18 +261,18 @@ async function processItem(item: ParsedItem, feed: FeedForFetch, parsed: ParsedF
     langHint: item.language ?? feed.site.primaryLang ?? parsed.language,
     title: item.title,
   })
-  return {
+  const object = buildContentObject(processed)
+  const p: ProcessedItem = {
     item,
     baseUrl,
-    key: await dedupKey(item),
+    key,
     title: titleFor(item, processed.excerpt),
     sourceLang: processed.lang === 'und' ? null : processed.lang,
-    object: buildContentObject(processed),
+    contentKey: object.key,
     excerpt: processed.excerpt || null,
     bodyChars: processed.text.length,
     wordCount: processed.wordCount,
     readingMinutes: processed.readingMinutes,
-    rawHtml: html,
     rawSha: await sha256Hex(html),
     sample: {
       chars: processed.text.length,
@@ -275,7 +280,8 @@ async function processItem(item: ParsedItem, feed: FeedForFetch, parsed: ParsedF
       tail: processed.text.slice(-40),
       jumpLink: endsWithJumpLink(html, item.url),
     },
-  } satisfies ProcessedItem
+  }
+  return { p, object, rawHtml: html }
 }
 
 async function titleHashOf(title: string, excerpt: string | null): Promise<string> {
@@ -295,7 +301,7 @@ function asStored(p: ProcessedItem, version: number): StoredVersion {
   return {
     version,
     provenance: 'feed',
-    contentKey: p.object.key,
+    contentKey: p.contentKey,
     bodyChars: p.bodyChars,
     excerpt: p.excerpt,
     wordCount: p.wordCount,
@@ -309,7 +315,7 @@ function newVersion(p: ProcessedItem, version: number): NewVersion {
     dedupKey: p.key,
     version,
     provenance: 'feed',
-    contentKey: p.object.key,
+    contentKey: p.contentKey,
     rawKey: objectKeys.raw(p.rawSha),
     bodyChars: p.bodyChars,
     excerpt: p.excerpt,
@@ -322,6 +328,20 @@ function newVersion(p: ProcessedItem, version: number): NewVersion {
   }
 }
 
+/**
+ * An item that brings its article nothing: the article's latest *feed* version holds this very
+ * content, or the item has no body. Compared with whatever is current, a summary was compared
+ * with its own extraction and put back (the regression ADR 0022 fixes). A new article is never
+ * unchanged.
+ */
+function unchanged(p: ProcessedItem, prior: ExistingArticle | undefined): boolean {
+  if (!prior) return false
+  const latestFeed = prior.versions
+    .filter((v) => v.provenance === 'feed')
+    .reduce<StoredVersion | undefined>((a, v) => (!a || v.version > a.version ? v : a), undefined)
+  return latestFeed?.contentKey === p.contentKey || p.bodyChars === 0
+}
+
 /** Decide what each item means for its article: new, changed (with a new current), or unchanged. */
 async function plan(
   processed: ProcessedItem[],
@@ -331,7 +351,6 @@ async function plan(
   const inserts: NewArticle[] = []
   const versions: NewVersion[] = []
   const changes: ArticleChange[] = []
-  const written: ProcessedItem[] = []
   for (const p of processed) {
     const prior = existing.get(p.key)
     if (!prior) {
@@ -344,22 +363,16 @@ async function plan(
         publishedAt: p.item.publishedAt?.getTime() ?? null,
         sourceLang: p.sourceLang,
         excerpt: p.excerpt,
-        contentKey: p.object.key,
+        contentKey: p.contentKey,
         wordCount: p.wordCount,
         readingMinutes: p.readingMinutes,
         extractState: wantsExtraction([asStored(p, 1)], mode, SUMMARY_MAX_CHARS) ? 'due' : 'none',
         titleHash: await titleHashOf(p.title, p.excerpt),
       })
       versions.push(newVersion(p, 1))
-      written.push(p)
       continue
     }
-    // Compare with the latest *feed* version only. Comparing with whatever is current compared a
-    // summary with its own extraction, and put the summary back (the regression ADR 0022 fixes).
-    const latestFeed = prior.versions
-      .filter((v) => v.provenance === 'feed')
-      .reduce<StoredVersion | undefined>((a, v) => (!a || v.version > a.version ? v : a), undefined)
-    if (latestFeed?.contentKey === p.object.key || p.bodyChars === 0) continue
+    if (unchanged(p, prior)) continue
     const next = Math.max(0, ...prior.versions.map((v) => v.version)) + 1
     const all = [...prior.versions, asStored(p, next)]
     const current = (chooseCurrent(all, mode) ?? asStored(p, next)) as StoredVersion
@@ -382,35 +395,47 @@ async function plan(
       titleHash: await titleHashOf(p.title, current.excerpt),
     })
     versions.push(newVersion(p, next))
-    written.push(p)
   }
-  return { inserts, versions, changes, written }
+  return { inserts, versions, changes }
 }
 
-/** Write objects before the batch that references them; an orphan from a failed batch is harmless. */
-async function putObjects(ctx: IngestContext, items: ProcessedItem[]): Promise<void> {
-  const puts: (() => Promise<void>)[] = []
+/**
+ * Writes an item's objects as it is processed, eight puts at a time, before the batch that
+ * references them; an orphan from a failed batch is harmless. Held until the batch instead, every
+ * item's content object and raw HTML cost about 13 times the feed: danluu.com's 6.6 MB feed took
+ * 85 MB of the isolate's 128 (V8, measured), and 35 MB written as it went.
+ */
+function objectWriter(ctx: IngestContext) {
   const seen = new Set<string>()
-  for (const p of items) {
-    if (!seen.has(p.object.key)) {
-      seen.add(p.object.key)
-      puts.push(() =>
-        ctx.blobs.put(objectKeys.content(p.object.key), JSON.stringify(p.object), {
-          contentType: 'application/json',
-          cacheControl: IMMUTABLE,
-        }),
-      )
-    }
-    if (!seen.has(p.rawSha)) {
-      seen.add(p.rawSha)
-      puts.push(() =>
-        ctx.blobs.put(objectKeys.raw(p.rawSha), p.rawHtml, {
-          contentType: 'text/html; charset=utf-8',
-        }),
-      )
-    }
+  let puts: (() => Promise<void>)[] = []
+  const flush = async () => {
+    const now = puts
+    puts = []
+    await Promise.all(now.map((f) => f()))
   }
-  for (let i = 0; i < puts.length; i += 8) await Promise.all(puts.slice(i, i + 8).map((f) => f()))
+  return {
+    async put(p: ProcessedItem, object: ContentObject, rawHtml: string) {
+      if (!seen.has(p.contentKey)) {
+        seen.add(p.contentKey)
+        puts.push(() =>
+          ctx.blobs.put(objectKeys.content(p.contentKey), JSON.stringify(object), {
+            contentType: 'application/json',
+            cacheControl: IMMUTABLE,
+          }),
+        )
+      }
+      if (!seen.has(p.rawSha)) {
+        seen.add(p.rawSha)
+        puts.push(() =>
+          ctx.blobs.put(objectKeys.raw(p.rawSha), rawHtml, {
+            contentType: 'text/html; charset=utf-8',
+          }),
+        )
+      }
+      if (puts.length >= 8) await flush()
+    },
+    flush,
+  }
 }
 
 /** Fetch a feed and store what changed. `lease.key` is the feed id. */
@@ -440,6 +465,7 @@ export async function ingestFeed(ctx: IngestContext, lease: Lease): Promise<Inge
       etag: feed.etag,
       lastModified: feed.lastModified,
       region: feed.fetchRegion,
+      maxBytes: FEED_MAX_BYTES,
     })
   } catch (err) {
     if (!(err instanceof HttpError)) throw err
@@ -563,20 +589,25 @@ export async function ingestFeed(ctx: IngestContext, lease: Lease): Promise<Inge
   // Provenance first: the feed belongs to the origin that served it before a post is stored.
   const moved = provenance(ctx, feed, served, now)
   const items = selectItems(parsed.items)
+  // Which article each item is, before any body is made: an item's objects are then written as it
+  // is processed and let go (`objectWriter`), never held for the whole feed.
+  const keys: string[] = []
+  for (const item of items) keys.push(await dedupKey(item))
+  const existing = await existingArticles(db, feed.id, keys)
+  const writer = objectWriter(ctx)
   const processed: ProcessedItem[] = []
-  for (const item of items) processed.push(await processItem(item, feed, parsed))
+  for (const [i, item] of items.entries()) {
+    const { p, object, rawHtml } = await processItem(item, keys[i] as string, feed, parsed)
+    if (!unchanged(p, existing.get(p.key))) await writer.put(p, object, rawHtml)
+    processed.push(p)
+  }
+  await writer.flush()
 
   const contentMode: ContentMode =
     feed.contentMode === 'unknown'
       ? learnContentMode(processed.map((p) => p.sample))
       : feed.contentMode
-  const existing = await existingArticles(
-    db,
-    feed.id,
-    processed.map((p) => p.key),
-  )
   const planned = await plan(processed, existing, contentMode)
-  await putObjects(ctx, planned.written)
 
   const adopted = moved.detached
     ? { statements: [] as Statement[], outcome: 'detached' as const }

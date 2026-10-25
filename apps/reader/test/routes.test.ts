@@ -428,6 +428,8 @@ describe('answers the pages turn into messages', () => {
     expect(addError('rate_limited')).toBe('rate_limited')
     expect(claimError('not_a_feed')).toBe('no_feed')
     expect(claimError('unreachable')).toBe('fetch_failed')
+    expect(addError('feed_too_large')).toBe('feed_too_large')
+    expect(claimError('feed_too_large')).toBe('feed_too_large')
   })
 })
 

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { cappedStream, createHttpClient, readCapped } from '../src/http'
+import { cappedStream, createHttpClient, HEAD_BYTES, type HttpError, readCapped } from '../src/http'
 import { isBlockedHost } from '../src/net'
 import { FixtureServer } from './fixture-server'
 
@@ -102,6 +102,40 @@ describe('createHttpClient', () => {
     await expect(client().get(server.url('/chunked'))).rejects.toMatchObject({ kind: 'too_large' })
   })
 
+  // So discovery can tell a feed too large to read from a large error page.
+  test('an oversized body says its status and how it began', async () => {
+    server.text('/gone', `<html>${'x'.repeat(HEAD_BYTES * 2)}`, { status: 404 })
+    const err = await client({ maxBytes: HEAD_BYTES + 100 })
+      .get(server.url('/gone'))
+      .catch((e: HttpError) => e)
+    expect(err).toMatchObject({ kind: 'too_large', status: 404 })
+    expect((err as HttpError).head?.byteLength).toBe(HEAD_BYTES)
+    expect(new TextDecoder().decode((err as HttpError).head).startsWith('<html>xxx')).toBe(true)
+  })
+
+  test('a 206 that holds the whole file is a 200; one that misses a byte is not', async () => {
+    const partial = (path: string, range: string | null) =>
+      server.set(path, (_req, res) => {
+        res.writeHead(206, {
+          'content-type': 'text/xml',
+          ...(range ? { 'content-range': range } : {}),
+        })
+        res.end('<rss/>')
+      })
+    // What Caddy answers with a precompressed file (kalzumeus.com): every byte, unasked.
+    partial('/whole', 'bytes 0-5/6')
+    partial('/part', 'bytes 0-2/6')
+    partial('/later', 'bytes 3-5/6')
+    partial('/unnamed', null)
+    const http = client()
+    const whole = await http.get(server.url('/whole'))
+    expect(whole.status).toBe(200)
+    expect(whole.body).toBe('<rss/>')
+    expect((await http.get(server.url('/part'))).status).toBe(206)
+    expect((await http.get(server.url('/later'))).status).toBe(206)
+    expect((await http.get(server.url('/unnamed'))).status).toBe(206)
+  })
+
   test('cappedStream passes bytes through until the cap and then fails the stream', async () => {
     const chunks = [new Uint8Array(6000), new Uint8Array(6000)]
     const source = new ReadableStream<Uint8Array>({
@@ -112,7 +146,18 @@ describe('createHttpClient', () => {
     })
     const reader = cappedStream(source, 10_000).getReader()
     expect((await reader.read()).value?.byteLength).toBe(6000)
-    await expect(reader.read()).rejects.toMatchObject({ kind: 'too_large' })
+    // The error keeps the start of what arrived, the chunk that crossed the cap included.
+    const cut = await reader.read().catch((e: HttpError) => e)
+    expect(cut).toMatchObject({ kind: 'too_large' })
+    expect((cut as HttpError).head?.byteLength).toBe(12_000)
+    // Even when that chunk is the first: CI fetched a 32 KB body as one.
+    const one = new Uint8Array(HEAD_BYTES * 2).fill(7)
+    const whole = cappedStream(new Response(one).body as ReadableStream<Uint8Array>, 10_000)
+    const first = await whole
+      .getReader()
+      .read()
+      .catch((e: HttpError) => e)
+    expect((first as HttpError).head).toEqual(one.subarray(0, HEAD_BYTES))
     const fine = await readCapped(new Response(new Uint8Array(3000)), 10_000)
     expect(fine.byteLength).toBe(3000)
   })

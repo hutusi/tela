@@ -84,8 +84,10 @@ epoch milliseconds; arrays read whole are JSON text; every row a device syncs ca
 
 `packages/content`, pure TypeScript with no I/O (normative spec: `packages/content/README.md`):
 
-1. Discovery (`findFeedLinks`, `candidateFeedUrls`): `link[rel=alternate]`, feed-looking anchors,
-   then well-known paths.
+1. Discovery (`findFeedLinks`, `findMetaRefresh`, `candidateFeedUrls`): `link[rel=alternate]`,
+   feed-looking anchors; when the page declares none, those of one more page (where its meta
+   refresh sends, else the blog's home); then well-known paths on the typed page's origin, and on
+   the second page's when it answered from another.
 2. Parsing (`parseFeedText`) with `feedsmith`: RSS, Atom, RDF, JSON Feed → `ParsedFeed` with
    `summaryHtml` and `contentHtml` per item.
 3. Sanitize (`sanitizeArticleHtml`) with an allowlist; links and images absolutized; lazy-load
@@ -118,12 +120,17 @@ ADR 0053).
 ## Ingestion (`packages/ingest`, run by tela-jobs)
 
 - `createHttpClient`: conditional headers, manual redirects with permanent-redirect detection,
-  a 5 MB cap, charset-aware decoding, private-network refusal, and the relay hook for
-  `fetch_region = 'cn'`. One abort signal per request, not per redirect hop.
+  a 5 MB cap (10 MB for a feed, `FEED_MAX_BYTES`), charset-aware decoding, private-network refusal, and the relay hook for
+  `fetch_region = 'cn'`. One abort signal per request, not per redirect hop. A 206 whose
+  `Content-Range` covers the whole file is read as a 200 (Caddy answers so for a precompressed
+  file, unasked). A body past the cap fails `too_large` carrying its status and first 16 KB, so
+  discovery calls only a 200 that begins as a feed a feed too large to read.
 - `ingestFeed` (`pipeline/feed.ts`) runs a whole fetch under the feed's lease: conditional GET,
   relay flip, alias detection, provenance and declared-home adoption, the 200-item cap,
   content-mode learning, scheduling. Everything commits in one fenced batch, so two fetches of one
-  feed cannot interleave (the lease is the per-feed serialization).
+  feed cannot interleave (the lease is the per-feed serialization). Each item's content object
+  and raw HTML are written as it is processed, before that batch, and not held for the whole
+  feed: held, they cost about 13 times the feed's size.
 - One blog, one feed (`pipeline/merge.ts`, ADR 0028): before fetching, a feed whose blog has
   other active feeds checks whether it holds the same post URLs as one of them over the time
   both cover. If it does and the other is canonical (on the blog's own host, else older), it
@@ -235,7 +242,7 @@ tela-api is Hono, built by `createApp(deps)` from portable dependencies.
 | `POST /api/v1/sync/titles` | Titles of named posts in one language (ADR 0052), for a device whose reading language changed: `{lang, ids}`, up to 1,000 ids, answers `{rows}` in the pull's title shape, only of feeds the member follows or posts they keep. One statement (`readTitles`): the ids one JSON parameter through `json_each`, six bound parameters, one three-term union. 400 `invalid_titles` or `invalid_ids` |
 | `POST /api/v1/mutations` | The push: up to 50 idempotent, last-writer-wins mutations in one batch |
 | `/api/v1/translations` | Request a body translation; poll its streamed state |
-| `/api/v1/feeds` | Discover feeds at a URL, add one, import and export OPML. An import's folders become the member's (ADR 0048): a feed is in the nearest outline around it that is not a feed, one level only; a name the member has a live folder for, case aside, files into it, and another makes a folder while they have fewer than 100. Only a blog in no live folder is filed, so an import never moves one the member filed; no folder is made that would hold nothing. An export is one outline per live folder, by name, holding its blogs by title, then the blogs in none |
+| `/api/v1/feeds` | Discover feeds at a URL, add one, import and export OPML. When nothing is found but a feed was too large to read, discovery and adding answer `feed_too_large` (422), not that there is no feed. An import's folders become the member's (ADR 0048): a feed is in the nearest outline around it that is not a feed, one level only; a name the member has a live folder for, case aside, files into it, and another makes a folder while they have fewer than 100. Only a blog in no live folder is filed, so an import never moves one the member filed; no folder is made that would hold nothing. An export is one outline per live folder, by name, holding its blogs by title, then the blogs in none |
 | `/api/v1/claims` | Start a claim, see its proofs (and whether the member has a GitHub to claim by), ask for the check; a failed check comes back as a `reason` the page words, or as text |
 | `/api/v1/profile`, `/api/v1/sites/:id/*`, `/api/v1/dashboard`, `/api/v1/search` | Handle and profile, owner-only topics and opt-out, the author dashboard (per blog its language, topics, readers and those new in 30 days, and its live totals of posts, likes, recommendations and notes; per post, the newest twenty, likes, recommendations and notes; readers' notes with their avatars), search past the device's horizon |
 | `GET /api/v1/following`, `GET /api/v1/sites/:id/followed-readers` | What the people a member follows recommended, liked and subscribed to, thirty entries a page behind a (time, offset, key) cursor, a day's likes grouped and placed at the newest; which of them read a blog. Only as far as each shows it (ADR 0031). Readers to follow come from Discover's pool, matched on the device (ADR 0044): `suggested` is always empty, kept for shells cached before that, which read it |

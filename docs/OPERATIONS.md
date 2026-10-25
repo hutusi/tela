@@ -1118,7 +1118,8 @@ cannot reach) is the reason to run the box.
 - **It is not an open proxy:** only signed `POST /fetch` requests are served, private ranges are
   refused, redirects are not followed, the upstream body is capped at 5 MB, and a request larger
   than 64 KiB is refused before it is read (the signature covers the body, so that cap is the only
-  pre-authentication limit).
+  pre-authentication limit). A feed fetched from Cloudflare is read up to 10 MB, but one routed
+  through the relay stops at the relay's 5 MB and fails as `too_large`.
 
 ## Later
 

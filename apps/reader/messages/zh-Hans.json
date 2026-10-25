@@ -233,7 +233,8 @@
       "fetch_failed": "无法访问该地址。",
       "opml_invalid": "该文件不是 OPML 文档。",
       "rate_limited": "操作太频繁，请稍后再试。",
-      "opml_too_large": "OPML 文件超过 1 MB。"
+      "opml_too_large": "OPML 文件超过 1 MB。",
+      "feed_too_large": "这个博客的订阅源超过了 Tela 能读取的大小（10 MB）。"
     }
   },
   "translation": {
@@ -542,6 +543,7 @@
       "invalid_url": "这不像是一个 URL。",
       "fetch_failed": "无法访问该地址。",
       "no_feed": "该地址下没有找到订阅源。Tela 只收录发布订阅源的博客。",
+      "feed_too_large": "这个博客的订阅源超过了 Tela 能读取的大小（10 MB）。",
       "rate_limited": "认领尝试太频繁，请稍后再试。"
     },
     "taken": "你选的用户名已经属于别人，所以目前用的还是临时用户名。可以在<link>设置</link>里另选一个。"

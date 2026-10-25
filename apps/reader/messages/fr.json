@@ -233,7 +233,8 @@
       "fetch_failed": "Impossible de joindre cette adresse.",
       "opml_invalid": "Ce fichier n’est pas un document OPML.",
       "rate_limited": "Trop de requêtes. Patientez un peu, puis réessayez.",
-      "opml_too_large": "Ce fichier OPML dépasse 1 Mo."
+      "opml_too_large": "Ce fichier OPML dépasse 1 Mo.",
+      "feed_too_large": "Le flux de ce blog dépasse ce que Tela peut lire (10 Mo)."
     }
   },
   "translation": {
@@ -542,6 +543,7 @@
       "invalid_url": "Cela ne ressemble pas à une URL.",
       "fetch_failed": "Impossible de joindre cette adresse.",
       "no_feed": "Aucun flux trouvé à cette adresse. Tela référence les blogs qui publient un flux.",
+      "feed_too_large": "Le flux de ce blog dépasse ce que Tela peut lire (10 Mo).",
       "rate_limited": "Trop de tentatives de revendication. Patientez un peu, puis réessayez."
     },
     "taken": "L’identifiant choisi appartient déjà à quelqu’un d’autre : le vôtre reste donc provisoire. Choisissez-en un autre dans les <link>Paramètres</link>."

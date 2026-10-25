@@ -10,6 +10,7 @@ export type AddError =
   | 'rate_limited'
   | 'opml_invalid'
   | 'opml_too_large'
+  | 'feed_too_large'
 
 /** tela-api's answer, as the message a page has for it. */
 export function addError(code: string | undefined): AddError {
@@ -17,7 +18,8 @@ export function addError(code: string | undefined): AddError {
     code === 'invalid_url' ||
     code === 'rate_limited' ||
     code === 'opml_invalid' ||
-    code === 'opml_too_large'
+    code === 'opml_too_large' ||
+    code === 'feed_too_large'
   )
     return code
   return 'fetch_failed'
