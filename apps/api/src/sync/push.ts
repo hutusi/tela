@@ -345,8 +345,9 @@ function statementsFor(
     case 'follow':
       // Through the followee's profile, so nobody to follow writes nothing; and never yourself,
       // excluded here because the table's check would sink the whole push (ADR 0031). A follow
-      // after an unfollow is a new follow, from now. Nor anyone suspended or gone (ADR 0059):
-      // acknowledged, and nothing written, so the device's follow goes once it pulls.
+      // after an unfollow is a new follow, from now. Nor a closed or suspended account (ADRs
+      // 0058, 0059): acknowledged, and nothing written, so the device's follow goes once it pulls,
+      // and a follow queued on a device offline as the account closed never brings the row back.
       return [
         db.run(sql`
           insert into follows (follower_id, followee_id, created_at, updated_at, seq)

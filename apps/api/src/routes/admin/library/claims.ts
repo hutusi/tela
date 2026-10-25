@@ -3,8 +3,17 @@
  * with a reason the claimant reads, take it out of the review queue, or remove a verified one. A
  * claim's row syncs to its claimant, so they see each of these on their own device.
  */
-import { audit, bumpSeq, currentSeq, first, laterActionOn, type TelaDb } from '@tela/data'
-import { COMMUNITY_LISTING_MIN_READERS, type SiteListing } from '@tela/shared'
+import {
+  audit,
+  bumpSeq,
+  currentSeq,
+  first,
+  laterActionOn,
+  listingUnclaimed,
+  releaseClaim,
+  type TelaDb,
+} from '@tela/data'
+import type { SiteListing } from '@tela/shared'
 import { type AdminActionName, actionsWriting, CLAIM_REMOVED_ERROR } from '@tela/shared/admin'
 import { type SQL, sql } from 'drizzle-orm'
 import { checkClaimSoon } from '../../claims'
@@ -142,19 +151,6 @@ const restoreReview = restoreColumns({
   synced: false,
 })
 
-/**
- * What a site's listing becomes once it has no owner (over `sites`, aliased `prefix`): a listing
- * only the claim opened closes, and one that another door holds stays, three readers or an
- * operator's review that listed it (ADR 0041). Featured and hidden stay as they are.
- */
-const listingUnclaimed = (prefix: string) => {
-  const column = (name: string) => sql.raw(`${prefix}${name}`)
-  return sql`(case when ${column('listing')} = 'listed' then
-    (case when ${column('reader_count')} >= ${COMMUNITY_LISTING_MIN_READERS}
-      or ${column('review')} = 'listed' then 'listed' else 'private' end)
-    else ${column('listing')} end)`
-}
-
 type RemovedFrom = {
   claim?: {
     status?: string
@@ -174,7 +170,8 @@ type RemovedFrom = {
 type RemovedTo = { site?: { listing?: SiteListing } }
 
 /**
- * Remove a verified claim (ADR 0011's support action): the claim fails with a reason its claimant
+ * Remove a verified claim (ADR 0011's support action), through `releaseClaim` (ADR 0058), which a
+ * claimant's own release shares: the claim fails with a reason its claimant
  * sees, never deleted, since a device drops only what a tombstone names and claims have none. The
  * blog loses its owner and what came with one: the feeds it declared, the owner's translation
  * opt-out, and a listing only the claim opened (a featured or hidden blog stays as it is). Its
@@ -192,7 +189,6 @@ const remove: ActHandler = async (ctx, id) => {
   )
   if (!claim) return 'not_found'
   if (claim.status !== 'verified') return 'not_applicable'
-  const applied = stamped('site_claims', claimId)
   const results = await runBatch(db, [
     bumpSeq(db),
     audit(
@@ -220,19 +216,9 @@ const remove: ActHandler = async (ctx, id) => {
       sql`from site_claims c join sites s on s.id = c.site_id
         where c.id = ${claimId} and c.status = 'verified'`,
     ),
-    db.all(sql`
-      update site_claims set status = 'failed', error = ${CLAIM_REMOVED_ERROR},
-        reviewed_at = ${ctx.now}, overruled_at = ${ctx.now}, vouched_by = null, seq = ${currentSeq}
-      where id = ${claimId} and status = 'verified'
-      returning id
-    `),
-    db.run(sql`
-      update sites set claimed_by = null, claimed_at = null, declared_feed_urls = '[]',
-        translation_opt_out = 0, listing = ${listingUnclaimed('')}, updated_at = ${ctx.now},
-        seq = ${currentSeq}
-      where id = ${claim.site_id} and claimed_by = ${claim.user_id} and ${applied}
-    `),
-    breakLease(db, 'site.claim', claimId, applied),
+    // The claim, then its blog and any check in flight, as a claimant's own release does, with
+    // the opt-out taken back and the claim overruled: only an operator's removal does that.
+    ...releaseClaim(db, { claimId, by: 'operator', now: ctx.now }),
   ])
   return returned(results[2]).length > 0 ? 'done' : 'not_applicable'
 }

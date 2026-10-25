@@ -197,7 +197,8 @@ describe('people', () => {
     const annHandle = await handleOf(ann.userId)
     expect(rows.get(ann.userId)).toMatchObject({
       id: ann.userId,
-      actions: ['member.signOut', 'member.suspend'],
+      // Not an admin's account, so it may be suspended or deleted (ADRs 0058, 0059).
+      actions: ['member.signOut', 'member.suspend', 'member.delete'],
       email: 'ann@x.test',
       signIn: ['credential', 'github'],
       invitedBy: { kind: 'operator' },
@@ -217,9 +218,9 @@ describe('people', () => {
       invitesUsed: 0,
     })
     expect(rows.get(cat.userId)?.invitedBy).toEqual({ kind: 'code', code: 'WELCOME' })
-    // Nobody to sign out: no session, nothing to offer but a suspension.
+    // Nobody to sign out: no session, so only suspending or deleting is offered.
     expect(rows.get(dee.userId)).toMatchObject({
-      actions: ['member.suspend'],
+      actions: ['member.suspend', 'member.delete'],
       sessions: 0,
       lastSeenAt: null,
       invitedBy: { kind: 'operator' },
@@ -378,7 +379,7 @@ describe('signing a member out', () => {
     })
     const detail = await get<AdminPersonDetail>(`people/${ann.userId}`)
     expect(detail.history.map((h) => h.action)).toEqual(['member.signOut'])
-    expect(detail.person.actions).toEqual(['member.suspend'])
+    expect(detail.person.actions).toEqual(['member.suspend', 'member.delete'])
   })
 })
 

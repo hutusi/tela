@@ -86,6 +86,7 @@ export function wantJob(w: Wanted, kind: string, key: string) {
       return add(w.claims, intKey(key))
     case 'member.gravatar':
     case 'member.pendingFeeds':
+    case 'member.erase':
       return w.members.add(key)
   }
 }
@@ -114,7 +115,8 @@ export function targetOf(names: Names, kind: string, key: string): Target {
       return label === undefined ? null : { area: 'claims', id: key, label }
     }
     case 'member.gravatar':
-    case 'member.pendingFeeds': {
+    case 'member.pendingFeeds':
+    case 'member.erase': {
       const label = names.members.get(key)
       return label === undefined ? null : { area: 'people', id: key, label }
     }

@@ -142,6 +142,7 @@ export function historyWords(
   }
   if (action === 'admin.grant') return t('audit.grant')
   if (action === 'admin.ungrant') return t('audit.ungrant')
+  if (action === 'account.delete') return t('audit.accountDelete')
   // A newer server's action this build has no words for: its name beats a missing message.
   return isAdminAction(action) ? t(`actions.${action}.done`) : String(action)
 }

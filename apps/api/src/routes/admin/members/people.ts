@@ -4,7 +4,18 @@
  * recommends or follows: the console is for running Tela, not for watching its readers, and a
  * query that never touches those tables cannot leak them.
  */
-import { audit, avatarOf, bumpSeq, currentSeq, historyOf, type TelaDb } from '@tela/data'
+import {
+  audit,
+  avatarOf,
+  bumpSeq,
+  closeAccount,
+  closureKey,
+  currentSeq,
+  first,
+  historyOf,
+  type TelaDb,
+  writeClosure,
+} from '@tela/data'
 import {
   ADMIN_LIST_LIMIT,
   type AdminActionName,
@@ -39,6 +50,7 @@ type PersonRaw = {
   email: string
   avatar: string | null
   is_admin: number
+  deleted_at: number | null
   joined_at: number
   sign_in: string
   inv_id: number | null
@@ -62,7 +74,7 @@ type PersonRaw = {
  */
 const personSelect = (wall: number) => sql`
   select u.id as user_id, p.handle, p.display_name, p.bio, u.email, ${avatarOf('p')} as avatar,
-    p.is_admin, p.suspended_at, u.created_at as joined_at,
+    p.is_admin, p.suspended_at, p.deleted_at, u.created_at as joined_at,
     (select json_group_array(w.provider_id) from (select distinct a.provider_id from account a
       where a.user_id = u.id and a.provider_id in ${WAYS_IN} order by a.provider_id) w) as sign_in,
     r.id as inv_id, r.code as inv_code, c.created_by as inv_by, ip.handle as inv_handle,
@@ -81,12 +93,13 @@ const personSelect = (wall: number) => sql`
 
 /**
  * Each filter over `profiles p`: the admins, the members in good standing, and the suspended. An
- * admin is never suspended (`member.suspend` refuses one), so no member is in two.
+ * admin is never suspended (`member.suspend` refuses one), so no member is in two. A closed
+ * account (ADR 0058) is in none: its shell holds nothing an operator could act on.
  */
 const IN = {
-  admins: sql`(p.is_admin = 1)`,
-  members: sql`(p.is_admin <> 1 and p.suspended_at is null)`,
-  suspended: sql`(p.is_admin <> 1 and p.suspended_at is not null)`,
+  admins: sql`(p.is_admin = 1 and p.deleted_at is null)`,
+  members: sql`(p.is_admin <> 1 and p.suspended_at is null and p.deleted_at is null)`,
+  suspended: sql`(p.is_admin <> 1 and p.suspended_at is not null and p.deleted_at is null)`,
 } as const
 
 /** A search over a member's handle, display name and address; everyone without one. */
@@ -118,17 +131,20 @@ function parseList(json: string): string[] {
 
 /**
  * What applies to a member now: signing out while there is a session to end; suspending one in
- * good standing and lifting a suspension (ADR 0059). An admin is never suspended: ungranted first,
- * from the command line, they can be.
+ * good standing and lifting a suspension (ADR 0059); deleting an open account (ADR 0058). An admin
+ * is never suspended or deleted: ungranted first, from the command line, they can be. A closed
+ * account has nothing left to act on.
  */
 function personActions(r: PersonRaw): AdminActionName[] {
+  if (r.deleted_at !== null) return []
   return [
     ...(r.sessions > 0 ? (['member.signOut'] as const) : []),
     ...(r.is_admin === 1
       ? []
-      : r.suspended_at === null
-        ? (['member.suspend'] as const)
-        : (['member.unsuspend'] as const)),
+      : [
+          r.suspended_at === null ? ('member.suspend' as const) : ('member.unsuspend' as const),
+          'member.delete' as const,
+        ]),
   ]
 }
 
@@ -183,6 +199,38 @@ const signOut: ActHandler = async (ctx, id) => {
   ])
   if (returned(results[1]).length > 0) return 'done'
   return returned(results[2]).length > 0 ? 'not_applicable' : 'not_found'
+}
+
+/**
+ * Delete a member's account (ADR 0058), as they could from Settings: `closeAccount` in one batch,
+ * audited as `member.delete`, after the closure is recorded for a restore to re-apply. Never an
+ * admin's (ungrant first, `bun run admin ungrant`), nor the operator's own: an operator closes
+ * their own account from Settings, once someone else holds the console. No undo: what it empties
+ * is gone, and `member.erase` follows. `not_applicable` for those and for one closed already.
+ */
+const deleteMember: ActHandler = async (ctx, id) => {
+  const { db, blobs } = ctx.deps
+  const found = await first<{ is_admin: number; deleted_at: number | null }>(
+    db,
+    sql`select is_admin, deleted_at from profiles where user_id = ${id}`,
+  )
+  if (!found) return 'not_found'
+  if (id === ctx.actor || found.is_admin === 1 || found.deleted_at !== null) {
+    return 'not_applicable'
+  }
+  await writeClosure(blobs, id, ctx.now)
+  const closed = await closeAccount(db, {
+    userId: id,
+    actor: ctx.actor,
+    action: 'member.delete',
+    group: ctx.group,
+    now: ctx.now,
+    refuseAdmin: true,
+  })
+  if (closed === 'closed') return 'done'
+  // Made an admin since it was read: nothing closed, so no closure may stand for a restore.
+  if (closed === 'admin') await blobs.delete(closureKey(id))
+  return closed === 'not_found' ? 'not_found' : 'not_applicable'
 }
 
 /**
@@ -377,6 +425,7 @@ export const peopleActions = {
   'member.signOut': signOut,
   'member.suspend': suspend,
   'member.unsuspend': unsuspend,
+  'member.delete': deleteMember,
 }
 
 export const peopleInverses = {

@@ -7,8 +7,19 @@
  * nothing exists until the member asks for the check, and a `pending` claim is always one they
  * asked for: the verify sweep claims `pending` rows, and a row made at "start" would be checked
  * before the token could be on the page.
+ *
+ * A claimant may also let their blog go (`POST /:siteId/release`, ADR 0058), as an operator's
+ * removal does, keeping what they chose for it.
  */
-import { bumpSeq, claimDue, consumeLimit, currentSeq, dueClaims, first } from '@tela/data'
+import {
+  bumpSeq,
+  claimDue,
+  consumeLimit,
+  currentSeq,
+  dueClaims,
+  first,
+  releaseClaim,
+} from '@tela/data'
 import { claimReason, describeClaimError } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -163,6 +174,24 @@ export function claimRoutes(deps: ApiDeps) {
     const claimId = rows[0]?.id
     if (claimId !== undefined) await checkClaimSoon(deps, claimId, now)
     return c.json(await standing(siteId, member.id))
+  })
+
+  /**
+   * Let the member's own blog go (ADR 0058): the claim fails as released, and the blog loses its
+   * owner, the feeds it declared and a listing only the claim opened, as an operator's removal
+   * does (`releaseClaim`). Its opt-outs stay as the writer set them. 404 `not_owner` for a blog
+   * that is not the member's. The member may claim it again, by any proof.
+   */
+  routes.post('/:siteId/release', async (c) => {
+    const member = c.get('member')
+    const siteId = Number(c.req.param('siteId'))
+    if (!Number.isSafeInteger(siteId)) return c.json({ error: 'not_owner' }, 404)
+    const [, released] = (await db.batch([
+      bumpSeq(db),
+      ...releaseClaim(db, { siteId, userId: member.id, by: 'member', now: deps.clock.now() }),
+    ] as never)) as unknown as [unknown, { id: number }[]]
+    if (released.length === 0) return c.json({ error: 'not_owner' }, 404)
+    return c.json({ released: true })
   })
 
   return routes

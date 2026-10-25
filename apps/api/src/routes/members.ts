@@ -270,7 +270,9 @@ export function memberRoutes(deps: ApiDeps) {
 
   /**
    * "Your data": what the member did, as one JSON file. Their own rows only; of anyone they
-   * follow, only what a public profile already says.
+   * follow, only what a public profile already says. Since ADR 0058 also the blogs they claimed,
+   * their invite codes and who joined by each (by handle, never an address), the invitation they
+   * joined by, what they read, and their picture's address: what leaving would take with it.
    */
   routes.get('/export', async (c) => {
     const member = c.get('member')
@@ -292,6 +294,10 @@ export function memberRoutes(deps: ApiDeps) {
       highlights,
       following,
       blogrolls,
+      claims,
+      codes,
+      joinedBy,
+      reads,
     ] = (await db.batch([
       db.all(sql`
         select p.handle, p.display_name as "displayName", p.bio, p.reading_lang as "readingLang",
@@ -306,7 +312,8 @@ export function memberRoutes(deps: ApiDeps) {
       ),
       db.all(sql`
         select f.feed_url as "feedUrl", s.home_url as "blog", s.title, fo.name as "folder",
-          sub.created_at as "since"
+          sub.created_at as "since",
+          (select a.url from articles a where a.id = sub.watermark_id) as "readUpTo"
         from subscriptions sub join feeds f on f.id = sub.feed_id join sites s on s.id = f.site_id
           left join feed_folders ff on ff.user_id = sub.user_id and ff.feed_id = sub.feed_id
           left join folders fo on fo.id = ff.folder_id and fo.deleted_at is null
@@ -351,6 +358,36 @@ export function memberRoutes(deps: ApiDeps) {
         from blogrolls r where r.user_id = ${id} and r.deleted_at is null
         order by r.created_at, r.id
       `),
+      db.all(sql`
+        select s.home_url as "blog", s.title, c.status, c.method, c.created_at as "askedAt",
+          c.verified_at as "verifiedAt"
+        from site_claims c join sites s on s.id = c.site_id
+        where c.user_id = ${id} order by c.created_at, c.id
+      `),
+      // Who joined by each code, by handle: a hold's address is someone else's, never shown.
+      db.all(sql`
+        select c.code, c.created_at as "createdAt", c.revoked_at as "revokedAt",
+          (select json_group_array(json_object('handle', p.handle, 'joinedAt', r.redeemed_at))
+            from invite_redemptions r join profiles p on p.user_id = r.user_id
+            where r.code = c.code and r.redeemed_at is not null) as joined
+        from invite_codes c where c.created_by = ${id} order by c.created_at, c.code
+      `),
+      db.all(sql`
+        select r.code, r.redeemed_at as "joinedAt", p.handle as "invitedBy"
+        from invite_redemptions r left join invite_codes c on c.code = r.code
+          left join profiles p on p.user_id = c.created_by
+        where r.user_id = ${id} and r.settled_at is not null
+        order by r.redeemed_at, r.id limit 1
+      `),
+      // What they read and marked unread by hand. A feed's posts up to its subscription's
+      // `readUpTo` are read too, whether or not a row here says so (ADR 0009).
+      db.all(sql`
+        select ${post}, st.read_at as "readAt",
+          (st.read_at is null and st.read_updated_at is not null) as "markedUnread"
+        from user_article_states st ${on(sql`st.article_id`)}
+        where st.user_id = ${id} and (st.read_at is not null or st.read_updated_at is not null)
+        order by coalesce(st.read_at, st.read_updated_at) desc, st.article_id
+      `),
     ] as never)) as unknown as Record<string, unknown>[][]
     const profile = profiles?.[0]
     const body = {
@@ -363,6 +400,11 @@ export function memberRoutes(deps: ApiDeps) {
             publicLikes: profile.publicLikes === 1,
             showsGravatar: profile.showsGravatar === 1,
             pictureUploaded: profile.pictureUploaded === 1,
+            // Where anyone sees it, whole, rather than the path the app asks for.
+            picture:
+              typeof profile.picture === 'string'
+                ? `${deps.config.publicUrl}${profile.picture}`
+                : null,
           }
         : null,
       prefs: (prefs ?? []).map((p) => ({ key: p.key, value: JSON.parse(String(p.valueJson)) })),
@@ -376,6 +418,16 @@ export function memberRoutes(deps: ApiDeps) {
         ...blogroll,
         isPublic: isPublic === 1,
         blogs: JSON.parse(String(blogs ?? '[]')),
+      })),
+      claims,
+      inviteCodes: (codes ?? []).map(({ joined, ...code }) => ({
+        ...code,
+        joined: JSON.parse(String(joined ?? '[]')),
+      })),
+      joinedBy: joinedBy?.[0] ?? null,
+      reads: (reads ?? []).map(({ markedUnread, ...read }) => ({
+        ...read,
+        markedUnread: markedUnread === 1,
       })),
     }
     return new Response(JSON.stringify(body, null, 2), {

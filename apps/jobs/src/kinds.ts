@@ -7,6 +7,7 @@ import {
   type Backoff,
   currentSeq,
   dueBodies,
+  dueErasures,
   dueExtractions,
   dueFeeds,
   dueGravatarChecks,
@@ -37,6 +38,7 @@ import {
 } from '@tela/ingest/pipeline'
 import { PIPELINE_VERSION } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
+import { ERASE_TTL_MS, eraseMemberJob } from './erase'
 import { PENDING_FEEDS_TTL_MS, pendingFeedsJob } from './pending-feeds'
 import { translateBodyJob } from './translation/body'
 import { TITLE_TTL_MS, type TranslationContext, translateTitlesJob } from './translation/titles'
@@ -161,6 +163,19 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
         where user_id = ${key} and queued_at <= ${now}
       `),
     ],
+  },
+  'member.erase': {
+    // What a closed account's own devices held (ADR 0058), once no signed copy of its session
+    // can be read. A member at a time per claim is plenty: accounts close rarely.
+    queue: 'misc',
+    ttlMs: ERASE_TTL_MS,
+    limit: 10,
+    backoff: { baseMs: 10 * MIN, maxMs: 6 * 60 * MIN, maxAttempts: 3 },
+    due: (now) => dueErasures(now),
+    run: eraseMemberJob,
+    // Nothing to mark: an erasure is never called finished when it is not. Its dead letter is the
+    // record that it stopped, and `dueErasures` waits on it until the console retries.
+    exhausted: () => [],
   },
   'site.claim': {
     queue: 'misc',

@@ -154,6 +154,10 @@ const REFUSALS = {
    * address without an invitation waits for the next UTC day.
    */
   SIGNUPS_PAUSED: 'Tela is taking no more new accounts today.',
+  /** The account was closed (ADR 0058): `session.create.before`. */
+  ACCOUNT_CLOSED: 'This account was deleted.',
+  /** An operator suspended the account (ADR 0059): `session.create.before`. */
+  ACCOUNT_SUSPENDED: 'This account is suspended.',
 } as const
 
 const refuse = (code: keyof typeof REFUSALS) =>
@@ -593,6 +597,21 @@ export function createAuth(deps: Pick<ApiDeps, 'db' | 'mail' | 'clock' | 'config
       },
       session: {
         create: {
+          /**
+           * No session for an account that was closed or suspended (ADRs 0058, 0059), whichever
+           * way in made it: a code, a password, a provider, or a reset. A closed account has none
+           * of those left, so this is its backstop; a suspended one keeps them and stops here. It
+           * refuses by throwing, as every hook must (`user.create.before`).
+           */
+          before: async (session) => {
+            const standing = await first<{ closed: number; suspended: number }>(
+              db,
+              sql`select deleted_at is not null as closed, suspended_at is not null as suspended
+                from profiles where user_id = ${session.userId}`,
+            )
+            if (standing?.closed) throw refuse('ACCOUNT_CLOSED')
+            if (standing?.suspended) throw refuse('ACCOUNT_SUSPENDED')
+          },
           // A user whose profile insert failed is never created again, so a sign-in repairs it.
           // A repair that fails does not fail the sign-in: a member without a profile is better
           // off than one who cannot sign in to be given one.

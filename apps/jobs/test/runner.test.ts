@@ -102,6 +102,7 @@ describe('tick and runJob', () => {
       'article.reprocess': 0,
       'member.gravatar': 0,
       'member.pendingFeeds': 0,
+      'member.erase': 0,
       'site.claim': 0,
       errors: {},
       config: {

@@ -100,6 +100,13 @@ export const REDUE: Record<LeaseKind, Redue> = {
       `),
     ],
   },
+  // A closed account's erasure (ADR 0058) waits while its dead letter is unresolved
+  // (`dueErasures`): the console's retry resolves the letter in the same batch, and that alone
+  // makes it due again. Nothing to mark here, and nothing synced.
+  'member.erase': {
+    synced: false,
+    statements: () => [],
+  },
   // A member's own re-check does the same (routes/claims.ts); an operator's vouch, if any, stays.
   'site.claim': {
     synced: true,

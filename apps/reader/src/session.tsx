@@ -29,6 +29,11 @@ type Session = {
   /** After a sign-in: learn who, and start syncing. */
   signedIn(next: string): Promise<SignedIn>
   signOut(): Promise<void>
+  /**
+   * The account was deleted from this tab (ADR 0058): tela-api has ended the session and cleared
+   * its cookies, so there is nothing to send. Forget the copy and start over at `/`.
+   */
+  closed(): Promise<void>
 }
 
 const SessionContext = createContext<Session | null>(null)
@@ -268,6 +273,7 @@ export function GuestSession({ children }: { children: React.ReactNode }) {
     retrying: false,
     signedIn: async () => 'guest',
     signOut: async () => {},
+    closed: async () => {},
   }
   return <SessionContext.Provider value={guest}>{children}</SessionContext.Provider>
 }
@@ -416,8 +422,17 @@ export function SessionProvider({
     window.location.assign('/')
   }, [engine, store])
 
+  const closed = useCallback(async () => {
+    // Unsent changes go with the account: there is no one left to apply them to.
+    engine.stop()
+    await store.clear().catch(() => undefined)
+    window.location.assign('/')
+  }, [engine, store])
+
   return (
-    <SessionContext.Provider value={{ status, retrying: retry !== null, signedIn, signOut }}>
+    <SessionContext.Provider
+      value={{ status, retrying: retry !== null, signedIn, signOut, closed }}
+    >
       {children}
     </SessionContext.Provider>
   )

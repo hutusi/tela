@@ -374,7 +374,8 @@
   },
   "audit": {
     "grant": "設為管理員",
-    "ungrant": "取消管理員"
+    "ungrant": "取消管理員",
+    "accountDelete": "成員自己刪除了帳號"
   },
   "overview": {
     "waiting": "四個佇列中共有 {n} 項待處理。",

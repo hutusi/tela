@@ -2,7 +2,16 @@
  * tela-api's routes (ADR 0024). Portable: built from `ApiDeps`, so the Cloudflare entry and the
  * bun test suite run the same app. Reached only through tela-web, which forwards `/api/*`.
  */
-import { audit, bumpSeq, currentSeq, first, newGroupId, readTitles, schema } from '@tela/data'
+import {
+  audit,
+  bumpSeq,
+  currentSeq,
+  first,
+  isBarred,
+  newGroupId,
+  readTitles,
+  schema,
+} from '@tela/data'
 import { isReadingLanguage, isSettingKey } from '@tela/shared'
 import {
   CLIENT_HEADER,
@@ -102,6 +111,19 @@ function protocolOf(header: string | undefined): number {
   const n = Number(header ?? '0')
   return Number.isInteger(n) ? n : 0
 }
+
+/**
+ * The member calls that read the account's standing from D1 first (ADRs 0058, 0059): who is signed
+ * in, the pull, the export, and every call that writes. Other reads trust the session as ever;
+ * the next pull, a minute away at most, signs the tab out.
+ */
+const STANDING_READS: ReadonlySet<string> = new Set([
+  '/api/v1/me',
+  '/api/v1/sync',
+  '/api/v1/export',
+])
+export const guarded = (method: string, path: string) =>
+  (method !== 'GET' && method !== 'HEAD') || STANDING_READS.has(path)
 
 /** A client older than the protocol is told to reload, not left misreading rows. */
 const tooOld = (header: string | undefined) => protocolOf(header) < MIN_CLIENT
@@ -367,6 +389,13 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
     if (!session) return c.json({ error: 'unauthorized' }, 401)
     const member = { id: session.user.id, email: session.user.email }
     c.set('member', member)
+    // A closed or suspended account is signed out from its next call that matters (ADRs 0058,
+    // 0059), whatever copy of its session the cookie still carries: 401, which every shell reads
+    // as the end of the session and wipes the device's copy on. Checked in D1 for the calls that
+    // say who is signed in, sync, write, or hand the member their data.
+    if (guarded(c.req.method, c.req.path) && (await isBarred(deps.db, member.id))) {
+      return c.json({ error: 'unauthorized' }, 401)
+    }
     if (c.req.path === '/api/v1/me') return next()
     if (tooOld(c.req.header(CLIENT_HEADER))) return c.json({ error: 'upgrade' }, 409)
     if (c.req.header(MEMBER_HEADER) !== member.id) return c.json({ error: 'account_changed' }, 409)

@@ -1,5 +1,6 @@
 /**
- * The mails Tela sends a member. Two carry a code: one to sign in, one to choose a new password.
+ * The mails Tela sends a member. Three carry a code: to sign in, to choose a new password, and to
+ * delete the account.
  * Each leads with the code, in two languages, because the member may open it on another device
  * than the one waiting for it (ADR 0013). The link carries the same code, so whichever device
  * opens it can finish there. The rest are notices about the account's ways in, which carry no
@@ -75,7 +76,10 @@ type Writer = ReturnType<typeof writer>
 
 const paragraph = ([first, second]: Both) => `${escapeHtml(first)}<br>${escapeHtml(second)}`
 
-/** A code's mail: the heading, what the code is for, the code, its link, and what else to know. */
+/**
+ * A code's mail: the heading, what the code is for, the code, its link, and what else to know. A
+ * code with no link (`link` null) is entered only where it was asked for.
+ */
 function codeMail(options: {
   write: Writer
   to: string
@@ -83,18 +87,22 @@ function codeMail(options: {
   heading: string
   intro: Both
   code: string
-  link: string
+  link: string | null
   outro: Both
 }): MailMessage {
   const { write, to, subject, heading, intro, code, link, outro } = options
   const openLink = write.openLink()
-  const lines = [heading, '', ...intro, '', code, '', openLink, link, '', ...outro]
+  const linked = link === null ? [] : [openLink, link, '']
+  const lines = [heading, '', ...intro, '', code, '', ...linked, ...outro]
+  const linkHtml =
+    link === null
+      ? ''
+      : `<p>${escapeHtml(openLink)}<br><a href="${escapeHtml(link)}">${escapeHtml(link)}</a></p>\n`
   const html = `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
 <h1 style="font-size:18px">${escapeHtml(heading)}</h1>
 <p>${paragraph(intro)}</p>
 <p style="font-size:28px;letter-spacing:6px;font-weight:600">${escapeHtml(code)}</p>
-<p>${escapeHtml(openLink)}<br><a href="${escapeHtml(link)}">${escapeHtml(link)}</a></p>
-<p style="color:#667">${paragraph(outro)}</p>
+${linkHtml}<p style="color:#667">${paragraph(outro)}</p>
 </body></html>`
   return { to, subject, text: lines.join('\n'), html }
 }
@@ -157,6 +165,31 @@ export function passwordResetMail(options: {
     intro: both((t) => t.reset.intro),
     link: `${publicUrl}/login?reset=1&email=${encodeURIComponent(to)}&otp=${encodeURIComponent(code)}`,
     outro: both((t) => t.reset.outro),
+  })
+}
+
+/**
+ * A code to delete the account (ADR 0058), asked for from Settings by a member signed in, and
+ * entered there. It carries no link: a link that deletes an account is one a mail scanner or a
+ * slip of the finger could follow, and the code is asked for only where it is entered.
+ */
+export function deleteAccountMail(options: {
+  to: string
+  code: string
+  locale: UiLocale
+}): MailMessage {
+  const { to, code } = options
+  const write = writer(options.locale)
+  const { both } = write
+  return codeMail({
+    write,
+    to,
+    code,
+    subject: `${together(both((t) => t.closeAccount.subject))}: ${code}`,
+    heading: together(both((t) => t.closeAccount.heading)),
+    intro: both((t) => t.closeAccount.intro),
+    link: null,
+    outro: both((t) => t.closeAccount.outro),
   })
 }
 

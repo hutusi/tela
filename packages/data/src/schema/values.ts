@@ -41,5 +41,6 @@ export const LEASE_KINDS = [
   'websub.subscribe',
   'member.gravatar',
   'member.pendingFeeds',
+  'member.erase',
 ] as const
 export type LeaseKind = (typeof LEASE_KINDS)[number]

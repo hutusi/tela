@@ -374,7 +374,8 @@
   },
   "audit": {
     "grant": "Made an admin",
-    "ungrant": "No longer an admin"
+    "ungrant": "No longer an admin",
+    "accountDelete": "Deleted by its member"
   },
   "overview": {
     "waiting": "{n, plural, one {# decision waiting} other {# decisions waiting}} across four queues.",

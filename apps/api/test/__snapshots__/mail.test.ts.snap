@@ -276,6 +276,28 @@ https://tela.example/login?email=o'neil%2Btela%40x.test&otp=123456&join=1
 
 If you did not ask for this, you can ignore this email.
 如果这不是你本人的操作，请忽略这封邮件。"
+
+exports[`the English mails account deletion code is what it has always been 1`] = `
+{
+  "html": 
+"<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1f2a24">
+<h1 style="font-size:18px">Delete your Tela account · 删除你的 Tela 账号</h1>
+<p>Enter this code in Settings to delete your account. It expires in one hour, and a deleted account cannot be brought back.<br>在“设置”中输入下面的验证码即可删除账号，一小时内有效。账号删除后无法恢复。</p>
+<p style="font-size:28px;letter-spacing:6px;font-weight:600">123456</p>
+<p style="color:#667">If you did not ask for this, someone may be signed in as you: your account stays as it is, and Sign out everywhere in Settings → Account ends their session.<br>如果这不是你本人的操作，可能有人正以你的身份登录：你的账号不会有任何变化，在“设置 → 账户”中退出所有设备即可结束对方的登录。</p>
+</body></html>"
+,
+  "subject": "Your code to delete your Tela account · 删除 Tela 账号的验证码: 123456",
+  "text": 
+"Delete your Tela account · 删除你的 Tela 账号
+
+Enter this code in Settings to delete your account. It expires in one hour, and a deleted account cannot be brought back.
+在“设置”中输入下面的验证码即可删除账号，一小时内有效。账号删除后无法恢复。
+
+123456
+
+If you did not ask for this, someone may be signed in as you: your account stays as it is, and Sign out everywhere in Settings → Account ends their session.
+如果这不是你本人的操作，可能有人正以你的身份登录：你的账号不会有任何变化，在“设置 → 账户”中退出所有设备即可结束对方的登录。"
 ,
   "to": "o'neil+tela@x.test",
 }

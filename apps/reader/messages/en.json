@@ -854,6 +854,16 @@
       "likes": "<b>{n}</b> {n, plural, one {like} other {likes}}",
       "recommendations": "<b>{n}</b> {n, plural, one {recommendation} other {recommendations}}",
       "notes": "{n, plural, one {# note} other {# notes}}"
+    },
+    "release": {
+      "label": "Release this blog",
+      "hint": "You stop being its owner on Tela. Its translation setting stays as it is, and you can claim it again.",
+      "open": "Release",
+      "confirm": "Release {blog}? It has no owner on Tela until someone claims it.",
+      "yes": "Release it",
+      "keep": "Keep it",
+      "done": "{blog} is released.",
+      "failed": "That did not work. Try again."
     }
   },
   "settings": {
@@ -1074,6 +1084,24 @@
       "failed": "That did not work. Try again.",
       "link_failed": "That account could not be linked. Try again.",
       "load": "Your sign-in methods could not be loaded. Try again later."
+    },
+    "delete": {
+      "label": "Delete account",
+      "hint": "Removes your account and what you keep on Tela, for good.",
+      "open": "Delete account",
+      "title": "Delete your account?",
+      "goes": "Your name, bio, picture, notes and blogrolls disappear at once, and so do the people you follow and your followers. Every device is signed out. What you kept for yourself (subscriptions, folders, highlights, likes, what you read) is removed within minutes. Blogs you claimed are released, keeping the settings you chose for them.",
+      "stays": "Your handle {handle} is retired, so nobody can take it to pass as you. Tela’s backups keep a copy for 30 days, then it is gone.",
+      "export": "To keep a copy, <link>download your data</link> first.",
+      "send": "Email me a code",
+      "sent": "We sent a code to {email}. Enter it to delete your account.",
+      "confirm": "Delete my account",
+      "errors": {
+        "admin": "This account runs Tela’s admin console. Hand the console on first, then delete the account.",
+        "bad_code": "That code is not right, or it has expired. Ask for a new one.",
+        "rate_limited": "Too many tries. Try again later.",
+        "failed": "That did not work. Try again."
+      }
     }
   },
   "search": {

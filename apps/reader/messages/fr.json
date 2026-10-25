@@ -854,6 +854,16 @@
       "likes": "<b>{n}</b> j’aime",
       "recommendations": "<b>{n}</b> {n, plural, one {recommandation} other {recommandations}}",
       "notes": "{n} avec un mot"
+    },
+    "release": {
+      "label": "Renoncer à ce blog",
+      "hint": "Vous n’en êtes plus le propriétaire sur Tela. Son réglage de traduction reste tel quel, et vous pourrez le revendiquer à nouveau.",
+      "open": "Renoncer",
+      "confirm": "Renoncer à {blog} ? Il n’a plus de propriétaire sur Tela tant que personne ne le revendique.",
+      "yes": "Y renoncer",
+      "keep": "Le garder",
+      "done": "Vous avez renoncé à {blog}.",
+      "failed": "Cela n’a pas fonctionné. Réessayez."
     }
   },
   "settings": {
@@ -1074,6 +1084,24 @@
       "failed": "Cela n’a pas fonctionné. Réessayez.",
       "link_failed": "Ce compte n’a pas pu être associé. Réessayez.",
       "load": "Impossible de charger vos moyens de connexion. Réessayez plus tard."
+    },
+    "delete": {
+      "label": "Supprimer le compte",
+      "hint": "Supprime définitivement votre compte et ce que vous gardez sur Tela.",
+      "open": "Supprimer le compte",
+      "title": "Supprimer votre compte ?",
+      "goes": "Votre nom, votre bio, votre photo, vos mots et vos blogrolls disparaissent aussitôt, de même que les personnes que vous suivez et vos abonnés. Tous vos appareils sont déconnectés. Ce que vous gardiez pour vous (abonnements, dossiers, surlignages, j’aime, ce que vous avez lu) est supprimé dans les minutes qui suivent. Les blogs que vous avez revendiqués sont libérés, avec les réglages que vous leur aviez donnés.",
+      "stays": "Votre identifiant {handle} est mis hors d’usage : personne ne pourra le reprendre pour se faire passer pour vous. Les sauvegardes de Tela en gardent une copie 30 jours, puis elle disparaît.",
+      "export": "Pour en garder une copie, <link>téléchargez vos données</link> d’abord.",
+      "send": "M’envoyer un code",
+      "sent": "Nous avons envoyé un code à {email}. Saisissez-le pour supprimer votre compte.",
+      "confirm": "Supprimer mon compte",
+      "errors": {
+        "admin": "Ce compte gère la console d’administration de Tela. Confiez-la d’abord à quelqu’un d’autre, puis supprimez le compte.",
+        "bad_code": "Ce code n’est pas le bon, ou il a expiré. Demandez-en un nouveau.",
+        "rate_limited": "Trop d’essais. Réessayez plus tard.",
+        "failed": "Cela n’a pas fonctionné. Réessayez."
+      }
     }
   },
   "search": {

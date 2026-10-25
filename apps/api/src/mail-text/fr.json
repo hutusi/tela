@@ -22,6 +22,12 @@
     "intro": "Saisissez ce code pour choisir un nouveau mot de passe. Il expire dans une heure, et le choisir met fin à vos sessions sur tous les appareils.",
     "outro": "Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet e-mail : votre mot de passe reste inchangé."
   },
+  "closeAccount": {
+    "subject": "Votre code pour supprimer votre compte Tela",
+    "heading": "Supprimer votre compte Tela",
+    "intro": "Saisissez ce code dans les Paramètres pour supprimer votre compte. Il expire dans une heure, et un compte supprimé ne peut pas être rétabli.",
+    "outro": "Si vous n’êtes pas à l’origine de cette demande, quelqu’un est peut-être connecté à votre place : votre compte reste inchangé, et « Se déconnecter partout » dans Paramètres → Compte met fin à sa session."
+  },
   "notice": {
     "ifYou": "Si c’était vous, il n’y a rien à faire.",
     "othersOut": "Tous les autres appareils ont été déconnectés."

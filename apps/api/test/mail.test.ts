@@ -7,7 +7,13 @@
 import { describe, expect, test } from 'bun:test'
 import type { MailMessage } from '@tela/platform'
 import { UI_LOCALES, type UiLocale } from '@tela/shared'
-import { accountChangeMail, passwordResetMail, providerAccountMail, signInMail } from '../src/mail'
+import {
+  accountChangeMail,
+  deleteAccountMail,
+  passwordResetMail,
+  providerAccountMail,
+  signInMail,
+} from '../src/mail'
 import { languageHeaders, mailLocale } from '../src/mail-locale'
 import en from '../src/mail-text/en.json'
 import fr from '../src/mail-text/fr.json'
@@ -19,7 +25,8 @@ const PUBLIC_URL = 'https://tela.example'
 const TO = "o'neil+tela@x.test"
 const CODE = '123456'
 
-type Kind = 'code' | 'notice'
+/** A code with its link, a code entered only where it was asked for, or a notice. */
+type Kind = 'code' | 'bare code' | 'notice'
 
 /** Every mail Tela sends, by a name of its own, in `locale`. */
 function everyMail(locale: UiLocale): [string, Kind, MailMessage][] {
@@ -31,6 +38,7 @@ function everyMail(locale: UiLocale): [string, Kind, MailMessage][] {
     ['invited', 'code', signInMail({ ...base, code: CODE, invited: true })],
     ['welcome', 'code', signInMail({ ...base, code: CODE, invited: false, joining: true })],
     ['password reset code', 'code', passwordResetMail({ ...base, code: CODE })],
+    ['account deletion code', 'bare code', deleteAccountMail({ to: TO, code: CODE, locale })],
     ['account made with GitHub', 'notice', providerAccountMail({ ...base, provider: 'github' })],
     [
       'account made with a provider Tela has no name for',
@@ -124,9 +132,9 @@ describe('a mail in another language', () => {
         if (!them) throw new Error(`no English ${name}`)
         // Each pair is [English, Simplified] in an English mail, and [own, English] here.
         const englishOf = (line: string) => line.split(' · ')[0]
-        const pairs = kind === 'code' ? [2, 10] : [2, 5]
+        const pairs = kind === 'code' ? [2, 10] : kind === 'bare code' ? [2, 7] : [2, 5]
         expect(mail.subject.split(' · ')[1]).toBe(
-          kind === 'code' ? `${englishOf(them.subject)}: ${CODE}` : englishOf(them.subject),
+          kind === 'notice' ? englishOf(them.subject) : `${englishOf(them.subject)}: ${CODE}`,
         )
         expect(lines(mail)[0]?.split(' · ')[1]).toBe(englishOf(lines(them)[0] ?? ''))
         for (const at of pairs) {
@@ -218,5 +226,23 @@ describe('which language a mail is in', () => {
       ['cookie', 'tela_locale=zh-Hant'],
     ])
     expect([...languageHeaders(new Headers({ 'cf-connecting-ip': '1' })).entries()]).toEqual([])
+  })
+})
+
+describe('the code to delete an account (ADR 0058)', () => {
+  test('carries no link, only the code to enter in Settings', () => {
+    const mail = deleteAccountMail({ to: TO, code: CODE, locale: 'en' })
+    expect(lines(mail)).toEqual([
+      'Delete your Tela account · 删除你的 Tela 账号',
+      '',
+      'Enter this code in Settings to delete your account. It expires in one hour, and a deleted account cannot be brought back.',
+      '在“设置”中输入下面的验证码即可删除账号，一小时内有效。账号删除后无法恢复。',
+      '',
+      CODE,
+      '',
+      'If you did not ask for this, someone may be signed in as you: your account stays as it is, and Sign out everywhere in Settings → Account ends their session.',
+      '如果这不是你本人的操作，可能有人正以你的身份登录：你的账号不会有任何变化，在“设置 → 账户”中退出所有设备即可结束对方的登录。',
+    ])
+    expect(mail.html).not.toContain('<a ')
   })
 })

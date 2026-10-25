@@ -5,9 +5,10 @@
  * `lib/account-api.ts`.
  */
 import { groupInviteCode } from '@tela/shared'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { ResponsiveDialog } from '../components/modal'
 import { SETTING_HINT, SETTING_LABEL, SettingRow } from '../components/setting-row'
 import {
   type Account,
@@ -16,6 +17,8 @@ import {
   configuredProviders,
   confirmWithCode,
   createInvite,
+  type DeleteError,
+  deleteAccount,
   getAccount,
   type InviteError,
   type Invites,
@@ -24,6 +27,7 @@ import {
   listInvites,
   PROVIDERS,
   type Provider,
+  requestDeleteCode,
   revokeInvite,
   sendConfirmCode,
   setPassword,
@@ -35,6 +39,7 @@ import { monthYear } from '../lib/format'
 import { useLive } from '../lib/use-live'
 import { PASSWORD_MAX, PASSWORD_MIN } from '../lib/use-sign-in'
 import { useSession } from '../session'
+import { useTables } from '../store/hooks'
 import { useUi } from '../ui'
 
 /** The quiet pill the Settings buttons share, and a muted one for taking something back. */
@@ -414,7 +419,173 @@ export function AccountSection() {
           {t('everywhereButton')}
         </button>
       </SettingRow>
+      <DeleteAccountRow email={account.email} />
     </>
+  )
+}
+
+/**
+ * Settings › Account › Delete account (ADR 0058): a row that opens a dialog saying plainly what
+ * goes and what stays, then asks for a code mailed to the member's address, as every change to an
+ * account is confirmed. Deleted, the tab forgets its copy and starts over at `/`: tela-api has
+ * ended the session and cleared the cookies, and every other tab is signed out at its next call.
+ */
+function DeleteAccountRow({ email }: { email: string }) {
+  const t = useTranslations('account')
+  const [open, setOpen] = useState(false)
+  const opener = useRef<HTMLButtonElement>(null)
+  return (
+    <SettingRow label={t('delete.label')} hint={t('delete.hint')} testId="account-delete-row">
+      <button
+        ref={opener}
+        type="button"
+        onClick={() => setOpen(true)}
+        className={`${QUIET} text-danger hover:border-danger`}
+        data-testid="account-delete"
+      >
+        {t('delete.open')}
+      </button>
+      {open ? (
+        <DeleteAccountDialog email={email} opener={opener} onClose={() => setOpen(false)} />
+      ) : null}
+    </SettingRow>
+  )
+}
+
+function DeleteAccountDialog({
+  email,
+  opener,
+  onClose,
+}: {
+  email: string
+  opener: React.RefObject<HTMLButtonElement | null>
+  onClose: () => void
+}) {
+  const t = useTranslations('account')
+  const door = useTranslations('door')
+  const { closed } = useSession()
+  const handle = useTables().profile?.handle ?? ''
+  const titleId = useId()
+  const [sent, setSent] = useState(false)
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<DeleteError | null>(null)
+
+  const run = async (step: () => Promise<DeleteError | null>, then: () => void | Promise<void>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const failed = await step()
+      if (failed) setError(failed)
+      else await then()
+    } catch {
+      setError('failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const send = () => run(requestDeleteCode, () => setSent(true))
+  const confirm = (e: React.FormEvent) => {
+    e.preventDefault()
+    void run(
+      () => deleteAccount(code.trim()),
+      () => closed(),
+    )
+  }
+
+  return (
+    <ResponsiveDialog
+      labelledBy={titleId}
+      opener={opener}
+      onClose={onClose}
+      testId="account-delete-dialog"
+    >
+      <div className="flex flex-col gap-4">
+        <h2
+          id={titleId}
+          className="m-0 font-serif text-[24px] leading-tight font-medium tracking-[-0.01em] md:text-[28px]"
+        >
+          {t('delete.title')}
+        </h2>
+        <p className="m-0 text-[14px] text-ink-2">{t('delete.goes')}</p>
+        <p className="m-0 text-[14px] text-ink-2">
+          {t('delete.stays', { handle: handle ? `@${handle}` : '' })}
+        </p>
+        <p className="m-0 text-[13.5px] text-muted">
+          {t.rich('delete.export', {
+            link: (chunks) => (
+              <Link to="/settings/privacy" className="text-ink underline" onClick={onClose}>
+                {chunks}
+              </Link>
+            ),
+          })}
+        </p>
+        {sent ? (
+          <form onSubmit={confirm} className="flex flex-col gap-3">
+            <p className="m-0 text-[13.5px] text-muted">{t('delete.sent', { email })}</p>
+            <input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              required
+              aria-label={door('codePlaceholder')}
+              placeholder={door('codePlaceholder')}
+              // biome-ignore lint/a11y/noAutofocus: the code is what the dialog asks for now.
+              autoFocus
+              className={`${FIELD} max-w-[180px] font-mono tracking-widest`}
+              data-testid="account-delete-code"
+            />
+            <div className="flex flex-wrap gap-2.5">
+              <button
+                type="submit"
+                disabled={busy || code.trim().length === 0}
+                className="rounded-full bg-danger px-[18px] py-[9px] text-[13.5px] font-medium whitespace-nowrap text-paper hover:brightness-110 disabled:opacity-60"
+                data-testid="account-delete-confirm"
+              >
+                {t('delete.confirm')}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full px-3 py-[9px] text-[13.5px] text-ink-2 hover:text-ink"
+              >
+                {t('cancel')}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="flex flex-wrap gap-2.5">
+            <button
+              type="button"
+              onClick={() => void send()}
+              disabled={busy}
+              className={PRIMARY}
+              data-testid="account-delete-send"
+            >
+              {t('delete.send')}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full px-3 py-[9px] text-[13.5px] text-ink-2 hover:text-ink"
+            >
+              {t('cancel')}
+            </button>
+          </div>
+        )}
+        {error ? (
+          <p
+            role="alert"
+            className="m-0 text-[13px] text-danger"
+            data-testid="account-delete-error"
+          >
+            {t(`delete.errors.${error}`)}
+          </p>
+        ) : null}
+      </div>
+    </ResponsiveDialog>
   )
 }
 

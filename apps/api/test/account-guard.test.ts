@@ -94,6 +94,9 @@ beforeEach(async () => {
     // a's failed claim on blog 2, for the Claims area's record.
     db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status, created_at)
       values (1, 2, ${a.userId}, 'meta', 'guard-token', 'failed', 0)`),
+    // b's verified claim on blog 1, for b to release (ADR 0058).
+    db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status, created_at)
+      values (2, 1, ${b.userId}, 'meta', 'guard-token-b', 'verified', 0)`),
     // a's public blogroll, for Discover's Blogrolls record (ADR 0050).
     db.run(sql`insert into blogrolls (id, user_id, name, is_public, public_version, public_since,
         created_at, updated_at)
@@ -213,6 +216,8 @@ type MemberRoute = {
   raw?: string | Uint8Array<ArrayBuffer>
   /** What the request does when it runs: writes (a refused one must not), or only reads. */
   effect: 'writes' | 'reads'
+  /** What it answers b when it runs, when that is not 200: a refusal of its own, past the checks. */
+  status?: number
 }
 
 /** The header of a 256 px square PNG: all a picture upload is checked by (ADR 0033). */
@@ -448,6 +453,28 @@ const MEMBER_ROUTES: MemberRoute[] = [
     body: () => ({}),
     effect: 'reads',
   },
+  // b runs the console, and an admin is ungranted before deleting the account (ADR 0058): each
+  // runs, past the checks above, to its own refusal, which spends nothing and mails nothing.
+  {
+    route: 'POST /api/v1/account/delete/code',
+    path: '/api/v1/account/delete/code',
+    body: () => ({}),
+    effect: 'reads',
+    status: 403,
+  },
+  {
+    route: 'POST /api/v1/account/delete',
+    path: '/api/v1/account/delete',
+    body: () => ({ code: '123456' }),
+    effect: 'reads',
+    status: 403,
+  },
+  {
+    route: 'POST /api/v1/claims/:siteId/release',
+    path: '/api/v1/claims/1/release',
+    body: () => ({}),
+    effect: 'writes',
+  },
 ]
 
 describe('every member route', () => {
@@ -493,7 +520,7 @@ describe('every member route', () => {
       expect(server.requests).toEqual([])
 
       // Naming b, the same request runs, so the refusals above refused something real.
-      expect((await send({ as: b })).status).toBe(200)
+      expect((await send({ as: b })).status).toBe(entry.status ?? 200)
       if (entry.effect === 'writes') expect(await everything()).not.toEqual(before)
     })
   }

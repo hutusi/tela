@@ -26,6 +26,7 @@ import {
   importFeeds,
   memberAllowances,
 } from './queries/allowances'
+import { ERASE_CHUNK, ERASE_STEPS, finishErasure } from './queries/erase'
 import {
   adoptExtractedVersion,
   adoptReprocessedVersion,
@@ -57,6 +58,7 @@ import {
   revokeOperatorCode,
   settleInvite,
 } from './queries/invites'
+import { closeAccount, releaseClaim } from './queries/leaving'
 import { avatarOf, dueGravatarChecks } from './queries/people'
 import { compactReadStates, fileImportedFeeds, writeImportFiling } from './queries/reader'
 import {
@@ -2773,6 +2775,428 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
       const [pruned] = await db.batch([pruneInvites(db, T0)])
       expect(pruned).toHaveLength(2)
       expect((await rows(db)).map((r) => r.email)).toEqual(['lapsed@x.y', 'kept@x.y'])
+    })
+  })
+
+  describe('leaving Tela (ADR 0058)', () => {
+    const DAY = 24 * 60 * MIN
+    const today = utcDay(T0)
+    const A = 'A'.repeat(12)
+    const B = 'B'.repeat(12)
+    const C = 'C'.repeat(12)
+    /** A member with a little of everything, a friend who follows them back, and a stranger. */
+    async function world(db: TelaDb) {
+      const user = (id: string, email: string) =>
+        db.run(sql`insert into user (id, name, email, email_verified, image, created_at, updated_at)
+          values (${id}, 'Name', ${email}, 1, 'https://pic.example/x', 0, 0)`)
+      const profile = (id: string, handle: string) =>
+        db.run(sql`insert into profiles (user_id, handle, display_name, bio, avatar_key, is_admin,
+            public_subscriptions, public_likes, ui_locale, created_at, updated_at, seq)
+          values (${id}, ${handle}, 'Shown', 'A bio', ${`avatars/${id}/a.png`}, 0, 1, 1, 'fr', 0, 0,
+            ${currentSeq})`)
+      await db.batch([
+        bumpSeq(db),
+        // `lea_ver` and `leaxver`: a LIKE would take one for the other.
+        user('leaver', 'lea_ver@x.test'),
+        user('friend', 'leaxver@x.test'),
+        user('stranger', 'stranger@x.test'),
+        profile('leaver', 'leaver'),
+        profile('friend', 'friend'),
+        profile('stranger', 'stranger'),
+        db.run(sql`insert into sites (id, home_url, listing, claimed_by, claimed_at,
+            translation_opt_out, declared_feed_urls, created_at, updated_at, seq)
+          values (1, 'https://mine.example', 'listed', 'leaver', 0, 1,
+              '["https://mine.example/feed"]', 0, 0, ${currentSeq}),
+            (2, 'https://other.example', 'private', null, null, 0, '[]', 0, 0, ${currentSeq})`),
+        db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, added_by,
+            created_at, updated_at, seq)
+          values (1, 1, 'https://mine.example/feed', 'mine.example', 0, 'leaver', 0, 0, ${currentSeq}),
+            (2, 2, 'https://other.example/feed', 'other.example', 0, null, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at,
+            content_key, like_count, recommend_count, seq)
+          values (1, 1, 'a1', 'One', 0, 0, 'ck1', 2, 2, ${currentSeq}),
+            (2, 2, 'a2', 'Two', 0, 0, 'ck2', 1, 0, ${currentSeq})`),
+        db.run(sql`insert into site_claims (id, site_id, user_id, method, token, status, created_at,
+            seq)
+          values (1, 1, 'leaver', 'meta', 't1', 'verified', 0, ${currentSeq}),
+            (2, 2, 'leaver', 'meta', 't2', 'pending', 0, ${currentSeq})`),
+        db.run(
+          sql`insert into leases (kind, key, owner, until) values ('site.claim', '2', 'w', ${T0 + MIN})`,
+        ),
+        db.run(sql`insert into follows (follower_id, followee_id, created_at, updated_at, seq)
+          values ('leaver', 'friend', 0, 0, ${currentSeq}), ('friend', 'leaver', 0, 0, ${currentSeq})`),
+        db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at,
+            seq)
+          values ('leaver', 1, 'my note', 0, 0, ${currentSeq}),
+            ('friend', 1, 'theirs', 0, 0, ${currentSeq})`),
+        db.run(sql`insert into user_article_states (user_id, article_id, read_at, liked_at, seq)
+          values ('leaver', 1, 0, 0, ${currentSeq}), ('friend', 1, 0, 0, ${currentSeq}),
+            ('leaver', 2, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at, deleted_at,
+            seq)
+          values ('leaver', 1, 0, 0, null, ${currentSeq}), ('leaver', 2, 0, 0, 5, ${currentSeq}),
+            ('friend', 1, 0, 0, null, ${currentSeq})`),
+        db.run(sql`insert into highlights (id, user_id, article_id, content_key, side, leaf_id,
+            start, "end", quote, note, created_at, updated_at, seq)
+          values ('h1', 'leaver', 1, 'ck1', 'original', 'b1', 0, 3, 'One', 'mine', 0, 0,
+            ${currentSeq})`),
+        db.run(sql`insert into blogrolls (id, user_id, name, description, is_public, public_since,
+            created_at, updated_at, seq)
+          values ('r1', 'leaver', 'My reads', 'All I read', 1, 0, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into blogroll_blogs (blogroll_id, feed_id, user_id, note, note_at,
+            added_at, updated_at, seq)
+          values ('r1', 2, 'leaver', 'why', 1, 0, 0, ${currentSeq})`),
+        db.run(sql`insert into user_prefs (user_id, key, value_json, updated_at, seq)
+          values ('leaver', 'theme', '"dark"', 0, ${currentSeq})`),
+        db.run(sql`insert into session (id, expires_at, token, created_at, updated_at, user_id)
+          values ('s1', ${T0 + DAY}, 'tok1', 0, 0, 'leaver'),
+            ('s2', ${T0 + DAY}, 'tok2', 0, 0, 'friend')`),
+        db.run(sql`insert into account (id, account_id, provider_id, user_id, password, created_at,
+            updated_at)
+          values ('a1', 'leaver', 'credential', 'leaver', 'hash', 0, 0),
+            ('a2', 'friend', 'credential', 'friend', 'hash', 0, 0)`),
+        db.run(sql`insert into verification (id, identifier, value, expires_at, created_at,
+            updated_at)
+          values ('v1', 'sign-in-otp-lea_ver@x.test', 'h:0', ${T0 + DAY}, 0, 0),
+            ('v2', 'sign-in-otp-leaxver@x.test', 'h:0', ${T0 + DAY}, 0, 0),
+            ('v3', 'stateabc',
+              ${JSON.stringify({ link: { email: 'lea_ver@x.test', userId: 'leaver' } })},
+              ${T0 + DAY}, 0, 0),
+            ('v4', 'statedef', 'not json', ${T0 + DAY}, 0, 0)`),
+        db.run(sql`insert into action_limits (key, window_start, count)
+          values ('otpSend:lea_ver@x.test', 0, 1), ('export:leaver', 0, 1),
+            ('otpSend:leaxver@x.test', 0, 1), ('export:friend', 0, 1)`),
+        // Two codes of its own, one a stranger holds and one a stranger joined by; it joined by
+        // the friend's.
+        db.run(sql`insert into invite_codes (code, created_by, max_uses, created_at)
+          values (${A}, 'leaver', 1, 0), (${B}, 'friend', 1, 0), (${C}, 'leaver', 1, 0)`),
+        db.run(sql`insert into invite_redemptions (code, email, expires_at, redeemed_at, user_id,
+            settled_at, created_at)
+          values (${A}, 'held@x.test', ${T0 + DAY}, null, null, null, 0),
+            (${B}, 'lea_ver@x.test', 0, 0, 'leaver', 0, 0),
+            (${C}, 'stranger@x.test', 0, 0, 'stranger', 0, 0)`),
+        // A translation waiting, its tokens reserved, and one running.
+        db.run(sql`insert into body_translations (content_key, lang, state, request_id,
+            requested_by, reserved_tokens, reserved_day, used_tokens, updated_at, seq)
+          values ('ck1', 'fr', 'requested', 'r1', 'leaver', 5000, ${today}, 0, 0, ${currentSeq}),
+            ('ck2', 'fr', 'running', 'r2', 'leaver', 3000, ${today}, 100, 0, ${currentSeq})`),
+        db.run(sql`insert into usage_daily (subject, day, reserved, used)
+          values ('leaver', ${today}, 8000, 100)`),
+        db.run(sql`insert into pending_feeds (user_id, feed_url, queued_at)
+          values ('leaver', 'https://later.example/feed', 0)`),
+      ] as never)
+    }
+    const close = (db: TelaDb, refuseAdmin = true) =>
+      closeAccount(db, {
+        userId: 'leaver',
+        actor: 'leaver',
+        action: 'account.delete',
+        group: 'g1',
+        now: T0,
+        refuseAdmin,
+      })
+    const rows = (db: TelaDb, query: ReturnType<typeof sql>) =>
+      db.all<Record<string, unknown>>(query)
+    const count = (db: TelaDb, query: ReturnType<typeof sql>) =>
+      first<{ n: number }>(db, sql`select count(*) as n from ${query}`).then((r) => r?.n ?? 0)
+
+    /** Every step to its end, each chunk a batch, then the last one: what `member.erase` does. */
+    async function erase(db: TelaDb, now: number) {
+      const sizes: number[] = []
+      for (const step of ERASE_STEPS) {
+        for (;;) {
+          const chunk = step(db, 'leaver', now)
+          const results = (await db.batch([
+            bumpSeq(db),
+            ...chunk.statements,
+          ] as never)) as unknown as unknown[][]
+          const took = (results[1 + chunk.counted] ?? []).length
+          sizes.push(took)
+          if (took < ERASE_CHUNK) break
+        }
+      }
+      const finish = (await db.batch([
+        bumpSeq(db),
+        ...finishErasure(db, 'leaver', now),
+      ] as never)) as unknown as unknown[][]
+      return { sizes, erased: (finish.at(-1) ?? []).length > 0 }
+    }
+
+    it('empties what others can see and ends every way in, in one batch, once', async () => {
+      const db = await makeDb()
+      await world(db)
+      const before = await headSeq(db)
+      expect(await close(db)).toBe('closed')
+      expect(await close(db)).toBe('already')
+      expect(await rows(db, sql`select actor_id, action, target_key from admin_actions`)).toEqual([
+        { actor_id: 'leaver', action: 'account.delete', target_key: 'leaver' },
+      ])
+      // The handle stays; everything shown with it goes.
+      expect(
+        await rows(
+          db,
+          sql`select handle, display_name, bio, avatar_key, public_subscriptions,
+          public_likes, ui_locale, is_admin, gravatar, deleted_at, seq > ${before} as moved
+          from profiles where user_id = 'leaver'`,
+        ),
+      ).toEqual([
+        {
+          handle: 'leaver',
+          display_name: null,
+          bio: null,
+          avatar_key: null,
+          public_subscriptions: 0,
+          public_likes: 0,
+          ui_locale: null,
+          is_admin: 0,
+          gravatar: 0,
+          deleted_at: T0,
+          moved: 1,
+        },
+      ])
+      expect(await rows(db, sql`select email, name, image from user where id = 'leaver'`)).toEqual([
+        { email: 'deleted+leaver@deleted.invalid', name: '', image: null },
+      ])
+      expect(
+        await rows(db, sql`select follower_id, deleted_at from follows order by follower_id`),
+      ).toEqual([
+        { follower_id: 'friend', deleted_at: T0 },
+        { follower_id: 'leaver', deleted_at: T0 },
+      ])
+      expect(
+        await rows(db, sql`select user_id, note, deleted_at from recommendations order by user_id`),
+      ).toEqual([
+        { user_id: 'friend', note: 'theirs', deleted_at: null },
+        { user_id: 'leaver', note: null, deleted_at: T0 },
+      ])
+      expect(
+        await rows(db, sql`select name, description, is_public, deleted_at from blogrolls`),
+      ).toEqual([{ name: '-', description: '', is_public: 0, deleted_at: T0 }])
+      expect(await rows(db, sql`select note from blogroll_blogs`)).toEqual([{ note: null }])
+      expect(await rows(db, sql`select user_id from session`)).toEqual([{ user_id: 'friend' }])
+      expect(await rows(db, sql`select user_id from account`)).toEqual([{ user_id: 'friend' }])
+      expect(await rows(db, sql`select id from verification order by id`)).toEqual([
+        { id: 'v2' },
+        { id: 'v4' },
+      ])
+      expect(await rows(db, sql`select key from action_limits order by key`)).toEqual([
+        { key: 'export:friend' },
+        { key: 'otpSend:leaxver@x.test' },
+      ])
+      // Its codes revoked and their hold gone; the invitation it joined by keeps its place and
+      // its member, not its address; the stranger it invited keeps theirs.
+      expect(await rows(db, sql`select code, revoked_at from invite_codes order by code`)).toEqual([
+        { code: A, revoked_at: T0 },
+        { code: B, revoked_at: null },
+        { code: C, revoked_at: T0 },
+      ])
+      expect(
+        await rows(
+          db,
+          sql`select code, email, user_id, redeemed_at from invite_redemptions
+          order by code`,
+        ),
+      ).toEqual([
+        { code: B, email: 'deleted:leaver', user_id: 'leaver', redeemed_at: 0 },
+        { code: C, email: 'stranger@x.test', user_id: 'stranger', redeemed_at: 0 },
+      ])
+      // Its blog let go with its opt-out kept; its pending claim failed and its check cut off.
+      expect(
+        await rows(
+          db,
+          sql`select claimed_by, declared_feed_urls, translation_opt_out, listing
+          from sites where id = 1`,
+        ),
+      ).toEqual([
+        { claimed_by: null, declared_feed_urls: '[]', translation_opt_out: 1, listing: 'private' },
+      ])
+      expect(
+        await rows(db, sql`select id, status, overruled_at from site_claims order by id`),
+      ).toEqual([
+        { id: 1, status: 'failed', overruled_at: null },
+        { id: 2, status: 'failed', overruled_at: null },
+      ])
+      expect(await rows(db, sql`select key from leases`)).toEqual([])
+      // The waiting translation ended unpaid, its reservation given back; the running one runs.
+      expect(
+        await rows(
+          db,
+          sql`select content_key, state, requested_by, reserved_tokens
+          from body_translations order by content_key`,
+        ),
+      ).toEqual([
+        { content_key: 'ck1', state: 'failed', requested_by: 'leaver', reserved_tokens: 0 },
+        { content_key: 'ck2', state: 'running', requested_by: 'leaver', reserved_tokens: 3000 },
+      ])
+      expect(await rows(db, sql`select reserved, used from usage_daily`)).toEqual([
+        { reserved: 3000, used: 100 },
+      ])
+      expect(await count(db, sql`pending_feeds`)).toBe(0)
+    })
+
+    it("refuses an admin's account and writes nothing", async () => {
+      const db = await makeDb()
+      await world(db)
+      await db.run(sql`update profiles set is_admin = 1 where user_id = 'leaver'`)
+      expect(await close(db)).toBe('admin')
+      expect(await count(db, sql`session`)).toBe(2)
+      expect(await count(db, sql`admin_actions`)).toBe(0)
+      // A restore re-applying a closure does not ask.
+      expect(await close(db, false)).toBe('closed')
+    })
+
+    it('erases what only its devices held, recounting what others see first', async () => {
+      const db = await makeDb()
+      await world(db)
+      await close(db)
+      const before = await headSeq(db)
+      const first1 = await erase(db, T0 + DAY)
+      // A translation still runs for it: everything else is gone, but it is not stamped yet.
+      expect(first1.erased).toBe(false)
+      for (const table of [
+        'user_article_states',
+        'recommendations',
+        'highlights',
+        'subscriptions',
+        'blogrolls',
+        'blogroll_blogs',
+        'user_prefs',
+        'site_claims',
+        'pending_feeds',
+      ]) {
+        expect(await count(db, sql`${sql.raw(table)} where user_id = 'leaver'`)).toBe(0)
+      }
+      // Its own follows go; the friend's of it stays deleted, for a device that has not pulled.
+      expect(await rows(db, sql`select follower_id, deleted_at from follows`)).toEqual([
+        { follower_id: 'friend', deleted_at: T0 },
+      ])
+      expect(
+        await rows(
+          db,
+          sql`select id, like_count, recommend_count, seq > ${before} as moved
+          from articles order by id`,
+        ),
+      ).toEqual([
+        { id: 1, like_count: 1, recommend_count: 1, moved: 1 },
+        { id: 2, like_count: 0, recommend_count: 0, moved: 1 },
+      ])
+      expect(await rows(db, sql`select reader_count from sites where id = 1`)).toEqual([
+        { reader_count: 1 },
+      ])
+      expect(await rows(db, sql`select added_by from feeds where id = 1`)).toEqual([
+        { added_by: null },
+      ])
+      // The running translation keeps its member until it ends, and so does the ledger.
+      expect(await count(db, sql`usage_daily`)).toBe(1)
+      await db.run(sql`update body_translations set state = 'done' where content_key = 'ck2'`)
+      expect((await erase(db, T0 + DAY)).erased).toBe(true)
+      expect(await count(db, sql`usage_daily`)).toBe(0)
+      expect(await count(db, sql`body_translations where requested_by is not null`)).toBe(0)
+      expect(await rows(db, sql`select erased_at from profiles where user_id = 'leaver'`)).toEqual([
+        { erased_at: T0 + DAY },
+      ])
+      // Run again, it finds nothing and changes nothing.
+      const third = await erase(db, T0 + 2 * DAY)
+      expect(third.sizes.every((n) => n === 0)).toBe(true)
+      expect(third.erased).toBe(false)
+    })
+
+    it("takes thousands of a member's rows in chunks within D1's limits", async () => {
+      const db = await makeDb()
+      await world(db)
+      const ids = JSON.stringify(Array.from({ length: 2000 }, (_, i) => i + 100))
+      const each = (select: ReturnType<typeof sql>) =>
+        sql`${select} from json_each(${ids}) where true`
+      await db.batch([
+        bumpSeq(db),
+        db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+            updated_at, seq)
+          ${each(sql`select value, 2, 'https://other.example/f' || value, 'other.example', 0, 0, 0,
+            ${currentSeq}`)}`),
+        db.run(sql`insert into articles (id, feed_id, dedup_key, title, fetched_at, sort_at,
+            like_count, recommend_count, seq)
+          ${each(sql`select value, 2, 'k' || value, 'P', 0, 0, 2, 1, ${currentSeq}`)}`),
+        db.run(sql`insert into user_article_states (user_id, article_id, read_at, liked_at, seq)
+          ${each(sql`select 'leaver', value, 0, 0, ${currentSeq}`)}`),
+        db.run(sql`insert into user_article_states (user_id, article_id, read_at, liked_at, seq)
+          ${each(sql`select 'friend', value, 0, 0, ${currentSeq}`)}`),
+        db.run(sql`insert into recommendations (user_id, article_id, note, created_at, updated_at,
+            seq)
+          ${each(sql`select 'leaver', value, 'n', 0, 0, ${currentSeq}`)}`),
+        db.run(sql`insert into highlights (id, user_id, article_id, content_key, side, leaf_id,
+            start, "end", quote, created_at, updated_at, seq)
+          ${each(sql`select 'h' || value, 'leaver', value, 'c', 'original', 'b', 0, 1, 'x', 0, 0,
+            ${currentSeq}`)}`),
+        db.run(sql`insert into subscriptions (user_id, feed_id, created_at, updated_at, seq)
+          ${each(sql`select 'leaver', value, 0, 0, ${currentSeq}`)}`),
+        db.run(sql`insert into applied_mutations (user_id, mid, applied_at)
+          ${each(sql`select 'leaver', 'm' || value, 0`)}`),
+        db.run(sql`insert into llm_calls (job, user_id, model, input_tokens, output_tokens,
+            latency_ms, created_at)
+          ${each(sql`select 'translate.body', 'leaver', 'm', 1, 1, 1, 0`)}`),
+      ] as never)
+      expect(await close(db)).toBe('closed')
+      const before = await headSeq(db)
+      await db.run(sql`update body_translations set state = 'done' where content_key = 'ck2'`)
+      const { sizes, erased } = await erase(db, T0 + DAY)
+      expect(erased).toBe(true)
+      expect(Math.max(...sizes)).toBe(ERASE_CHUNK)
+      // Never more than a chunk of posts in one seq, so others' pulls page as ever.
+      const most = await first<{ most: number }>(
+        db,
+        sql`select max(n) as most from (select count(*) as n from articles
+          where seq > ${before} group by seq)`,
+      )
+      expect((most?.most ?? 0) <= ERASE_CHUNK).toBe(true)
+      expect(
+        await count(
+          db,
+          sql`articles where id >= 100 and (like_count <> 1 or recommend_count <> 0)`,
+        ),
+      ).toBe(0)
+      expect(await count(db, sql`llm_calls where user_id is not null`)).toBe(0)
+      for (const table of [
+        'user_article_states',
+        'highlights',
+        'subscriptions',
+        'applied_mutations',
+      ]) {
+        expect(await count(db, sql`${sql.raw(table)} where user_id = 'leaver'`)).toBe(0)
+      }
+    })
+
+    it('releases a claim: only an operator takes back the opt-out and overrules it', async () => {
+      for (const by of ['operator', 'member'] as const) {
+        const db = await makeDb()
+        await world(db)
+        const target = by === 'operator' ? { claimId: 1 } : { siteId: 1, userId: 'leaver' }
+        const release = async () =>
+          (await db.batch([
+            bumpSeq(db),
+            ...releaseClaim(db, { ...target, by, now: T0 }),
+          ] as never)) as unknown as unknown[][]
+        expect((await release())[1]).toEqual([{ id: 1 }])
+        expect(
+          await rows(
+            db,
+            sql`select claimed_by, translation_opt_out, listing from sites
+            where id = 1`,
+          ),
+        ).toEqual([
+          { claimed_by: null, translation_opt_out: by === 'operator' ? 0 : 1, listing: 'private' },
+        ])
+        expect(
+          await rows(db, sql`select status, error, overruled_at from site_claims where id = 1`),
+        ).toEqual([
+          {
+            status: 'failed',
+            error: by === 'operator' ? 'removed by an operator' : 'released by its claimant',
+            overruled_at: by === 'operator' ? T0 : null,
+          },
+        ])
+        // A second release finds no verified claim and moves no blog.
+        expect((await release())[1]).toEqual([])
+      }
     })
   })
 

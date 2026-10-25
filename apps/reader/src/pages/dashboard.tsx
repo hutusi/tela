@@ -220,6 +220,11 @@ export function DashboardPage() {
                 : held,
             )
           }
+          onReleased={() =>
+            setDash((held) =>
+              held ? { ...held, sites: held.sites.filter((s) => s.id !== site.id) } : held,
+            )
+          }
         />
       ))}
     </main>
@@ -232,12 +237,15 @@ function SiteDashboard({
   notes,
   locale,
   onChange,
+  onReleased,
 }: {
   site: Site
   notes: Note[]
   locale: string
   /** The blog's settings as tela-api answered a change to one. */
   onChange: (patch: Pick<Site, 'translationOptOut'> | Pick<Site, 'feedOnly'>) => void
+  /** The member let the blog go: it is no longer theirs to show here. */
+  onReleased: () => void
 }) {
   const t = useTranslations('dashboard')
   const ts = useTranslations('site')
@@ -475,7 +483,86 @@ function SiteDashboard({
             />
           </SettingRow>
         )}
+        <ReleaseRow siteId={site.id} title={title} onReleased={onReleased} />
       </section>
     </section>
+  )
+}
+
+/**
+ * Release this blog (ADR 0058): the claim lets go, as an operator's removal does, and the blog
+ * keeps what its writer chose for it. Asked once more in place before it goes, since only a new
+ * claim brings it back.
+ */
+function ReleaseRow({
+  siteId,
+  title,
+  onReleased,
+}: {
+  siteId: number
+  title: string
+  onReleased: () => void
+}) {
+  const t = useTranslations('dashboard')
+  const [asking, setAsking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const release = async () => {
+    setBusy(true)
+    setFailed(false)
+    try {
+      const res = await api(`/api/v1/claims/${siteId}/release`, { method: 'POST', body: {} })
+      if (!res.ok) throw new Error(`release: ${res.status}`)
+      showToast(t('release.done', { blog: title }))
+      onReleased()
+    } catch {
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const pill =
+    'rounded-full border border-thumb px-3.5 py-[7px] text-[13px] font-medium whitespace-nowrap hover:border-ink disabled:opacity-60'
+  return (
+    <SettingRow
+      label={t('release.label')}
+      hint={asking ? t('release.confirm', { blog: title }) : t('release.hint')}
+      testId="dashboard-release-row"
+    >
+      {asking ? (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void release()}
+            className={`${pill} border-danger text-danger`}
+            data-testid="dashboard-release-confirm"
+          >
+            {t('release.yes')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setAsking(false)}
+            className={`${pill} text-muted hover:text-ink`}
+          >
+            {t('release.keep')}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAsking(true)}
+          className={`${pill} text-ink`}
+          data-testid="dashboard-release"
+        >
+          {t('release.open')}
+        </button>
+      )}
+      {failed ? (
+        <p role="alert" className="m-0 basis-full text-[13px] text-danger">
+          {t('release.failed')}
+        </p>
+      ) : null}
+    </SettingRow>
   )
 }

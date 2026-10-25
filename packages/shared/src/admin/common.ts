@@ -301,8 +301,16 @@ export type AdminUndoResponse = { restored: number } | { error: 'not_found' | 'c
 /** A member as the console names them; never more than the public card plus the handle. */
 export type AdminPerson = { id: string; handle: string; name: string | null }
 
-/** What an audit row records: a console action, an undo, or the CLI granting the console. */
-export type AdminAuditAction = AdminActionName | 'undo' | 'admin.grant' | 'admin.ungrant'
+/**
+ * What an audit row records: a console action, an undo, the CLI granting the console, or a member
+ * closing their own account (ADR 0058), which the console shows beside an operator's deletion.
+ */
+export type AdminAuditAction =
+  | AdminActionName
+  | 'undo'
+  | 'admin.grant'
+  | 'admin.ungrant'
+  | 'account.delete'
 
 /** One audit row: who did what to which target, and what it replaced. */
 export type AdminHistoryEntry = {

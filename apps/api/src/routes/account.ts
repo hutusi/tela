@@ -10,6 +10,8 @@
  *   to send the browser, and sets the cookie that ties the provider's return to it.
  * - `POST /unlink {accountId}` removes a linked provider, on a fresh session.
  * - `POST /sign-out-everywhere` ends every session the member has but this one.
+ * - `POST /delete/code` mails a code to delete the account, and `POST /delete {code}` deletes it
+ *   with that code (ADR 0058), then clears this browser's cookies.
  *
  * Live answers, not synced rows: these are security state, decided on the server, and a device's
  * copy would be out of date exactly when it matters. Every call reads the session from D1, not the
@@ -21,15 +23,27 @@
  * pass none of its limits, so each change is counted per member, once it is known to be one: a
  * refusal for a stale session or an account that is not the member's spends nothing.
  */
-import { consumeLimit, type LimitedAction, memberAllowances, nextUtcDay } from '@tela/data'
+import {
+  closeAccount,
+  closureKey,
+  consumeLimit,
+  first,
+  type LimitedAction,
+  memberAllowances,
+  newGroupId,
+  nextUtcDay,
+  writeClosure,
+} from '@tela/data'
 import type { AccountUsage } from '@tela/shared'
 import { isAPIError } from 'better-auth/api'
+import { sql } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { ApiEnv, Member } from '../app'
 import { type Auth, endOtherSessions, FRESH_SECONDS, notifyMember, PASSWORD_LENGTH } from '../auth'
 import type { ApiDeps } from '../deps'
-import type { AccountChange } from '../mail'
+import { type AccountChange, deleteAccountMail } from '../mail'
+import { mailLocale } from '../mail-locale'
 
 /** The session a call came with, as D1 has it now: its token, and when it was made (ms). */
 type Session = { token: string; createdAt: number }
@@ -62,6 +76,31 @@ function refused(c: Context, err: unknown) {
   if (!isAPIError(err)) throw err
   const code = typeof err.body?.code === 'string' ? err.body.code.toLowerCase() : 'refused'
   return c.json({ error: code }, err.statusCode as ContentfulStatusCode)
+}
+
+/** How long a code to delete the account holds, and how many tries it takes, as a sign-in code. */
+export const DELETE_CODE_MS = 60 * 60_000
+export const DELETE_CODE_TRIES = 3
+/**
+ * Where the code is kept: Tela's own row in better-auth's `verification` table, named as
+ * better-auth names its codes (`<type>-otp-<address>`), so closing the account deletes it with
+ * theirs. No better-auth endpoint checks a type it does not know, so none can spend it.
+ */
+export const deleteCodeIdentifier = (address: string) => `account-delete-otp-${address}`
+
+/** Six digits, each as likely as any other: 32-bit draws above the last whole million are redrawn. */
+export function drawDeleteCode(): string {
+  const limit = 4_294_000_000
+  for (;;) {
+    const [n = limit] = crypto.getRandomValues(new Uint32Array(1))
+    if (n < limit) return String(n % 1_000_000).padStart(6, '0')
+  }
+}
+
+/** A code as stored: its SHA-256, never the code, as better-auth stores its own (`hashed`). */
+async function hashCode(code: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code))
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 export function accountRoutes(deps: ApiDeps, auth: Auth) {
@@ -245,6 +284,103 @@ export function accountRoutes(deps: ApiDeps, auth: Auth) {
   routes.post('/sign-out-everywhere', async (c) => {
     const ended = await endOtherSessions(db, c.get('member').id, c.get('session').token)
     return c.json({ ended })
+  })
+
+  /** An admin's account is not deleted from Settings: the console is ungranted first (ADR 0058). */
+  const isAdmin = async (member: Member) =>
+    (
+      await first<{ is_admin: number }>(
+        db,
+        sql`select is_admin from profiles where user_id = ${member.id}`,
+      )
+    )?.is_admin === 1
+
+  /**
+   * Mail a code to delete the account, to the address it signs in with: a fresh one each time,
+   * replacing any before it. Counted as every code mailed to an address is (`otpSend`, ADR 0036),
+   * so this cannot mail an address more than a sign-in can. The code is in the language this
+   * browser chose, else the account's, as a sign-in code is.
+   */
+  routes.post('/delete/code', async (c) => {
+    const member = c.get('member')
+    if (await isAdmin(member)) return c.json({ error: 'admin' }, 403)
+    const address = member.email.toLowerCase()
+    const now = deps.clock.now()
+    if (!(await consumeLimit(db, 'otpSend', address, now)).allowed) {
+      return c.json({ error: 'rate_limited' }, 429)
+    }
+    const code = drawDeleteCode()
+    const identifier = deleteCodeIdentifier(address)
+    const value = JSON.stringify({ hash: await hashCode(code), tries: 0 })
+    await db.batch([
+      db.run(sql`delete from verification where identifier = ${identifier}`),
+      db.run(sql`
+        insert into verification (id, identifier, value, expires_at, created_at, updated_at)
+        values (${crypto.randomUUID()}, ${identifier}, ${value}, ${now + DELETE_CODE_MS}, ${now},
+          ${now})
+      `),
+    ])
+    const account = await first<{ ui_locale: string | null }>(
+      db,
+      sql`select ui_locale from profiles where user_id = ${member.id}`,
+    )
+    const locale = mailLocale({
+      cookie: c.req.header('cookie'),
+      acceptLanguage: c.req.header('accept-language'),
+      account: account?.ui_locale,
+    })
+    await deps.mail.send(deleteAccountMail({ to: member.email, code, locale }))
+    return c.json({ sent: true }, 200, { 'cache-control': 'no-store' })
+  })
+
+  /**
+   * Delete the account with the code just mailed (ADR 0058). Each try is counted as every code
+   * checked against an address is (`otpVerify`), and spends one of the code's three, so a wrong
+   * code is answered as such until the code is used up. The closure is recorded before the account
+   * closes, so a closing that fails is still re-applied after a restore; then the account closes in
+   * one batch (`closeAccount`), and this browser's cookies are cleared. Every other device is
+   * refused from its next call (`guarded` in app.ts).
+   */
+  routes.post('/delete', async (c) => {
+    const member = c.get('member')
+    const { code } = await readBody(c)
+    const entered = typeof code === 'string' ? code.trim() : ''
+    if (!/^\d{6}$/.test(entered)) return c.json({ error: 'invalid_code' }, 400)
+    if (await isAdmin(member)) return c.json({ error: 'admin' }, 403)
+    const address = member.email.toLowerCase()
+    const now = deps.clock.now()
+    if (!(await consumeLimit(db, 'otpVerify', address, now)).allowed) {
+      return c.json({ error: 'rate_limited' }, 429)
+    }
+    const tried = await db.all<{ value: string }>(sql`
+      update verification set value = json_set(value, '$.tries', json_extract(value, '$.tries') + 1),
+        updated_at = ${now}
+      where identifier = ${deleteCodeIdentifier(address)} and expires_at > ${now}
+        and (case when json_valid(value) then json_extract(value, '$.tries') end) < ${DELETE_CODE_TRIES}
+      returning value
+    `)
+    const stored = tried[0] ? (JSON.parse(tried[0].value) as { hash?: unknown }).hash : undefined
+    if (stored === undefined || stored !== (await hashCode(entered))) {
+      return c.json({ error: 'invalid_code' }, 400)
+    }
+    await writeClosure(deps.blobs, member.id, now)
+    const closed = await closeAccount(db, {
+      userId: member.id,
+      actor: member.id,
+      action: 'account.delete',
+      group: newGroupId(),
+      now,
+      refuseAdmin: true,
+    })
+    if (closed === 'admin') {
+      // Made an admin since it was read: nothing closed, so no closure may stand for a restore.
+      await deps.blobs.delete(closureKey(member.id))
+      return c.json({ error: 'admin' }, 403)
+    }
+    // The session is gone by now; better-auth's sign-out still expires this browser's cookies.
+    const { headers } = await auth.api.signOut({ headers: c.req.raw.headers, returnHeaders: true })
+    for (const cookie of headers.getSetCookie()) c.header('set-cookie', cookie, { append: true })
+    return c.json({ deleted: true }, 200, { 'cache-control': 'no-store' })
   })
 
   return routes
