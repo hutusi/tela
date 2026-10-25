@@ -102,6 +102,29 @@ describe('createHttpClient', () => {
     await expect(client().get(server.url('/chunked'))).rejects.toMatchObject({ kind: 'too_large' })
   })
 
+  test('a 206 that holds the whole file is a 200; one that misses a byte is not', async () => {
+    const partial = (path: string, range: string | null) =>
+      server.set(path, (_req, res) => {
+        res.writeHead(206, {
+          'content-type': 'text/xml',
+          ...(range ? { 'content-range': range } : {}),
+        })
+        res.end('<rss/>')
+      })
+    // What Caddy answers with a precompressed file (kalzumeus.com): every byte, unasked.
+    partial('/whole', 'bytes 0-5/6')
+    partial('/part', 'bytes 0-2/6')
+    partial('/later', 'bytes 3-5/6')
+    partial('/unnamed', null)
+    const http = client()
+    const whole = await http.get(server.url('/whole'))
+    expect(whole.status).toBe(200)
+    expect(whole.body).toBe('<rss/>')
+    expect((await http.get(server.url('/part'))).status).toBe(206)
+    expect((await http.get(server.url('/later'))).status).toBe(206)
+    expect((await http.get(server.url('/unnamed'))).status).toBe(206)
+  })
+
   test('cappedStream passes bytes through until the cap and then fails the stream', async () => {
     const chunks = [new Uint8Array(6000), new Uint8Array(6000)]
     const source = new ReadableStream<Uint8Array>({

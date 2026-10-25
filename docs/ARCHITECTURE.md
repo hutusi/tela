@@ -119,7 +119,9 @@ ADR 0053).
 
 - `createHttpClient`: conditional headers, manual redirects with permanent-redirect detection,
   a 5 MB cap, charset-aware decoding, private-network refusal, and the relay hook for
-  `fetch_region = 'cn'`. One abort signal per request, not per redirect hop.
+  `fetch_region = 'cn'`. One abort signal per request, not per redirect hop. A 206 whose
+  `Content-Range` covers the whole file is read as a 200 (Caddy answers so for a precompressed
+  file, unasked).
 - `ingestFeed` (`pipeline/feed.ts`) runs a whole fetch under the feed's lease: conditional GET,
   relay flip, alias detection, provenance and declared-home adoption, the 200-item cap,
   content-mode learning, scheduling. Everything commits in one fenced batch, so two fetches of one

@@ -131,6 +131,18 @@ export function cappedStream(
   )
 }
 
+/**
+ * A 206 that holds the whole file. Tela never asks for a range, but Caddy serving a precompressed
+ * file answers a request that accepts gzip with `206` and `content-range: bytes 0-2106/2107`:
+ * every byte, so a 200 in all but name. Refused as a 206, kalzumeus.com's feed failed every fetch
+ * and could not be added. A range that misses a byte, or a 206 that names none, stays a 206.
+ */
+function wholeRange(response: Response): boolean {
+  if (response.status !== 206) return false
+  const range = response.headers.get('content-range')?.match(/^bytes\s+0-(\d+)\/(\d+)$/i)
+  return range !== null && range !== undefined && Number(range[1]) + 1 === Number(range[2])
+}
+
 /** Buffer a body through `cappedStream`. Accepts a Request as well as a Response. */
 export async function readCapped(
   message: { body: ReadableStream<Uint8Array> | null },
@@ -260,7 +272,7 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
         const body =
           bytes.byteLength === 0 ? '' : decodeBody(bytes, response.headers.get('content-type'))
         return {
-          status: response.status,
+          status: wholeRange(response) ? 200 : response.status,
           headers: response.headers,
           body,
           raw: bytes,
