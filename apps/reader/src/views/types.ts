@@ -87,6 +87,8 @@ export type SiteData = {
     claimant: (PersonRef & { bio: string | null }) | null
     /** Null when the answering tela-api does not say (one from before ADR 0031). */
     postsLast30d: number | null
+    /** Search engines may index its page: an operator listed it (ADR 0060). Absent: no. */
+    indexable?: boolean
   }
   feeds: { id: number; feedUrl: string; title: string | null }[]
   posts: PublicArticle[]
@@ -123,6 +125,8 @@ export type ProfileData = {
     /** Their picture's address, while they show one (ADR 0032). */
     avatar?: string | null
     memberSince: number
+    /** Search engines may index it: the account is a week old, in good standing (ADR 0060). */
+    indexable?: boolean
   }
   /** Null from a tela-api before follows (ADR 0031), which counts nothing: shown as absent, never 0. */
   counts: ProfileCounts | null
@@ -168,7 +172,14 @@ export type BlogrollBlog = {
 
 /** A public blogroll's page (`/api/v1/public/blogrolls/:id`): its blogs in the order added. */
 export type BlogrollData = {
-  blogroll: { id: string; name: string; description: string; updatedAt: number }
+  blogroll: {
+    id: string
+    name: string
+    description: string
+    updatedAt: number
+    /** Search engines may index it: Discover shows it (ADR 0060). Absent: no. */
+    indexable?: boolean
+  }
   owner: Person
   blogs: BlogrollBlog[]
 }

@@ -4,6 +4,7 @@
  * and a 401 from any sync call ends it and wipes the device's copy while it is still that
  * member's.
  */
+import { isUiLocale } from '@tela/shared'
 import { type ProfileRow, readingLangOf } from '@tela/sync'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { detectLocale } from './i18n'
@@ -164,11 +165,15 @@ export async function whoAmI(deadline = ME_DEADLINE): Promise<Me | null> {
 }
 
 /**
- * The page's interface language as the app first renders it (`Routed`): the cookie's, else the
- * browser's. What a member reads in when their account names neither language.
+ * The page's interface language as the app renders it (`Routed`, which puts it on `<html lang>`
+ * as it first commits, before any answer from /me): a `?hl=` or the edge's choice included (ADR
+ * 0060). Else the cookie's, else the browser's. What a member reads in when their account names
+ * neither language.
  */
 function pageLocale(): string {
   try {
+    const shown = document.documentElement.lang
+    if (isUiLocale(shown)) return shown
     return detectLocale(document.cookie ?? '', navigator.languages ?? [navigator.language])
   } catch {
     return 'en'

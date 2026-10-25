@@ -28,8 +28,10 @@ import {
   PUBLIC_CACHE,
   PUBLIC_LISTING,
   parseLangMap,
+  profileIndexable,
   publicNotFound,
   READER_COUNT,
+  SITE_INDEXABLE,
   siteCard,
   TITLES,
   withTitles,
@@ -141,7 +143,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       db.all(sql`
         select s.id, s.title, s.home_url as "homeUrl", s.description, s.favicon_key as "faviconKey",
           s.primary_lang as "primaryLang", ${READER_COUNT} as "readerCount",
-          p.handle as "claimedBy", p.display_name as "claimantName", p.bio as "claimantBio",
+          ${SITE_INDEXABLE} as indexable, p.handle as "claimedBy", p.display_name as "claimantName", p.bio as "claimantBio",
           ${avatarOf('p')} as "claimantAvatar",
           (select count(*) from articles a join feeds f on f.id = a.feed_id
             where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since})
@@ -178,11 +180,13 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
     ] as never)) as unknown as Record<string, unknown>[][]
     const row = sites?.[0]
     if (!row) return publicNotFound()
-    const { claimantName, claimantBio, claimantAvatar, ...site } = row
+    const { claimantName, claimantBio, claimantAvatar, indexable, ...site } = row
     return c.json(
       {
         site: {
           ...site,
+          // Whether search engines may index its page (ADR 0060).
+          indexable: indexable === 1,
           // Who writes it, for the page's About: the claimant's own name and bio.
           claimant: site.claimedBy
             ? {
@@ -217,10 +221,11 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       public_subscriptions: number
       public_likes: number
       avatar: string | null
+      indexable: number
     }>(
       db,
       sql`select user_id, handle, display_name, bio, created_at, public_subscriptions, public_likes,
-            ${avatarOf('p')} as avatar
+            ${avatarOf('p')} as avatar, ${profileIndexable(deps.clock.now())} as indexable
           from profiles p where handle = ${handle}`,
     )
     if (!profile) return publicNotFound()
@@ -304,6 +309,8 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
           bio: profile.bio,
           avatar: profile.avatar,
           memberSince: profile.created_at,
+          // Whether search engines may index it (ADR 0060).
+          indexable: profile.indexable === 1,
         },
         counts: {
           following: Number(count.following ?? 0),

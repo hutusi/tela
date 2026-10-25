@@ -72,7 +72,7 @@ mkdirSync(outDir, { recursive: true })
 const configs = {
   web: relocate(join(root, 'apps/reader/dist/tela_web/wrangler.json'), {
     AUTH_SECRET,
-    TELA_PRIVATE_BETA: '1',
+    TELA_NOINDEX: '1',
   }),
   api: relocate(join(root, 'apps/api/wrangler.jsonc'), {
     AUTH_SECRET,

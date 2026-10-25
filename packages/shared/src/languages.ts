@@ -82,6 +82,17 @@ export function negotiateLocale(languages: readonly string[]): UiLocale {
 }
 
 /**
+ * The interface language an address fixes with `?hl=` (ADR 0060), or null when it names none Tela
+ * has. Read as any language tag is (`normalizeLangTag`): case and `_` do not matter, and a regional
+ * tag reads as its language, so `?hl=ZH-tw` is Traditional and `?hl=en-GB` English. Pages always
+ * write the canonical spelling back (`zh-Hant`), in their canonical link and alternates.
+ */
+export function hlLocale(value: string | null | undefined): UiLocale | null {
+  const tag = normalizeLangTag(value)
+  return isUiLocale(tag) ? tag : null
+}
+
+/**
  * Human-readable names, keyed by the language the *reader* is using. French writes a language's
  * name in lower case mid-sentence ("traduit du japonais"); a label capitalises it.
  */

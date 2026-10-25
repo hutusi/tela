@@ -9,7 +9,9 @@ import {
   ARTICLE_COLUMNS,
   avatarOf,
   BLOG_NAME,
+  inDiscover,
   publicReaderCount,
+  standingOk,
   visibleBlogCount,
   visibleBlogsFrom,
 } from '@tela/data'
@@ -47,6 +49,30 @@ export const DAY = 24 * 60 * 60 * 1000
 export const PUBLIC_LISTING = sql.raw(`('listed', 'featured')`)
 /** A blog's reader count as anyone may see it (`publicReaderCount`), over `sites s`. */
 export const READER_COUNT = publicReaderCount('s')
+
+/**
+ * Whether search engines may index a public page (ADR 0060). What anyone can publish on Tela is
+ * indexed only once someone has vouched for it, so an open sign-up cannot turn telaread.com into
+ * a place to rank spam: a claim, three readers or a new account vouch for nothing, being things a
+ * spammer can make. The page says `noindex, nofollow` until then (`apps/reader/src/ssr.tsx`), and
+ * the sitemap leaves it out.
+ *
+ * A blog, over `sites s`: public and listed by an operator (List, Feature, curation; ADR 0041).
+ * A claimed blog nobody has reviewed is public and not indexed.
+ */
+export const SITE_INDEXABLE = sql.raw(
+  `(s.listing in ('listed', 'featured') and s.review = 'listed')`,
+)
+/** How long a new account's profile waits before it is indexed: time to report or suspend it. */
+export const PROFILE_INDEX_AFTER = 7 * DAY
+/** A profile, over `profiles p`: a week old at `now`, and in good standing. */
+export const profileIndexable = (now: number, p = 'p'): SQL =>
+  sql`(${sql.raw(p)}.created_at <= ${now - PROFILE_INDEX_AFTER} and ${standingOk(p)})`
+/**
+ * A blogroll, over `blogrolls r` and its owner's `profiles p`: one Discover shows (public, not
+ * hidden, with enough blogs others see to be more than a stub), of an owner in good standing.
+ */
+export const BLOGROLL_INDEXABLE = sql`(${inDiscover('r')} and ${standingOk('p')})`
 /**
  * A post's titles in the launch languages it has one in, from a table aliased `a`: a public page
  * is cached for everyone, so it carries each and the reader picks the one they read in.

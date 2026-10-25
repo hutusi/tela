@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json",
     "icons": "bun scripts/generate-icons.ts",
+    "share-cards": "bun scripts/generate-share-cards.ts",
     "i18n:hant": "bun scripts/hant.ts"
   },
   "dependencies": {

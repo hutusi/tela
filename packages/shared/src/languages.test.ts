@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   asLabel,
+  hlLocale,
   isReadingLanguage,
   isUiLocale,
   LANGUAGE_NAMES,
@@ -84,5 +85,17 @@ describe('languages', () => {
     expect(negotiate('de,fr;q=0.8')).toBe('fr')
     expect(negotiate('ja')).toBe('en')
     expect(negotiate('')).toBe('en')
+  })
+
+  test('an address names an interface language in any spelling, and nothing else', () => {
+    expect(hlLocale('fr')).toBe('fr')
+    expect(hlLocale('FR')).toBe('fr')
+    expect(hlLocale('zh-hans')).toBe('zh-Hans')
+    expect(hlLocale('ZH_HANT')).toBe('zh-Hant')
+    expect(hlLocale('zh-TW')).toBe('zh-Hant')
+    expect(hlLocale('en-GB')).toBe('en')
+    for (const none of ['de', 'ja', '', ' ', null, undefined, 'zh-Hans;x']) {
+      expect(hlLocale(none)).toBeNull()
+    }
   })
 })
