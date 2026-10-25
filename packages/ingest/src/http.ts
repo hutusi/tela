@@ -5,6 +5,13 @@ export type HttpErrorKind = 'timeout' | 'network' | 'too_large' | 'redirect_loop
 
 export class HttpError extends Error {
   override name = 'HttpError'
+  /**
+   * On `too_large`, what came before the cap, so a caller can tell what was too large: an 11 MB
+   * page at a guessed `/feed` is not a feed too large to read. `readCapped` keeps the first
+   * `HEAD_BYTES` read; a client's `get` adds the status.
+   */
+  head?: Uint8Array
+  status?: number
   constructor(
     public kind: HttpErrorKind,
     message: string,
@@ -12,6 +19,9 @@ export class HttpError extends Error {
     super(message)
   }
 }
+
+/** How much of a body cut off at the cap `readCapped` keeps on the error. */
+export const HEAD_BYTES = 16 * 1024
 
 export type HttpResponse = {
   status: number
@@ -151,18 +161,31 @@ export async function readCapped(
   if (!message.body) return new Uint8Array()
   const reader = cappedStream(message.body, maxBytes).getReader()
   const chunks: Uint8Array[] = []
-  let total = 0
   for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.byteLength
-    chunks.push(value)
+    let next: Awaited<ReturnType<typeof reader.read>>
+    try {
+      next = await reader.read()
+    } catch (err) {
+      if (err instanceof HttpError && err.kind === 'too_large')
+        err.head = joined(chunks, HEAD_BYTES)
+      throw err
+    }
+    if (next.done) break
+    chunks.push(next.value)
   }
-  const out = new Uint8Array(total)
+  return joined(chunks, Number.POSITIVE_INFINITY)
+}
+
+/** The chunks as one array, up to `limit` bytes. */
+function joined(chunks: Uint8Array[], limit: number): Uint8Array {
+  const total = chunks.reduce((n, c) => n + c.byteLength, 0)
+  const out = new Uint8Array(Math.min(total, limit))
   let offset = 0
   for (const c of chunks) {
-    out.set(c, offset)
-    offset += c.byteLength
+    if (offset >= out.byteLength) break
+    const part = c.subarray(0, out.byteLength - offset)
+    out.set(part, offset)
+    offset += part.byteLength
   }
   return out
 }
@@ -262,17 +285,19 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
           continue
         }
 
+        const status = wholeRange(response) ? 200 : response.status
         let bytes: Uint8Array
         try {
           bytes = await readCapped(response, opts.maxBytes ?? maxBytes)
         } catch (err) {
-          if (err instanceof HttpError) throw err
-          throw classify(err)
+          if (!(err instanceof HttpError)) throw classify(err)
+          err.status = status
+          throw err
         }
         const body =
           bytes.byteLength === 0 ? '' : decodeBody(bytes, response.headers.get('content-type'))
         return {
-          status: wholeRange(response) ? 200 : response.status,
+          status,
           headers: response.headers,
           body,
           raw: bytes,

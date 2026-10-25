@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { cappedStream, createHttpClient, readCapped } from '../src/http'
+import { cappedStream, createHttpClient, HEAD_BYTES, type HttpError, readCapped } from '../src/http'
 import { isBlockedHost } from '../src/net'
 import { FixtureServer } from './fixture-server'
 
@@ -100,6 +100,17 @@ describe('createHttpClient', () => {
       res.end()
     })
     await expect(client().get(server.url('/chunked'))).rejects.toMatchObject({ kind: 'too_large' })
+  })
+
+  // So discovery can tell a feed too large to read from a large error page.
+  test('an oversized body says its status and how it began', async () => {
+    server.text('/gone', `<html>${'x'.repeat(HEAD_BYTES * 2)}`, { status: 404 })
+    const err = await client({ maxBytes: HEAD_BYTES + 100 })
+      .get(server.url('/gone'))
+      .catch((e: HttpError) => e)
+    expect(err).toMatchObject({ kind: 'too_large', status: 404 })
+    expect((err as HttpError).head?.byteLength).toBe(HEAD_BYTES)
+    expect(new TextDecoder().decode((err as HttpError).head).startsWith('<html>xxx')).toBe(true)
   })
 
   test('a 206 that holds the whole file is a 200; one that misses a byte is not', async () => {

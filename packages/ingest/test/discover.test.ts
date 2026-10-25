@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { discoverFeeds } from '../src/discover'
 import { createHttpClient } from '../src/http'
 import { FEED_MAX_BYTES } from '../src/items'
-import { FixtureServer, rss } from './fixture-server'
+import { FixtureServer, type RouteHandler, rss } from './fixture-server'
 
 let server: FixtureServer
 const http = createHttpClient({
@@ -70,6 +70,31 @@ describe('discoverFeeds', () => {
     server.text('/recent.xml', rss({ items: [{ guid: '1', title: 'A', description: 'x' }] }))
     const found = await discoverFeeds(http, server.url('/'))
     expect(found.map((f) => f.url)).toEqual([server.url('/recent.xml')])
+  })
+
+  // Codex's review: every body past the cap counted as a feed too large to read.
+  test('a page too large to read is not a feed too large to read', async () => {
+    const huge =
+      (status: number, type: string, body: string): RouteHandler =>
+      (_req, res) => {
+        res.writeHead(status, { 'content-type': type })
+        res.end(body)
+      }
+    const page = `<html><body>${'x'.repeat(FEED_MAX_BYTES)}</body></html>`
+    server.set('/big', huge(200, 'text/html', page)) // the page typed
+    server.set('/feed', huge(404, 'text/html', page)) // a guessed path's error page
+    server.set('/atom.xml', huge(200, 'text/html', page)) // a soft 404
+    server.set(
+      '/feed.json',
+      huge(200, 'application/json', `{"rows": "${'x'.repeat(FEED_MAX_BYTES)}"}`),
+    )
+    expect(await discoverFeeds(http, server.url('/big'))).toEqual([])
+    // A JSON Feed no longer parses once cut, and is still named.
+    const jsonFeed = `{"version": "https://jsonfeed.org/version/1.1", "items": ["${'x'.repeat(FEED_MAX_BYTES)}"]}`
+    server.set('/feed.json', huge(200, 'application/feed+json', jsonFeed))
+    await expect(discoverFeeds(http, server.url('/big'))).rejects.toMatchObject({
+      kind: 'too_large',
+    })
   })
 
   test('uses feeds declared by the page', async () => {

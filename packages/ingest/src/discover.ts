@@ -29,7 +29,18 @@ function withScheme(input: string): string {
   return `https://${trimmed.replace(/^\/+/, '')}`
 }
 
-/** The feed at `url`, if it is one; `too_large` for a body past `FEED_MAX_BYTES`. */
+/**
+ * A body cut off at the cap that was a feed: a 200 whose start reads as one, by the test a whole
+ * body gets. A page past the cap, a 404 with a large page, or a JSON API is not a feed too large.
+ */
+function feedCutOff(err: HttpError): boolean {
+  if (err.kind !== 'too_large' || err.status !== 200 || !err.head) return false
+  const head = new TextDecoder().decode(err.head)
+  // Cut short, a JSON Feed no longer parses, but its version URL still says what it is.
+  return looksLikeFeed(head) || (/^\s*\{/.test(head) && head.includes('jsonfeed.org/version/'))
+}
+
+/** The feed at `url`, if it is one; `too_large` for a feed past `FEED_MAX_BYTES`. */
 async function tryFeed(
   http: HttpClient,
   url: string,
@@ -38,7 +49,7 @@ async function tryFeed(
   try {
     res = await http.get(url, { maxBytes: FEED_MAX_BYTES })
   } catch (err) {
-    if (err instanceof HttpError) return err.kind === 'too_large' ? 'too_large' : null
+    if (err instanceof HttpError) return feedCutOff(err) ? 'too_large' : null
     throw err
   }
   if (res.status !== 200 || !res.body || !looksLikeFeed(res.body)) return null
