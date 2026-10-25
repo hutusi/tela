@@ -204,6 +204,41 @@ describe('ingestFeed', () => {
     expect(article?.content_key).toBe(v2!.content_key)
   })
 
+  // Objects are written as each item is processed, not held for the whole feed: the same test
+  // that decides an item changed decides it is written.
+  test('a changed feed writes the objects of the items that changed, and only those', async () => {
+    server.text('/feed.xml', threeItems())
+    const { feedId } = await addFeed('/feed.xml')
+    await fetchOnce(feedId)
+    const edited = rss({
+      link: server.url('/'),
+      items: [1, 2, 3].map((n) => ({
+        guid: `post-${n}`,
+        link: server.url(`/posts/${n}`),
+        title: `Post ${n}`,
+        description: `Summary ${n}`,
+        content: n === 2 ? longHtml(6) : longHtml(4),
+        date: `Thu, 0${n} Sep 2026 08:00:00 GMT`,
+      })),
+    })
+    server.text('/feed.xml', edited)
+    const put: string[] = []
+    const spy = {
+      ...blobs,
+      put: async (...args: Parameters<typeof blobs.put>) => {
+        put.push(args[0])
+        await blobs.put(...args)
+      },
+    }
+    clock.advance(MIN)
+    const result = await fetchOnce(feedId, { blobs: spy })
+    expect(result.status === 'fetched' ? result.updatedArticleIds : []).toEqual([2])
+    const v2 = await row<{ content_key: string; raw_key: string }>(
+      sql`select content_key, raw_key from article_versions where article_id = 2 and version = 2`,
+    )
+    expect(put.sort()).toEqual([objectKeys.content(v2!.content_key), v2!.raw_key].sort())
+  })
+
   // Three feeds were learned as full while they shipped excerpts in a content field, so readers
   // got the excerpt as the post and nothing ever extracted it: a French Blogger blog's jump break,
   // smitten kitchen's theme and kexue.fm. A full post ending in its permalink stays full.
