@@ -207,13 +207,22 @@ test.describe('discover and claim', () => {
     await page.route(sites, (route) => route.abort('internetdisconnected'))
     await link.click()
     await expect(page.getByTestId('load-failed')).toBeVisible()
-    // Try again asks again, and says so again while the network is still gone.
+    // Try again asks again, and says so again while the network is still gone. Wait for its own
+    // request to fail: the failure on screen before the click passed the check while Try again was
+    // still asking, and the page, showing its skeleton meanwhile, heard no "online" (on CI).
+    const retried = page.waitForEvent('requestfailed', (r) =>
+      r.url().includes('/api/v1/public/sites/'),
+    )
     await page.getByTestId('load-failed-retry').click()
+    await retried
     await expect(page.getByTestId('load-failed')).toBeVisible()
     await page.unroute(sites)
-    // Back online, the page asks by itself.
-    await page.evaluate(() => window.dispatchEvent(new Event('online')))
-    await expect(page.getByTestId('site-articles')).toBeVisible()
+    // Back online, the page asks by itself. It listens from the effect after it shows the failure,
+    // a moment after the paint the check saw, so the event is sent until it is heard.
+    await expect(async () => {
+      await page.evaluate(() => window.dispatchEvent(new Event('online')))
+      await expect(page.getByTestId('site-articles')).toBeVisible({ timeout: 1000 })
+    }).toPass()
     await expect(page.getByTestId('load-failed')).toHaveCount(0)
   })
 

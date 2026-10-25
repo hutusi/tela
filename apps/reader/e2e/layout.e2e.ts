@@ -422,9 +422,17 @@ test("below lg, Esc focuses the row it closed clear of the list's heading", asyn
   await row.click()
   await expect(page).toHaveURL(new RegExp(`article=${id}$`))
   await expect(page.getByTestId('reader')).toBeVisible()
-  // Read down to where the row will be 60px from the top once the list is back.
-  await page.evaluate((y) => window.scrollTo(0, y), top - 60)
-  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(top - 60)
+  // Read down to where the row will be 60px from the top once the list is back. Scroll until it
+  // holds: while the article is still arriving the page is shorter, and one scroll stopped at its
+  // foot (566 of 594 on CI) with nothing to move it further.
+  await expect
+    .poll(() =>
+      page.evaluate((y) => {
+        window.scrollTo(0, y)
+        return Math.round(window.scrollY)
+      }, top - 60),
+    )
+    .toBe(top - 60)
 
   await page.keyboard.press('Escape')
   await expect(page).not.toHaveURL(/article=/)
