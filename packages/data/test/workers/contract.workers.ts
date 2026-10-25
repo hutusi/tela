@@ -34,6 +34,10 @@ const TABLES = [
   // An operator's code and invitations outlive any user, so the cascade from `user` misses them.
   'invite_redemptions',
   'invite_codes',
+  // Migration 0014's (ADR 0056, 0063): each names a user, so before `user`.
+  'settings',
+  'pending_feeds',
+  'reports',
   'user',
   'leases',
   'lease_fence',
@@ -45,8 +49,7 @@ const TABLES = [
   'counters',
   'block_translations',
   'usage_daily',
-  // A setting one case stores would hold the next case to it.
-  'settings',
+  'ops_alerts',
 ]
 
 async function freshDb(): Promise<TelaDb> {

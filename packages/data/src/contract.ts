@@ -20,6 +20,13 @@ import {
   startLease,
 } from './leases'
 import {
+  type BroughtFeed,
+  duePendingFeeds,
+  feedRoom,
+  importFeeds,
+  memberAllowances,
+} from './queries/allowances'
+import {
   adoptExtractedVersion,
   adoptReprocessedVersion,
   dueReprocessing,
@@ -1330,6 +1337,115 @@ export function dataContract(t: TestApi, makeDb: () => Promise<TelaDb>): void {
         { homeUrl: 'https://blog.example' },
         { homeUrl: 'https://new.example' },
       ])
+    })
+  })
+
+  describe("a member's allowances (ADR 0063)", () => {
+    const brought = (names: string[]): BroughtFeed[] =>
+      names.map((name) => ({
+        feedUrl: `https://${name}.example/feed`,
+        host: `${name}.example`,
+        origin: `https://${name}.example`,
+      }))
+    const seedMember = async (db: TelaDb, settings: Record<string, unknown> = {}) => {
+      await db.run(sql`insert into user (id, name, email, email_verified, created_at, updated_at)
+        values ('u1', 'u', 'u@x.y', 1, 0, 0)`)
+      await db.run(sql`insert into profiles (user_id, handle, created_at, updated_at)
+        values ('u1', 'reader_one', 0, 0)`)
+      for (const [key, value] of Object.entries(settings)) {
+        await db.run(sql`insert into settings (key, value, updated_at)
+          values (${key}, json(${JSON.stringify(value)}), 0)`)
+      }
+    }
+    const waiting = async (db: TelaDb) =>
+      (
+        (await db.all(
+          sql`select feed_url from pending_feeds where user_id = 'u1' order by feed_url`,
+        )) as { feed_url: string }[]
+      ).map((r) => r.feed_url.replace('https://', '').replace('.example/feed', ''))
+
+    // A room is a subquery in a LIMIT, and in `min()` beside another: both engines must read it.
+    it('an import adds the day’s new feeds, waits the rest within the cap, and leaves the rest out', async () => {
+      const db = await makeDb()
+      await seedMember(db, { 'member.feedsPerDay': 2, 'member.maxSubscriptions': 4 })
+      await ensureFeed(db, {
+        feedUrl: 'https://known.example/feed',
+        host: 'known.example',
+        siteOrigin: 'https://known.example',
+        now: T0,
+      })
+      const result = await importFeeds(db, {
+        userId: 'u1',
+        feeds: brought(['known', 'n1', 'n1', 'n2', 'n3', 'n4', 'n5']),
+        now: T0,
+      })
+      expect(result).toEqual({
+        subscribed: 3,
+        added: 2,
+        waiting: 1,
+        following: 3,
+        over: 2,
+        perDay: 2,
+        maxSubscriptions: 4,
+        exempt: false,
+      })
+      expect(await waiting(db)).toEqual(['n3'])
+      const added = await db.all(sql`
+        select feed_url, added_by from feeds where added_by is not null order by feed_url`)
+      expect(added).toEqual([
+        { feed_url: 'https://n1.example/feed', added_by: 'u1' },
+        { feed_url: 'https://n2.example/feed', added_by: 'u1' },
+      ])
+      // No site for a feed that waits: it is made when the feed is added.
+      expect(
+        await first(db, sql`select 1 as x from sites where home_url = 'https://n3.example'`),
+      ).toBe(undefined)
+    })
+
+    it('a feed new to Tela is created only within the room, and one Tela has is found regardless', async () => {
+      const db = await makeDb()
+      await seedMember(db, { 'member.feedsPerDay': 0 })
+      const feed = (name: string) => ({
+        feedUrl: `https://${name}.example/feed`,
+        host: `${name}.example`,
+        siteOrigin: `https://${name}.example`,
+        addedBy: 'u1',
+        now: T0,
+      })
+      const within = sql`${feedRoom('u1', T0)} > 0`
+      expect(await ensureFeed(db, { ...feed('new'), within })).toBe(null)
+      expect(await first(db, sql`select 1 as x from feeds`)).toBe(undefined)
+      expect(await first(db, sql`select 1 as x from sites`)).toBe(undefined)
+      await ensureFeed(db, { ...feed('known'), addedBy: null })
+      expect(await ensureFeed(db, { ...feed('known'), within })).toEqual({
+        feedId: 1,
+        siteId: 1,
+        created: false,
+      })
+      // An admin's room is never spent.
+      await db.run(sql`update profiles set is_admin = 1 where user_id = 'u1'`)
+      expect((await ensureFeed(db, { ...feed('new'), within }))?.created).toBe(true)
+    })
+
+    it('the waiting member is due when a run would move something', async () => {
+      const db = await makeDb()
+      await seedMember(db, { 'member.feedsPerDay': 1 })
+      await importFeeds(db, { userId: 'u1', feeds: brought(['a', 'b', 'c']), now: T0 })
+      const due = async (now: number) =>
+        ((await db.all(duePendingFeeds(now))) as { key: string }[]).map((r) => r.key)
+      expect(await due(T0)).toEqual([])
+      expect(await due(T0 + 86_400_000)).toEqual(['u1'])
+    })
+    it('the usage answer counts the day, what waits and what is held', async () => {
+      const db = await makeDb()
+      await seedMember(db, { 'member.feedsPerDay': 1 })
+      await importFeeds(db, { userId: 'u1', feeds: brought(['a', 'b', 'c']), now: T0 })
+      expect(await memberAllowances(db, 'u1', T0)).toEqual({
+        exempt: false,
+        feeds: { perDay: 1, addedToday: 1, pending: 2 },
+        subscriptions: { max: 300, count: 1 },
+        translations: { perDay: 20, usedToday: 0, waiting: 0 },
+      })
     })
   })
 

@@ -415,6 +415,7 @@ const MEMBER_ROUTES: MemberRoute[] = [
     effect: 'writes',
   },
   { route: 'GET /api/v1/account', path: '/api/v1/account', effect: 'reads' },
+  { route: 'GET /api/v1/account/usage', path: '/api/v1/account/usage', effect: 'reads' },
   {
     route: 'POST /api/v1/account/password',
     path: '/api/v1/account/password',

@@ -40,5 +40,6 @@ export const LEASE_KINDS = [
   'site.claim',
   'websub.subscribe',
   'member.gravatar',
+  'member.pendingFeeds',
 ] as const
 export type LeaseKind = (typeof LEASE_KINDS)[number]

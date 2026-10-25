@@ -1,7 +1,8 @@
 /** Registering a feed the way discovery, the add-feed RPC and the editorial seed do. */
 import { normalizeLangTag, normalizeOrigin, type ParsedFeed } from '@tela/content'
-import { declaredHomeHonoured, ensureFeed, type TelaDb } from '@tela/data'
+import { declaredHomeHonoured, type EnsuredFeed, ensureFeed, type TelaDb } from '@tela/data'
 import type { FetchRegion } from '@tela/shared'
+import type { SQL } from 'drizzle-orm'
 
 export type RegisterFeedInput = {
   feedUrl: string
@@ -11,6 +12,11 @@ export type RegisterFeedInput = {
   /** The member adding the feed: a declared home may file it under a site they claimed. */
   actorId?: string | null
   fetchRegion?: FetchRegion
+  /**
+   * What a feed new to Tela needs to be created: a member's room for one today (`feedRoom`, ADR
+   * 0063). Refused, nothing is written and the answer is null.
+   */
+  within?: SQL
   now: number
 }
 
@@ -20,7 +26,15 @@ export type RegisterFeedInput = {
  * the first fetch may move), so a feed cannot put its posts under another member's site by
  * declaring it.
  */
-export async function registerFeed(db: TelaDb, input: RegisterFeedInput) {
+export async function registerFeed(
+  db: TelaDb,
+  input: RegisterFeedInput & { within: SQL },
+): Promise<EnsuredFeed | null>
+export async function registerFeed(db: TelaDb, input: RegisterFeedInput): Promise<EnsuredFeed>
+export async function registerFeed(
+  db: TelaDb,
+  input: RegisterFeedInput,
+): Promise<EnsuredFeed | null> {
   const feedOrigin = normalizeOrigin(input.feedUrl)
   if (!feedOrigin) throw new Error(`cannot derive a site origin from ${input.feedUrl}`)
   const parsed = input.parsed ?? null
@@ -30,7 +44,7 @@ export async function registerFeed(db: TelaDb, input: RegisterFeedInput) {
     declared !== null &&
     (declared === feedOrigin || (await declaredHomeHonoured(db, declared, input.actorId ?? null)))
   const siteOrigin = honoured && declared ? declared : feedOrigin
-  return ensureFeed(db, {
+  const feed = {
     feedUrl: input.feedUrl,
     host: new URL(input.feedUrl).hostname.toLowerCase(),
     siteOrigin,
@@ -46,5 +60,6 @@ export async function registerFeed(db: TelaDb, input: RegisterFeedInput) {
       primaryLang: normalizeLangTag(parsed?.language ?? null),
     },
     now: input.now,
-  })
+  }
+  return input.within ? ensureFeed(db, { ...feed, within: input.within }) : ensureFeed(db, feed)
 }

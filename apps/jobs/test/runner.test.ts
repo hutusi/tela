@@ -101,6 +101,7 @@ describe('tick and runJob', () => {
       'article.extract': 0,
       'article.reprocess': 0,
       'member.gravatar': 0,
+      'member.pendingFeeds': 0,
       'site.claim': 0,
       errors: {},
       config: {

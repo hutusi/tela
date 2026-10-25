@@ -11,6 +11,8 @@ export type AddError =
   | 'opml_invalid'
   | 'opml_too_large'
   | 'feed_too_large'
+  | 'feed_limit'
+  | 'subscription_limit'
 
 /** tela-api's answer, as the message a page has for it. */
 export function addError(code: string | undefined): AddError {
@@ -19,22 +21,75 @@ export function addError(code: string | undefined): AddError {
     code === 'rate_limited' ||
     code === 'opml_invalid' ||
     code === 'opml_too_large' ||
-    code === 'feed_too_large'
+    code === 'feed_too_large' ||
+    code === 'feed_limit' ||
+    code === 'subscription_limit'
   )
     return code
   return 'fetch_failed'
 }
 
-/** Import an OPML file: how many feeds it added, or why not. */
-export async function importOpml(file: File): Promise<{ feeds: number } | { error: AddError }> {
+/**
+ * Why an add was refused, with what a member's limit says (ADR 0063): `feed_limit` names the day's
+ * allowance and when it comes back, `subscription_limit` the cap.
+ */
+export type AddProblem = { error: AddError; limit?: number; resetsAt?: number }
+
+/** A refusal's body as the page words it. */
+export function addProblem(body: unknown): AddProblem {
+  const b = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {}
+  return {
+    error: addError(typeof b.error === 'string' ? b.error : undefined),
+    ...(typeof b.limit === 'number' ? { limit: b.limit } : {}),
+    ...(typeof b.resetsAt === 'number' ? { resetsAt: b.resetsAt } : {}),
+  }
+}
+
+/**
+ * What an import did (ADR 0063): `feeds`, the file's blogs the member now follows; the rest say
+ * how many were new to Tela and added, how many wait for a later day and at how many a day, and
+ * how many were left out past the subscription cap. A tela-api from before it sends `feeds` alone.
+ */
+export type Imported = {
+  feeds: number
+  added?: number
+  waiting?: number
+  over?: number
+  perDay?: number | null
+  maxSubscriptions?: number | null
+}
+
+const countOf = (v: unknown) => (typeof v === 'number' ? v : undefined)
+const limitOf = (v: unknown) => (v === null || typeof v === 'number' ? v : undefined)
+
+/** An import's answer: the fields it carries, and no others. */
+export function readImported(body: unknown): Imported | null {
+  const b = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {}
+  const feeds = countOf(b.feeds)
+  if (feeds === undefined) return null
+  const imported: Imported = { feeds }
+  const added = countOf(b.added)
+  const waiting = countOf(b.waiting)
+  const over = countOf(b.over)
+  const perDay = limitOf(b.perDay)
+  const maxSubscriptions = limitOf(b.maxSubscriptions)
+  if (added !== undefined) imported.added = added
+  if (waiting !== undefined) imported.waiting = waiting
+  if (over !== undefined) imported.over = over
+  if (perDay !== undefined) imported.perDay = perDay
+  if (maxSubscriptions !== undefined) imported.maxSubscriptions = maxSubscriptions
+  return imported
+}
+
+/** Import an OPML file: what it did, or why not. */
+export async function importOpml(file: File): Promise<Imported | AddProblem> {
   if (file.size > 1024 * 1024) return { error: 'opml_too_large' }
   try {
-    const { status, body } = await apiJson<{ feeds?: number; error?: string }>(
-      '/api/v1/feeds/opml',
-      { method: 'POST', raw: await file.text() },
-    )
-    if (status !== 200 || body.feeds === undefined) return { error: addError(body?.error) }
-    return { feeds: body.feeds }
+    const { status, body } = await apiJson<unknown>('/api/v1/feeds/opml', {
+      method: 'POST',
+      raw: await file.text(),
+    })
+    return (status === 200 ? readImported(body) : null) ?? addProblem(body)
   } catch {
     return { error: 'fetch_failed' }
   }

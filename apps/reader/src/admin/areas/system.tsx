@@ -31,6 +31,7 @@ export const KIND_TILES: Record<string, { letter: string; hue: number }> = {
   'site.claim': { letter: 'C', hue: 6 },
   'websub.subscribe': { letter: 'W', hue: 7 },
   'member.gravatar': { letter: 'G', hue: 8 },
+  'member.pendingFeeds': { letter: 'P', hue: 10 },
 }
 
 /** The kinds in the order tela-jobs lists them (LEASE_KINDS), for the per-kind strip. */

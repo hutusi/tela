@@ -8,7 +8,7 @@ export const NAV: readonly { group: NavGroup | null; areas: readonly AdminArea[]
   { group: 'queues', areas: ['claims', 'reports'] },
   { group: 'library', areas: ['sites', 'feeds', 'discover'] },
   { group: 'members', areas: ['people', 'invites'] },
-  { group: 'running', areas: ['translation', 'system'] },
+  { group: 'running', areas: ['translation', 'system', 'settings'] },
 ]
 
 /** The group an area's header names above its title. */
@@ -22,6 +22,7 @@ export const AREA_GROUP: Record<LedgerArea, NavGroup> = {
   invites: 'members',
   translation: 'running',
   system: 'running',
+  settings: 'running',
 }
 
 /** What waits in an area, for its badge: only the queues have one. */

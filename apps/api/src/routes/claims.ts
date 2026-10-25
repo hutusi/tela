@@ -14,6 +14,7 @@ import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiEnv } from '../app'
 import type { ApiDeps } from '../deps'
+import { feedLimitAnswer } from './feeds'
 
 const CLAIM_TTL_MS = 4 * 60_000
 const META_NAME = 'tela-site-verification'
@@ -111,8 +112,18 @@ export function claimRoutes(deps: ApiDeps) {
     if (!(await consumeLimit(db, 'claimStart', member.id, deps.clock.now())).allowed) {
       return c.json({ error: 'rate_limited' }, 429)
     }
-    const started = await deps.ingest.startClaim({ url: body.url, actorId: member.id })
-    if ('error' in started) return c.json(started, started.error === 'invalid_url' ? 400 : 422)
+    // A claim that brings a feed new to Tela counts against the member's day (ADR 0063).
+    const started = await deps.ingest.startClaim({
+      url: body.url,
+      actorId: member.id,
+      withinDay: true,
+    })
+    if ('error' in started) {
+      if (started.error === 'feed_limit') {
+        return c.json(await feedLimitAnswer(db, deps.clock.now()), 429)
+      }
+      return c.json(started, started.error === 'invalid_url' ? 400 : 422)
+    }
     return c.json(await standing(started.siteId, member.id))
   })
 

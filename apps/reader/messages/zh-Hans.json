@@ -239,8 +239,13 @@
       "opml_invalid": "该文件不是 OPML 文档。",
       "rate_limited": "操作太频繁，请稍后再试。",
       "opml_too_large": "OPML 文件超过 1 MB。",
-      "feed_too_large": "这个博客的订阅源超过了 Tela 能读取的大小（10 MB）。"
-    }
+      "feed_too_large": "这个博客的订阅源超过了 Tela 能读取的大小（10 MB）。",
+      "feed_limit": "{limit, plural, =0 {Tela 暂时不接收新的博客。已在 Tela 上的博客仍可随时添加。} other {你今天已添加 # 个 Tela 上原本没有的博客，达到了每天的上限。{time} 之后可以继续添加；已在 Tela 上的博客随时都能添加。}}",
+      "subscription_limit": "你已订阅 {limit} 个博客，这是一个账号的上限。取消订阅一个，才能再添加。"
+    },
+    "importWaiting": "Tela 每天为你添加 {perDay} 个新博客，其余 {n} 个{days, plural, =1 {明天加入} other {将在接下来 # 天内陆续加入}}。",
+    "importPaused": "另有 {n} 个在等待，Tela 重新接收新博客后会加入。",
+    "importOver": "有 {n} 个没有导入：一个账号最多订阅 {max} 个博客。"
   },
   "translation": {
     "writtenIn": "原文为<b>{source}</b>。",
@@ -553,7 +558,8 @@
       "fetch_failed": "无法访问该地址。",
       "no_feed": "该地址下没有找到订阅源。Tela 只收录发布订阅源的博客。",
       "feed_too_large": "这个博客的订阅源超过了 Tela 能读取的大小（10 MB）。",
-      "rate_limited": "认领尝试太频繁，请稍后再试。"
+      "rate_limited": "认领尝试太频繁，请稍后再试。",
+      "feed_limit": "这个博客还不在 Tela 上，而你今天添加的新博客已达上限。{time} 之后就可以认领。"
     },
     "taken": "你选的用户名已经属于别人，所以目前用的还是临时用户名。可以在<link>设置</link>里另选一个。"
   },
@@ -914,7 +920,16 @@
     "privacyDelay": "公开个人页可能要几分钟才会跟上改动。",
     "yourData": "你的数据",
     "yourDataHint": "你的资料、订阅、喜欢、推荐、划线和关注的人，打包成一个文件。",
-    "download": "下载"
+    "download": "下载",
+    "translationsToday": "新的翻译",
+    "translationsTodayValue": "今天 {used} / {perDay}",
+    "translationsHint": "Tela 已经翻译过的文章，以及简繁之间的转换，都不计入。{time} 起重新计数。",
+    "translationsFree": "你的账号没有每日上限。",
+    "translationsUnlimited": "不限",
+    "translationsWaiting": "有 {n} 篇翻译将在 {time} 之后开始。",
+    "subscriptionsPending": "有 {n} 个导入的博客等待添加。Tela 每天为你添加 {perDay} 个新博客，{days, plural, =1 {明天就会全部加入} other {它们将在接下来 # 天内陆续加入}}。",
+    "subscriptionsPendingPaused": "有 {n} 个导入的博客等待添加，Tela 重新接收新博客后会加入。",
+    "subscriptionsCap": "你已订阅 {count} 个博客，一个账号最多可订阅 {max} 个。"
   },
   "invites": {
     "intro": "Tela 目前仅限邀请加入。你可以邀请五个人：一个邀请码只能让一个人加入，用过后永久计入名额。撤销一个还没人用过的邀请码，可以收回它的名额。",
@@ -1046,7 +1061,9 @@
     "updated": "最后更新：{date}"
   },
   "toast": {
-    "undo": "撤销"
+    "undo": "撤销",
+    "subscriptionLimit": "你已订阅 {max} 个博客，这是一个账号的上限。取消订阅一个，才能再添加。",
+    "subscriptionLimitMany": "这会再添加 {n} 个博客，而一个账号最多订阅 {max} 个。你还能再订阅 {room} 个。"
   },
   "firstRun": {
     "title": "从几个博客开始",

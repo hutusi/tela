@@ -239,8 +239,13 @@
       "opml_invalid": "Ce fichier n’est pas un document OPML.",
       "rate_limited": "Trop de requêtes. Patientez un peu, puis réessayez.",
       "opml_too_large": "Ce fichier OPML dépasse 1 Mo.",
-      "feed_too_large": "Le flux de ce blog dépasse ce que Tela peut lire (10 Mo)."
-    }
+      "feed_too_large": "Le flux de ce blog dépasse ce que Tela peut lire (10 Mo).",
+      "feed_limit": "{limit, plural, =0 {Tela n’accueille pas de nouveaux blogs pour le moment. Les blogs déjà présents sur Tela peuvent toujours être ajoutés.} one {Vous avez ajouté aujourd’hui un blog nouveau pour Tela, le maximum pour une journée. Vous pourrez en ajouter un autre après {time} ; les blogs déjà présents sur Tela s’ajoutent à tout moment.} other {Vous avez ajouté aujourd’hui # blogs nouveaux pour Tela, le maximum pour une journée. Vous pourrez en ajouter d’autres après {time} ; les blogs déjà présents sur Tela s’ajoutent à tout moment.}}",
+      "subscription_limit": "Vous suivez {limit} blogs, le maximum pour un compte. Désabonnez-vous d’un blog pour en ajouter un autre."
+    },
+    "importWaiting": "Tela ajoute pour vous {perDay, plural, one {# nouveau blog} other {# nouveaux blogs}} par jour ; {n, plural, one {le dernier arrive} other {les # autres arrivent}} {days, plural, one {demain} other {au cours des # prochains jours}}.",
+    "importPaused": "{n, plural, one {Un autre attend} other {# autres attendent}} que Tela accueille de nouveau des blogs.",
+    "importOver": "{n, plural, one {Un blog n’a pas été importé} other {# blogs n’ont pas été importés}} : un compte suit au plus {max} blogs."
   },
   "translation": {
     "writtenIn": "Écrit en <b>{source}</b>.",
@@ -553,7 +558,8 @@
       "fetch_failed": "Impossible de joindre cette adresse.",
       "no_feed": "Aucun flux trouvé à cette adresse. Tela référence les blogs qui publient un flux.",
       "feed_too_large": "Le flux de ce blog dépasse ce que Tela peut lire (10 Mo).",
-      "rate_limited": "Trop de tentatives de revendication. Patientez un peu, puis réessayez."
+      "rate_limited": "Trop de tentatives de revendication. Patientez un peu, puis réessayez.",
+      "feed_limit": "Ce blog est nouveau pour Tela, et vous avez déjà ajouté aujourd’hui autant de nouveaux blogs qu’une journée le permet. Vous pourrez le revendiquer après {time}."
     },
     "taken": "L’identifiant choisi appartient déjà à quelqu’un d’autre : le vôtre reste donc provisoire. Choisissez-en un autre dans les <link>Paramètres</link>."
   },
@@ -914,7 +920,16 @@
     "privacyDelay": "Votre profil public peut mettre quelques minutes à refléter un changement.",
     "yourData": "Vos données",
     "yourDataHint": "Votre profil, vos abonnements, coups de cœur, recommandations et surlignages, et les personnes que vous suivez, en un seul fichier.",
-    "download": "Télécharger"
+    "download": "Télécharger",
+    "translationsToday": "Nouvelles traductions",
+    "translationsTodayValue": "{used} sur {perDay} aujourd’hui",
+    "translationsHint": "Un article que Tela a déjà traduit, et le passage d’une écriture chinoise à l’autre, ne comptent pas. Le compteur repart à {time}.",
+    "translationsFree": "Aucune limite quotidienne ne s’applique à votre compte.",
+    "translationsUnlimited": "Sans limite",
+    "translationsWaiting": "{n, plural, one {Une traduction commencera} other {# traductions commenceront}} après {time}.",
+    "subscriptionsPending": "{n, plural, one {Un blog importé attend} other {# blogs importés attendent}} d’être ajoutés. Tela ajoute pour vous {perDay, plural, one {# nouveau blog} other {# nouveaux blogs}} par jour : {n, plural, one {il arrive} other {ils arrivent}} {days, plural, one {demain} other {au cours des # prochains jours}}.",
+    "subscriptionsPendingPaused": "{n, plural, one {Un blog importé attend} other {# blogs importés attendent}} que Tela accueille de nouveau des blogs.",
+    "subscriptionsCap": "Vous suivez {count} des {max} blogs qu’un compte peut suivre."
   },
   "invites": {
     "intro": "Tela fonctionne sur invitation pour l’instant. Vous pouvez inviter cinq personnes : un code permet à une personne de s’inscrire et, une fois utilisé, il compte pour de bon. Révoquez un code que personne n’a utilisé pour récupérer sa place.",
@@ -1046,7 +1061,9 @@
     "updated": "Dernière mise à jour : {date}"
   },
   "toast": {
-    "undo": "Annuler"
+    "undo": "Annuler",
+    "subscriptionLimit": "Vous suivez {max} blogs, le maximum pour un compte. Désabonnez-vous d’un blog pour en ajouter un autre.",
+    "subscriptionLimitMany": "Cela ferait {n} blogs de plus, et un compte en suit au plus {max}. Vous pouvez encore en suivre {room}."
   },
   "firstRun": {
     "title": "Commencez par quelques blogs",

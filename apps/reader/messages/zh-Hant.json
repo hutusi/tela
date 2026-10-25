@@ -239,8 +239,13 @@
       "opml_invalid": "該檔案不是 OPML 文件。",
       "rate_limited": "操作太頻繁，請稍後再試。",
       "opml_too_large": "OPML 檔案超過 1 MB。",
-      "feed_too_large": "這個部落格的訂閱源超過了 Tela 能讀取的大小（10 MB）。"
-    }
+      "feed_too_large": "這個部落格的訂閱源超過了 Tela 能讀取的大小（10 MB）。",
+      "feed_limit": "{limit, plural, =0 {Tela 暫時不接收新的部落格。已在 Tela 上的部落格仍可隨時新增。} other {你今天已新增 # 個 Tela 上原本沒有的部落格，達到了每天的上限。{time} 之後可以繼續新增；已在 Tela 上的部落格隨時都能新增。}}",
+      "subscription_limit": "你已訂閱 {limit} 個部落格，這是一個帳號的上限。取消訂閱一個，才能再新增。"
+    },
+    "importWaiting": "Tela 每天為你新增 {perDay} 個新部落格，其餘 {n} 個{days, plural, =1 {明天加入} other {將在接下來 # 天內陸續加入}}。",
+    "importPaused": "另有 {n} 個在等待，Tela 重新接收新部落格後會加入。",
+    "importOver": "有 {n} 個沒有匯入：一個帳號最多訂閱 {max} 個部落格。"
   },
   "translation": {
     "writtenIn": "原文為<b>{source}</b>。",
@@ -553,7 +558,8 @@
       "fetch_failed": "無法連上這個網址。",
       "no_feed": "這個網址下沒有找到訂閱源。Tela 只收錄發布訂閱源的部落格。",
       "feed_too_large": "這個部落格的訂閱源超過了 Tela 能讀取的大小（10 MB）。",
-      "rate_limited": "認領嘗試太頻繁，請稍後再試。"
+      "rate_limited": "認領嘗試太頻繁，請稍後再試。",
+      "feed_limit": "這個部落格還不在 Tela 上，而你今天新增的新部落格已達上限。{time} 之後就可以認領。"
     },
     "taken": "你選的使用者名稱已經屬於別人，所以目前用的還是臨時使用者名稱。可以在<link>設定</link>裡另選一個。"
   },
@@ -914,7 +920,16 @@
     "privacyDelay": "公開個人頁可能要幾分鐘才會跟上改動。",
     "yourData": "你的資料",
     "yourDataHint": "你的資料、訂閱、喜歡、推薦、劃線和追蹤的人，打包成一個檔案。",
-    "download": "下載"
+    "download": "下載",
+    "translationsToday": "新的翻譯",
+    "translationsTodayValue": "今天 {used} / {perDay}",
+    "translationsHint": "Tela 已經翻譯過的文章，以及簡繁之間的轉換，都不計入。{time} 起重新計數。",
+    "translationsFree": "你的帳號沒有每日上限。",
+    "translationsUnlimited": "不限",
+    "translationsWaiting": "有 {n} 篇翻譯將在 {time} 之後開始。",
+    "subscriptionsPending": "有 {n} 個匯入的部落格等待新增。Tela 每天為你新增 {perDay} 個新部落格，{days, plural, =1 {明天就會全部加入} other {它們將在接下來 # 天內陸續加入}}。",
+    "subscriptionsPendingPaused": "有 {n} 個匯入的部落格等待新增，Tela 重新接收新部落格後會加入。",
+    "subscriptionsCap": "你已訂閱 {count} 個部落格，一個帳號最多可訂閱 {max} 個。"
   },
   "invites": {
     "intro": "Tela 目前僅限邀請加入。你可以邀請五個人：一個邀請碼只能讓一個人加入，用過後永久計入名額。撤銷一個還沒人用過的邀請碼，可以收回它的名額。",
@@ -1046,7 +1061,9 @@
     "updated": "最後更新：{date}"
   },
   "toast": {
-    "undo": "撤銷"
+    "undo": "撤銷",
+    "subscriptionLimit": "你已訂閱 {max} 個部落格，這是一個帳號的上限。取消訂閱一個，才能再新增。",
+    "subscriptionLimitMany": "這會再新增 {n} 個部落格，而一個帳號最多訂閱 {max} 個。你還能再訂閱 {room} 個。"
   },
   "firstRun": {
     "title": "從幾個部落格開始",

@@ -239,8 +239,13 @@
       "opml_invalid": "That file is not an OPML document.",
       "rate_limited": "Too many requests. Please wait a little and try again.",
       "opml_too_large": "That OPML file is larger than 1 MB.",
-      "feed_too_large": "That blog's feed is larger than Tela reads (10 MB)."
-    }
+      "feed_too_large": "That blog's feed is larger than Tela reads (10 MB).",
+      "feed_limit": "{limit, plural, =0 {Tela isn’t taking blogs new to it right now. Blogs already on Tela can still be added.} one {You’ve added a blog new to Tela today, as many as a day allows. You can add another after {time}; blogs already on Tela can be added any time.} other {You’ve added # blogs new to Tela today, as many as a day allows. You can add more after {time}; blogs already on Tela can be added any time.}}",
+      "subscription_limit": "You follow {limit} blogs, the most one account holds. Unsubscribe from one to add another."
+    },
+    "importWaiting": "Tela adds {perDay, plural, one {# new blog} other {# new blogs}} a day for you; {n, plural, one {the other one arrives} other {the other # arrive}} {days, plural, one {tomorrow} other {over the next # days}}.",
+    "importPaused": "{n, plural, one {One more waits} other {# more wait}} until Tela takes new blogs again.",
+    "importOver": "{n, plural, one {One was left out} other {# were left out}}: one account follows {max} blogs at most."
   },
   "translation": {
     "writtenIn": "Written in <b>{source}</b>.",
@@ -553,7 +558,8 @@
       "fetch_failed": "Could not reach that address.",
       "no_feed": "No feed found at that address. Tela lists blogs that publish a feed.",
       "feed_too_large": "That blog's feed is larger than Tela reads (10 MB).",
-      "rate_limited": "Too many claim attempts. Please wait a little and try again."
+      "rate_limited": "Too many claim attempts. Please wait a little and try again.",
+      "feed_limit": "This blog is new to Tela, and you’ve added as many new blogs as a day allows. You can claim it after {time}."
     },
     "taken": "The handle you picked belongs to someone else, so yours is still a temporary one. Choose another in <link>Settings</link>."
   },
@@ -914,7 +920,16 @@
     "privacyDelay": "Your public profile can take a few minutes to catch up with a change.",
     "yourData": "Your data",
     "yourDataHint": "Your profile, subscriptions, likes, recommendations, highlights and the people you follow, as one file.",
-    "download": "Download"
+    "download": "Download",
+    "translationsToday": "New translations",
+    "translationsTodayValue": "{used} of {perDay} today",
+    "translationsHint": "A post Tela has already translated, and a switch between the Chinese scripts, don’t count. The count starts again at {time}.",
+    "translationsFree": "No daily limit applies to your account.",
+    "translationsUnlimited": "No limit",
+    "translationsWaiting": "{n, plural, one {One translation waits} other {# translations wait}} to start after {time}.",
+    "subscriptionsPending": "{n, plural, one {One imported blog waits} other {# imported blogs wait}} to be added. Tela adds {perDay, plural, one {# new blog} other {# new blogs}} a day for you, so {n, plural, one {it arrives} other {they arrive}} {days, plural, one {tomorrow} other {over the next # days}}.",
+    "subscriptionsPendingPaused": "{n, plural, one {One imported blog waits} other {# imported blogs wait}} until Tela takes new blogs again.",
+    "subscriptionsCap": "You follow {count} of the {max} blogs one account holds."
   },
   "invites": {
     "intro": "Tela is invite-only for now. You can invite five people: a code lets one person in, and once used it counts for good. Revoke a code nobody has used to get its place back.",
@@ -1046,7 +1061,9 @@
     "updated": "Last updated {date}"
   },
   "toast": {
-    "undo": "Undo"
+    "undo": "Undo",
+    "subscriptionLimit": "You follow {max} blogs, the most one account holds. Unsubscribe from one to add another.",
+    "subscriptionLimitMany": "That’s {n} more blogs, and one account holds {max} at most. You can follow {room, plural, one {one more} other {# more}}."
   },
   "firstRun": {
     "title": "Start with a few blogs",

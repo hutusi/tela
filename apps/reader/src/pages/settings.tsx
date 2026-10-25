@@ -8,7 +8,9 @@
  * live answers on purpose (`settings-account.tsx`).
  */
 import {
+  type AccountUsage,
   asLabel,
+  daysToArrive,
   LANGUAGE_NAMES,
   MAX_FOLDERS,
   READING_LANGUAGES,
@@ -28,6 +30,7 @@ import {
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useNavigationType, useParams } from 'react-router'
 import { useTranslations } from 'use-intl'
+import { ImportSummary, useAddProblemWords, useClockTime } from '../components/add-words'
 import { AvatarCrop } from '../components/avatar-crop'
 import { BlogrollDialog } from '../components/blogroll-dialog'
 import {
@@ -51,7 +54,7 @@ import { canMakeFolder, filedIn, folderWith, groupRows, knownFolders } from '../
 import { displayHost } from '../lib/format'
 import type { ReadingMode } from '../lib/href'
 import { newId } from '../lib/id'
-import { type AddError, importOpml, saveDownload } from '../lib/opml'
+import { type AddProblem, type Imported, importOpml, saveDownload } from '../lib/opml'
 import { PREF_KEYS, readingPrefsOf } from '../lib/prefs'
 import { latestPosts, matcher } from '../lib/subscriptions'
 import { useTitle } from '../lib/title'
@@ -66,6 +69,7 @@ import {
   typographyOf,
 } from '../lib/typography'
 import { offerUndo } from '../lib/undo'
+import { useUsage } from '../lib/usage'
 import { BELOW_LG, BELOW_MD, useMediaQuery } from '../lib/use-media'
 import { api, apiJson } from '../store/api'
 import { useNow, usePrivacyUnsettled, useReadingLang, useStore, useTables } from '../store/hooks'
@@ -780,7 +784,63 @@ function TranslationSection() {
         />
       </SettingRow>
       <NeverTranslate never={prefs.never} readingLang={readingLang} names={names} />
+      <TranslationsToday />
     </>
+  )
+}
+
+/**
+ * How many of the day's new translations the member has asked for (ADR 0063), from the live usage
+ * answer: nothing until it comes, so the page never shows a count it does not know.
+ */
+function TranslationsToday() {
+  const t = useTranslations('settings')
+  const { store } = useStore()
+  const { usage } = useUsage(store.userId)
+  const time = useClockTime()
+  if (!usage) return null
+  const { perDay, usedToday, waiting, resetsAt } = usage.translations
+  const hint = [
+    perDay === null ? t('translationsFree') : t('translationsHint', { time: time(resetsAt) }),
+    waiting > 0 ? t('translationsWaiting', { n: waiting, time: time(resetsAt) }) : null,
+  ]
+    .filter(Boolean)
+    .join(' ')
+  return (
+    <SettingRow label={t('translationsToday')} hint={hint} testId="translations-today">
+      <span className="text-[13.5px] text-ink-2 tabular-nums">
+        {perDay === null
+          ? t('translationsUnlimited')
+          : t('translationsTodayValue', { used: usedToday, perDay })}
+      </span>
+    </SettingRow>
+  )
+}
+
+/**
+ * What the usage answer says about the member's subscriptions (ADR 0063): imported blogs that
+ * wait for a later day, and the cap once it is near. Nothing until the answer comes.
+ */
+function SubscriptionUsage({ usage, held }: { usage: AccountUsage | null; held: number }) {
+  const t = useTranslations('settings')
+  if (!usage) return null
+  const { pending, perDay } = usage.feeds
+  const { max } = usage.subscriptions
+  const days = daysToArrive(pending, perDay)
+  const lines = [
+    pending > 0
+      ? days === null || perDay === null
+        ? t('subscriptionsPendingPaused', { n: pending })
+        : t('subscriptionsPending', { n: pending, perDay, days })
+      : null,
+    // From four in five of the cap: before that it is no news.
+    max !== null && held * 5 >= max * 4 ? t('subscriptionsCap', { count: held, max }) : null,
+  ].filter((line): line is string => line !== null)
+  if (lines.length === 0) return null
+  return (
+    <p className="mt-1 max-w-xl text-[13px] text-ink-2" data-testid="subscription-usage">
+      {lines.join(' ')}
+    </p>
   )
 }
 
@@ -899,6 +959,7 @@ function SubscriptionsSection() {
   const tables = useTables()
   const now = useNow()
   const { store, engine } = useStore()
+  const { usage, reload: reloadUsage } = useUsage(store.userId)
   // The manager wants a pointer and room for its pane: below `lg`, the sections.
   const narrow = useMediaQuery(BELOW_LG)
   const phone = useMediaQuery(BELOW_MD)
@@ -1068,13 +1129,21 @@ function SubscriptionsSection() {
 
   const header = (
     <div className="mb-2.5 flex flex-wrap items-end justify-between gap-4">
-      <p className="text-[14px] text-muted" data-testid="subscription-count">
-        {folders.length > 0
-          ? t('subscriptionsInFolders', { blogs: rows.length, folders: folders.length })
-          : t('subscriptionsIntro', { n: rows.length })}
-      </p>
+      <div>
+        <p className="text-[14px] text-muted" data-testid="subscription-count">
+          {folders.length > 0
+            ? t('subscriptionsInFolders', { blogs: rows.length, folders: folders.length })
+            : t('subscriptionsIntro', { n: rows.length })}
+        </p>
+        <SubscriptionUsage usage={usage} held={rows.length} />
+      </div>
       <div className="flex flex-wrap items-start gap-2">
-        <OpmlImport onImported={() => void engine.pull()} />
+        <OpmlImport
+          onImported={() => {
+            void engine.pull()
+            reloadUsage()
+          }}
+        />
         <ExportButton
           path="/api/v1/feeds/opml"
           fallbackName="tela-subscriptions.opml"
@@ -1273,9 +1342,9 @@ function SubscriptionsSection() {
 /** A file picker that imports as soon as a file is chosen, and says what came of it. */
 function OpmlImport({ onImported }: { onImported: () => void }) {
   const t = useTranslations('settings')
-  const ta = useTranslations('add')
+  const words = useAddProblemWords()
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<{ feeds: number } | { error: AddError } | null>(null)
+  const [result, setResult] = useState<Imported | AddProblem | null>(null)
   const choose = async (file: File | undefined) => {
     if (!file) return
     setBusy(true)
@@ -1305,10 +1374,10 @@ function OpmlImport({ onImported }: { onImported: () => void }) {
       </label>
       {result ? (
         <span
-          className={`text-[12.5px] ${'error' in result ? 'text-danger' : 'text-ink-2'}`}
+          className={`max-w-80 text-right text-[12.5px] ${'error' in result ? 'text-danger' : 'text-ink-2'}`}
           data-testid="opml-result"
         >
-          {'error' in result ? ta(`errors.${result.error}`) : ta('imported', { n: result.feeds })}
+          {'error' in result ? words(result) : <ImportSummary result={result} />}
         </span>
       ) : null}
     </div>

@@ -10,6 +10,7 @@ import {
   dueExtractions,
   dueFeeds,
   dueGravatarChecks,
+  duePendingFeeds,
   dueReprocessing,
   dueTitles,
   FEED_FETCH_TTL_MS,
@@ -36,6 +37,7 @@ import {
 } from '@tela/ingest/pipeline'
 import { PIPELINE_VERSION } from '@tela/shared'
 import { type SQL, sql } from 'drizzle-orm'
+import { PENDING_FEEDS_TTL_MS, pendingFeedsJob } from './pending-feeds'
 import { translateBodyJob } from './translation/body'
 import { TITLE_TTL_MS, type TranslationContext, translateTitlesJob } from './translation/titles'
 
@@ -140,6 +142,24 @@ export const KINDS: Partial<Record<LeaseKind, KindSpec>> = {
     // Asked often enough: stamp it, and the answer it had (none, if never) waits a week.
     exhausted: (db, key, now) => [
       db.run(sql`update profiles set gravatar_checked_at = ${now} where user_id = ${key}`),
+    ],
+  },
+  'member.pendingFeeds': {
+    // An import's feeds new to Tela beyond the member's day, added on the days after (ADR 0063).
+    // Keyed by member; nothing is fetched, so no host. Due only while a run would move something:
+    // the day and the cap have room, or a waiting feed is one Tela has now.
+    queue: 'misc',
+    ttlMs: PENDING_FEEDS_TTL_MS,
+    limit: 50,
+    backoff: { baseMs: 10 * MIN, maxMs: 6 * 60 * MIN, maxAttempts: 3 },
+    due: (now) => duePendingFeeds(now),
+    run: pendingFeedsJob,
+    // A batch that keeps failing is a bug, not a member's doing: their feeds wait a day, visibly.
+    exhausted: (db, key, now) => [
+      db.run(sql`
+        update pending_feeds set queued_at = ${now + 24 * 60 * MIN}
+        where user_id = ${key} and queued_at <= ${now}
+      `),
     ],
   },
   'site.claim': {

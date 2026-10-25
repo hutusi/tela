@@ -41,6 +41,9 @@ beforeEach(async () => {
     db.run(sql`insert into body_translations (content_key, lang, state, request_id, requested_by,
         reserved_tokens, reserved_day, updated_at)
       values ('ck1', 'fr', 'requested', 'r1', 'u1', 5000, '2026-10-05', ${NOW - HOUR})`),
+    // An import's feed new to Tela, waiting for a day with room (ADR 0063).
+    db.run(sql`insert into pending_feeds (user_id, feed_url, queued_at)
+      values ('u1', 'https://new.example/feed', ${NOW - HOUR})`),
   ] as never)
 })
 
@@ -55,6 +58,7 @@ const KEYS: Record<LeaseKind, string> = {
   'site.claim': '1',
   'websub.subscribe': '1',
   'member.gravatar': 'u1',
+  'member.pendingFeeds': 'u1',
 }
 
 const ctx = { backgroundBudget: 0 } as WorkContext

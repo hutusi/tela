@@ -15,6 +15,7 @@ import {
   gravatarOn,
   recountReaders,
   standingOk,
+  subscriptionRoom,
   type TelaDb,
 } from '@tela/data'
 import { hasControl, MAX_BLOGROLL_BLOGS, MAX_BLOGROLLS, MAX_FOLDERS } from '@tela/shared'
@@ -147,11 +148,15 @@ function statementsFor(
       ]
     }
     case 'subscribe':
+      // Past the member's subscription cap (ADR 0063) a new one writes nothing, as a folder past
+      // MAX_FOLDERS does; one already followed was a no-op anyway. The device refuses first,
+      // with words, from the cap its usage answer gave it.
       return [
         db.run(sql`
           insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at, seq)
           select ${userId}, ${feedOf(m)}, 0, ${now}, ${now}, ${currentSeq}
           from feeds where id = ${m.feedId} ${unmerged(m)} and ${fresh}
+            and ${subscriptionRoom(userId)} > 0
           on conflict (user_id, feed_id) do update set
             deleted_at = null, updated_at = excluded.updated_at, seq = excluded.seq
           where subscriptions.deleted_at is not null

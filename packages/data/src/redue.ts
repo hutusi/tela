@@ -88,6 +88,16 @@ export const REDUE: Record<LeaseKind, Redue> = {
       db.run(sql`update profiles set gravatar_checked_at = null where user_id = ${key}`),
     ],
   },
+  // Not synced: a member's waiting feeds are on no device. Exhausted pushed the wait a day out;
+  // due again as soon as the member's day and cap have room.
+  'member.pendingFeeds': {
+    synced: false,
+    statements: (db, key, now) => [
+      db.run(sql`
+        update pending_feeds set queued_at = ${now} where user_id = ${key} and queued_at > ${now}
+      `),
+    ],
+  },
   // A member's own re-check does the same (routes/claims.ts); an operator's vouch, if any, stays.
   'site.claim': {
     synced: true,

@@ -747,6 +747,27 @@ export function view(confirmed: Confirmed, pending: readonly Pending[]): Tables 
   return t
 }
 
+/** The subscriptions the tables hold, a pending one included when they are a view. */
+export function subscriptionCount(t: Pick<Tables, 'subscriptions'>): number {
+  let n = 0
+  for (const sub of t.subscriptions.values()) if (sub.deletedAt === null) n++
+  return n
+}
+
+/**
+ * Whether subscribing to `adding` more would hold more than `cap` (ADR 0063). The server refuses a
+ * subscribe past the cap without a word, as it refuses any mutation, so the device asks this first
+ * and says why; a cap it does not know (null) refuses nothing, and the server still holds it.
+ * Prediction stays optimistic: two devices may each take the last place, and the pull settles it.
+ */
+export function pastSubscriptionCap(
+  t: Pick<Tables, 'subscriptions'>,
+  cap: number | null,
+  adding: number,
+): boolean {
+  return cap !== null && adding > 0 && subscriptionCount(t) + adding > cap
+}
+
 /**
  * Drop the pending mutations the confirmed tables already hold: acknowledged by a push, and
  * reached by a pull. One acknowledged later than the cursor stays, or the screen would show it

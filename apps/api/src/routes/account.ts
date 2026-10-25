@@ -21,7 +21,8 @@
  * pass none of its limits, so each change is counted per member, once it is known to be one: a
  * refusal for a stale session or an account that is not the member's spends nothing.
  */
-import { consumeLimit, type LimitedAction } from '@tela/data'
+import { consumeLimit, type LimitedAction, memberAllowances, nextUtcDay } from '@tela/data'
+import type { AccountUsage } from '@tela/shared'
 import { isAPIError } from 'better-auth/api'
 import { type Context, Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
@@ -89,6 +90,35 @@ export function accountRoutes(deps: ApiDeps, auth: Auth) {
       .sort((a, b) => a.since - b.since)
     return { linked, hasPassword: accounts.some((account) => account.providerId === 'credential') }
   }
+
+  /**
+   * `GET /usage`: what the member has used of their limits today (ADR 0063), live, for Settings
+   * and for the cap the reader checks before it subscribes. Registered before the session check
+   * below, which it does not need: it is no security state, and the member check every `/api/v1`
+   * route has already names the member. An admin's limits do not apply to them, so they read as
+   * none (`exempt` says why).
+   */
+  routes.get('/usage', async (c) => {
+    const now = deps.clock.now()
+    const used = await memberAllowances(db, c.get('member').id, now)
+    const none = (limit: number | null) => (used.exempt ? null : limit)
+    const answer: AccountUsage = {
+      translations: {
+        perDay: none(used.translations.perDay),
+        usedToday: used.translations.usedToday,
+        waiting: used.translations.waiting,
+        resetsAt: nextUtcDay(now),
+      },
+      feeds: {
+        perDay: none(used.feeds.perDay),
+        addedToday: used.feeds.addedToday,
+        pending: used.feeds.pending,
+      },
+      subscriptions: { max: none(used.subscriptions.max), count: used.subscriptions.count },
+      exempt: used.exempt,
+    }
+    return c.json(answer, 200, { 'cache-control': 'no-store' })
+  })
 
   routes.use('*', async (c, next) => {
     const found = await auth.api.getSession({

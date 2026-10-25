@@ -14,7 +14,8 @@
     "people": "People",
     "invites": "Invitations",
     "translation": "Translation",
-    "system": "System"
+    "system": "System",
+    "settings": "Settings"
   },
   "groups": {
     "queues": "Queues",
@@ -31,7 +32,8 @@
     "people": "Members and their account basics. Admins see a member's public card, never what they read, subscribe to, like or highlight.",
     "invites": "Tela is invitation-only. Each member has five codes to give; an operator's code admits as many people as it was given.",
     "translation": "What translation costs, in tokens, over the last 30 days. Members reserve against a daily cap; titles for everyone come out of one background budget.",
-    "system": "The health check and the work it watches. A job that runs out of attempts becomes a dead letter, and nothing retries it unless someone does."
+    "system": "The health check and the work it watches. A job that runs out of attempts becomes a dead letter, and nothing retries it unless someone does.",
+    "settings": "What you can change while Tela runs: who may join, the limits on an ordinary account, the day's translation budgets, and when Tela mails you. A change holds at once, with no deploy."
   },
   "actions": {
     "site": {

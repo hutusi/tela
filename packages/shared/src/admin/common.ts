@@ -17,6 +17,7 @@ export const ADMIN_AREAS = [
   'invites',
   'translation',
   'system',
+  'settings',
 ] as const
 export type AdminArea = (typeof ADMIN_AREAS)[number]
 
@@ -36,6 +37,8 @@ export const ADMIN_FILTERS = {
   invites: ['codes', 'waiting', 'revoked'],
   translation: ['blogs', 'jobs', 'models'],
   system: ['dead', 'retrying', 'resolved'],
+  // Every runtime setting (ADR 0056), and those a stored row overrides.
+  settings: ['all', 'changed'],
 } as const satisfies Record<Exclude<AdminArea, 'overview'>, readonly string[]>
 export type LedgerArea = keyof typeof ADMIN_FILTERS
 export type AdminFilter<A extends LedgerArea = LedgerArea> = (typeof ADMIN_FILTERS)[A][number]
