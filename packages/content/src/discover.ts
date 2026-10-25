@@ -68,6 +68,27 @@ export function findFeedLinks(html: string, baseUrl: string): FeedCandidate[] {
 }
 
 /**
+ * The URL in a refresh's `content`: a delay, `;` or `,`, then the target, bare, after `url=`, or
+ * quoted ("0; url=/zht/", "0;URL='/zht/'", "0; /zht/"). Read step by step, as the HTML standard
+ * does, never by one regex: runs of whitespace that two parts of a pattern can both take made a
+ * blank attribute of 80 KB cost four seconds of CPU, and a page may carry megabytes of it.
+ */
+function refreshUrl(content: string): string | null {
+  let rest = content.trimStart()
+  rest = rest.slice(/^[\d.]*/.exec(rest)?.[0].length ?? 0).trimStart()
+  if (rest[0] !== ';' && rest[0] !== ',') return null
+  rest = rest.slice(1).trimStart()
+  const named = /^url\s*=/i.exec(rest)
+  if (named) rest = rest.slice(named[0].length).trimStart()
+  const quote = rest[0]
+  if (quote === '"' || quote === "'") {
+    const end = rest.indexOf(quote, 1)
+    rest = rest.slice(1, end < 0 ? undefined : end)
+  }
+  return rest.trim() || null
+}
+
+/**
  * Where a `<meta http-equiv="refresh">` sends the page, when that is another page. Hugo makes such
  * a page of a multilingual site's root and of every alias, and declares the feed only at the
  * target: byvoid.com's home sends to `/zht/`, which names `zht/feed.xml`. A refresh with no URL,
@@ -78,10 +99,7 @@ export function findMetaRefresh(html: string, baseUrl: string): string | null {
   const here = absoluteUrl(baseUrl)?.split('#')[0]
   for (const meta of findAll((el) => el.name === 'meta', doc.children)) {
     if ((getAttributeValue(meta, 'http-equiv') ?? '').trim().toLowerCase() !== 'refresh') continue
-    // "0; url=/zht/", "0;URL='/zht/'", or "0; /zht/": a delay, then the target.
-    const target = (getAttributeValue(meta, 'content') ?? '').match(
-      /^\s*\d*(?:\.\d*)?\s*[;,]\s*(?:url\s*=\s*)?(['"]?)(.*?)\1\s*$/i,
-    )?.[2]
+    const target = refreshUrl(getAttributeValue(meta, 'content') ?? '')
     const url = target ? absoluteUrl(target, baseUrl) : null
     if (url && url.split('#')[0] !== here) return url
   }

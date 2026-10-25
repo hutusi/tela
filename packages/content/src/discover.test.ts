@@ -49,7 +49,20 @@ describe('discover', () => {
     expect(findMetaRefresh(page('0; url=/#top'), base)).toBeNull()
     expect(findMetaRefresh(page('0; url=javascript:alert(1)'), base)).toBeNull()
     expect(findMetaRefresh(page('0; url=/zht/', 'content-type'), base)).toBeNull()
+    // An unclosed quote still names the target.
+    expect(findMetaRefresh(page("0; url='/zht/"), base)).toBe('https://byvoid.com/zht/')
   })
+
+  // A regex read 80 KB of blank attribute in four seconds, and would have taken 40 on this.
+  test('a meta refresh is read in time linear in its length', () => {
+    const blank = ' '.repeat(256 * 1024)
+    for (const content of [blank, `0${blank}`, `0;${blank}url=${blank}x${blank}\n`]) {
+      const html = `<meta http-equiv="refresh" content="${content}">`
+      expect(findMetaRefresh(html, 'https://byvoid.com/')).toBe(
+        content.includes('x') ? 'https://byvoid.com/x' : null,
+      )
+    }
+  }, 1000)
 
   test('candidate paths are absolute on the origin', () => {
     const urls = candidateFeedUrls('https://blog.example')
