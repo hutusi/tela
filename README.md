@@ -7,9 +7,10 @@ original, so anyone can read the world's indie blogs.
 
 Every feed here has a specific human behind it.
 
-Tela is in private testing: the site is at <https://telaread.com>, and every new account
-needs an invitation, an invite code from a member (each may invite five people) or from the person
-who runs it.
+Tela is at <https://telaread.com>. Whether a new account needs an invitation is a switch the
+person who runs it flips while it runs: while sign-up is closed, an invite code comes from a member
+(each may invite five people) or from them; while it is open, anyone with an email address can
+join.
 
 ## Layout
 
@@ -63,16 +64,24 @@ bun run dev           # the reader with tela-api and tela-jobs beside it; see do
 - **Discover**: listed blogs with topic and language filters, blog pages, subscribe from a card.
   A blog gets there three ways: an editorial pick, its author claiming it, or three distinct
   members subscribing to it.
-- **Claim your feed**: prove ownership with a meta tag or `rel="me"` link; claimed blogs are
-  listed and can opt out of translation.
+- **Claim your feed**: prove ownership with a meta tag, a `rel="me"` link or GitHub; claimed blogs
+  are listed and can opt out of translation, or ask Tela to use only what the feed provides. Tela's
+  page fetches obey robots.txt, and For writers (`/writers`) explains how Tela reads a blog.
 - **Recommendations**: recommend a post with a note; the note appears on your public profile
   (`/@handle`) and in the author's dashboard next to likes and reader counts.
 - **Search**: the device first, then blogs by name, address or description and older posts in your
   subscriptions by original or translated title.
 - **Freshness**: adaptive polling with conditional requests, plus WebSub push where a feed
   advertises a hub.
-- **Running unattended**: a dead-man's switch, a weekly digest, a verified nightly export that
-  restores anywhere SQLite runs, and D1's point-in-time recovery.
+- **Your data**: export it as JSON and OPML, release a claimed blog, or delete your account from
+  Settings; report what breaks the rules on any public page.
+- **Findable**: public pages in each of the four languages by address, with sitemaps,
+  `/llms.txt`, and RSS and OPML of public blogrolls and Discover; search engines and AI answer
+  tools are welcome, AI training crawlers are not, on pages that show writers' work.
+- **Running unattended**: a dead-man's switch, mail when the day's translation budget runs low or
+  sign-ups surge, a weekly digest, limits and budgets changed without a deploy, a verified nightly
+  export that restores anywhere SQLite runs (and a drill that proves it), and D1's point-in-time
+  recovery.
 - **Languages**: Simplified and Traditional Chinese, English and French, for reading and for the
   interface, switchable without a reload. Traditional is converted from Simplified, never paid for
   twice.
