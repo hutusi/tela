@@ -152,15 +152,18 @@ export const RECOMMENDERS_SHOWN = 20
  * changed, keeps its row and so its place. Recommendations are public (ADR 0031), so a cached answer may carry them.
  */
 export const postExtras = (since: number): SQL => sql`
-  (select count(*) from recommendations r where r.article_id = a.id and r.deleted_at is null
-    and r.created_at >= ${since}) as "weekRecs",
+  (select count(*) from recommendations r join profiles p on p.user_id = r.user_id
+    where r.article_id = a.id and r.deleted_at is null and r.created_at >= ${since}
+      and ${standingOk('p')}) as "weekRecs",
   (select json_group_array(x.user_id) from (
-    select r.user_id from recommendations r where r.article_id = a.id and r.deleted_at is null
+    select r.user_id from recommendations r join profiles p on p.user_id = r.user_id
+    where r.article_id = a.id and r.deleted_at is null and ${standingOk('p')}
     order by r.id desc limit ${sql.raw(String(RECOMMENDERS_SHOWN))}) x) as "recommenders",
   (select json_object('text', r.note, 'id', p.user_id, 'handle', p.handle,
       'displayName', p.display_name, 'avatar', ${avatarOf('p')})
     from recommendations r join profiles p on p.user_id = r.user_id
     where r.article_id = a.id and r.deleted_at is null and r.note is not null and r.note <> ''
+      and ${standingOk('p')}
     order by r.id desc limit 1) as "note"`
 
 /**
@@ -207,7 +210,7 @@ export const editionStatement = (now: number, extras?: SQL): SQL => sql`
     where f.site_id = s.id and f.merged_into is null
     order by a1.sort_at desc, a1.id desc limit 1
   )
-  left join profiles p on p.user_id = s.claimed_by
+  left join profiles p on p.user_id = s.claimed_by and ${standingOk('p')}
   where s.listing in ${PUBLIC_LISTING}
   order by a.sort_at desc, a.id desc
   limit 60

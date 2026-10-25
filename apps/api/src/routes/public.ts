@@ -10,7 +10,15 @@
  * says how a blog was listed: nothing public renders it, and beside a held-back count it would
  * tell a blog an operator listed from the queue from an editorial pick (ADR 0041).
  */
-import { ARTICLE_COLUMNS, avatarOf, consumeLimit, first, isShown, signupState } from '@tela/data'
+import {
+  ARTICLE_COLUMNS,
+  avatarOf,
+  consumeLimit,
+  first,
+  isShown,
+  signupState,
+  standingOk,
+} from '@tela/data'
 import { HANDLE, isTopic, RESERVED_HANDLES } from '@tela/shared'
 import { getIP } from 'better-auth/api'
 import { sql } from 'drizzle-orm'
@@ -148,7 +156,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
           (select count(*) from articles a join feeds f on f.id = a.feed_id
             where f.site_id = s.id and f.merged_into is null and a.sort_at >= ${since})
             as "postsLast30d"
-        from sites s left join profiles p on p.user_id = s.claimed_by
+        from sites s left join profiles p on p.user_id = s.claimed_by and ${standingOk('p')}
         where s.id = ${siteId} and s.listing in ${PUBLIC_LISTING}
       `),
       db.all(sql`
@@ -168,12 +176,12 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       db.all(sql`select topic from site_topics where site_id = ${siteId}`),
       // What readers said recommending its posts: recommendations are public (ADR 0031).
       db.all(sql`
-        select r.note, r.created_at as "createdAt", p.handle, p.display_name as "displayName",
-          ${ARTICLE_COLUMNS}, ${TITLES}
+        select r.note, r.created_at as "createdAt", p.user_id as "userId", p.handle,
+          p.display_name as "displayName", ${ARTICLE_COLUMNS}, ${TITLES}
         from recommendations r join articles a on a.id = r.article_id
         join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         join profiles p on p.user_id = r.user_id
-        where f.site_id = ${siteId} and s.listing in ${PUBLIC_LISTING}
+        where f.site_id = ${siteId} and s.listing in ${PUBLIC_LISTING} and ${standingOk('p')}
           and r.deleted_at is null and r.note is not null and r.note <> ''
         order by r.created_at desc limit 5
       `),
@@ -201,8 +209,14 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
         posts: (posts ?? []).map(withTitles),
         topics: (topics ?? []).map((t) => t.topic),
         notes: (notes ?? []).map((n) => {
-          const { note, createdAt, handle, displayName, ...article } = n
-          return { note, createdAt, person: { handle, displayName }, article: withTitles(article) }
+          const { note, createdAt, userId, handle, displayName, ...article } = n
+          return {
+            note,
+            createdAt,
+            // The account id: what a report of the note names (ADR 0059).
+            person: { id: userId, handle, displayName },
+            article: withTitles(article),
+          }
         }),
       },
       200,
@@ -226,7 +240,7 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
       db,
       sql`select user_id, handle, display_name, bio, created_at, public_subscriptions, public_likes,
             ${avatarOf('p')} as avatar, ${profileIndexable(deps.clock.now())} as indexable
-          from profiles p where handle = ${handle}`,
+          from profiles p where handle = ${handle} and ${standingOk('p')}`,
     )
     if (!profile) return publicNotFound()
     const id = profile.user_id
@@ -267,8 +281,12 @@ export function publicRoutes(deps: ApiDeps, auth: Auth) {
         : db.all(none),
       db.all(sql`
         select
-          (select count(*) from follows where follower_id = ${id} and deleted_at is null) as following,
-          (select count(*) from follows where followee_id = ${id} and deleted_at is null) as followers,
+          (select count(*) from follows fo join profiles fp on fp.user_id = fo.followee_id
+            where fo.follower_id = ${id} and fo.deleted_at is null and ${standingOk('fp')})
+            as following,
+          (select count(*) from follows fo join profiles fp on fp.user_id = fo.follower_id
+            where fo.followee_id = ${id} and fo.deleted_at is null and ${standingOk('fp')})
+            as followers,
           (select count(*) from recommendations where user_id = ${id} and deleted_at is null)
             as recommendations,
           (select count(*) from user_article_states where user_id = ${id} and liked_at is not null)

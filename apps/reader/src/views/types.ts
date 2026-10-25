@@ -93,8 +93,16 @@ export type SiteData = {
   feeds: { id: number; feedUrl: string; title: string | null }[]
   posts: PublicArticle[]
   topics: string[]
-  /** Recent recommendations of its posts that came with a note. */
-  notes: { note: string; createdAt: number; person: PersonRef; article: PublicArticle }[]
+  /**
+   * Recent recommendations of its posts that came with a note, each by a person whose account id
+   * is what a report of the note names (absent from a tela-api before ADR 0059).
+   */
+  notes: {
+    note: string
+    createdAt: number
+    person: PersonRef & { id?: string }
+    article: PublicArticle
+  }[]
 }
 
 /** A post on a profile: the article, its blog, and whether that blog has a public page. */

@@ -3,12 +3,13 @@
  * readers said of them. Pure: the SPA and the edge both render it. The readers a member follows
  * come in by props, from a member call beside this cached page, never in it.
  */
-import { LANGUAGE_NAMES, type UiLocale } from '@tela/shared'
+import { LANGUAGE_NAMES, recommendationKey, type UiLocale } from '@tela/shared'
 import { Link } from 'react-router'
 import { useTranslations } from 'use-intl'
 import { CHECK, Glyph } from '../components/glyph'
 import { GlyphCount } from '../components/glyph-count'
 import { PersonAvatar } from '../components/person-avatar'
+import { ReportLink } from '../components/report-link'
 import { SiteAvatar } from '../components/site-avatar'
 import { blogsHref } from '../lib/discover-href'
 import { cadenceKey, displayHost, shortDate } from '../lib/format'
@@ -154,15 +155,24 @@ export function SiteView({
               )
             ) : null}
           </div>
-          {!claimant && member ? (
-            <Link
-              to={`/sites/${site.id}/claim`}
-              className="text-[13px] text-muted hover:text-ink"
-              data-testid="claim-link"
-            >
-              {t('claimLink')}
-            </Link>
-          ) : null}
+          <div className="flex flex-wrap items-baseline justify-end gap-x-3 gap-y-1 max-md:justify-start">
+            {!claimant && member ? (
+              <Link
+                to={`/sites/${site.id}/claim`}
+                className="text-[13px] text-muted hover:text-ink"
+                data-testid="claim-link"
+              >
+                {t('claimLink')}
+              </Link>
+            ) : null}
+            {member?.handle !== undefined && claimant?.handle === member.handle ? null : (
+              <ReportLink
+                subject={{ kind: 'site', key: String(site.id) }}
+                path={here}
+                member={member !== undefined}
+              />
+            )}
+          </div>
         </div>
       </header>
 
@@ -286,6 +296,18 @@ export function SiteView({
                     {tc('quoted', { text: n.note })}
                   </p>
                   <div className="mt-2 text-[12.5px] leading-[1.4] text-muted">
+                    {n.person.id && n.person.id !== member?.userId ? (
+                      <span className="float-right ml-3">
+                        <ReportLink
+                          subject={{
+                            kind: 'recommendation',
+                            key: recommendationKey(n.person.id, n.article.id),
+                          }}
+                          path={here}
+                          member={member !== undefined}
+                        />
+                      </span>
+                    ) : null}
                     {t.rich('noteOn', {
                       person: () => (
                         <Link

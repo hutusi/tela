@@ -7,6 +7,7 @@
   "nav": {
     "overview": "Overview",
     "claims": "Claims",
+    "reports": "Reports",
     "sites": "Sites",
     "feeds": "Feeds",
     "discover": "Discover",
@@ -23,6 +24,7 @@
   },
   "about": {
     "claims": "A blog becomes its author's once they prove it with a meta tag or a rel=\"me\" link. The check runs on its own; here are the claims it could not settle, the ones still checking, and the ones it verified.",
+    "reports": "What members reported on Tela’s public pages: a profile, a blogroll, a blog or a note. Each thing shows once, however many reported it. Resolve it once you have acted on it, or dismiss it when there is nothing to do; the actions that act on it are in its record.",
     "sites": "Every blog Tela knows: its feeds, its owner, its readers, and whether Discover lists it. The queues link here.",
     "feeds": "Each feed is fetched on its own schedule. These are the ones that stopped: errors, timeouts from Cloudflare, feeds that died, feeds paused by hand, and feeds merged into another.",
     "discover": "A blog is listed once it is claimed or three people read it, or when an operator lists it. The blogs members add wait under To review: list each, or say it is not for Discover. Featuring is the operator's call, and a hidden blog never appears, whatever its claims. Changes reach Discover within five minutes.",

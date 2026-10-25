@@ -36,6 +36,7 @@ import { memberRoutes } from './routes/members'
 import { pictureRoutes } from './routes/picture'
 import { publicRoutes } from './routes/public'
 import { publicFeedRoutes } from './routes/public-feeds'
+import { reportRoutes } from './routes/reports'
 import { sitemapRoutes } from './routes/sitemap'
 import { socialRoutes } from './routes/social'
 import { translationRoutes } from './routes/translations'
@@ -434,6 +435,8 @@ export function createApp(deps: ApiDeps): { app: Hono<ApiEnv>; auth: Auth } {
   app.route('/api/v1/translations', translationRoutes(deps))
   app.route('/api/v1/feeds', feedRoutes(deps))
   app.route('/api/v1/claims', claimRoutes(deps))
+  // Reporting what a public page shows (ADR 0059): members only; a visitor writes instead.
+  app.route('/api/v1/reports', reportRoutes(deps))
   app.route('/api/v1', memberRoutes(deps))
   app.route('/api/v1', pictureRoutes(deps))
   app.route('/api/v1', socialRoutes(deps))

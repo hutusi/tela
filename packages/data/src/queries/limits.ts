@@ -83,6 +83,11 @@ export const ACTION_LIMITS = {
   passwordChange: { limit: 5, windowSec: 900 },
   accountLink: { limit: 10, windowSec: 3600 },
   accountUnlink: { limit: 10, windowSec: 3600 },
+  /**
+   * Reports of public content (ADR 0059), per member: room to report everything wrong on a bad
+   * day, not to fill the operator's queue. A repeat of an open report counts too.
+   */
+  report: { limit: 20, windowSec: 86_400 },
 } as const satisfies Record<string, ActionLimit>
 
 export type LimitedAction = keyof typeof ACTION_LIMITS

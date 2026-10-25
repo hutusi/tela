@@ -24,6 +24,7 @@ import {
   siteRow,
   siteSelect,
 } from '../library/rows'
+import { OPEN_REPORTS } from '../members/reports'
 import { auditedLabel, lookUp, wantAudited, wanted, wantJob } from './names'
 import { DEAD_UNRESOLVED, deadRows, FEED_FAILING, toDeadRow } from './rows'
 import { liveHealth } from './system'
@@ -41,7 +42,8 @@ const queueCounts = (db: TelaDb) =>
       (select count(*) from site_claims c where ${NEEDS_REVIEW}) as claims,
       (select count(*) from feeds f where ${FEED_FAILING}) as feeds,
       (select count(*) from dead_letters d where ${DEAD_UNRESOLVED}) as dead,
-      (select count(*) from sites s where ${DISCOVER_REVIEW}) as candidates
+      (select count(*) from sites s where ${DISCOVER_REVIEW}) as candidates,
+      ${OPEN_REPORTS} as reports
   `)
 
 async function counts(db: TelaDb): Promise<AdminCounts> {
@@ -51,6 +53,7 @@ async function counts(db: TelaDb): Promise<AdminCounts> {
     feeds: Number(row.feeds ?? 0),
     dead: Number(row.dead ?? 0),
     discover: Number(row.candidates ?? 0),
+    reports: Number(row.reports ?? 0),
   }
 }
 

@@ -1063,5 +1063,50 @@
     "opml": "这些博客的 OPML 文件，可导入阅读器",
     "blogroll": "{owner} 在 Tela 上的博客链「{name}」里各个博客的最新文章。",
     "discover": "Tela 收录博客的最新文章。"
+  },
+  "report": {
+    "link": "举报",
+    "title": {
+      "profile": "举报这个个人页",
+      "blogroll": "举报这个博客链",
+      "site": "举报这个博客",
+      "recommendation": "举报这条推荐语"
+    },
+    "byMail": {
+      "profile": "发邮件举报这个个人页",
+      "blogroll": "发邮件举报这个博客链",
+      "site": "发邮件举报这个博客",
+      "recommendation": "发邮件举报这条推荐语"
+    },
+    "mailSubject": {
+      "profile": "举报：Tela 上的一个个人页",
+      "blogroll": "举报：Tela 上的一个博客链",
+      "site": "举报：Tela 上的一个博客",
+      "recommendation": "举报：Tela 上的一条推荐语"
+    },
+    "intro": "举报只会交给运营 Tela 的人，不会告诉任何人是谁举报的。",
+    "why": "它有什么问题？",
+    "reasons": {
+      "spam": "垃圾信息或广告",
+      "abuse": "辱骂或骚扰",
+      "impersonation": "冒充他人",
+      "copyright": "抄袭别人的作品",
+      "illegal": "违法内容",
+      "other": "其他问题"
+    },
+    "details": "还想补充什么",
+    "optional": "（可选）",
+    "count": "{n}/{max}",
+    "send": "提交举报",
+    "sending": "正在提交…",
+    "cancel": "取消",
+    "thanks": "谢谢你",
+    "thanksBody": "举报已经收到，会有人认真看，需要处理的会处理。",
+    "close": "关闭",
+    "errors": {
+      "rate_limited": "你今天已经举报了很多次，请明天再试。",
+      "not_found": "这项内容已经不再显示，无需再举报。",
+      "failed": "举报没能提交，请再试一次。"
+    }
   }
 }

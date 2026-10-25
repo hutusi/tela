@@ -12,7 +12,7 @@
  * blog's description cut to a tagline. Cached as a profile is, so a blogroll made private leaves
  * within minutes (ADR 0031).
  */
-import { avatarOf, BLOG_NAME, isShown, visibleBlogsFrom } from '@tela/data'
+import { avatarOf, BLOG_NAME, isShown, standingOk, visibleBlogsFrom } from '@tela/data'
 import { BLOGROLL_ID } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -46,7 +46,7 @@ export function blogrollRoutes(deps: ApiDeps) {
           ${BLOGROLL_INDEXABLE} as indexable, p.user_id as "ownerId", p.handle, p.display_name as "displayName",
           ${avatarOf('p')} as avatar
         from blogrolls r join profiles p on p.user_id = r.user_id
-        where r.id = ${id} and ${isShown('r')}
+        where r.id = ${id} and ${isShown('r')} and ${standingOk('p')}
       `),
       // A merged feed's row stays (ADR 0028): it is not updating when the feed it became is not.
       db.all(sql`

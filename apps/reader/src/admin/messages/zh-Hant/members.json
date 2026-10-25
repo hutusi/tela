@@ -12,11 +12,19 @@
     "rejected": "已隱藏"
   },
   "people": {
-    "filters": { "admins": "管理員", "members": "成員" },
+    "filters": {
+      "admins": "管理員",
+      "members": "成員",
+      "suspended": "已停用"
+    },
     "search": "按使用者名稱、暱稱或電子郵件搜尋",
     "name": "成員",
     "columns": { "role": "角色", "signIn": "登入方式", "joined": "加入時間" },
-    "role": { "admin": "管理員", "member": "成員" },
+    "role": {
+      "admin": "管理員",
+      "member": "成員",
+      "suspended": "已停用"
+    },
     "privacy": "閱讀記錄、訂閱和點贊都是私密的，管理員也看不到。",
     "kv": {
       "email": "電子郵件",
@@ -24,7 +32,8 @@
       "joined": "加入",
       "invites": "邀請",
       "sessions": "工作階段",
-      "bio": "簡介"
+      "bio": "簡介",
+      "suspended": "停用於"
     },
     "separator": "、",
     "joinedBy": {
@@ -97,5 +106,64 @@
       "created": "已建立，可供 {n, plural, other {# 人}}使用",
       "addUses": "名額從 {from} 增加到 {to}"
     }
+  },
+  "reports": {
+    "filters": {
+      "open": "待處理",
+      "resolved": "已處理",
+      "dismissed": "已忽略"
+    },
+    "search": "按名字、使用者名稱、部落格或檢舉內容搜尋",
+    "name": "被檢舉的內容",
+    "kinds": {
+      "profile": "個人頁",
+      "blogroll": "部落格鏈",
+      "site": "部落格",
+      "recommendation": "推薦語"
+    },
+    "sub": "{kind} · @{handle}",
+    "gone": "已不再顯示的{kind}",
+    "columns": {
+      "reason": "原因",
+      "reporters": "檢舉人數",
+      "when": "最近檢舉"
+    },
+    "reasons": {
+      "spam": "垃圾訊息",
+      "abuse": "辱罵或騷擾",
+      "impersonation": "冒充他人",
+      "copyright": "侵犯版權",
+      "illegal": "違法內容",
+      "other": "其他"
+    },
+    "reporters": "{n} 位成員",
+    "status": {
+      "open": "待處理",
+      "resolved": "已處理",
+      "dismissed": "已忽略"
+    },
+    "standing": {
+      "ok": "正常",
+      "suspended": "已停用",
+      "deleted": "帳戶已關閉"
+    },
+    "privacy": "檢舉人的名字只在這裡顯示。被檢舉的人不會知道是誰檢舉的。",
+    "kv": {
+      "what": "內容",
+      "page": "公開頁面",
+      "member": "所屬成員",
+      "reasons": "檢舉原因",
+      "reporters": "檢舉人數",
+      "first": "首次檢舉",
+      "last": "最近檢舉",
+      "decided": "處理"
+    },
+    "notPublic": "現在沒有對任何人顯示",
+    "decidedBy": "{when}，由 @{handle}",
+    "openBlog": "開啟這個部落格的記錄",
+    "actOn": "對它採取操作",
+    "entries": "檢舉",
+    "gonePerson": "帳戶已不存在的成員",
+    "from": "來自 {url}"
   }
 }

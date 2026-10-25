@@ -13,6 +13,7 @@ import {
   first,
   gravatarOn,
   publicReaderCount,
+  standingOk,
 } from '@tela/data'
 import { isReadingLanguage, isTopic, isValidHandle } from '@tela/shared'
 import { sql } from 'drizzle-orm'
@@ -187,6 +188,7 @@ export function memberRoutes(deps: ApiDeps) {
           join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
           join profiles p on p.user_id = r.user_id
           where s.claimed_by = ${member.id} and r.deleted_at is null and r.note is not null
+            and ${standingOk('p')}
         ) where n <= 20 order by "createdAt" desc
       `),
       // The counters are live counts (`recount` in sync/push.ts), as the posts' columns are.
@@ -197,6 +199,7 @@ export function memberRoutes(deps: ApiDeps) {
           (select count(*) from recommendations r join articles a2 on a2.id = r.article_id
             join feeds f2 on f2.id = a2.feed_id join profiles p2 on p2.user_id = r.user_id
             where f2.site_id = f.site_id and r.deleted_at is null and r.note is not null
+              and ${standingOk('p2')}
           ) as "notes"
         from articles a join feeds f on f.id = a.feed_id join sites s on s.id = f.site_id
         where s.claimed_by = ${member.id}

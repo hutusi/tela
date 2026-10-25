@@ -15,6 +15,7 @@ import { useTranslations } from 'use-intl'
 import { FeedLinks } from '../components/feed-links'
 import { CHECK, Glyph } from '../components/glyph'
 import { PersonAvatar } from '../components/person-avatar'
+import { ReportLink } from '../components/report-link'
 import { SiteAvatar } from '../components/site-avatar'
 import { daysAgo } from '../lib/days'
 import { blogrollFeedHref } from '../lib/feed-href'
@@ -171,6 +172,16 @@ export function BlogrollView({
               ? t('updatedDay', { when: updated.when })
               : t('updatedOn', { when: updated.when })}
           </span>
+          {mine ? null : (
+            <>
+              <span aria-hidden="true">·</span>
+              <ReportLink
+                subject={{ kind: 'blogroll', key: blogroll.id }}
+                path={here}
+                member={member !== undefined}
+              />
+            </>
+          )}
         </div>
         {actions ? (
           <div className="mt-1.5 flex w-full flex-col items-center gap-3">{actions}</div>

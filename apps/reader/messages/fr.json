@@ -1063,5 +1063,50 @@
     "opml": "Ces blogs en OPML, à importer dans un lecteur de flux",
     "blogroll": "Les derniers articles des blogs de {name}, une blogroll de {owner} sur Tela.",
     "discover": "Les derniers articles des blogs de l’annuaire de Tela."
+  },
+  "report": {
+    "link": "Signaler",
+    "title": {
+      "profile": "Signaler ce profil",
+      "blogroll": "Signaler cette blogroll",
+      "site": "Signaler ce blog",
+      "recommendation": "Signaler ce mot"
+    },
+    "byMail": {
+      "profile": "Signaler ce profil par e-mail",
+      "blogroll": "Signaler cette blogroll par e-mail",
+      "site": "Signaler ce blog par e-mail",
+      "recommendation": "Signaler ce mot par e-mail"
+    },
+    "mailSubject": {
+      "profile": "Signalement : un profil sur Tela",
+      "blogroll": "Signalement : une blogroll sur Tela",
+      "site": "Signalement : un blog sur Tela",
+      "recommendation": "Signalement : un mot sur Tela"
+    },
+    "intro": "Votre signalement va à la personne qui gère Tela, et à elle seule. Personne ne saura qui l’a envoyé.",
+    "why": "Quel est le problème ?",
+    "reasons": {
+      "spam": "Spam ou publicité",
+      "abuse": "Injurieux ou harcelant",
+      "impersonation": "Se fait passer pour quelqu’un d’autre",
+      "copyright": "Copie le travail de quelqu’un d’autre",
+      "illegal": "Illégal",
+      "other": "Autre chose"
+    },
+    "details": "Autre chose à préciser",
+    "optional": "(facultatif)",
+    "count": "{n}/{max}",
+    "send": "Envoyer le signalement",
+    "sending": "Envoi…",
+    "cancel": "Annuler",
+    "thanks": "Merci",
+    "thanksBody": "Votre signalement est bien arrivé. Il sera lu, et suivi d’effet si nécessaire.",
+    "close": "Fermer",
+    "errors": {
+      "rate_limited": "Vous avez envoyé beaucoup de signalements aujourd’hui. Réessayez demain.",
+      "not_found": "Ce contenu n’est plus affiché : il n’y a plus rien à signaler.",
+      "failed": "Le signalement n’a pas pu être envoyé. Réessayez."
+    }
   }
 }

@@ -160,6 +160,8 @@ export type AdminCounts = {
   dead: number
   /** Blogs members added that wait for review for Discover (ADR 0041). */
   discover: number
+  /** Things reported that wait for an operator (ADR 0059): one per thing, however many reported it. */
+  reports: number
 }
 
 export type AdminOverview = {

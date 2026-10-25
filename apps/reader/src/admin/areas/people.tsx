@@ -127,6 +127,10 @@ function PersonRecord({ row, detail, open }: RecordProps<AdminPersonRow, AdminPe
               : t('people.lastSeen', { sessions, when: relativeTime(person.lastSeenAt, locale) }),
           ],
           [t('people.kv.bio'), detail?.bio ?? null],
+          [
+            t('people.kv.suspended'),
+            person.suspendedAt === null ? null : fullDate(person.suspendedAt, locale),
+          ],
         ]}
       />
       {detail && detail.blogs.length > 0 ? (
@@ -211,7 +215,14 @@ export function usePeopleArea(): AnyAreaSpec {
       columns: [
         {
           label: t('people.columns.role'),
-          text: (row) => t(row.isAdmin ? 'people.role.admin' : 'people.role.member'),
+          text: (row) =>
+            t(
+              row.isAdmin
+                ? 'people.role.admin'
+                : row.suspendedAt !== null
+                  ? 'people.role.suspended'
+                  : 'people.role.member',
+            ),
         },
         { label: t('people.columns.signIn'), text: (row) => waysIn(t, row) },
         {
@@ -223,7 +234,9 @@ export function usePeopleArea(): AnyAreaSpec {
       status: (row) =>
         row.isAdmin
           ? { tone: 'info', label: t('people.role.admin') }
-          : { tone: 'neutral', label: t('people.role.member') },
+          : row.suspendedAt !== null
+            ? { tone: 'bad', label: t('people.role.suspended') }
+            : { tone: 'neutral', label: t('people.role.member') },
       Record: PersonRecord,
       bulk: [],
     }

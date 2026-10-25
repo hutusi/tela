@@ -4,9 +4,10 @@
  * recommends or follows: the console is for running Tela, not for watching its readers, and a
  * query that never touches those tables cannot leak them.
  */
-import { audit, avatarOf, historyOf, type TelaDb } from '@tela/data'
+import { audit, avatarOf, bumpSeq, currentSeq, historyOf, type TelaDb } from '@tela/data'
 import {
   ADMIN_LIST_LIMIT,
+  type AdminActionName,
   type AdminInvitedBy,
   type AdminList,
   type AdminPersonDetail,
@@ -17,7 +18,14 @@ import { type SQL, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { ApiDeps } from '../../../deps'
 import { likePattern } from '../../members'
-import { type ActHandler, type AdminEnv, returned, runBatch, searchBody } from '../framework'
+import {
+  type ActHandler,
+  type AdminEnv,
+  type Inverse,
+  returned,
+  runBatch,
+  searchBody,
+} from '../framework'
 import { codeQuery, toCode } from './invites'
 
 /** The ways in besides the mailed code that `account` rows record (ADR 0036). */
@@ -42,6 +50,7 @@ type PersonRaw = {
   invites_used: number
   sessions: number
   last_seen_at: number | null
+  suspended_at: number | null
 }
 
 /**
@@ -53,7 +62,7 @@ type PersonRaw = {
  */
 const personSelect = (wall: number) => sql`
   select u.id as user_id, p.handle, p.display_name, p.bio, u.email, ${avatarOf('p')} as avatar,
-    p.is_admin, u.created_at as joined_at,
+    p.is_admin, p.suspended_at, u.created_at as joined_at,
     (select json_group_array(w.provider_id) from (select distinct a.provider_id from account a
       where a.user_id = u.id and a.provider_id in ${WAYS_IN} order by a.provider_id) w) as sign_in,
     r.id as inv_id, r.code as inv_code, c.created_by as inv_by, ip.handle as inv_handle,
@@ -69,6 +78,16 @@ const personSelect = (wall: number) => sql`
     where x.user_id = u.id and x.settled_at is not null order by x.redeemed_at, x.id limit 1)
   left join invite_codes c on c.code = r.code
   left join profiles ip on ip.user_id = c.created_by`
+
+/**
+ * Each filter over `profiles p`: the admins, the members in good standing, and the suspended. An
+ * admin is never suspended (`member.suspend` refuses one), so no member is in two.
+ */
+const IN = {
+  admins: sql`(p.is_admin = 1)`,
+  members: sql`(p.is_admin <> 1 and p.suspended_at is null)`,
+  suspended: sql`(p.is_admin <> 1 and p.suspended_at is not null)`,
+} as const
 
 /** A search over a member's handle, display name and address; everyone without one. */
 const personMatches = (pattern: string | null): SQL =>
@@ -97,11 +116,26 @@ function parseList(json: string): string[] {
   }
 }
 
+/**
+ * What applies to a member now: signing out while there is a session to end; suspending one in
+ * good standing and lifting a suspension (ADR 0059). An admin is never suspended: ungranted first,
+ * from the command line, they can be.
+ */
+function personActions(r: PersonRaw): AdminActionName[] {
+  return [
+    ...(r.sessions > 0 ? (['member.signOut'] as const) : []),
+    ...(r.is_admin === 1
+      ? []
+      : r.suspended_at === null
+        ? (['member.suspend'] as const)
+        : (['member.unsuspend'] as const)),
+  ]
+}
+
 function toPerson(r: PersonRaw): AdminPersonRow {
   return {
     id: r.user_id,
-    // Signing out applies while there is a session to end.
-    actions: r.sessions > 0 ? ['member.signOut'] : [],
+    actions: personActions(r),
     userId: r.user_id,
     handle: r.handle,
     name: r.display_name,
@@ -115,6 +149,7 @@ function toPerson(r: PersonRaw): AdminPersonRow {
     invitesUsed: r.invites_used,
     sessions: r.sessions,
     lastSeenAt: r.last_seen_at,
+    suspendedAt: r.suspended_at,
   }
 }
 
@@ -162,18 +197,23 @@ export function peopleRoutes(deps: ApiDeps) {
     if (!isAdminFilter('people', f)) return null
     const matches = personMatches(likePattern(q))
     const [counts, rows] = await db.batch([
-      db.all<{ admins: number; members: number }>(sql`
-        select coalesce(sum(p.is_admin = 1), 0) as admins, coalesce(sum(p.is_admin <> 1), 0) as members
+      db.all<{ admins: number; members: number; suspended: number }>(sql`
+        select coalesce(sum(${IN.admins}), 0) as admins, coalesce(sum(${IN.members}), 0) as members,
+          coalesce(sum(${IN.suspended}), 0) as suspended
         from user u join profiles p on p.user_id = u.id where ${matches}
       `),
       db.all<PersonRaw>(sql`
         ${personSelect(deps.clock.now())}
-        where p.is_admin = ${f === 'admins' ? 1 : 0} and ${matches}
+        where ${IN[f]} and ${matches}
         order by u.created_at desc, u.id limit ${ADMIN_LIST_LIMIT + 1}
       `),
     ])
     const answer: AdminList<AdminPersonRow, 'people'> = {
-      counts: { admins: counts[0]?.admins ?? 0, members: counts[0]?.members ?? 0 },
+      counts: {
+        admins: counts[0]?.admins ?? 0,
+        members: counts[0]?.members ?? 0,
+        suspended: counts[0]?.suspended ?? 0,
+      },
       rows: rows.slice(0, ADMIN_LIST_LIMIT).map(toPerson),
       truncated: rows.length > ADMIN_LIST_LIMIT,
     }
@@ -238,4 +278,108 @@ async function personDetail(
   }
 }
 
-export const peopleActions = { 'member.signOut': signOut }
+/**
+ * Where a suspension may start: a member in good standing who is no admin and not the operator
+ * acting, over `profiles`. An admin is ungranted first, from the command line (ADR 0039).
+ */
+const suspendable = (id: string, actor: string) => sql`user_id = ${id} and user_id <> ${actor}
+  and is_admin = 0 and suspended_at is null and deleted_at is null`
+
+/** End every session of a member while they are suspended: what a suspension starts with. */
+const endSessions = (db: TelaDb, id: string) =>
+  db.all(sql`delete from session where user_id = ${id}
+    and exists (select 1 from profiles where user_id = ${id} and suspended_at is not null)
+    returning id`)
+
+/**
+ * Suspend a member (ADR 0059): `suspended_at` set, and every session ended in the same batch. The
+ * sign-in hook refuses them from then on, and every public answer leaves out their profile, notes
+ * and blogrolls (`standingOk`). The profile's seq moves, so the devices of the members who follow
+ * them drop the follow on their next pull. Undone, they can sign in again; the sessions it ended
+ * are not given back.
+ */
+const suspend: ActHandler = async (ctx, id) => {
+  const { db } = ctx.deps
+  const where = suspendable(id, ctx.actor)
+  const results = await runBatch(db, [
+    bumpSeq(db),
+    audit(
+      db,
+      {
+        group: ctx.group,
+        actor: ctx.actor,
+        action: 'member.suspend',
+        targetKind: 'member',
+        targetKey: id,
+        at: ctx.now,
+      },
+      { from: sql`json_object('suspendedAt', suspended_at)`, to: { suspendedAt: ctx.now } },
+      sql`from profiles where ${where}`,
+    ),
+    db.all(sql`update profiles set suspended_at = ${ctx.now}, seq = ${currentSeq}
+      where ${where} returning user_id`),
+    endSessions(db, id),
+    db.all(sql`select user_id from profiles where user_id = ${id}`),
+  ])
+  if (returned(results[2]).length > 0) return 'done'
+  return returned(results[4]).length > 0 ? 'not_applicable' : 'not_found'
+}
+
+/** Lift a suspension: the member may sign in again, and shows wherever they chose to. */
+const unsuspend: ActHandler = async (ctx, id) => {
+  const { db } = ctx.deps
+  const where = sql`user_id = ${id} and suspended_at is not null and deleted_at is null`
+  const results = await runBatch(db, [
+    bumpSeq(db),
+    audit(
+      db,
+      {
+        group: ctx.group,
+        actor: ctx.actor,
+        action: 'member.unsuspend',
+        targetKind: 'member',
+        targetKey: id,
+        at: ctx.now,
+      },
+      { from: sql`json_object('suspendedAt', suspended_at)`, to: { suspendedAt: null } },
+      sql`from profiles where ${where}`,
+    ),
+    db.all(sql`update profiles set suspended_at = null, seq = ${currentSeq}
+      where ${where} returning user_id`),
+    db.all(sql`select user_id from profiles where user_id = ${id}`),
+  ])
+  if (returned(results[2]).length > 0) return 'done'
+  return returned(results[3]).length > 0 ? 'not_applicable' : 'not_found'
+}
+
+/**
+ * Put a member's standing back while it is still what the action left. Putting a suspension back
+ * (undoing a lift) ends their sessions again, as suspending does: they may have signed in since.
+ */
+const restoreStanding: Inverse = (db, change) => {
+  const to = (change.to ?? {}) as { suspendedAt?: number | null }
+  const from = (change.from ?? {}) as { suspendedAt?: number | null }
+  const id = change.targetKey
+  const holds = sql`user_id = ${id} and suspended_at is ${to.suspendedAt ?? null}
+    and deleted_at is null`
+  return {
+    changed: sql`not exists (select 1 from profiles where ${holds})`,
+    restore: [
+      db.run(sql`update profiles set suspended_at = ${from.suspendedAt ?? null}, seq = ${currentSeq}
+        where ${holds}`),
+      endSessions(db, id),
+    ],
+    synced: true,
+  }
+}
+
+export const peopleActions = {
+  'member.signOut': signOut,
+  'member.suspend': suspend,
+  'member.unsuspend': unsuspend,
+}
+
+export const peopleInverses = {
+  'member.suspend': restoreStanding,
+  'member.unsuspend': restoreStanding,
+}

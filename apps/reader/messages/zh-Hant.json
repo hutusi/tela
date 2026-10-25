@@ -1063,5 +1063,50 @@
     "opml": "這些部落格的 OPML 檔案，可匯入閱讀器",
     "blogroll": "{owner} 在 Tela 上的部落格鏈「{name}」裡各個部落格的最新文章。",
     "discover": "Tela 收錄部落格的最新文章。"
+  },
+  "report": {
+    "link": "檢舉",
+    "title": {
+      "profile": "檢舉這個個人頁",
+      "blogroll": "檢舉這個部落格鏈",
+      "site": "檢舉這個部落格",
+      "recommendation": "檢舉這條推薦語"
+    },
+    "byMail": {
+      "profile": "發郵件檢舉這個個人頁",
+      "blogroll": "發郵件檢舉這個部落格鏈",
+      "site": "發郵件檢舉這個部落格",
+      "recommendation": "發郵件檢舉這條推薦語"
+    },
+    "mailSubject": {
+      "profile": "檢舉：Tela 上的一個個人頁",
+      "blogroll": "檢舉：Tela 上的一個部落格鏈",
+      "site": "檢舉：Tela 上的一個部落格",
+      "recommendation": "檢舉：Tela 上的一條推薦語"
+    },
+    "intro": "檢舉只會交給運營 Tela 的人，不會告訴任何人是誰檢舉的。",
+    "why": "它有什麼問題？",
+    "reasons": {
+      "spam": "垃圾訊息或廣告",
+      "abuse": "辱罵或騷擾",
+      "impersonation": "冒充他人",
+      "copyright": "抄襲別人的作品",
+      "illegal": "違法內容",
+      "other": "其他問題"
+    },
+    "details": "還想補充什麼",
+    "optional": "（選填）",
+    "count": "{n}/{max}",
+    "send": "提交檢舉",
+    "sending": "正在提交…",
+    "cancel": "取消",
+    "thanks": "謝謝你",
+    "thanksBody": "檢舉已經收到，會有人認真看，需要處理的會處理。",
+    "close": "關閉",
+    "errors": {
+      "rate_limited": "你今天已經檢舉了很多次，請明天再試。",
+      "not_found": "這項內容已經不再顯示，無需再檢舉。",
+      "failed": "檢舉沒能提交，請再試一次。"
+    }
   }
 }

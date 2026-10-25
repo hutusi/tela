@@ -23,6 +23,8 @@ export type Translate = (key: string, values?: Record<string, string | number>) 
 const DANGER: ReadonlySet<AdminActionName> = new Set([
   'site.hide',
   'blogroll.hide',
+  'member.suspend',
+  'member.delete',
   'claim.reject',
   'claim.remove',
   'code.revoke',

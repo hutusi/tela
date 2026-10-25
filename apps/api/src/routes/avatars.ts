@@ -4,7 +4,7 @@
  * ever sees Tela. Public, like the profiles it appears on, and only while the member shows it.
  */
 import { sha256Hex } from '@tela/content/hash'
-import { first, gravatarOn } from '@tela/data'
+import { first, gravatarOn, standingOk } from '@tela/data'
 import { GRAVATAR_URL } from '@tela/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -50,7 +50,7 @@ export function avatarRoutes(deps: ApiDeps) {
     const row = await first<{ email: string; avatarKey: string | null }>(
       db,
       sql`select u.email, p.avatar_key as "avatarKey" from profiles p join "user" u on u.id = p.user_id
-        where p.user_id = ${userId} and p.avatar_version = ${Number(version)}
+        where p.user_id = ${userId} and p.avatar_version = ${Number(version)} and ${standingOk('p')}
           and (p.avatar_key is not null or (${gravatarOn('p')} and p.gravatar_found = 1))`,
     )
     if (!row) return none(300)

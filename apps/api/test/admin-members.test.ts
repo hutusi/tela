@@ -151,7 +151,7 @@ describe('people', () => {
     await joinWith(annCode.code, 'bob@y.test')
 
     const admins = await people('admins')
-    expect(admins.counts).toEqual({ admins: 1, members: 2 })
+    expect(admins.counts).toEqual({ admins: 1, members: 2, suspended: 0 })
     expect(admins.rows.map((r) => r.email)).toEqual(['ops@x.test'])
     expect(admins.truncated).toBe(false)
     const members = await people('members')
@@ -159,10 +159,14 @@ describe('people', () => {
     expect(members.rows.every((r) => !r.isAdmin)).toBe(true)
 
     // By address, by handle, and a wildcard typed is a character searched for.
-    expect((await people('members', 'Y.TEST')).counts).toEqual({ admins: 0, members: 1 })
+    expect((await people('members', 'Y.TEST')).counts).toEqual({
+      admins: 0,
+      members: 1,
+      suspended: 0,
+    })
     const handle = await handleOf(ann.userId)
     expect((await people('members', handle)).rows.map((r) => r.userId)).toEqual([ann.userId])
-    expect((await people('members', '%')).counts).toEqual({ admins: 0, members: 0 })
+    expect((await people('members', '%')).counts).toEqual({ admins: 0, members: 0, suspended: 0 })
     expect((await api.request('/api/v1/admin/people?f=staff', { as: ops })).status).toBe(400)
   })
 
@@ -193,7 +197,7 @@ describe('people', () => {
     const annHandle = await handleOf(ann.userId)
     expect(rows.get(ann.userId)).toMatchObject({
       id: ann.userId,
-      actions: ['member.signOut'],
+      actions: ['member.signOut', 'member.suspend'],
       email: 'ann@x.test',
       signIn: ['credential', 'github'],
       invitedBy: { kind: 'operator' },
@@ -213,9 +217,9 @@ describe('people', () => {
       invitesUsed: 0,
     })
     expect(rows.get(cat.userId)?.invitedBy).toEqual({ kind: 'code', code: 'WELCOME' })
-    // Nobody to sign out: no session, nothing to offer.
+    // Nobody to sign out: no session, nothing to offer but a suspension.
     expect(rows.get(dee.userId)).toMatchObject({
-      actions: [],
+      actions: ['member.suspend'],
       sessions: 0,
       lastSeenAt: null,
       invitedBy: { kind: 'operator' },
@@ -266,6 +270,7 @@ describe('people', () => {
         'name',
         'sessions',
         'signIn',
+        'suspendedAt',
         'userId',
       ].sort(),
     )
@@ -373,7 +378,7 @@ describe('signing a member out', () => {
     })
     const detail = await get<AdminPersonDetail>(`people/${ann.userId}`)
     expect(detail.history.map((h) => h.action)).toEqual(['member.signOut'])
-    expect(detail.person.actions).toEqual([])
+    expect(detail.person.actions).toEqual(['member.suspend'])
   })
 })
 

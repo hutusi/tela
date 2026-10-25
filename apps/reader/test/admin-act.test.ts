@@ -3,11 +3,14 @@
  * toast, History and the health line say, in the console's own English and Simplified Chinese.
  */
 import { describe, expect, test } from 'bun:test'
+import { REPORT_REASONS, REPORT_STATES, REPORT_TARGETS } from '@tela/shared'
 import {
   ACTION_CONFIRM,
   ADMIN_ACTIONS,
+  ADMIN_AREAS,
   ADMIN_FILTERS,
   type AdminHealth,
+  type AdminReportRow,
   type AdminRowBase,
 } from '@tela/shared/admin'
 import { createTranslator } from 'use-intl'
@@ -23,6 +26,8 @@ import {
   undoMessage,
 } from '../src/admin/act'
 import { discoverDone, discoverWords } from '../src/admin/areas/discover'
+import type { MembersT } from '../src/admin/areas/people'
+import { reportStatus, targetSub, targetTitle } from '../src/admin/areas/reports'
 import { describeLibrary, restoreDone } from '../src/admin/areas/sites'
 import { ADMIN_MESSAGES } from '../src/admin/i18n'
 import { healthSummary } from '../src/admin/overview'
@@ -77,6 +82,79 @@ describe('the words', () => {
   })
 })
 
+describe('the members’ words', () => {
+  const members = (lang: 'en' | 'zh-Hans' | 'zh-Hant') =>
+    createTranslator({
+      locale: lang,
+      messages: { admin: ADMIN_MESSAGES[lang] },
+      namespace: 'admin.members',
+    }) as unknown as MembersT
+
+  test.each(['en', 'zh-Hans', 'zh-Hant'] as const)(
+    '%s names People’s and Reports’ filters, and every kind, reason and state of a report',
+    (lang) => {
+      const words = members(lang)
+      const keys = [
+        ...ADMIN_FILTERS.people.map((f) => `people.filters.${f}`),
+        ...ADMIN_FILTERS.reports.map((f) => `reports.filters.${f}`),
+        ...REPORT_TARGETS.map((k) => `reports.kinds.${k}`),
+        ...REPORT_REASONS.map((r) => `reports.reasons.${r}`),
+        ...REPORT_STATES.map((s) => `reports.status.${s}`),
+        ...['ok', 'suspended', 'deleted'].map((s) => `reports.standing.${s}`),
+        'people.role.suspended',
+        'people.kv.suspended',
+      ]
+      for (const key of keys) {
+        expect({ key, text: words(key) }).not.toEqual({ key, text: `admin.members.${key}` })
+      }
+      const shell = translator(lang)
+      for (const area of ADMIN_AREAS) {
+        expect(shell(`nav.${area}`)).not.toBe(`admin.shell.nav.${area}`)
+      }
+      expect(shell('about.reports')).not.toBe('admin.shell.about.reports')
+    },
+  )
+
+  test('a report row names what was reported, whose it is, and where it stands', () => {
+    const words = members('en')
+    const row = (over: Partial<AdminReportRow>): AdminReportRow => ({
+      id: 'profile:u-anna-000001',
+      actions: [],
+      target: {
+        kind: 'profile',
+        key: 'u-anna-000001',
+        label: 'Anna',
+        path: '/@anna',
+        member: { id: 'u-anna-000001', handle: 'anna', name: 'Anna', standing: 'ok' },
+        siteId: null,
+        actions: [],
+      },
+      state: 'open',
+      reason: 'spam',
+      reasons: ['spam'],
+      details: null,
+      reporters: 2,
+      firstAt: 0,
+      lastAt: 0,
+      decidedAt: null,
+      decidedBy: null,
+      ...over,
+    })
+    const open = row({})
+    expect(targetTitle(words, open.target)).toBe('Anna')
+    expect(targetSub(words, open.target)).toBe('Profile · @anna')
+    expect(reportStatus(words, open)).toEqual({ tone: 'warn', label: 'Open' })
+    const gone = row({
+      state: 'dismissed',
+      target: { ...open.target, kind: 'blogroll', label: null, member: null },
+    })
+    expect(targetTitle(words, gone.target)).toBe('Blogroll no longer shown')
+    expect(targetSub(words, gone.target)).toBe('Blogroll')
+    expect(reportStatus(words, gone)).toEqual({ tone: 'neutral', label: 'Dismissed' })
+    expect(reportStatus(words, row({ state: 'resolved' })).tone).toBe('ok')
+  })
+})
+
 describe('asking first', () => {
   test('an action that needs words asks for them, unless they were given', () => {
     expect(promptFor('claim.reject')).toEqual({ input: 'reason' })
@@ -90,6 +168,10 @@ describe('asking first', () => {
     expect(promptFor('claim.vouch')).toEqual({ confirm: true })
     expect(promptFor('claim.remove')).toEqual({ confirm: true })
     expect(promptFor('member.signOut')).toEqual({ confirm: true })
+    expect(promptFor('member.suspend')).toEqual({ confirm: true })
+    // Lifting a suspension gives something back: it goes at once, with its undo.
+    expect(promptFor('member.unsuspend')).toBeNull()
+    expect(promptFor('report.resolve')).toBeNull()
     expect(promptFor('code.revoke', {})).toEqual({ confirm: true })
     expect(promptFor('hold.cancel')).toEqual({ confirm: true })
   })
@@ -144,6 +226,8 @@ describe('how an action looks', () => {
     for (const action of [
       'site.hide',
       'blogroll.hide',
+      'member.suspend',
+      'member.delete',
       'claim.reject',
       'claim.remove',
       'code.revoke',

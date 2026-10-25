@@ -104,7 +104,7 @@ describe('the badges and the Overview', () => {
     expect(status).toBe(200)
     // Claim 2 was reviewed after its last check; feed 1 is fine. Site 2 waits for review for
     // Discover; site 3 has no post yet, so there is nothing to review.
-    expect(body).toEqual({ claims: 1, feeds: 2, dead: 1, discover: 1 })
+    expect(body).toEqual({ claims: 1, feeds: 2, dead: 1, discover: 1, reports: 0 })
   })
 
   test('the Discover badge and card count only blogs waiting for review (ADR 0041)', async () => {

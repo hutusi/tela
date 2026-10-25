@@ -98,6 +98,9 @@ beforeEach(async () => {
     db.run(sql`insert into blogrolls (id, user_id, name, is_public, public_version, public_since,
         created_at, updated_at)
       values ('AbCdEf012345', ${a.userId}, 'Guarded', 1, 1, 0, 0, 0)`),
+    // a's report of blog 2, for the Reports area's record (ADR 0059).
+    db.run(sql`insert into reports (reporter_id, target_kind, target_key, reason, state, created_at)
+      values (${a.userId}, 'site', '2', 'spam', 'open', 0)`),
   ] as never)
 })
 
@@ -282,6 +285,13 @@ const MEMBER_ROUTES: MemberRoute[] = [
     path: '/api/v1/admin/blogrolls/AbCdEf012345',
     effect: 'reads',
   },
+  { route: 'GET /api/v1/admin/reports', path: '/api/v1/admin/reports?f=open', effect: 'reads' },
+  {
+    route: 'GET /api/v1/admin/reports/:id',
+    path: '/api/v1/admin/reports/site:2',
+    effect: 'reads',
+  },
+  { route: 'GET /api/v1/admin/settings', path: '/api/v1/admin/settings', effect: 'reads' },
   { route: 'GET /api/v1/admin/counts', path: '/api/v1/admin/counts', effect: 'reads' },
   { route: 'GET /api/v1/admin/overview', path: '/api/v1/admin/overview', effect: 'reads' },
   {
@@ -295,7 +305,6 @@ const MEMBER_ROUTES: MemberRoute[] = [
     effect: 'reads',
   },
   { route: 'GET /api/v1/admin/system', path: '/api/v1/admin/system?f=dead', effect: 'reads' },
-  { route: 'GET /api/v1/admin/settings', path: '/api/v1/admin/settings', effect: 'reads' },
   {
     route: 'GET /api/v1/admin/system/report',
     path: '/api/v1/admin/system/report',
@@ -388,6 +397,13 @@ const MEMBER_ROUTES: MemberRoute[] = [
     path: '/api/v1/sites/1/translation',
     method: 'PUT',
     body: () => ({ optOut: true }),
+    effect: 'writes',
+  },
+  // Reporting a's profile (ADR 0059).
+  {
+    route: 'POST /api/v1/reports',
+    path: '/api/v1/reports',
+    body: () => ({ targetKind: 'profile', targetKey: a.userId, reason: 'spam' }),
     effect: 'writes',
   },
   { route: 'GET /api/v1/invites', path: '/api/v1/invites', effect: 'reads' },

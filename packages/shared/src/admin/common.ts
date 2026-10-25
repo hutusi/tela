@@ -9,6 +9,7 @@
 export const ADMIN_AREAS = [
   'overview',
   'claims',
+  'reports',
   'sites',
   'feeds',
   'discover',
@@ -22,13 +23,16 @@ export type AdminArea = (typeof ADMIN_AREAS)[number]
 /** Each ledger's filters; the first is where the area opens. */
 export const ADMIN_FILTERS = {
   claims: ['review', 'checking', 'verified'],
+  // Reports of public content (ADR 0059), one row per thing reported: `open` is the queue.
+  reports: ['open', 'resolved', 'dismissed'],
   sites: ['discover', 'private', 'attention', 'hidden'],
   feeds: ['failing', 'timeout', 'dead', 'paused', 'merged', 'fetching'],
   // `candidates` is the review queue (ADR 0041), "To review"; `dismissed`, the blogs judged not
   // for Discover, which three readers can still list. `blogrolls` lists members' public
   // blogrolls (ADR 0050), not blogs: its rows are `AdminBlogrollRow`s.
   discover: ['candidates', 'featured', 'listed', 'dismissed', 'hidden', 'blogrolls'],
-  people: ['admins', 'members'],
+  // `suspended`: members an operator suspended (ADR 0059), who are in neither of the others.
+  people: ['admins', 'members', 'suspended'],
   invites: ['codes', 'waiting', 'revoked'],
   translation: ['blogs', 'jobs', 'models'],
   system: ['dead', 'retrying', 'resolved'],
