@@ -22,7 +22,7 @@ import {
 } from '@tela/data'
 import { HttpError } from '../http'
 import { commit, type IngestContext, type Statement } from './context'
-import { checkRobots, type RobotsCheck } from './robots'
+import { checkLanded, checkRobots, type RobotsCheck } from './robots'
 
 /** Readability parses the whole page in memory; pages past this are skipped as too large. */
 export const EXTRACTION_MAX_BYTES = 2 * 1024 * 1024
@@ -130,14 +130,13 @@ export async function extractArticleJob(ctx: IngestContext, lease: Lease): Promi
     }
     return settle(ctx, lease, article.id, 'failed', `${err.kind}: ${err.message}`, learned)
   }
-  // Redirected to another origin (a blog that moved host, a link shortener), the page is that
-  // origin's, and so are the rules for it. The client follows redirects itself, so its answer is
-  // here by now: refused there, nothing it said is used or kept, whatever its status.
-  if (new URL(page.finalUrl).origin !== robots.origin) {
-    const landed = await checkRobots(ctx, page.finalUrl, article.fetchRegion)
-    learned.push(...landed.statements)
-    if (landed.verdict !== 'allowed') return refuse(ctx, lease, article.id, landed, learned)
-  }
+  // Redirected, the page is where it landed (a blog that moved host, a link shortener, a post
+  // moved under a path its writer keeps Tela out of), and so are the rules for it. The client
+  // follows redirects itself, so its answer is here by now: refused there, nothing it said is used
+  // or kept, whatever its status.
+  const landed = await checkLanded(ctx, robots, page.finalUrl, article.fetchRegion)
+  learned.push(...landed.statements)
+  if (landed.verdict !== 'allowed') return refuse(ctx, lease, article.id, landed, learned)
   if (page.status >= 500 || page.status === 429 || page.status === 408) {
     return retry(ctx, lease, `http ${page.status}`, learned)
   }

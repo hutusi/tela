@@ -216,6 +216,32 @@ describe('siteAssetsJob', () => {
     })
   })
 
+  test('a home page redirected on its own origin is judged by the path it landed on', async () => {
+    const { siteId } = await siteFor('/feed.xml')
+    iconsBothWays()
+    server.redirect('/', server.url('/private/'))
+    serveHtml(
+      '/private/',
+      '<html><head><link rel="icon" sizes="64x64" href="/icon.png"></head></html>',
+    )
+    server.text('/robots.txt', 'User-agent: Tela\nDisallow: /private/\n', {
+      headers: { 'content-type': 'text/plain' },
+    })
+    server.requests.length = 0
+    expect(await siteAssetsJob(ctx(), await claim('site.assets', siteId))).toEqual({
+      status: 'done',
+      favicon: true,
+      homePage: false,
+    })
+    // Refused where it landed, the page's icons are not looked for, and robots.txt is read once.
+    expect(server.requests.map((r) => r.path)).toEqual([
+      '/robots.txt',
+      '/',
+      '/private/',
+      '/favicon.ico',
+    ])
+  })
+
   test('a home page redirected to another origin asks that origin too', async () => {
     const other = await FixtureServer.start()
     try {

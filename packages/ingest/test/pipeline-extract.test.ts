@@ -390,6 +390,26 @@ describe('a page Tela may not fetch (ADR 0061)', () => {
     ])
   })
 
+  test('a page redirected on its own origin is judged by the path it landed on', async () => {
+    await summaryFeed()
+    const before = await article(1)
+    robots('User-agent: *\nDisallow: /private/\n')
+    server.redirect('/posts/1', server.url('/private/post-1'))
+    servePage('/private/post-1', page(6))
+    server.redirect('/posts/2', server.url('/moved/post-2'))
+    servePage('/moved/post-2', page(6))
+    expect(await extract(1)).toEqual({
+      status: 'settled',
+      state: 'failed',
+      reason: `robots.txt disallows the page for ${server.origin}`,
+    })
+    // Still the feed's post, marked as refused, and robots.txt read once for both.
+    expect(await article(1)).toEqual({ ...before!, extract_state: 'failed' })
+    expect((await marks())[0]).toEqual({ id: 1, extract_state: 'failed', extract_refused: 1 })
+    expect(await extract(2)).toMatchObject({ status: 'extracted' })
+    expect(server.requestsFor('/robots.txt')).toHaveLength(1)
+  })
+
   test('a page redirected to another origin asks that origin too', async () => {
     const other = await FixtureServer.start()
     try {

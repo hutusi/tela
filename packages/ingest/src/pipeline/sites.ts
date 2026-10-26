@@ -23,7 +23,7 @@ import { type HttpClient, HttpError } from '../http'
 import { requestHubSubscription } from '../websub'
 import { commit, type IngestContext, type Statement } from './context'
 import { namesSite, type ProfileLink, profileHosts, readProofs } from './proofs'
-import { checkRobots } from './robots'
+import { checkLanded, checkRobots } from './robots'
 
 /** The host of a site's origin (`https://blog.example` → `blog.example`), in SQL. */
 const siteHost = (homeUrl: SQL) => sql`substr(${homeUrl}, instr(${homeUrl}, '://') + 3)`
@@ -108,10 +108,10 @@ export async function siteAssetsJob(
     if (robots.verdict === 'allowed') {
       page = await tryGet(ctx.http, site.home_url, 'text/html, */*;q=0.5')
     }
-    // Redirected to another origin, the home page is that origin's, and so are its rules (as
-    // extraction reads them): refused there, nothing it declared is used.
-    if (page && new URL(page.finalUrl).origin !== robots.origin) {
-      const landed = await checkRobots(ctx, page.finalUrl, site.region ?? 'global')
+    // Redirected, the home page is where it landed, on another origin or the same, and so are
+    // its rules (as extraction reads them): refused there, nothing it declared is used.
+    if (page) {
+      const landed = await checkLanded(ctx, robots, page.finalUrl, site.region ?? 'global')
       learned.push(...landed.statements)
       if (landed.verdict !== 'allowed') page = null
     }

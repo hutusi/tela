@@ -57,6 +57,8 @@ export type RobotsCheck = {
   origin: string
   /** What the check learned, for the caller's fenced batch: empty when the kept rules were fresh. */
   statements: Statement[]
+  /** The rules the verdict was read from, which judge another page on the same origin. */
+  rules: { status: number; body: string } | null
 }
 
 type Kept = { status: number; body: string; fetched_at: number }
@@ -112,7 +114,7 @@ export async function checkRobots(
   try {
     parsed = new URL(url)
   } catch {
-    return { verdict: 'disallowed', origin: '', statements: [] }
+    return { verdict: 'disallowed', origin: '', statements: [], rules: null }
   }
   const origin = parsed.origin
   const now = ctx.clock.now()
@@ -123,7 +125,7 @@ export async function checkRobots(
   if (kept) {
     const ttl = kindOf(kept.status) === 'unreachable' ? ROBOTS_RETRY_MS : ROBOTS_FRESH_MS
     if (kept.fetched_at > now - ttl) {
-      return { verdict: verdictOf(kept, url), origin, statements: [] }
+      return { verdict: verdictOf(kept, url), origin, statements: [], rules: kept }
     }
   }
   const read = await fetchRules(ctx, origin, region)
@@ -144,7 +146,31 @@ export async function checkRobots(
     (kindOf(kept.status) !== kindOf(read.status) || kept.body !== read.body) &&
     kindOf(read.status) !== 'unreachable'
   if (changed) statements.push(redueRefused(ctx, parsed.hostname.toLowerCase()))
-  return { verdict: verdictOf(read, url), origin, statements }
+  return { verdict: verdictOf(read, url), origin, statements, rules: read }
+}
+
+/**
+ * Whether Tela may use the page a fetch landed on, after the client followed its redirects: the
+ * page is where it landed, and so are the rules for it. On another origin they are that origin's
+ * own (`checkRobots` again); on the same one a redirect can still land on a path they refuse (an
+ * allowed `/old-post` moved to a disallowed `/private/post`), so the landed path is read against
+ * the rules `asked` already holds, with no second fetch of robots.txt.
+ */
+export async function checkLanded(
+  ctx: IngestContext,
+  asked: RobotsCheck,
+  finalUrl: string,
+  region: FetchRegion = 'global',
+): Promise<RobotsCheck> {
+  let landed: URL
+  try {
+    landed = new URL(finalUrl)
+  } catch {
+    return { verdict: 'disallowed', origin: '', statements: [], rules: null }
+  }
+  if (landed.origin !== asked.origin) return checkRobots(ctx, finalUrl, region)
+  const verdict = asked.rules ? verdictOf(asked.rules, finalUrl) : asked.verdict
+  return { ...asked, verdict, statements: [] }
 }
 
 /**

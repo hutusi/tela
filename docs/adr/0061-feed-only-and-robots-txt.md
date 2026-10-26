@@ -62,7 +62,10 @@ A page that redirects to another origin (a blog that moved host, a link shortene
 the home page, is that origin's page, and its robots.txt is asked too, before anything the page
 answered is used. The client follows redirects itself, so the page has been fetched by then;
 refused there, it is dropped, whatever its status: the post is failed and marked as refused
-(below), and the home page's icons are not looked for. Both checks' rules are kept. Such a post is made due again by new rules on its own host, the one its link
+(below), and the home page's icons are not looked for. Both checks' rules are kept. A redirect on
+the same origin is judged the same way, by the path it landed on, against the rules already read
+(`checkLanded`): an allowed `/old-post` that moves to a disallowed `/private/post` is refused
+(Codex's review found it stored). Such a post is made due again by new rules on its own host, the one its link
 names, not on the host it landed on: in the common case (apex to `www`, `http` to `https`) the
 two robots.txt are one file behind the same redirect, and change together.
 
