@@ -222,17 +222,22 @@ export async function importFeeds(
 }
 
 /**
- * The member's waiting feeds, as `member.pendingFeeds` takes them, `limit` at a time: the ones Tela
- * has now first, which subscribe free whatever the day (`duePendingFeeds` makes the run due for
- * them), then the oldest. Read oldest first, a wait longer than the read (a cap raised past it)
- * hid a feed someone else had added behind ones the day had no room for: the run was due every
- * sweep and moved nothing (Codex's review).
+ * The member's waiting feeds, as `member.pendingFeeds` takes them, `limit` at a time, in the order
+ * of what each reason `duePendingFeeds` makes a run due for needs: those the member follows
+ * already, which stop waiting even at the cap; then those Tela has now, which subscribe free
+ * whatever the day; then the oldest. Read oldest first, a wait longer than the read (a cap raised
+ * past it) hid what made the run due behind rows it could not move, and the run was due every
+ * sweep and moved nothing (Codex's reviews: a feed someone else added, and one already followed).
  */
 export function pendingFeedsOf(db: TelaDb, userId: string, limit = 500) {
   return db.all<{ feed_url: string; title: string | null }>(sql`
     select p.feed_url, p.title from pending_feeds p where p.user_id = ${userId}
-    order by exists (select 1 from feeds f where f.feed_url = p.feed_url) desc, p.queued_at,
-      p.feed_url
+    order by
+      exists (select 1 from feeds f
+        join subscriptions s on s.feed_id = coalesce(f.merged_into, f.id)
+        where f.feed_url = p.feed_url and s.user_id = p.user_id and s.deleted_at is null) desc,
+      exists (select 1 from feeds f where f.feed_url = p.feed_url) desc,
+      p.queued_at, p.feed_url
     limit ${limit}
   `)
 }

@@ -138,6 +138,36 @@ describe('member.pendingFeeds', () => {
     expect(await sweep()).toEqual({ claimed: 0, outcomes: [] })
   })
 
+  test('at the cap, a waiting feed already followed stops waiting past more rows than a run reads', async () => {
+    // A wait of 500 feeds Tela has, then the member follows one of the five feeds that wait after
+    // them: that is all a run at the cap can move.
+    await db.batch([
+      db.run(sql`insert into settings (key, value, updated_at)
+        values ('member.maxSubscriptions', '1', 0)`),
+      db.run(sql`insert into sites (id, home_url, created_at, updated_at)
+        values (2, 'https://known.example', 0, 0), (3, 'https://bulk.example', 0, 0)`),
+      db.run(sql`insert into feeds (site_id, feed_url, host, next_fetch_at, created_at, updated_at)
+        select 3, 'https://bulk.example/' || value, 'bulk.example', ${NOW}, 0, 0
+        from generate_series(1, 500)`),
+      db.run(sql`insert into pending_feeds (user_id, feed_url, queued_at)
+        select 'u1', 'https://bulk.example/' || value, ${NOW - 2 * DAY} + value
+        from generate_series(1, 500)`),
+      db.run(sql`insert into feeds (id, site_id, feed_url, host, next_fetch_at, created_at,
+          updated_at)
+        values (900, 2, ${url('known')}, 'known.example', ${NOW}, 0, 0)`),
+      db.run(sql`insert into subscriptions (user_id, feed_id, watermark_id, created_at, updated_at)
+        values ('u1', 900, 0, 0, 0)`),
+    ] as never)
+    expect(await waiting()).toHaveLength(505)
+    const run = await sweep()
+    expect(run.outcomes).toMatchObject([
+      { status: 'done', result: { status: 'done', added: 0, subscribed: 0, waiting: 504 } },
+    ])
+    expect(await waiting()).not.toContain(url('known'))
+    // At the cap with nothing followed left waiting, nothing more is due.
+    expect(await sweep()).toEqual({ claimed: 0, outcomes: [] })
+  })
+
   test('the next day adds the day’s worth, oldest first, and the rest wait for the day after', async () => {
     clock.set(NOW + DAY)
     const run = await sweep()
